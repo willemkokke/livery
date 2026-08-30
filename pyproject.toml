@@ -1,11 +1,10 @@
-[build-system]
-requires = ["uv_build>=0.11,<0.13"]
-build-backend = "uv_build"
-
+# The livery monorepo's virtual root: never built, never published. The
+# `livery` name on PyPI stays reserved by the placeholder release; whether
+# a meta-package returns here is an open item in the bootstrap plan.
 [project]
 name = "livery"
 version = "0.0.1"
-description = "Reserved package name."
+description = "The livery ecosystem monorepo (virtual root)."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -18,3 +17,52 @@ classifiers = [
 
 [project.urls]
 Repository = "https://github.com/willemkokke/livery"
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+livery-forge = { workspace = true }
+
+[dependency-groups]
+dev = [
+    # uv itself, unconstrained so it tracks latest; the lockfile still
+    # resolves it to one exact version (footman's lockfile-churn lesson).
+    "uv",
+    "footman>=0.44",
+    # Typed tool handles tasks.py runs through (ruff, basedpyright, pytest).
+    "toolroom>=0.6.1",
+    # The workspace members, so root tests import them.
+    "livery-forge",
+    "pytest>=8.0",
+    # Parallelise the suite across cores (`-n auto`, wired into addopts).
+    "pytest-xdist>=3.6",
+    "ruff>=0.6",
+    "basedpyright>=1.18",
+]
+
+# Ruff and basedpyright configuration cribbed from footman's pyproject, as
+# the bootstrap plan says: footman's rules, global, for now. Footman's
+# file-specific carve-outs are not carried — they explain footman files.
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+src = ["packages/forge/src", "packages/forge/tests", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF"]
+
+[tool.basedpyright]
+include = ["packages", "tests", "tasks.py"]
+pythonVersion = "3.11"
+typeCheckingMode = "standard"
+reportMissingModuleSource = false
+
+[tool.pytest.ini_options]
+testpaths = ["packages", "tests"]
+# `-n auto` fans the suite across cores; `worksteal` because durations are
+# uneven (footman measured it; the choice carries until we measure here).
+addopts = "-q -n auto --dist=worksteal"
