@@ -343,6 +343,18 @@ series), gate green at the end.
   Docstrings follow the voice guidance; objects are named by full
   import path for cross-package API docs. All of it stated in
   CLAUDE.md.
+- 2026-08-31, correcting the archive-tag line above: hse decided the
+  other way and shipped it. `_tag_archive_setup` in the devkit's
+  release driver cuts an annotated `archive/setup` tag at the setup PR
+  head before the first squash merge: idempotent, pushed alone,
+  branch-prefix-free so a rename cannot orphan it, CI-clean because
+  tag guards skip it, and in its words the only durable record of the
+  setup history that squash plus auto-delete would erase. The earlier
+  search missed the devkit's own devlog and source. Adopted for
+  livery: the accepted graduation cuts `archive/setup` at the setup
+  head, pushes it, then squash-merges; the release grammar keeps CI
+  clean (`packages/*/v*` triggers, `archive/setup` does not); the
+  workshop ports this with the first-release flow.
 
 ## Open
 

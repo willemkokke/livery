@@ -37,8 +37,10 @@ Conventional prefixes (`feat:`, `fix:`, `docs:`, `chore:`,
 `refactor:`, `test:`), imperative subject, body only when the subject
 cannot carry it. Author identity: Willem Kokke <mail@willem.net>,
 SSH-signed. No attribution trailers. Commit and push only when asked.
-Tags are release tags only, `packages/<pkg>/v<semver>`, immutable,
-pushed alone. No other tag class exists.
+Tags are release tags, `packages/<pkg>/v<semver>`, immutable and
+pushed alone, with one exception: the annotated `archive/setup` tag
+cut at graduation, freezing the setup history that the squash merge
+collapses. No other tag class exists.
 
 ## Layering
 
