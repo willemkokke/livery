@@ -1,10 +1,11 @@
 # Bootstrapping livery: the forge first
 
-Status: phase 0 executed locally, 2026-08-31 — the workspace skeleton
-is built and `uv run fm check` is green (format, lint, typecheck, tests
-in parallel; 6.7s). Awaiting the human-gated acceptance steps: commit +
-push, the PyPI pending publisher for `livery-forge`, branch protection,
-and the `packages/forge/v0.0.1` tag to prove the train.
+Status: phase 0 in progress on the `setup` branch, 2026-08-31. The
+first CI run already proved the gate green on three OSes and the armed
+squash merge fired, but the merge was rolled back: main is the
+reservation commit again, and the squash merge lands when phase 0
+acceptance is complete. Remaining: the PyPI pending publisher, the
+`packages/forge/v0.0.1` tag, the accepted merge.
 
 ## The prompt (Willem)
 
@@ -323,6 +324,25 @@ series), gate green at the end.
   ruling): the skeleton lands as a `setup` branch and pull request,
   merged through branch protection by the armed squash merge that the
   workshop's project-birth workflow will one day perform itself.
+- 2026-08-31: the first squash merge is rolled back (Willem: phase 0
+  was not yet accepted). `setup` is restored at its original commit,
+  main is force-pushed to the reservation commit under a briefly
+  lifted protection, and the accepted squash merge is a later pull
+  request. Pull request #1 stays in the forge's history.
+- 2026-08-31: no archive or graduation tags, in livery or copied from
+  hse: hse has none (its "graduation" is template-payload docs being
+  removed; its "archive" is an installer kind), and the ancestor idea,
+  landmark tags, is one we removed. Tags are release tags only. The
+  setup squash commit is the addressable pre-graduation point.
+- 2026-08-31: typing arrives in final form (Willem: no clean-up passes
+  later). footman's four-checker gate (basedpyright, mypy strict per
+  platform, ty, pyrefly), `fm typecomplete` requiring a 100%
+  type-complete public API, the public/private rule (underscore
+  modules, `__all__` re-exports) pinned by a test, and Google-only
+  docstrings with no RST anywhere, enforced by ruff's pydocstyle.
+  Docstrings follow the voice guidance; objects are named by full
+  import path for cross-package API docs. All of it stated in
+  CLAUDE.md.
 
 ## Open
 

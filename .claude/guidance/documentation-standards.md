@@ -146,6 +146,12 @@ shape, and names the fix that would let someone simplify.
 - Describe the thing as it is, not as a diff from what it was.
 - A module docstring says what the module is for and what a reader
   should reach for first.
+- Google style only: Args, Returns, Raises, Yields, Attributes. No
+  RST anywhere, in docstrings or comments.
+- The plain-language and voice rules apply to docstrings unchanged.
+- Refer to other objects by their full public import path,
+  `livery.forge.Forge`, so the API renderer can cross-link them across
+  packages.
 
 ## Markdown
 

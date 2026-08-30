@@ -14,6 +14,7 @@ from pathlib import Path
 
 
 def main() -> int:
+    """Apply ruff fixes to the file named in the hook payload."""
     try:
         payload = json.load(sys.stdin)
     except json.JSONDecodeError:
