@@ -17,4 +17,4 @@ floor = "0.1.0"
 [qa]
 # The coverage high-water mark the gate enforces; raise it as the
 # suite grows, lower it only deliberately.
-coverage_floor = 79
+coverage_floor = 95
