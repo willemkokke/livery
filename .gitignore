@@ -1,3 +1,8 @@
 dist/
 .venv/
 __pycache__/
+.pytest_cache/
+.ruff_cache/
+.coverage*
+.claude/worktrees/
+.mypy_cache/

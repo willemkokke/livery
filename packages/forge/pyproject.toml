@@ -1,0 +1,27 @@
+[build-system]
+requires = ["uv_build>=0.11,<0.13"]
+build-backend = "uv_build"
+
+[project]
+name = "livery-forge"
+version = "0.0.1"
+description = "One interface to GitHub, Gitea, and GitLab — the livery ecosystem's forge."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Willem Kokke", email = "mail@willem.net" }]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Repository = "https://github.com/willemkokke/livery"
+
+[tool.uv.build-backend]
+# PEP 420 namespace: the importable package is livery.forge and there is
+# no livery/__init__.py anywhere in this repository.
+module-name = "livery.forge"

@@ -1,0 +1,13 @@
+# The package contract. Discovery is by this file: a directory under
+# packages/ is a package exactly when it carries one.
+
+type = "python"
+name = "livery-forge"
+
+[verbs]
+check = "fm check"
+test = "fm test"
+build = "uv build --package livery-forge"
+
+# No [[depends]]: livery.forge is stdlib-only at runtime, and the root
+# contracts test enforces it.

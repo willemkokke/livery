@@ -1,0 +1,14 @@
+# The workspace contract, ecosystem-neutral. The workshop reads this;
+# nothing else is authoritative about workspace shape.
+
+[workspace]
+# Forward declaration: this workspace renders from livery.workshop's base
+# layer once the workshop exists. No overlays.
+layers = ["livery.workshop"]
+
+[forge]
+kind = "github"
+owner = "willemkokke"
+
+[ci]
+runners = ["ubuntu-latest", "macos-latest", "windows-latest"]

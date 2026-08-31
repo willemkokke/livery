@@ -1,5 +1,10 @@
 # livery
 
-This package name is reserved for a future open-source project.
+The livery ecosystem monorepo. The working record lives in
+[notes/](notes/).
 
-Nothing to see here yet.
+| Package | Distribution | What it is |
+| --- | --- | --- |
+| `packages/forge` | `livery-forge` | One interface to GitHub, Gitea, and GitLab |
+
+The gate: `uv run fm check`. CI runs the same command on three OSes.
