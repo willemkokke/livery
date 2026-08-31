@@ -175,6 +175,43 @@ def test_check_affected_scopes_or_says_nothing(
     assert set(ran) == {"format", "lint", "types", "complete", "test"}
 
 
+def test_check_fix_heals_before_the_gate_judges(
+    rig: tuple[FakeForge, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ = rig
+    calls: list[tuple[str, object]] = []
+    monkeypatch.setattr(
+        _python, "run_format", lambda **kwargs: calls.append(("format", kwargs))
+    )
+    monkeypatch.setattr(
+        _python, "run_lint", lambda **kwargs: calls.append(("lint", kwargs))
+    )
+    monkeypatch.setattr(
+        _python, "run_typecheck", lambda **kwargs: calls.append(("types", kwargs))
+    )
+    monkeypatch.setattr(
+        _python, "run_typecomplete", lambda subset: calls.append(("complete", None))
+    )
+    monkeypatch.setattr(
+        _python, "run_test", lambda **kwargs: calls.append(("test", kwargs))
+    )
+    monkeypatch.setattr(
+        _quality, "template_check", lambda: calls.append(("render", None))
+    )
+    import contextlib
+
+    monkeypatch.setattr(_quality, "parallel", contextlib.nullcontext)
+    _quality.check(fix=True)
+    # The rewrite and the safe fixes run first; the gate still judges.
+    assert calls[0] == ("format", {})
+    assert calls[1] == ("lint", {"fix": True})
+    judged = {name for name, _ in calls[2:]}
+    assert judged == {"format", "lint", "types", "complete", "test", "render"}
+    assert ("format", {"check": True}) in calls[2:]
+    assert ("lint", {"fix": False}) in calls[2:]
+
+
 def test_coverage_enforce_reads_the_workspace(
     rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:

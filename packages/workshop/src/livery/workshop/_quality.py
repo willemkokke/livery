@@ -88,8 +88,15 @@ def check(
     affected: Annotated[
         bool, doc("scope the gate to the branch's affected packages")
     ] = False,
+    fix: Annotated[
+        bool, doc("rewrite formatting and apply safe lint fixes first")
+    ] = False,
 ) -> None:
     """Run the gate: format, lint, types, tests, render gate, in parallel.
+
+    ``--fix`` rewrites formatting and applies the linter's safe fixes
+    before the gate runs, so a mechanical finding heals instead of
+    failing. The gate itself still judges the result.
 
     ``--affected`` narrows every verb to the packages this branch's
     changes can influence (their dependents' closure). A change
@@ -97,6 +104,10 @@ def check(
     falls back to everything; ty and pyrefly always check their
     configured whole either way.
     """
+    if fix:
+        _packages()
+        _python.run_format()
+        _python.run_lint(fix=True)
     subset = _affected() if affected else None
     if affected and subset is not None:
         packages = _packages()
