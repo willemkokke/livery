@@ -22,6 +22,7 @@ from __future__ import annotations
 import base64
 import contextlib
 import os
+import secrets
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -63,8 +64,11 @@ jobs:
             echo "holding until released"
             i=0
             url="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/tags/release-$GITHUB_SHA"
+            authed=$(printf %s "$GITHUB_SERVER_URL" | sed "s#://#://x-access-token:$GITHUB_TOKEN@#")
             until wget -q -O /dev/null \\
-                --header "Authorization: token $GITHUB_TOKEN" "$url"; do
+                --header "Authorization: token $GITHUB_TOKEN" "$url" \\
+                || git ls-remote -q "$authed$GITHUB_REPOSITORY" \\
+                "refs/tags/release-$GITHUB_SHA" | grep -q .; do
               i=$((i+1))
               if [ "$i" -gt 300 ]; then exit 1; fi
               sleep 2
@@ -106,6 +110,12 @@ class GiteaConformanceDriver:
             headers={"Authorization": f"token {token}", "Accept": "application/json"},
             opener=opener,
         )
+        if live and opener is None:
+            # A plain live run (the release legs) gets unique names:
+            # replay determinism only matters when recording, and a
+            # cloud forge keeps redirects from earlier corpse renames
+            # that a recreated deterministic path can collide with.
+            namespace = f"{namespace}-{secrets.token_hex(3)}"
         self._namespace = namespace
         self._live = live
         self._counter = 0

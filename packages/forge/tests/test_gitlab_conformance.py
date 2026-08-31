@@ -72,21 +72,21 @@ def _run_live(scenario: Scenario) -> None:
     if not scenario.applies_to(driver.forge):
         pytest.skip(f"{scenario.name} is out of scope for gitlab")
     try:
-        try:
-            scenario.run(driver)
-        except Unsupported as exc:
-            if RECORD:
-                raise
-            # A live leg against a server below the interface floor
-            # (gitea.com runs 1.27) skips with the server's words; the
-            # recorded suites still pin the behaviour where it exists.
-            pytest.skip(str(exc))
-    finally:
-        if not RECORD:
-            # Cloud accounts meter repositories, so a live run deletes
-            # its scratch as it goes; recording keeps the old
-            # lifecycle so cassettes stay stable.
-            driver.cleanup()
+        scenario.run(driver)
+    except Unsupported as exc:
+        if RECORD:
+            raise
+        driver.cleanup()
+        # A live leg against a server below the interface floor
+        # (gitea.com runs 1.27) skips with the server's words; the
+        # recorded suites still pin the behaviour where it exists.
+        pytest.skip(str(exc))
+    if not RECORD:
+        # Cloud accounts meter repositories, so a live run deletes its
+        # scratch as each scenario ends. Only on success: a failed
+        # scenario's scratch is the evidence the diagnostics dump and
+        # the next run's leftover sweep both need.
+        driver.cleanup()
     if RECORD:
         cassette.save(CASSETTES / f"{scenario.name}.json")
 
