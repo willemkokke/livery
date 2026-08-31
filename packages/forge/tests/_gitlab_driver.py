@@ -16,6 +16,7 @@ with a bounded retry in live mode.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import time
 from collections.abc import Callable
@@ -75,6 +76,9 @@ class GitlabConformanceDriver:
         live: bool = True,
     ) -> None:
         self._gitlab = GitlabForge.connect(url=url, token=token, opener=opener)
+        # Cloud legs point the scratch at the e2e group; the default
+        # stays the compose seed group.
+        self._group = os.environ.get("LIVERY_FORGE_E2E_OWNER") or "livery"
         self._client = JsonClient(
             f"{url.rstrip('/')}/api/v4",
             headers={"PRIVATE-TOKEN": token},
@@ -106,7 +110,7 @@ class GitlabConformanceDriver:
         name = f"conf-{self._namespace}-{self._counter}"
         try:
             leftover = self._client.request(
-                f"/projects/{_path('livery', name)}", none_on=(404,)
+                f"/projects/{_path(self._group, name)}", none_on=(404,)
             )
         except ForgeError as exc:
             if exc.status is not None and 300 <= exc.status < 400:
@@ -119,7 +123,7 @@ class GitlabConformanceDriver:
                 raise
         if (
             leftover is not None
-            and str(leftover.get("path_with_namespace")) == f"livery/{name}"
+            and str(leftover.get("path_with_namespace")) == f"{self._group}/{name}"
         ):
             pid = int(leftover["id"])
             corpse = f"corpse-{pid}"
@@ -128,8 +132,8 @@ class GitlabConformanceDriver:
                 method="PUT",
                 data={"path": corpse, "name": corpse},
             )
-            self._gitlab.delete_repo("livery", corpse)
-        return ("livery", name)
+            self._gitlab.delete_repo(self._group, corpse)
+        return (self._group, name)
 
     def fresh_repo(self) -> Repository:
         """A new project seeded with the conformance pipeline."""

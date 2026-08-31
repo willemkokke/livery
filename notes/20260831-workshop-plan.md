@@ -1,12 +1,13 @@
 # Building the workshop
 
-Status: phase 6 shipped, 2026-08-31 (PR #25; livery-workshop 0.0.2
-on PyPI; workshop-templates v0.0.2 published, byte-identical to
-`templates/` at the tag). The train's gate is `fm release.verify`
-inside the rendered release.yml, `fm release.templates` is the W6
-snapshot, and `fm update` is the wave's instance half. Next:
-phase 7. Phases 1-5 shipped the same day (PRs #12-#24, the forge-lane
-verb now `fm submit`). The bootstrap
+Status: phase 7 built, 2026-08-31, submitting; its acceptance
+completes with a green `release-legs.yml` dispatch. The project kind
+renders per-forge CI (`.github/`, `.gitea/`, `.gitlab-ci.yml`) from
+contract values with the required context spelled in `livery.toml`,
+and the live legs run the conformance suite against the compose
+forges and all three cloud accounts, skips named, scratch cleaned.
+Phases 1-6 shipped 2026-08-31 (PRs #12-#28; livery-workshop 0.0.2
+and workshop-templates v0.0.2 published). The bootstrap
 plan's entry criteria are met: `livery-forge` 0.1.0 is on PyPI with
 all three backends passing the one conformance suite, the fixture
 harness is stable, and the compose loop is routine.
@@ -287,6 +288,10 @@ templates, and the per-release live verification gets its workflow.
   kinds); `release-legs.yml` green via `gh workflow run` for every
   leg whose account exists, and its skips named in the summary for
   the rest.
+  *(2026-08-31, first half: the render-all-kinds test parses every
+  rendered CI definition and pins the required-context job, the
+  per-forge exclusivity, and the contract's `required_context` line.
+  The dispatch evidence follows the merge.)*
 
 ## Phase 8 — graduation: affected, coverage, and 0.1.0
 
@@ -396,6 +401,15 @@ The bootstrap deferrals come home and the temporary environment ends.
   before reporting disarmed or stalled; merged wins over any blocker
   derived from stale reads (regression-tested through a stub; fixed
   by PR #22, which the fixed verb shipped and followed to "merged").
+- 2026-08-31, phase 7 shape. The scratch owner override is one env
+  var, `LIVERY_FORGE_E2E_OWNER`, read by all three conformance
+  drivers with their local defaults kept, so the cloud legs are the
+  same suite pointed at the e2e accounts; the gitea.com leg mints a
+  disposable act_runner per run through the API (capacity 8: held
+  runs occupy slots) and removes it after, per the runbook's
+  verified design. Cloud legs write `.forge.dev.env` with the cloud
+  URL and token, which is the harness's existing seam. Cleanup lists
+  and deletes scratch by prefix, runs on every verdict.
 - 2026-08-31, the template source is the contract's call (Willem:
   forks and local modification at their own risk must be possible;
   "always keep the ease of use of consuming this development in hse

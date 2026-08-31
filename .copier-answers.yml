@@ -20,6 +20,7 @@ python_versions:
 layers:
 - livery.workshop
 - livery.forge
+required_context: gate
 templates_source: templates
 packages:
 - dir: forge

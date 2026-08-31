@@ -23,7 +23,7 @@ jobs:
 
   # The one required context. Branch protection points here, so the
   # matrix can grow or shrink without touching repository settings.
-  gate:
+  {{ required_context }}:
     if: always()
     needs: [check]
     runs-on: ubuntu-latest

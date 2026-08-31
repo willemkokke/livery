@@ -1,0 +1,199 @@
+# The live legs, run before a release tag: the conformance suite
+# against the compose forges and the three cloud accounts. Each cloud
+# leg skips cleanly when its secret is absent (the skip is named in
+# the run summary) and cleans its scratch at the end, whatever the
+# verdict. Dispatch with `gh workflow run release-legs.yml`.
+name: release-legs
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gitea-local:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Sync (locked)
+        run: uv sync --locked
+      - name: Start and seed the compose Gitea
+        run: uv run --no-sync fm forge.dev.up --profile=gitea
+      - name: Conformance, live
+        env:
+          LIVERY_FORGE_LIVE: "1"
+        run: uv run --no-sync pytest packages/forge/tests/test_gitea_conformance.py -n 4
+      - name: Down
+        if: always()
+        run: uv run --no-sync fm forge.dev.down --wipe
+
+  gitlab-local:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Sync (locked)
+        run: uv sync --locked
+      - name: Start and seed the compose GitLab (first boot takes minutes)
+        run: uv run --no-sync fm forge.dev.up --profile=gitlab
+      - name: Conformance, live
+        env:
+          LIVERY_FORGE_LIVE: "1"
+        # One single-node GitLab absorbs about four concurrent
+        # writers; beyond that Gitaly times out.
+        run: uv run --no-sync pytest packages/forge/tests/test_gitlab_conformance.py -n 4
+      - name: Down
+        if: always()
+        run: uv run --no-sync fm forge.dev.down --wipe
+
+  github-cloud:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      LEG_TOKEN: ${{ secrets.LIVERY_E2E_GITHUB_TOKEN }}
+    steps:
+      - name: Guard
+        id: guard
+        run: |
+          if [ -z "$LEG_TOKEN" ]; then
+            echo "leg skipped: no LIVERY_E2E_GITHUB_TOKEN" >> "$GITHUB_STEP_SUMMARY"
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.guard.outputs.present == 'true'
+      - uses: astral-sh/setup-uv@v5
+        if: steps.guard.outputs.present == 'true'
+      - name: Sync (locked)
+        if: steps.guard.outputs.present == 'true'
+        run: uv sync --locked
+      - name: Conformance, live against the e2e organisation
+        if: steps.guard.outputs.present == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.LIVERY_E2E_GITHUB_TOKEN }}
+          LIVERY_FORGE_E2E_OWNER: ${{ vars.LIVERY_E2E_GITHUB_OWNER }}
+          LIVERY_FORGE_LIVE: "1"
+        run: uv run --no-sync pytest packages/forge/tests/test_github_conformance.py -n 4
+      - name: Clean the scratch
+        if: always() && steps.guard.outputs.present == 'true'
+        env:
+          LEG: github
+          TOKEN: ${{ secrets.LIVERY_E2E_GITHUB_TOKEN }}
+          OWNER: ${{ vars.LIVERY_E2E_GITHUB_OWNER }}
+        run: python3 .github/scripts/e2e_cleanup.py
+
+  gitlab-cloud:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      LEG_TOKEN: ${{ secrets.LIVERY_E2E_GITLAB_TOKEN }}
+    steps:
+      - name: Guard
+        id: guard
+        run: |
+          if [ -z "$LEG_TOKEN" ]; then
+            echo "leg skipped: no LIVERY_E2E_GITLAB_TOKEN" >> "$GITHUB_STEP_SUMMARY"
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.guard.outputs.present == 'true'
+      - uses: astral-sh/setup-uv@v5
+        if: steps.guard.outputs.present == 'true'
+      - name: Sync (locked)
+        if: steps.guard.outputs.present == 'true'
+        run: uv sync --locked
+      - name: Point the harness at gitlab.com
+        if: steps.guard.outputs.present == 'true'
+        run: |
+          printf 'GITLAB_URL=https://gitlab.com\nGITLAB_TOKEN=%s\n' "$LEG_TOKEN" > .forge.dev.env
+      - name: Conformance, live against the e2e group
+        if: steps.guard.outputs.present == 'true'
+        env:
+          LIVERY_FORGE_E2E_OWNER: ${{ vars.LIVERY_E2E_GITLAB_GROUP }}
+          LIVERY_FORGE_LIVE: "1"
+        run: uv run --no-sync pytest packages/forge/tests/test_gitlab_conformance.py -n 4
+      - name: Clean the scratch
+        if: always() && steps.guard.outputs.present == 'true'
+        env:
+          LEG: gitlab
+          URL: https://gitlab.com
+          TOKEN: ${{ secrets.LIVERY_E2E_GITLAB_TOKEN }}
+          OWNER: ${{ vars.LIVERY_E2E_GITLAB_GROUP }}
+        run: python3 .github/scripts/e2e_cleanup.py
+
+  gitea-cloud:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      LEG_TOKEN: ${{ secrets.LIVERY_E2E_GITEA_TOKEN }}
+      RUNNER_NAME: release-legs-${{ github.run_id }}
+    steps:
+      - name: Guard
+        id: guard
+        run: |
+          if [ -z "$LEG_TOKEN" ]; then
+            echo "leg skipped: no LIVERY_E2E_GITEA_TOKEN" >> "$GITHUB_STEP_SUMMARY"
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.guard.outputs.present == 'true'
+      - uses: astral-sh/setup-uv@v5
+        if: steps.guard.outputs.present == 'true'
+      - name: Sync (locked)
+        if: steps.guard.outputs.present == 'true'
+        run: uv sync --locked
+      - name: Disposable act_runner (gitea.com grants no shared runners)
+        if: steps.guard.outputs.present == 'true'
+        env:
+          TOKEN: ${{ secrets.LIVERY_E2E_GITEA_TOKEN }}
+          OWNER: ${{ vars.LIVERY_E2E_GITEA_OWNER }}
+          URL: https://gitea.com
+        run: |
+          reg=$(python3 .github/scripts/e2e_gitea_runner.py mint)
+          # Held conformance runs occupy a slot each until released or
+          # cancelled, so one-job capacity would deadlock the suite.
+          printf 'runner:\n  capacity: 8\n' > "$PWD/runner-config.yaml"
+          docker run -d --name legs-runner \
+            -v "$PWD/runner-config.yaml:/runner-config.yaml:ro" \
+            -e CONFIG_FILE=/runner-config.yaml \
+            -e GITEA_INSTANCE_URL=https://gitea.com \
+            -e GITEA_RUNNER_REGISTRATION_TOKEN="$reg" \
+            -e GITEA_RUNNER_NAME="$RUNNER_NAME" \
+            -e GITEA_RUNNER_LABELS=ubuntu-latest:host \
+            docker.gitea.com/act_runner:latest
+      - name: Point the harness at gitea.com
+        if: steps.guard.outputs.present == 'true'
+        run: |
+          printf 'GITEA_URL=https://gitea.com\nGITEA_TOKEN=%s\n' "$LEG_TOKEN" > .forge.dev.env
+      - name: Conformance, live against the e2e organisation
+        if: steps.guard.outputs.present == 'true'
+        env:
+          LIVERY_FORGE_E2E_OWNER: ${{ vars.LIVERY_E2E_GITEA_OWNER }}
+          LIVERY_FORGE_LIVE: "1"
+        run: uv run --no-sync pytest packages/forge/tests/test_gitea_conformance.py -n 4
+      - name: Remove the runner
+        if: always() && steps.guard.outputs.present == 'true'
+        env:
+          TOKEN: ${{ secrets.LIVERY_E2E_GITEA_TOKEN }}
+          OWNER: ${{ vars.LIVERY_E2E_GITEA_OWNER }}
+          URL: https://gitea.com
+        run: |
+          docker rm -f legs-runner || true
+          python3 .github/scripts/e2e_gitea_runner.py remove
+      - name: Clean the scratch
+        if: always() && steps.guard.outputs.present == 'true'
+        env:
+          LEG: gitea
+          URL: https://gitea.com
+          TOKEN: ${{ secrets.LIVERY_E2E_GITEA_TOKEN }}
+          OWNER: ${{ vars.LIVERY_E2E_GITEA_OWNER }}
+        run: python3 .github/scripts/e2e_cleanup.py

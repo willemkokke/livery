@@ -17,3 +17,6 @@ owner = "willemkokke"
 
 [ci]
 runners = ["ubuntu-latest", "macos-latest", "windows-latest"]
+# The one status name branch protection requires, spelled by contract
+# so each forge's CI renders it rather than anyone retyping it.
+required_context = "gate"

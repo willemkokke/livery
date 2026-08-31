@@ -14,6 +14,10 @@ templates = "{{ templates_source }}"
 [forge]
 kind = "{{ forge_kind }}"
 owner = "{{ forge_owner }}"
-
+{% if forge_url %}url = "{{ forge_url }}"
+{% endif %}
 [ci]
 runners = [{% for runner in runners %}"{{ runner }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+# The one status name branch protection requires, spelled by contract
+# so each forge's CI renders it rather than anyone retyping it.
+required_context = "{{ required_context }}"

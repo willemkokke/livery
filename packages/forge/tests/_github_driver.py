@@ -23,6 +23,7 @@ safe to delete.
 from __future__ import annotations
 
 import base64
+import os
 import time
 from collections.abc import Callable
 from typing import Literal
@@ -108,6 +109,9 @@ class GithubConformanceDriver:
         self._namespace = namespace
         self._live = live
         self._me = self._github.whoami()
+        # Cloud legs point the scratch at the e2e organisation; the
+        # default stays the signed-in user for local recording.
+        self._owner = os.environ.get("LIVERY_FORGE_E2E_OWNER") or self._me
         self._counter = 0
         self._files = 0
 
@@ -120,8 +124,8 @@ class GithubConformanceDriver:
         """A deterministic name; any leftover from a prior run is deleted."""
         self._counter += 1
         name = f"livery-forge-conf-{self._namespace}-{self._counter}"
-        self._github.delete_repo(self._me, name)
-        return (self._me, name)
+        self._github.delete_repo(self._owner, name)
+        return (self._owner, name)
 
     def fresh_repo(self) -> Repository:
         """A new public repository seeded with the conformance workflow."""
