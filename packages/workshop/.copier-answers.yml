@@ -1,0 +1,14 @@
+# Managed by copier: this package's identity and template provenance.
+# Do not edit by hand.
+_src_path: templates
+kind: package-python
+package_name: livery-workshop
+package_description: The livery workshop, a footman plugin serving the whole dev loop.
+namespace_package: livery
+author_name: Willem Kokke
+author_email: mail@willem.net
+copyright_year: '2026'
+forge_owner: willemkokke
+project_name: livery
+python_versions:
+- '3.11'

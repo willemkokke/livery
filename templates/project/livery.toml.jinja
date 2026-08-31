@@ -5,11 +5,11 @@
 # The layers, in precedence order. Discovery is this list and nothing
 # else: a layer not named here is not mounted, however it got
 # installed.
-layers = ["livery.workshop", "livery.forge"]
+layers = [{% for layer in layers %}"{{ layer }}"{% if not loop.last %}, {% endif %}{% endfor %}]
 
 [forge]
-kind = "github"
-owner = "willemkokke"
+kind = "{{ forge_kind }}"
+owner = "{{ forge_owner }}"
 
 [ci]
-runners = ["ubuntu-latest", "macos-latest", "windows-latest"]
+runners = [{% for runner in runners %}"{{ runner }}"{% if not loop.last %}, {% endif %}{% endfor %}]

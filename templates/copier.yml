@@ -1,0 +1,120 @@
+# The workshop's template source: one template, two kinds, chosen by
+# `kind` and served from the matching subdirectory. Every question
+# carries a default or `when: false`, so an existing instance updates
+# without a prompt.
+_min_copier_version: "9.10.0"
+_subdirectory: "{{ kind }}"
+_answers_file: .copier-answers.yml
+_templates_suffix: .jinja
+_envops:
+  keep_trailing_newline: true
+  autoescape: false
+
+kind:
+  type: str
+  help: "What to render: a workspace root, or one Python package"
+  choices: [project, package-python]
+  default: project
+
+project_name:
+  type: str
+  help: "The workspace's name (also the repository name)"
+  default: "{{ _copier_conf.dst_path | basename }}"
+
+project_description:
+  type: str
+  help: "One sentence for the virtual root's [project] table"
+  default: "The {{ project_name }} monorepo (virtual root)."
+
+author_name:
+  type: str
+  default: "Willem Kokke"
+
+author_email:
+  type: str
+  default: "mail@willem.net"
+
+copyright_year:
+  type: str
+  help: "The year in a new package's LICENSE"
+  default: "2026"
+
+forge_kind:
+  type: str
+  choices: [github, gitea, gitlab]
+  default: github
+
+forge_owner:
+  type: str
+  help: "The owner or organisation the repository lives under"
+  default: "willemkokke"
+
+runners:
+  type: yaml
+  help: "CI runner labels, one gate leg per runner and Python version"
+  default: [ubuntu-latest]
+
+python_versions:
+  type: yaml
+  help: "Python versions CI runs; the first is the floor everywhere"
+  default: ["3.11"]
+
+layers:
+  type: yaml
+  help: "The workspace's layers, in precedence order"
+  default: [livery.workshop]
+
+packages:
+  type: yaml
+  help: >-
+    The workspace members: dir (under packages/), name (the
+    distribution), dev (the dev-group requirement, which may carry
+    extras the dev loop needs)
+  default: []
+
+# --- package-python ---------------------------------------------------
+
+package_name:
+  type: str
+  help: "The distribution name (e.g. livery-scratch)"
+  default: "livery-{{ _copier_conf.dst_path | basename }}"
+
+package_description:
+  type: str
+  default: "{{ package_name }}: a livery workspace package."
+
+namespace_package:
+  type: str
+  help: "Dotted namespace the package lives in (PEP 420, no __init__)"
+  default: "livery"
+
+# The module name inside the namespace, derived from the distribution
+# name minus the namespace prefix: livery-forge in livery -> forge.
+project_slug:
+  type: str
+  default: >-
+    {% set ns_prefix = namespace_package.replace('.', '-') + '-' if namespace_package else ''
+    %}{{ package_name.removeprefix(ns_prefix).replace('-', '_') }}
+  when: false
+
+# Filesystem path under src/ and tests/ - slashes nest directories.
+source_path:
+  type: str
+  default: >-
+    {% if namespace_package
+    %}{{ namespace_package.replace('.', '/') }}/{{ project_slug
+    }}{% else
+    %}{{ project_slug
+    }}{% endif %}
+  when: false
+
+# The dotted import path (livery.forge).
+import_path:
+  type: str
+  default: >-
+    {% if namespace_package
+    %}{{ namespace_package }}.{{ project_slug
+    }}{% else
+    %}{{ project_slug
+    }}{% endif %}
+  when: false

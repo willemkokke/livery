@@ -1,0 +1,27 @@
+[build-system]
+requires = ["uv_build>=0.11,<0.13"]
+build-backend = "uv_build"
+
+[project]
+name = "{{ package_name }}"
+version = "0.0.1"
+description = "{{ package_description }}"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">={{ python_versions[0] }}"
+authors = [{ name = "{{ author_name }}", email = "{{ author_email }}" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Repository = "https://github.com/{{ forge_owner }}/{{ project_name }}"
+
+[tool.uv.build-backend]
+# PEP 420 namespace: the importable package is {{ import_path }} and
+# there is no {{ namespace_package.split('.')[0] }}/__init__.py anywhere in this repository.
+module-name = "{{ import_path }}"

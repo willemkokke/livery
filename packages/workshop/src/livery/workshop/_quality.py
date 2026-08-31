@@ -14,6 +14,7 @@ from footman import doc, parallel, task
 from livery.workshop._backends import _python, require_backends
 from livery.workshop._layers import workspace_root
 from livery.workshop._packages import Package, discover_packages
+from livery.workshop._templates import template_check
 
 
 def _packages() -> tuple[Package, ...]:
@@ -70,13 +71,14 @@ def test(*pytest_args: str) -> None:
 
 @task
 def check() -> None:
-    """Run the gate: format check, lint, both type gates, tests, in parallel."""
+    """Run the gate: format, lint, types, tests, render gate, in parallel."""
     with parallel():
         format(check=True)
         lint()
         typecheck()
         typecomplete()
         test()
+        template_check()
 
 
 @task

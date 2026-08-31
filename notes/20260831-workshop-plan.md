@@ -1,12 +1,13 @@
 # Building the workshop
 
-Status: phases 1-3 shipped 2026-08-31 (PRs #12, #13, #17), plus the
-task-surface split (see the decision record): forge's whole dev
-surface, fixtures.record included, ships with livery-forge as a
-mountable layer, the root tasks.py is back at its seeded one line,
-and the content channel is live with the monorepo dogfooding it. The e2e accounts are all three verified and
-stored per the runbook, gitea.com's leg bringing its own API-minted
-runner. Next: phase 4. The bootstrap
+Status: phase 4 built, 2026-08-31, awaiting the pull request. The
+template source lives in `templates/` (two kinds behind one
+copier.yml), the monorepo renders from it as its own first instance
+(root and per-package answers adopted), and `fm template.check` sits
+inside `fm check`: a drifted rendered file fails the gate by name,
+with `fm template.apply` as the recovery. `fm new.package` renders
+and wires a member. Phases 1-3 shipped the same day (PRs #12, #13,
+#17), the task-surface split after them (PRs #18, #19). The bootstrap
 plan's entry criteria are met: `livery-forge` 0.1.0 is on PyPI with
 all three backends passing the one conformance suite, the fixture
 harness is stable, and the compose loop is routine.
