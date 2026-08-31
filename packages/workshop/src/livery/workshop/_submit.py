@@ -1,10 +1,10 @@
-"""``fm ship``: the whole shipping act as one idempotent verb.
+"""``fm submit``: get the branch onto the remote, verified, and landed.
 
 Local gate first (a red gate costs zero network calls), then the
 closes-link resolution with existence probes, disarm-before-push,
 push, find-or-open with the title rules, arm per the arming ladder,
 and follow to the classified verdict. Exits 10 and 17 self-heal by
-integrating the base and re-shipping; every other code surfaces
+integrating the base and re-submitting; every other code surfaces
 unchanged, because skills, hooks, and humans branch on them.
 
 ``fm workflow.abort`` is the exit: disarm, close the pull request,
@@ -34,11 +34,16 @@ from footman import doc, fail, group
 from livery.forge import ForgeError, Repository
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._layers import workspace_root
-from livery.workshop._verdict import EXIT_BEHIND, EXIT_CONFLICTS, follow
+from livery.workshop._verdict import (
+    EXIT_BEHIND,
+    EXIT_CONFLICTS,
+    EXIT_DISARMED,
+    follow,
+)
 
 workflow = group("workflow", help="The branch workflow's exits and overrides")
 
-#: Branch names ship accepts: the conventional type, a slash, a slug
+#: Branch names submit accepts: the conventional type, a slash, a slug
 #: that may open with an issue number (``feat/41-title-rules``).
 _BRANCH_TYPES = ("feat", "fix", "docs", "chore", "refactor", "test")
 _BRANCH_RE = re.compile(rf"^({'|'.join(_BRANCH_TYPES)})/.+$")
@@ -107,7 +112,7 @@ def with_closes(body: str, number: int) -> str:
 
 
 def resolve_closes(repo: Repository, branch: str, closes_flag: int) -> int | None:
-    """The issue ship will link, per the three guards.
+    """The issue submit will link, per the three guards.
 
     The flag beats the branch-name parse; a disagreement is printed,
     never silently resolved; and the issue must exist before
@@ -127,7 +132,7 @@ def resolve_closes(repo: Repository, branch: str, closes_flag: int) -> int | Non
     if repo.issue.get(parsed) is None:
         print(
             f"  note: branch names issue #{parsed}, which does not exist;"
-            " shipping without a Closes link"
+            " submitting without a Closes link"
         )
         return None
     return parsed
@@ -138,7 +143,7 @@ class Plan:
     """Everything a push and pull request need, validated, no network.
 
     Attributes:
-        branch: The feature branch being shipped.
+        branch: The feature branch being submitted.
         base: The branch the pull request targets.
         title: The pull request title, validated.
         body: The pull request body.
@@ -212,7 +217,7 @@ def disarm_before_push(repo: Repository, git: GitOps, branch: str) -> None:
     A push to an armed pull request races auto-merge: the merge can
     take the pre-push head. The disarm narrows that window; it cannot
     close it, so the merged check runs after it on every path. An
-    unreadable arming state must not block the ship; the push itself
+    unreadable arming state must not block the submit; the push itself
     surfaces a real transport problem.
     """
     try:
@@ -277,7 +282,7 @@ def push_and_pr(
         # one commit ahead, its subject is the intent. More, and
         # whichever commit is HEAD would name the pull request - a
         # guess dressed as a default, so it refuses instead (the
-        # recurring mis-title hse lived with). Re-ships never enter
+        # recurring mis-title hse lived with). Re-submits never enter
         # this branch, where the default is inert anyway.
         if not plan.title_given:
             subjects = git.subjects_ahead(plan.base)
@@ -302,7 +307,7 @@ def push_and_pr(
     return pr.number
 
 
-def ship_flow(
+def submit_flow(
     repo: Repository,
     git: GitOps,
     *,
@@ -317,7 +322,7 @@ def ship_flow(
     interval: float = 15,
     timeout: float = 1800,
 ) -> int:
-    """The whole shipping act; returns the pull request number.
+    """The whole submitting act; returns the pull request number.
 
     The task shell resolves the repository, the git seam, and the
     arming ladder; everything after that lives here so tests drive the
@@ -344,11 +349,19 @@ def ship_flow(
             follow(repo, plan.branch, git, interval=interval, timeout=timeout)
         except SystemExit as exc:
             code = exc.code if isinstance(exc.code, int) else 1
+            if code == EXIT_DISARMED and not armed:
+                # The submit was asked not to arm, so a green parked PR is
+                # this run finishing its job, not a blocker: prose above
+                # already said where it is parked, and the exit is clean.
+                # 11 still surfaces on an *armed* submit, where a gone
+                # schedule means something interfered.
+                print(f"  done: CI is green and PR #{number} awaits your call")
+                return number
             if code in (EXIT_CONFLICTS, EXIT_BEHIND) and heals < _MAX_HEALS:
                 heals += 1
                 print(
                     f"  exit {code}: integrating origin/{plan.base} and"
-                    f" re-shipping (self-heal {heals}/{_MAX_HEALS})"
+                    f" re-submitting (self-heal {heals}/{_MAX_HEALS})"
                 )
                 disarm_before_push(repo, git, plan.branch)
                 try:
@@ -356,7 +369,7 @@ def ship_flow(
                 except GitError as exc2:
                     fail(
                         f"the merge stopped on a conflict; resolve it, commit,"
-                        f" and re-run `fm ship`:\n{exc2}"
+                        f" and re-run `fm submit`:\n{exc2}"
                     )
                 if gate:
                     _gate()
@@ -374,7 +387,7 @@ def _gate() -> None:
 
 
 @footman.task
-def ship(
+def submit(
     title: Annotated[str, doc("PR title; defaults to HEAD's subject")] = "",
     body: Annotated[str, doc("PR body; defaults to HEAD's body")] = "",
     base: Annotated[str, doc("target branch")] = "main",
@@ -393,7 +406,7 @@ def ship(
     """Gate, push, open-or-reuse the PR, arm, follow to the verdict.
 
     Idempotent: re-running it is the recovery procedure. Exits 10 and
-    17 self-heal by integrating the base and re-shipping; the other
+    17 self-heal by integrating the base and re-submitting; the other
     verdict codes surface unchanged (see livery.workshop._verdict).
     """
     root = _root()
@@ -401,7 +414,7 @@ def ship(
 
     repo = this_repository(root)
     reason = arming_reason(armed=armed, flag_given=footman.given("armed"))
-    ship_flow(
+    submit_flow(
         repo,
         GitOps(root),
         title=title,
