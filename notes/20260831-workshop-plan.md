@@ -1,14 +1,12 @@
 # Building the workshop
 
-Status: phase 6 built, 2026-08-31, shipping via `fm submit --armed`;
-its acceptance completes with the 0.0.2 tag after the merge. The
-train's gate is `fm release.verify` (run by release.yml, which now
-renders from the template), `fm release.prepare` stamps versions,
-`fm release.templates` publishes the snapshot to
-willemkokke/workshop-templates (created, public, write deploy key
-installed, secret stored), and `fm update` is the wave's instance
-half. Phases 1-5 shipped 2026-08-31 (PRs #12, #13, #17, #20, #21-24
-carrying phase 5, its verb now `fm submit`). The bootstrap
+Status: phase 6 shipped, 2026-08-31 (PR #25; livery-workshop 0.0.2
+on PyPI; workshop-templates v0.0.2 published, byte-identical to
+`templates/` at the tag). The train's gate is `fm release.verify`
+inside the rendered release.yml, `fm release.templates` is the W6
+snapshot, and `fm update` is the wave's instance half. Next:
+phase 7. Phases 1-5 shipped the same day (PRs #12-#24, the forge-lane
+verb now `fm submit`). The bootstrap
 plan's entry criteria are met: `livery-forge` 0.1.0 is on PyPI with
 all three backends passing the one conformance suite, the fixture
 harness is stable, and the compose loop is routine.
@@ -259,8 +257,12 @@ The train the workshop rides is the train it ships.
   disagreements. Seven tests cover verify, prepare idempotency, the
   snapshot's publish/idempotent/immutable triple with the empty
   `git diff --no-index` as an assertion, and floor bumps moving both
-  homes. The live snapshot and the update no-op follow the 0.0.2
-  tag.)*
+  homes. Second half, after the tag: the release run's publish and
+  templates jobs both green, PyPI serves 0.0.2, the artifact clone at
+  v0.0.2 diffs empty against `templates/` (`git diff --no-index`,
+  exit 0), and the update flow on the merged tree prints "nothing to
+  update: floors, content, and render all current" and creates
+  nothing.)*
 
 ## Phase 7 — the other forges' CI, and the release legs
 
@@ -403,7 +405,10 @@ The bootstrap deferrals come home and the temporary environment ends.
   repository is public (instances consume it without credentials;
   its whole content is already public in the monorepo), created with
   Willem's gh credentials along with the write deploy key and the
-  `WORKSHOP_TEMPLATES_DEPLOY_KEY` secret, closing open item 1.
+  `WORKSHOP_TEMPLATES_DEPLOY_KEY` secret, closing open item 1. A
+  known gap, owned by the global create verb: `fm new.package` still
+  requires a local `templates/`, so a wheel instance cannot render a
+  member until the verb reads the artifact repository.
 - 2026-08-31, the verb is `submit`, armed off by default (Willem:
   "ship is a little misnamed ... it's also verify the current state
   on CI and make sure it's on the remote"; "we need to keep both our
