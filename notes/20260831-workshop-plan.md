@@ -1,10 +1,12 @@
 # Building the workshop
 
-Status: phase 1 shipped, 2026-08-31: merged as PR #12,
-`packages/workshop/v0.0.1` tagged, verified, and published by trusted
-publishing (run 33377265354; PyPI serves 0.0.1). The name is reserved
-and the train's second path is proven. Next: phase 2, the task
-surface into the plugin. The bootstrap
+Status: phase 2 built, 2026-08-31, awaiting the pull request. The
+whole task surface serves from the wheel, dispatched by contract, and
+the root `tasks.py` is at its final one line already; the layering
+lint is real and refuses six violation shapes by name. Phase 1
+shipped the same day (PR #12; 0.0.1 published, run 33377265354).
+Willem-side setup for phase 7 is written up in
+`notes/20260831-e2e-accounts-runbook.md`. The bootstrap
 plan's entry criteria are met: `livery-forge` 0.1.0 is on PyPI with
 all three backends passing the one conformance suite, the fixture
 harness is stable, and the compose loop is routine.
@@ -120,6 +122,13 @@ and starts reading `livery.toml` instead of assuming Python.
   --list` names the same verbs now served by the plugin; the layering
   lint fails on a synthetic violation
   (`uv run pytest packages/workshop/tests -k layering`).
+  *(2026-08-31: all three hold, and the root `tasks.py` reached its
+  one-line form this phase rather than "toward" it - the whole
+  surface moved, hooks and forge.dev included, so nothing temporary
+  remains in the file. Two verbs grew beside the moves: `clean`
+  (planned surface, nothing to port) and typecomplete deriving each
+  package's module from its contract name. The pipe guard and the
+  container seeds proven working from the plugin by command.)*
 
 ## Phase 3 — the materialiser and the content channel
 

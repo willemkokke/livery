@@ -2,18 +2,21 @@
 
 Advertised as the ``footman.tasks`` entry point named
 ``livery.workshop``; a repository's whole ``tasks.py`` is
-``plugin("livery.workshop")`` once the surface has moved in. Importing
-this module mounts every further layer the workspace contract names,
-in order, so one line composes the entire tree.
+``plugin("livery.workshop")``. Importing this module registers the
+task tree (the quality family, the forge dev loop, the agent hooks)
+and mounts every further layer the workspace contract names, in
+order, so one line composes everything.
 
-The task surface migrates here phase by phase; today the plugin
-carries the layer host and its one verb.
+Tasks assume the working directory is the workspace root; ``fm`` is
+invoked there.
 """
 
 from __future__ import annotations
 
 from footman import task
 
+# Importing registers each module's tasks with footman.
+from livery.workshop import _forge_dev, _hooks, _quality  # noqa: F401
 from livery.workshop._layers import SELF, layer_names, mount_layers
 
 
