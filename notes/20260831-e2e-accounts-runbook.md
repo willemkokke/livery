@@ -34,7 +34,8 @@ the personal profile.
    `workflow`, `delete_repo`, no expiry shorter than a year. Classic,
    not fine-grained: it is the token shape the backend's live runs
    are verified with.
-3. Store it:
+3. Store it (done 2026-08-31: secret and variable set, verified end
+   to end including protection and a sealed-box secret):
 
    ```console
    gh secret set LIVERY_E2E_GITHUB_TOKEN --repo willemkokke/livery
@@ -56,16 +57,24 @@ anyway.
 1. Create a private group: <https://gitlab.com/groups/new>. Group
    paths are global on gitlab.com, so `livery-forge-e2e` may be
    taken; any path works, it lands in the variable.
-2. Enable CI minutes: gitlab.com requires account validation (a
-   credit card, not charged) before shared runners run pipelines for
-   a new namespace. Without this the CI-driven scenarios hang, which
-   reads as a livery bug and is not one. Free tier includes 400
-   compute minutes per month; a full live leg uses a few.
+2. Shared runners: some accounts must validate (a credit card, not
+   charged) before gitlab.com's shared runners run their pipelines;
+   without it jobs sit pending forever, which reads as a livery bug
+   and is not one. There is no standing settings page for this: the
+   card form appears reactively on a blocked pipeline's page
+   (`gitlab.com/-/identity_verification`), and accounts verified at
+   signup or predating the requirement never see it. The check is
+   empirical: push a one-job pipeline and watch it run. Willem's
+   account checked out validated on 2026-08-31 (the probe job ran on
+   shared runners in seconds), so this step is done. Free tier
+   includes 400 compute minutes per month; a full live leg uses a
+   few.
 3. Mint a personal access token: <https://gitlab.com/-/user_settings/personal_access_tokens>,
    scope `api`, one year. (A group access token would be tidier, but
    those are paid-tier; the personal token is what the container legs
    are verified with anyway.)
-4. Store it:
+4. Store it (done 2026-08-31: secret and variable set, group
+   `livery-forge-e2e`):
 
    ```console
    gh secret set LIVERY_E2E_GITLAB_TOKEN --repo willemkokke/livery
