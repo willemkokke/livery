@@ -528,6 +528,13 @@ starts; recorded here so the sequence is visible (Willem: post
   signing, a non-PyPI index for the monorepo itself, and a portable
   token path on the github kind. `packages/workshop/docs/releases.md`
   states the same for readers.
+- 2026-08-31, the shells lit and the floor ratcheted. Lighting the
+  task shells through the resolution seam took the workshop union
+  from 79.0 to 84.5 (PRs #52-#54, `fm ci.logs` born on the way);
+  the floor ratchets to 84 from that reading. The remaining dark
+  weight is the materialiser's other-platform fallbacks as seen from
+  any single leg's tooling, the submit heal remainders, and the
+  enforcement helpers that run after the union closes.
 - 2026-08-31, everything through fm (Willem: a ban on calling gh,
   the type checkers, and other tool CLIs directly; exceptions on
   request, and a needed exception probably marks a missing workshop
