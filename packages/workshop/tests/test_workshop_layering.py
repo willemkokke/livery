@@ -107,11 +107,13 @@ def test_a_forge_third_party_import_is_refused(tmp_path: Path) -> None:
         verify_workspace(tmp_path)
 
 
-def test_the_dev_plugin_may_import_footman_and_nothing_else(tmp_path: Path) -> None:
+def test_the_dev_plugin_may_import_its_two_tools_and_nothing_else(
+    tmp_path: Path,
+) -> None:
     _forge_stub(tmp_path)
     plugin_dir = tmp_path / "packages" / "forge" / "src" / "livery" / "forge" / "_dev"
     plugin_dir.mkdir(parents=True)
-    (plugin_dir / "__init__.py").write_text("import footman\n")
+    (plugin_dir / "__init__.py").write_text("import footman\nimport toolroom\n")
     verify_workspace(tmp_path)
     (plugin_dir / "__init__.py").write_text("import footman\nimport requests\n")
     with pytest.raises(ValueError, match="stdlib-only at import time"):

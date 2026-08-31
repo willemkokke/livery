@@ -10,9 +10,14 @@ every seed probes before acting.
 This module is the `footman.tasks` entry point named ``livery.forge``.
 A workspace mounts it by listing ``livery.forge`` in its layers; a
 repository that does not is never offered these tasks. Unlike the rest
-of livery.forge it imports footman, which is present by construction:
-the only loader is footman's own ``plugin()``, so livery-forge still
-declares no dependency.
+of livery.forge it imports footman and toolroom, which are present by
+construction: the only loader is footman's own ``plugin()``, and only
+a workshop workspace mounts layers, so livery-forge still declares no
+dependency.
+
+``fm forge.fixtures.record`` re-records the conformance cassettes and
+registers only in forge's own source checkout, where the test suite
+it runs exists; a wheel install never offers it.
 """
 
 from __future__ import annotations
@@ -30,9 +35,39 @@ from pathlib import Path
 from typing import Annotated
 
 from footman import doc, fail, group
+from toolroom import pytest
 
 forge = group("forge", help="livery.forge development")
 dev = forge.group("dev", help="Local forge containers (Gitea and GitLab)")
+
+#: Forge's own test suite, present only in a source checkout: this
+#: file is src/livery/forge/_dev/__init__.py, so the package directory
+#: holding tests/ is four parents up.
+_FORGE_TESTS = Path(__file__).resolve().parents[4] / "tests"
+
+if _FORGE_TESTS.is_dir():
+    fixtures = forge.group("fixtures", help="Recorded HTTP fixtures (cassettes)")
+
+    @fixtures.task(name="record")
+    def fixtures_record() -> None:
+        """Re-record the conformance cassettes from the live containers.
+
+        Runs the backend conformance suites against the seeded
+        containers (`fm forge.dev.up` first) and rewrites the
+        cassettes under forge's tests/cassettes/. Review the diff like
+        code: a changed exchange is a changed contract with the
+        server.
+        """
+        os.environ["LIVERY_FORGE_RECORD"] = "1"
+        run_tests = pytest.opts(in_process=False)
+        run_tests(str(_FORGE_TESTS / "test_gitea_conformance.py"))
+        # One single-node GitLab absorbs about four concurrent
+        # writers; beyond that its own internals time out (Gitaly
+        # deadlines), so the recording run is capped rather than
+        # flaky.
+        run_tests(str(_FORGE_TESTS / "test_gitlab_conformance.py"), "-n", "4")
+        run_tests(str(_FORGE_TESTS / "test_github_conformance.py"), "-n", "4")
+
 
 _GITEA_URL = "http://localhost:3000"
 _GITLAB_URL = "http://localhost:8929"
