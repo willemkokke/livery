@@ -15,44 +15,39 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The verify step checks floors against released tags.
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v5
+      - name: Sync (locked)
+        run: uv sync --locked
       - name: Verify tag against package
         id: verify
-        run: |
-          uv run --no-project python - "$GITHUB_REF_NAME" <<'PY'
-          """Fail loudly, with the reason verbatim, before anything builds."""
-          import re
-          import sys
-          import tomllib
-          from pathlib import Path
-
-          tag = sys.argv[1]  # packages/<pkg>/v<semver>
-          m = re.fullmatch(r"(packages/[^/]+)/v(\d+\.\d+\.\d+)", tag)
-          if not m:
-              sys.exit(f"tag {tag!r} does not match packages/<pkg>/v<semver>")
-          pkg_dir, version = Path(m.group(1)), m.group(2)
-          if not pkg_dir.is_dir():
-              sys.exit(f"tag names {pkg_dir}, which does not exist")
-          pyproject = tomllib.loads((pkg_dir / "pyproject.toml").read_text())
-          name = pyproject["project"]["name"]
-          declared = pyproject["project"]["version"]
-          if declared != version:
-              sys.exit(f"tag says {version}, {pkg_dir}/pyproject.toml says {declared}")
-          changelog = (pkg_dir / "CHANGELOG.md").read_text()
-          if f"## {version}" not in changelog:
-              sys.exit(f"{pkg_dir}/CHANGELOG.md has no '## {version}' entry")
-          inits = list((pkg_dir / "src").rglob("__init__.py"))
-          versioned = [p for p in inits if "__version__" in p.read_text()]
-          if not any(f'__version__ = "{version}"' in p.read_text() for p in versioned):
-              sys.exit(f"no __init__.py under {pkg_dir}/src declares __version__ = \"{version}\"")
-          out = Path(__import__("os").environ["GITHUB_OUTPUT"])
-          with out.open("a") as fh:
-              fh.write(f"package={name}\n")
-          print(f"verified: {name} {version} from {tag}")
-          PY
+        run: uv run --no-sync fm release.verify "$GITHUB_REF_NAME"
       - name: Build
         run: uv build --package "${{ steps.verify.outputs.package }}" --out-dir dist
       - name: Publish to PyPI (trusted publishing)
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist
+
+  # The workshop's release aftermath (W6): the template snapshot,
+  # tagged v<semver> in lockstep with packages/workshop/v<semver>.
+  templates:
+    if: startsWith(github.ref_name, 'packages/workshop/v')
+    needs: [publish]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Sync (locked)
+        run: uv sync --locked
+      - name: Deploy key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.WORKSHOP_TEMPLATES_DEPLOY_KEY }}" > ~/.ssh/templates_deploy
+          chmod 600 ~/.ssh/templates_deploy
+      - name: Publish the template snapshot
+        env:
+          GIT_SSH_COMMAND: ssh -i ~/.ssh/templates_deploy -o StrictHostKeyChecking=accept-new
+        run: uv run --no-sync fm release.templates "${GITHUB_REF_NAME#packages/workshop/v}"
