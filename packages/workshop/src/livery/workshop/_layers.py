@@ -1,0 +1,63 @@
+"""The layer walk: one list in the workspace contract, every channel.
+
+The root ``livery.toml`` names the layers in precedence order, the
+workshop first and the instance implicitly last. Mounting reads that
+list and grafts each further layer's footman plugin in order, so a
+package installed by accident never changes a repository: discovery
+is the list and nothing else.
+"""
+
+from __future__ import annotations
+
+import tomllib
+from pathlib import Path
+
+#: The layer this package is. Never mounted by name: importing the
+#: plugin module IS this layer arriving.
+SELF = "livery.workshop"
+
+
+def workspace_root(start: Path | None = None) -> Path | None:
+    """The nearest ancestor carrying a ``livery.toml``, or None.
+
+    The workspace contract is the marker; a checkout without one is
+    not a workspace and gets no layers.
+    """
+    origin = (start or Path.cwd()).resolve()
+    for candidate in (origin, *origin.parents):
+        if (candidate / "livery.toml").is_file():
+            return candidate
+    return None
+
+
+def layer_names(start: Path | None = None) -> tuple[str, ...]:
+    """The layers the workspace declares, in precedence order.
+
+    Empty outside a workspace, and empty when the contract carries no
+    ``[workspace] layers`` list: no guessing, no defaults.
+    """
+    root = workspace_root(start)
+    if root is None:
+        return ()
+    contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
+    workspace = contract.get("workspace") or {}
+    layers = workspace.get("layers") or []
+    return tuple(str(layer) for layer in layers)
+
+
+def mount_layers(start: Path | None = None) -> tuple[str, ...]:
+    """Graft every further layer's plugin, in order; the names mounted.
+
+    The workshop itself is skipped: importing this package's plugin
+    module is how the base layer arrives, and mounting it again from
+    inside itself would recurse.
+    """
+    from footman import plugin
+
+    mounted = []
+    for layer in layer_names(start):
+        if layer == SELF:
+            continue
+        plugin(layer)
+        mounted.append(layer)
+    return tuple(mounted)

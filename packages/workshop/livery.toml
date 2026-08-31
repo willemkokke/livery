@@ -1,0 +1,15 @@
+# The package contract. Discovery is by this file: a directory under
+# packages/ is a package exactly when it carries one.
+
+type = "python"
+name = "livery-workshop"
+
+[verbs]
+check = "fm check"
+test = "fm test"
+build = "uv build --package livery-workshop"
+
+[[depends]]
+path = "packages/forge"
+kind = "build"
+floor = "0.1.0"

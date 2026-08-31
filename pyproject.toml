@@ -26,6 +26,7 @@ members = ["packages/*"]
 
 [tool.uv.sources]
 livery-forge = { workspace = true }
+livery-workshop = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -38,6 +39,7 @@ dev = [
     # The workspace members, so root tests import them; the extra so
     # fixture recording exercises GitHub's ci_secrets path.
     "livery-forge[github-secrets]",
+    "livery-workshop",
     "pytest>=8.0",
     # Parallelise the suite across cores (`-n auto`, wired into addopts).
     "pytest-xdist>=3.6",
@@ -57,7 +59,7 @@ dev = [
 [tool.ruff]
 line-length = 88
 target-version = "py311"
-src = ["packages/forge/src", "packages/forge/tests", "tests"]
+src = ["packages/forge/src", "packages/forge/tests", "packages/workshop/src", "packages/workshop/tests", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF", "D"]
@@ -89,8 +91,15 @@ reportMissingModuleSource = false
 # `# type: ignore[code]` with a reason; pyright-only suppressions use
 # `# pyright: ignore` so warn_unused_ignores keeps this checker's set
 # honest.
-files = ["packages/forge/src", "packages/forge/tests", "tests", "tasks.py"]
-mypy_path = ["packages/forge/src", "packages/forge/tests"]
+files = [
+    "packages/forge/src",
+    "packages/forge/tests",
+    "packages/workshop/src",
+    "packages/workshop/tests",
+    "tests",
+    "tasks.py",
+]
+mypy_path = ["packages/forge/src", "packages/forge/tests", "packages/workshop/src"]
 # PEP 420 namespace in a src layout: mypy needs both to derive module
 # names without an __init__.py trail.
 namespace_packages = true
@@ -120,7 +129,7 @@ disallow_untyped_decorators = true
 # Third gate. Scope: the packages themselves; the consumer seam in
 # tests is already double-checked by basedpyright and mypy.
 [tool.ty.src]
-include = ["packages/forge/src"]
+include = ["packages/forge/src", "packages/workshop/src"]
 
 [tool.ty.environment]
 # Every platform at once (ty checks the union), 3.11 floor.
@@ -133,7 +142,7 @@ python-version = "3.11"
 # zero-dependency 3.11 library cannot spell it without a
 # typing_extensions runtime dep. Revisit when 3.11 support ends.
 preset = "default"
-project-includes = ["packages/forge/src"]
+project-includes = ["packages/forge/src", "packages/workshop/src"]
 # Both path heuristics off: a checkout under a dot-directory (a
 # `.claude/worktrees/` worktree) silently skips every include and the
 # gate fails on "no files matched". At the repo root neither setting
