@@ -277,6 +277,36 @@ def test_prepare_validates_branch_and_title(rig: tuple[FakeForge, ShipGit]) -> N
         prepare(git)
 
 
+def test_an_ambiguous_title_default_refuses_on_first_open(
+    rig: tuple[FakeForge, ShipGit],
+) -> None:
+    # Two commits ahead: no commit subject may name the new PR. The
+    # refusal lists the subjects; --title opens; and once the PR
+    # exists, a defaulted re-ship is fine because the default is
+    # inert there.
+    fake, git = rig
+    (git.root / "work.txt").write_text("second\n")
+    _git(git.root, "commit", "-am", "feat: the second commit")
+    with pytest.raises(_FAILURES) as caught:
+        _ship(fake, git, armed=False, follow_to_verdict=False)
+    assert "2 commits ahead" in str(caught.value)
+    assert "the first change" in str(caught.value)
+    number = _ship(
+        fake,
+        git,
+        armed=False,
+        follow_to_verdict=False,
+        title="feat: the whole intent",
+    )
+    (git.root / "work.txt").write_text("third\n")
+    _git(git.root, "commit", "-am", "feat: a fixup")
+    assert (
+        _ship(fake, git, armed=False, follow_to_verdict=False) == number
+    )  # defaulted re-ship: reused, title kept
+    pr = _repo(fake).pr.get(number)
+    assert pr is not None and pr.title == "feat: the whole intent"
+
+
 def test_a_given_title_updates_the_reused_pr(
     rig: tuple[FakeForge, ShipGit],
 ) -> None:

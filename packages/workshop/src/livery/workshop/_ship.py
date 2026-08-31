@@ -273,6 +273,22 @@ def push_and_pr(
     git.push(plan.branch)
     pr = repo.pr.find_by_head(plan.branch)
     if pr is None:
+        # A defaulted title is trustworthy only when it is unambiguous:
+        # one commit ahead, its subject is the intent. More, and
+        # whichever commit is HEAD would name the pull request - a
+        # guess dressed as a default, so it refuses instead (the
+        # recurring mis-title hse lived with). Re-ships never enter
+        # this branch, where the default is inert anyway.
+        if not plan.title_given:
+            subjects = git.subjects_ahead(plan.base)
+            if len(subjects) > 1:
+                listed = "\n".join(f"    - {subject}" for subject in subjects)
+                fail(
+                    f"the branch is {len(subjects)} commits ahead, so no"
+                    " commit subject can default the PR title:\n"
+                    f"{listed}\n"
+                    '  pass the intent: --title="type(scope): subject"'
+                )
         pr = repo.pr.open(plan.branch, plan.base, plan.title, body)
         print(f"  opened PR #{pr.number}: {pr.title}")
     else:
