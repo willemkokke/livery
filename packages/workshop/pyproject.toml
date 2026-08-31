@@ -21,6 +21,10 @@ dependencies = [
     "livery-forge>=0.1.0",
     "footman>=0.46",
     "toolroom>=0.6.1",
+    # The template engine behind `fm template.check` and `fm
+    # new.package`; pyyaml reads the adopted answers files.
+    "copier>=9.10",
+    "pyyaml>=6",
 ]
 
 [project.entry-points."footman.tasks"]

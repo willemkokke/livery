@@ -17,7 +17,7 @@ from __future__ import annotations
 from footman import task
 
 # Importing registers each module's tasks with footman.
-from livery.workshop import _hooks, _quality, _sync  # noqa: F401
+from livery.workshop import _hooks, _quality, _sync, _templates  # noqa: F401
 from livery.workshop._layers import SELF, layer_names, mount_layers
 
 

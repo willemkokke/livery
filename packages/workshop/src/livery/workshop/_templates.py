@@ -1,0 +1,240 @@
+"""The template channel: the render gate, the applier, the generator.
+
+The template source lives in the workspace's ``templates/`` directory:
+one copier template, two kinds (``project`` for the workspace root,
+``package-python`` for one package), rendered from the adopted
+answers file at the workspace root.
+
+``fm template.check`` renders the ``project`` kind into a scratch
+directory and compares every rendered file byte for byte against the
+repository, failing on any drift; it is part of ``fm check``, and
+does nothing in a workspace without a ``templates/`` directory.
+``fm template.apply`` writes the same render over the repository,
+which is the recovery procedure for drift. ``fm new.package`` renders
+the ``package-python`` kind into ``packages/<name>`` and wires the
+member into the workspace by appending it to the answers file and
+re-applying the ``project`` render.
+"""
+
+from __future__ import annotations
+
+import re
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from typing import Annotated, Any
+
+import yaml
+from footman import doc, fail, group
+
+from livery.workshop._layers import workspace_root
+from livery.workshop._materialise import write_lf
+
+template = group("template", help="The template source and its render gate")
+new = group("new", help="Render new pieces from the template source")
+
+_ANSWERS = ".copier-answers.yml"
+
+
+def _root() -> Path:
+    """The workspace root, or fail."""
+    root = workspace_root()
+    if root is None:
+        fail("no workspace: no livery.toml above the working directory")
+    return root
+
+
+def read_answers(path: Path) -> dict[str, Any]:
+    """The adopted answers at *path*, copier's own bookkeeping stripped."""
+    if not path.is_file():
+        fail(f"no answers file at {path}: adopt one before rendering")
+    answers = yaml.safe_load(path.read_text("utf-8")) or {}
+    if not isinstance(answers, dict):
+        fail(f"{path} is not a mapping")
+    return {key: value for key, value in answers.items() if not key.startswith("_")}
+
+
+def render(template_dir: Path, destination: Path, data: dict[str, Any]) -> None:
+    """Render *template_dir* into *destination* with *data*, no prompts.
+
+    The working tree is the source: uncommitted template edits render
+    too, which is what lets the gate judge a change before its commit.
+    Runs copier in a child process because it chdirs while rendering,
+    which a parallel task must never do to the one real directory.
+    """
+    with tempfile.NamedTemporaryFile("w", suffix=".yml", delete=False) as handle:
+        yaml.safe_dump(data, handle)
+        data_file = handle.name
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "copier",
+                "copy",
+                "--defaults",
+                "--trust",
+                "--overwrite",
+                "--quiet",
+                "--data-file",
+                data_file,
+                str(template_dir),
+                str(destination),
+            ],
+            capture_output=True,
+            text=True,
+        )
+    finally:
+        Path(data_file).unlink(missing_ok=True)
+    if result.returncode != 0:
+        fail(f"copier exited {result.returncode}:\n{result.stdout}{result.stderr}")
+
+
+def rendered_files(destination: Path) -> list[Path]:
+    """Every rendered file, the answers file excluded.
+
+    The answers file records provenance, not content, so the drift
+    comparison never judges it.
+    """
+    return sorted(
+        path
+        for path in destination.rglob("*")
+        if path.is_file() and path.name != _ANSWERS
+    )
+
+
+def project_drift(root: Path) -> list[str]:
+    """The drift report: rendered files that disagree with *root*.
+
+    Empty when every rendered file matches the repository byte for
+    byte.
+    """
+    data = read_answers(root / _ANSWERS)
+    drift = []
+    with tempfile.TemporaryDirectory() as scratch:
+        render(root / "templates", Path(scratch), data)
+        for rendered in rendered_files(Path(scratch)):
+            relative = rendered.relative_to(scratch)
+            committed = root / relative
+            if not committed.is_file():
+                drift.append(f"{relative}: rendered, but missing from the repository")
+            elif committed.read_bytes() != rendered.read_bytes():
+                drift.append(f"{relative}: differs from its render")
+    return drift
+
+
+def apply_project(root: Path) -> list[str]:
+    """Write the ``project`` render over *root*; the files that changed."""
+    data = read_answers(root / _ANSWERS)
+    changed = []
+    with tempfile.TemporaryDirectory() as scratch:
+        render(root / "templates", Path(scratch), data)
+        for rendered in rendered_files(Path(scratch)):
+            relative = rendered.relative_to(scratch)
+            committed = root / relative
+            body = rendered.read_bytes()
+            if not committed.is_file() or committed.read_bytes() != body:
+                committed.parent.mkdir(parents=True, exist_ok=True)
+                committed.write_bytes(body)
+                changed.append(str(relative))
+    return changed
+
+
+@template.task(name="check")
+def template_check() -> None:
+    """Fail when a rendered file drifts from the template source.
+
+    Part of the gate. A workspace without a ``templates/`` directory
+    is an instance, not the template source, and passes vacuously.
+    """
+    root = _root()
+    if not (root / "templates").is_dir():
+        return
+    drift = project_drift(root)
+    if drift:
+        fail(
+            "rendered files drift from templates/:\n  "
+            + "\n  ".join(drift)
+            + "\n  edit templates/ (never the rendered copy) and run"
+            " `fm template.apply`"
+        )
+
+
+@template.task(name="apply")
+def template_apply() -> None:
+    """Re-render the ``project`` kind over the repository.
+
+    The recovery procedure for drift, and the delivery step after a
+    template edit. Idempotent: a clean tree changes nothing.
+    """
+    root = _root()
+    if not (root / "templates").is_dir():
+        fail("no templates/ here: nothing to apply")
+    changed = apply_project(root)
+    for name in changed:
+        print(f"  rendered: {name}")
+    if not changed:
+        print("  everything already matches the render")
+
+
+@new.task(name="package")
+def new_package(
+    name: Annotated[str, doc("directory name under packages/ (e.g. scratch)")],
+) -> None:
+    """Render a new Python package and wire it into the workspace.
+
+    Renders ``package-python`` into ``packages/<name>`` with the
+    distribution named after the workspace convention
+    (``livery-<name>``), appends the member to the root answers file,
+    re-applies the ``project`` render so every per-package list picks
+    it up, and re-locks the environment.
+    """
+    root = _root()
+    if not (root / "templates").is_dir():
+        fail("no templates/ here: new packages render from the template source")
+    if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
+        fail(f"package name {name!r}: use lowercase letters, digits, hyphens")
+    destination = root / "packages" / name
+    if destination.exists():
+        fail(f"{destination} already exists")
+    answers = read_answers(root / _ANSWERS)
+    package_name = f"livery-{name}"
+    render(
+        root / "templates",
+        destination,
+        {
+            "kind": "package-python",
+            "package_name": package_name,
+            "package_description": f"{package_name}: a livery workspace package.",
+            "namespace_package": "livery",
+            "author_name": answers.get("author_name", ""),
+            "author_email": answers.get("author_email", ""),
+            "copyright_year": answers.get("copyright_year", ""),
+            "forge_owner": answers.get("forge_owner", ""),
+            "project_name": answers.get("project_name", ""),
+            "python_versions": answers.get("python_versions", []),
+        },
+    )
+    members = list(answers.get("packages", []))
+    members.append({"dir": name, "name": package_name, "dev": package_name})
+    answers["packages"] = members
+    _write_root_answers(root, answers)
+    for changed in apply_project(root):
+        print(f"  rendered: {changed}")
+    lock = subprocess.run(["uv", "lock"], cwd=root, capture_output=True, text=True)
+    if lock.returncode != 0:
+        fail(f"uv lock exited {lock.returncode}:\n{lock.stdout}{lock.stderr}")
+    print(f"  packages/{name}: rendered and wired; run `uv sync` to install it")
+
+
+def _write_root_answers(root: Path, answers: dict[str, Any]) -> None:
+    """Rewrite the root answers file, header and bookkeeping kept."""
+    body = (
+        "# Managed by copier: this instance's identity and template\n"
+        "# provenance. `fm new.package` appends to `packages`; edit other\n"
+        "# values only when the workspace itself changes.\n"
+        "_src_path: templates\n"
+        + yaml.safe_dump(answers, sort_keys=False, allow_unicode=True)
+    )
+    write_lf(root / _ANSWERS, body)

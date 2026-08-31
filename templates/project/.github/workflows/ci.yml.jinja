@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [{% for runner in runners %}{{ runner }}{% if not loop.last %}, {% endif %}{% endfor %}]
+        python: [{% for version in python_versions %}"{{ version }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+    runs-on: ${{ '{{' }} matrix.os {{ '}}' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Sync (locked)
+        run: uv sync --locked --python ${{ '{{' }} matrix.python {{ '}}' }}
+      - name: Gate
+        run: uv run --no-sync fm check
+
+  # The one required context. Branch protection points here, so the
+  # matrix can grow or shrink without touching repository settings.
+  gate:
+    if: always()
+    needs: [check]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verdict
+        run: test "${{ '{{' }} needs.check.result {{ '}}' }}" = "success"

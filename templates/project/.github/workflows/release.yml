@@ -1,0 +1,58 @@
+name: release
+
+# The train: push a tag shaped packages/<pkg>/v<semver> and only that
+# package releases. Tags are immutable and pushed alone.
+on:
+  push:
+    tags: ["packages/*/v*"]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Verify tag against package
+        id: verify
+        run: |
+          uv run --no-project python - "$GITHUB_REF_NAME" <<'PY'
+          """Fail loudly, with the reason verbatim, before anything builds."""
+          import re
+          import sys
+          import tomllib
+          from pathlib import Path
+
+          tag = sys.argv[1]  # packages/<pkg>/v<semver>
+          m = re.fullmatch(r"(packages/[^/]+)/v(\d+\.\d+\.\d+)", tag)
+          if not m:
+              sys.exit(f"tag {tag!r} does not match packages/<pkg>/v<semver>")
+          pkg_dir, version = Path(m.group(1)), m.group(2)
+          if not pkg_dir.is_dir():
+              sys.exit(f"tag names {pkg_dir}, which does not exist")
+          pyproject = tomllib.loads((pkg_dir / "pyproject.toml").read_text())
+          name = pyproject["project"]["name"]
+          declared = pyproject["project"]["version"]
+          if declared != version:
+              sys.exit(f"tag says {version}, {pkg_dir}/pyproject.toml says {declared}")
+          changelog = (pkg_dir / "CHANGELOG.md").read_text()
+          if f"## {version}" not in changelog:
+              sys.exit(f"{pkg_dir}/CHANGELOG.md has no '## {version}' entry")
+          inits = list((pkg_dir / "src").rglob("__init__.py"))
+          versioned = [p for p in inits if "__version__" in p.read_text()]
+          if not any(f'__version__ = "{version}"' in p.read_text() for p in versioned):
+              sys.exit(f"no __init__.py under {pkg_dir}/src declares __version__ = \"{version}\"")
+          out = Path(__import__("os").environ["GITHUB_OUTPUT"])
+          with out.open("a") as fh:
+              fh.write(f"package={name}\n")
+          print(f"verified: {name} {version} from {tag}")
+          PY
+      - name: Build
+        run: uv build --package "${{ steps.verify.outputs.package }}" --out-dir dist
+      - name: Publish to PyPI (trusted publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist

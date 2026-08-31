@@ -1,0 +1,29 @@
+# Managed by copier: this instance's identity and template
+# provenance. `fm new.package` appends to `packages`; edit other
+# values only when the workspace itself changes.
+_src_path: templates
+kind: project
+project_name: livery
+project_description: The livery ecosystem monorepo (virtual root).
+author_name: Willem Kokke
+author_email: mail@willem.net
+copyright_year: '2026'
+forge_kind: github
+forge_owner: willemkokke
+runners:
+- ubuntu-latest
+- macos-latest
+- windows-latest
+python_versions:
+- '3.11'
+- '3.14'
+layers:
+- livery.workshop
+- livery.forge
+packages:
+- dir: forge
+  name: livery-forge
+  dev: livery-forge[github-secrets]
+- dir: workshop
+  name: livery-workshop
+  dev: livery-workshop
