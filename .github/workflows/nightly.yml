@@ -1,0 +1,67 @@
+# The nightly: the released wheels, replayed as a consumer would run
+# them. Hermetic by construction - no live forge, no credential, no
+# scratch repository - so a red night means something real: a
+# dependency release broke the installed configuration, or the wheel
+# on the index no longer matches its own recorded contract. Live legs
+# against the real forges run per release, not here.
+name: nightly
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  released-wheels-replay:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.11", "3.14"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Check out the latest release and install its wheel
+        shell: bash
+        # The pairing under test is the one a consumer gets: the wheel
+        # from PyPI beside the cassettes recorded for that same
+        # version, so the tree is checked out at the release tag, not
+        # at main.
+        run: |
+          version=$(curl -fsS https://pypi.org/pypi/livery-forge/json | python -c "import json,sys; print(json.load(sys.stdin)['info']['version'])")
+          echo "replaying livery-forge $version"
+          git checkout "packages/forge/v$version"
+          python -m venv .nightly
+          . .nightly/bin/activate 2>/dev/null || . .nightly/Scripts/activate
+          python -m pip install --quiet "livery-forge[github-secrets]==$version" pytest pytest-xdist
+      - name: Replay the conformance suite against the installed wheel
+        shell: bash
+        # A plain venv, not the uv workspace: the tests must import
+        # livery.forge from site-packages, exactly as a consumer does.
+        run: |
+          . .nightly/bin/activate 2>/dev/null || . .nightly/Scripts/activate
+          python -c "import livery.forge, pathlib; p = pathlib.Path(livery.forge.__file__); assert \"site-packages\" in str(p), p; print(\"testing\", p)"
+          python -m pytest packages/forge/tests
+
+  file-issue-on-failure:
+    needs: released-wheels-replay
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: File or extend the drift issue, through the forge itself
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          NIGHTLY_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: uv run python .github/scripts/nightly_issue.py

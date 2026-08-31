@@ -215,10 +215,13 @@ under concurrency (arming several PRs whose runs share a queue — and
 - **W10 — issue-driven work.** `issue.assigned_to_me` → `issue.get` — title, full body, labels; the body *is* the work order — → branch named for the issue → W3 with the closes-link →
   `issue.comment` for evidence the PR body can't carry → close happens
   by merge keyword, not by API.
-- **W11 — nightly.** `checks.dispatch` (released-wheels suites, forge
-  drift replays) → watch → on failure `issue.create` with the evidence
-  attached. The nightly is the only workflow that *creates* issues
-  unprompted, so its dedup probe (`issue.search` by marker text and label before create) is part of the workflow, not left to chance.
+- **W11 — nightly.** The scheduled released-wheels replay (hermetic:
+  the wheel from the index against its own recorded cassettes) → on
+  failure `issue.create` with the evidence attached; the live forge
+  legs run per release instead, where their verdict changes a
+  decision. The nightly is the only workflow that *creates* issues
+  unprompted, so its dedup probe (`issue.search` by marker text
+  before create) is part of the workflow, not left to chance.
 - **W12 — doctor / identity.** `identity.whoami`, token-for-host
   precedence (`is_configured_host`), `identity.server_version` (the
   1.28 floor probe), `forge.supports(...)` report. Runs at the start of
