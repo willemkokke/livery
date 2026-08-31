@@ -1,15 +1,14 @@
 # Building the workshop
 
-Status: phase 5 built, 2026-08-31, shipped by its own verb: this
-phase's pull request is the acceptance run for `fm submit --armed`.
-W3 is a callable flow on the frozen protocol (gate, closes guards,
-disarm-before-push, find-or-open, the arming ladder, the classified
-verdict, self-heal on 10 and 17, `workflow.abort` and
-`workflow.merge-now`), with `fm status`, `fm ci.rerun/watch/cancel`,
-and `fm doctor` beside it, all tested in-process on FakeForge with a
-real temporary git repository. Phases 1-4 shipped the same day
-(PRs #12, #13, #17, #20), the task-surface split between them
-(PRs #18, #19). The bootstrap
+Status: phase 6 built, 2026-08-31, shipping via `fm submit --armed`;
+its acceptance completes with the 0.0.2 tag after the merge. The
+train's gate is `fm release.verify` (run by release.yml, which now
+renders from the template), `fm release.prepare` stamps versions,
+`fm release.templates` publishes the snapshot to
+willemkokke/workshop-templates (created, public, write deploy key
+installed, secret stored), and `fm update` is the wave's instance
+half. Phases 1-5 shipped 2026-08-31 (PRs #12, #13, #17, #20, #21-24
+carrying phase 5, its verb now `fm submit`). The bootstrap
 plan's entry criteria are met: `livery-forge` 0.1.0 is on PyPI with
 all three backends passing the one conformance suite, the fixture
 harness is stable, and the compose loop is routine.
@@ -252,8 +251,16 @@ The train the workshop rides is the train it ships.
   command); the snapshot publication proven by releasing
   `livery-workshop` and diffing the artifact repository against
   `templates/` at the tag (`git diff --no-index`, empty); `fm update`
-  run on the monorepo itself is a no-op pull request when nothing
-  changed.
+  run on the monorepo itself is a no-op when nothing changed: no
+  branch and no pull request, one line saying so.
+  *(2026-08-31, first half: `fm release.verify
+  packages/workshop/v0.0.2` verified after `fm release.prepare`
+  stamped it; `packages/forge/v0.1.1` refused naming all three
+  disagreements. Seven tests cover verify, prepare idempotency, the
+  snapshot's publish/idempotent/immutable triple with the empty
+  `git diff --no-index` as an assertion, and floor bumps moving both
+  homes. The live snapshot and the update no-op follow the 0.0.2
+  tag.)*
 
 ## Phase 7 — the other forges' CI, and the release legs
 
@@ -387,6 +394,16 @@ The bootstrap deferrals come home and the temporary environment ends.
   before reporting disarmed or stalled; merged wins over any blocker
   derived from stale reads (regression-tested through a stub; fixed
   by PR #22, which the fixed verb shipped and followed to "merged").
+- 2026-08-31, phase 6 shape. The wave's no-op is literal: nothing
+  changed means no branch and no pull request, one line saying so
+  (the plan's "no-op pull request" wording read as "no pull
+  request"). `fm update` refreshes render via the applier where
+  `templates/` lives in the workspace, and via `copier update` at
+  the installed workshop's own tag everywhere else. The artifact
+  repository is public (instances consume it without credentials;
+  its whole content is already public in the monorepo), created with
+  Willem's gh credentials along with the write deploy key and the
+  `WORKSHOP_TEMPLATES_DEPLOY_KEY` secret, closing open item 1.
 - 2026-08-31, the verb is `submit`, armed off by default (Willem:
   "ship is a little misnamed ... it's also verify the current state
   on CI and make sure it's on the remote"; "we need to keep both our
@@ -412,9 +429,9 @@ The bootstrap deferrals come home and the temporary environment ends.
 
 ## Open
 
-1. The `workshop-templates` artifact repository: name confirmed as
-   `willemkokke/workshop-templates`? Needs creating plus a deploy
-   key secret before phase 6. Owner: Willem.
+1. Resolved 2026-08-31: `willemkokke/workshop-templates` exists
+   (public) with the write deploy key and the
+   `WORKSHOP_TEMPLATES_DEPLOY_KEY` secret on the monorepo.
 2. Which skills and hooks ship in the wheel and which stay personal
    (design note's open 7). Proposal in phase 3: the three plan
    skills plus both guards ship; everything else waits for a second

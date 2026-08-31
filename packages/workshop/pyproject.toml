@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-workshop"
-version = "0.0.1"
+version = "0.0.2"
 description = "The livery ecosystem's devkit: the task surface, layers, templates, and content."
 readme = "README.md"
 license = "MIT"

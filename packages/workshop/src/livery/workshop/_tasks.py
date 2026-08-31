@@ -21,9 +21,11 @@ from livery.workshop import (  # noqa: F401
     _ci_tasks,
     _hooks,
     _quality,
+    _release,
     _submit,
     _sync,
     _templates,
+    _update,
 )
 from livery.workshop._layers import SELF, layer_names, mount_layers
 

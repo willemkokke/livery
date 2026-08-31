@@ -116,6 +116,23 @@ class GitOps:
         self.fetch()
         self._run("merge", "--no-edit", f"origin/{base}")
 
+    def is_clean(self) -> bool:
+        """Whether the working tree has no changes, staged or not."""
+        return not self._run("status", "--porcelain").strip()
+
+    def create_branch(self, name: str) -> None:
+        """Create and switch to *name*."""
+        self._run("checkout", "-b", name)
+
+    def commit_all(self, message: str) -> None:
+        """Stage everything and commit with *message*."""
+        self._run("add", "-A")
+        self._run("commit", "-m", message)
+
+    def tags(self) -> tuple[str, ...]:
+        """Every tag name the repository knows."""
+        return tuple(self._run("tag", "-l").split())
+
     def delete_local_branch(self, branch: str) -> None:
         """Delete the local *branch*, even if unmerged."""
         self._run("branch", "-D", branch)
