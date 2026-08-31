@@ -1,7 +1,7 @@
 # Building the workshop
 
 Status: phase 5 built, 2026-08-31, shipped by its own verb: this
-phase's pull request is the acceptance run for `fm ship --armed`.
+phase's pull request is the acceptance run for `fm submit --armed`.
 W3 is a callable flow on the frozen protocol (gate, closes guards,
 disarm-before-push, find-or-open, the arming ladder, the classified
 verdict, self-heal on 10 and 17, `workflow.abort` and
@@ -205,7 +205,7 @@ The template source at the root, the render gate in the gate.
 W3 lands as a callable flow on the frozen protocol, tested on the
 fake.
 
-- `ship`: the whole act as one idempotent verb, ported from hse's
+- `submit`: the whole act as one idempotent verb, ported from hse's
   `ship_flow` onto `livery.forge`: local gate, closes-link resolution
   with existence probes, disarm-before-push, push, find-or-open with
   title rules, arm per the arming ladder (`--armed` / env / repo
@@ -218,9 +218,9 @@ fake.
   git repository: the second run of every workflow tested as
   seriously as the first, the fault modes (lost schedule, 405 window,
   wedged queue, slow status) exercised through ship's own loops.
-- **Acceptance:** `uv run pytest packages/workshop/tests -k ship`
+- **Acceptance:** `uv run pytest packages/workshop/tests -k submit`
   green, including a test per fault mode and a re-entry test per
-  verb; `uv run fm ship --help` documents the surface; the livery
+  verb; `uv run fm submit --help` documents the surface; the livery
   repository's own next pull request is shipped by `uv run fm ship`
   and merges armed.
   *(2026-08-31: 19 tests cover the four fault modes (lost schedule
@@ -387,6 +387,13 @@ The bootstrap deferrals come home and the temporary environment ends.
   before reporting disarmed or stalled; merged wins over any blocker
   derived from stale reads (regression-tested through a stub; fixed
   by PR #22, which the fixed verb shipped and followed to "merged").
+- 2026-08-31, the verb is `submit`, armed off by default (Willem:
+  "ship is a little misnamed ... it's also verify the current state
+  on CI and make sure it's on the remote"; "we need to keep both our
+  audiences in mind"). The common human run publishes and verifies;
+  landing is the `--armed` flag, one flag for an agent, opt-in for a
+  person. The unarmed dogfood run was PR #24 (parked cleanly, exit
+  0); the rename itself merges through `fm submit --armed`.
 - 2026-08-31, parked is not an error (Willem: "if the prose even
   hints an error or problem, that's no bueno", nobody should have to
   learn the exit codes). A deliberately unarmed ship that reaches

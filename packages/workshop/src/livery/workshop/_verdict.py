@@ -7,14 +7,14 @@ hooks, and humans read them, so a new state gets a new code, never a
 reused one.
 
 Exit codes:
-    10: the merge would conflict; integrate the base and re-ship.
+    10: the merge would conflict; integrate the base and re-submit.
     11: nothing will merge it; the pull request is not armed.
     12: the pull request is closed unmerged.
     13: CI is red; the message names the failing job.
     14: still in flight when the watch deadline passed.
     15: the forge was unreachable past the transient budget.
     16: green and armed with no merge; the server lost the evaluation.
-    17: the head is behind the base; integrate and re-ship.
+    17: the head is behind the base; integrate and re-submit.
 
 A required-review blocker has no code: the frozen livery.forge
 protocol carries no review surface, so a review-blocked pull request
@@ -101,7 +101,7 @@ def classify(
         return Verdict(
             "closed",
             EXIT_CLOSED,
-            f"PR #{pr.number} is closed unmerged; `fm ship` after reopening,"
+            f"PR #{pr.number} is closed unmerged; `fm submit` after reopening,"
             " or start over",
             pr.number,
         )
@@ -139,7 +139,7 @@ def classify(
             "disarmed",
             EXIT_DISARMED,
             f"PR #{pr.number} is green and parked unarmed; arm it with"
-            " `fm ship --armed`, or merge it with `fm workflow.merge-now`",
+            " `fm submit --armed`, or merge it with `fm workflow.merge-now`",
             pr.number,
         )
     if not grace_spent:

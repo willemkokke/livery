@@ -21,7 +21,7 @@ from livery.workshop import (  # noqa: F401
     _ci_tasks,
     _hooks,
     _quality,
-    _ship,
+    _submit,
     _sync,
     _templates,
 )
