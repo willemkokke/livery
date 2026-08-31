@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -70,19 +71,33 @@ def main() -> int:
         headers = {"PRIVATE-TOKEN": token}
         group = urllib.parse.quote(owner, safe="")
         projects = _request(
-            f"{base}/api/v4/groups/{group}/projects?per_page=100", headers
+            f"{base}/api/v4/groups/{group}/projects?per_page=100"
+            "&include_pending_delete=true",
+            headers,
         )
         assert isinstance(projects, list)
         for project in projects:
             name = str(project["path"])
-            if name.startswith(PREFIXES):
+            if not name.startswith(PREFIXES):
+                continue
+            pid = project["id"]
+            _request(f"{base}/api/v4/projects/{pid}", headers, method="DELETE")
+            # The first DELETE only marks the project and mails the
+            # owner for 30 days; the second, with permanently_remove,
+            # removes it for real where the instance allows. A refusal
+            # is absorbed: the project then just ages out as before.
+            full_path = urllib.parse.quote(str(project["path_with_namespace"]), safe="")
+            try:
                 _request(
-                    f"{base}/api/v4/projects/{project['id']}",
+                    f"{base}/api/v4/projects/{pid}"
+                    f"?permanently_remove=true&full_path={full_path}",
                     headers,
                     method="DELETE",
                 )
-                print(f"deleted {owner}/{name}")
-                deleted += 1
+            except urllib.error.HTTPError as exc:
+                print(f"permanent removal refused for {name}: HTTP {exc.code}")
+            print(f"deleted {owner}/{name}")
+            deleted += 1
     else:
         print(f"unknown leg {leg!r}")
         return 2
