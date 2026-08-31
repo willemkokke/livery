@@ -23,6 +23,13 @@ classifiers = [
 # capability on for livery.forge.GithubForge.
 github-secrets = ["pynacl>=1.5"]
 
+[project.entry-points."footman.tasks"]
+# The dev-container tasks (livery.forge._dev), mounted only by a
+# workspace that lists livery.forge in its layers. The module imports
+# footman, which is not a dependency: the only loader is footman's own
+# plugin(), so footman is present by construction.
+"livery.forge" = "livery.forge._dev"
+
 [project.urls]
 Repository = "https://github.com/willemkokke/livery"
 

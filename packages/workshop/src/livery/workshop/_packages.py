@@ -111,7 +111,10 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
       downward;
     - ``livery.forge`` imports only the standard library at module
       import time, plus its one declared lazy extra (PyNaCl), because
-      the whole ecosystem stands on it being dependency-free.
+      the whole ecosystem stands on it being dependency-free. The one
+      exception is the dev-container plugin under ``_dev``, which may
+      also import footman: its only loader is footman's ``plugin()``,
+      so footman is present whenever it loads.
     """
     packages = discover_packages(root)
     by_path = {package.path: package for package in packages}
@@ -207,13 +210,23 @@ def _cycles(packages: tuple[Package, ...]) -> list[str]:
 #: set is a plan decision, not an edit.
 _FORGE_LAZY_EXTRAS = frozenset({"nacl"})
 
+#: The dev-container plugin's subtree, the one place in forge that may
+#: import footman: its only loader is footman's own plugin(), so
+#: footman is present whenever it loads, and livery-forge still
+#: declares no dependency.
+_FORGE_PLUGIN_DIR = "packages/forge/src/livery/forge/_dev"
+
 
 def _forge_is_stdlib_only(root: Path) -> list[str]:
     """Violations of the forge's stdlib-at-import-time rule."""
     stdlib = sys.stdlib_module_names
     allowed = set(stdlib) | {"livery"} | _FORGE_LAZY_EXTRAS
+    plugin_dir = root / _FORGE_PLUGIN_DIR
     problems = []
     for source in sorted((root / "packages/forge/src").rglob("*.py")):
+        allowed_here = allowed
+        if source.is_relative_to(plugin_dir):
+            allowed_here = allowed | {"footman"}
         tree = ast.parse(source.read_text("utf-8"), filename=str(source))
         for node in ast.walk(tree):
             names: list[str] = []
@@ -223,7 +236,7 @@ def _forge_is_stdlib_only(root: Path) -> list[str]:
                 names = [node.module]
             for name in names:
                 top = name.split(".")[0]
-                if top not in allowed:
+                if top not in allowed_here:
                     problems.append(
                         f"{source.relative_to(root)} imports {name!r}:"
                         " livery.forge is stdlib-only at import time"

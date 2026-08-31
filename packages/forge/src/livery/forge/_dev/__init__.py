@@ -1,14 +1,18 @@
-"""The local forge containers: compose, seeds, and fixture recording.
+"""The local forge containers: compose and seeds, as a footman plugin.
 
 `fm forge.dev.up` starts and seeds Gitea (with its act_runner) and
-GitLab (with its shell-executor runner) from the workspace's
-``compose.yaml``; the minted credentials land in the gitignored
-``.forge.dev.env`` beside it, which the live conformance runs and the
-fixture recorder read. Every verb is idempotent: re-running it is the
-recovery procedure, and every seed probes before acting.
+GitLab (with its shell-executor runner) from the compose file shipped
+in this package; the minted credentials land in the gitignored
+``.forge.dev.env`` at the workspace root, which live test runs read.
+Every verb is idempotent: re-running it is the recovery procedure, and
+every seed probes before acting.
 
-Tasks assume the working directory is the workspace root, as the
-whole quality family does.
+This module is the `footman.tasks` entry point named ``livery.forge``.
+A workspace mounts it by listing ``livery.forge`` in its layers; a
+repository that does not is never offered these tasks. Unlike the rest
+of livery.forge it imports footman, which is present by construction:
+the only loader is footman's own ``plugin()``, so livery-forge still
+declares no dependency.
 """
 
 from __future__ import annotations
@@ -21,26 +25,41 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
+from importlib import resources
 from pathlib import Path
 from typing import Annotated
 
-from footman import doc, fail
-from toolroom import pytest
+from footman import doc, fail, group
 
-from livery.workshop._layers import workspace_root
-from livery.workshop._tree import dev, fixtures
+forge = group("forge", help="livery.forge development")
+dev = forge.group("dev", help="Local forge containers (Gitea and GitLab)")
 
 _GITEA_URL = "http://localhost:3000"
 _GITLAB_URL = "http://localhost:8929"
 _ADMIN = "livery-admin"
 
 
+def _compose_file() -> Path:
+    """The compose file this package ships."""
+    return Path(str(resources.files(__name__))) / "compose.yaml"
+
+
+def _workspace_root() -> Path:
+    """The nearest ancestor carrying a ``livery.toml``, or fail.
+
+    The dev credentials are workspace state, not package state, so
+    they live beside the workspace contract.
+    """
+    origin = Path.cwd().resolve()
+    for candidate in (origin, *origin.parents):
+        if (candidate / "livery.toml").is_file():
+            return candidate
+    fail("no workspace: no livery.toml above the working directory")
+
+
 def _dev_env_path() -> Path:
     """Where the seeds write the minted credentials. Gitignored."""
-    root = workspace_root()
-    if root is None:
-        fail("no workspace: no livery.toml above the working directory")
-    return root / ".forge.dev.env"
+    return _workspace_root() / ".forge.dev.env"
 
 
 def _gitlab_image() -> str:
@@ -66,13 +85,22 @@ def _compose_env() -> dict[str, str]:
     return merged
 
 
+def _compose_cmd(*args: str) -> list[str]:
+    """A docker compose command line against the packaged file.
+
+    The compose file pins its own project name, so where it lives on
+    disk never changes which containers it addresses.
+    """
+    return ["docker", "compose", "-f", str(_compose_file()), *args]
+
+
 def _compose(*args: str, env: dict[str, str] | None = None) -> str:
     """Run docker compose, returning stdout; a failure is fatal, verbatim."""
     merged = _compose_env()
     if env:
         merged.update(env)
     result = subprocess.run(
-        ["docker", "compose", *args],
+        _compose_cmd(*args),
         capture_output=True,
         text=True,
         env=merged,
@@ -89,7 +117,7 @@ def _compose(*args: str, env: dict[str, str] | None = None) -> str:
 def _gitea_cli(*args: str) -> subprocess.CompletedProcess[str]:
     """Run the gitea CLI inside the container, as the git user."""
     return subprocess.run(
-        ["docker", "compose", "exec", "-T", "-u", "git", "gitea", "gitea", *args],
+        _compose_cmd("exec", "-T", "-u", "git", "gitea", "gitea", *args),
         capture_output=True,
         text=True,
         env=_compose_env(),
@@ -297,9 +325,7 @@ def _gitlab_api(
 def _docker_exec(service: str, *args: str) -> subprocess.CompletedProcess[str]:
     """Run a command inside a compose service, every profile enabled."""
     return subprocess.run(
-        [
-            "docker",
-            "compose",
+        _compose_cmd(
             "--profile",
             "gitlab",
             "--profile",
@@ -308,7 +334,7 @@ def _docker_exec(service: str, *args: str) -> subprocess.CompletedProcess[str]:
             "-T",
             service,
             *args,
-        ],
+        ),
         capture_output=True,
         text=True,
         env=_compose_env(),
@@ -412,28 +438,6 @@ def _register_gitlab_runner() -> None:
     if raised.returncode != 0:
         fail(f"runner concurrency update failed:\n{raised.stdout}{raised.stderr}")
     print("  seed: gitlab runner registered (concurrency 8)")
-
-
-@fixtures.task(name="record")
-def fixtures_record() -> None:
-    """Re-record the conformance cassettes from the live containers.
-
-    Runs the backend conformance suites against the seeded containers
-    (`fm forge.dev.up` first) and rewrites the cassettes under
-    packages/forge/tests/cassettes/. Review the diff like code: a
-    changed exchange is a changed contract with the server.
-    """
-    os.environ["LIVERY_FORGE_RECORD"] = "1"
-    pytest.opts(in_process=False)("packages/forge/tests/test_gitea_conformance.py")
-    # One single-node GitLab absorbs about four concurrent writers;
-    # beyond that its own internals time out (Gitaly deadlines), so
-    # the recording run is capped rather than flaky.
-    pytest.opts(in_process=False)(
-        "packages/forge/tests/test_gitlab_conformance.py", "-n", "4"
-    )
-    pytest.opts(in_process=False)(
-        "packages/forge/tests/test_github_conformance.py", "-n", "4"
-    )
 
 
 @dev.task(name="down")

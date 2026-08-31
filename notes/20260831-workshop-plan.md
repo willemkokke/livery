@@ -1,13 +1,12 @@
 # Building the workshop
 
-Status: phase 3 built, 2026-08-31, awaiting the pull request. The
-content channel is live and the monorepo dogfoods it: the temporary
-hand-written CLAUDE.md is retired for the managed stub, the skills
-and the post-edit hook materialise as links from the wheel, and
-`fm sync` is idempotent by test and on the real tree. Phases 1 and 2
-shipped the same day (PRs #12 and #13); the e2e accounts are all
-three verified and stored per the runbook, gitea.com's leg bringing
-its own API-minted runner. The bootstrap
+Status: phases 1-3 shipped 2026-08-31 (PRs #12, #13, #17), plus the
+task-surface split (see the decision record): forge.dev ships with
+livery-forge as a mountable layer, fixtures.record is instance-only
+in the root tasks.py, and the content channel is live with the
+monorepo dogfooding it. The e2e accounts are all three verified and
+stored per the runbook, gitea.com's leg bringing its own API-minted
+runner. Next: phase 4. The bootstrap
 plan's entry criteria are met: `livery-forge` 0.1.0 is on PyPI with
 all three backends passing the one conformance suite, the fixture
 harness is stable, and the compose loop is routine.
@@ -183,6 +182,11 @@ The template source at the root, the render gate in the gate.
   fails.
 - `fm new.package` renders `package-python` into `packages/` and
   wires the workspace member.
+- The `project` render is the bootstrap: it writes the files that must
+  exist before `fm` can run at all (`tasks.py`, `livery.toml`,
+  `pyproject.toml`), each seeded once and instance-owned after. The
+  phase states the verb that renders a fresh repository (copier
+  directly, or a wrapper) and how it is invoked without a `tasks.py`.
 - **Acceptance:** `uv run fm check` green with the render gate in it;
   a deliberate template drift fails it (edit a rendered file, `uv run
   fm check` exits non-zero, revert); `uv run fm new.package
@@ -319,6 +323,30 @@ The bootstrap deferrals come home and the temporary environment ends.
   keeps the phase day-sized. The stub's import order is guidance
   first (voice, then documentation rules), then the layer fragments,
   then `CLAUDE.project.md`, which always wins.
+
+- 2026-08-31, the task-surface split (Willem: "The local forge
+  compose ones should be this repo only. No user of the workshop
+  would want them by default."). The workshop base layer keeps only
+  what every instance wants. `forge.dev.*` moves to livery-forge as
+  the `footman.tasks` entry point `livery.forge`, with the compose
+  file shipped as a package resource (its project name is pinned in
+  the file, so the move changes no running containers); a workspace
+  gets those tasks only by listing `livery.forge` in its layers.
+  `forge.fixtures.record` re-records this repository's cassettes and
+  works nowhere else, so it lives in the root `tasks.py`. The
+  layering lint widens for exactly one subtree: `livery.forge._dev`
+  may import footman, because its only loader is footman's own
+  `plugin()`; livery-forge still declares no dependency.
+- 2026-08-31, instance-owned files (Willem's questions, resolved).
+  `tasks.py` is classed like `CLAUDE.project.md`: seeded once by the
+  template, never rewritten, so an instance growing its own tasks
+  below the plugin line never conflicts with an update. Global task
+  or guidance changes travel in the wheels, never in the seeded
+  files. `fm sync` never runs git: a seeded file is left untracked
+  for the human to commit. Sync maintains an instance and cannot
+  create one; the bootstrap of a new repository (tasks.py,
+  livery.toml, pyproject.toml) is the template phase's job, and its
+  verb must be stated there.
 
 ## Open
 
