@@ -414,6 +414,17 @@ The bootstrap deferrals come home and the temporary environment ends.
   verified design. Cloud legs write `.forge.dev.env` with the cloud
   URL and token, which is the harness's existing seam. Cleanup lists
   and deletes scratch by prefix, runs on every verdict.
+- 2026-08-31, the legs gate forge releases only (Willem: live
+  interaction should happen "when we actually change something in
+  forge and decide to release"). release-legs verifies livery-forge's
+  contract against real servers, and nothing else in the workspace
+  can invalidate that contract, so the dispatch is required before a
+  `packages/forge/v*` tag and skipped for other packages' releases.
+  The remaining live interaction is free and development-bound:
+  cassette recording when forge's exchanges change (local compose
+  plus the github e2e org), and the daily submit verbs' API calls.
+  gitlab.com compute, the one metered resource, is spent only by a
+  forge release's legs dispatch, about 34 minutes each.
 - 2026-08-31, the stalled grace was too tight (livery PR #35 merged
   25 seconds after `fm submit`'s follow declared 16): the green-and-
   armed grace is now eight polls, about two minutes at the default
