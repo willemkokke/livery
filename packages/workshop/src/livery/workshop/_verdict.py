@@ -138,7 +138,8 @@ def classify(
         return Verdict(
             "disarmed",
             EXIT_DISARMED,
-            f"PR #{pr.number} is green and not armed: nothing will merge it",
+            f"PR #{pr.number} is green and parked unarmed; arm it with"
+            " `fm ship --armed`, or merge it with `fm workflow.merge-now`",
             pr.number,
         )
     if not grace_spent:

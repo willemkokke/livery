@@ -387,6 +387,15 @@ The bootstrap deferrals come home and the temporary environment ends.
   before reporting disarmed or stalled; merged wins over any blocker
   derived from stale reads (regression-tested through a stub; fixed
   by PR #22, which the fixed verb shipped and followed to "merged").
+- 2026-08-31, parked is not an error (Willem: "if the prose even
+  hints an error or problem, that's no bueno", nobody should have to
+  learn the exit codes). A deliberately unarmed ship that reaches
+  green finished its job: it prints where the PR is parked and what
+  arms or merges it, and exits 0. Exit 11 is reserved for the
+  surprising case, an armed ship whose schedule went missing. The
+  codes signal deviations from what the verb was asked to do; the
+  prose alone must carry the meaning. `fm status` and `fm ci.watch`
+  keep answering 11 for a parked PR, with the same neutral prose.
 - 2026-08-31, the title default (Willem: hse's recurring mis-title).
   A defaulted PR title is allowed only when it is unambiguous: on
   first open with the branch one commit ahead, that subject is the

@@ -34,7 +34,12 @@ from footman import doc, fail, group
 from livery.forge import ForgeError, Repository
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._layers import workspace_root
-from livery.workshop._verdict import EXIT_BEHIND, EXIT_CONFLICTS, follow
+from livery.workshop._verdict import (
+    EXIT_BEHIND,
+    EXIT_CONFLICTS,
+    EXIT_DISARMED,
+    follow,
+)
 
 workflow = group("workflow", help="The branch workflow's exits and overrides")
 
@@ -344,6 +349,14 @@ def ship_flow(
             follow(repo, plan.branch, git, interval=interval, timeout=timeout)
         except SystemExit as exc:
             code = exc.code if isinstance(exc.code, int) else 1
+            if code == EXIT_DISARMED and not armed:
+                # The ship was asked not to arm, so a green parked PR is
+                # this run finishing its job, not a blocker: prose above
+                # already said where it is parked, and the exit is clean.
+                # 11 still surfaces on an *armed* ship, where a gone
+                # schedule means something interfered.
+                print(f"  done: CI is green and PR #{number} awaits your call")
+                return number
             if code in (EXIT_CONFLICTS, EXIT_BEHIND) and heals < _MAX_HEALS:
                 heals += 1
                 print(

@@ -125,13 +125,16 @@ def test_a_second_ship_reuses_the_pr(rig: tuple[FakeForge, ShipGit]) -> None:
     assert len([p for p in [repo.pr.get(first)] if p]) == 1
 
 
-def test_an_unarmed_green_ship_exits_disarmed(
+def test_an_unarmed_green_ship_parks_cleanly(
     rig: tuple[FakeForge, ShipGit],
 ) -> None:
+    # Deliberately unarmed and green is the run finishing its job, so
+    # it returns instead of raising; 11 is reserved for an armed ship
+    # whose schedule went missing.
     fake, git = rig
-    with pytest.raises(SystemExit) as caught:
-        _ship(fake, git, armed=False)
-    assert caught.value.code == EXIT_DISARMED
+    number = _ship(fake, git, armed=False)
+    pr = _repo(fake).pr.get(number)
+    assert pr is not None and pr.state == "open" and not pr.merged
 
 
 def test_red_ci_names_the_failing_job(rig: tuple[FakeForge, ShipGit]) -> None:
@@ -184,10 +187,10 @@ def test_self_heal_integrates_a_clean_advance(
     _git(other, "add", ".")
     _git(other, "commit", "-m", "feat: independent change")
     _git(other, "push", "origin", "main")
-    with pytest.raises(SystemExit) as caught:
-        _ship(fake, git, armed=False)
-    assert caught.value.code == EXIT_DISARMED
-    assert git.behind_base("main") > 0  # behind alone never blocks unarmed
+    number = _ship(fake, git, armed=False)
+    pr = _repo(fake).pr.get(number)
+    assert pr is not None and pr.state == "open"
+    assert git.behind_base("main") > 0  # behind alone never parks a ship red
 
 
 def test_the_lost_arm_schedule_is_retried(rig: tuple[FakeForge, ShipGit]) -> None:
@@ -216,9 +219,8 @@ def test_slow_status_reads_keep_the_watch_in_flight(
 ) -> None:
     fake, git = rig
     fake.faults.slow_status_reads = 2
-    with pytest.raises(SystemExit) as caught:
-        _ship(fake, git, armed=False)
-    assert caught.value.code == EXIT_DISARMED  # polled through the window
+    number = _ship(fake, git, armed=False)  # polled through the window
+    assert _repo(fake).pr.get(number) is not None
 
 
 def test_merge_now_rides_out_the_405_window(
@@ -386,6 +388,21 @@ def test_the_stalled_and_behind_verdicts_discriminate(
     _git(other, "push", "origin", "main")
     behind = classify(StubRepo(), "feat/1-first", git, grace_spent=True)  # type: ignore[arg-type]
     assert behind.exit_code == EXIT_BEHIND
+
+
+def test_a_disarmed_verdict_still_raises_for_the_watcher(
+    rig: tuple[FakeForge, ShipGit],
+) -> None:
+    # The classifier's code is unchanged: fm status and ci.watch still
+    # answer 11 for a parked PR; only a deliberately unarmed ship
+    # treats it as its own finish line.
+    fake, git = rig
+    _ship(fake, git, armed=False, follow_to_verdict=False)
+    with pytest.raises(SystemExit) as caught:
+        follow(_repo(fake), "feat/1-first", git, interval=0, timeout=1)
+    assert caught.value.code == EXIT_DISARMED
+    verdict = classify(_repo(fake), "feat/1-first", git)
+    assert "parked unarmed" in verdict.detail
 
 
 def test_follow_returns_the_merged_verdict(rig: tuple[FakeForge, ShipGit]) -> None:
