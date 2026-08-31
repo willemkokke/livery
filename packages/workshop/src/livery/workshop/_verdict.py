@@ -127,6 +127,14 @@ def classify(
             pr.number,
         )
     if not repo.pr.is_armed(pr.number):
+        # Forge evidence (livery PR #21): a merge in flight consumes the
+        # schedule between the open-PR read and this one, so an armed
+        # merge can read as "green and not armed". Re-read before
+        # reporting: merged wins over any blocker derived from stale
+        # reads.
+        current = repo.pr.get(pr.number)
+        if current is not None and current.merged:
+            return Verdict("merged", 0, f"PR #{pr.number} merged", pr.number)
         return Verdict(
             "disarmed",
             EXIT_DISARMED,
@@ -143,6 +151,9 @@ def classify(
             " blocks outdated branches",
             pr.number,
         )
+    current = repo.pr.get(pr.number)
+    if current is not None and current.merged:
+        return Verdict("merged", 0, f"PR #{pr.number} merged", pr.number)
     return Verdict(
         "stalled",
         EXIT_STALLED,

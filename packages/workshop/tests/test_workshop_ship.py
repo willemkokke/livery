@@ -250,7 +250,7 @@ def test_disarm_before_push_and_the_merged_refusal(
 
 
 def test_closes_resolution_guards(rig: tuple[FakeForge, ShipGit]) -> None:
-    fake, _git_unused = rig
+    fake, _ = rig
     repo = _repo(fake)
     assert resolve_closes(repo, "feat/9-thing", 0) is None  # absent: dropped
     issue = repo.issue.create("the work order", body="the order")
@@ -261,7 +261,7 @@ def test_closes_resolution_guards(rig: tuple[FakeForge, ShipGit]) -> None:
 
 
 def test_prepare_validates_branch_and_title(rig: tuple[FakeForge, ShipGit]) -> None:
-    _fake_unused, git = rig
+    _, git = rig
     plan = prepare(git)
     assert plan == Plan(
         branch="feat/1-first",
@@ -337,6 +337,9 @@ def test_the_stalled_and_behind_verdicts_discriminate(
         def is_armed(self, number: int) -> bool:
             return True
 
+        def get(self, number: int):
+            return real_pr.get(number)
+
     class StubRepo:
         pr = StubPRs()
         checks = repo.checks
@@ -360,6 +363,45 @@ def test_follow_returns_the_merged_verdict(rig: tuple[FakeForge, ShipGit]) -> No
     number = _ship(fake, git, armed=True)
     verdict = follow(_repo(fake), "feat/1-first", git, interval=0, timeout=1)
     assert verdict.state == "merged" and verdict.pr_number == number
+
+
+def test_a_merge_in_flight_wins_over_a_stale_arming_read(
+    rig: tuple[FakeForge, ShipGit],
+) -> None:
+    # Forge evidence (livery PR #21): the server merges between the
+    # open-PR read and the arming read, so the consumed schedule looks
+    # like "green and not armed". The re-read must answer merged.
+    fake, git = rig
+    _ship(fake, git, armed=False, follow_to_verdict=False)
+    repo = _repo(fake)
+    real_pr = repo.pr
+
+    class RacingPRs:
+        def find_by_head(self, branch: str, state: StateFilter = "open"):
+            pr = real_pr.find_by_head(branch, state="all")
+            if pr is not None and not pr.merged:
+                return pr
+            # Replay the stale open-PR read the race produces.
+            from dataclasses import replace
+
+            return None if pr is None else replace(pr, merged=False, state="open")
+
+        def find_by_head_sha(self, sha: str):
+            return real_pr.find_by_head_sha(sha)
+
+        def is_armed(self, number: int) -> bool:
+            return False
+
+        def get(self, number: int):
+            return real_pr.get(number)
+
+    class RacingRepo:
+        pr = RacingPRs()
+        checks = repo.checks
+
+    real_pr.arm(1, title="feat: the first change")  # green: merges now
+    verdict = classify(RacingRepo(), "feat/1-first", git)  # type: ignore[arg-type]
+    assert verdict.state == "merged" and verdict.exit_code == 0
 
 
 def test_conflicts_classify_before_arming(rig: tuple[FakeForge, ShipGit]) -> None:
