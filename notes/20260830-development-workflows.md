@@ -2,7 +2,10 @@
 
 Status: design input, drafted 2026-08-30 — the fitness yardstick for
 the forge protocol (bootstrap phase 1) and a design input to the
-workshop.
+workshop. 2026-08-31: verb spellings updated to the drafted protocol
+(`pr.is_armed`, `checks.jobs`, `checks.rerun` with `failed_only`,
+labels folded into `repo.configure`, `repo.delete_branch` added);
+`packages/forge/docs/protocol.md` is now the authoritative surface.
 
 Willem's ask, verbatim in intent: the forge protocol's fitness for
 purpose cannot be judged without an exhaustive chart of the development
@@ -107,7 +110,7 @@ Provenance: `_resolve_closes` (issue link from branch name),
 ```mermaid
 flowchart TD
   A[branch work · fm check green] --> B[["issue.get — closes-number from the branch name"]]
-  B --> C[["pr.arm_state + pr.disarm — disarm before push"]]
+  B --> C[["pr.is_armed + pr.disarm — disarm before push"]]
   C --> D(git push branch)
   D --> E[["pr.find_by_head / pr.open — find or open, title validated"]]
   E --> F[["pr.arm — merge when green"]]
@@ -115,7 +118,7 @@ flowchart TD
   G -->|green| H[merged server-side · branch auto-deleted]
   G -->|superseded push| I[["checks.cancel_run — stale run cancelled"]]
   I --> C
-  G -->|red| J[["checks.run_jobs + checks.job_log — read the failure"]]
+  G -->|red| J[["checks.jobs + checks.job_log — read the failure"]]
   J --> K{fixable now?}
   K -->|yes| A
   K -->|no| L[["pr.close + pr.disarm — workflow.abort"]]
@@ -135,8 +138,8 @@ leaks those runner-minutes.
 ### W4 — CI triage
 
 `fm ci.rerun` today: a red run on a branch or main → `checks.runs`
-(list for ref) → `checks.run_jobs` → `checks.job_log` →
-`checks.rerun_failed` or fix-forward; a wedged or storming queue →
+(list for ref) → `checks.jobs` → `checks.job_log` →
+`checks.rerun` (failed jobs by default) or fix-forward; a wedged or storming queue →
 `checks.cancel_run` (forced when the runner stopped answering — Gitea
 1.28's `force-cancel`, GitHub's `force-cancel`; GitLab declines
 `force` by name). Evidence lands in the PR or an issue via `*.comment`.
@@ -154,7 +157,7 @@ flowchart TD
   A[preflight — clean main, gate green, version, changelog] --> B(git push tag packages/name/vX.Y.Z)
   B --> C[["checks.runs — find the release run for the tag"]]
   C --> D[["checks.status — watch the run"]]
-  D -->|red| E[["checks.job_log → checks.rerun_failed"]]
+  D -->|red| E[["checks.job_log → checks.rerun"]]
   E --> D
   D -->|green| F[verify on the index — resolver sees the version]
   F --> G[["release.create — notes for the tag"]]
@@ -231,17 +234,18 @@ capability probe; the GitLab column is the odd-one-out check in action.
 | `repo.create` / `repo.get` / `repo.delete` | W1 W6 | REST repos | REST repos (hse-proven) | projects API; **owner may be a group path** |
 | `repo.configure` (default branch, merge policy, protection, required contexts, secrets, variables, labels, Pages) | W1 W5 | REST branch protection + actions secrets | hse-proven end to end | protected branches + **approval rules are tier-gated** |
 | `repo.tags` | W5 W7 | REST tags | `list_tag_names` (hse-proven) | tags API |
-| `pr.open` / `pr.find_by_head` / `pr.get` / `pr.close` / `pr.reopen` / `pr.update_title` | W1 W3 W7 W8 | pulls API | hse-proven | MRs; **iid vs global id** — the protocol speaks one handle |
+| `repo.branch_exists` / `repo.delete_branch` | W1 W3 (the abort exit's cleanup) | branches API | branches API (exists hse-proven) | branches API |
+| `pr.open` / `pr.find_by_head` / `pr.find_by_head_sha` / `pr.get` / `pr.close` / `pr.reopen` / `pr.update_title` | W1 W3 W7 W8 | pulls API | hse-proven | MRs; **iid vs global id** — the protocol speaks one handle |
 | `pr.merge_now` | W3 (manual override) | merge API | `merge_pr_now` (hse-proven) | accept MR |
-| `pr.arm` / `pr.disarm` / `pr.arm_state` | W1 W3 W7 W8 | GraphQL enable auto-merge; needs protection | schedule merge-when-checks-succeed (hse forge evidence) | merge-when-pipeline-succeeds; **auto-merge strategy differs by tier** |
+| `pr.arm` / `pr.disarm` / `pr.is_armed` | W1 W3 W7 W8 | GraphQL enable auto-merge; needs protection | schedule merge-when-checks-succeed (hse forge evidence) | merge-when-pipeline-succeeds; **auto-merge strategy differs by tier** |
 | `pr.comment` | W4 W7 W10 | issues comments API | issue comments API | MR notes API |
 | `checks.status` (combined, for a sha) | W1 W3 W5 | combined status + check runs behind one answer | `commit_combined_status` (hse-proven) | **pipeline status is the canonical answer, not commit status** |
-| `checks.runs` / `checks.run_jobs` / `checks.job_log` | W3 W4 W5 | actions runs API | actions runs API (hse-proven) | pipelines + jobs + job trace |
-| `checks.rerun_failed` / `checks.rerun` | W4 W5 | rerun APIs | `rerun_run` (hse-proven) | pipeline retry |
+| `checks.runs` / `checks.jobs` / `checks.job_log` | W3 W4 W5 | actions runs API | actions runs API (hse-proven) | pipelines + jobs + job trace |
+| `checks.rerun` (`failed_only=True` by default) | W4 W5 | rerun APIs | `rerun_run` (hse-proven) | pipeline retry |
 | `checks.cancel_run(run, *, force=False)` | W3 W4 W9 | cancel + force-cancel | cancel + force-cancel (1.28, documented) | pipeline cancel; **declines `force` by name** |
 | `checks.dispatch` | W9 W11 | workflow dispatch | `dispatch_workflow` (hse-proven) | pipeline trigger / run |
 | `release.create` / `release.get` | W5 W6 | releases API | `create_release` (hse-proven) + get by tag | releases API |
-| `issue.create` (title, body, labels, assignee) / `issue.get` (with body) / `issue.list` / `issue.search` (text query) / `issue.assign` / `issue.assigned_to_me` / `issue.comment` / labels | W3 W10 W11 | issues + search API | issues + repo issue search; hse's thinner surface (no body on create, no text query) ruled not good enough | issues + search scope; **group-level boards are out of protocol** |
+| `issue.create` (title, body, labels, assignee) / `issue.get` (with body) / `issue.list` / `issue.search` (text query) / `issue.assign` / `issue.assigned_to_me` / `issue.comment` | W3 W10 W11 | issues + search API | issues + repo issue search; hse's thinner surface (no body on create, no text query) ruled not good enough | issues + search scope; **group-level boards are out of protocol** |
 | `identity.whoami` / `identity.server_version` | W12 all-unattended | `/user` + API version | `whoami` (hse-proven) + `/version` | `/user` + `/version` |
 | `forge.supports(capability)` | everywhere a bold cell exists | — | — | — |
 

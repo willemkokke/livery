@@ -1,13 +1,18 @@
 # Bootstrapping livery: the forge first
 
-Status: phase 0 accepted by Willem, 2026-08-31, conditional on the
-basedpyright venv fix passing CI; the graduation pull request's gate
-is that condition's proof. Evidence: `fm check` green on three OSes
-and two Pythons (run 33342483626); branch protection live;
+Status: phase 1 accepted by Willem, 2026-08-31, conditional on the
+three-OS gate; the pull request merges by armed squash once green. The
+protocols, the GitLab mapping (`packages/forge/docs/gitlab.md`), the
+verified FakeForge with four fault modes, the shipped conformance
+suite (25 scenarios, run against the fake in two capability shapes),
+and the cassette layer are in; `fm check` green locally (67 passed, 4
+capability-gated skips); three-OS proof follows the push. Phase 0 was
+accepted by Willem, 2026-08-31, conditional on the basedpyright venv
+fix passing CI; evidence: `fm check` green on three OSes and two
+Pythons (run 33342483626); branch protection live;
 `packages/forge/v0.0.1` verified and published by trusted publishing
-(run 33343851374). Graduation: annotated `archive/setup` cut at the
-setup head after the gate is green, then the squash merge. Next:
-phase 1, the protocols and the verified fake.
+(run 33343851374). Next: phase 2, the compose file and the three real
+backends.
 
 ## The prompt (Willem)
 
@@ -253,6 +258,16 @@ series), gate green at the end.
 - **Acceptance:** the suite green against `FakeForge` on three OS; a
   documented fixture format; quirk injection demonstrated by tests
   that fail without the fake's fault handling.
+  *(2026-08-31: built and green locally. The protocols and types are
+  the public surface of `livery.forge`; the conformance suite ships
+  as `livery.forge.testing.SCENARIOS` over a per-backend
+  `ForgeDriver`, and runs against the fake full-capability and
+  GitLab-shaped; the four fault modes are injected by
+  `livery.forge.testing.Faults`, each with its regression test and
+  its `docs/quirks.md` line; the fixture format is
+  `packages/forge/docs/fixtures.md`; the GitLab mapping is
+  `packages/forge/docs/gitlab.md`. The three-OS legs run on the pull
+  request.)*
 
 ## Phase 2 — two real backends, then the freeze
 
@@ -357,6 +372,26 @@ series), gate green at the end.
   head, pushes it, then squash-merges; the release grammar keeps CI
   clean (`packages/*/v*` triggers, `archive/setup` does not); the
   workshop ports this with the first-release flow.
+- 2026-08-31, phase 1 drafting rulings: verb spellings refined from
+  the workflows note's draft: `pr.arm_state` is `pr.is_armed`,
+  `checks.run_jobs` is `checks.jobs`, `checks.rerun_failed` /
+  `checks.rerun` collapse into `checks.rerun(run, *,
+  failed_only=True)`, and `pr.find_by_head_sha` stays beside
+  `pr.find_by_head` because a merged PR's head branch may be cleared
+  while the sha persists (the workflows note is updated in the same
+  change). Labels are names everywhere, ensured by `repo.configure`,
+  and no separate label verbs ship. Listings are complete or they
+  raise: no truncated-result type in the protocol (hse's
+  `PagedList.truncated` lesson hardened into the contract). Pull
+  request and issue numbers are separate spaces, as GitLab keeps them,
+  and the fake models the odd one out.
+- 2026-08-31: the conformance suite ships in the wheel
+  (`livery.forge.testing.SCENARIOS` over a per-backend `ForgeDriver`),
+  so the phase 2 backends and any consumer run the identical suite;
+  the repository's harness is a thin parametrisation. The cassette
+  re-record task is deferred to phase 2 with the first recorded
+  cassette: nothing exists to re-record until a backend does, and the
+  task belongs beside the containers it records from.
 
 ## Open
 
