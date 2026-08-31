@@ -525,6 +525,16 @@ series), gate green at the end.
   refusal verbatim; `docs/quirks.md` records which reproduction each
   quirk has.
 
+- 2026-08-31: footman's `hooks.pre-bash` guard is ported into the dev
+  loop and wired as a `PreToolUse` hook (Willem's ask, after the piped
+  gate incident). It carries both of footman's guards: the pipe guard
+  (a footman command piped into tail/head is refused, because the pipe
+  replaces the verdict exit code) and the conflicting-push guard (a
+  branch that conflicts with origin/main is refused before the push
+  can open a CI-less pull request). Both are pinned by
+  `tests/test_agent_hooks.py` and replaced by the workshop's content
+  channel later, per the replaced-by table.
+
 ## Open
 
 1. Agent gate discipline, corrected after a wrong diagnosis: footman
