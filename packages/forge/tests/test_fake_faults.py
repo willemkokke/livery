@@ -51,7 +51,7 @@ def test_a_wedged_status_queue_holds_pending_until_cancel_relieves_it() -> None:
     repo, _, sha = _repo_with_open_pr(driver)
     run = repo.checks.runs(head_sha=sha)[0].id
     driver.fake.faults.wedge_status_queue = True
-    driver.finish_run(repo.owner, repo.name, run, "success")
+    driver.settle(repo.owner, repo.name, sha)
     # The quirk: CI finished, and the queue never applied the result.
     assert repo.checks.status(sha).state == "pending"
     repo.checks.cancel_run(run)
@@ -61,8 +61,7 @@ def test_a_wedged_status_queue_holds_pending_until_cancel_relieves_it() -> None:
 def test_slow_status_reads_answer_none_before_the_truth() -> None:
     driver = FakeDriver()
     repo, _, sha = _repo_with_open_pr(driver)
-    run = repo.checks.runs(head_sha=sha)[0].id
-    driver.finish_run(repo.owner, repo.name, run, "success")
+    driver.settle(repo.owner, repo.name, sha)
     driver.fake.faults.slow_status_reads = 2
     # The quirk: freshly pushed commits read as unreported for a while,
     # so a poller must treat "none" as "keep waiting", never "no CI".

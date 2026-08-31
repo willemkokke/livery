@@ -17,6 +17,7 @@ def test_the_surface_is_declared() -> None:
         "Conclusion",
         "Forge",
         "ForgeError",
+        "GiteaForge",
         "Issue",
         "Issues",
         "Job",
@@ -34,6 +35,8 @@ def test_the_surface_is_declared() -> None:
         "StateFilter",
         "Unsupported",
         "__version__",
+        "gitea_configured_host",
+        "gitea_is_configured_host",
     ]
 
 
@@ -49,6 +52,7 @@ def test_the_testing_surface_is_declared() -> None:
         "FakeForge",
         "Faults",
         "ForgeDriver",
+        "Outcome",
         "RecordingOpener",
         "ReplayOpener",
         "Scenario",

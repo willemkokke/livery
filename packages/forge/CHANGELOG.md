@@ -7,11 +7,16 @@
   they speak and `ForgeError` carrying the server's own words.
   `cancel_run(run, *, force=False)` is required everywhere, `force`
   being the first capability probe.
+- `GiteaForge`: the Gitea backend (REST v1, stdlib only), with the
+  1.28 server floor probed at `cancel_run` and the one-host token
+  rule (`gitea_is_configured_host`).
 - `livery.forge.testing`: the verified `FakeForge` with deterministic
   fault injection (`Faults`), the conformance suite (`SCENARIOS` over
   a per-backend `ForgeDriver`), and the HTTP record and replay layer
   (`Cassette`, `RecordingOpener`, `ReplayOpener`) with secrets
-  scrubbed at record time.
+  scrubbed at record time. The conformance driver states each push's
+  CI outcome at push time (`Outcome`), which is what a real forge can
+  actually be made to do.
 
 ## 0.0.1 — 2026-08-31
 

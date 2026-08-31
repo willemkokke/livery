@@ -1,0 +1,97 @@
+# The local forge containers the backends are developed against.
+# `uv run fm forge.dev up` starts and seeds them; the seeded credentials
+# land in .forge.dev.env (gitignored), which the live conformance run
+# and the fixture recorder read.
+name: livery-forge-dev
+
+services:
+  gitea:
+    # The 1.28 development line: the interface's floor, and the first
+    # line with run cancellation (cancel and force-cancel). Pinned to a
+    # release tag once 1.28 ships; how often the pin tracks upstream is
+    # an open item in the bootstrap plan.
+    image: docker.gitea.com/gitea:nightly
+    profiles: [gitea]
+    environment:
+      GITEA__security__INSTALL_LOCK: "true"
+      GITEA__server__ROOT_URL: http://localhost:3000/
+      GITEA__actions__ENABLED: "true"
+      # The seeded org creates repositories through the API only.
+      GITEA__service__DISABLE_REGISTRATION: "true"
+    ports:
+      - "3000:3000"
+    volumes:
+      - gitea-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/api/healthz"]
+      interval: 2s
+      timeout: 2s
+      retries: 90
+
+  act_runner:
+    image: docker.gitea.com/act_runner:nightly
+    profiles: [gitea-runner]
+    depends_on:
+      gitea:
+        condition: service_healthy
+    environment:
+      GITEA_INSTANCE_URL: http://gitea:3000
+      # Minted by `fm forge.dev seed` and passed through by the task;
+      # never written into this file.
+      GITEA_RUNNER_REGISTRATION_TOKEN: ${LIVERY_GITEA_RUNNER_TOKEN:-}
+      GITEA_RUNNER_NAME: livery-dev
+      # Host mode: jobs run inside the runner container itself. The
+      # conformance workflows are shell one-liners, so no Docker socket
+      # is mounted.
+      GITEA_RUNNER_LABELS: ubuntu-latest:host,linux:host
+      CONFIG_FILE: /runner-config.yaml
+    configs:
+      - source: runner-config
+        target: /runner-config.yaml
+    volumes:
+      - runner-data:/data
+
+  gitlab:
+    # The image is architecture-dependent: GitLab ships no official
+    # arm64 container, but it does ship official arm64 omnibus
+    # packages, which the community image wraps. `fm forge.dev.up`
+    # detects the machine and sets LIVERY_GITLAB_IMAGE (an explicit
+    # value in the environment wins):
+    #   amd64: gitlab/gitlab-ce (official)
+    #   arm64: yrzr/gitlab-ce-arm64v8 (official omnibus, community wrap)
+    # Long-lived: started once and kept, minutes to become healthy.
+    image: ${LIVERY_GITLAB_IMAGE:-gitlab/gitlab-ce:latest}
+    profiles: [gitlab]
+    shm_size: 512m
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://localhost:8929'
+        gitlab_rails['initial_root_password'] = 'livery-dev-password'
+        prometheus_monitoring['enable'] = false
+    ports:
+      - "8929:8929"
+    volumes:
+      - gitlab-config:/etc/gitlab
+      - gitlab-logs:/var/log/gitlab
+      - gitlab-data:/var/opt/gitlab
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8929/-/readiness"]
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 10m
+
+configs:
+  runner-config:
+    # Held conformance runs occupy a slot each until released or
+    # cancelled, so one-job capacity would deadlock the suite.
+    content: |
+      runner:
+        capacity: 8
+
+volumes:
+  gitea-data:
+  runner-data:
+  gitlab-config:
+  gitlab-logs:
+  gitlab-data:

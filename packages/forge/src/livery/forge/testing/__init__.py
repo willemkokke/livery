@@ -27,7 +27,12 @@ from livery.forge.testing._cassette import (
     ReplayOpener,
     UrlOpener,
 )
-from livery.forge.testing._conformance import SCENARIOS, ForgeDriver, Scenario
+from livery.forge.testing._conformance import (
+    SCENARIOS,
+    ForgeDriver,
+    Outcome,
+    Scenario,
+)
 from livery.forge.testing._fake import FakeDriver, FakeForge, Faults
 
 __all__ = [
@@ -41,6 +46,7 @@ __all__ = [
     "FakeForge",
     "Faults",
     "ForgeDriver",
+    "Outcome",
     "RecordingOpener",
     "ReplayOpener",
     "Scenario",

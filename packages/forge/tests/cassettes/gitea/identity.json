@@ -1,0 +1,23 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "method": "GET",
+      "url": "http://localhost:3000/api/v1/user",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json;charset=utf-8",
+      "response_body": "{\"id\":1,\"login\":\"livery-admin\",\"login_name\":\"\",\"source_id\":0,\"full_name\":\"\",\"email\":\"admin@livery.local\",\"avatar_url\":\"http://localhost:3000/avatars/e9f16902fb3673c6fda4e1372dd17e7d16c7442cf13f822ad0a756556a3fb572\",\"html_url\":\"http://localhost:3000/livery-admin\",\"language\":\"\",\"is_admin\":true,\"last_login\":\"1970-01-01T00:00:00Z\",\"created\":\"2026-08-31T01:46:59Z\",\"restricted\":false,\"active\":true,\"prohibit_login\":false,\"location\":\"\",\"website\":\"\",\"description\":\"\",\"visibility\":\"public\",\"followers_count\":0,\"following_count\":0,\"starred_repos_count\":0,\"username\":\"livery-admin\"}"
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3000/api/v1/version",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json;charset=utf-8",
+      "response_body": "{\"version\":\"1.28.0+dev-438-g27570ea685\"}"
+    }
+  ]
+}

@@ -14,6 +14,11 @@ workspace test enforces it.
 from __future__ import annotations
 
 from livery.forge._errors import ForgeError, Unsupported
+from livery.forge._gitea import (
+    GiteaForge,
+    gitea_configured_host,
+    gitea_is_configured_host,
+)
 from livery.forge._protocol import (
     Checks,
     Forge,
@@ -50,6 +55,7 @@ __all__ = [
     "Conclusion",
     "Forge",
     "ForgeError",
+    "GiteaForge",
     "Issue",
     "Issues",
     "Job",
@@ -67,4 +73,6 @@ __all__ = [
     "StateFilter",
     "Unsupported",
     "__version__",
+    "gitea_configured_host",
+    "gitea_is_configured_host",
 ]

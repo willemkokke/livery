@@ -1,7 +1,13 @@
 # Bootstrapping livery: the forge first
 
-Status: phase 1 accepted by Willem, 2026-08-31, conditional on the
-three-OS gate; the pull request merges by armed squash once green. The
+Status: phase 2 in progress on branch `worktree-phase-2-backends`,
+2026-08-31: the Gitea leg is done (compose loop, seeded container and
+runner, the ported backend, the live suite green at 23 scenarios, the
+cassettes recorded and replaying with no network). Next in the phase:
+the GitHub backend against the willemkokke scratch repositories, then
+the GitLab container and backend, then the freeze and 0.1.0. Phase 1
+was accepted by Willem and merged 2026-08-31 (PR #3, gate green on
+three OSes). The
 protocols, the GitLab mapping (`packages/forge/docs/gitlab.md`), the
 verified FakeForge with four fault modes, the shipped conformance
 suite (25 scenarios, run against the fake in two capability shapes),
@@ -392,20 +398,47 @@ series), gate green at the end.
   re-record task is deferred to phase 2 with the first recorded
   cassette: nothing exists to re-record until a backend does, and the
   task belongs beside the containers it records from.
+- 2026-08-31, phase 2 driver-seam rework: `finish_run(run, conclusion)`
+  was not implementable by a real backend, because real CI decides its
+  verdict from the pushed commit, not from a later call. The driver
+  contract is now outcome-at-push (`Outcome`: success, failure, or a
+  held `hang` released to success by `settle` or ended by
+  `cancel_run`), with `settle` and `await_run` as the only blocking
+  points; the fake and every scenario updated in the same change. The
+  seeded dispatchable workflow's name, `conf.yml`, is part of the
+  driver contract.
+- 2026-08-31: GitHub fixtures record against scratch repositories
+  under `willemkokke` (Willem's ruling on open item 1): zero setup and
+  reversible; org-scoped behaviour stays untested and unused by the
+  protocol.
+- 2026-08-31, container facts, paid for in the first live run: Gitea's
+  nightly images live at `docker.gitea.com` (Docker Hub carries no
+  nightly tag), and the act_runner runs with `capacity: 8`, because a
+  held conformance run occupies a slot and a one-slot runner deadlocks
+  the suite. `fm forge.fixtures.record` is the re-record task.
+- 2026-08-31, the GitLab image is architecture-dependent (Willem's
+  ruling): `fm forge.dev.up` detects the machine and selects
+  `gitlab/gitlab-ce` on amd64 and `yrzr/gitlab-ce-arm64v8` on arm64
+  (GitLab's own arm64 omnibus packages, community-wrapped), an
+  explicit `LIVERY_GITLAB_IMAGE` beating detection. This serves macOS,
+  Windows, and Linux on both architectures; the earlier Rosetta cost
+  in the pushback section applies only to the amd64-image-on-arm case
+  the detection now avoids. Known costs of the community image, both
+  accepted for a dev-only container: third-party packaging (mitigate
+  by digest pin, with open item 3) and possible release lag (the
+  nightly against gitlab.com is the drift detector).
 
 ## Open
 
-1. GitHub fixtures: a test organisation or a scratch repository under
-   `willemkokke`.
-2. The CI matrix's breadth now (floor + newest) versus footman's full
+1. The CI matrix's breadth now (floor + newest) versus footman's full
    ladder; widen when the forge grows platform-sensitive code.
-3. Whether strongroom's step 0 (the spec and vectors, per the store
+2. Whether strongroom's step 0 (the spec and vectors, per the store
    note) starts in parallel with phase 1 or waits for forge 0.1.0.
-4. The Gitea and GitLab containers' version pins, and how often each
+3. The Gitea and GitLab containers' version pins, and how often each
    tracks upstream.
-5. Which GitLab tier the capability registry models beyond CE: the
+4. Which GitLab tier the capability registry models beyond CE: the
    container is CE, gitlab.com free differs again, and approval rules
    and external status checks are paid.
-6. Whether the placeholder `livery` distribution becomes the
+5. Whether the placeholder `livery` distribution becomes the
    meta-package now or at the workshop phase.
-7. PyPI namespace grant for `livery-`: PEP 752 was accepted 2026-06-29 and grants are organization-only, so create the `livery` community organization on PyPI, then apply for the prefix grant when the application form is open (PEP 755). Until the grant lands, the prefix is first-come-first-served.
+6. PyPI namespace grant for `livery-`: PEP 752 was accepted 2026-06-29 and grants are organization-only, so create the `livery` community organization on PyPI, then apply for the prefix grant when the application form is open (PEP 755). Until the grant lands, the prefix is first-come-first-served.

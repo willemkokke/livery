@@ -16,6 +16,8 @@ Where to read next:
 
 - [protocol.md](protocol.md): the verbs, their groups, and the rules
   every method obeys.
+- [gitea.md](gitea.md): the Gitea backend, its token rule, and its
+  1.28 server floor.
 - [gitlab.md](gitlab.md): every protocol method mapped onto GitLab's
   REST v4 API, the odd one out that keeps the protocol honest.
 - [fixtures.md](fixtures.md): the record and replay layer that lets

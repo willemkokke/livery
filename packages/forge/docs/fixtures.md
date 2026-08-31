@@ -70,8 +70,8 @@ exchange the replayed run stopped making.
 
 ## Re-recording
 
-A cassette is re-recorded, never edited. Run the same operations with
-a `RecordingOpener` against the live target (the local forge
-containers, or the scratch repository for GitHub), save over the old
-file, and review the diff like code: a changed exchange is a changed
+A cassette is re-recorded, never edited. `fm forge.fixtures.record`
+runs the conformance suites against the live targets (the local forge
+containers, or the scratch repository for GitHub) and rewrites the
+files. Review the diff like code: a changed exchange is a changed
 contract with the server.
