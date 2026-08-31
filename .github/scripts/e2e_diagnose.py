@@ -44,12 +44,13 @@ def _gitea() -> None:
         name = str(repo["name"])
         if not name.startswith("conf-"):
             continue
-        runs = _get(f"{base}/api/v1/repos/livery/{name}/actions/tasks", headers)
+        runs = _get(f"{base}/api/v1/repos/livery/{name}/actions/runs?limit=20", headers)
         entries = runs.get("workflow_runs", []) if isinstance(runs, dict) else []
-        for run in entries[:4]:
+        print(f"{name}: {len(entries)} run(s) listed")
+        for run in entries[:6]:
             print(
-                f"{name}: task {run.get('id')} {run.get('status')}"
-                f" {run.get('name')} head {str(run.get('head_sha'))[:10]}"
+                f"{name}: run {run.get('id')} {run.get('status')}"
+                f"/{run.get('conclusion')} head {str(run.get('head_sha'))[:10]}"
             )
         tags = _get(f"{base}/api/v1/repos/livery/{name}/tags?limit=10", headers)
         if isinstance(tags, list):
