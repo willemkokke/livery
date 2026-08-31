@@ -528,6 +528,18 @@ starts; recorded here so the sequence is visible (Willem: post
   signing, a non-PyPI index for the monorepo itself, and a portable
   token path on the github kind. `packages/workshop/docs/releases.md`
   states the same for readers.
+- 2026-08-31, fallbacks before happy paths (Willem: exceptional
+  cases and fallbacks matter more to test, the happy path announces
+  its own breakage). The principle is published in the base layer's
+  fragment and the first forced-fallback pass proved it: the copy
+  fallback was never idempotent and clobbered local edits, because
+  the manifest declared ownership without content. The manifest now
+  records each copy's digest, so a current copy is quiet, a stale
+  one refreshes, and an edited one is an override, kept and named,
+  the same promise the link platforms make. Also forced: arming
+  retries to exhaustion, the clean self-heal's full continuation,
+  the release verbs' refusal shapes, and the enforcement helpers
+  against real coverage data.
 - 2026-08-31, the shells lit and the floor ratcheted. Lighting the
   task shells through the resolution seam took the workshop union
   from 79.0 to 84.5 (PRs #52-#54, `fm ci.logs` born on the way);

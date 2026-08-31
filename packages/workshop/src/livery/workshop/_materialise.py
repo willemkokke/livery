@@ -32,6 +32,7 @@ which then takes precedence.
 from __future__ import annotations
 
 import filecmp
+import hashlib
 import os
 import shutil
 import stat
@@ -41,12 +42,16 @@ from collections.abc import Callable
 from pathlib import Path
 
 _MANIFEST = ".livery-materialised"
-"""Names this module *copied* into a directory, one per line.
+"""What this module *copied* into a directory: ``<hash> <name>`` lines.
 
 A manifest rather than a marker inside each entry, because the copy
 fallback must work for files too (the hook scripts) and a file has
 nowhere to carry a marker. Links need no record; they are
-self-identifying.
+self-identifying. The hash is the copied content's digest at copy
+time: it is how a later sync tells a stale copy of ours (refresh)
+from a local edit (an override, kept and named). A legacy line
+without a hash grants ownership without that distinction, and the
+next refresh upgrades it.
 """
 
 _GITIGNORE_HEADER = (
@@ -168,13 +173,40 @@ def _same_content(local: Path, shipped: Path) -> bool:
     )
 
 
-def _read_manifest(root: Path) -> set[str]:
-    """Names a previous sync copied into *root* (empty when none)."""
+def _digest(target: Path) -> str:
+    """A stable digest of a file's bytes or a directory's whole content."""
+    digest = hashlib.sha256()
+    if target.is_file():
+        digest.update(target.read_bytes())
+        return digest.hexdigest()
+    for child in sorted(target.rglob("*")):
+        if child.is_file():
+            digest.update(str(child.relative_to(target)).encode())
+            digest.update(child.read_bytes())
+    return digest.hexdigest()
+
+
+def _read_manifest(root: Path) -> dict[str, str]:
+    """Name to copy-time digest from a previous sync (empty when none).
+
+    A legacy name-only line reads as an empty digest: ownership
+    without the stale-versus-edited distinction.
+    """
     path = root / _MANIFEST
+    entries: dict[str, str] = {}
     try:
-        return {line for line in path.read_text(encoding="utf-8").split() if line}
+        text = path.read_text(encoding="utf-8")
     except OSError:
-        return set()
+        return entries
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        first, _, rest = line.partition(" ")
+        if rest and len(first) == 64 and all(c in "0123456789abcdef" for c in first):
+            entries[rest] = first
+        else:
+            entries[line.strip()] = ""
+    return entries
 
 
 def write_lf(path: Path, text: str) -> None:
@@ -187,13 +219,13 @@ def write_lf(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8", newline="\n")
 
 
-def _write_manifest(root: Path, copies: set[str]) -> None:
-    """Record what we copied, or remove the file when we copied nothing."""
+def _write_manifest(root: Path, copies: dict[str, str]) -> None:
+    """Record what we copied and its digests; remove the file when nothing."""
     path = root / _MANIFEST
     if not copies:
         path.unlink(missing_ok=True)
         return
-    body = "".join(f"{name}\n" for name in sorted(copies))
+    body = "".join(f"{digest} {name}\n" for name, digest in sorted(copies.items()))
     if not path.exists() or path.read_text(encoding="utf-8") != body:
         write_lf(path, body)
 
@@ -204,7 +236,7 @@ def _entry(
     overrides: list[str],
     reclaimed: list[str],
     *,
-    was_copied: bool,
+    copied_digest: str | None,
 ) -> tuple[bool, str]:
     """Reconcile one materialised entry. Never raises.
 
@@ -221,10 +253,16 @@ def _entry(
             return True, ""
         _remove(link)  # wrong or dangling target: re-point it
         return True, _make_link(link, target)
-    if was_copied:
-        # A copy we made last time is ours to refresh, whatever its
-        # content now says; content is deliberately not consulted,
-        # which is why the manifest exists at all.
+    if copied_digest is not None:
+        if _same_content(link, target):
+            return True, ""  # our copy, current: nothing to do or say
+        if copied_digest and _digest(link) != copied_digest:
+            # Changed since we copied it: a local edit, not staleness.
+            # The override is kept and named, exactly as on a link
+            # platform where a replaced link means the same thing.
+            overrides.append(link.name)
+            return False, ""
+        # Stale (or legacy-owned without a digest): ours to refresh.
         _remove(link)
         return True, _make_link(link, target)
     if link.is_dir() and not any(link.iterdir()):
@@ -361,7 +399,7 @@ def materialise(repo_root: Path, source: Path, subdir: str) -> list[str]:
     previous = _read_manifest(root)
     ours: list[str] = []
     reclaimed: list[str] = []
-    copies: set[str] = set()
+    copies: dict[str, str] = {}
     for name in shipped:
         entry = root / name
         pre_existing = entry.exists() or _is_link(entry)
@@ -371,25 +409,27 @@ def materialise(repo_root: Path, source: Path, subdir: str) -> list[str]:
                 source / name,
                 overrides,
                 reclaimed,
-                was_copied=name in previous,
+                copied_digest=previous.get(name) if name in previous else None,
             )
             if mode:
                 modes.add(mode)
             if mine:
                 ours.append(name)
                 if mode == "copied" or (not mode and name in previous):
-                    copies.add(name)
+                    copies[name] = _digest(source / name)
         except OSError as exc:
             lines.append(
                 f"  Note: could not materialise .claude/{subdir}/{name} ({exc})"
             )
             # Whatever is on disk is still ours: a previous copy, or the
-            # half-written one this call failed part way through.
+            # half-written one this call failed part way through. The
+            # old digest (or a legacy blank) rides along, so the next
+            # sync treats it as stale and refreshes it.
             if name in previous or not pre_existing:
-                copies.add(name)
+                copies[name] = previous.get(name, "")
 
     try:
-        dropped = _prune(root, set(shipped), source, previous)
+        dropped = _prune(root, set(shipped), source, set(previous))
     except OSError:
         dropped = []
     _write_manifest(root, copies)

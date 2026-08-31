@@ -17,6 +17,11 @@ with `origin/main`.
 
 ## Working conventions
 
+- Exceptional cases and fallbacks are tested before happy paths: a
+  broken happy path announces itself in daily use, a broken fallback
+  hides until the day it is the only path left. A fallback without a
+  test forcing it is untested code.
+
 - Agent sessions work in worktrees under `.claude/worktrees/`.
 - Failure reasons are printed verbatim, never read as booleans.
 - Never pipe the output of a command whose verdict you depend on: a
