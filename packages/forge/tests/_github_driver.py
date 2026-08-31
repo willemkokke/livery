@@ -123,9 +123,11 @@ class GithubConformanceDriver:
         self._live = live
         self._recording = opener is not None
         self._me = self._github.whoami()
-        # Cloud legs point the scratch at the e2e organisation; the
-        # default stays the signed-in user for local recording.
-        self._owner = os.environ.get("LIVERY_FORGE_E2E_OWNER") or self._me
+        # Scratch always belongs to the e2e organisation, never a
+        # personal profile; the env overrides for a different org. The
+        # owner must not derive from whoami: replay would then depend
+        # on who recorded.
+        self._owner = os.environ.get("LIVERY_FORGE_E2E_OWNER") or "livery-forge-e2e"
         self._counter = 0
         self._created: list[tuple[str, str]] = []
         self._files = 0
