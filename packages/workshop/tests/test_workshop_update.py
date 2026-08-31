@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 from footman import Failed
@@ -132,10 +133,12 @@ def test_new_package_renders_and_wires(
 
     real_run = subprocess.run
 
-    def fake_run(cmd: list[str], **kwargs: object):
+    def fake_run(
+        cmd: list[str], **kwargs: Any
+    ) -> subprocess.CompletedProcess[Any]:
         if cmd[:2] == ["uv", "lock"]:
             return subprocess.CompletedProcess(cmd, 0, "", "")
-        return real_run(cmd, **kwargs)  # type: ignore[arg-type]
+        return real_run(cmd, **kwargs)
 
     monkeypatch.setattr("livery.workshop._templates.subprocess.run", fake_run)
     with pytest.raises(_FAILURES):
