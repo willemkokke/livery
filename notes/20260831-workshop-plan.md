@@ -400,6 +400,14 @@ One tool cache between agents. Waits on toolroom moving into this
 monorepo and on strongroom progress, both outside this plan's
 control; recorded so the dependency is visible.
 
+## Phase 14 — the docs toolchain (post-0.1.0)
+
+Per-package rendered sites from the docstrings and `docs/` trees,
+every module included, underscore-private ones too: the reason every
+docstring is already held to published standard. Its own plan when it
+starts; recorded here so the sequence is visible (Willem: post
+0.1.0).
+
 ## Temporary, replaced by
 
 | Temporary piece | Replaced by |
@@ -610,9 +618,7 @@ control; recorded so the dependency is visible.
 3. Resolved 2026-08-31 at phase 8: the coverage bar lives in each
    package's `livery.toml` (`[qa] coverage_floor`). Per-package
    checker sets stay undivided until a package needs one.
-4. The docs toolchain (per-package rendered sites) is not in this
-   plan; it follows 0.1.0 as its own small plan unless Willem pulls
-   it in. Owner: Willem.
+4. Sequenced 2026-08-31 as phase 14, post-0.1.0.
 5. The bootstrap plan's open item 7 (the three e2e accounts) gates
    phase 7's full acceptance. Owner: Willem, in progress
    (2026-08-31: accounts promised for 2026-09-01).
