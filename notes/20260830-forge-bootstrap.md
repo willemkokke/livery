@@ -1,13 +1,16 @@
 # Bootstrapping livery: the forge first
 
-Status: phase 2 built, 2026-08-31, awaiting Willem's acceptance, the
-pull request, and the `packages/forge/v0.1.0` tag. The suite is green
-four ways: FakeForge (three capability shapes), the Gitea 1.28
-container, the GitLab CE container, and github.com scratch
-repositories; 24 cassettes per real backend replay in under two
-seconds with no network and no credential, no token on disk, and the
-protocol is frozen at 0.1.0. The Gitea slice merged earlier as PR #4;
-phase 1 as PR #3. The
+Status: phase 2 shipped, 2026-08-31, awaiting Willem's acceptance.
+The whole phase merged as PR #5 (gate green on three OSes, the
+166-test replay suite network-free in CI); `packages/forge/v0.1.0`
+is tagged, verified, and published by trusted publishing (run
+33356994573; PyPI serves 0.1.0). The suite is green four ways:
+FakeForge (three capability shapes), the Gitea 1.28 container, the
+GitLab CE container, and github.com scratch repositories; the
+protocol is frozen. PR #4 (the Gitea slice) never merged: its CI had
+failed on a defect fixed later on the shared branch, and it is
+closed as superseded by #5, which carries all of its content. Next:
+phase 3, the nightly. The
 protocols, the GitLab mapping (`packages/forge/docs/gitlab.md`), the
 verified FakeForge with four fault modes, the shipped conformance
 suite (25 scenarios, run against the fake in two capability shapes),
@@ -524,11 +527,14 @@ series), gate green at the end.
 
 ## Open
 
-1. footman's `check` caching reported green after a uv.lock refresh
-   bumped ty to 0.0.75, while a cold CI run failed on the new ty's
-   class-scope annotation resolution (and on ruff format drift). The
-   cache key misses lockfile-driven tool changes; needs a footman
-   issue, and until then a lockfile change warrants a cold run.
+1. Agent gate discipline, corrected after a wrong diagnosis: footman
+   has no caching and did nothing wrong. The agent ran the gate as
+   `fm check | tail -N`, which truncates the failing step lines and
+   replaces the gate's exit code with tail's zero, and declared a
+   pull request merged on an early-exiting checks watcher. The
+   gate's verdict is its exit code, read unpiped; a merge is
+   confirmed by querying the pull request's state. Process rule 3
+   applies to the agent's own pipes.
 2. The CI matrix's breadth now (floor + newest) versus footman's full
    ladder; widen when the forge grows platform-sensitive code.
 3. Whether strongroom's step 0 (the spec and vectors, per the store
