@@ -112,9 +112,10 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
     - ``livery.forge`` imports only the standard library at module
       import time, plus its one declared lazy extra (PyNaCl), because
       the whole ecosystem stands on it being dependency-free. The one
-      exception is the dev-container plugin under ``_dev``, which may
-      also import footman: its only loader is footman's ``plugin()``,
-      so footman is present whenever it loads.
+      exception is the dev plugin under ``_dev``, which may also
+      import footman and toolroom: its only loader is footman's
+      ``plugin()``, and only a workshop workspace mounts layers, so
+      both are present whenever it loads.
     """
     packages = discover_packages(root)
     by_path = {package.path: package for package in packages}
@@ -210,11 +211,12 @@ def _cycles(packages: tuple[Package, ...]) -> list[str]:
 #: set is a plan decision, not an edit.
 _FORGE_LAZY_EXTRAS = frozenset({"nacl"})
 
-#: The dev-container plugin's subtree, the one place in forge that may
-#: import footman: its only loader is footman's own plugin(), so
-#: footman is present whenever it loads, and livery-forge still
-#: declares no dependency.
+#: The dev plugin's subtree, the one place in forge that may import
+#: footman and toolroom: its only loader is footman's own plugin(),
+#: and only a workshop workspace mounts layers, so both are present
+#: whenever it loads and livery-forge still declares no dependency.
 _FORGE_PLUGIN_DIR = "packages/forge/src/livery/forge/_dev"
+_FORGE_PLUGIN_IMPORTS = frozenset({"footman", "toolroom"})
 
 
 def _forge_is_stdlib_only(root: Path) -> list[str]:
@@ -226,7 +228,7 @@ def _forge_is_stdlib_only(root: Path) -> list[str]:
     for source in sorted((root / "packages/forge/src").rglob("*.py")):
         allowed_here = allowed
         if source.is_relative_to(plugin_dir):
-            allowed_here = allowed | {"footman"}
+            allowed_here = allowed | _FORGE_PLUGIN_IMPORTS
         tree = ast.parse(source.read_text("utf-8"), filename=str(source))
         for node in ast.walk(tree):
             names: list[str] = []

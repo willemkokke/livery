@@ -1,10 +1,10 @@
 # Building the workshop
 
 Status: phases 1-3 shipped 2026-08-31 (PRs #12, #13, #17), plus the
-task-surface split (see the decision record): forge.dev ships with
-livery-forge as a mountable layer, fixtures.record is instance-only
-in the root tasks.py, and the content channel is live with the
-monorepo dogfooding it. The e2e accounts are all three verified and
+task-surface split (see the decision record): forge's whole dev
+surface, fixtures.record included, ships with livery-forge as a
+mountable layer, the root tasks.py is back at its seeded one line,
+and the content channel is live with the monorepo dogfooding it. The e2e accounts are all three verified and
 stored per the runbook, gitea.com's leg bringing its own API-minted
 runner. Next: phase 4. The bootstrap
 plan's entry criteria are met: `livery-forge` 0.1.0 is on PyPI with
@@ -336,11 +336,16 @@ The bootstrap deferrals come home and the temporary environment ends.
   file shipped as a package resource (its project name is pinned in
   the file, so the move changes no running containers); a workspace
   gets those tasks only by listing `livery.forge` in its layers.
-  `forge.fixtures.record` re-records this repository's cassettes and
-  works nowhere else, so it lives in the root `tasks.py`. The
-  layering lint widens for exactly one subtree: `livery.forge._dev`
-  may import footman, because its only loader is footman's own
-  `plugin()`; livery-forge still declares no dependency.
+  `forge.fixtures.record` also lives in the plugin, registered only
+  in forge's own source checkout: the tests directory it runs is
+  derived from the module's location and a wheel install has none, so
+  no consumer sees the task and the root `tasks.py` stays at its
+  seeded one line (Willem's ruling; an earlier cut had put the
+  recorder in `tasks.py`). The layering lint widens for exactly one
+  subtree: `livery.forge._dev` may import footman and toolroom,
+  because its only loader is footman's own `plugin()` and only a
+  workshop workspace mounts layers; livery-forge still declares no
+  dependency.
 - 2026-08-31, instance-owned files (Willem's questions, resolved).
   `tasks.py` is classed like `CLAUDE.project.md`: seeded once by the
   template, never rewritten, so an instance growing its own tasks
