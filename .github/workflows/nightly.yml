@@ -59,7 +59,7 @@ jobs:
       issues: write
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.0.1
       - name: File or extend the drift issue, through the forge itself
         env:
           GITHUB_TOKEN: ${{ github.token }}
