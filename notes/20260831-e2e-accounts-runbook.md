@@ -87,34 +87,48 @@ anyway.
    f.create_repo('<group-path>', 'probe'); f.delete_repo('<group-path>',
    'probe'); print('group ok')"`.
 
-## 3. gitea.com: a free organisation
+## 3. gitea.com: a private organisation, bringing its own runner
 
 The hosted-stable edge beside the local container's 1.28-dev edge.
-Known caveat, stated in the workshop plan: until gitea.com serves the
-1.28 line, the required `cancel_run` scenarios fail below the floor
-(the backend raises `Unsupported` naming the server version), so this
-leg runs partial and marked, or waits for 1.28.
+All done 2026-08-31; what the probes established, kept here because
+each fact cost a wrong assumption:
 
-1. Create an account at <https://gitea.com> (or sign in), then a new
-   organisation, e.g. `livery-forge-e2e`.
-2. Mint a token: Settings → Applications → Generate New Token, with
-   read/write on `organization`, `repository`, `issue`, and `user`.
-3. Store it:
+- The org and every scratch repo are fully **private**: Gitea gates
+  nothing behind payment, protection included.
+- gitea.com serves `1.27.0+dev`, below the 1.28 cancel floor, so the
+  `cancel_run` scenarios fail by design there until 1.28 lands (the
+  backend raises `Unsupported` naming the version); the leg runs
+  partial and marked.
+- gitea.com has **no usable shared runner pool** for org repos: a
+  pushed workflow queues forever and the org's Runners page shows
+  zero, which is that page's normal state (it lists org-registered
+  runners only). The leg brings its own runner.
+- The runner is minted **through the API**, not the UI: the UI's
+  Create-new-Runner token is single-use, but
+  `POST /orgs/<org>/actions/runners/registration-token` (with the
+  ordinary API token) mints a fresh registration token any time, so
+  the release-legs workflow stores no runner token at all - it boots
+  a disposable `act_runner`, registers, runs the leg, and deletes the
+  registration (`DELETE /orgs/<org>/actions/runners/<id>`).
+- Against gitea.com use `docker.gitea.com/act_runner:latest`, not
+  `:nightly`: the nightly runner registers and is then rejected as
+  unregistered by the 1.27 server, consuming the token on the way
+  down.
+- Proven end to end: a private probe repo's push-triggered job ran
+  green on a disposable stable runner registered with an API-minted
+  token; repo, container, and registration all cleaned after.
 
-   ```console
-   gh secret set LIVERY_E2E_GITEA_TOKEN --repo willemkokke/livery
-   gh variable set LIVERY_E2E_GITEA_OWNER --repo willemkokke/livery --body livery-forge-e2e
-   ```
-
-4. Verify: `GITEA_URL=https://gitea.com GITEA_TOKEN=<token> uv run
-   python -c "from livery.forge import GiteaForge; f =
-   GiteaForge.connect(); print(f.whoami(), f.server_version());
-   print('gitea.com ok')"` — the printed version also answers
-   whether the 1.28 floor caveat still applies.
+The stored credentials (done 2026-08-31): `LIVERY_E2E_GITEA_TOKEN`
+(Settings → Applications token with read/write on `organization`,
+`repository`, `issue`, `user`) and
+`LIVERY_E2E_GITEA_OWNER=livery-forge-e2e`.
 
 ## Afterwards
 
-Say the accounts exist and the release-legs workflow lands (workshop
-plan phase 7): workflow_dispatch, one job per forge, each skipping
+All three accounts exist and their credentials are stored and
+verified (2026-08-31). The release-legs workflow lands with workshop
+plan phase 7: workflow_dispatch, one job per forge, each skipping
 cleanly when its secret is absent, each deleting its scratch at end
-of run.
+of run; the gitea.com job boots its disposable runner first. The
+plaintext token file in the planning repository can be deleted, and
+rotating its tokens costs nothing if wanted.
