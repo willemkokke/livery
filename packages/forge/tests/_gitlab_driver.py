@@ -160,6 +160,18 @@ class GitlabConformanceDriver:
         owner, name = self.unused_repo_name()
         self._created.append((owner, name))
         repo = self._gitlab.create_repo(owner, name)
+        try:
+            # gitlab.com's default forbids API pipeline variables on new
+            # projects; the dispatch scenario routes by one. An older
+            # server without the attribute refuses; that is absorbed.
+            self._client.request(
+                f"/projects/{_path(owner, name)}",
+                method="PUT",
+                data={"ci_pipeline_variables_minimum_override_role": "maintainer"},
+            )
+        except ForgeError as exc:
+            if exc.status != 400:
+                raise
         self._commit(
             owner,
             name,

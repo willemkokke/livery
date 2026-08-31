@@ -26,6 +26,9 @@ jobs:
         env:
           LIVERY_FORGE_LIVE: "1"
         run: uv run --no-sync pytest packages/forge/tests/test_gitea_conformance.py -n 4
+      - name: Evidence from the scratch repositories
+        if: failure()
+        run: python3 .github/scripts/e2e_diagnose.py gitea
       - name: Down
         if: always()
         run: uv run --no-sync fm forge.dev.down --wipe
@@ -46,6 +49,9 @@ jobs:
         # One single-node GitLab absorbs about four concurrent
         # writers; beyond that Gitaly times out.
         run: uv run --no-sync pytest packages/forge/tests/test_gitlab_conformance.py -n 4
+      - name: Evidence from the scratch repositories
+        if: failure()
+        run: python3 .github/scripts/e2e_diagnose.py gitlab
       - name: Down
         if: always()
         run: uv run --no-sync fm forge.dev.down --wipe
