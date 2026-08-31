@@ -12,20 +12,6 @@ permissions:
   contents: read
 
 jobs:
-# The live legs, run before a release tag: the conformance suite
-# against the compose forges and the three cloud accounts. Each cloud
-# leg skips cleanly when its secret is absent (the skip is named in
-# the run summary) and cleans its scratch at the end, whatever the
-# verdict. Dispatch with `gh workflow run release-legs.yml`.
-name: release-legs
-
-on:
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
-jobs:
   gitea-local:
     runs-on: ubuntu-latest
     timeout-minutes: 30
