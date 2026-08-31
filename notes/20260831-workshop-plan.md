@@ -528,6 +528,17 @@ starts; recorded here so the sequence is visible (Willem: post
   signing, a non-PyPI index for the monorepo itself, and a portable
   token path on the github kind. `packages/workshop/docs/releases.md`
   states the same for readers.
+- 2026-08-31, everything through fm (Willem: a ban on calling gh,
+  the type checkers, and other tool CLIs directly; exceptions on
+  request, and a needed exception probably marks a missing workshop
+  verb). `fm typecheck` reports every checker's findings in one
+  pass, and reading them one at a time through repeated gates was
+  the proof of the rule. First verb the rule surfaced:
+  `fm ci.logs`, the head commit's job logs through the protocol,
+  replacing `gh run view --log-failed`. Granted exceptions, each a
+  recorded gap: `gh workflow run` for dispatching release-legs, and
+  `gh` for work outside this workspace (other repositories'
+  issues and administration).
 - 2026-08-31, the union's first reading. The aggregating job's
   first enforcement measured workshop at 79.0 on the six-leg union
   and refused the 80 floor, which had been ratcheted against the
