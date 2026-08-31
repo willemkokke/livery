@@ -91,6 +91,16 @@ def render(template_dir: Path, destination: Path, data: dict[str, Any]) -> None:
         fail(f"copier exited {result.returncode}:\n{result.stdout}{result.stderr}")
 
 
+def _lf(data: bytes) -> bytes:
+    """The bytes with LF endings, whatever the platform wrote.
+
+    The channel is LF end to end: git holds LF, and copier writes the
+    platform's endings, so both sides normalise before any compare or
+    write. Without this the Windows gate drifts on every file.
+    """
+    return data.replace(b"\r\n", b"\n")
+
+
 def rendered_files(destination: Path) -> list[Path]:
     """Every rendered file, the answers file excluded.
 
@@ -119,7 +129,7 @@ def project_drift(root: Path) -> list[str]:
             committed = root / relative
             if not committed.is_file():
                 drift.append(f"{relative}: rendered, but missing from the repository")
-            elif committed.read_bytes() != rendered.read_bytes():
+            elif _lf(committed.read_bytes()) != _lf(rendered.read_bytes()):
                 drift.append(f"{relative}: differs from its render")
     return drift
 
@@ -133,8 +143,8 @@ def apply_project(root: Path) -> list[str]:
         for rendered in rendered_files(Path(scratch)):
             relative = rendered.relative_to(scratch)
             committed = root / relative
-            body = rendered.read_bytes()
-            if not committed.is_file() or committed.read_bytes() != body:
+            body = _lf(rendered.read_bytes())
+            if not committed.is_file() or _lf(committed.read_bytes()) != body:
                 committed.parent.mkdir(parents=True, exist_ok=True)
                 committed.write_bytes(body)
                 changed.append(str(relative))
