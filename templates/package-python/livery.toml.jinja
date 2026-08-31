@@ -3,3 +3,8 @@
 # members as [[depends]] edges with a kind and a floor.
 type = "python"
 name = "{{ package_name }}"
+
+[qa]
+# The coverage high-water mark the gate enforces; raise it as the
+# suite grows, lower it only deliberately.
+coverage_floor = 100

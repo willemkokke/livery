@@ -39,6 +39,8 @@ dev = [
     "livery-forge[github-secrets]",
     "livery-workshop",
     "pytest>=8.0",
+    # Coverage feeds the per-package floors the gate enforces.
+    "pytest-cov>=5",
     # Parallelise the suite across cores (`-n auto`, wired into addopts).
     "pytest-xdist>=3.6",
     "ruff>=0.6",

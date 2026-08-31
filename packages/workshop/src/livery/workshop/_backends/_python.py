@@ -4,11 +4,22 @@ One invocation covers every Python package at once: the checkers read
 their scopes from the workspace's own configuration, so the whole
 repository is linted exactly as CI lints it, and a tracked file
 outside any package still cannot pass the gate and fail the build.
-Per-package scoping arrives with the affected engine.
+The affected engine narrows the same verbs to a package subset by
+passing explicit paths; ty and pyrefly always check their configured
+whole, because their runs cost seconds and their configs pin the
+platform matrix.
 """
 
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
+import tempfile
+import tomllib
+from pathlib import Path
+
+from footman import fail
 from toolroom import basedpyright, mypy, pyrefly, pytest, ruff, ruff_format, ty
 
 from livery.workshop._packages import Package
@@ -17,17 +28,28 @@ from livery.workshop._packages import Package
 SRC = (".",)
 
 
-def run_format(check: bool = False) -> None:
+def package_paths(packages: tuple[Package, ...]) -> tuple[str, ...]:
+    """The src and tests directories the *packages* own, as they exist."""
+    paths = []
+    for package in packages:
+        for name in ("src", "tests"):
+            directory = package.directory / name
+            if directory.is_dir():
+                paths.append(f"{package.path}/{name}")
+    return tuple(paths)
+
+
+def run_format(check: bool = False, paths: tuple[str, ...] = SRC) -> None:
     """Format with ruff; *check* reports instead of rewriting."""
-    ruff_format(*SRC, check=check)
+    ruff_format(*paths, check=check)
 
 
-def run_lint(fix: bool = False) -> None:
+def run_lint(fix: bool = False, paths: tuple[str, ...] = SRC) -> None:
     """Lint with ruff; *fix* applies safe fixes in place."""
-    ruff.check(*SRC, fix=fix)
+    ruff.check(*paths, fix=fix)
 
 
-def run_typecheck() -> None:
+def run_typecheck(paths: tuple[str, ...] = ()) -> None:
     """Type-check with all four gating checkers, in parallel.
 
     basedpyright runs with warnings gating as errors. mypy is strict
@@ -36,22 +58,25 @@ def run_typecheck() -> None:
     mypy has no all-platforms mode. ty and pyrefly check every
     platform at once at the scopes pyproject pins. All four gate: a
     checker livery uses is a checker the tree is clean against.
+
+    *paths* narrows basedpyright and mypy to the affected subset; ty
+    and pyrefly keep their configured whole either way.
     """
     from footman import parallel, step
 
     def based() -> None:
-        basedpyright(warnings=True)
+        basedpyright(*paths, warnings=True)
 
     # Each mypy run gets its own cache dir: the SQLite cache does not
     # tolerate three concurrent writers on one file.
     def mypy_linux() -> None:
-        mypy(cache_dir=".mypy_cache/linux")
+        mypy(*paths, cache_dir=".mypy_cache/linux")
 
     def mypy_darwin() -> None:
-        mypy(platform="darwin", cache_dir=".mypy_cache/darwin")
+        mypy(*paths, platform="darwin", cache_dir=".mypy_cache/darwin")
 
     def mypy_win32() -> None:
-        mypy(platform="win32", cache_dir=".mypy_cache/win32")
+        mypy(*paths, platform="win32", cache_dir=".mypy_cache/win32")
 
     def run_ty() -> None:
         ty.check()
@@ -81,6 +106,89 @@ def run_typecomplete(packages: tuple[Package, ...]) -> None:
         basedpyright(verifytypes=module, ignoreexternal=True)
 
 
-def run_test(*pytest_args: str) -> None:
-    """Run the test suite; *pytest_args* forwarded verbatim."""
-    pytest.opts(in_process=False)(*pytest_args)
+def coverage_floor(package: Package) -> float | None:
+    """The committed coverage floor from the package's contract, or None."""
+    contract = tomllib.loads((package.directory / "livery.toml").read_text("utf-8"))
+    value = (contract.get("qa") or {}).get("coverage_floor")
+    return float(value) if value is not None else None
+
+
+def measured_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, float]:
+    """Per-package line coverage from the run's ``.coverage`` data."""
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as handle:
+        report = handle.name
+    result = subprocess.run(
+        [sys.executable, "-m", "coverage", "json", "-o", report],
+        cwd=root,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        fail(
+            f"coverage json exited {result.returncode}:\n{result.stdout}{result.stderr}"
+        )
+    data = json.loads(Path(report).read_text("utf-8"))
+    Path(report).unlink(missing_ok=True)
+    totals: dict[str, list[int]] = {package.path: [0, 0] for package in packages}
+    for filename, entry in data.get("files", {}).items():
+        for package in packages:
+            if filename.startswith(f"{package.path}/src/"):
+                summary = entry.get("summary", {})
+                totals[package.path][0] += int(summary.get("covered_lines", 0))
+                totals[package.path][1] += int(summary.get("num_statements", 0))
+                break
+    return {
+        path: (100.0 * covered / statements if statements else 100.0)
+        for path, (covered, statements) in totals.items()
+    }
+
+
+def enforce_coverage(root: Path, packages: tuple[Package, ...]) -> None:
+    """Fail any package below its committed floor; print each verdict."""
+    measured = measured_coverage(root, packages)
+    problems = []
+    for package in packages:
+        floor = coverage_floor(package)
+        if floor is None:
+            continue
+        percent = measured.get(package.path, 0.0)
+        print(f"  coverage {package.path}: {percent:.1f}% (floor {floor:.1f}%)")
+        if percent < floor:
+            problems.append(
+                f"{package.path}: {percent:.1f}% is below the committed"
+                f" floor of {floor:.1f}%"
+            )
+    if problems:
+        fail(
+            "coverage fell below the high-water marks:\n  "
+            + "\n  ".join(problems)
+            + "\n  raise the code, or lower a floor deliberately in livery.toml"
+        )
+
+
+def run_test(
+    *pytest_args: str,
+    packages: tuple[Package, ...] = (),
+    root: Path | None = None,
+    scoped: bool = False,
+) -> None:
+    """Run the test suite; *pytest_args* forwarded verbatim.
+
+    With *packages* and *root*, the run measures coverage over
+    ``livery`` and enforces each package's committed floor afterwards;
+    *scoped* additionally narrows collection to those packages' own
+    test directories (the affected mode). Without them the arguments
+    pass through untouched.
+    """
+    if not packages or root is None:
+        pytest.opts(in_process=False)(*pytest_args)
+        return
+    dirs: tuple[str, ...] = ()
+    if scoped:
+        dirs = tuple(
+            f"{package.path}/tests"
+            for package in packages
+            if (package.directory / "tests").is_dir()
+        )
+    pytest.opts(in_process=False)(*dirs, "--cov=livery", "--cov-report=", *pytest_args)
+    enforce_coverage(root, packages)
