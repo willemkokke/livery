@@ -1,9 +1,10 @@
 # Building the workshop
 
-Status: phase 1 built, 2026-08-31, awaiting the pull request and the
-`packages/workshop/v0.0.1` tag; the tag needs the PyPI pending
-publisher for `livery-workshop` registered first (Willem-side, like
-the forge's in bootstrap phase 0). The bootstrap
+Status: phase 1 shipped, 2026-08-31: merged as PR #12,
+`packages/workshop/v0.0.1` tagged, verified, and published by trusted
+publishing (run 33377265354; PyPI serves 0.0.1). The name is reserved
+and the train's second path is proven. Next: phase 2, the task
+surface into the plugin. The bootstrap
 plan's entry criteria are met: `livery-forge` 0.1.0 is on PyPI with
 all three backends passing the one conformance suite, the fixture
 harness is stable, and the compose loop is routine.
@@ -92,9 +93,9 @@ first, train proven before the code matters.
   with no `livery/__init__.py` (`unzip -l`); `packages/workshop/v0.0.1`
   tagged, verified, published (PyPI answers
   `https://pypi.org/pypi/livery-workshop/json`).
-  *(2026-08-31: built and green locally; the wheel carries the
-  namespace and the entry point. The tag follows the merge and the
-  PyPI pending publisher.)*
+  *(2026-08-31: all four proven — gate green, `fm layers` present,
+  the wheel namespace-clean with its entry point, and 0.0.1 tagged,
+  verified, and published; PyPI answers for the version.)*
 
 ## Phase 2 — tasks move into the plugin, dispatched by contract
 
