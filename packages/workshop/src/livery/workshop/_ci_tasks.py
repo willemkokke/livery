@@ -15,7 +15,7 @@ from typing import Annotated
 
 from footman import doc, fail, group, task
 
-from livery.forge import Capability, Forge, Repository
+from livery.forge import Capability, Forge, ForgeError, Repository
 from livery.workshop._git_ops import GitOps
 from livery.workshop._layers import workspace_root
 from livery.workshop._verdict import classify, follow
@@ -139,7 +139,13 @@ def logs_flow(
                 continue
             state = job.conclusion or job.status
             print(f"  {run.workflow} / {job.name}: {state}")
-            log = repo.checks.job_log(job.id)
+            try:
+                log = repo.checks.job_log(job.id)
+            except ForgeError as exc:
+                # A running job's log is not stored yet; github answers
+                # 404 from its blob store until the job completes.
+                print(f"    log not available yet ({exc.status or 'error'})")
+                continue
             for line in log.splitlines()[-lines:]:
                 print(f"    {line}")
             printed += 1
