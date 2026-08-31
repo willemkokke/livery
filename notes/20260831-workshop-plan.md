@@ -1,10 +1,8 @@
 # Building the workshop
 
-Status: phase 8 shipped 2026-08-31 (PRs #42-#44; coverage floors
-live with a half-point grace, workshop ratcheted to 80). 0.1.0 is
-deliberately NOT tagged: more of hse ports first (Willem), phase 9
-(coverage accuracy) being the first named piece; the stamped 0.1.0
-version waits inert until the list closes. The affected engine scopes the gate to
+Status: phase 9 shipped, 2026-08-31 (PR #49; the union enforcement
+proven red and green by PRs #49-#50). Next on the 0.1.0 gate:
+phase 10 (automatic changelogs and versioning), then 11 and 12. The affected engine scopes the gate to
 the changed packages' dependents' closure, per-package coverage
 floors live in each contract's `[qa]` table and gate the test step,
 the bootstrap's replaced-by table is annotated done line by line,
@@ -361,6 +359,14 @@ shape, on today's cheaper machinery.
   the merged union and fails a deliberate floor raise above the
   measured union (raise, observe red, revert); the per-leg
   enforcement is gone from CI logs.
+  *(2026-08-31: all three hold. The gate job's report lists the
+  shells covered by its own run; PR #50 raised the workshop floor to
+  95 and every check leg passed while the gate job alone refused
+  (run 33436483906), then `fm workflow.abort` tore the branch down;
+  the check legs' logs carry only the print-free parent-measured
+  run. The union's first reading set the workshop floor at 79. The
+  informational live union prints with the next release-legs
+  dispatch, deliberately not burned now.)*
 
 ## Phase 10 — automatic changelogs and versioning
 
