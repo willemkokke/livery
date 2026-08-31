@@ -18,7 +18,10 @@ the code it describes, or it is wrong.
 `uv run fm check` runs format, lint, the four type checkers, the
 type-completeness verdict, and tests in parallel. Run it before every
 commit; CI runs the same command on three OSes. Nothing on the merge
-path may wait on anything outside this repository.
+path may wait on anything outside this repository. The gate's verdict
+is its exit code, and a `PreToolUse` hook (`fm hooks.pre-bash`)
+refuses a footman command piped into head/tail and a push of a branch
+that conflicts with `origin/main`.
 
 ## Working conventions
 
