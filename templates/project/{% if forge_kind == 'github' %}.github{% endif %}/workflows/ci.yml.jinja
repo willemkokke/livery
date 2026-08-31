@@ -14,8 +14,8 @@ jobs:
         python: [{% for version in python_versions %}"{{ version }}"{% if not loop.last %}, {% endif %}{% endfor %}]
     runs-on: ${{ '{{' }} matrix.os {{ '}}' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
       - name: Sync (locked)
         run: uv sync --locked --python ${{ '{{' }} matrix.python {{ '}}' }}
       - name: Gate
