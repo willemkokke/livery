@@ -66,6 +66,10 @@ if _FORGE_TESTS.is_dir():
         # deadlines), so the recording run is capped rather than
         # flaky.
         run_tests(str(_FORGE_TESTS / "test_gitlab_conformance.py"), "-n", "4")
+        # GitHub scratch goes to the e2e organisation, never the
+        # signed-in user's profile: scratch stays out of personal
+        # namespaces, recording included.
+        os.environ["LIVERY_FORGE_E2E_OWNER"] = "livery-forge-e2e"
         run_tests(str(_FORGE_TESTS / "test_github_conformance.py"), "-n", "4")
 
 
