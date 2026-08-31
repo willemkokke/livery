@@ -4,8 +4,9 @@ The protocols are the whole surface: livery.forge.Forge for one
 server, livery.forge.Repository for one repository on it, and
 livery.forge.Registry for one package index. Every verb exists because
 a development workflow uses it; a verb no workflow uses is removed.
-The protocols are a draft until every backend passes the one
-conformance suite in livery.forge.testing; then they freeze.
+The protocols are frozen: every backend, the verified fake included,
+passes the one conformance suite in livery.forge.testing, and a change
+to a verb now is a compatibility event, not a draft edit.
 
 Runtime dependencies are the standard library and nothing else; a
 workspace test enforces it.
@@ -14,6 +15,17 @@ workspace test enforces it.
 from __future__ import annotations
 
 from livery.forge._errors import ForgeError, Unsupported
+from livery.forge._gitea import (
+    GiteaForge,
+    gitea_configured_host,
+    gitea_is_configured_host,
+)
+from livery.forge._github import GithubForge
+from livery.forge._gitlab import (
+    GitlabForge,
+    gitlab_configured_host,
+    gitlab_is_configured_host,
+)
 from livery.forge._protocol import (
     Checks,
     Forge,
@@ -40,7 +52,7 @@ from livery.forge._types import (
     StateFilter,
 )
 
-__version__ = "0.0.1"
+__version__ = "0.1.0"
 
 __all__ = [
     "Capability",
@@ -50,6 +62,9 @@ __all__ = [
     "Conclusion",
     "Forge",
     "ForgeError",
+    "GiteaForge",
+    "GithubForge",
+    "GitlabForge",
     "Issue",
     "Issues",
     "Job",
@@ -67,4 +82,8 @@ __all__ = [
     "StateFilter",
     "Unsupported",
     "__version__",
+    "gitea_configured_host",
+    "gitea_is_configured_host",
+    "gitlab_configured_host",
+    "gitlab_is_configured_host",
 ]

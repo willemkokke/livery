@@ -4,10 +4,18 @@ The suite is data plus a harness seam: livery.forge.testing.SCENARIOS
 is the data, a tuple of named livery.forge.testing.Scenario records,
 and each backend supplies a livery.forge.testing.ForgeDriver so the
 scenarios can drive the world around the protocol (pushes, tags, CI
-finishing) in that backend's own way. A test harness runs every
+settling) in that backend's own way. A test harness runs every
 applicable scenario against every driver it has; the scenarios
 themselves never change per backend, which is what makes passing them
 mean something.
+
+The driver seam is shaped by what a real forge can actually be made to
+do. CI's verdict is decided by the commit that was pushed, so the
+scenario states the intended outcome at push time and the driver
+arranges it (the fake stores it; a real driver pushes a commit whose
+seeded workflow produces it). Blocking lives only in the driver:
+``settle`` and ``await_run`` return immediately on the fake and poll
+on a real forge, and no scenario ever sleeps.
 
 Scenarios assert the contract and only the contract: where forges may
 legitimately differ, the scenario either probes
@@ -18,21 +26,30 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Literal, Protocol, TypeAlias
 
 from livery.forge._errors import ForgeError, Unsupported
 from livery.forge._protocol import Forge, Repository
-from livery.forge._types import Capability, Conclusion, Label, RepoConfig
+from livery.forge._types import Capability, Label, RepoConfig
+
+Outcome: TypeAlias = Literal["success", "failure", "hang"]
+"""What CI will do with a pushed commit.
+
+``success`` and ``failure`` are verdicts the run reaches once settled.
+``hang`` is a held run: it stays live until the scenario either
+cancels it or settles it, and settling releases it to success. The
+held run is what makes the pending state, cancellation, and arming
+deterministic on every backend, however fast its runners are.
+"""
 
 
 class ForgeDriver(Protocol):
     """What a backend's test rig supplies to run the shared scenarios.
 
     The protocol under test only observes the forge; the driver moves
-    the world the protocol observes. The fake moves dictionaries, a
-    container driver runs git pushes and posts CI results, and the
-    scenarios cannot tell the difference. Every method is cheap on the
-    fake and honest on a real backend, however slow.
+    the world the protocol observes. The fake moves dictionaries; a
+    real driver creates commits, seeds workflow files, and polls. The
+    scenarios cannot tell the difference, which is the point.
     """
 
     @property
@@ -45,14 +62,28 @@ class ForgeDriver(Protocol):
         ...
 
     def fresh_repo(self) -> Repository:
-        """A new repository with an initialised default branch."""
+        """A new repository with an initialised default branch.
+
+        The repository carries a dispatchable CI workflow the
+        scenarios address as ``conf.yml``, however the backend spells
+        that underneath.
+        """
         ...
 
-    def push(self, repo_owner: str, repo_name: str, branch: str) -> str:
+    def push(
+        self,
+        repo_owner: str,
+        repo_name: str,
+        branch: str,
+        *,
+        outcome: Outcome = "success",
+    ) -> str:
         """Push *branch* (creating it when new) and return its head sha.
 
-        CI starts on the pushed commit, as a push trigger would start
-        it.
+        CI starts on the pushed commit and will reach *outcome* once
+        settled; a ``hang`` outcome stays live until cancelled. A real
+        driver arranges this with the workflow it seeds (the branch or
+        commit carries the outcome); the fake stores it on the run.
         """
         ...
 
@@ -60,10 +91,23 @@ class ForgeDriver(Protocol):
         """Create *tag* at the default branch's head."""
         ...
 
-    def finish_run(
-        self, repo_owner: str, repo_name: str, run: int, conclusion: Conclusion
-    ) -> None:
-        """Drive CI to finish *run* with *conclusion*."""
+    def settle(self, repo_owner: str, repo_name: str, sha: str) -> None:
+        """Return once every run for *sha* is terminal.
+
+        A held (``hang``) run is released and concludes success; the
+        other outcomes conclude as pushed. The fake applies the
+        outcome; a real driver releases its hold and polls.
+        """
+        ...
+
+    def await_run(
+        self, repo_owner: str, repo_name: str, *, head_sha: str = "", event: str = ""
+    ) -> int:
+        """The id of the one run matching the filters, once it exists.
+
+        Runs appear asynchronously on a real forge; this blocks until
+        the matching run is listed. Exactly one run must match.
+        """
         ...
 
     def comment_bodies(
@@ -75,6 +119,49 @@ class ForgeDriver(Protocol):
         kind: Literal["pr", "issue"],
     ) -> tuple[str, ...]:
         """The comments on one pull request or issue, oldest first."""
+        ...
+
+    def await_mergeable(self, repo_owner: str, repo_name: str, number: int) -> None:
+        """Return once the forge has computed the pull request's mergeability.
+
+        A forge recomputes mergeability asynchronously after a pull
+        request opens, and merging or arming inside that window is
+        refused with a 405. Scenarios wait here before either verb;
+        workflows retry on the 405 instead, which is the same
+        contract from the other side.
+        """
+        ...
+
+    def await_merged(self, repo_owner: str, repo_name: str, number: int) -> None:
+        """Return once the merge of *number* and its aftermath have landed.
+
+        A scheduled merge is performed by the forge after the checks
+        go green, and even an immediate merge finishes its aftermath
+        (the configured source branch deletion) asynchronously; the
+        caller only ever observes both. This is the driver-side bound
+        on that observation.
+        """
+        ...
+
+    def await_issue(
+        self, repo_owner: str, repo_name: str, number: int, *, assignee: str = ""
+    ) -> None:
+        """Return once listings serve issue *number* in its current state.
+
+        Issue listings are eventually consistent on some forges (about
+        nine seconds behind on github.com), so a scenario that creates
+        or assigns and then reads through a listing waits here first.
+        When *assignee* is given, the served row must carry it.
+        """
+        ...
+
+    def required_context(self) -> str:
+        """How this forge spells the seeded workflow's check context.
+
+        The string branch protection must name for the gate job:
+        forges spell it differently (a bare job name, or
+        workflow / job (event)), and the spelling is rig knowledge.
+        """
         ...
 
 
@@ -102,13 +189,6 @@ class Scenario:
         return all(forge.supports(c) for c in self.requires) and not any(
             forge.supports(c) for c in self.forbids
         )
-
-
-def _run_id_for(repo: Repository, sha: str) -> int:
-    """The id of the one run CI started for *sha*."""
-    runs = repo.checks.runs(head_sha=sha)
-    assert len(runs) == 1, f"expected one run for {sha}, found {len(runs)}"
-    return runs[0].id
 
 
 def _identity(driver: ForgeDriver) -> None:
@@ -174,8 +254,35 @@ def _configure_is_idempotent(driver: ForgeDriver) -> None:
 def _configure_required_contexts(driver: ForgeDriver) -> None:
     """Configure names required contexts where the forge supports it."""
     repo = driver.fresh_repo()
-    repo.configure(RepoConfig(required_contexts=("gate",)))
-    repo.configure(RepoConfig(required_contexts=("gate",)))
+    contexts = (driver.required_context(),)
+    repo.configure(RepoConfig(required_contexts=contexts))
+    repo.configure(RepoConfig(required_contexts=contexts))
+
+
+def _configure_secrets(driver: ForgeDriver) -> None:
+    """Secrets and variables store idempotently where supported.
+
+    Write-only by design: no protocol verb reads a secret back, so the
+    assertion is that both writes succeed twice.
+    """
+    repo = driver.fresh_repo()
+    config = RepoConfig(
+        secrets={"CONF_SECRET": "a secret value"},
+        variables={"CONF_VARIABLE": "a plain value"},
+    )
+    repo.configure(config)
+    repo.configure(config)
+
+
+def _configure_secrets_declined(driver: ForgeDriver) -> None:
+    """Secrets are declined by name where the backend cannot store them."""
+    repo = driver.fresh_repo()
+    try:
+        repo.configure(RepoConfig(secrets={"CONF_SECRET": "a secret value"}))
+    except Unsupported as exc:
+        assert "ci_secrets" in str(exc)
+    else:
+        raise AssertionError("a forge without ci_secrets must raise Unsupported")
 
 
 def _configure_required_contexts_declined(driver: ForgeDriver) -> None:
@@ -190,7 +297,7 @@ def _configure_required_contexts_declined(driver: ForgeDriver) -> None:
 
 
 def _pr_open_find_get(driver: ForgeDriver) -> None:
-    """open, find_by_head, and get agree; duplicates are refused."""
+    """Open, find_by_head, and get agree; duplicates are refused."""
     repo = driver.fresh_repo()
     sha = driver.push(repo.owner, repo.name, "feature")
     base = _default_branch(driver, repo)
@@ -243,7 +350,9 @@ def _pr_merge_now(driver: ForgeDriver) -> None:
     repo.configure(RepoConfig(delete_branch_on_merge=True))
     sha = driver.push(repo.owner, repo.name, "feature")
     pr = repo.pr.open("feature", _default_branch(driver, repo), "feat: merge", "")
+    driver.await_mergeable(repo.owner, repo.name, pr.number)
     repo.pr.merge_now(pr.number, title="feat: merge")
+    driver.await_merged(repo.owner, repo.name, pr.number)
     merged = repo.pr.get(pr.number)
     assert merged is not None
     assert merged.merged
@@ -252,12 +361,10 @@ def _pr_merge_now(driver: ForgeDriver) -> None:
     by_sha = repo.pr.find_by_head_sha(sha)
     assert by_sha is not None
     assert by_sha.number == pr.number
-    try:
-        repo.pr.merge_now(pr.number, title="feat: merge")
-    except ForgeError:
-        pass
-    else:
-        raise AssertionError("merging a merged pull request must raise")
+    repo.pr.merge_now(pr.number, title="feat: merge")  # idempotent re-run
+    still = repo.pr.get(pr.number)
+    assert still is not None
+    assert still.merged
 
 
 def _pr_comment(driver: ForgeDriver) -> None:
@@ -276,26 +383,54 @@ def _pr_comment(driver: ForgeDriver) -> None:
         raise AssertionError("commenting on a missing pull request must raise")
 
 
+def _armable(driver: ForgeDriver) -> Repository:
+    """A fresh repository configured so arming is available.
+
+    GitHub only arms a pull request something blocks, so where the
+    forge can name required contexts the repository is protected with
+    the seeded workflow's context; elsewhere allowing auto-merge is
+    enough.
+    """
+    repo = driver.fresh_repo()
+    if driver.forge.supports("required_contexts"):
+        repo.configure(
+            RepoConfig(
+                allow_auto_merge=True,
+                required_contexts=(driver.required_context(),),
+            )
+        )
+    else:
+        repo.configure(RepoConfig(allow_auto_merge=True))
+    return repo
+
+
 def _arm_disarm(driver: ForgeDriver) -> None:
     """Arm records a schedule, disarm cancels it, both observably."""
-    repo = driver.fresh_repo()
-    driver.push(repo.owner, repo.name, "feature")
+    repo = _armable(driver)
+    sha = driver.push(repo.owner, repo.name, "feature", outcome="hang")
     pr = repo.pr.open("feature", _default_branch(driver, repo), "feat: arm", "")
+    driver.await_mergeable(repo.owner, repo.name, pr.number)
     assert not repo.pr.is_armed(pr.number)
     repo.pr.arm(pr.number, title="feat: arm")
     assert repo.pr.is_armed(pr.number)
     assert repo.pr.disarm(pr.number)
     assert not repo.pr.is_armed(pr.number)
     assert not repo.pr.disarm(pr.number)  # idempotent, and says so
+    run = driver.await_run(repo.owner, repo.name, head_sha=sha)
+    repo.checks.cancel_run(run)  # leave nothing hanging
 
 
 def _armed_pr_merges_on_green(driver: ForgeDriver) -> None:
     """An armed pull request merges when its checks go green, server-side."""
-    repo = driver.fresh_repo()
-    sha = driver.push(repo.owner, repo.name, "feature")
+    repo = _armable(driver)
+    # A held run keeps CI live while the arm lands (GitLab refuses a
+    # schedule with no live pipeline); settling releases it to green.
+    sha = driver.push(repo.owner, repo.name, "feature", outcome="hang")
     pr = repo.pr.open("feature", _default_branch(driver, repo), "feat: auto", "")
+    driver.await_mergeable(repo.owner, repo.name, pr.number)
     repo.pr.arm(pr.number, title="feat: auto")
-    driver.finish_run(repo.owner, repo.name, _run_id_for(repo, sha), "success")
+    driver.settle(repo.owner, repo.name, sha)
+    driver.await_merged(repo.owner, repo.name, pr.number)
     merged = repo.pr.get(pr.number)
     assert merged is not None
     assert merged.merged, "the armed pull request must merge on green"
@@ -308,29 +443,39 @@ def _status_progression(driver: ForgeDriver) -> None:
     nothing = repo.checks.status("0" * 40)
     assert nothing.state == "none"
     assert nothing.contexts == 0
-    sha = driver.push(repo.owner, repo.name, "green")
-    assert repo.checks.status(sha).state == "pending"
-    driver.finish_run(repo.owner, repo.name, _run_id_for(repo, sha), "success")
-    green = repo.checks.status(sha)
+    live_sha = driver.push(repo.owner, repo.name, "live", outcome="hang")
+    driver.await_run(repo.owner, repo.name, head_sha=live_sha)
+    assert repo.checks.status(live_sha).state == "pending"
+    green_sha = driver.push(repo.owner, repo.name, "green")
+    driver.settle(repo.owner, repo.name, green_sha)
+    green = repo.checks.status(green_sha)
     assert green.state == "success"
     assert green.contexts >= 1
-    red_sha = driver.push(repo.owner, repo.name, "red")
-    driver.finish_run(repo.owner, repo.name, _run_id_for(repo, red_sha), "failure")
+    red_sha = driver.push(repo.owner, repo.name, "red", outcome="failure")
+    driver.settle(repo.owner, repo.name, red_sha)
     assert repo.checks.status(red_sha).state == "failure"
+    live_run = driver.await_run(repo.owner, repo.name, head_sha=live_sha)
+    repo.checks.cancel_run(live_run)  # leave nothing hanging
+    driver.settle(repo.owner, repo.name, live_sha)
 
 
 def _runs_jobs_log(driver: ForgeDriver) -> None:
     """Runs filters and orders newest first; jobs and job_log read through."""
     repo = driver.fresh_repo()
-    first = driver.push(repo.owner, repo.name, "one")
+    first = driver.push(repo.owner, repo.name, "one", outcome="failure")
     second = driver.push(repo.owner, repo.name, "two")
+    driver.settle(repo.owner, repo.name, first)
+    driver.settle(repo.owner, repo.name, second)
     listed = repo.checks.runs()
     assert len(listed) >= 2
-    assert listed[0].head_sha == second, "runs must list newest first"
+    ids = [run.id for run in listed]
+    assert ids == sorted(ids, reverse=True), "runs must list newest first"
+    assert {first, second} <= {run.head_sha for run in listed}
     for_first = repo.checks.runs(head_sha=first)
     assert len(for_first) == 1
     run = for_first[0]
-    driver.finish_run(repo.owner, repo.name, run.id, "failure")
+    assert run.status == "completed"
+    assert run.conclusion == "failure"
     jobs = repo.checks.jobs(run.id)
     assert jobs, "a run has jobs"
     assert jobs[0].conclusion == "failure"
@@ -338,28 +483,34 @@ def _runs_jobs_log(driver: ForgeDriver) -> None:
 
 
 def _rerun(driver: ForgeDriver) -> None:
-    """Rerun resets a completed run; a live run is refused."""
+    """Rerun re-runs a completed run; a live run is refused."""
     repo = driver.fresh_repo()
-    sha = driver.push(repo.owner, repo.name, "feature")
-    run = _run_id_for(repo, sha)
+    live_sha = driver.push(repo.owner, repo.name, "live", outcome="hang")
+    live_run = driver.await_run(repo.owner, repo.name, head_sha=live_sha)
     try:
-        repo.checks.rerun(run)
+        repo.checks.rerun(live_run)
     except ForgeError:
         pass
     else:
         raise AssertionError("re-running a live run must raise")
-    driver.finish_run(repo.owner, repo.name, run, "failure")
-    repo.checks.rerun(run)
-    rerun = repo.checks.runs(head_sha=sha)[0]
-    assert rerun.status != "completed", "a re-run run is live again"
+    repo.checks.cancel_run(live_run)
+    driver.settle(repo.owner, repo.name, live_sha)
+    flaky_sha = driver.push(repo.owner, repo.name, "flaky", outcome="failure")
+    driver.settle(repo.owner, repo.name, flaky_sha)
+    flaky_run = driver.await_run(repo.owner, repo.name, head_sha=flaky_sha)
+    repo.checks.rerun(flaky_run)
+    driver.settle(repo.owner, repo.name, flaky_sha)
+    settled = repo.checks.runs(head_sha=flaky_sha)[0]
+    assert settled.status == "completed", "a re-run run settles again"
 
 
 def _cancel_run(driver: ForgeDriver) -> None:
     """cancel_run cancels a live run; a terminal run is refused."""
     repo = driver.fresh_repo()
-    sha = driver.push(repo.owner, repo.name, "feature")
-    run = _run_id_for(repo, sha)
+    sha = driver.push(repo.owner, repo.name, "feature", outcome="hang")
+    run = driver.await_run(repo.owner, repo.name, head_sha=sha)
     repo.checks.cancel_run(run)
+    driver.settle(repo.owner, repo.name, sha)  # cancellation lands async
     cancelled = repo.checks.runs(head_sha=sha)[0]
     assert cancelled.status == "completed"
     assert cancelled.conclusion == "cancelled"
@@ -372,10 +523,12 @@ def _cancel_run(driver: ForgeDriver) -> None:
 
 
 def _cancel_run_forced(driver: ForgeDriver) -> None:
-    """force-cancel works where the capability is declared."""
+    """Force-cancel works where the capability is declared."""
     repo = driver.fresh_repo()
-    sha = driver.push(repo.owner, repo.name, "feature")
-    repo.checks.cancel_run(_run_id_for(repo, sha), force=True)
+    sha = driver.push(repo.owner, repo.name, "feature", outcome="hang")
+    run = driver.await_run(repo.owner, repo.name, head_sha=sha)
+    repo.checks.cancel_run(run, force=True)
+    driver.settle(repo.owner, repo.name, sha)
     cancelled = repo.checks.runs(head_sha=sha)[0]
     assert cancelled.conclusion == "cancelled"
 
@@ -383,8 +536,8 @@ def _cancel_run_forced(driver: ForgeDriver) -> None:
 def _cancel_run_force_declined(driver: ForgeDriver) -> None:
     """Force is declined by name where unsupported; plain cancel still works."""
     repo = driver.fresh_repo()
-    sha = driver.push(repo.owner, repo.name, "feature")
-    run = _run_id_for(repo, sha)
+    sha = driver.push(repo.owner, repo.name, "feature", outcome="hang")
+    run = driver.await_run(repo.owner, repo.name, head_sha=sha)
     try:
         repo.checks.cancel_run(run, force=True)
     except Unsupported as exc:
@@ -392,17 +545,17 @@ def _cancel_run_force_declined(driver: ForgeDriver) -> None:
     else:
         raise AssertionError("force on an unsupporting forge must raise")
     repo.checks.cancel_run(run)
+    driver.settle(repo.owner, repo.name, sha)
     assert repo.checks.runs(head_sha=sha)[0].conclusion == "cancelled"
 
 
 def _dispatch(driver: ForgeDriver) -> None:
     """Dispatch queues a run on the named ref; a missing ref is refused."""
     repo = driver.fresh_repo()
-    repo.checks.dispatch("nightly.yml", ref=_default_branch(driver, repo))
-    dispatched = repo.checks.runs(event="workflow_dispatch")
-    assert dispatched, "dispatch must queue a run"
+    repo.checks.dispatch("conf.yml", ref=_default_branch(driver, repo))
+    driver.await_run(repo.owner, repo.name, event="workflow_dispatch")
     try:
-        repo.checks.dispatch("nightly.yml", ref="no-such-ref")
+        repo.checks.dispatch("conf.yml", ref="no-such-ref")
     except ForgeError:
         pass
     else:
@@ -440,7 +593,7 @@ def _issue_text_both_ways(driver: ForgeDriver) -> None:
         labels=("nightly",),
         assignee=me,
     )
-    got = repo.issue.get(issue.number)
+    got = repo.issue.get(issue.number)  # the direct get is not a listing
     assert got is not None
     assert got.title == "nightly: replay failed"
     assert got.body == "the work order, in full"
@@ -456,7 +609,9 @@ def _issue_list_and_search(driver: ForgeDriver) -> None:
     with_marker = repo.issue.create(
         "one", body="marker: drift-2026", labels=("nightly",)
     )
-    repo.issue.create("two", body="unrelated")
+    other = repo.issue.create("two", body="unrelated")
+    driver.await_issue(repo.owner, repo.name, with_marker.number)
+    driver.await_issue(repo.owner, repo.name, other.number)
     numbers = [issue.number for issue in repo.issue.list()]
     assert with_marker.number in numbers
     assert len(numbers) >= 2
@@ -471,6 +626,7 @@ def _issue_assign(driver: ForgeDriver) -> None:
     issue = repo.issue.create("work", body="the order")
     me = driver.forge.whoami()
     repo.issue.assign(issue.number, me)
+    driver.await_issue(repo.owner, repo.name, issue.number, assignee=me)
     mine = repo.issue.assigned_to_me()
     assert issue.number in [i.number for i in mine]
     try:
@@ -518,6 +674,12 @@ SCENARIOS: tuple[Scenario, ...] = (
         "configure-required-contexts-declined",
         _configure_required_contexts_declined,
         forbids=("required_contexts",),
+    ),
+    Scenario("configure-secrets", _configure_secrets, requires=("ci_secrets",)),
+    Scenario(
+        "configure-secrets-declined",
+        _configure_secrets_declined,
+        forbids=("ci_secrets",),
     ),
     Scenario("pr-open-find-get", _pr_open_find_get),
     Scenario("pr-title-close-reopen", _pr_title_close_reopen),

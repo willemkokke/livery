@@ -9,13 +9,17 @@ verb no workflow uses is removed.
 - Stdlib-only at runtime, on every platform the ecosystem supports.
 - Backends: `_github`, `_gitea` (server 1.28 or later), `_gitlab`,
   plus the verified `FakeForge` every consumer tests against. One
-  conformance suite gates all of them, the fake included, and the
-  protocol freezes only when every backend passes it.
+  conformance suite gates all of them, the fake included; every one
+  passes it, which is what froze the protocol.
 
 Where to read next:
 
 - [protocol.md](protocol.md): the verbs, their groups, and the rules
   every method obeys.
+- [gitea.md](gitea.md): the Gitea backend, its token rule, and its
+  1.28 server floor.
+- [github.md](github.md): the GitHub backend, its GraphQL auto-merge
+  pair, and its one followed redirect.
 - [gitlab.md](gitlab.md): every protocol method mapped onto GitLab's
   REST v4 API, the odd one out that keeps the protocol honest.
 - [fixtures.md](fixtures.md): the record and replay layer that lets

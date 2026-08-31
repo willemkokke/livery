@@ -1,7 +1,10 @@
 """The layering lint's seed (bootstrap plan, phase 0).
 
 Every package carries its contract, and livery.forge imports only the
-standard library at runtime. Grows into the real layering lint when a
+standard library at module import time. One declared optional extra
+(PyNaCl, behind livery-forge[github-secrets]) loads lazily inside the
+one capability path that needs it; nothing else may join this set
+without a plan decision. Grows into the real layering lint when a
 second package arrives.
 """
 
@@ -33,7 +36,8 @@ def test_forge_runtime_imports_only_stdlib() -> None:
                 names = [node.module]
             for name in names:
                 top = name.split(".")[0]
-                assert top in stdlib or top == "livery", (
+                # nacl is the github-secrets extra, imported lazily.
+                assert top in stdlib or top in ("livery", "nacl"), (
                     f"{source.relative_to(ROOT)} imports {name!r}: "
                     "livery.forge is stdlib-only at runtime"
                 )

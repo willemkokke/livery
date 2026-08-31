@@ -15,11 +15,18 @@ def _full() -> ForgeDriver:
 
 
 def _gitlab_shaped() -> ForgeDriver:
-    return FakeDriver(FakeForge(capabilities=("auto_merge",)))
+    return FakeDriver(FakeForge(capabilities=("auto_merge", "ci_secrets")))
+
+
+def _github_shaped() -> ForgeDriver:
+    return FakeDriver(
+        FakeForge(capabilities=("auto_merge", "force_cancel", "required_contexts"))
+    )
 
 
 _DRIVERS: dict[str, Callable[[], ForgeDriver]] = {
     "fake": _full,
+    "fake-github-shaped": _github_shaped,
     "fake-gitlab-shaped": _gitlab_shaped,
 }
 

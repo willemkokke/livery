@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-forge"
-version = "0.0.1"
+version = "0.1.0"
 description = "One interface to GitHub, Gitea, and GitLab — the livery ecosystem's forge."
 readme = "README.md"
 license = "MIT"
@@ -12,11 +12,16 @@ license-files = ["LICENSE"]
 requires-python = ">=3.11"
 authors = [{ name = "Willem Kokke", email = "mail@willem.net" }]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
     "Typing :: Typed",
 ]
+
+[project.optional-dependencies]
+# Sealed-box encryption for GitHub CI secrets: turns the ci_secrets
+# capability on for livery.forge.GithubForge.
+github-secrets = ["pynacl>=1.5"]
 
 [project.urls]
 Repository = "https://github.com/willemkokke/livery"

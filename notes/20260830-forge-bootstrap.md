@@ -1,7 +1,13 @@
 # Bootstrapping livery: the forge first
 
-Status: phase 1 accepted by Willem, 2026-08-31, conditional on the
-three-OS gate; the pull request merges by armed squash once green. The
+Status: phase 2 built, 2026-08-31, awaiting Willem's acceptance, the
+pull request, and the `packages/forge/v0.1.0` tag. The suite is green
+four ways: FakeForge (three capability shapes), the Gitea 1.28
+container, the GitLab CE container, and github.com scratch
+repositories; 24 cassettes per real backend replay in under two
+seconds with no network and no credential, no token on disk, and the
+protocol is frozen at 0.1.0. The Gitea slice merged earlier as PR #4;
+phase 1 as PR #3. The
 protocols, the GitLab mapping (`packages/forge/docs/gitlab.md`), the
 verified FakeForge with four fault modes, the shipped conformance
 suite (25 scenarios, run against the fake in two capability shapes),
@@ -47,13 +53,13 @@ backends.
    testable state (root password by environment, a PAT minted through
    `gitlab-rails runner`, a group and a project by API) is the
    heaviest of the three seed scripts.
-2. **All three backends before the protocol freezes.** The protocol is
+3. **All three backends before the protocol freezes.** The protocol is
    derived from hse's Gitea client, and every backend it has not met
    may reshape it: Gitea (ported, against the local container), GitHub
    (the forge this repository runs on), and GitLab (the odd one out,
    above) all land in phase 2, and the protocol may move until all
    three pass the same conformance suite; then it is frozen.
-3. **Three things the list did not have that harden immediately:**
+4. **Three things the list did not have that harden immediately:**
    `livery.toml` at the root and in the package from day one (the
    contract is cheap now and every later tool discovers packages by it);
    the path tag grammar (`packages/forge/v0.0.1`) in the very first
@@ -61,19 +67,19 @@ backends.
    `livery-forge` in phase 0, which reserves the PyPI name (checked free
    2026-08-29) and proves the whole release train before any code
    exists — the same defensive registration `livery` itself got.
-4. **Skills: three, not a set.** hse's skills are studio-flavoured;
+5. **Skills: three, not a set.** hse's skills are studio-flavoured;
    adapting them all now is waste. Phase 0 carries `create-plan`,
    `execute-plan` and `phase-audit` (the discipline this very plan
    runs under), hand-adapted; the rest arrive as workshop content
    later. The post-edit ruff hook comes now (imports stripped between
    saves is a lesson already paid for); the session-env hook does not
    (there is no pinned tool store yet — plain uv is the environment).
-5. **Release verification now, inline and small.** footman's
+6. **Release verification now, inline and small.** footman's
    tag-equals-pyproject-equals-`__version__`-equals-changelog check,
    generalised for path tags, lives as a step in the release workflow
    for now and is harvested by the workshop later. Not deferred:
    an unverified train teaches wrong habits from release one.
-6. **Deliberately deferred to the workshop phase:** the docs site,
+7. **Deliberately deferred to the workshop phase:** the docs site,
    coverage high-water marks, the affected engine, `ship`/`status`,
    materialised configuration, and everything copier. The temporary
    gate is plain and whole-repo; it will be slower than the eventual
@@ -300,6 +306,12 @@ series), gate green at the end.
   declined `force` asserted;
   recorded replays green in CI on three OS with no network;
   `livery-forge 0.1.0` released through the train.
+  *(2026-08-31: green four ways locally — 166 passed, 18
+  capability-gated skips on full replay; `cancel_run` plain and
+  forced recorded against Gitea 1.28.0+dev and GitHub, GitLab's
+  declined `force` asserted by `cancel-run-force-declined`; the
+  freeze is declared and the version is 0.1.0. The three-OS replay
+  proof and the release tag follow the push.)*
 
 ## Phase 3 — the nightly, and the door to the workshop
 
@@ -392,11 +404,131 @@ series), gate green at the end.
   re-record task is deferred to phase 2 with the first recorded
   cassette: nothing exists to re-record until a backend does, and the
   task belongs beside the containers it records from.
+- 2026-08-31, phase 2 driver-seam rework: `finish_run(run, conclusion)`
+  was not implementable by a real backend, because real CI decides its
+  verdict from the pushed commit, not from a later call. The driver
+  contract is now outcome-at-push (`Outcome`: success, failure, or a
+  held `hang` released to success by `settle` or ended by
+  `cancel_run`), with `settle` and `await_run` as the only blocking
+  points; the fake and every scenario updated in the same change. The
+  seeded dispatchable workflow's name, `conf.yml`, is part of the
+  driver contract.
+- 2026-08-31: GitHub fixtures record against scratch repositories
+  under `willemkokke` (Willem's ruling on open item 1): zero setup and
+  reversible; org-scoped behaviour stays untested and unused by the
+  protocol.
+- 2026-08-31, container facts, paid for in the first live run: Gitea's
+  nightly images live at `docker.gitea.com` (Docker Hub carries no
+  nightly tag), and the act_runner runs with `capacity: 8`, because a
+  held conformance run occupies a slot and a one-slot runner deadlocks
+  the suite. `fm forge.fixtures.record` is the re-record task.
+- 2026-08-31, the GitLab image is architecture-dependent (Willem's
+  ruling): `fm forge.dev.up` detects the machine and selects
+  `gitlab/gitlab-ce` on amd64 and `yrzr/gitlab-ce-arm64v8` on arm64
+  (GitLab's own arm64 omnibus packages, community-wrapped), an
+  explicit `LIVERY_GITLAB_IMAGE` beating detection. This serves macOS,
+  Windows, and Linux on both architectures; the earlier Rosetta cost
+  in the pushback section applies only to the amd64-image-on-arm case
+  the detection now avoids. Known costs of the community image, both
+  accepted for a dev-only container: third-party packaging (mitigate
+  by digest pin, with open item 3) and possible release lag (the
+  nightly against gitlab.com is the drift detector). In practice the
+  arm image booted healthy in about a minute.
+- 2026-08-31, `ci_secrets` joins the capability vocabulary: GitHub's
+  secrets API demands libsodium sealed-box encryption, which a
+  stdlib-only backend cannot provide, and no workflow stores a secret
+  on GitHub because trusted publishing replaces tokens there (the
+  workflows note's W1). The GitHub backend declines by name; Gitea
+  and GitLab support it. The required-context spelling is driver rig
+  knowledge (`required_context()`): Gitea spells the seeded check
+  "conf / gate (push)", GitHub "gate".
+- 2026-08-31, the GitLab parallel failures, run to ground rather than
+  serialised away (Willem's instruction): (1) gitlab-runner defaults
+  to `concurrent = 1`, so a held job starved every pipeline; the seed
+  now sets 8, like act_runner's capacity. (2) Project deletion is
+  asynchronous and the path stays reserved, so delete-then-recreate
+  races sidekiq; the driver renames leftovers to a corpse path first,
+  which is synchronous. (3) What remains is capacity: one single-node
+  CE absorbs about four concurrent writers before its own internals
+  time out (Gitaly "4:Deadline Exceeded"), so live and record runs
+  cap at four workers while merge-path replay stays fully parallel.
+  The backend's client timeout is 120s so "slow" stays
+  distinguishable from "unreachable".
+- 2026-08-31, the conformance driver grows three observation
+  primitives the asynchronous forges demanded: `await_mergeable` (the
+  405 window until the mergeability recompute and pipeline
+  association land), `await_merged` (a scheduled merge and its branch
+  deletion are performed by the forge and only ever observed), and
+  settle-after-cancel (cancellation is asynchronous). The runs
+  listing asserts descending id order, not push order, because
+  pipeline creation order is not push order under load.
+- 2026-08-31, GitHub secrets ride an optional extra (Willem's
+  ruling): `livery-forge[github-secrets]` installs PyNaCl, the
+  repository public key comes from the API, and the backend seals
+  values lazily, so `supports("ci_secrets")` answers per install and
+  the stdlib-only rule is restated as "stdlib-only at module import
+  time, one declared lazy extra". Motivation: trusted publishing
+  covers GitHub and GitLab but not Gitea, so a portable release train
+  needs the traditional token publish story too, and that story needs
+  secrets on every forge; the token train itself is workshop-phase
+  release work.
+- 2026-08-31, github.com's eventual consistency joins the driver
+  contract: issue listings run about nine seconds behind writes
+  (measured), so `await_issue` bounds every create-then-list read;
+  the direct get is not a listing and stays immediate. Scratch
+  conformance repositories are public, because branch protection on
+  private repositories needs a paid plan; they carry a
+  safe-to-delete description and the `livery-forge-conf-` prefix.
+  The held run's release signal on GitHub is a `release-<sha>` tag
+  the job polls for with its own token, created through the recorded
+  opener so replay stays deterministic.
+- 2026-08-31, `merge_now` is idempotent (process rule 4 applied to the
+  contract): GitHub answers 200 when merging an already merged pull
+  request, Gitea and GitLab answer 405, and re-running a verb being
+  its recovery procedure decides the tie toward GitHub's shape. The
+  other backends absorb the refusal after verifying the pull request
+  really merged; the scenario asserts the re-run succeeds.
+- 2026-08-31, three GitHub Actions facts, paid for in the first live
+  runs: a push workflow triggers for tag pushes (the seeded workflow
+  filters on branches), `GITHUB_TOKEN` reaches a run step's shell
+  only through an explicit `env:` block, and run creation for a push
+  can be silently dropped under load, so the driver's push verifies
+  its run is listed and re-pushes, attempt-counted for replay.
+- 2026-08-31, the protocol freeze: all three backends and the fake
+  pass the identical suite, so per the phase 2 contract the drafts
+  are now the contract and a verb change is a compatibility event.
+  Scratch repositories were deleted after the final recording (23).
+- 2026-08-31, recording refuses redirects like the live clients do:
+  the recorder's default inner opener had been urllib's stock opener,
+  which forwards the Authorization header to a redirect's location;
+  GitHub's signed log URLs surfaced it as Azure 401s. The refused
+  redirect's Location now travels in the cassette so the one
+  deliberate follow (job logs, bare) replays too, and 3xx replays
+  raise like every recorded refusal. Sealed-box secret bodies are
+  recorded as VOLATILE (an ephemeral key never encrypts the same
+  bytes twice) and match by method and URL.
+- 2026-08-31, server-minted secrets join the scrubbing model: GitHub's
+  push protection caught GitLab's per-project `runners_token` inside
+  the recorded project JSON, a secret no caller-supplied secret list
+  can know in advance. The recorder now takes `scrub_fields`, JSON
+  field names whose string values are redacted in every stored
+  response body, and the recorded cassettes were rewritten through the
+  same function before anything left the machine.
+- 2026-08-31, the quirks rule interpreted for backend-level quirks: a
+  quirk the backend absorbs at its own boundary (GitLab's
+  marked-for-deletion dance, the moved-path redirect route) has no
+  surface a FakeForge fault mode could reproduce, so its millisecond
+  regression is the recorded cassette that replays the server's
+  refusal verbatim; `docs/quirks.md` records which reproduction each
+  quirk has.
 
 ## Open
 
-1. GitHub fixtures: a test organisation or a scratch repository under
-   `willemkokke`.
+1. footman's `check` caching reported green after a uv.lock refresh
+   bumped ty to 0.0.75, while a cold CI run failed on the new ty's
+   class-scope annotation resolution (and on ruff format drift). The
+   cache key misses lockfile-driven tool changes; needs a footman
+   issue, and until then a lockfile change warrants a cold run.
 2. The CI matrix's breadth now (floor + newest) versus footman's full
    ladder; widen when the forge grows platform-sensitive code.
 3. Whether strongroom's step 0 (the spec and vectors, per the store

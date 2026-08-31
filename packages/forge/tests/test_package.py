@@ -6,7 +6,7 @@ import livery.forge
 
 
 def test_imports_and_carries_a_version() -> None:
-    assert livery.forge.__version__ == "0.0.1"
+    assert livery.forge.__version__ == "0.1.0"
 
 
 def test_unsupported_is_an_exception() -> None:

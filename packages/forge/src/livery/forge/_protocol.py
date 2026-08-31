@@ -122,6 +122,11 @@ class PullRequests(Protocol):
         caller branches on: 405 when the checks are not green, 409 on
         a conflict. A caller that can wait arms instead
         (livery.forge.PullRequests.arm).
+
+        Merging an already merged pull request is success: re-running
+        a verb is its recovery procedure, and backends whose forge
+        refuses the second merge absorb that refusal after verifying
+        the pull request really merged.
         """
         ...
 

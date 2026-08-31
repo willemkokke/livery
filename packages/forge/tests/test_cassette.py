@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from livery.forge.testing import (
+    VOLATILE,
     Cassette,
     CassetteError,
     RecordingOpener,
@@ -140,3 +141,27 @@ def test_a_foreign_format_number_is_refused(tmp_path: Path) -> None:
     path.write_text(json.dumps({"format": 999, "exchanges": []}), "utf-8")
     with pytest.raises(CassetteError, match="format"):
         Cassette.load(path)
+
+
+def test_a_volatile_body_matches_by_method_and_url(tmp_path: Path) -> None:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        base = f"http://127.0.0.1:{server.server_port}"
+        cassette = Cassette()
+        opener = RecordingOpener(cassette, volatile_bodies=("/repos",))
+        request = urllib.request.Request(
+            f"{base}/repos", data=b"ephemeral-A", method="POST"
+        )
+        assert opener.open(request).status == 201
+    finally:
+        server.shutdown()
+        thread.join()
+    assert cassette.exchanges[0].request_body == VOLATILE
+    replay = ReplayOpener(cassette)
+    differing = urllib.request.Request(
+        f"{base}/repos", data=b"ephemeral-B", method="POST"
+    )
+    assert replay.open(differing).status == 201
+    replay.verify_exhausted()

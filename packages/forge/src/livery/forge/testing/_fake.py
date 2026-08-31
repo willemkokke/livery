@@ -37,11 +37,13 @@ from livery.forge._types import (
     Run,
     StateFilter,
 )
+from livery.forge.testing._conformance import Outcome
 
 _ALL_CAPABILITIES: tuple[Capability, ...] = (
     "auto_merge",
     "force_cancel",
     "required_contexts",
+    "ci_secrets",
 )
 
 
@@ -112,6 +114,7 @@ class _RunState:
     status: Literal["queued", "running", "completed"]
     conclusion: Conclusion
     job_id: int
+    outcome: Outcome = "success"
     log: str = ""
 
 
@@ -235,17 +238,22 @@ class FakeForge:
 
     # -- the driver half ---------------------------------------------------
 
-    def push(self, owner: str, name: str, branch: str) -> str:
+    def push(
+        self, owner: str, name: str, branch: str, *, outcome: Outcome = "success"
+    ) -> str:
         """Simulate a git push: a new head sha on *branch*, CI starting.
 
         Creates the branch when it is new, moves its head to a fresh
         deterministic sha, and queues one run for that sha, as a push
-        trigger would. Returns the new head sha.
+        trigger would. The run stays queued until
+        livery.forge.testing.FakeForge.settle applies *outcome* (a
+        ``hang`` outcome is released to success there, or cancelled
+        through the protocol). Returns the new head sha.
         """
         state = self._require_repo(owner, name)
         sha = self._sha()
         state.branches[branch] = sha
-        self._start_run(state, sha, workflow="ci.yml", event="push")
+        self._start_run(state, sha, workflow="ci.yml", event="push", outcome=outcome)
         return sha
 
     def create_tag(self, owner: str, name: str, tag: str) -> None:
@@ -253,23 +261,28 @@ class FakeForge:
         state = self._require_repo(owner, name)
         state.tags[tag] = state.branches[state.default_branch]
 
-    def finish_run(
-        self, owner: str, name: str, run: int, conclusion: Conclusion, *, log: str = ""
-    ) -> None:
-        """Simulate CI finishing *run* with *conclusion*.
+    def settle(self, owner: str, name: str, sha: str) -> None:
+        """Simulate CI settling: every run for *sha* reaches its outcome.
 
-        While livery.forge.testing.Faults.wedge_status_queue holds,
-        the result is silently dropped and the run stays queued, which
-        is what a wedged queue does to a finished job. Re-finish after
-        clearing the fault.
+        A held (``hang``) run is released and concludes success, per
+        the driver contract. While
+        livery.forge.testing.Faults.wedge_status_queue holds, the
+        results are silently dropped and the runs stay queued, which
+        is what a wedged queue does to finished jobs. Settle again
+        after clearing the fault.
         """
         state = self._require_repo(owner, name)
         if self.faults.wedge_status_queue:
             return
-        run_state = self._require_run(state, run)
-        run_state.status = "completed"
-        run_state.conclusion = conclusion
-        run_state.log = log or f"job {run_state.job_id} concluded {conclusion}"
+        for run_state in state.runs.values():
+            if run_state.head_sha != sha or run_state.status == "completed":
+                continue
+            conclusion: Conclusion = (
+                "success" if run_state.outcome == "hang" else run_state.outcome
+            )
+            run_state.status = "completed"
+            run_state.conclusion = conclusion
+            run_state.log = f"job {run_state.job_id} concluded {conclusion}"
         self._settle(state)
 
     def comment_bodies(
@@ -289,7 +302,13 @@ class FakeForge:
         return sha
 
     def _start_run(
-        self, state: _RepoState, sha: str, *, workflow: str, event: str
+        self,
+        state: _RepoState,
+        sha: str,
+        *,
+        workflow: str,
+        event: str,
+        outcome: Outcome = "success",
     ) -> _RunState:
         run = _RunState(
             id=self._next_run,
@@ -299,6 +318,7 @@ class FakeForge:
             status="queued",
             conclusion="",
             job_id=self._next_job,
+            outcome=outcome,
         )
         self._next_run += 1
         self._next_job += 1
@@ -407,6 +427,10 @@ class _FakeRepository:
             raise Unsupported(
                 "this forge cannot name required check contexts in branch"
                 " protection (capability: required_contexts)"
+            )
+        if config.secrets is not None and not self._fake.supports("ci_secrets"):
+            raise Unsupported(
+                "this forge cannot store CI secrets (capability: ci_secrets)"
             )
         if config.default_branch is not None:
             state.default_branch = config.default_branch
@@ -536,9 +560,11 @@ class _FakePullRequests:
         pr.state = "open"
 
     def merge_now(self, number: int, *, title: str, message: str = "") -> None:
-        """Merge pull request *number* immediately."""
+        """Merge pull request *number* immediately; a merged one is success."""
         state = self._state()
         pr = self._fake._require_pr(state, number)
+        if pr.merged:
+            return
         if pr.state != "open":
             raise ForgeError(f"pull request {number} is not open", status=405)
         if self._fake.faults.merge_405_window > 0:
@@ -879,19 +905,38 @@ class FakeDriver:
         owner, name = self.unused_repo_name()
         return self.fake.create_repo(owner, name)
 
-    def push(self, repo_owner: str, repo_name: str, branch: str) -> str:
-        """Push *branch* and return its new head sha."""
-        return self.fake.push(repo_owner, repo_name, branch)
+    def push(
+        self,
+        repo_owner: str,
+        repo_name: str,
+        branch: str,
+        *,
+        outcome: Outcome = "success",
+    ) -> str:
+        """Push *branch* with *outcome* and return its new head sha."""
+        return self.fake.push(repo_owner, repo_name, branch, outcome=outcome)
 
     def create_tag(self, repo_owner: str, repo_name: str, tag: str) -> None:
         """Create *tag* at the default branch's head."""
         self.fake.create_tag(repo_owner, repo_name, tag)
 
-    def finish_run(
-        self, repo_owner: str, repo_name: str, run: int, conclusion: Conclusion
-    ) -> None:
-        """Drive CI to finish *run* with *conclusion*."""
-        self.fake.finish_run(repo_owner, repo_name, run, conclusion)
+    def settle(self, repo_owner: str, repo_name: str, sha: str) -> None:
+        """Apply every pushed outcome for *sha*; immediate on the fake."""
+        self.fake.settle(repo_owner, repo_name, sha)
+
+    def await_run(
+        self, repo_owner: str, repo_name: str, *, head_sha: str = "", event: str = ""
+    ) -> int:
+        """The one run matching the filters; the fake never waits.
+
+        Raises AssertionError unless exactly one run matches, which is
+        the driver contract.
+        """
+        runs = self.fake.repository(repo_owner, repo_name).checks.runs(
+            head_sha=head_sha, event=event
+        )
+        assert len(runs) == 1, f"expected one matching run, found {len(runs)}"
+        return runs[0].id
 
     def comment_bodies(
         self,
@@ -903,3 +948,24 @@ class FakeDriver:
     ) -> tuple[str, ...]:
         """The comments on one pull request or issue, oldest first."""
         return self.fake.comment_bodies(repo_owner, repo_name, number, kind=kind)
+
+    def await_mergeable(self, repo_owner: str, repo_name: str, number: int) -> None:
+        """The fake computes mergeability synchronously: nothing to await."""
+        self.fake._require_pr(self.fake._require_repo(repo_owner, repo_name), number)
+
+    def await_merged(self, repo_owner: str, repo_name: str, number: int) -> None:
+        """The fake merges inside settle: nothing to await."""
+        self.fake._require_pr(self.fake._require_repo(repo_owner, repo_name), number)
+
+    def await_issue(
+        self, repo_owner: str, repo_name: str, number: int, *, assignee: str = ""
+    ) -> None:
+        """The fake's listings are immediate: only verify the state."""
+        issue = self.fake._require_issue(
+            self.fake._require_repo(repo_owner, repo_name), number
+        )
+        assert not assignee or assignee in issue.assignees
+
+    def required_context(self) -> str:
+        """The fake reports checks under the plain job name."""
+        return "gate"

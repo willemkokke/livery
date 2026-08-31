@@ -14,7 +14,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal, TypeAlias
 
-Capability: TypeAlias = Literal["auto_merge", "force_cancel", "required_contexts"]
+Capability: TypeAlias = Literal[
+    "auto_merge", "force_cancel", "required_contexts", "ci_secrets"
+]
 """What livery.forge.Forge.supports answers for, by name.
 
 - ``auto_merge``: the forge can schedule a merge that fires when the
@@ -23,6 +25,11 @@ Capability: TypeAlias = Literal["auto_merge", "force_cancel", "required_contexts
   answering (``force=True`` on livery.forge.Checks.cancel_run).
 - ``required_contexts``: branch protection can name the check contexts
   that must pass before a merge.
+- ``ci_secrets``: livery.forge.RepoConfig.secrets can be stored
+  through the backend. GitHub's backend declines: its secrets API
+  demands sealed-box encryption the standard library cannot provide,
+  and no workflow stores a secret there, because trusted publishing
+  replaces tokens on GitHub.
 """
 
 CheckState: TypeAlias = Literal["none", "pending", "success", "failure"]
@@ -42,6 +49,9 @@ Conclusion: TypeAlias = Literal["", "success", "failure", "cancelled", "skipped"
 
 StateFilter: TypeAlias = Literal["open", "closed", "all"]
 """Which pull requests or issues a listing includes."""
+
+ItemState: TypeAlias = Literal["open", "closed"]
+"""Where a pull request or issue is: open, or closed in any way."""
 
 
 @dataclass(frozen=True)
@@ -101,7 +111,9 @@ class RepoConfig:
             forge without the ``required_contexts`` capability raises
             livery.forge.Unsupported.
         secrets: CI secrets to store, by name. Write-only: no protocol
-            operation reads a secret back.
+            operation reads a secret back. Setting this on a forge
+            without the ``ci_secrets`` capability raises
+            livery.forge.Unsupported.
         variables: Plain CI variables to store, by name.
         labels: The labels the repository must offer. Labels already
             present keep their issues; labels absent from this tuple
@@ -142,7 +154,7 @@ class PullRequest:
     number: int
     title: str
     body: str
-    state: Literal["open", "closed"]
+    state: ItemState
     merged: bool
     head_branch: str
     head_sha: str
@@ -256,7 +268,7 @@ class Issue:
     number: int
     title: str
     body: str
-    state: Literal["open", "closed"]
+    state: ItemState
     labels: tuple[str, ...] = ()
     assignees: tuple[str, ...] = ()
     url: str = ""
