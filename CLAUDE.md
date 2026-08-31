@@ -27,6 +27,9 @@ that conflicts with `origin/main`.
 
 - Agent sessions work in worktrees under `.claude/worktrees/`.
 - Failure reasons are printed verbatim, never read as booleans.
+- Never pipe the output of a command whose verdict you depend on: a
+  pipe replaces its exit code with the filter's and truncates the
+  failing lines. Redirect to a file and slice the file instead.
 - Every workflow verb is idempotent: re-running it is the recovery
   procedure.
 - A forge quirk without a FakeForge fault mode is a debt: same-day

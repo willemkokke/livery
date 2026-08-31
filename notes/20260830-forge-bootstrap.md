@@ -178,6 +178,14 @@ the workshop materialises it:
    default.** hse's e2e only ever tested in-tree pairings, the one
    configuration no consumer runs; the nightly here installs the
    released wheels and replays the suites against them.
+9. **Never pipe the output of a command whose verdict you depend
+   on.** A pipe replaces the exit code with the filter's and `tail`
+   truncates the failing lines out of view, so `gate | tail -3 &&
+   next` runs `next` on a red gate that reads green. This session
+   reported a red gate green and a failed pull request merged exactly
+   that way. Redirect to a file and slice the file; confirm a merge
+   or release only by querying its state, never from a watcher's
+   exit. `fm hooks.pre-bash` enforces the footman-command case.
 
 ## Phase 0 — the repository becomes the workspace
 
