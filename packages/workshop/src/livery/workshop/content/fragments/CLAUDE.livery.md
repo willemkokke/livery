@@ -1,0 +1,78 @@
+# The livery workshop's rules
+
+The base layer's fragment: only the rules the workshop itself
+enforces. A repository's own facts (identity, intent, layout beyond
+the workspace shape) live in its `CLAUDE.project.md`, which always
+loads last and wins.
+
+## The gate
+
+`uv run fm check` runs format, lint, the four type checkers, the
+type-completeness verdict, and tests in parallel. Run it before every
+commit; CI runs the same command. Nothing on the merge path may wait
+on anything outside the repository. The gate's verdict is its exit
+code, and a `PreToolUse` hook (`fm hooks.pre-bash`) refuses a footman
+command piped into head/tail and a push of a branch that conflicts
+with `origin/main`.
+
+## Working conventions
+
+- Agent sessions work in worktrees under `.claude/worktrees/`.
+- Failure reasons are printed verbatim, never read as booleans.
+- Never pipe the output of a command whose verdict you depend on: a
+  pipe replaces its exit code with the filter's and truncates the
+  failing lines. Redirect to a file and slice the file instead.
+- Every workflow verb is idempotent: re-running it is the recovery
+  procedure.
+- Phases land daily, gate-green, mergeable alone.
+- Notes in `notes/` describe current state; decisions carry dates in
+  each note's decision record. A note is updated in the same change
+  as the code it describes, or it is wrong.
+
+## Commits and tags
+
+Conventional prefixes (`feat:`, `fix:`, `docs:`, `chore:`,
+`refactor:`, `test:`), imperative subject, body only when the subject
+cannot carry it. No attribution trailers. Commit and push only when
+asked. Tags are release tags, `<path>/v<semver>`, immutable and
+pushed alone.
+
+## Layering
+
+Dependencies point only downward; the workspace's layering lint
+(`livery.workshop.verify_workspace`) enforces the contract graph. The
+importable namespace is PEP 420: **never create a namespace-level
+`__init__.py`**.
+
+## Interfaces and typing
+
+This is the final form; there are no typing clean-up passes later.
+
+- Public is what a package's `__init__` re-exports in `__all__`. Every
+  other module is underscore-named. A test pins both.
+- Four type checkers gate, none advisory: basedpyright with warnings
+  as errors, mypy strict on the namespace (linux, darwin, and win32),
+  ty, and pyrefly. `fm typecomplete` requires every public API to be
+  100% type-complete.
+- A suppression is narrow, inline with the code, and carries a reason:
+  `# type: ignore[code]`. Pyright-only suppressions use
+  `# pyright: ignore[...]` so mypy's unused-ignore check stays honest.
+
+## Docstrings
+
+- Google style only: Args, Returns, Raises, Yields, Attributes. ruff
+  enforces the convention.
+- No RST anywhere. Not in docstrings, not in comments.
+- The voice and word rules of the imported guidance fragments apply to
+  docstrings the same as to every other published sentence.
+- Refer to other objects by their full public import path,
+  `livery.forge.Forge`, so generated API docs can cross-link them
+  across packages.
+
+## Workspace shape
+
+- `packages/<name>/`: one package, discovered by its `livery.toml`.
+- `packages/<name>/docs/`: plain markdown, the seed of the rendered
+  per-package site. Write it as that site, never as scratch.
+- `tasks.py`: `plugin("livery.workshop")`, the whole dev loop.
+- `livery.toml`: the workspace contract (layers, forge, runners).

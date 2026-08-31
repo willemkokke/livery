@@ -7,3 +7,4 @@ __pycache__/
 .claude/worktrees/
 .mypy_cache/
 .forge.dev.env
+.workshop/

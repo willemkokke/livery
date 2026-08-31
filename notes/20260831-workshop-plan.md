@@ -1,12 +1,13 @@
 # Building the workshop
 
-Status: phase 2 built, 2026-08-31, awaiting the pull request. The
-whole task surface serves from the wheel, dispatched by contract, and
-the root `tasks.py` is at its final one line already; the layering
-lint is real and refuses six violation shapes by name. Phase 1
-shipped the same day (PR #12; 0.0.1 published, run 33377265354).
-Willem-side setup for phase 7 is written up in
-`notes/20260831-e2e-accounts-runbook.md`. The bootstrap
+Status: phase 3 built, 2026-08-31, awaiting the pull request. The
+content channel is live and the monorepo dogfoods it: the temporary
+hand-written CLAUDE.md is retired for the managed stub, the skills
+and the post-edit hook materialise as links from the wheel, and
+`fm sync` is idempotent by test and on the real tree. Phases 1 and 2
+shipped the same day (PRs #12 and #13); the e2e accounts are all
+three verified and stored per the runbook, gitea.com's leg bringing
+its own API-minted runner. The bootstrap
 plan's entry criteria are met: `livery-forge` 0.1.0 is on PyPI with
 all three backends passing the one conformance suite, the fixture
 harness is stable, and the compose loop is routine.
@@ -156,6 +157,11 @@ the wheel.
   hook and skill files materialised, and the pre-bash guard still
   refuses a piped gate
   (`echo '<event json>' | uv run fm hooks.pre-bash; exit 2`).
+  *(2026-08-31: all four hold, plus a dogfood test that pins the real
+  tree in sync (`test_the_monorepo_is_in_sync`) and six behaviour
+  tests: idempotency, guidance-first stub order, materialised links,
+  override kept and committed, identical copies reclaimed, stale
+  entries pruned.)*
 
 ## Phase 4 — templates, and the monorepo as its own instance
 
@@ -303,6 +309,16 @@ The bootstrap deferrals come home and the temporary environment ends.
   layer walk deserves a voice more than a stub deserves existence.
   The layer host's functions (`layer_names`, `mount_layers`,
   `workspace_root`) are the package's public API from day one.
+
+- 2026-08-31, phase 3 scoping: the checker configurations stay in the
+  root `pyproject.toml` rather than moving into the content channel
+  now. Four checkers' extend-and-discovery behaviours differ enough
+  that the move belongs with the template rendering (phase 4 and
+  later), where the rendered `pyproject` can reference materialised
+  files deliberately; shipping fragments, skills, and hooks first
+  keeps the phase day-sized. The stub's import order is guidance
+  first (voice, then documentation rules), then the layer fragments,
+  then `CLAUDE.project.md`, which always wins.
 
 ## Open
 
