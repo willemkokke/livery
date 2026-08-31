@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from footman import doc, parallel, task
+from footman import doc, group, parallel, task
 
 from livery.workshop._backends import _python, require_backends
 from livery.workshop._layers import workspace_root
@@ -139,6 +139,24 @@ def _scoped_check(subset: tuple[Package, ...]) -> None:
             lambda: _python.run_test(packages=subset, root=root, scoped=True),
             title="test",
         )()
+
+
+coverage = group("coverage", help="The measured union and its floors")
+
+
+@coverage.task(name="enforce")
+def coverage_enforce() -> None:
+    """Enforce every package's floor on the combined coverage data.
+
+    Runs where a merged ``.coverage`` file already exists, the
+    aggregating CI job after it combines every leg's data; the same
+    floors `fm test` checks quickly on one machine, here judged on
+    the cross-platform union.
+    """
+    root = workspace_root()
+    if root is None:
+        raise ValueError("no workspace: no livery.toml above the working directory")
+    _python.enforce_coverage(root, _packages())
 
 
 @task

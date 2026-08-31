@@ -53,8 +53,15 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
 ## Coverage floors
 
 Each package's `livery.toml` may declare `[qa] coverage_floor`, the
-high-water mark the gate enforces. Raise it as the suite grows; lower
-it only deliberately, in a reviewed change.
+high-water mark the gate enforces. The number that is judged is the
+CI union: every leg runs measured (each `fm` child included) and the
+aggregating job combines all platforms before enforcing, so the
+floors are deterministic per change and never depend on one
+machine's view. A local `fm test` prints its own lower-biased
+preview beside the floor, for information. Raise a floor as the
+suite grows; lower it only deliberately, in a reviewed change. The
+release legs publish a further, informational union that includes
+the live-only code.
 
 The forge lane belongs to `livery.forge`; the workshop orchestrates
 local, git, and forge steps and never hands a raw forge verb to a

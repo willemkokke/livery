@@ -37,8 +37,10 @@ dev = [
     # carry extras the dev loop needs.
 {% for package in packages %}    "{{ package.dev }}",
 {% endfor %}    "pytest>=8.0",
-    # Coverage feeds the per-package floors the gate enforces.
+    # Coverage feeds the per-package floors the gate enforces;
+    # `patch = ["subprocess"]` needs coverage 7.10 or newer.
     "pytest-cov>=5",
+    "coverage[toml]>=7.10",
     # Parallelise the suite across cores (`-n auto`, wired into addopts).
     "pytest-xdist>=3.6",
     "ruff>=0.6",
@@ -159,6 +161,21 @@ python-version = "{{ python_versions[0] }}"
 # zero today.
 deprecated = "error"
 unnecessary-type-conversion = "error"
+
+[tool.coverage.run]
+# Every fm child measures: the CI gate wraps `fm check` in
+# `coverage run`, and the patch cascades through the task shells, the
+# out-of-process pytest, and its workers. Parallel data files merge
+# per leg, then across legs in the aggregating gate job.
+patch = ["subprocess"]
+parallel = true
+relative_files = true
+source = ["livery"]
+
+[tool.coverage.paths]
+# One identity for a file whichever separator wrote it, so Windows
+# and POSIX legs combine as one file set.
+packages = ["packages/", "packages\\"]
 
 [tool.pytest.ini_options]
 testpaths = ["packages", "tests"]

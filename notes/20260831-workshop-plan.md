@@ -344,9 +344,17 @@ shape, on today's cheaper machinery.
   artifact. The aggregating `gate` job downloads all six, combines
   them, and enforces the floors once, on the union: the number that
   counts Windows junction branches and mac lines alike.
-- `fm test` locally keeps a quick same-machine enforcement (the
-  grace absorbs its platform bias); the combined CI number is the
-  authoritative one, and the floors ratchet against it.
+- `fm test` locally prints a lower-biased preview beside the floor
+  and never fails on it: one machine's run cannot see the task
+  shells or the other platforms' branches, so a local verdict would
+  disagree with the union's. The floors gate once per change, in the
+  aggregating job, on the union.
+- The release legs also run measured and publish a further,
+  informational union including the live-only code (the compose
+  containers, the retry and poll guards); it never gates, and floors
+  ratchet from it deliberately (Willem: "an honest validated number
+  per release, and deterministic solution to coverage not degrading
+  in between").
 - **Acceptance:** the combined report shows the task-shell modules
   (`_quality`, `_submit` shells, `_ci_tasks`) with non-zero
   coverage from the gate's own run; one gate job enforces floors on
@@ -514,6 +522,12 @@ starts; recorded here so the sequence is visible (Willem: post
   signing, a non-PyPI index for the monorepo itself, and a portable
   token path on the github kind. `packages/workshop/docs/releases.md`
   states the same for readers.
+- 2026-08-31, the union's first reading. The aggregating job's
+  first enforcement measured workshop at 79.0 on the six-leg union
+  and refused the 80 floor, which had been ratcheted against the
+  smaller pre-measurement denominator. The floor now says 79, the
+  first honest high water; it ratchets upward from union readings
+  only.
 - 2026-08-31, coverage grace (Willem: hse allowed a margin so a
   0.01% drop is not penalised). The gate fails only more than half a
   point below the floor; the floor stays the declared high-water
