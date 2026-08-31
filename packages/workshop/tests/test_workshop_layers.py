@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[3]
 
 def test_this_workspace_declares_the_workshop_as_its_base() -> None:
     assert workspace_root(ROOT / "packages") == ROOT
-    assert layer_names(ROOT) == ("livery.workshop",)
+    assert layer_names(ROOT) == ("livery.workshop", "livery.forge")
 
 
 def test_outside_a_workspace_there_are_no_layers(tmp_path: Path) -> None:
@@ -21,9 +21,9 @@ def test_outside_a_workspace_there_are_no_layers(tmp_path: Path) -> None:
 
 
 def test_the_workshop_never_mounts_itself() -> None:
-    # The one declared layer is this package, so the walk mounts
-    # nothing further; a second layer in the list would be grafted.
-    assert mount_layers(ROOT) == ()
+    # The walk skips this package (importing it IS the base layer
+    # arriving) and grafts only the further layers the contract names.
+    assert mount_layers(ROOT) == ("livery.forge",)
 
 
 def test_a_contract_without_layers_names_none(tmp_path: Path) -> None:

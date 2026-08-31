@@ -1,7 +1,9 @@
 # The local forge containers the backends are developed against.
-# `uv run fm forge.dev up` starts and seeds them; the seeded credentials
-# land in .forge.dev.env (gitignored), which the live conformance run
-# and the fixture recorder read.
+# Ships inside livery-forge; `fm forge.dev.up` starts and seeds them,
+# and the seeded credentials land in .forge.dev.env (gitignored) at
+# the workspace root, which live test runs read. The project name is
+# pinned here so where this file lives never changes which containers
+# it addresses.
 name: livery-forge-dev
 
 services:
