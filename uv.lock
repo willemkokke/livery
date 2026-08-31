@@ -10,6 +10,7 @@ resolution-markers = [
 members = [
     "livery",
     "livery-forge",
+    "livery-workshop",
 ]
 
 [[package]]
@@ -348,6 +349,7 @@ dev = [
     { name = "basedpyright" },
     { name = "footman" },
     { name = "livery-forge", extra = ["github-secrets"] },
+    { name = "livery-workshop" },
     { name = "mypy" },
     { name = "pyrefly" },
     { name = "pytest" },
@@ -365,6 +367,7 @@ dev = [
     { name = "basedpyright", specifier = ">=1.18" },
     { name = "footman", specifier = ">=0.44" },
     { name = "livery-forge", extras = ["github-secrets"], editable = "packages/forge" },
+    { name = "livery-workshop", editable = "packages/workshop" },
     { name = "mypy", specifier = ">=1.14" },
     { name = "pyrefly" },
     { name = "pytest", specifier = ">=8.0" },
@@ -388,6 +391,23 @@ github-secrets = [
 [package.metadata]
 requires-dist = [{ name = "pynacl", marker = "extra == 'github-secrets'", specifier = ">=1.5" }]
 provides-extras = ["github-secrets"]
+
+[[package]]
+name = "livery-workshop"
+version = "0.0.1"
+source = { editable = "packages/workshop" }
+dependencies = [
+    { name = "footman" },
+    { name = "livery-forge" },
+    { name = "toolroom" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "footman", specifier = ">=0.46" },
+    { name = "livery-forge", editable = "packages/forge" },
+    { name = "toolroom", specifier = ">=0.6.1" },
+]
 
 [[package]]
 name = "mypy"

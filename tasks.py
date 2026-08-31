@@ -21,7 +21,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-from footman import RunFailed, doc, fail, group, parallel, run, stdin, step, task
+from footman import (
+    RunFailed,
+    doc,
+    fail,
+    group,
+    parallel,
+    plugin,
+    run,
+    stdin,
+    step,
+    task,
+)
 from toolroom import basedpyright, mypy, pyrefly, pytest, ruff, ruff_format, ty
 
 # The whole repo, as CI lints it. Anything narrower lets a tracked file
@@ -89,13 +100,14 @@ def typecheck():
 
 @task
 def typecomplete():
-    """Verify the public API is 100% type-complete (pyright --verifytypes).
+    """Verify the public APIs are 100% type-complete (pyright --verifytypes).
 
     The exit code is the verdict: 0 only when every public symbol has a
     fully known type. A new unannotated export fails the gate here
     before a consumer's checker ever sees it.
     """
     basedpyright(verifytypes="livery.forge", ignoreexternal=True)
+    basedpyright(verifytypes="livery.workshop", ignoreexternal=True)
 
 
 @task
@@ -654,3 +666,9 @@ def pre_bash(event: Annotated[HookEvent, stdin]) -> None:
                 "the gate, then push.",
                 code=2,
             )
+
+
+# The base layer, mounted the way every instance mounts it. The tasks
+# defined above migrate into the plugin phase by phase (workshop plan);
+# until then the plugin contributes the layer walk and nothing else.
+plugin("livery.workshop")

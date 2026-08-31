@@ -1,6 +1,9 @@
 # Building the workshop
 
-Status: PLAN, drafted 2026-08-31. Phase 1 not started. The bootstrap
+Status: phase 1 built, 2026-08-31, awaiting the pull request and the
+`packages/workshop/v0.0.1` tag; the tag needs the PyPI pending
+publisher for `livery-workshop` registered first (Willem-side, like
+the forge's in bootstrap phase 0). The bootstrap
 plan's entry criteria are met: `livery-forge` 0.1.0 is on PyPI with
 all three backends passing the one conformance suite, the fixture
 harness is stable, and the compose loop is routine.
@@ -73,21 +76,25 @@ first, train proven before the code matters.
   toolroom), `src/livery/workshop/` with `__init__` and `__version__
   = "0.0.1"`, `docs/` seed, `CHANGELOG.md`, tests pinning the public
   surface.
-- The plugin host: `footman_tasks.py` exposing a `footman.tasks`
-  entry point, and `_layers.py` reading `[workspace] layers` from the
-  root `livery.toml` and mounting each layer's plugin in order. Root
-  `tasks.py` gains `plugin("livery.workshop")` while keeping its
-  existing tasks; the fm surface is unchanged this phase.
+- The plugin host: `_tasks.py` behind the `footman.tasks` entry
+  point (the underscore rule kept; the entry point name is the public
+  address), and `_layers.py` reading `[workspace] layers` from the
+  root `livery.toml` and mounting each layer's plugin in order, with
+  `fm layers` printing the composition. Root `tasks.py` gains
+  `plugin("livery.workshop")` while keeping its existing tasks.
 - The name: `livery-workshop` released as 0.0.1 through the path-tag
   train (`packages/workshop/v0.0.1`), reserving the distribution
   (checked free on PyPI, 2026-08-31) and proving the train's second
   path.
 - **Acceptance:** `uv run fm check` green with the second workspace
-  member; `uv run fm --list` shows the surface unchanged; `uv build
-  --package livery-workshop` produces a wheel with no
-  `livery/__init__.py` (`unzip -l`); `packages/workshop/v0.0.1`
+  member; `uv run fm --list` shows the surface unchanged but for
+  `fm layers`; `uv build --package livery-workshop` produces a wheel
+  with no `livery/__init__.py` (`unzip -l`); `packages/workshop/v0.0.1`
   tagged, verified, published (PyPI answers
   `https://pypi.org/pypi/livery-workshop/json`).
+  *(2026-08-31: built and green locally; the wheel carries the
+  namespace and the entry point. The tag follows the merge and the
+  PyPI pending publisher.)*
 
 ## Phase 2 — tasks move into the plugin, dispatched by contract
 
@@ -277,6 +284,15 @@ The bootstrap deferrals come home and the temporary environment ends.
   before templates (phase 4), because the render gate wants the
   managed stub and materialised configuration to already exist as
   the things the template renders references to.
+
+- 2026-08-31, phase 1 spellings: the plugin module is `_tasks.py`,
+  addressed by the entry point, keeping the underscore rule
+  (`footman_tasks.py` in the design note was hse's public spelling);
+  and the surface gains one verb this phase, `fm layers`, because
+  footman refuses to mount a plugin that registers nothing, and the
+  layer walk deserves a voice more than a stub deserves existence.
+  The layer host's functions (`layer_names`, `mount_layers`,
+  `workspace_root`) are the package's public API from day one.
 
 ## Open
 
