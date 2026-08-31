@@ -183,10 +183,14 @@ The template source at the root, the render gate in the gate.
 - `fm new.package` renders `package-python` into `packages/` and
   wires the workspace member.
 - The `project` render is the bootstrap: it writes the files that must
-  exist before `fm` can run at all (`tasks.py`, `livery.toml`,
-  `pyproject.toml`), each seeded once and instance-owned after. The
-  phase states the verb that renders a fresh repository (copier
-  directly, or a wrapper) and how it is invoked without a `tasks.py`.
+  exist before the repo's own `fm` loop can run (`tasks.py`,
+  `livery.toml`, `pyproject.toml`), each seeded once and
+  instance-owned after. The verb that renders a fresh repository is a
+  globally available task, hse's `create.repo` shape: it lives in the
+  tool above any repository, so it never depends on the target having
+  a `tasks.py`, and nobody invokes copier by hand. The phase decides
+  the carrier: hse's `create.repo` with a livery-specific layer, or
+  the same shape shipped by livery-workshop.
 - **Acceptance:** `uv run fm check` green with the render gate in it;
   a deliberate template drift fails it (edit a rendered file, `uv run
   fm check` exits non-zero, revert); `uv run fm new.package
