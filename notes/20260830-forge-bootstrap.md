@@ -326,10 +326,30 @@ series), gate green at the end.
 
 ## Phase 3 — the nightly, and the door to the workshop
 
-- A nightly workflow: the replays, plus live legs against a fresh Gitea
-  container, the GitHub scratch repository, and a gitlab.com scratch
-  group (the container is the dev loop; gitlab.com is where drift
-  happens) — drift detection, off every merge path.
+Revised 2026-08-31 (Willem's ruling, decision record): no scheduled
+live legs. The forges' APIs are version-pinned or
+stability-committed, so a nightly live leg mostly measures transient
+weather and would file noise; live verification runs once per
+release, when it changes a decision. And no scratch repositories in
+Willem's personal namespaces.
+
+- **The nightly** (`nightly.yml`): the released-wheels replay only.
+  Checks out the latest release tag, installs `livery-forge` from
+  PyPI into a plain venv as a consumer would (transitive deps
+  unpinned), and replays that release's own cassettes on three OSes
+  and two Pythons. Hermetic: no live forge, no credential, no
+  repository created, so a red night means something real. On
+  failure it files the drift issue through the forge protocol itself
+  (`.github/scripts/nightly_issue.py`, the workflows note's W11:
+  search for the marker, comment on a hit, create on a miss).
+- **Live legs, per release and on demand**: the full conformance
+  suite live against the compose containers (Gitea, GitLab CE) and
+  the cloud forges, run before a release tag is pushed. The cloud
+  scratch surfaces live outside the personal namespace: a dedicated
+  GitHub organisation (public repositories, because protection on
+  private ones is paid) and a private gitlab.com group; both cleaned
+  at end of run. The org, the group, and their token secrets are
+  Willem-side setup, tracked in Open.
 - **Entry criteria for the workshop phase** (a separate plan, in this
   repository, when reached): `livery-forge` 0.1.0 on PyPI with all
   three backends conformant, the fixture harness stable, and the
@@ -543,6 +563,16 @@ series), gate green at the end.
   `tests/test_agent_hooks.py` and replaced by the workshop's content
   channel later, per the replaced-by table.
 
+- 2026-08-31, phase 3 revised (Willem's ruling): the nightly carries
+  only the hermetic released-wheels replay, which creates no
+  repositories and touches no live forge; live legs run once per
+  release and on demand, because between releases they would mostly
+  catch transients, not drift — the forges' APIs are version-pinned
+  (GitHub's dated API version header) or stability-committed (GitLab
+  v4), and the Gitea container only moves when its pin does. Scratch
+  surfaces move out of the personal namespace: a dedicated GitHub
+  organisation and a private gitlab.com group.
+
 ## Open
 
 1. Agent gate discipline, corrected after a wrong diagnosis: footman
@@ -564,4 +594,15 @@ series), gate green at the end.
    and external status checks are paid.
 6. Whether the placeholder `livery` distribution becomes the
    meta-package now or at the workshop phase.
-7. PyPI namespace grant for `livery-`: PEP 752 was accepted 2026-06-29 and grants are organization-only, so create the `livery` community organization on PyPI, then apply for the prefix grant when the application form is open (PEP 755). Until the grant lands, the prefix is first-come-first-served.
+7. Willem-side setup for the per-release live legs: the dedicated
+   GitHub organisation (proposal: `livery-forge-e2e`) with a PAT
+   secret; a private gitlab.com group with a PAT secret; and a free
+   gitea.com organisation with a token (Willem's suggestion), which
+   adds the hosted-stable Gitea edge beside the container's 1.28-dev
+   edge. Caveat until gitea.com serves 1.28: `cancel_run` is required
+   at the 1.28 floor, so its scenarios fail by design there and the
+   leg runs partial, clearly marked, or waits. The release-legs
+   workflow lands once the accounts exist; until then the pre-tag
+   live verification is the local run, the compose containers plus
+   github.com.
+8. PyPI namespace grant for `livery-`: PEP 752 was accepted 2026-06-29 and grants are organization-only, so create the `livery` community organization on PyPI, then apply for the prefix grant when the application form is open (PEP 755). Until the grant lands, the prefix is first-come-first-served.
