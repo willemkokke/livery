@@ -13,6 +13,7 @@ platform matrix.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -151,6 +152,26 @@ def measured_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, fl
 COVERAGE_GRACE = 0.5
 
 
+def report_coverage(root: Path, packages: tuple[Package, ...]) -> None:
+    """Print each package's local coverage beside its floor, no verdict.
+
+    One machine's run misses the platform branches and the task
+    shells only the measured CI union reaches, so the local number is
+    a low-biased preview: it informs, and the aggregating CI job's
+    union is what the floors gate.
+    """
+    measured = measured_coverage(root, packages)
+    for package in packages:
+        floor = coverage_floor(package)
+        if floor is None:
+            continue
+        percent = measured.get(package.path, 0.0)
+        print(
+            f"  coverage {package.path}: {percent:.1f}% here"
+            f" (floor {floor:.1f}% judges the CI union)"
+        )
+
+
 def enforce_coverage(root: Path, packages: tuple[Package, ...]) -> None:
     """Fail any package measurably below its committed floor.
 
@@ -205,5 +226,12 @@ def run_test(
             for package in packages
             if (package.directory / "tests").is_dir()
         )
+    if os.environ.get("LIVERY_COVERAGE_PARENT") == "1":
+        # A parent `coverage run` is measuring the whole fm invocation
+        # (the CI gate), so the run adds no second meter and the
+        # enforcement happens once, on the merged union, in the
+        # aggregating job.
+        pytest.opts(in_process=False)(*dirs, *pytest_args)
+        return
     pytest.opts(in_process=False)(*dirs, "--cov=livery", "--cov-report=", *pytest_args)
-    enforce_coverage(root, packages)
+    report_coverage(root, packages)

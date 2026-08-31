@@ -545,6 +545,7 @@ source = { virtual = "." }
 [package.dev-dependencies]
 dev = [
     { name = "basedpyright" },
+    { name = "coverage", extra = ["toml"] },
     { name = "footman" },
     { name = "livery-forge", extra = ["github-secrets"] },
     { name = "livery-workshop" },
@@ -565,6 +566,7 @@ dev = [
 [package.metadata.requires-dev]
 dev = [
     { name = "basedpyright", specifier = ">=1.18" },
+    { name = "coverage", extras = ["toml"], specifier = ">=7.10" },
     { name = "footman", specifier = ">=0.44" },
     { name = "livery-forge", extras = ["github-secrets"], editable = "packages/forge" },
     { name = "livery-workshop", editable = "packages/workshop" },
