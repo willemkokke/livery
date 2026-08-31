@@ -16,6 +16,7 @@ from footman import Failed
 
 from livery.forge.testing import FakeForge
 from livery.workshop import _ci_tasks, _graph, _quality
+from livery.workshop._backends import _python
 from livery.workshop._packages import Package
 
 _FAILURES = (SystemExit, Failed)
@@ -63,7 +64,7 @@ def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[FakeForge, Pat
 def test_status_and_doctor_answer(
     rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    fake, root = rig
+    _, _root = rig
     _ci_tasks.status()  # no PR: exit 0, says so
     _ci_tasks.doctor()
     out = capsys.readouterr().out
@@ -74,7 +75,7 @@ def test_status_and_doctor_answer(
 def test_the_ci_group_reports_the_empty_head(
     rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    fake, root = rig
+    _, _root = rig
     _ci_tasks.ci_rerun()
     _ci_tasks.ci_cancel()
     out = capsys.readouterr().out
@@ -85,7 +86,7 @@ def test_the_ci_group_reports_the_empty_head(
 def test_graph_affected_prints_the_reach(
     rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    fake, root = rig
+    _, root = rig
     (root / "packages" / "thing" / "src" / "livery" / "thing" / "mod.py").write_text(
         "x = 2\n"
     )
@@ -103,22 +104,16 @@ def test_check_affected_scopes_or_says_nothing(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    fake, root = rig
+    _, root = rig
     ran: list[str] = []
+    monkeypatch.setattr(_python, "run_format", lambda **kwargs: ran.append("format"))
+    monkeypatch.setattr(_python, "run_lint", lambda **kwargs: ran.append("lint"))
+    monkeypatch.setattr(_python, "run_typecheck", lambda **kwargs: ran.append("types"))
     monkeypatch.setattr(
-        _quality._python, "run_format", lambda **kwargs: ran.append("format")
+        _python, "run_typecomplete", lambda subset: ran.append("complete")
     )
     monkeypatch.setattr(
-        _quality._python, "run_lint", lambda **kwargs: ran.append("lint")
-    )
-    monkeypatch.setattr(
-        _quality._python, "run_typecheck", lambda **kwargs: ran.append("types")
-    )
-    monkeypatch.setattr(
-        _quality._python, "run_typecomplete", lambda subset: ran.append("complete")
-    )
-    monkeypatch.setattr(
-        _quality._python,
+        _python,
         "run_test",
         lambda **kwargs: ran.append("test"),
     )
@@ -129,9 +124,7 @@ def test_check_affected_scopes_or_says_nothing(
     import footman
 
     monkeypatch.setattr(_quality, "parallel", contextlib.nullcontext)
-    monkeypatch.setattr(
-        footman, "step", lambda fn, title=None: (lambda: fn())
-    )
+    monkeypatch.setattr(footman, "step", lambda fn, title=None: lambda: fn())
     # Nothing changed: the affected gate says so and runs nothing.
     _quality.check(affected=True)
     out = capsys.readouterr().out
@@ -170,10 +163,10 @@ def test_check_affected_scopes_or_says_nothing(
 def test_coverage_enforce_reads_the_workspace(
     rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake, root = rig
+    _, root = rig
     seen: list[Path] = []
     monkeypatch.setattr(
-        _quality._python,
+        _python,
         "enforce_coverage",
         lambda r, packages: seen.append(r),
     )
@@ -186,10 +179,11 @@ def test_the_layers_task_prints_the_walk(
 ) -> None:
     from livery.workshop._tasks import layers
 
-    fake, root = rig
+    _, _root = rig
     layers()
     out = capsys.readouterr().out
     assert "no workspace" in out or "instance's own files" in out
+
 
 def test_forge_lane_reads_the_contract_and_the_remote(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -219,16 +213,16 @@ def test_forge_lane_reads_the_contract_and_the_remote(
         (root / "livery.toml").write_text(
             f'[workspace]\n[forge]\nkind = "{kind}"\nowner = "acme"\n'
         )
-        monkeypatch.setattr(
-            _forge_lane.GithubForge, "connect", classmethod(lambda cls, **k: connected)
-        )
-        monkeypatch.setattr(
-            _forge_lane.GiteaForge, "connect", classmethod(lambda cls, **k: connected)
-        )
-        monkeypatch.setattr(
-            _forge_lane.GitlabForge, "connect", classmethod(lambda cls, **k: connected)
-        )
-        assert _forge_lane.this_repository(root) == ("acme", "widgets")
+        import livery.forge as forge
+
+        for cls_name in ("GithubForge", "GiteaForge", "GitlabForge"):
+            monkeypatch.setattr(
+                getattr(forge, cls_name),
+                "connect",
+                classmethod(lambda cls, **k: connected),
+            )
+        _forge_lane.this_repository(root)
+        assert connected.repositories[-1] == ("acme", "widgets")
     (root / "livery.toml").write_text('[workspace]\n[forge]\nkind = "svn"\n')
     with pytest.raises(_FAILURES):
         _forge_lane.this_forge(root)
