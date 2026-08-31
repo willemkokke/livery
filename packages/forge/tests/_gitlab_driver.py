@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import secrets
 import time
 from collections.abc import Callable
 from typing import Literal
@@ -104,6 +105,12 @@ class GitlabConformanceDriver:
             opener=opener,
             timeout=120,
         )
+        if live and opener is None:
+            # A plain live run (the release legs) gets unique names:
+            # replay determinism only matters when recording, and a
+            # cloud forge keeps redirects from earlier corpse renames
+            # that a recreated deterministic path can collide with.
+            namespace = f"{namespace}-{secrets.token_hex(3)}"
         self._namespace = namespace
         self._live = live
         self._counter = 0
