@@ -64,6 +64,28 @@ layers:
   help: "The workspace's layers, in precedence order"
   default: [livery.workshop]
 
+required_context:
+  type: str
+  help: >-
+    The one status name branch protection requires; each forge's CI
+    renders it as the aggregating job, so the matrix can change
+    without touching repository settings
+  default: gate
+
+forge_url:
+  type: str
+  help: "The forge server (empty for github.com and gitlab.com)"
+  default: ""
+
+publish_index:
+  type: str
+  help: >-
+    Where token publishing uploads (gitea and gitlab kinds); empty on
+    github, where trusted publishing to PyPI is the train
+  default: >-
+    {% if forge_kind == 'gitea' and forge_url
+    %}{{ forge_url.rstrip('/') }}/api/packages/{{ forge_owner }}/pypi{% endif %}
+
 templates_source:
   type: str
   help: >-

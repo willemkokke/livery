@@ -20,6 +20,7 @@ it.
 from __future__ import annotations
 
 import base64
+import os
 import subprocess
 import time
 from collections.abc import Callable
@@ -85,6 +86,9 @@ class GiteaConformanceDriver:
         live: bool = True,
     ) -> None:
         self._gitea = GiteaForge.connect(url=url, token=token, opener=opener)
+        # Cloud legs point the scratch at the e2e organisation; the
+        # default stays the compose seed org.
+        self._owner_org = os.environ.get("LIVERY_FORGE_E2E_OWNER") or "livery"
         self._client = JsonClient(
             f"{url.rstrip('/')}/api/v1",
             headers={"Authorization": f"token {token}", "Accept": "application/json"},
@@ -104,8 +108,8 @@ class GiteaConformanceDriver:
         """A deterministic name; any leftover from a prior run is deleted."""
         self._counter += 1
         name = f"conf-{self._namespace}-{self._counter}"
-        self._gitea.delete_repo("livery", name)
-        return ("livery", name)
+        self._gitea.delete_repo(self._owner_org, name)
+        return (self._owner_org, name)
 
     def fresh_repo(self) -> Repository:
         """A new repository seeded with the conformance workflow."""

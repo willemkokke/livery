@@ -64,6 +64,46 @@ def test_apply_settles_and_drift_names_the_file(tmp_path: Path) -> None:
     assert project_drift(root) == ["livery.toml: differs from its render"]
 
 
+def _render_kind(tmp_path: Path, forge_kind: str, **extra: object) -> Path:
+    destination = tmp_path / forge_kind
+    answers = read_answers(ROOT / ".copier-answers.yml")
+    answers.update({"kind": "project", "forge_kind": forge_kind}, **extra)
+    answers.update(extra)
+    render(ROOT / "templates", destination, answers)
+    return destination
+
+
+def test_each_forge_kind_renders_a_ci_definition_that_lints(
+    tmp_path: Path,
+) -> None:
+    import yaml
+
+    github = _render_kind(tmp_path, "github")
+    ci = yaml.safe_load((github / ".github" / "workflows" / "ci.yml").read_text())
+    assert "gate" in ci["jobs"]
+    assert not (github / ".gitea").exists()
+    assert not (github / ".gitlab-ci.yml").exists()
+
+    gitea = _render_kind(tmp_path, "gitea", forge_url="https://forge.example.com")
+    ci = yaml.safe_load((gitea / ".gitea" / "workflows" / "ci.yml").read_text())
+    assert "gate" in ci["jobs"]
+    release = yaml.safe_load(
+        (gitea / ".gitea" / "workflows" / "release.yml").read_text()
+    )
+    assert "publish" in release["jobs"]
+    contract = (gitea / "livery.toml").read_text()
+    assert 'url = "https://forge.example.com"' in contract
+    assert not (gitea / ".github").exists()
+
+    gitlab = _render_kind(tmp_path, "gitlab")
+    pipeline = yaml.safe_load((gitlab / ".gitlab-ci.yml").read_text())
+    assert "gate" in pipeline and "release" in pipeline
+    assert pipeline["workflow"]["rules"]  # MRs, main, tags, LIVERY_WORKFLOW
+    assert not (gitlab / ".github").exists()
+    for rendered in (github, gitea, gitlab):
+        assert 'required_context = "gate"' in (rendered / "livery.toml").read_text()
+
+
 def test_a_package_renders_namespace_clean(tmp_path: Path) -> None:
     destination = tmp_path / "scratch"
     answers = read_answers(ROOT / ".copier-answers.yml")
