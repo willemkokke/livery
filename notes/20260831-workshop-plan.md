@@ -522,6 +522,12 @@ starts; recorded here so the sequence is visible (Willem: post
   signing, a non-PyPI index for the monorepo itself, and a portable
   token path on the github kind. `packages/workshop/docs/releases.md`
   states the same for readers.
+- 2026-08-31, the union's first reading. The aggregating job's
+  first enforcement measured workshop at 79.0 on the six-leg union
+  and refused the 80 floor, which had been ratcheted against the
+  smaller pre-measurement denominator. The floor now says 79, the
+  first honest high water; it ratchets upward from union readings
+  only.
 - 2026-08-31, coverage grace (Willem: hse allowed a margin so a
   0.01% drop is not penalised). The gate fails only more than half a
   point below the floor; the floor stays the declared high-water
