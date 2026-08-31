@@ -43,7 +43,10 @@ _UNREACHABLE_BUDGET = 5
 
 #: Green-and-armed polls the watch grants the server to merge before
 #: probing for behind/conflicts and calling the evaluation lost.
-_MERGE_GRACE_POLLS = 3
+#: Forge evidence (livery PR #35): github.com's auto-merge can take
+#: over a minute after green, and three 15s polls declared it stalled
+#: 25 seconds before the merge landed.
+_MERGE_GRACE_POLLS = 8
 
 
 @dataclass(frozen=True)
