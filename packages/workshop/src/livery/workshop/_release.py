@@ -7,7 +7,7 @@ the ``__version__``, and the changelog must all agree, and every
 released. ``fm release.prepare`` stamps a version into those same
 places, idempotently, so the human act is one command plus one tag.
 
-``fm release.templates`` is W6, the workshop release's aftermath: the
+``fm release.templates`` is the workshop release's aftermath: the
 ``templates/`` tree at the tagged commit is published to the artifact
 repository and tagged ``vX.Y.Z`` in lockstep with
 ``packages/workshop/vX.Y.Z``. Idempotent: the same version with the
@@ -265,7 +265,7 @@ def release_templates(
     version: Annotated[str, doc("the workshop version being released")],
     remote: Annotated[str, doc("artifact repository url")] = TEMPLATES_REMOTE,
 ) -> None:
-    """Publish the template snapshot for one workshop release (W6).
+    """Publish the template snapshot for one workshop release.
 
     Runs from the tagged checkout in the release workflow, with the
     deploy key in the ssh agent; ``templates/`` becomes the artifact

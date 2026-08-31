@@ -1,4 +1,4 @@
-"""The classified verdict on a branch's pull request.
+"""Where a branch's pull request stands, as one plain answer.
 
 One read of the forge plus two local git probes, folded into a
 livery.workshop._verdict.Verdict that names the state and the exit
@@ -51,7 +51,7 @@ _MERGE_GRACE_POLLS = 8
 
 @dataclass(frozen=True)
 class Verdict:
-    """One classified read of a branch's pull request.
+    """One reading of where a branch's pull request stands.
 
     Attributes:
         state: A short name: ``merged``, ``in-flight``, ``conflicts``,
@@ -83,7 +83,7 @@ def _failing_job(repo: Repository, head_sha: str) -> str:
 def classify(
     repo: Repository, branch: str, git: GitOps, *, grace_spent: bool = False
 ) -> Verdict:
-    """One read, classified.
+    """One reading of the branch, named and coded.
 
     *grace_spent* is the watcher's signal that a green-and-armed pull
     request has already been given time to merge, so the local probes

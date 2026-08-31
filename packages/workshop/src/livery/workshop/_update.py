@@ -1,4 +1,4 @@
-"""``fm update``: the update wave's instance half (W7).
+"""``fm update``: bring this repository up to date, then submit it.
 
 One idempotent verb, run from a clean checkout of the base branch:
 bump every ``[[depends]]`` floor to the latest released tag, refresh
@@ -198,7 +198,7 @@ def update_flow(
 def update(
     armed: Annotated[bool, doc("arm the update's pull request")] = False,
 ) -> None:
-    """Run the update wave on this instance (W7): floors, content, render, W3.
+    """Bring floors, content, and rendered files up to date, then submit.
 
     Idempotent, and quiet when there is nothing to move: no branch and
     no pull request are created for a current instance. A template

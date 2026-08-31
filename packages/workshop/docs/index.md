@@ -46,7 +46,7 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
 - `fm release.prepare` and `fm release.verify` run the path-tag
   train (`packages/<pkg>/v<semver>`); a workshop release also
   publishes the template snapshot, tagged in lockstep.
-- `fm update` runs the wave on an instance: floors to the latest
+- `fm update` brings an instance up to date: floors to the latest
   released tags, content, render, then the submit flow. Nothing
   changed means nothing happens.
 

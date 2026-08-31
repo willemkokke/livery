@@ -23,7 +23,7 @@ Four rules hold across every method:
   idempotent on the server (creating a release, opening a pull
   request), the protocol pairs it with the read that makes the caller's
   probe-then-act loop idempotent.
-- Capabilities, not pretence. Where forges genuinely differ, the
+- Capabilities, not pretence. Where forges differ, the
   difference is a named livery.forge.Capability. A backend asked for
   an operation it declined by name raises livery.forge.Unsupported;
   callers that can degrade probe livery.forge.Forge.supports first.

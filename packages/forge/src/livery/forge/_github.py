@@ -81,8 +81,17 @@ def _resolve_token() -> str:
     if token:
         return token
     try:
+        # cwd and env are stated deliberately: the call is
+        # directory-independent and inherits the caller's world, and
+        # a task runner that guards ambient subprocess state (footman
+        # does) treats explicit arguments as the author's intent.
         result = subprocess.run(
-            ["gh", "auth", "token"], capture_output=True, text=True, check=False
+            ["gh", "auth", "token"],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=os.getcwd(),
+            env=dict(os.environ),
         )
     except OSError:
         return ""
