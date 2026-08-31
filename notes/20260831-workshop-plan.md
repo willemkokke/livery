@@ -1,7 +1,10 @@
 # Building the workshop
 
-Status: phase 8 built, 2026-08-31, submitting; the 0.1.0 tag after
-the merge completes the plan. The affected engine scopes the gate to
+Status: phase 8 shipped 2026-08-31 (PRs #42-#44; coverage floors
+live with a half-point grace, workshop ratcheted to 80). 0.1.0 is
+deliberately NOT tagged: more of hse ports first (Willem), phase 9
+(coverage accuracy) being the first named piece; the stamped 0.1.0
+version waits inert until the list closes. The affected engine scopes the gate to
 the changed packages' dependents' closure, per-package coverage
 floors live in each contract's `[qa]` table and gate the test step,
 the bootstrap's replaced-by table is annotated done line by line,
@@ -322,6 +325,34 @@ The bootstrap deferrals come home and the temporary environment ends.
   annotated in this change; five graph tests pin the closure, the
   everything fallback, and both change halves. The --affected demo
   and the 0.1.0 evidence follow the merge.)*
+
+## Phase 9 — coverage accuracy: every fm call measured
+
+0.1.0 waits on this (Willem: it is the only way to see how much of
+the task surface, a large chunk of the workshop, is covered). hse's
+shape, on today's cheaper machinery.
+
+- Subprocess instrumentation: `[tool.coverage.run]` gains
+  `patch = ["subprocess"]`, parallel data files, `relative_files`,
+  and a `[tool.coverage.paths]` alias set so Windows and POSIX paths
+  merge as one file. pytest-cov retires; the parent measure is
+  `coverage run` around the whole `fm check`, and the patch cascades
+  through every child: task shells, the out-of-process pytest, its
+  xdist workers.
+- CI's Gate step runs under that parent measure; each leg combines
+  its own parallel files and uploads one `.coverage.<os>-<python>`
+  artifact. The aggregating `gate` job downloads all six, combines
+  them, and enforces the floors once, on the union: the number that
+  counts Windows junction branches and mac lines alike.
+- `fm test` locally keeps a quick same-machine enforcement (the
+  grace absorbs its platform bias); the combined CI number is the
+  authoritative one, and the floors ratchet against it.
+- **Acceptance:** the combined report shows the task-shell modules
+  (`_quality`, `_submit` shells, `_ci_tasks`) with non-zero
+  coverage from the gate's own run; one gate job enforces floors on
+  the merged union and fails a deliberate floor raise above the
+  measured union (raise, observe red, revert); the per-leg
+  enforcement is gone from CI logs.
 
 ## Temporary, replaced by
 
