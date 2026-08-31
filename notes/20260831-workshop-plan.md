@@ -421,6 +421,11 @@ The bootstrap deferrals come home and the temporary environment ends.
   verified design. Cloud legs write `.forge.dev.env` with the cloud
   URL and token, which is the harness's existing seam. Cleanup lists
   and deletes scratch by prefix, runs on every verdict.
+- 2026-08-31, coverage grace (Willem: hse allowed a margin so a
+  0.01% drop is not penalised). The gate fails only more than half a
+  point below the floor; the floor stays the declared high-water
+  mark and the grace absorbs measurement jitter, printed beside
+  every verdict so the enforced numbers are the visible ones.
 - 2026-08-31, phase 8 shape. The coverage bar lives in each
   package's own contract (`[qa] coverage_floor` in livery.toml),
   closing open item 3: the floor is part of what the package
