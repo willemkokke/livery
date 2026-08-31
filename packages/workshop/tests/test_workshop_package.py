@@ -22,8 +22,12 @@ def test_the_namespace_is_shared_and_stays_pep420() -> None:
 
 def test_the_surface_is_declared() -> None:
     assert workshop_module.__all__ == [
+        "Edge",
+        "Package",
         "__version__",
+        "discover_packages",
         "layer_names",
         "mount_layers",
+        "verify_workspace",
         "workspace_root",
     ]

@@ -1,43 +1,20 @@
-"""The layering lint's seed (bootstrap plan, phase 0).
+"""The layering lint, run over this workspace.
 
-Every package carries its contract, and livery.forge imports only the
-standard library at module import time. One declared optional extra
-(PyNaCl, behind livery-forge[github-secrets]) loads lazily inside the
-one capability path that needs it; nothing else may join this set
-without a plan decision. Grows into the real layering lint when a
-second package arrives.
+The engine lives in livery.workshop.verify_workspace; this test keeps
+the whole workspace honest on every gate run: contracts present,
+declared edges agreeing with the native manifests both ways, the
+graph acyclic, and livery.forge stdlib-only at import time.
 """
 
 from __future__ import annotations
 
-import ast
-import sys
 from pathlib import Path
 
+from livery.workshop import verify_workspace
+
 ROOT = Path(__file__).resolve().parents[1]
-PACKAGES = sorted(p for p in (ROOT / "packages").iterdir() if p.is_dir())
 
 
-def test_every_package_carries_its_contracts() -> None:
-    for pkg in PACKAGES:
-        assert (pkg / "livery.toml").is_file(), f"{pkg.name} lacks livery.toml"
-        assert (pkg / "pyproject.toml").is_file(), f"{pkg.name} lacks pyproject.toml"
-
-
-def test_forge_runtime_imports_only_stdlib() -> None:
-    stdlib = sys.stdlib_module_names
-    for source in (ROOT / "packages/forge/src").rglob("*.py"):
-        tree = ast.parse(source.read_text("utf-8"), filename=str(source))
-        for node in ast.walk(tree):
-            names = []
-            if isinstance(node, ast.Import):
-                names = [alias.name for alias in node.names]
-            elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-                names = [node.module]
-            for name in names:
-                top = name.split(".")[0]
-                # nacl is the github-secrets extra, imported lazily.
-                assert top in stdlib or top in ("livery", "nacl"), (
-                    f"{source.relative_to(ROOT)} imports {name!r}: "
-                    "livery.forge is stdlib-only at runtime"
-                )
+def test_the_workspace_keeps_its_layering() -> None:
+    packages = verify_workspace(ROOT)
+    assert {p.name for p in packages} == {"livery-forge", "livery-workshop"}
