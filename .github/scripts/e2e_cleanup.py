@@ -81,7 +81,14 @@ def main() -> int:
             if not name.startswith(PREFIXES):
                 continue
             pid = project["id"]
-            _request(f"{base}/api/v4/projects/{pid}", headers, method="DELETE")
+            try:
+                _request(f"{base}/api/v4/projects/{pid}", headers, method="DELETE")
+            except urllib.error.HTTPError as exc:
+                # An already-marked project answers 400 on the first
+                # DELETE; the permanent attempt below still applies.
+                if exc.code != 400:
+                    print(f"marking {name} failed: HTTP {exc.code}")
+                    continue
             # The first DELETE only marks the project and mails the
             # owner for 30 days; the second, with permanently_remove,
             # removes it for real where the instance allows. A refusal

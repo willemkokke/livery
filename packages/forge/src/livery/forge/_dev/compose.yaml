@@ -9,10 +9,13 @@ name: livery-forge-dev
 services:
   gitea:
     # The 1.28 development line: the interface's floor, and the first
-    # line with run cancellation (cancel and force-cancel). Pinned to a
-    # release tag once 1.28 ships; how often the pin tracks upstream is
-    # an open item in the bootstrap plan.
-    image: docker.gitea.com/gitea:nightly
+    # line with run cancellation (cancel and force-cancel). Pinned by
+    # digest to a validated nightly build until 1.28 ships as a
+    # release tag: the moving :nightly broke the conformance legs when
+    # a later build stopped listing completed action tasks (release
+    # legs run 33411879570), so the pin moves only after the legs
+    # prove a newer build.
+    image: docker.gitea.com/gitea@sha256:026a91271ad2b154c139f84ee587205f7a0776b1ca43709bddc7c29bc2b22664
     profiles: [gitea]
     environment:
       GITEA__security__INSTALL_LOCK: "true"
@@ -35,7 +38,8 @@ services:
       retries: 90
 
   act_runner:
-    image: docker.gitea.com/act_runner:nightly
+    # Pinned by digest beside the server, for the same reason.
+    image: docker.gitea.com/act_runner@sha256:2f54d4df2a1e1b69c4b44db53c70dbd57043594b7f48bcf2e685c3b5bdb738e0
     profiles: [gitea-runner]
     depends_on:
       gitea:
