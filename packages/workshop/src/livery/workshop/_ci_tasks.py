@@ -118,6 +118,46 @@ def ci_cancel(
     cancel_flow(repo, git, force=force)
 
 
+def logs_flow(
+    repo: Repository, git: GitOps, *, lines: int = 80, failed_only: bool = True
+) -> None:
+    """Print the head commit's job logs, failed jobs first and by default.
+
+    The tail of each log, newest run first, so a red branch explains
+    itself without leaving the terminal.
+    """
+    sha = _head_sha(repo, git)
+    runs = repo.checks.runs(head_sha=sha)
+    if not runs:
+        print(f"  no runs for {sha[:10]}")
+        return
+    printed = 0
+    for run in runs:
+        for job in repo.checks.jobs(run.id):
+            failed = job.conclusion not in ("", "success", "skipped")
+            if failed_only and not failed:
+                continue
+            state = job.conclusion or job.status
+            print(f"  {run.workflow} / {job.name}: {state}")
+            log = repo.checks.job_log(job.id)
+            for line in log.splitlines()[-lines:]:
+                print(f"    {line}")
+            printed += 1
+    if not printed:
+        which = "failed " if failed_only else ""
+        print(f"  no {which}jobs for {sha[:10]}")
+
+
+@ci.task(name="logs")
+def ci_logs(
+    lines: Annotated[int, doc("log lines per job, from the tail")] = 80,
+    failed_only: Annotated[bool, doc("only jobs that did not succeed")] = True,
+) -> None:
+    """Print the head commit's job logs, failed jobs by default."""
+    repo, git = _resolved()
+    logs_flow(repo, git, lines=lines, failed_only=failed_only)
+
+
 @ci.task(name="watch")
 def ci_watch(
     interval: Annotated[int, doc("poll seconds")] = 15,

@@ -83,6 +83,21 @@ def test_the_ci_group_reports_the_empty_head(
     assert "nothing running for" in out
 
 
+def test_ci_logs_prints_the_failing_tail(
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake, _root = rig
+    sha = fake.push(OWNER, NAME, "feat/1-thing", outcome="failure")
+    fake.settle(OWNER, NAME, sha)
+    # The PR is what names the head commit the verbs inspect.
+    fake.repository(OWNER, NAME).pr.open("feat/1-thing", "main", "feat: t")
+    _ci_tasks.ci_logs()
+    out = capsys.readouterr().out
+    assert "concluded failure" in out
+    _ci_tasks.ci_logs(failed_only=False)
+    assert "ci.yml" in capsys.readouterr().out
+
+
 def test_graph_affected_prints_the_reach(
     rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
