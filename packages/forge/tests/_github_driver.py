@@ -81,6 +81,11 @@ _MARKERS: dict[Outcome, str] = {
 }
 
 
+#: Seconds a live wait may take; CI runners are slower than a
+#: laptop, so the legs raise it via the environment.
+_POLL_BUDGET = float(os.environ.get("LIVERY_FORGE_POLL_TIMEOUT", "600"))
+
+
 class GithubConformanceDriver:
     """Drive the conformance scenarios against github.com.
 
@@ -390,11 +395,13 @@ class GithubConformanceDriver:
         deadline is long; a replayed loop needs neither deadline nor
         sleep, and a drifted one dies on the cassette's own mismatch.
         """
-        deadline = time.monotonic() + 600
+        deadline = time.monotonic() + _POLL_BUDGET
         while not probe():
             if self._live:
                 if time.monotonic() > deadline:
-                    raise ForgeError(f"timed out after 600s waiting for {subject}")
+                    raise ForgeError(
+                        f"timed out after {_POLL_BUDGET:.0f}s waiting for {subject}"
+                    )
                 time.sleep(2)
 
     def cleanup(self) -> None:

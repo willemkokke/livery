@@ -84,6 +84,11 @@ _MARKERS: dict[Outcome, str] = {
 }
 
 
+#: Seconds a live wait may take; CI runners are slower than a
+#: laptop, so the legs raise it via the environment.
+_POLL_BUDGET = float(os.environ.get("LIVERY_FORGE_POLL_TIMEOUT", "180"))
+
+
 class GiteaConformanceDriver:
     """Drive the conformance scenarios against a Gitea server.
 
@@ -330,11 +335,13 @@ class GiteaConformanceDriver:
         answers drive exactly the iterations the recording made, and a
         drifted loop dies on the cassette's own mismatch error.
         """
-        deadline = time.monotonic() + 180
+        deadline = time.monotonic() + _POLL_BUDGET
         while not probe():
             if self._live:
                 if time.monotonic() > deadline:
-                    raise ForgeError(f"timed out after 180s waiting for {subject}")
+                    raise ForgeError(
+                        f"timed out after {_POLL_BUDGET:.0f}s waiting for {subject}"
+                    )
                 time.sleep(1)
 
     def cleanup(self) -> None:

@@ -25,10 +25,16 @@ jobs:
       - name: Conformance, live
         env:
           LIVERY_FORGE_LIVE: "1"
+          # CI runners are slower than a laptop; the budget separates
+          # broken from slow.
+          LIVERY_FORGE_POLL_TIMEOUT: "360"
         run: uv run --no-sync pytest packages/forge/tests/test_gitea_conformance.py -n 4
       - name: Evidence from the scratch repositories
         if: failure()
-        run: python3 .github/scripts/e2e_diagnose.py gitea
+        run: |
+          python3 .github/scripts/e2e_diagnose.py gitea
+          docker compose -f packages/forge/src/livery/forge/_dev/compose.yaml \
+            --profile gitea --profile gitea-runner logs act_runner | tail -80
       - name: Down
         if: always()
         run: uv run --no-sync fm forge.dev.down --wipe
