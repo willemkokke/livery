@@ -1,0 +1,237 @@
+"""The task shells, lit: resolution monkeypatched, the verbs exercised.
+
+CI's gate never invokes status, doctor, the ci group, or the
+affected mode, so their shells stayed dark in the union. These tests
+run each shell against livery.forge.testing.FakeForge and a
+temporary workspace, which is the same seam the flows already use.
+"""
+
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+import pytest
+from footman import Failed
+
+from livery.forge.testing import FakeForge
+from livery.workshop import _ci_tasks, _graph, _quality
+from livery.workshop._packages import Package
+
+_FAILURES = (SystemExit, Failed)
+
+OWNER, NAME = "willemkokke", "livery"
+
+
+def _git(cwd: Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=cwd, capture_output=True, check=True)
+
+
+@pytest.fixture
+def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[FakeForge, Path]:
+    """A workspace clone on a feature branch, resolution faked."""
+    origin = tmp_path / "origin.git"
+    origin.mkdir()
+    _git(origin, "init", "--bare", "--initial-branch=main")
+    root = tmp_path / "ws"
+    _git(tmp_path, "clone", str(origin), "ws")
+    _git(root, "config", "user.email", "t@livery.local")
+    _git(root, "config", "user.name", "T")
+    (root / "livery.toml").write_text("[workspace]\n")
+    package = root / "packages" / "thing"
+    (package / "src" / "livery" / "thing").mkdir(parents=True)
+    (package / "livery.toml").write_text('type = "python"\nname = "livery-thing"\n')
+    (package / "pyproject.toml").write_text(
+        '[project]\nname = "livery-thing"\ndependencies = []\n'
+    )
+    (package / "src" / "livery" / "thing" / "mod.py").write_text("x = 1\n")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "chore: seed")
+    _git(root, "push", "-u", "origin", "main")
+    _git(root, "checkout", "-b", "feat/1-thing")
+    fake = FakeForge()
+    fake.create_repo(OWNER, NAME, private=True, description="t")
+    repo = fake.repository(OWNER, NAME)
+    monkeypatch.chdir(root)
+    monkeypatch.setattr(
+        "livery.workshop._forge_lane.this_repository", lambda _root: repo
+    )
+    monkeypatch.setattr("livery.workshop._forge_lane.this_forge", lambda _root: fake)
+    return fake, root
+
+
+def test_status_and_doctor_answer(
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake, root = rig
+    _ci_tasks.status()  # no PR: exit 0, says so
+    _ci_tasks.doctor()
+    out = capsys.readouterr().out
+    assert "no pull request for feat/1-thing" in out
+    assert "fake-user on FakeForge" in out or "grants:" in out
+
+
+def test_the_ci_group_reports_the_empty_head(
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake, root = rig
+    _ci_tasks.ci_rerun()
+    _ci_tasks.ci_cancel()
+    out = capsys.readouterr().out
+    assert "no runs for" in out
+    assert "nothing running for" in out
+
+
+def test_graph_affected_prints_the_reach(
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake, root = rig
+    (root / "packages" / "thing" / "src" / "livery" / "thing" / "mod.py").write_text(
+        "x = 2\n"
+    )
+    _graph.graph_affected()
+    out = capsys.readouterr().out
+    assert "packages/thing (livery-thing)" in out
+    (root / "livery.toml").write_text("[workspace]\n# root\n")
+    _graph.graph_affected()
+    out = capsys.readouterr().out
+    assert "everything" in out
+
+
+def test_check_affected_scopes_or_says_nothing(
+    rig: tuple[FakeForge, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fake, root = rig
+    ran: list[str] = []
+    monkeypatch.setattr(
+        _quality._python, "run_format", lambda **kwargs: ran.append("format")
+    )
+    monkeypatch.setattr(
+        _quality._python, "run_lint", lambda **kwargs: ran.append("lint")
+    )
+    monkeypatch.setattr(
+        _quality._python, "run_typecheck", lambda **kwargs: ran.append("types")
+    )
+    monkeypatch.setattr(
+        _quality._python, "run_typecomplete", lambda subset: ran.append("complete")
+    )
+    monkeypatch.setattr(
+        _quality._python,
+        "run_test",
+        lambda **kwargs: ran.append("test"),
+    )
+    # footman's parallel block insists on a real run context; the
+    # test wants the routing, so both collapse to run-in-place.
+    import contextlib
+
+    import footman
+
+    monkeypatch.setattr(_quality, "parallel", contextlib.nullcontext)
+    monkeypatch.setattr(
+        footman, "step", lambda fn, title=None: (lambda: fn())
+    )
+    # Nothing changed: the affected gate says so and runs nothing.
+    _quality.check(affected=True)
+    out = capsys.readouterr().out
+    assert "nothing affected" in out
+    assert ran == []
+    # A one-package change: the scoped verbs run.
+    (root / "packages" / "thing" / "src" / "livery" / "thing" / "mod.py").write_text(
+        "x = 3\n"
+    )
+    monkeypatch.setattr(
+        _quality,
+        "_packages",
+        lambda: (
+            Package(
+                directory=root / "packages" / "thing",
+                path="packages/thing",
+                name="livery-thing",
+                type="python",
+                depends=(),
+            ),
+            Package(
+                directory=root / "packages" / "ghost",
+                path="packages/ghost",
+                name="livery-ghost",
+                type="python",
+                depends=(),
+            ),
+        ),
+    )
+    _quality.check(affected=True)
+    out = capsys.readouterr().out
+    assert "affected: packages/thing" in out
+    assert set(ran) == {"format", "lint", "types", "complete", "test"}
+
+
+def test_coverage_enforce_reads_the_workspace(
+    rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake, root = rig
+    seen: list[Path] = []
+    monkeypatch.setattr(
+        _quality._python,
+        "enforce_coverage",
+        lambda r, packages: seen.append(r),
+    )
+    _quality.coverage_enforce()
+    assert seen == [root]
+
+
+def test_the_layers_task_prints_the_walk(
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop._tasks import layers
+
+    fake, root = rig
+    layers()
+    out = capsys.readouterr().out
+    assert "no workspace" in out or "instance's own files" in out
+
+def test_forge_lane_reads_the_contract_and_the_remote(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # No rig here: the rig monkeypatches the very resolution this
+    # test exercises.
+    from livery.workshop import _forge_lane
+
+    root = tmp_path / "lane"
+    root.mkdir()
+    _git(root, "init", "--initial-branch=main")
+    _git(root, "remote", "add", "origin", "git@github.com:acme/widgets.git")
+    assert _forge_lane.remote_repo_name(root) == "widgets"
+    _git(root, "remote", "set-url", "origin", "https://github.com/acme/widgets")
+    assert _forge_lane.remote_repo_name(root) == "widgets"
+
+    class FakeConnectable:
+        def __init__(self) -> None:
+            self.repositories: list[tuple[str, str]] = []
+
+        def repository(self, owner: str, name: str) -> tuple[str, str]:
+            self.repositories.append((owner, name))
+            return (owner, name)
+
+    connected = FakeConnectable()
+    for kind in ("github", "gitea", "gitlab"):
+        (root / "livery.toml").write_text(
+            f'[workspace]\n[forge]\nkind = "{kind}"\nowner = "acme"\n'
+        )
+        monkeypatch.setattr(
+            _forge_lane.GithubForge, "connect", classmethod(lambda cls, **k: connected)
+        )
+        monkeypatch.setattr(
+            _forge_lane.GiteaForge, "connect", classmethod(lambda cls, **k: connected)
+        )
+        monkeypatch.setattr(
+            _forge_lane.GitlabForge, "connect", classmethod(lambda cls, **k: connected)
+        )
+        assert _forge_lane.this_repository(root) == ("acme", "widgets")
+    (root / "livery.toml").write_text('[workspace]\n[forge]\nkind = "svn"\n')
+    with pytest.raises(_FAILURES):
+        _forge_lane.this_forge(root)
+    (root / "livery.toml").write_text("[workspace]\n")
+    with pytest.raises(_FAILURES):
+        _forge_lane.this_repository(root)
