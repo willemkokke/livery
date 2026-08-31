@@ -1,12 +1,13 @@
 # Building the workshop
 
-Status: phase 7 shipped, 2026-08-31. All five release legs are green
-in one dispatch (run 33416377299): the compose Gitea and GitLab and
-the three cloud accounts, the same conformance suite end to end,
-skips named where a server is below the floor, scratch cleaned as
-scenarios pass. The project kind renders per-forge CI from contract
-values. Next: phase 8. Phases 1-6 shipped 2026-08-31 (PRs #12-#28;
-livery-workshop 0.0.2 and workshop-templates v0.0.2 published). The bootstrap
+Status: phase 8 built, 2026-08-31, submitting; the 0.1.0 tag after
+the merge completes the plan. The affected engine scopes the gate to
+the changed packages' dependents' closure, per-package coverage
+floors live in each contract's `[qa]` table and gate the test step,
+the bootstrap's replaced-by table is annotated done line by line,
+and the workshop docs state the layer model as built. Phases 1-7
+shipped 2026-08-31 (PRs #12-#41; all five release legs green in run
+33416377299). The bootstrap
 plan's entry criteria are met: `livery-forge` 0.1.0 is on PyPI with
 all three backends passing the one conformance suite, the fixture
 harness is stable, and the compose loop is routine.
@@ -315,15 +316,21 @@ The bootstrap deferrals come home and the temporary environment ends.
   `uv run fm check` green from cold caches; the bootstrap plan's
   replaced-by table annotated done, line by line, in the same change;
   `livery-workshop` 0.1.0 on PyPI.
+  *(2026-08-31: the cold-cache gate ran green after `fm clean` plus
+  removing the checker caches, coverage floors printing inside it
+  (forge 90.7 over 90, workshop 76.2 over 76); the table is
+  annotated in this change; five graph tests pin the closure, the
+  everything fallback, and both change halves. The --affected demo
+  and the 0.1.0 evidence follow the merge.)*
 
 ## Temporary, replaced by
 
 | Temporary piece | Replaced by |
 | --- | --- |
-| root `tasks.py` still defining verbs after phase 2 | the plugin's task tree, phase by phase, one line left at phase 8 |
-| GitHub-only rendered CI (phase 4) | the three forge variants, phase 7 |
-| hand-listed `content/` inventory | the docs channel and the workshop's own docs toolchain, after 0.1.0 (open 4) |
-| `release-legs.yml` skipping absent accounts | all legs live once open item 7 of the bootstrap plan closes |
+| root `tasks.py` still defining verbs after phase 2 | done: the plugin's tree serves every verb, and the file is the seeded one line (fixtures.record moved into forge's dev plugin) |
+| GitHub-only rendered CI (phase 4) | done: the three forge variants render from contract values, phase 7 |
+| hand-listed `content/` inventory | done as far as this plan goes: the content channel ships and materialises the inventory; the rendered docs toolchain stays post-0.1.0 (open 4) |
+| `release-legs.yml` skipping absent accounts | done: all five legs live and green in one dispatch (run 33416377299) |
 
 ## Decision record
 
@@ -414,6 +421,16 @@ The bootstrap deferrals come home and the temporary environment ends.
   verified design. Cloud legs write `.forge.dev.env` with the cloud
   URL and token, which is the harness's existing seam. Cleanup lists
   and deletes scratch by prefix, runs on every verdict.
+- 2026-08-31, phase 8 shape. The coverage bar lives in each
+  package's own contract (`[qa] coverage_floor` in livery.toml),
+  closing open item 3: the floor is part of what the package
+  declares about itself, moves in the same review as the code, and
+  the template seeds new packages at 100. Floors start at today's
+  high water (forge 90, workshop 76). In `--affected` mode ty and
+  pyrefly still check their configured whole (their runs cost
+  seconds and pin the platform matrix), and the render gate is
+  skipped because a package-scoped change cannot touch its inputs;
+  everything else takes explicit paths.
 - 2026-08-31, the legs gate forge releases only (Willem: live
   interaction should happen "when we actually change something in
   forge and decide to release"). release-legs verifies livery-forge's
@@ -500,9 +517,9 @@ The bootstrap deferrals come home and the temporary environment ends.
    (design note's open 7). Proposal in phase 3: the three plan
    skills plus both guards ship; everything else waits for a second
    consumer. Owner: Willem, at phase 3 review.
-3. Where the coverage bar and per-package checker set live:
-   `livery.toml` or workshop configuration (design note's open 4).
-   Decide at phase 8, where coverage lands. Owner: the phase.
+3. Resolved 2026-08-31 at phase 8: the coverage bar lives in each
+   package's `livery.toml` (`[qa] coverage_floor`). Per-package
+   checker sets stay undivided until a package needs one.
 4. The docs toolchain (per-package rendered sites) is not in this
    plan; it follows 0.1.0 as its own small plan unless Willem pulls
    it in. Owner: Willem.

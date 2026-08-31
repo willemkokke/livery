@@ -19,6 +19,7 @@ from footman import task
 # Importing registers each module's tasks with footman.
 from livery.workshop import (  # noqa: F401
     _ci_tasks,
+    _graph,
     _hooks,
     _quality,
     _release,

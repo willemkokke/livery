@@ -60,18 +60,54 @@ def typecomplete() -> None:
 
 @task
 def test(*pytest_args: str) -> None:
-    """Run the test suite.
+    """Run the test suite, coverage floors enforced.
 
     Args:
         pytest_args: forwarded to pytest verbatim
     """
-    _packages()
-    _python.run_test(*pytest_args)
+    packages = _packages()
+    root = workspace_root()
+    _python.run_test(*pytest_args, packages=packages, root=root)
+
+
+def _affected() -> tuple[Package, ...] | None:
+    """The affected subset for the gate; None means everything."""
+    from livery.workshop._git_ops import GitOps
+    from livery.workshop._graph import affected_packages
+
+    root = workspace_root()
+    if root is None:
+        raise ValueError("no workspace: no livery.toml above the working directory")
+    git = GitOps(root)
+    git.fetch()
+    return affected_packages(root, git)
 
 
 @task
-def check() -> None:
-    """Run the gate: format, lint, types, tests, render gate, in parallel."""
+def check(
+    affected: Annotated[
+        bool, doc("scope the gate to the branch's affected packages")
+    ] = False,
+) -> None:
+    """Run the gate: format, lint, types, tests, render gate, in parallel.
+
+    ``--affected`` narrows every verb to the packages this branch's
+    changes can influence (their dependents' closure). A change
+    outside the packages configures every gate, so the narrowing
+    falls back to everything; ty and pyrefly always check their
+    configured whole either way.
+    """
+    subset = _affected() if affected else None
+    if affected and subset is not None:
+        packages = _packages()
+        if not subset:
+            print("  nothing affected: the branch changes no files")
+            return
+        if len(subset) < len(packages):
+            names = ", ".join(package.path for package in subset)
+            print(f"  affected: {names}")
+            _scoped_check(subset)
+            return
     with parallel():
         format(check=True)
         lint()
@@ -79,6 +115,30 @@ def check() -> None:
         typecomplete()
         test()
         template_check()
+
+
+def _scoped_check(subset: tuple[Package, ...]) -> None:
+    """The gate over *subset* only, each verb explicitly scoped.
+
+    The render gate is skipped: its inputs are the root answers and
+    the template source, which a package-scoped change cannot touch
+    (touching them makes the change root-scoped, and the full gate
+    runs instead).
+    """
+    from footman import step
+
+    root = workspace_root()
+    assert root is not None
+    paths = _python.package_paths(subset)
+    with parallel():
+        step(lambda: _python.run_format(check=True, paths=paths), title="format")()
+        step(lambda: _python.run_lint(paths=paths), title="lint")()
+        step(lambda: _python.run_typecheck(paths=paths), title="typecheck")()
+        step(lambda: _python.run_typecomplete(subset), title="typecomplete")()
+        step(
+            lambda: _python.run_test(packages=subset, root=root, scoped=True),
+            title="test",
+        )()
 
 
 @task

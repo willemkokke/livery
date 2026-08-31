@@ -7,7 +7,7 @@ import livery.workshop as workshop_module
 
 
 def test_imports_and_carries_a_version() -> None:
-    assert workshop_module.__version__ == "0.0.2"
+    assert workshop_module.__version__ == "0.1.0"
 
 
 def test_the_namespace_is_shared_and_stays_pep420() -> None:

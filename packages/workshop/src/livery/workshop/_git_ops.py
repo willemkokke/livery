@@ -129,6 +129,20 @@ class GitOps:
         self._run("add", "-A")
         self._run("commit", "-m", message)
 
+    def changed_paths(self, base: str) -> list[str]:
+        """Repo-relative paths this branch touches, committed or not.
+
+        The committed half diffs against the merge base with
+        ``origin/<base>``; the uncommitted half comes from the status
+        listing, renames counted on both sides.
+        """
+        merge_base = self._run("merge-base", "HEAD", f"origin/{base}").strip()
+        committed = self._run("diff", "--name-only", merge_base, "HEAD").splitlines()
+        pending: list[str] = []
+        for line in self._run("status", "--porcelain").splitlines():
+            pending.extend(part for part in line[3:].split(" -> ") if part)
+        return sorted({path for path in committed + pending if path})
+
     def tags(self) -> tuple[str, ...]:
         """Every tag name the repository knows."""
         return tuple(self._run("tag", "-l").split())

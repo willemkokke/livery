@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.0 — 2026-08-31
+
+- The affected engine: `fm graph.affected`, and `fm check --affected`
+  scoping the gate to the changed packages' dependents' closure.
+- Per-package coverage floors: `[qa] coverage_floor` in each
+  package's contract, enforced by the gate's test step.
+- The whole phase-5 to phase-7 surface hardens through the live
+  release legs: the classified submit verdicts, the release train
+  with the template snapshot, the update wave, and the per-forge CI
+  variants.
+
 ## 0.0.2 — 2026-08-31
 
 - The whole dev loop: the quality family dispatched by contract, the
