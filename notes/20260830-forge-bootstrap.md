@@ -1,15 +1,13 @@
 # Bootstrapping livery: the forge first
 
-Status: phase 0 complete, awaiting Willem's acceptance, 2026-08-31.
-Evidence: `fm check` green on three OSes and two Pythons (run
-33342483626, six legs plus the gate); branch protection live on main
-(gate required, admins enforced); `packages/forge/v0.0.1` tagged at
-the setup head, verified by the train's inline check ("verified:
-livery-forge 0.0.1 from packages/forge/v0.0.1", run 33343851374), and
-published to PyPI by trusted publishing (wheel and sdist live, the
-pending publisher converted). On acceptance: cut annotated
-`archive/setup` at the setup head, push it, open the graduation pull
-request, squash-merge on green.
+Status: phase 0 accepted by Willem, 2026-08-31, conditional on the
+basedpyright venv fix passing CI; the graduation pull request's gate
+is that condition's proof. Evidence: `fm check` green on three OSes
+and two Pythons (run 33342483626); branch protection live;
+`packages/forge/v0.0.1` verified and published by trusted publishing
+(run 33343851374). Graduation: annotated `archive/setup` cut at the
+setup head after the gate is green, then the squash merge. Next:
+phase 1, the protocols and the verified fake.
 
 ## The prompt (Willem)
 
