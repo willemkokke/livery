@@ -128,7 +128,20 @@ class GiteaConformanceDriver:
         """A new repository seeded with the conformance workflow."""
         owner, name = self.unused_repo_name()
         self._created.append((owner, name))
-        repo = self._gitea.create_repo(owner, name)
+        repo = None
+        for attempt in range(3):
+            try:
+                repo = self._gitea.create_repo(owner, name)
+            except ForgeError as exc:
+                # gitea.com answers 500 on bursts of creations; brief
+                # retries ride it out, the last answer verbatim.
+                if exc.status is not None and exc.status >= 500 and attempt < 2:
+                    if self._live:
+                        time.sleep(2 + attempt)
+                    continue
+                raise
+            break
+        assert repo is not None
         self._commit_file(
             owner,
             name,

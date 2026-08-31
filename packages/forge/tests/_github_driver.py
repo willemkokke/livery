@@ -298,17 +298,33 @@ class GithubConformanceDriver:
         )
 
     def await_merged(self, repo_owner: str, repo_name: str, number: int) -> None:
-        """Poll until the merge and its aftermath have landed."""
+        """Poll until the merge and its aftermath have landed.
+
+        The aftermath is the head branch deletion, which github.com
+        performs asynchronously after the merge when the repository
+        asks for it; whether it does is read from the repository
+        itself.
+        """
+        state: dict[str, object] = {}
+
+        def merged() -> bool:
+            data = (
+                self._client.request(f"/repos/{repo_owner}/{repo_name}/pulls/{number}")
+                or {}
+            )
+            state.update(data)
+            return bool(data.get("merged"))
+
+        self._poll(merged, subject=f"pull request {number} to merge")
+        settings = self._client.request(f"/repos/{repo_owner}/{repo_name}") or {}
+        if not settings.get("delete_branch_on_merge"):
+            return
+        head = state.get("head")
+        branch = str(head.get("ref", "")) if isinstance(head, dict) else ""
+        repo = self._github.repository(repo_owner, repo_name)
         self._poll(
-            lambda: bool(
-                (
-                    self._client.request(
-                        f"/repos/{repo_owner}/{repo_name}/pulls/{number}"
-                    )
-                    or {}
-                ).get("merged")
-            ),
-            subject=f"pull request {number} to merge",
+            lambda: not repo.branch_exists(branch),
+            subject=f"head branch {branch} to be deleted",
         )
 
     def await_issue(
