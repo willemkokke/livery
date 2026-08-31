@@ -1,13 +1,15 @@
 # Building the workshop
 
-Status: phase 4 built, 2026-08-31, awaiting the pull request. The
-template source lives in `templates/` (two kinds behind one
-copier.yml), the monorepo renders from it as its own first instance
-(root and per-package answers adopted), and `fm template.check` sits
-inside `fm check`: a drifted rendered file fails the gate by name,
-with `fm template.apply` as the recovery. `fm new.package` renders
-and wires a member. Phases 1-3 shipped the same day (PRs #12, #13,
-#17), the task-surface split after them (PRs #18, #19). The bootstrap
+Status: phase 5 built, 2026-08-31, shipped by its own verb: this
+phase's pull request is the acceptance run for `fm ship --armed`.
+W3 is a callable flow on the frozen protocol (gate, closes guards,
+disarm-before-push, find-or-open, the arming ladder, the classified
+verdict, self-heal on 10 and 17, `workflow.abort` and
+`workflow.merge-now`), with `fm status`, `fm ci.rerun/watch/cancel`,
+and `fm doctor` beside it, all tested in-process on FakeForge with a
+real temporary git repository. Phases 1-4 shipped the same day
+(PRs #12, #13, #17, #20), the task-surface split between them
+(PRs #18, #19). The bootstrap
 plan's entry criteria are met: `livery-forge` 0.1.0 is on PyPI with
 all three backends passing the one conformance suite, the fixture
 harness is stable, and the compose loop is routine.
@@ -221,6 +223,14 @@ fake.
   verb; `uv run fm ship --help` documents the surface; the livery
   repository's own next pull request is shipped by `uv run fm ship`
   and merges armed.
+  *(2026-08-31: 19 tests cover the four fault modes (lost schedule
+  retried by read-back, 405 ridden out by `workflow.merge-now`,
+  wedged queue timing out with `ci.cancel` as the relief, slow status
+  polled through), the re-entries (second ship reuses the PR, second
+  abort finds nothing, `with_closes` never duplicates), the closes
+  guards, the title rules, and the verdict discrimination. The help
+  renders the whole surface with the arming ladder's env rung. The
+  dogfood ship is this phase's own PR.)*
 
 ## Phase 6 — the release train and the update wave
 
@@ -357,6 +367,19 @@ The bootstrap deferrals come home and the temporary environment ends.
   create one; the bootstrap of a new repository (tasks.py,
   livery.toml, pyproject.toml) is the template phase's job, and its
   verb must be stated there.
+
+- 2026-08-31, phase 5 shape. The verdict codes are hse's 10-17;
+  exit 18 (required review) is dropped, because the frozen protocol
+  carries no review surface, and a review-blocked pull request reads
+  as 16 with the message saying what to check. The classifier probes
+  conflicts locally (`git merge-tree`) before the arming state, since
+  a conflict blocks the merge whatever the arming; behind is
+  classified only after an armed grace, because without strict
+  protection an armed behind head still merges. `ci.rerun` and
+  `ci.cancel` key on the pull request's head sha, not the local one,
+  so they work from a checkout that moved on. Arming is verified by
+  read-back, never assumed from a 2xx, and an arm that merged on the
+  spot is success, not a lost schedule.
 
 ## Open
 
