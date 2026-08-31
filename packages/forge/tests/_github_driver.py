@@ -347,8 +347,14 @@ class GithubConformanceDriver:
         def listed() -> bool:
             for row in issues.list(state="all"):
                 if row.number == number:
-                    return not assignee or assignee in row.assignees
-            return False
+                    break
+            else:
+                return False
+            if not assignee or assignee not in row.assignees:
+                return not assignee
+            # assigned_to_me is search-backed and indexes later than
+            # the listing; the scenario asserts it, so the wait does.
+            return number in [mine.number for mine in issues.assigned_to_me()]
 
         self._poll(listed, subject=f"issue {number} to be listed")
 
