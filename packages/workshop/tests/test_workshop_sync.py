@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
 
 from livery.workshop._materialise import materialise
@@ -87,7 +88,22 @@ def test_no_longer_shipped_entries_are_pruned(tmp_path: Path) -> None:
     assert (repo / ".claude" / "skills" / "new" / "SKILL.md").is_file()
 
 
+def _tracked_state() -> str:
+    return subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+
+
 def test_the_monorepo_is_in_sync() -> None:
-    # The dogfood check: a fresh sync over the real repository says
-    # nothing, so the committed state and the shipped content agree.
+    # The dogfood check. A fresh checkout has no .workshop/ and no
+    # materialised links (both gitignored), so the first sync may
+    # speak; after it, a second run says nothing and no tracked file
+    # changed, so the committed state and the shipped content agree.
+    before = _tracked_state()
+    sync_workspace(ROOT)
     assert sync_workspace(ROOT) == []
+    assert _tracked_state() == before
