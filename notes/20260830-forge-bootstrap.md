@@ -371,3 +371,4 @@ series), gate green at the end.
    and external status checks are paid.
 6. Whether the placeholder `livery` distribution becomes the
    meta-package now or at the workshop phase.
+7. PyPI namespace grant for `livery-`: PEP 752 was accepted 2026-06-29 and grants are organization-only, so create the `livery` community organization on PyPI, then apply for the prefix grant when the application form is open (PEP 755). Until the grant lands, the prefix is first-come-first-served.
