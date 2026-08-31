@@ -133,9 +133,7 @@ def test_new_package_renders_and_wires(
 
     real_run = subprocess.run
 
-    def fake_run(
-        cmd: list[str], **kwargs: Any
-    ) -> subprocess.CompletedProcess[Any]:
+    def fake_run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
         if cmd[:2] == ["uv", "lock"]:
             return subprocess.CompletedProcess(cmd, 0, "", "")
         return real_run(cmd, **kwargs)
