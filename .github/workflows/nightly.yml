@@ -23,7 +23,7 @@ jobs:
         python: ["3.11", "3.14"]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: actions/setup-python@v5
@@ -58,8 +58,8 @@ jobs:
     permissions:
       issues: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.0.1
       - name: File or extend the drift issue, through the forge itself
         env:
           GITHUB_TOKEN: ${{ github.token }}
