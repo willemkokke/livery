@@ -1,8 +1,8 @@
 # The livery monorepo
 
-Plain-markdown docs, deliberately unrendered: once `livery.workshop`
-is functional its docs toolchain renders these same files into the
-site, so they are written as that site's seed, never as scratch.
+Plain-markdown docs, deliberately unrendered: these files are
+written as the seed of the rendered per-package site, never as
+scratch.
 
 The working record lives in `notes/`: plans, the development
 workflows, and their decision records.

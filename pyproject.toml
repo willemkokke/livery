@@ -71,6 +71,11 @@ convention = "google"
 
 [tool.basedpyright]
 include = ["packages", "tests", "tasks.py"]
+# The IDE and the CLI resolve the same environment: the workspace
+# members are editable installs in .venv, so basedpyright must look
+# there whatever interpreter the editor has selected.
+venvPath = "."
+venv = ".venv"
 pythonVersion = "3.11"
 typeCheckingMode = "standard"
 reportMissingModuleSource = false
