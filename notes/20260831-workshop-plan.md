@@ -1,13 +1,12 @@
 # Building the workshop
 
-Status: phase 7 built, 2026-08-31, submitting; its acceptance
-completes with a green `release-legs.yml` dispatch. The project kind
-renders per-forge CI (`.github/`, `.gitea/`, `.gitlab-ci.yml`) from
-contract values with the required context spelled in `livery.toml`,
-and the live legs run the conformance suite against the compose
-forges and all three cloud accounts, skips named, scratch cleaned.
-Phases 1-6 shipped 2026-08-31 (PRs #12-#28; livery-workshop 0.0.2
-and workshop-templates v0.0.2 published). The bootstrap
+Status: phase 7 shipped, 2026-08-31. All five release legs are green
+in one dispatch (run 33416377299): the compose Gitea and GitLab and
+the three cloud accounts, the same conformance suite end to end,
+skips named where a server is below the floor, scratch cleaned as
+scenarios pass. The project kind renders per-forge CI from contract
+values. Next: phase 8. Phases 1-6 shipped 2026-08-31 (PRs #12-#28;
+livery-workshop 0.0.2 and workshop-templates v0.0.2 published). The bootstrap
 plan's entry criteria are met: `livery-forge` 0.1.0 is on PyPI with
 all three backends passing the one conformance suite, the fixture
 harness is stable, and the compose loop is routine.
@@ -291,7 +290,12 @@ templates, and the per-release live verification gets its workflow.
   *(2026-08-31, first half: the render-all-kinds test parses every
   rendered CI definition and pins the required-context job, the
   per-forge exclusivity, and the contract's `required_context` line.
-  The dispatch evidence follows the merge.)*
+  Six dispatches later (PRs #29-#35 carrying the lessons), run
+  33416377299 is green on all five legs; no account was absent, so
+  no skip rows appear, and the below-floor skips on gitea.com are
+  named per scenario instead. The decisive last piece was a poll
+  budget: CI runners are slower than a laptop, and gitea-local's
+  holds were slow, not broken.)*
 
 ## Phase 8 — graduation: affected, coverage, and 0.1.0
 
@@ -410,6 +414,10 @@ The bootstrap deferrals come home and the temporary environment ends.
   verified design. Cloud legs write `.forge.dev.env` with the cloud
   URL and token, which is the harness's existing seam. Cleanup lists
   and deletes scratch by prefix, runs on every verdict.
+- 2026-08-31, the stalled grace was too tight (livery PR #35 merged
+  25 seconds after `fm submit`'s follow declared 16): the green-and-
+  armed grace is now eight polls, about two minutes at the default
+  interval, before the watch calls an evaluation lost.
 - 2026-08-31, what the first legs dispatch taught (run 33404116894,
   all five legs red; every failure became a fix and most a quirk
   entry). The held-run release is now the release-<sha> tag on every
