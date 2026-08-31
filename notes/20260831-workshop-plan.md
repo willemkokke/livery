@@ -380,6 +380,19 @@ The bootstrap deferrals come home and the temporary environment ends.
   so they work from a checkout that moved on. Arming is verified by
   read-back, never assumed from a 2xx, and an arm that merged on the
   spot is success, not a lost schedule.
+- 2026-08-31, forge evidence from the first dogfood ship (PR #21,
+  merged armed): a merge in flight consumes the schedule between the
+  open-PR read and the arming read, so an armed merge can read as
+  "green and not armed". The classifier re-reads the pull request
+  before reporting disarmed or stalled; merged wins over any blocker
+  derived from stale reads (regression-tested through a stub; fixed
+  by PR #22, which the fixed verb shipped and followed to "merged").
+- 2026-08-31, the title default (Willem: hse's recurring mis-title).
+  A defaulted PR title is allowed only when it is unambiguous: on
+  first open with the branch one commit ahead, that subject is the
+  intent; more than one ahead refuses, lists the subjects, and asks
+  for --title. Re-ships are untouched, where the default is already
+  inert (it never rewrites the PR title or the squash subject).
 
 ## Open
 

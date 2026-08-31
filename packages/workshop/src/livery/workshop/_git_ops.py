@@ -67,6 +67,11 @@ class GitOps:
         """Push *branch* to origin, setting upstream."""
         self._run("push", "-u", "origin", branch)
 
+    def subjects_ahead(self, base: str) -> list[str]:
+        """The subjects of the commits HEAD carries beyond ``origin/<base>``."""
+        out = self._run("log", "--format=%s", f"origin/{base}..HEAD")
+        return [line for line in out.splitlines() if line]
+
     def behind_base(self, base: str) -> int:
         """How many commits ``origin/<base>`` is ahead of HEAD."""
         out = self._run("rev-list", "--count", f"HEAD..origin/{base}").strip()
