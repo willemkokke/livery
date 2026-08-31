@@ -24,14 +24,22 @@ import subprocess
 import tempfile
 import tomllib
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Annotated
 
 from footman import doc, fail, group
 
+from livery.workshop._backends import _python
+from livery.workshop._conventional import (
+    changelog_entry,
+    next_version,
+    parse_commit,
+)
 from livery.workshop._git_ops import GitOps
 from livery.workshop._layers import workspace_root
 from livery.workshop._packages import Package, discover_packages
+from livery.workshop._update import latest_released
 
 release = group("release", help="The path-tag release train")
 
@@ -86,7 +94,8 @@ def verify_release(root: Path, tag: str) -> ReleasePlan:
     if declared != version:
         problems.append(f"tag says {version}, pyproject.toml says {declared}")
     changelog = package.directory / "CHANGELOG.md"
-    if not changelog.is_file() or f"## {version}" not in changelog.read_text("utf-8"):
+    body = changelog.read_text("utf-8") if changelog.is_file() else ""
+    if f"## {version}" not in body and f"## [{version}]" not in body:
         problems.append(f"CHANGELOG.md has no '## {version}' entry")
     inits = list((package.directory / "src").rglob("__init__.py"))
     stamp = f'__version__ = "{version}"'
@@ -124,66 +133,97 @@ def release_verify(
             handle.write(f"package={plan.package.name}\n")
 
 
-def prepare_release(root: Path, path: str, version: str) -> list[str]:
-    """Stamp *version* into *path*'s three release places; what changed.
+def _pr_url_base(root: Path) -> str:
+    """Where a pull request number links, per the contract's forge kind."""
+    contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
+    forge_table = contract.get("forge") or {}
+    kind = str(forge_table.get("kind", ""))
+    owner = str(forge_table.get("owner", ""))
+    if not kind or not owner:
+        return ""
+    from livery.workshop._forge_lane import remote_repo_name
 
-    Idempotent: a place already carrying the version is left alone. The
-    changelog gains a ``## <version>`` heading above the first existing
-    entry when it lacks one; its body stays yours to write.
+    host = str(forge_table.get("url", "")).rstrip("/") or {
+        "github": "https://github.com",
+        "gitlab": "https://gitlab.com",
+    }.get(kind, "")
+    if not host:
+        return ""
+    name = remote_repo_name(root)
+    suffix = {"github": "pull", "gitea": "pulls", "gitlab": "-/merge_requests"}[kind]
+    return f"{host}/{owner}/{name}/{suffix}"
+
+
+def prepare_release(root: Path, path: str, version: str = "") -> list[str]:
+    """Stamp a release into *path*'s places; what changed.
+
+    Without *version*, the commits since the package's last release
+    tag derive it (livery.workshop._conventional.next_version) and
+    write the changelog entry: grouped sections, linked pull request
+    references, a contributors line, for review. A given *version*
+    wins and gets an empty entry for the human to write. Idempotent
+    either way: a place already carrying the version is left alone.
     """
-    if not _SEMVER_RE.fullmatch(version):
-        fail(f"version {version!r} is not <major>.<minor>.<patch>")
     packages = {package.path: package for package in discover_packages(root)}
     package = packages.get(path)
     if package is None:
         fail(f"{path} is not a workspace package")
-    changed = []
-    pyproject = package.directory / "pyproject.toml"
-    text = pyproject.read_text("utf-8")
-    stamped, count = re.subn(
-        r'^version = "[^"]+"$', f'version = "{version}"', text, count=1, flags=re.M
-    )
-    if count != 1:
-        fail(f"{pyproject} has no version line to stamp")
-    if stamped != text:
-        pyproject.write_text(stamped, encoding="utf-8")
-        changed.append("pyproject.toml")
-    for init in (package.directory / "src").rglob("__init__.py"):
-        text = init.read_text("utf-8")
-        stamped, count = re.subn(
-            r'^__version__ = "[^"]+"$',
-            f'__version__ = "{version}"',
-            text,
-            count=1,
-            flags=re.M,
+    git = GitOps(root)
+    entry_body = ""
+    if not version:
+        released = latest_released(git.tags())
+        last = released.get(path, "")
+        tag = f"{path}/v{last}" if last else ""
+        commits = [
+            parse_commit(sha, subject, body, name, email)
+            for sha, subject, body, name, email in git.commits_since(tag, path)
+        ]
+        if not commits:
+            print(f"  no commits touch {path} since its last release")
+            return []
+        current = _python.current_version(package)
+        version = next_version(current, commits)
+        if version == current:
+            print(f"  {path} is already at {current} with nothing to release")
+            return []
+        entry_body = changelog_entry(
+            version,
+            date.today().isoformat(),
+            commits,
+            pr_url_base=_pr_url_base(root),
         )
-        if count and stamped != text:
-            init.write_text(stamped, encoding="utf-8")
-            changed.append(str(init.relative_to(package.directory)))
+        since = last or "the beginning"
+        print(f"  derived {version} from {len(commits)} commit(s) since {since}")
+    if not _SEMVER_RE.fullmatch(version):
+        fail(f"version {version!r} is not <major>.<minor>.<patch>")
+    changed = _python.stamp_version(package).stamp(version)
     changelog = package.directory / "CHANGELOG.md"
     text = changelog.read_text("utf-8") if changelog.is_file() else "# Changelog\n"
-    if f"## {version}" not in text:
+    if f"## {version}" not in text and f"## [{version}]" not in text:
+        insert = "\n" + (entry_body or f"## [{version}]\n\n- \n")
         first_entry = text.find("\n## ")
-        insert = f"\n## {version}\n\n- \n"
         if first_entry == -1:
             text = text.rstrip("\n") + "\n" + insert
         else:
             text = text[:first_entry] + insert + text[first_entry:]
         changelog.write_text(text, encoding="utf-8")
-        changed.append("CHANGELOG.md (write the entry before tagging)")
+        changed.append("CHANGELOG.md (review the entry before tagging)")
     return changed
 
 
 @release.task(name="prepare")
 def release_prepare(
     path: Annotated[str, doc("the package, e.g. packages/workshop")],
-    version: Annotated[str, doc("the semver to stamp")],
+    version: Annotated[str, doc("the semver to stamp; empty derives it")] = "",
 ) -> None:
-    """Stamp a version into pyproject, ``__version__``, and the changelog.
+    """Stamp a release: version derived from the commits unless given.
 
-    Idempotent; the changelog entry's body stays yours to write, and
-    ``fm release.verify`` is the check that everything agrees before
-    the tag is cut.
+    The derived path reads the conventional commits since the last
+    release tag, bumps per the published convention, and writes the
+    grouped changelog entry with linked pull requests and the
+    contributors line, for review. A given version wins and leaves
+    the entry for the human. ``fm release.verify`` is the check that
+    everything agrees before the tag is cut.
     """
     for name in prepare_release(_root(), path, version):
         print(f"  stamped: {name}")

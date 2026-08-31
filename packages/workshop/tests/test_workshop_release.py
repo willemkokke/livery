@@ -94,7 +94,38 @@ def test_prepare_stamps_idempotently(tmp_path: Path) -> None:
     assert any("CHANGELOG" in name for name in changed)
     assert prepare_release(root, "packages/tool", "0.3.0") == []
     text = (root / "packages" / "tool" / "CHANGELOG.md").read_text()
-    assert text.index("## 0.3.0") < text.index("## 0.2.0")
+    assert text.index("## [0.3.0]") < text.index("## 0.2.0")
+
+
+def test_prepare_derives_the_bump_and_the_entry(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    _git(root, "tag", "packages/tool/v0.2.0")
+    (root / "packages" / "tool" / "src" / "livery" / "tool" / "extra.py").mkdir(
+        parents=True, exist_ok=False
+    ) if False else None
+    new_file = root / "packages" / "tool" / "src" / "livery" / "tool" / "extra.py"
+    new_file.write_text("x = 1\n")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "feat: the tool grows a verb (#41)")
+    changed = prepare_release(root, "packages/tool")
+    assert "pyproject.toml" in changed
+    import tomllib
+
+    version = tomllib.loads(
+        (root / "packages" / "tool" / "pyproject.toml").read_text()
+    )["project"]["version"]
+    assert version == "0.3.0"  # feat bumps minor pre-1.0, footman's practice
+    text = (root / "packages" / "tool" / "CHANGELOG.md").read_text()
+    assert "## [0.3.0]" in text
+    assert "### Added" in text
+    assert "the tool grows a verb" in text
+    assert "Contributors:" in text
+    verify_release(root, "packages/tool/v0.3.0")
+    # The tag closes the release; only then is a re-derivation a no-op.
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "chore: release 0.3.0 (#42)")
+    _git(root, "tag", "packages/tool/v0.3.0")
+    assert prepare_release(root, "packages/tool") == []
 
 
 def _artifact_remote(tmp_path: Path) -> tuple[Path, Path]:

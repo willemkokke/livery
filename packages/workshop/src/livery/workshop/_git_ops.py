@@ -143,6 +143,27 @@ class GitOps:
             pending.extend(part for part in line[3:].split(" -> ") if part)
         return sorted({path for path in committed + pending if path})
 
+    def commits_since(
+        self, tag: str, path: str
+    ) -> list[tuple[str, str, str, str, str]]:
+        """(sha, subject, body, author name, author email) newest first.
+
+        The commits after *tag* (all history when empty) that touch
+        *path*.
+        """
+        span = f"{tag}..HEAD" if tag else "HEAD"
+        out = self._run(
+            "log", "--format=%H%x1f%s%x1f%b%x1f%an%x1f%ae%x1e", span, "--", path
+        )
+        rows = []
+        for record in out.split("\x1e"):
+            record = record.strip("\n")
+            if not record:
+                continue
+            sha, subject, body, name, email = record.split("\x1f")
+            rows.append((sha, subject, body, name, email))
+        return rows
+
     def tags(self) -> tuple[str, ...]:
         """Every tag name the repository knows."""
         return tuple(self._run("tag", "-l").split())
