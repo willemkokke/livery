@@ -3,7 +3,7 @@
 Local gate first (a red gate costs zero network calls), then the
 closes-link resolution with existence probes, disarm-before-push,
 push, find-or-open with the title rules, arm per the arming ladder,
-and follow to the classified verdict. Exits 10 and 17 self-heal by
+and follow until it lands or says what stopped it. Exits 10 and 17 self-heal by
 integrating the base and re-submitting; every other code surfaces
 unchanged, because skills, hooks, and humans branch on them.
 
@@ -399,11 +399,11 @@ def submit(
         doc("arm auto-merge (ladder: flag, LIVERY_AUTOMERGE, [ci] automerge)"),
     ] = False,
     gate: Annotated[bool, doc("run `fm check` first")] = True,
-    follow: Annotated[bool, doc("watch to the classified verdict")] = True,
+    follow: Annotated[bool, doc("watch until it lands or says what stopped it")] = True,
     interval: Annotated[int, doc("watch poll seconds")] = 15,
     timeout: Annotated[int, doc("watch deadline seconds")] = 1800,
 ) -> None:
-    """Gate, push, open-or-reuse the PR, arm, follow to the verdict.
+    """Gate, push, open-or-reuse the PR, arm, and watch it land.
 
     Idempotent: re-running it is the recovery procedure. Exits 10 and
     17 self-heal by integrating the base and re-submitting; the other

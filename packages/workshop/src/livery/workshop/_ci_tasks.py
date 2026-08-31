@@ -1,12 +1,12 @@
 """``fm status``, the ``ci`` group, and ``fm doctor``.
 
-``status`` prints one classified read of the current branch's pull
-request and exits its verdict code (0 while nothing is wrong). The
-``ci`` group works on the head commit's runs: ``ci.watch`` follows to
-the classified verdict, ``ci.rerun`` re-runs the failed jobs,
-``ci.cancel`` cancels what is still moving (the relief for a wedged
-queue). ``doctor`` answers who you are, what the server is, and which
-capabilities this forge grants.
+``status`` says where the current branch's pull request stands and
+exits that state's code (0 while nothing is wrong). The ``ci`` group
+works on the head commit's runs: ``ci.watch`` watches until the
+branch lands or something needs a person, ``ci.rerun`` re-runs the
+failed jobs, ``ci.cancel`` cancels what is still moving (the relief
+for a wedged queue). ``doctor`` says who you are, which server this
+is, and what it grants.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ def _resolved() -> tuple[Repository, GitOps]:
 
 
 def status_flow(repo: Repository, git: GitOps) -> int:
-    """One classified read, printed; returns the verdict's exit code."""
+    """Print where the branch stands; return that state's exit code."""
     verdict = classify(repo, git.current_branch(), git)
     print(f"  {verdict.state}: {verdict.detail}")
     return verdict.exit_code
@@ -48,10 +48,11 @@ def status_flow(repo: Repository, git: GitOps) -> int:
 
 @task
 def status() -> None:
-    """Print the branch's classified verdict; exit its code.
+    """Say where the branch's pull request stands; exit that state's code.
 
-    Exit 0 covers merged, in-flight, and no-PR; the blocker codes are
-    stable interface (see livery.workshop._verdict).
+    Exit 0 covers merged, in flight, and no pull request; each blocker
+    state keeps its own stable code (see livery.workshop._verdict), and
+    the printed sentence always says what to do next.
     """
     repo, git = _resolved()
     code = status_flow(repo, git)
@@ -122,23 +123,27 @@ def ci_watch(
     interval: Annotated[int, doc("poll seconds")] = 15,
     timeout: Annotated[int, doc("deadline seconds")] = 1800,
 ) -> None:
-    """Follow the branch to its classified verdict (see fm status)."""
+    """Watch the branch until it lands or something needs a person."""
     repo, git = _resolved()
     follow(repo, git.current_branch(), git, interval=interval, timeout=timeout)
 
 
 def doctor_flow(forge: Forge) -> None:
     """Print identity, server, and capabilities for *forge*."""
-    print(f"  whoami: {forge.whoami()}")
-    print(f"  server: {forge.server_version()}")
-    for capability in _CAPABILITIES:
-        verdict = "yes" if forge.supports(capability) else "no"
-        print(f"  {capability}: {verdict}")
+    print(f"  {forge.whoami()} on {forge.server_version()}")
+    granted = [name for name in _CAPABILITIES if forge.supports(name)]
+    missing = [name for name in _CAPABILITIES if name not in granted]
+    if granted:
+        print(f"  grants: {', '.join(granted)}")
+    if missing:
+        print(f"  missing: {', '.join(missing)}")
+    else:
+        print("  every capability the workshop can use is granted")
 
 
 @task
 def doctor() -> None:
-    """Who you are, what the server is, what it grants (W12)."""
+    """Say who you are, which server this is, and what it grants."""
     root = workspace_root()
     if root is None:
         fail("no workspace: no livery.toml above the working directory")

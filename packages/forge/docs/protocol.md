@@ -27,7 +27,7 @@ and discovery joins the protocol only when a workflow demands it.
   procedure. Where a server operation is not idempotent (creating a
   repository, a release, a pull request), the protocol pairs it with
   the read that makes probe-then-act idempotent as a whole.
-- **Capabilities, not pretence.** Where forges genuinely differ, the
+- **Capabilities, not pretence.** Where forges differ, the
   difference is a named capability. `forge.supports(name)` answers
   honestly, and an operation a forge declines raises
   `livery.forge.Unsupported` naming the capability.
