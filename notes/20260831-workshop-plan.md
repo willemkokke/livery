@@ -396,6 +396,16 @@ The bootstrap deferrals come home and the temporary environment ends.
   before reporting disarmed or stalled; merged wins over any blocker
   derived from stale reads (regression-tested through a stub; fixed
   by PR #22, which the fixed verb shipped and followed to "merged").
+- 2026-08-31, the template source is the contract's call (Willem:
+  forks and local modification at their own risk must be possible;
+  "always keep the ease of use of consuming this development in hse
+  in mind"). `[workspace] templates` in livery.toml: a directory
+  relative to the root (the monorepo says `templates`) or a git URL,
+  defaulting to the published artifact repository. The update wave
+  writes the contract's value into the answers' `_src_path` before
+  `copier update`, because that is where copier reads its source, so
+  livery.toml stays the one authority. hse as a consumer either says
+  nothing (stock) or points at its own fork or checkout.
 - 2026-08-31, phase 6 shape. The wave's no-op is literal: nothing
   changed means no branch and no pull request, one line saying so
   (the plan's "no-op pull request" wording read as "no pull

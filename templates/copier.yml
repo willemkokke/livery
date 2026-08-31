@@ -64,6 +64,13 @@ layers:
   help: "The workspace's layers, in precedence order"
   default: [livery.workshop]
 
+templates_source:
+  type: str
+  help: >-
+    Where this workspace's templates come from: a directory relative
+    to the root, or a git URL (a fork, at your own risk)
+  default: "https://github.com/willemkokke/workshop-templates"
+
 packages:
   type: yaml
   help: >-

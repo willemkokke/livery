@@ -36,6 +36,34 @@ new = group("new", help="Render new pieces from the template source")
 
 _ANSWERS = ".copier-answers.yml"
 
+#: Where instances take their templates from when the contract is
+#: silent: the published artifact repository, readable anonymously.
+DEFAULT_TEMPLATE_SOURCE = "https://github.com/willemkokke/workshop-templates"
+
+
+def template_source(root: Path) -> str:
+    """The workspace's declared template source.
+
+    ``[workspace] templates`` in ``livery.toml``: a directory relative
+    to the root (the monorepo says ``templates``), or a git URL (a
+    fork, at its own risk). Silent means the published artifact
+    repository.
+    """
+    import tomllib
+
+    contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
+    workspace = contract.get("workspace") or {}
+    return str(workspace.get("templates", "")) or DEFAULT_TEMPLATE_SOURCE
+
+
+def local_template_dir(root: Path) -> Path | None:
+    """The template source as a local directory, or None when remote."""
+    source = template_source(root)
+    if "://" in source or source.startswith("git@"):
+        return None
+    directory = root / source
+    return directory if directory.is_dir() else None
+
 
 def _root() -> Path:
     """The workspace root, or fail."""
@@ -121,9 +149,12 @@ def project_drift(root: Path) -> list[str]:
     byte.
     """
     data = read_answers(root / _ANSWERS)
+    source = local_template_dir(root)
+    if source is None:
+        fail("no local template source: the render gate needs one")
     drift = []
     with tempfile.TemporaryDirectory() as scratch:
-        render(root / "templates", Path(scratch), data)
+        render(source, Path(scratch), data)
         for rendered in rendered_files(Path(scratch)):
             relative = rendered.relative_to(scratch)
             committed = root / relative
@@ -137,9 +168,12 @@ def project_drift(root: Path) -> list[str]:
 def apply_project(root: Path) -> list[str]:
     """Write the ``project`` render over *root*; the files that changed."""
     data = read_answers(root / _ANSWERS)
+    source = local_template_dir(root)
+    if source is None:
+        fail("no local template source: nothing to apply from")
     changed = []
     with tempfile.TemporaryDirectory() as scratch:
-        render(root / "templates", Path(scratch), data)
+        render(source, Path(scratch), data)
         for rendered in rendered_files(Path(scratch)):
             relative = rendered.relative_to(scratch)
             committed = root / relative
@@ -159,7 +193,7 @@ def template_check() -> None:
     is an instance, not the template source, and passes vacuously.
     """
     root = _root()
-    if not (root / "templates").is_dir():
+    if local_template_dir(root) is None:
         return
     drift = project_drift(root)
     if drift:
@@ -179,8 +213,8 @@ def template_apply() -> None:
     template edit. Idempotent: a clean tree changes nothing.
     """
     root = _root()
-    if not (root / "templates").is_dir():
-        fail("no templates/ here: nothing to apply")
+    if local_template_dir(root) is None:
+        fail("no local template source here: nothing to apply")
     changed = apply_project(root)
     for name in changed:
         print(f"  rendered: {name}")
@@ -201,8 +235,13 @@ def new_package(
     it up, and re-locks the environment.
     """
     root = _root()
-    if not (root / "templates").is_dir():
-        fail("no templates/ here: new packages render from the template source")
+    template_dir = local_template_dir(root)
+    if template_dir is None:
+        fail(
+            f"the template source is {template_source(root)}, and"
+            " new.package can only render from a local checkout today:"
+            " the global create verb will read the artifact repository"
+        )
     if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
         fail(f"package name {name!r}: use lowercase letters, digits, hyphens")
     destination = root / "packages" / name
@@ -211,7 +250,7 @@ def new_package(
     answers = read_answers(root / _ANSWERS)
     package_name = f"livery-{name}"
     render(
-        root / "templates",
+        template_dir,
         destination,
         {
             "kind": "package-python",

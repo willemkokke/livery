@@ -90,16 +90,23 @@ def _bump_edge_floor(text: str, dep_path: str, old: str, new: str) -> str:
 def refresh_rendered(root: Path) -> list[str]:
     """Refresh the rendered files; what changed.
 
-    Where the template source lives in the workspace the render
-    applier is the truth; everywhere else ``copier update`` replays
-    the stored answers at the installed workshop's own tag, so an
+    Where the contract's template source is a local directory the
+    render applier is the truth; a remote source (the artifact
+    repository by default, a fork if the contract says so) is pulled
+    by ``copier update`` at the installed workshop's own tag, so an
     instance moves to exactly the templates its workshop shipped
-    with.
+    with. The contract's source is written into the answers file
+    first, because that is where copier reads it.
     """
-    if (root / "templates").is_dir():
-        from livery.workshop._templates import apply_project
+    from livery.workshop._templates import (
+        apply_project,
+        local_template_dir,
+        template_source,
+    )
 
+    if local_template_dir(root) is not None:
         return apply_project(root)
+    notes = _align_answers_source(root, template_source(root))
     from livery.workshop import __version__
 
     result = subprocess.run(
@@ -123,7 +130,27 @@ def refresh_rendered(root: Path) -> list[str]:
         fail(
             f"copier update exited {result.returncode}:\n{result.stdout}{result.stderr}"
         )
-    return ["copier update ran; review the working tree"]
+    return [*notes, "copier update ran; review the working tree"]
+
+
+def _align_answers_source(root: Path, source: str) -> list[str]:
+    """Make the answers' ``_src_path`` follow the contract; what changed.
+
+    ``copier update`` reads its source from the answers file, so the
+    contract's declared source (a fork, say) must be written there
+    first or the update would quietly pull from the old place.
+    """
+    answers = root / ".copier-answers.yml"
+    if not answers.is_file():
+        return []
+    text = answers.read_text("utf-8")
+    aligned, count = re.subn(
+        r"^_src_path: .*$", f"_src_path: {source}", text, count=1, flags=re.M
+    )
+    if count and aligned != text:
+        answers.write_text(aligned, encoding="utf-8")
+        return [f"answers _src_path now follows the contract: {source}"]
+    return []
 
 
 def update_flow(root: Path, git: GitOps, *, armed: bool, base: str = "main") -> None:
