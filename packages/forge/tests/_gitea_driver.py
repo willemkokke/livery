@@ -20,8 +20,8 @@ it.
 from __future__ import annotations
 
 import base64
+import contextlib
 import os
-import subprocess
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -35,15 +35,25 @@ ROOT = Path(__file__).resolve().parents[3]
 
 #: The workflow every conformance repository is seeded with. POSIX sh
 #: only: the runner is act_runner's alpine image in host mode.
+#: The workflow every scratch repository is seeded with. The push
+#: trigger carries a branches filter (tag pushes are pushes too, and
+#: the settle tags must not spawn runs), and a held job polls the API
+#: for its release-<sha> tag, so the same mechanism works on the
+#: compose forge and on gitea.com.
 WORKFLOW = """\
 name: conf
-on: [push, workflow_dispatch]
+on:
+  push:
+    branches: ["**"]
+  workflow_dispatch:
 jobs:
   gate:
     runs-on: ubuntu-latest
     steps:
       - name: verdict
         shell: sh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           if grep -q "conf:failure" "$GITHUB_EVENT_PATH"; then
             echo "verdict: failure"
@@ -52,10 +62,12 @@ jobs:
           if grep -q "conf:hang" "$GITHUB_EVENT_PATH"; then
             echo "holding until released"
             i=0
-            until [ -f "/tmp/conf-release-$GITHUB_SHA" ]; do
+            url="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/tags/release-$GITHUB_SHA"
+            until wget -q -O /dev/null \\
+                --header "Authorization: token $GITHUB_TOKEN" "$url"; do
               i=$((i+1))
-              if [ "$i" -gt 600 ]; then exit 1; fi
-              sleep 1
+              if [ "$i" -gt 300 ]; then exit 1; fi
+              sleep 2
             done
           fi
           echo "verdict: success"
@@ -97,6 +109,7 @@ class GiteaConformanceDriver:
         self._namespace = namespace
         self._live = live
         self._counter = 0
+        self._created: list[tuple[str, str]] = []
         self._files = 0
 
     @property
@@ -114,6 +127,7 @@ class GiteaConformanceDriver:
     def fresh_repo(self) -> Repository:
         """A new repository seeded with the conformance workflow."""
         owner, name = self.unused_repo_name()
+        self._created.append((owner, name))
         repo = self._gitea.create_repo(owner, name)
         self._commit_file(
             owner,
@@ -156,26 +170,21 @@ class GiteaConformanceDriver:
         )
 
     def settle(self, repo_owner: str, repo_name: str, sha: str) -> None:
-        """Release any held run for *sha*, then wait for terminal runs."""
-        if self._live:
-            subprocess.run(
-                [
-                    "docker",
-                    "compose",
-                    "--profile",
-                    "gitea",
-                    "--profile",
-                    "gitea-runner",
-                    "exec",
-                    "-T",
-                    "act_runner",
-                    "touch",
-                    f"/tmp/conf-release-{sha}",
-                ],
-                cwd=ROOT,
-                check=True,
-                capture_output=True,
+        """Release any held run for *sha*, then wait for terminal runs.
+
+        The release is the ``release-<sha>`` tag the held job polls
+        for; a tag that already exists is absorbed, so settling twice
+        is safe.
+        """
+        try:
+            self._client.request(
+                f"/repos/{repo_owner}/{repo_name}/tags",
+                method="POST",
+                data={"tag_name": f"release-{sha}", "target": sha},
             )
+        except ForgeError as exc:
+            if exc.status != 409:
+                raise
         checks = self._gitea.repository(repo_owner, repo_name).checks
         self._poll(
             lambda: (
@@ -304,3 +313,14 @@ class GiteaConformanceDriver:
                 if time.monotonic() > deadline:
                     raise ForgeError(f"timed out after 180s waiting for {subject}")
                 time.sleep(1)
+
+    def cleanup(self) -> None:
+        """Delete every repository this driver created; errors absorbed.
+
+        Cloud accounts meter repositories, so a live run deletes its
+        scratch as each scenario ends instead of leaving it for the
+        next run's leftover sweep.
+        """
+        for owner, name in self._created:
+            with contextlib.suppress(ForgeError):
+                self._gitea.delete_repo(owner, name)

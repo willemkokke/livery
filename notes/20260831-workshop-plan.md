@@ -410,6 +410,22 @@ The bootstrap deferrals come home and the temporary environment ends.
   verified design. Cloud legs write `.forge.dev.env` with the cloud
   URL and token, which is the harness's existing seam. Cleanup lists
   and deletes scratch by prefix, runs on every verdict.
+- 2026-08-31, what the first legs dispatch taught (run 33404116894,
+  all five legs red; every failure became a fix and most a quirk
+  entry). The held-run release is now the release-<sha> tag on every
+  forge (the compose-exec file touch could never work off-machine):
+  the gitea job polls the API with wget (the act_runner image has no
+  curl) at GITHUB_API_URL, which required the compose ROOT_URL to
+  say gitea:3000 rather than localhost; the gitlab job polls its
+  checkout's origin (CI_REPOSITORY_URL carries the unreachable
+  external_url) under workflow rules that admit tag pipelines never,
+  LIVERY_WORKFLOW dispatches, and push pipelines only (`when:
+  always` duplicated runs via MR pipelines). Current gitlab-ce
+  demands a sha on merge, so merge_now and arm pin the head sha.
+  Live runs delete scratch per scenario (gitea.com's quota trips on
+  bursts; single creates pass, proven by probe). The github driver
+  waits out workflow-indexing lag before returning a fresh repo and
+  retries 5xx cancels. Gitea and gitlab cassettes re-recorded.
 - 2026-08-31, the template source is the contract's call (Willem:
   forks and local modification at their own risk must be possible;
   "always keep the ease of use of consuming this development in hse

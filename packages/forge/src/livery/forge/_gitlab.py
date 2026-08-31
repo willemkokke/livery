@@ -513,14 +513,21 @@ class _GitlabPullRequests:
 
         GitLab refuses the second merge with a 405, so the refusal is
         absorbed only after verifying the merge request really merged;
-        every other 405 passes through verbatim.
+        every other 405 passes through verbatim. The head sha rides
+        along: newer GitLab refuses a merge without one ("SHA must be
+        provided when merging"), and pinning it also means the merge
+        takes exactly the head this call read, never a racing push.
         """
         squash_message = f"{title}\n\n{message}" if message else title
+        current = self.get(number)
+        if current is None:
+            raise ForgeError(f"merge request {number} does not exist", status=404)
         try:
             self._client.request(
                 f"{self._base}/merge_requests/{number}/merge",
                 method="PUT",
                 data={
+                    "sha": current.head_sha,
                     "squash": True,
                     "squash_commit_message": squash_message,
                     "should_remove_source_branch": self._delete_source_branch(),
@@ -538,13 +545,18 @@ class _GitlabPullRequests:
         GitLab refuses the schedule while no pipeline is running (a
         405), so arming a just-pushed merge request can race the
         pipeline's creation; the refusal passes through verbatim for
-        the caller to act on.
+        the caller to act on. The head sha rides along, as on
+        livery.forge.PullRequests.merge_now.
         """
         squash_message = f"{title}\n\n{message}" if message else title
+        current = self.get(number)
+        if current is None:
+            raise ForgeError(f"merge request {number} does not exist", status=404)
         self._client.request(
             f"{self._base}/merge_requests/{number}/merge",
             method="PUT",
             data={
+                "sha": current.head_sha,
                 "merge_when_pipeline_succeeds": True,
                 "squash": True,
                 "squash_commit_message": squash_message,

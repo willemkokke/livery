@@ -23,6 +23,7 @@ safe to delete.
 from __future__ import annotations
 
 import base64
+import contextlib
 import os
 import time
 from collections.abc import Callable
@@ -108,11 +109,13 @@ class GithubConformanceDriver:
         )
         self._namespace = namespace
         self._live = live
+        self._recording = opener is not None
         self._me = self._github.whoami()
         # Cloud legs point the scratch at the e2e organisation; the
         # default stays the signed-in user for local recording.
         self._owner = os.environ.get("LIVERY_FORGE_E2E_OWNER") or self._me
         self._counter = 0
+        self._created: list[tuple[str, str]] = []
         self._files = 0
 
     @property
@@ -130,6 +133,7 @@ class GithubConformanceDriver:
     def fresh_repo(self) -> Repository:
         """A new public repository seeded with the conformance workflow."""
         owner, name = self.unused_repo_name()
+        self._created.append((owner, name))
         repo = self._github.create_repo(
             owner,
             name,
@@ -144,6 +148,20 @@ class GithubConformanceDriver:
             message="conf: seed workflow",
             branch="main",
         )
+        if self._live and not self._recording:
+            # github.com indexes a new workflow file asynchronously;
+            # dispatching before that answers 404. Recording keeps the
+            # old exchange shape (the lag never bit a recording run),
+            # so only the plain live legs wait.
+            base = f"/repos/{owner}/{name}"
+            for _ in range(30):
+                listing = self._client.request(f"{base}/actions/workflows")
+                names = [
+                    str(flow.get("path", "")) for flow in listing.get("workflows", [])
+                ]
+                if any(path.endswith("conf.yml") for path in names):
+                    break
+                time.sleep(2)
         return repo
 
     def push(
@@ -349,3 +367,14 @@ class GithubConformanceDriver:
                 if time.monotonic() > deadline:
                     raise ForgeError(f"timed out after 600s waiting for {subject}")
                 time.sleep(2)
+
+    def cleanup(self) -> None:
+        """Delete every repository this driver created; errors absorbed.
+
+        Cloud accounts meter repositories, so a live run deletes its
+        scratch as each scenario ends instead of leaving it for the
+        next run's leftover sweep.
+        """
+        for owner, name in self._created:
+            with contextlib.suppress(ForgeError):
+                self._github.delete_repo(owner, name)
