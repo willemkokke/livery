@@ -153,7 +153,14 @@ def _align_answers_source(root: Path, source: str) -> list[str]:
     return []
 
 
-def update_flow(root: Path, git: GitOps, *, armed: bool, base: str = "main") -> None:
+def update_flow(
+    root: Path,
+    git: GitOps,
+    *,
+    armed: bool,
+    armed_reason: str = "",
+    base: str = "main",
+) -> None:
     """The whole wave step for this instance; see the task docstring."""
     if git.current_branch() != base:
         fail(f"fm update starts from {base}: switch branches first")
@@ -174,7 +181,7 @@ def update_flow(root: Path, git: GitOps, *, armed: bool, base: str = "main") -> 
     body = "\n".join(f"- {note}" for note in notes)
     git.commit_all(f"chore: the update wave\n\n{body}")
     from livery.workshop._forge_lane import this_repository
-    from livery.workshop._submit import arming_reason, submit_flow
+    from livery.workshop._submit import submit_flow
 
     submit_flow(
         this_repository(root),
@@ -183,7 +190,7 @@ def update_flow(root: Path, git: GitOps, *, armed: bool, base: str = "main") -> 
         body=body,
         base=base,
         armed=armed,
-        armed_reason=arming_reason(armed=armed, flag_given=footman.given("armed")),
+        armed_reason=armed_reason,
     )
 
 
@@ -201,4 +208,7 @@ def update(
     root = workspace_root()
     if root is None:
         fail("no workspace: no livery.toml above the working directory")
-    update_flow(root, GitOps(root), armed=armed)
+    from livery.workshop._submit import arming_reason
+
+    reason = arming_reason(armed=armed, flag_given=footman.given("armed"))
+    update_flow(root, GitOps(root), armed=armed, armed_reason=reason)
