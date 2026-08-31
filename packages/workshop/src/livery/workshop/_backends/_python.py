@@ -107,6 +107,57 @@ def run_typecomplete(packages: tuple[Package, ...]) -> None:
         basedpyright(verifytypes=module, ignoreexternal=True)
 
 
+def current_version(package: Package) -> str:
+    """The version the package's ``pyproject.toml`` declares."""
+    data = tomllib.loads((package.directory / "pyproject.toml").read_text("utf-8"))
+    return str(data.get("project", {}).get("version", "0.0.0"))
+
+
+def stamp_version(package: Package) -> _Stamper:
+    """Where a Python package's version lives, ready to stamp."""
+    return _Stamper(package)
+
+
+class _Stamper:
+    """Stamp a version into a Python package's places, idempotently."""
+
+    def __init__(self, package: Package) -> None:
+        self._package = package
+
+    def stamp(self, version: str) -> list[str]:
+        """Write *version* into pyproject and ``__version__``; what changed."""
+        import re as _re
+
+        changed = []
+        pyproject = self._package.directory / "pyproject.toml"
+        text = pyproject.read_text("utf-8")
+        stamped, count = _re.subn(
+            r'^version = "[^"]+"$',
+            f'version = "{version}"',
+            text,
+            count=1,
+            flags=_re.M,
+        )
+        if count != 1:
+            fail(f"{pyproject} has no version line to stamp")
+        if stamped != text:
+            pyproject.write_text(stamped, encoding="utf-8")
+            changed.append("pyproject.toml")
+        for init in (self._package.directory / "src").rglob("__init__.py"):
+            text = init.read_text("utf-8")
+            stamped, count = _re.subn(
+                r'^__version__ = "[^"]+"$',
+                f'__version__ = "{version}"',
+                text,
+                count=1,
+                flags=_re.M,
+            )
+            if count and stamped != text:
+                init.write_text(stamped, encoding="utf-8")
+                changed.append(str(init.relative_to(self._package.directory)))
+        return changed
+
+
 def coverage_floor(package: Package) -> float | None:
     """The committed coverage floor from the package's contract, or None."""
     contract = tomllib.loads((package.directory / "livery.toml").read_text("utf-8"))

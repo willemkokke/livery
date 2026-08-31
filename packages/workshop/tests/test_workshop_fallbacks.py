@@ -187,8 +187,14 @@ def test_release_verify_refuses_each_malformed_shape(tmp_path: Path) -> None:
     with pytest.raises(_FAILURES) as caught:
         prepare_release(root, "packages/ghost", "1.0.0")
     assert "not a workspace package" in str(caught.value)
+    thing = root / "packages" / "thing"
+    thing.mkdir()
+    (thing / "livery.toml").write_text('type = "python"\nname = "livery-thing"\n')
+    (thing / "pyproject.toml").write_text(
+        '[project]\nname = "livery-thing"\nversion = "0.1.0"\ndependencies = []\n'
+    )
     with pytest.raises(_FAILURES) as caught:
-        prepare_release(root, "packages/ghost", "not.a.version")
+        prepare_release(root, "packages/thing", "not.a.version")
     assert "is not <major>" in str(caught.value)
 
 

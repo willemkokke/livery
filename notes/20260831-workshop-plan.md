@@ -1,8 +1,11 @@
 # Building the workshop
 
-Status: phase 9 shipped, 2026-08-31 (PR #49; the union enforcement
-proven red and green by PRs #49-#50). Next on the 0.1.0 gate:
-phase 10 (automatic changelogs and versioning), then 11 and 12. The affected engine scopes the gate to
+Status: phase 10 built, 2026-09-01, submitting. `fm release.prepare
+<path>` derives the bump and the grouped, linked, credited changelog
+entry from the conventional commits since the last release tag;
+version stamping moved behind the backend seam; the grammar gained
+the breaking marker and is published in the fragment. Phases 1-9
+shipped 2026-08-31 (PRs #12-#57). The affected engine scopes the gate to
 the changed packages' dependents' closure, per-package coverage
 floors live in each contract's `[qa]` table and gate the test step,
 the bootstrap's replaced-by table is annotated done line by line,
@@ -373,9 +376,14 @@ shape, on today's cheaper machinery.
 One engine for both: conventional commits drive the changelog entry
 and the next version.
 
-- git-cliff configuration ported from hse's template (cliff.toml per
-  package), rendering a release's entries from the commits touching
-  that package's path since its last tag.
+- In-house mining rather than git-cliff (decided with Willem):
+  squash-only main plus submit's title validation make the history
+  conventional by construction, and the two git-cliff features that
+  mattered - linked pull requests and contributors - are mineable
+  from the squash subjects and the noreply author addresses. The
+  grammar gains the breaking marker (`!` and the BREAKING CHANGE
+  footer), published in the base fragment; versions follow footman's
+  practice, and entries take Keep a Changelog's grouped form.
 - `fm release.prepare <path>` learns to run without a version:
   derive the bump from the commits (feat is minor, fix is patch, a
   breaking marker is major), stamp it, and write the generated

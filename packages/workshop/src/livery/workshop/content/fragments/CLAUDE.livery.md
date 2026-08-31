@@ -36,6 +36,16 @@ with `origin/main`.
 
 ## Commits and tags
 
+The commit convention, machine-read by the release train: subjects
+are `type(scope): subject` with types feat, fix, docs, chore,
+refactor, test; a `!` before the colon or a `BREAKING CHANGE:`
+footer marks a break. Versions follow footman's practice: after 1.0
+a break bumps major, a feature minor, everything else patch; before
+1.0 a feature bumps minor (breaks ride along) and everything else is
+a patch. `fm release.prepare <path>` derives the bump and the
+grouped changelog entry from the commits since the last release tag.
+
+
 Conventional prefixes (`feat:`, `fix:`, `docs:`, `chore:`,
 `refactor:`, `test:`), imperative subject, body only when the subject
 cannot carry it. No attribution trailers. Commit and push only when

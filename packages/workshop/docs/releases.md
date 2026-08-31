@@ -1,7 +1,12 @@
 # Releases
 
 The train: push a tag shaped `packages/<pkg>/v<semver>` and only
-that package releases. Tags are immutable and pushed alone.
+that package releases. `fm release.prepare <path>` without a version
+derives it from the conventional commits since the package's last
+release tag (after 1.0 a break bumps major, a feature minor,
+everything else patch; before 1.0 a feature bumps minor with breaks
+riding along) and writes the grouped changelog entry, pull requests
+linked and contributors credited, for review before the tag. Tags are immutable and pushed alone.
 `fm release.prepare` stamps the version into the three places that
 must agree, and `fm release.verify` refuses the tag when they do
 not, or when a dependency floor names an unreleased version.

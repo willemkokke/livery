@@ -32,6 +32,7 @@ import footman
 from footman import doc, fail, group
 
 from livery.forge import ForgeError, Repository
+from livery.workshop._conventional import TITLE_RE, TYPES
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._layers import workspace_root
 from livery.workshop._verdict import (
@@ -45,12 +46,13 @@ workflow = group("workflow", help="The branch workflow's exits and overrides")
 
 #: Branch names submit accepts: the conventional type, a slash, a slug
 #: that may open with an issue number (``feat/41-title-rules``).
-_BRANCH_TYPES = ("feat", "fix", "docs", "chore", "refactor", "test")
+_BRANCH_TYPES = TYPES
 _BRANCH_RE = re.compile(rf"^({'|'.join(_BRANCH_TYPES)})/.+$")
 _BRANCH_ISSUE_RE = re.compile(r"^[a-z]+/(\d+)-")
 
-#: PR titles follow the commit convention the repository already uses.
-_TITLE_RE = re.compile(rf"^({'|'.join(_BRANCH_TYPES)})(\([^)]+\))?: .+$")
+#: PR titles follow the published commit convention, breaking
+#: marker included.
+_TITLE_RE = TITLE_RE
 
 #: Self-heal ceiling. Exits 10 and 17 are cured by one integrate and
 #: re-push; needing a third round means the base is moving faster than
