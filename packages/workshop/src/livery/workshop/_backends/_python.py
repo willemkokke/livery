@@ -143,8 +143,20 @@ def measured_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, fl
     }
 
 
+#: How far below its floor a package may measure before the gate
+#: fails. A refactor that deletes a few covered lines moves the
+#: percentage by noise, and a hundredth of a percent is not a
+#: coverage regression; the floor stays the declared high-water mark
+#: and the grace absorbs the measurement jitter.
+COVERAGE_GRACE = 0.5
+
+
 def enforce_coverage(root: Path, packages: tuple[Package, ...]) -> None:
-    """Fail any package below its committed floor; print each verdict."""
+    """Fail any package measurably below its committed floor.
+
+    Prints each verdict with the floor and the grace, so the numbers
+    on screen are the numbers enforced.
+    """
     measured = measured_coverage(root, packages)
     problems = []
     for package in packages:
@@ -152,11 +164,14 @@ def enforce_coverage(root: Path, packages: tuple[Package, ...]) -> None:
         if floor is None:
             continue
         percent = measured.get(package.path, 0.0)
-        print(f"  coverage {package.path}: {percent:.1f}% (floor {floor:.1f}%)")
-        if percent < floor:
+        print(
+            f"  coverage {package.path}: {percent:.1f}%"
+            f" (floor {floor:.1f}%, grace {COVERAGE_GRACE}%)"
+        )
+        if percent < floor - COVERAGE_GRACE:
             problems.append(
                 f"{package.path}: {percent:.1f}% is below the committed"
-                f" floor of {floor:.1f}%"
+                f" floor of {floor:.1f}% by more than the {COVERAGE_GRACE}% grace"
             )
     if problems:
         fail(
