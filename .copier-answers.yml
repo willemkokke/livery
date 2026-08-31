@@ -20,6 +20,7 @@ python_versions:
 layers:
 - livery.workshop
 - livery.forge
+templates_source: templates
 packages:
 - dir: forge
   name: livery-forge

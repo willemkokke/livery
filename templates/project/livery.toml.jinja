@@ -6,6 +6,10 @@
 # else: a layer not named here is not mounted, however it got
 # installed.
 layers = [{% for layer in layers %}"{{ layer }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+# Where the rendered files come from: a directory relative to this
+# root, or a git URL (a fork, at your own risk). The update wave
+# follows this value.
+templates = "{{ templates_source }}"
 
 [forge]
 kind = "{{ forge_kind }}"

@@ -19,7 +19,30 @@ def _template_instance(tmp_path: Path) -> Path:
     """A scratch workspace carrying the real template source and answers."""
     shutil.copytree(ROOT / "templates", tmp_path / "templates")
     shutil.copy(ROOT / ".copier-answers.yml", tmp_path / ".copier-answers.yml")
+    (tmp_path / "livery.toml").write_text('[workspace]\ntemplates = "templates"\n')
     return tmp_path
+
+
+def test_the_template_source_is_the_contracts_call(tmp_path: Path) -> None:
+    from livery.workshop._templates import (
+        DEFAULT_TEMPLATE_SOURCE,
+        local_template_dir,
+        template_source,
+    )
+
+    (tmp_path / "livery.toml").write_text("[workspace]\n")
+    assert template_source(tmp_path) == DEFAULT_TEMPLATE_SOURCE
+    assert local_template_dir(tmp_path) is None  # remote: no local dir
+    (tmp_path / "livery.toml").write_text(
+        '[workspace]\ntemplates = "my-fork-checkout"\n'
+    )
+    assert local_template_dir(tmp_path) is None  # declared but absent
+    (tmp_path / "my-fork-checkout").mkdir()
+    assert local_template_dir(tmp_path) == tmp_path / "my-fork-checkout"
+    (tmp_path / "livery.toml").write_text(
+        '[workspace]\ntemplates = "git@example.com:me/fork.git"\n'
+    )
+    assert local_template_dir(tmp_path) is None
 
 
 def test_the_monorepo_matches_its_own_render() -> None:
@@ -35,7 +58,9 @@ def test_apply_settles_and_drift_names_the_file(tmp_path: Path) -> None:
     assert "livery.toml" in changed and "pyproject.toml" in changed
     assert project_drift(root) == []
     assert apply_project(root) == []  # idempotent: a clean tree changes nothing
-    (root / "livery.toml").write_text("drifted\n")
+    # The drift stays valid TOML: the drift walker itself reads the
+    # contract for the template source.
+    (root / "livery.toml").write_text('[workspace]\ntemplates = "templates"\n')
     assert project_drift(root) == ["livery.toml: differs from its render"]
 
 
