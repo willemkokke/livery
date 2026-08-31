@@ -16,20 +16,34 @@ with a bounded retry in live mode.
 
 from __future__ import annotations
 
+import contextlib
 import os
-import subprocess
 import time
 from collections.abc import Callable
 from typing import Literal
 from urllib.parse import quote
 
-from _gitea_driver import ROOT
 from livery.forge import Forge, ForgeError, GitlabForge, Repository
 from livery.forge._http import JsonClient, Opener
 from livery.forge.testing import Outcome
 
 #: The pipeline every conformance project is seeded with.
 CI_YAML = """\
+# The settle mechanism pushes release-<sha> tags; a pipeline for the
+# tag would re-run the held gate and could fail the combined status,
+# so tag pipelines are suppressed entirely.
+workflow:
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    # Dispatched pipelines route by variable, the LIVERY_WORKFLOW
+    # convention.
+    - if: $LIVERY_WORKFLOW
+    # Otherwise push pipelines only: `when: always` would also admit
+    # merge-request pipelines, duplicating every run on a branch with
+    # an open MR.
+    - if: $CI_PIPELINE_SOURCE == "push"
+
 gate:
   script:
     - |
@@ -41,10 +55,15 @@ gate:
         *"conf:hang"*)
           echo "holding until released"
           i=0
-          until [ -f "/tmp/conf-release-$CI_COMMIT_SHA" ]; do
+          # CI_REPOSITORY_URL carries the server's external_url, which
+          # a shell-executor job cannot reach on the compose network;
+          # the checkout's origin uses the runner's clone-url and its
+          # job credentials, so the poll asks origin.
+          until git ls-remote -q origin \
+              "refs/tags/release-$CI_COMMIT_SHA" | grep -q .; do
             i=$((i+1))
-            if [ "$i" -gt 600 ]; then exit 1; fi
-            sleep 1
+            if [ "$i" -gt 300 ]; then exit 1; fi
+            sleep 2
           done
           ;;
       esac
@@ -88,6 +107,7 @@ class GitlabConformanceDriver:
         self._namespace = namespace
         self._live = live
         self._counter = 0
+        self._created: list[tuple[str, str]] = []
         self._files = 0
 
     @property
@@ -138,6 +158,7 @@ class GitlabConformanceDriver:
     def fresh_repo(self) -> Repository:
         """A new project seeded with the conformance pipeline."""
         owner, name = self.unused_repo_name()
+        self._created.append((owner, name))
         repo = self._gitlab.create_repo(owner, name)
         self._commit(
             owner,
@@ -180,26 +201,21 @@ class GitlabConformanceDriver:
         )
 
     def settle(self, repo_owner: str, repo_name: str, sha: str) -> None:
-        """Release any held job for *sha*, then wait for terminal runs."""
-        if self._live:
-            subprocess.run(
-                [
-                    "docker",
-                    "compose",
-                    "--profile",
-                    "gitlab",
-                    "--profile",
-                    "gitlab-runner",
-                    "exec",
-                    "-T",
-                    "gitlab-runner",
-                    "touch",
-                    f"/tmp/conf-release-{sha}",
-                ],
-                cwd=ROOT,
-                check=True,
-                capture_output=True,
+        """Release any held job for *sha*, then wait for terminal runs.
+
+        The release is the ``release-<sha>`` tag the held job polls
+        for over its job-token remote; a tag that already exists is
+        absorbed, so settling twice is safe.
+        """
+        try:
+            self._client.request(
+                f"/projects/{_path(repo_owner, repo_name)}/repository/tags",
+                method="POST",
+                data={"tag_name": f"release-{sha}", "ref": sha},
             )
+        except ForgeError as exc:
+            if exc.status != 400 or "already exists" not in exc.detail.lower():
+                raise
         checks = self._gitlab.repository(repo_owner, repo_name).checks
         self._poll(
             lambda: (
@@ -353,6 +369,17 @@ class GitlabConformanceDriver:
                 if time.monotonic() > deadline:
                     raise ForgeError(f"timed out after 180s waiting for {subject}")
                 time.sleep(1)
+
+    def cleanup(self) -> None:
+        """Delete every repository this driver created; errors absorbed.
+
+        Cloud accounts meter repositories, so a live run deletes its
+        scratch as each scenario ends instead of leaving it for the
+        next run's leftover sweep.
+        """
+        for owner, name in self._created:
+            with contextlib.suppress(ForgeError):
+                self._gitlab.delete_repo(owner, name)
 
 
 def _path(owner: str, name: str) -> str:

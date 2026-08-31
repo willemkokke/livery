@@ -16,7 +16,11 @@ services:
     profiles: [gitea]
     environment:
       GITEA__security__INSTALL_LOCK: "true"
-      GITEA__server__ROOT_URL: http://localhost:3000/
+      # The service name, not localhost: held conformance jobs poll
+      # the API from inside the runner container, and gitea derives
+      # the jobs' GITHUB_API_URL from this value. Host-side clients
+      # still reach the published port on localhost either way.
+      GITEA__server__ROOT_URL: http://gitea:3000/
       GITEA__actions__ENABLED: "true"
       # The seeded org creates repositories through the API only.
       GITEA__service__DISABLE_REGISTRATION: "true"

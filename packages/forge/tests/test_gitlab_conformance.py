@@ -70,7 +70,14 @@ def _run_live(scenario: Scenario) -> None:
     )
     if not scenario.applies_to(driver.forge):
         pytest.skip(f"{scenario.name} is out of scope for gitlab")
-    scenario.run(driver)
+    try:
+        scenario.run(driver)
+    finally:
+        if not RECORD:
+            # Cloud accounts meter repositories, so a live run deletes
+            # its scratch as it goes; recording keeps the old
+            # lifecycle so cassettes stay stable.
+            driver.cleanup()
     if RECORD:
         cassette.save(CASSETTES / f"{scenario.name}.json")
 

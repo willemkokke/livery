@@ -26,6 +26,7 @@ import importlib
 import importlib.util
 import os
 import subprocess
+import time
 from collections.abc import Mapping
 from typing import Any
 from urllib.parse import quote
@@ -722,11 +723,24 @@ class _GithubChecks:
         )
 
     def cancel_run(self, run: int, *, force: bool = False) -> None:
-        """Cancel the run; ``force`` discards later runner reports."""
+        """Cancel the run; ``force`` discards later runner reports.
+
+        github.com intermittently answers 5xx on the cancel endpoints
+        while a run is mid-transition; those are retried briefly, and
+        the last answer surfaces verbatim.
+        """
         endpoint = "force-cancel" if force else "cancel"
-        self._client.request(
-            f"{self._base}/actions/runs/{run}/{endpoint}", method="POST"
-        )
+        for attempt in range(3):
+            try:
+                self._client.request(
+                    f"{self._base}/actions/runs/{run}/{endpoint}", method="POST"
+                )
+            except ForgeError as exc:
+                if exc.status is not None and exc.status >= 500 and attempt < 2:
+                    time.sleep(1 + attempt)
+                    continue
+                raise
+            return
 
     def dispatch(
         self, workflow: str, *, ref: str, inputs: Mapping[str, str] | None = None
