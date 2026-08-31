@@ -1,27 +1,11 @@
 # Bootstrapping livery: the forge first
 
-Status: phase 2 shipped, 2026-08-31, awaiting Willem's acceptance.
-The whole phase merged as PR #5 (gate green on three OSes, the
-166-test replay suite network-free in CI); `packages/forge/v0.1.0`
-is tagged, verified, and published by trusted publishing (run
-33356994573; PyPI serves 0.1.0). The suite is green four ways:
-FakeForge (three capability shapes), the Gitea 1.28 container, the
-GitLab CE container, and github.com scratch repositories; the
-protocol is frozen. PR #4 (the Gitea slice) never merged: its CI had
-failed on a defect fixed later on the shared branch, and it is
-closed as superseded by #5, which carries all of its content. Next:
-phase 3, the nightly. The
-protocols, the GitLab mapping (`packages/forge/docs/gitlab.md`), the
-verified FakeForge with four fault modes, the shipped conformance
-suite (25 scenarios, run against the fake in two capability shapes),
-and the cassette layer are in; `fm check` green locally (67 passed, 4
-capability-gated skips); three-OS proof follows the push. Phase 0 was
-accepted by Willem, 2026-08-31, conditional on the basedpyright venv
-fix passing CI; evidence: `fm check` green on three OSes and two
-Pythons (run 33342483626); branch protection live;
-`packages/forge/v0.0.1` verified and published by trusted publishing
-(run 33343851374). Next: phase 2, the compose file and the three real
-backends.
+Status: complete, 2026-08-31, all four phases shipped and the plan
+closed. Phase 3's nightly (the released-wheels replay) merged as PR
+#9 and its first dispatched run is green on all six legs; the
+per-release live legs land with the workshop plan's phase 7 once the
+e2e accounts exist (open item 7). The workshop build-out is its own
+plan: `notes/20260831-workshop-plan.md`.
 
 ## The prompt (Willem)
 
