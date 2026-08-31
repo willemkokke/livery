@@ -4,8 +4,9 @@ How every protocol method maps onto GitLab's REST v4 API: the
 contract the `_gitlab` backend implements, written down before the
 backend so the odd one out shapes the protocol instead of surprising
 it. Everything here is verified against the local GitLab container by
-the conformance suite; a row that survives contact unchanged becomes
-that backend's documentation.
+the conformance suite; what the container corrected is folded in, and
+the asynchronous behaviours it taught are in
+[quirks.md](quirks.md).
 
 ## Addressing
 
@@ -33,6 +34,7 @@ that backend's documentation.
 | `auto_merge` | yes | merge when pipeline succeeds, on the merge request itself, every tier |
 | `force_cancel` | no | pipelines have plain cancel only; declined by name |
 | `required_contexts` | no | protection cannot name required check contexts; external status checks are tier-gated (Ultimate) and out of protocol |
+| `ci_secrets` | yes | one variables API serves both; a secret is stored masked where the value satisfies the masking rules |
 
 Tier-gated features the protocol deliberately does not model:
 approval rules (Premium), merge trains (Premium), external status
@@ -46,8 +48,8 @@ so every mapped endpoint below is a CE endpoint.
 | `whoami` | `GET /user` | `username` |
 | `server_version` | `GET /version` | `version`; needs authentication |
 | `create_repo` | `POST /projects` | `visibility` from `private`; when the owner is a group, `namespace_id` is resolved first (`GET /namespaces?search=`); `initialize_with_readme` so the default branch exists, as the protocol requires |
-| `get_repo` | `GET /projects/:path` | 404 is None; `default_branch`, `visibility` |
-| `delete_repo` | `DELETE /projects/:path` | 404 is success; paid tiers may delay deletion and keep the name reserved for a while, which the conformance suite must not assume away |
+| `get_repo` | `GET /projects/:path` | 404 is None; a redirect route can serve a renamed corpse with 200 for the old path, so the answer's `path_with_namespace` is verified before it counts |
+| `delete_repo` | `DELETE /projects/:path` | 404 is success, and so are the two shapes of "already deleting": 400 "marked for deletion" and 405 "moved". Deletion is asynchronous and the path stays reserved until it lands; a creator reusing a path renames the leftover aside first, because rename is synchronous |
 
 ## Repository
 
@@ -75,8 +77,8 @@ so every mapped endpoint below is a CE endpoint.
 | `get` | `GET /projects/:path/merge_requests/:iid` | the protocol number is the iid |
 | `update_title` | `PUT /projects/:path/merge_requests/:iid` | `title` |
 | `close` / `reopen` | `PUT /projects/:path/merge_requests/:iid` | `state_event: "close"` / `"reopen"`; reopening a merged MR fails and maps to `ForgeError` |
-| `merge_now` | `PUT /projects/:path/merge_requests/:iid/merge` | `squash` per repository policy, `squash_commit_message` from title and message; GitLab answers 405 when the MR is not mergeable, which matches the protocol's 405-shaped refusal as-is |
-| `arm` | `PUT /projects/:path/merge_requests/:iid/merge` with `merge_when_pipeline_succeeds: true` | GitLab refuses the schedule while no pipeline is running (405): arming a just-pushed MR can race the pipeline's creation. The backend surfaces that 405 verbatim; how callers hold and retry is decided against the container, and any quirk found gets a fake fault mode |
+| `merge_now` | `PUT /projects/:path/merge_requests/:iid/merge` | `squash`, `squash_commit_message` from title and message, and `should_remove_source_branch` read from the project setting, because the setting alone only pre-fills the UI checkbox; GitLab answers 405 while the mergeability recompute runs, which matches the protocol's 405-shaped refusal as-is |
+| `arm` | `PUT /projects/:path/merge_requests/:iid/merge` with `merge_when_pipeline_succeeds: true` | 405 until the mergeability recompute finishes and the head pipeline associates with the MR, both asynchronous; the backend surfaces the 405 verbatim and callers retry. The scheduled merge and its branch deletion land asynchronously after the pipeline succeeds: always observed, never assumed |
 | `disarm` | `POST /projects/:path/merge_requests/:iid/cancel_merge_when_pipeline_succeeds` | a refusal because nothing is scheduled maps to False, not an error |
 | `is_armed` | `GET /projects/:path/merge_requests/:iid` | the `merge_when_pipeline_succeeds` field: readable state, no timeline walk |
 | `comment` | `POST /projects/:path/merge_requests/:iid/notes` | `body` |
@@ -88,12 +90,12 @@ not commit statuses.
 
 | Method | GitLab | Semantics |
 | --- | --- | --- |
-| `status` | `GET /projects/:path/pipelines?sha=` | no pipelines is `none`; the newest pipeline decides: `success` is `success`; `failed` and `canceled` are `failure`; `skipped` is `none` (nothing ran); every other state (`created`, `pending`, `running`, `manual`, and kin) is `pending`. The `skipped` and `manual` rows are verified against the container before the backend ships |
+| `status` | `GET /projects/:path/pipelines?sha=` | no pipelines is `none`; the skipped pipelines do not count as contexts (nothing ran); the newest remaining pipeline decides: `success` is `success`, `failed` and `canceled` are `failure`, every other state (`created`, `pending`, `running`, `canceling`, `manual`, and kin) is `pending` |
 | `runs` | `GET /projects/:path/pipelines?sha=&...` | one Run per pipeline: `id` is the pipeline id, `workflow` is empty (one pipeline definition per project), `event` is the pipeline `source` |
 | `jobs` | `GET /projects/:path/pipelines/:id/jobs` | job `id`, `name`, status and conclusion mapped as for pipelines |
 | `job_log` | `GET /projects/:path/jobs/:id/trace` | plain text |
 | `rerun` | `POST /projects/:path/pipelines/:id/retry` | retries failed and cancelled jobs, which is the `failed_only=True` contract; GitLab cannot re-run a whole pipeline under the same id, so `failed_only=False` also maps to retry and the docstring's "all of them" is best-effort here |
-| `cancel_run` | `POST /projects/:path/pipelines/:id/cancel` | GitLab answers 200 on an already finished pipeline, so the backend probes the pipeline first and raises the protocol's terminal-run `ForgeError` itself; `force=True` raises `Unsupported` naming `force_cancel` |
+| `cancel_run` | `POST /projects/:path/pipelines/:id/cancel` | GitLab answers 200 on an already finished pipeline, so the backend probes the pipeline first and raises the protocol's terminal-run `ForgeError` itself; a pipeline reads `canceling` (a live state) until its jobs acknowledge; `force=True` raises `Unsupported` naming `force_cancel` |
 | `dispatch` | `POST /projects/:path/pipeline` | `ref`, plus variables: the protocol's `workflow` travels as the `LIVERY_WORKFLOW` variable and `inputs` as further variables, for the pipeline's own rules to route on |
 
 ## Releases

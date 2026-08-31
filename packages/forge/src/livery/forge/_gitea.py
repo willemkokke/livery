@@ -32,6 +32,7 @@ from livery.forge._types import (
     CombinedStatus,
     Conclusion,
     Issue,
+    ItemState,
     Job,
     Label,
     PullRequest,
@@ -178,7 +179,12 @@ class GiteaForge:
 
     def supports(self, capability: Capability) -> bool:
         """Gitea offers every named capability."""
-        return capability in ("auto_merge", "force_cancel", "required_contexts")
+        return capability in (
+            "auto_merge",
+            "force_cancel",
+            "required_contexts",
+            "ci_secrets",
+        )
 
     def repository(self, owner: str, name: str) -> Repository:
         """The view onto one repository. Cheap, no network."""
@@ -401,9 +407,7 @@ def _label_ids(client: JsonClient, base: str) -> dict[str, int]:
 
 def _as_pull_request(data: Mapping[str, Any]) -> PullRequest:
     """Gitea's pull request JSON, normalised."""
-    state: Literal["open", "closed"] = (
-        "open" if data.get("state") == "open" else "closed"
-    )
+    state: ItemState = "open" if data.get("state") == "open" else "closed"
     head = data.get("head") or {}
     base = data.get("base") or {}
     return PullRequest(
@@ -494,16 +498,27 @@ class _GiteaPullRequests:
         )
 
     def merge_now(self, number: int, *, title: str, message: str = "") -> None:
-        """Squash-merge now; 405 and 409 refusals pass through verbatim."""
-        self._client.request(
-            f"{self._base}/pulls/{number}/merge",
-            method="POST",
-            data={
-                "Do": "squash",
-                "merge_title_field": title,
-                "merge_message_field": message,
-            },
-        )
+        """Squash-merge now; merging an already merged pull request is success.
+
+        Gitea refuses the second merge with a 405, so the refusal is
+        absorbed only after verifying the pull request really merged;
+        every other 405 or 409 passes through verbatim.
+        """
+        try:
+            self._client.request(
+                f"{self._base}/pulls/{number}/merge",
+                method="POST",
+                data={
+                    "Do": "squash",
+                    "merge_title_field": title,
+                    "merge_message_field": message,
+                },
+            )
+        except ForgeError as exc:
+            already = self.get(number)
+            if exc.status == 405 and already is not None and already.merged:
+                return
+            raise
 
     def arm(self, number: int, *, title: str, message: str = "") -> None:
         """Schedule a squash merge for when the checks succeed."""
@@ -720,11 +735,14 @@ def _as_release(data: Mapping[str, Any]) -> Release:
     )
 
 
+#: Resolved at module scope: inside the issues classes the method
+#: named `list` shadows the builtin in annotation scope.
+_Rows = list[dict[str, Any]]
+
+
 def _as_issue(data: Mapping[str, Any]) -> Issue:
     """Gitea's issue JSON, normalised."""
-    state: Literal["open", "closed"] = (
-        "open" if data.get("state") == "open" else "closed"
-    )
+    state: ItemState = "open" if data.get("state") == "open" else "closed"
     return Issue(
         number=int(data["number"]),
         title=str(data.get("title", "")),
@@ -753,7 +771,7 @@ class _GiteaIssues:
         self._client = client
         self._base = base
 
-    def _listing(self, query: str, *, state: StateFilter) -> list[dict[str, Any]]:
+    def _listing(self, query: str, *, state: StateFilter) -> _Rows:
         return self._client.paginate(
             lambda page: (
                 self._client.request(

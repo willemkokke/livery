@@ -63,7 +63,11 @@ def _run_live(scenario: Scenario) -> None:
     if "GITEA_TOKEN" not in env:
         pytest.skip("no .forge.dev.env: run `fm forge.dev.up` first")
     cassette = Cassette()
-    opener = RecordingOpener(cassette, secrets=(env["GITEA_TOKEN"],))
+    opener = RecordingOpener(
+        cassette,
+        scrub_fields=("runners_token", "temp_clone_token"),
+        secrets=(env["GITEA_TOKEN"],),
+    )
     driver = GiteaConformanceDriver(
         scenario.name,
         url=env["GITEA_URL"],

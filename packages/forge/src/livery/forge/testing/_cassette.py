@@ -25,6 +25,7 @@ from __future__ import annotations
 import email.message
 import io
 import json
+import re
 import urllib.error
 import urllib.request
 import urllib.response
@@ -33,8 +34,15 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
+from livery.forge._http import default_opener
+
 #: The value that replaces every scrubbed secret.
 REDACTED = "REDACTED"
+
+#: The stored body of an exchange whose request body is nondeterministic
+#: (an encrypted payload): recorded as this marker, matched by URL and
+#: method alone on replay.
+VOLATILE = "VOLATILE"
 
 #: The cassette file format this module reads and writes.
 FORMAT = 1
@@ -77,6 +85,10 @@ class Exchange:
         reason: The status line's reason phrase.
         content_type: The response's Content-Type header value.
         response_body: The response body as text, scrubbed.
+        location: The Location header of a refused redirect, scrubbed.
+            Empty for every other exchange. Carried so a caller that
+            deliberately follows one refused redirect (a signed log
+            URL) can do so from the replayed refusal too.
     """
 
     method: str
@@ -86,6 +98,7 @@ class Exchange:
     reason: str
     content_type: str
     response_body: str
+    location: str = ""
 
 
 class Cassette:
@@ -132,6 +145,22 @@ def _scrub(text: str, secrets: tuple[str, ...]) -> str:
     return text
 
 
+def _scrub_fields(body: str, fields: tuple[str, ...]) -> str:
+    """*body* with every named JSON field's string value replaced.
+
+    The caller's secret list covers credentials it holds; this covers
+    the ones the server mints inside its answers (a project's
+    runners_token), which no caller can know in advance.
+    """
+    for field in fields:
+        body = re.sub(
+            rf'("{re.escape(field)}"\s*:\s*")[^"]*(")',
+            rf"\g<1>{REDACTED}\g<2>",
+            body,
+        )
+    return body
+
+
 def _request_body(request: urllib.request.Request) -> str:
     """The request's body as text, empty when it has none."""
     data = request.data
@@ -171,8 +200,15 @@ class RecordingOpener:
         cassette: The cassette exchanges are appended to.
         secrets: The values that must never reach disk. Pass every
             token the recorded client holds.
-        inner: The opener that actually talks to the network. urllib's
-            default opener when omitted.
+        scrub_fields: JSON field names whose string values are
+            redacted in stored response bodies: the secrets the
+            server mints inside its answers, which no secret list can
+            know in advance.
+        inner: The opener that actually talks to the network. The
+            redirect-refusing default when omitted, never urllib's
+            stock opener: following a redirect would forward the
+            Authorization header to the new location, and a recording
+            session holds real credentials.
     """
 
     def __init__(
@@ -180,14 +216,22 @@ class RecordingOpener:
         cassette: Cassette,
         *,
         secrets: tuple[str, ...] = (),
+        volatile_bodies: tuple[str, ...] = (),
+        scrub_fields: tuple[str, ...] = (),
         inner: UrlOpener | None = None,
     ) -> None:
-        """Record through *inner* into *cassette*, scrubbing *secrets*."""
+        """Record through *inner* into *cassette*, scrubbing *secrets*.
+
+        A request whose URL contains any *volatile_bodies* substring
+        has a nondeterministic body (an encrypted payload); it is
+        stored as the VOLATILE marker and matched by method and URL
+        alone on replay.
+        """
         self.cassette = cassette
         self._secrets = secrets
-        self._inner: UrlOpener = (
-            inner if inner is not None else urllib.request.build_opener()
-        )
+        self._volatile = volatile_bodies
+        self._scrub_fields = scrub_fields
+        self._inner: UrlOpener = inner if inner is not None else default_opener()
 
     def open(self, request: urllib.request.Request, /, *, timeout: float = 30.0) -> Any:
         """Send *request*, record the scrubbed exchange, answer as urllib does."""
@@ -206,6 +250,7 @@ class RecordingOpener:
                 reason=exc.reason,
                 content_type=exc.headers.get("Content-Type", ""),
                 response_body=detail.decode("utf-8", errors="replace"),
+                location=exc.headers.get("Location", ""),
             )
             raise _replay_error(exchange, url) from None
         raw = response.read()
@@ -230,15 +275,20 @@ class RecordingOpener:
         reason: str,
         content_type: str,
         response_body: str,
+        location: str = "",
     ) -> Exchange:
+        volatile = any(marker in url for marker in self._volatile)
         exchange = Exchange(
             method=method,
             url=_scrub(url, self._secrets),
-            request_body=_scrub(request_body, self._secrets),
+            request_body=VOLATILE if volatile else _scrub(request_body, self._secrets),
             status=status,
             reason=reason,
             content_type=content_type,
-            response_body=_scrub(response_body, self._secrets),
+            response_body=_scrub_fields(
+                _scrub(response_body, self._secrets), self._scrub_fields
+            ),
+            location=_scrub(location, self._secrets),
         )
         self.cassette.exchanges.append(exchange)
         return exchange
@@ -296,11 +346,10 @@ class ReplayOpener:
                 " the caller makes a request the recording never made"
             )
         expected = self._exchanges[self._cursor]
-        if (method, url, body) != (
-            expected.method,
-            expected.url,
-            expected.request_body,
-        ):
+        body_matches = (
+            expected.request_body == VOLATILE or body == expected.request_body
+        )
+        if (method, url) != (expected.method, expected.url) or not body_matches:
             raise CassetteError(
                 "replay mismatch:\n"
                 f"  recorded: {expected.method} {expected.url}"
@@ -309,7 +358,9 @@ class ReplayOpener:
                 "Re-record the cassette if the new request is intended."
             )
         self._cursor += 1
-        if expected.status >= 400:
+        if expected.status >= 300:
+            # Refused redirects (3xx) and refusals (4xx, 5xx) alike
+            # replay as the errors the recording raised.
             raise _replay_error(expected, request.full_url)
         return _response_for(expected, request.full_url)
 
@@ -318,6 +369,8 @@ def _replay_error(exchange: Exchange, url: str) -> urllib.error.HTTPError:
     """The HTTPError a recorded refusal raises, on record and on replay."""
     headers = email.message.Message()
     headers["Content-Type"] = exchange.content_type
+    if exchange.location:
+        headers["Location"] = exchange.location
     return urllib.error.HTTPError(
         url,
         exchange.status,

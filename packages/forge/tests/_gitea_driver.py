@@ -217,6 +217,52 @@ class GiteaConformanceDriver:
             return ()
         return tuple(str(comment.get("body", "")) for comment in comments)
 
+    def await_mergeable(self, repo_owner: str, repo_name: str, number: int) -> None:
+        """Poll until Gitea's mergeability recompute finishes."""
+        self._poll(
+            lambda: bool(
+                (
+                    self._client.request(
+                        f"/repos/{repo_owner}/{repo_name}/pulls/{number}"
+                    )
+                    or {}
+                ).get("mergeable")
+            ),
+            subject=f"mergeability of pull request {number}",
+        )
+
+    def await_merged(self, repo_owner: str, repo_name: str, number: int) -> None:
+        """Poll until the scheduled merge has landed."""
+        self._poll(
+            lambda: bool(
+                (
+                    self._client.request(
+                        f"/repos/{repo_owner}/{repo_name}/pulls/{number}"
+                    )
+                    or {}
+                ).get("merged")
+            ),
+            subject=f"pull request {number} to merge",
+        )
+
+    def await_issue(
+        self, repo_owner: str, repo_name: str, number: int, *, assignee: str = ""
+    ) -> None:
+        """Poll until listings serve the issue in its current state."""
+        issues = self._gitea.repository(repo_owner, repo_name).issue
+
+        def listed() -> bool:
+            for row in issues.list(state="all"):
+                if row.number == number:
+                    return not assignee or assignee in row.assignees
+            return False
+
+        self._poll(listed, subject=f"issue {number} to be listed")
+
+    def required_context(self) -> str:
+        """Gitea spells an Actions check as workflow / job (event)."""
+        return "conf / gate (push)"
+
     def _commit_file(
         self,
         owner: str,

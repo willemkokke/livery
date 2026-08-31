@@ -35,8 +35,9 @@ dev = [
     "footman>=0.44",
     # Typed tool handles tasks.py runs through.
     "toolroom>=0.6.1",
-    # The workspace members, so root tests import them.
-    "livery-forge",
+    # The workspace members, so root tests import them; the extra so
+    # fixture recording exercises GitHub's ci_secrets path.
+    "livery-forge[github-secrets]",
     "pytest>=8.0",
     # Parallelise the suite across cores (`-n auto`, wired into addopts).
     "pytest-xdist>=3.6",
@@ -89,7 +90,7 @@ reportMissingModuleSource = false
 # `# pyright: ignore` so warn_unused_ignores keeps this checker's set
 # honest.
 files = ["packages/forge/src", "packages/forge/tests", "tests", "tasks.py"]
-mypy_path = ["packages/forge/src"]
+mypy_path = ["packages/forge/src", "packages/forge/tests"]
 # PEP 420 namespace in a src layout: mypy needs both to derive module
 # names without an __init__.py trail.
 namespace_packages = true

@@ -18,6 +18,8 @@ def test_the_surface_is_declared() -> None:
         "Forge",
         "ForgeError",
         "GiteaForge",
+        "GithubForge",
+        "GitlabForge",
         "Issue",
         "Issues",
         "Job",
@@ -37,6 +39,8 @@ def test_the_surface_is_declared() -> None:
         "__version__",
         "gitea_configured_host",
         "gitea_is_configured_host",
+        "gitlab_configured_host",
+        "gitlab_is_configured_host",
     ]
 
 
@@ -45,6 +49,7 @@ def test_the_testing_surface_is_declared() -> None:
         "FORMAT",
         "REDACTED",
         "SCENARIOS",
+        "VOLATILE",
         "Cassette",
         "CassetteError",
         "Exchange",

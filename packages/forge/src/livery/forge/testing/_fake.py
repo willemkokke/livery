@@ -43,6 +43,7 @@ _ALL_CAPABILITIES: tuple[Capability, ...] = (
     "auto_merge",
     "force_cancel",
     "required_contexts",
+    "ci_secrets",
 )
 
 
@@ -427,6 +428,10 @@ class _FakeRepository:
                 "this forge cannot name required check contexts in branch"
                 " protection (capability: required_contexts)"
             )
+        if config.secrets is not None and not self._fake.supports("ci_secrets"):
+            raise Unsupported(
+                "this forge cannot store CI secrets (capability: ci_secrets)"
+            )
         if config.default_branch is not None:
             state.default_branch = config.default_branch
             state.branches.setdefault(config.default_branch, self._fake._sha())
@@ -555,9 +560,11 @@ class _FakePullRequests:
         pr.state = "open"
 
     def merge_now(self, number: int, *, title: str, message: str = "") -> None:
-        """Merge pull request *number* immediately."""
+        """Merge pull request *number* immediately; a merged one is success."""
         state = self._state()
         pr = self._fake._require_pr(state, number)
+        if pr.merged:
+            return
         if pr.state != "open":
             raise ForgeError(f"pull request {number} is not open", status=405)
         if self._fake.faults.merge_405_window > 0:
@@ -941,3 +948,24 @@ class FakeDriver:
     ) -> tuple[str, ...]:
         """The comments on one pull request or issue, oldest first."""
         return self.fake.comment_bodies(repo_owner, repo_name, number, kind=kind)
+
+    def await_mergeable(self, repo_owner: str, repo_name: str, number: int) -> None:
+        """The fake computes mergeability synchronously: nothing to await."""
+        self.fake._require_pr(self.fake._require_repo(repo_owner, repo_name), number)
+
+    def await_merged(self, repo_owner: str, repo_name: str, number: int) -> None:
+        """The fake merges inside settle: nothing to await."""
+        self.fake._require_pr(self.fake._require_repo(repo_owner, repo_name), number)
+
+    def await_issue(
+        self, repo_owner: str, repo_name: str, number: int, *, assignee: str = ""
+    ) -> None:
+        """The fake's listings are immediate: only verify the state."""
+        issue = self.fake._require_issue(
+            self.fake._require_repo(repo_owner, repo_name), number
+        )
+        assert not assignee or assignee in issue.assignees
+
+    def required_context(self) -> str:
+        """The fake reports checks under the plain job name."""
+        return "gate"

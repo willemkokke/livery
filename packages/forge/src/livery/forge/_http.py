@@ -87,11 +87,19 @@ class JsonClient:
         *,
         headers: dict[str, str],
         opener: Opener | None = None,
+        timeout: float = 30,
     ) -> None:
-        """Bind the client to *api_base* with *headers*."""
+        """Bind the client to *api_base* with *headers*.
+
+        *timeout* bounds each request unless a call overrides it: a
+        heavyweight server (a single-node GitLab under load) needs
+        more headroom than a light one, and the backend knows which
+        it is talking to.
+        """
         self.api_base = api_base.rstrip("/")
         self._headers = headers
         self._opener = opener if opener is not None else default_opener()
+        self._timeout = timeout
 
     def request(
         self,
@@ -100,7 +108,7 @@ class JsonClient:
         method: str = "GET",
         data: dict[str, Any] | None = None,
         none_on: tuple[int, ...] = (),
-        timeout: float = 30,
+        timeout: float | None = None,
     ) -> Any:
         """Make one request; the parsed JSON answer, or None per *none_on*.
 
@@ -115,7 +123,11 @@ class JsonClient:
         empty mapping means "an empty object", not "no body".
         """
         raw = self._raw(
-            endpoint, method=method, data=data, none_on=none_on, timeout=timeout
+            endpoint,
+            method=method,
+            data=data,
+            none_on=none_on,
+            timeout=self._timeout if timeout is None else timeout,
         )
         if raw is None:
             return None
@@ -129,11 +141,15 @@ class JsonClient:
         endpoint: str,
         *,
         none_on: tuple[int, ...] = (),
-        timeout: float = 30,
+        timeout: float | None = None,
     ) -> str | None:
         """GET *endpoint* as plain text (a job log), or None per *none_on*."""
         raw = self._raw(
-            endpoint, method="GET", data=None, none_on=none_on, timeout=timeout
+            endpoint,
+            method="GET",
+            data=None,
+            none_on=none_on,
+            timeout=self._timeout if timeout is None else timeout,
         )
         return None if raw is None else raw.decode("utf-8", errors="replace")
 

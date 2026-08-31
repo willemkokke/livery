@@ -17,8 +17,8 @@ failing later on the first write. `GITEA_TOKEN` belongs to the host
 The 1.28 line. Everything except run cancellation works on earlier
 servers; `checks.cancel_run` probes the version once and raises
 `livery.forge.Unsupported` naming it when the server predates the
-cancel endpoints. Capabilities: `auto_merge`, `force_cancel`, and
-`required_contexts` are all supported.
+cancel endpoints. Capabilities: `auto_merge`, `force_cancel`,
+`required_contexts`, and `ci_secrets` are all supported.
 
 ## Mapping notes
 

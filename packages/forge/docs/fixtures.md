@@ -39,8 +39,19 @@ Format 1. One JSON object per file:
 - `request_body` and `response_body` are text. Only bytes request
   bodies can be recorded; a streaming body has no stable
   representation to match on replay and is refused at record time.
-- Responses with status 400 and above are exchanges like any other:
-  recorded refusals replay as the same `HTTPError`.
+- Responses with status 300 and above are exchanges like any other:
+  recorded refusals, refused redirects included, replay as the same
+  `HTTPError`. A refused redirect's exchange carries the scrubbed
+  `Location`, so a caller that deliberately follows one (a signed log
+  URL) can do so from the replayed refusal too.
+- Recording refuses redirects exactly as the live clients do: the
+  default inner opener never forwards the Authorization header to a
+  new location, and a recording session holds real credentials.
+- A request whose body is nondeterministic by construction (a
+  sealed-box encrypted secret carries an ephemeral key) is recorded
+  with the `VOLATILE` marker as its body and matched by method and
+  URL alone on replay; the recorder is told which URLs those are
+  (`volatile_bodies`).
 - A file whose `format` is not 1 is refused with the instruction to
   re-record.
 
@@ -57,6 +68,10 @@ Secrets never reach disk:
 - Replay applies the same scrubbing to incoming requests
   (`ReplayOpener(cassette, secrets=(dummy,))`), so a dummy credential
   in CI matches a recording made with a real one.
+- Secrets the server mints inside its answers (a GitLab project's
+  `runners_token`) cannot appear on any caller's secret list, so the
+  recorder also takes `scrub_fields`: JSON field names whose string
+  values are redacted in every stored response body.
 
 ## Matching
 

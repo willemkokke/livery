@@ -2,9 +2,10 @@
 
 One interface to GitHub, Gitea, and GitLab: `livery.forge.Forge` for
 one server, `livery.forge.Repository` for one repository on it, and
-`livery.forge.Registry` for one package index. The protocols are a
-draft until every backend passes the one conformance suite in
-`livery.forge.testing`; then they freeze.
+`livery.forge.Registry` for one package index. The protocols are
+frozen: every backend, the verified fake included, passes the one
+conformance suite in `livery.forge.testing`, and a change to a verb
+now is a compatibility event.
 
 Every verb exists because a development workflow uses it, and a verb
 no workflow uses is removed. There is deliberately no
@@ -42,6 +43,7 @@ and discovery joins the protocol only when a workflow demands it.
 | `auto_merge` | a merge can be scheduled to fire when checks go green | yes | yes | yes (merge when pipeline succeeds) |
 | `force_cancel` | a run whose runner stopped answering can be cancelled immediately | yes | yes | no |
 | `required_contexts` | branch protection names the check contexts that must pass | yes | yes | no |
+| `ci_secrets` | `RepoConfig.secrets` can be stored through the backend | with the `github-secrets` extra (sealed-box encryption via PyNaCl); a bare install declines by name | yes | yes (masked variables) |
 
 ## The verbs
 

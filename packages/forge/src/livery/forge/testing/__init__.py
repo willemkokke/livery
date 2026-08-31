@@ -20,6 +20,7 @@ from __future__ import annotations
 from livery.forge.testing._cassette import (
     FORMAT,
     REDACTED,
+    VOLATILE,
     Cassette,
     CassetteError,
     Exchange,
@@ -39,6 +40,7 @@ __all__ = [
     "FORMAT",
     "REDACTED",
     "SCENARIOS",
+    "VOLATILE",
     "Cassette",
     "CassetteError",
     "Exchange",

@@ -81,6 +81,15 @@ services:
       retries: 60
       start_period: 10m
 
+  gitlab-runner:
+    image: gitlab/gitlab-runner:latest
+    profiles: [gitlab-runner]
+    depends_on:
+      gitlab:
+        condition: service_healthy
+    volumes:
+      - gitlab-runner-config:/etc/gitlab-runner
+
 configs:
   runner-config:
     # Held conformance runs occupy a slot each until released or
@@ -95,3 +104,4 @@ volumes:
   gitlab-config:
   gitlab-logs:
   gitlab-data:
+  gitlab-runner-config:

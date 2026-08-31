@@ -45,8 +45,11 @@ collapses. No other tag class exists.
 ## Layering
 
 Dependencies point only downward, and `livery.forge` imports only the
-standard library at runtime. `tests/test_workspace_contracts.py`
-enforces both and grows into the real layering lint. The importable
+standard library at module import time; the one declared optional
+extra (PyNaCl, behind `livery-forge[github-secrets]`) loads lazily
+inside the one capability path that needs it.
+`tests/test_workspace_contracts.py` enforces both and grows into the
+real layering lint. The importable
 namespace is PEP 420: **never create `livery/__init__.py`**.
 
 ## Interfaces and typing
