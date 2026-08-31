@@ -1,14 +1,59 @@
-"""The public surface is what __init__ declares; everything else is private."""
+"""The public surface is what each __init__ declares; everything else is private."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import livery.forge
+import livery.forge.testing
 
 
 def test_the_surface_is_declared() -> None:
-    assert livery.forge.__all__ == ["Unsupported", "__version__"]
+    assert livery.forge.__all__ == [
+        "Capability",
+        "CheckState",
+        "Checks",
+        "CombinedStatus",
+        "Conclusion",
+        "Forge",
+        "ForgeError",
+        "Issue",
+        "Issues",
+        "Job",
+        "Label",
+        "PullRequest",
+        "PullRequests",
+        "Registry",
+        "Release",
+        "Releases",
+        "RepoConfig",
+        "RepoInfo",
+        "Repository",
+        "Run",
+        "RunStatus",
+        "StateFilter",
+        "Unsupported",
+        "__version__",
+    ]
+
+
+def test_the_testing_surface_is_declared() -> None:
+    assert livery.forge.testing.__all__ == [
+        "FORMAT",
+        "REDACTED",
+        "SCENARIOS",
+        "Cassette",
+        "CassetteError",
+        "Exchange",
+        "FakeDriver",
+        "FakeForge",
+        "Faults",
+        "ForgeDriver",
+        "RecordingOpener",
+        "ReplayOpener",
+        "Scenario",
+        "UrlOpener",
+    ]
 
 
 def test_every_other_module_is_underscore_named() -> None:

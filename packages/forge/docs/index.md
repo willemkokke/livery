@@ -8,7 +8,17 @@ verb no workflow uses is removed.
   so (`forge.supports(...)`) instead of papering over it.
 - Stdlib-only at runtime, on every platform the ecosystem supports.
 - Backends: `_github`, `_gitea` (server 1.28 or later), `_gitlab`,
-  plus the verified `FakeForge` every consumer tests against.
+  plus the verified `FakeForge` every consumer tests against. One
+  conformance suite gates all of them, the fake included, and the
+  protocol freezes only when every backend passes it.
 
-`protocol.md` describes the verbs. `quirks.md` records what the real
-forges taught us.
+Where to read next:
+
+- [protocol.md](protocol.md): the verbs, their groups, and the rules
+  every method obeys.
+- [gitlab.md](gitlab.md): every protocol method mapped onto GitLab's
+  REST v4 API, the odd one out that keeps the protocol honest.
+- [fixtures.md](fixtures.md): the record and replay layer that lets
+  backend tests gate merges with no network.
+- [quirks.md](quirks.md): what the real forges taught us, each entry
+  reproduced by a deterministic `FakeForge` fault mode.
