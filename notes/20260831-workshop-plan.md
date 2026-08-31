@@ -354,6 +354,52 @@ shape, on today's cheaper machinery.
   measured union (raise, observe red, revert); the per-leg
   enforcement is gone from CI logs.
 
+## Phase 10 — automatic changelogs and versioning
+
+One engine for both: conventional commits drive the changelog entry
+and the next version.
+
+- git-cliff configuration ported from hse's template (cliff.toml per
+  package), rendering a release's entries from the commits touching
+  that package's path since its last tag.
+- `fm release.prepare <path>` learns to run without a version:
+  derive the bump from the commits (feat is minor, fix is patch, a
+  breaking marker is major), stamp it, and write the generated
+  entries under the new heading for the human to edit.
+- **Acceptance:** on a branch with one `feat:` commit touching only
+  the workshop, `uv run fm release.prepare packages/workshop`
+  stamps the minor bump and a changelog entry naming that commit's
+  subject; `release.verify` passes the result; a hand-passed version
+  still wins.
+- Gates 0.1.0: yes (the first real release should ride it).
+
+## Phase 11 — the environment: variables, paths, launchers, agents
+
+hse's instance environment, portable: `.repo.env` and
+`.repo.env.local` through footman's env cascade, path management,
+the shell and editor launchers in the project template, and the
+agent environment they share.
+
+- Scope drawn when the phase starts; hse's `setup/` and launcher
+  files are the source.
+- Gates 0.1.0: yes (template-shaping is cheapest before instances
+  exist).
+
+## Phase 12 — the branded runner
+
+The option to replace `fm` in workflows and docs with a branded
+footman name, as hse brands its own. A template question carries the
+brand through rendered workflows; footman's branding hooks do the
+rest.
+
+- Gates 0.1.0: preferred but not blocking; it slips without harm.
+
+## Phase 13 — the shared tool cache (post-0.1.0)
+
+One tool cache between agents. Waits on toolroom moving into this
+monorepo and on strongroom progress, both outside this plan's
+control; recorded so the dependency is visible.
+
 ## Temporary, replaced by
 
 | Temporary piece | Replaced by |
@@ -452,6 +498,14 @@ shape, on today's cheaper machinery.
   verified design. Cloud legs write `.forge.dev.env` with the cloud
   URL and token, which is the harness's existing seam. Cleanup lists
   and deletes scratch by prefix, runs on every verdict.
+- 2026-08-31, the release story as it stands (Willem: record it).
+  The github kind releases by trusted publishing to PyPI; the gitea
+  and gitlab kinds publish by token (`UV_PUBLISH_TOKEN`) to the
+  contract's `publish_index`; a workshop release also publishes the
+  template snapshot. Not yet covered anywhere: attestation or
+  signing, a non-PyPI index for the monorepo itself, and a portable
+  token path on the github kind. `packages/workshop/docs/releases.md`
+  states the same for readers.
 - 2026-08-31, coverage grace (Willem: hse allowed a margin so a
   0.01% drop is not penalised). The gate fails only more than half a
   point below the floor; the floor stays the declared high-water
