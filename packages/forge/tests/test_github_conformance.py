@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from _github_driver import GithubConformanceDriver
+from livery.forge import Unsupported
 from livery.forge._github import _resolve_token
 from livery.forge.testing import (
     SCENARIOS,
@@ -63,7 +64,15 @@ def _run_live(scenario: Scenario) -> None:
     if not scenario.applies_to(driver.forge):
         pytest.skip(f"{scenario.name} is out of scope for github")
     try:
-        scenario.run(driver)
+        try:
+            scenario.run(driver)
+        except Unsupported as exc:
+            if RECORD:
+                raise
+            # A live leg against a server below the interface floor
+            # (gitea.com runs 1.27) skips with the server's words; the
+            # recorded suites still pin the behaviour where it exists.
+            pytest.skip(str(exc))
     finally:
         if not RECORD:
             # Cloud accounts meter repositories, so a live run deletes
