@@ -207,8 +207,107 @@ def test_the_version_grammar_and_its_pep440_form(tmp_path: Path) -> None:
 
 def test_sanitise_and_pep440_pass_throughs() -> None:
     assert sanitise_branch("feat/my_thing!") == "feat.mything"
+    # ASCII only: PEP 440's local segment accepts nothing wider.
+    assert sanitise_branch("feat/café-über") == "feat.caf-ber"
     assert semver_to_pep440("1.2.3") == "1.2.3"
     assert semver_to_pep440("1.2.3-dev.b.2") == "1.2.3.dev2+b"
+
+
+def test_a_terminal_no_skips_the_member_and_continues(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    root = _workspace(tmp_path)
+    _grow_on_branch(root)
+    git = GitOps(root)
+    monkeypatch.setenv("LIVERY_PUBLISH_INDEX", "https://example.test/simple")
+    monkeypatch.setattr(
+        "livery.workshop._dev_release.footman.confirm", lambda *a, **k: False
+    )
+    # A real terminal said no: skip that member, never a refusal.
+    monkeypatch.setattr(
+        "livery.workshop._dev_release.sys",
+        SimpleNamespace(stdin=SimpleNamespace(isatty=lambda: True)),
+    )
+    monkeypatch.setattr(
+        "livery.workshop._dev_release.build_dev",
+        lambda *a, **k: pytest.fail("a declined member must not build"),
+    )
+    dev_release(root, git, discover_packages(root))
+    assert "skipped livery-core" in capsys.readouterr().out
+
+
+def test_a_failing_build_restores_the_dirty_tree_from_snapshots(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _workspace(tmp_path)
+    _grow_on_branch(root)
+    git = GitOps(root)
+    member = root / "packages" / "core"
+    # An uncommitted edit in a file the build stamps: a git-based
+    # restore would discard it, the snapshot restore must not.
+    pyproject = member / "pyproject.toml"
+    dirty = pyproject.read_text() + "# uncommitted local edit\n"
+    pyproject.write_text(dirty)
+    version = dev_version(root, git, discover_packages(root)[0], stamp="20260901")
+    assert version.endswith(".dirty")
+
+    def _boom(*_args: object, **_kwargs: object) -> Path:
+        raise Failed("uv build exploded")
+
+    monkeypatch.setattr("livery.workshop._dev_release._python.build", _boom)
+    with pytest.raises(_FAILURES):
+        build_dev(root, DevPlan(discover_packages(root)[0], version))
+    assert pyproject.read_text() == dirty
+
+
+def test_the_branch_routes_the_act(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._release_driver import workflow_release
+
+    root = _workspace(tmp_path)
+    monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: root)
+    routed: list[str] = []
+    monkeypatch.setattr(
+        "livery.workshop._release_driver.local_release",
+        lambda _root, _members: routed.append("train-local"),
+    )
+
+    def _dev(
+        _root: Path, _git: GitOps, _members: object, *, local: bool = False
+    ) -> None:
+        routed.append("dev")
+
+    monkeypatch.setattr("livery.workshop._dev_release.dev_release", _dev)
+    # A feature branch is the dev act.
+    _git(root, "checkout", "-b", "feat/9-widget")
+    workflow_release("core", local=True)
+    assert routed == ["dev"]
+    # main and the engine's workflow/ namespace run the train.
+    _git(root, "checkout", "main")
+    workflow_release("core", local=True)
+    assert routed == ["dev", "train-local"]
+    _git(root, "checkout", "-b", "workflow/update/templates")
+    workflow_release("core", local=True)
+    assert routed == ["dev", "train-local", "train-local"]
+    # Detached HEAD is a taught stop: the branch decides the act.
+    _git(root, "checkout", "--detach")
+    with pytest.raises(_FAILURES) as caught:
+        workflow_release("core", local=True)
+    assert "detached" in str(caught.value)
+
+
+def test_the_release_task_owns_the_terminal() -> None:
+    # The dev confirm runs mid-body, and footman refuses a mid-body
+    # prompt in a non-interactive task: dropping the stamp would pass
+    # every mocked test and break the real confirm at runtime.
+    from livery.workshop._release_driver import workflow_release
+
+    assert getattr(workflow_release, "_footman_interactive", False) is True
 
 
 def test_the_real_build_splices_the_readme_and_restores_the_tree(

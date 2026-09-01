@@ -51,9 +51,15 @@ def sanitise_branch(branch: str) -> str:
     """The branch name as version-segment identifiers.
 
     ``/`` becomes ``.``; every character outside ``[0-9A-Za-z-.]``
-    is dropped.
+    is dropped. ASCII only: PEP 440's local segment accepts nothing
+    wider, and ``str.isalnum`` alone would wave Unicode through into
+    a version the build backend refuses untaught.
     """
-    return "".join(c for c in branch.replace("/", ".") if c.isalnum() or c in "-.")
+    return "".join(
+        c
+        for c in branch.replace("/", ".")
+        if (c.isalnum() and c.isascii()) or c in "-."
+    )
 
 
 def semver_to_pep440(semver: str) -> str:
