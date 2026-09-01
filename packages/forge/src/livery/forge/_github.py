@@ -43,12 +43,17 @@ from livery.forge._types import (
     ItemState,
     Job,
     Label,
+    Protection,
     PullRequest,
     Release,
     RepoConfig,
     RepoInfo,
+    Review,
+    ReviewState,
     Run,
     RunStatus,
+    ScheduleEvent,
+    ScheduleEventKind,
     StateFilter,
 )
 
@@ -181,7 +186,12 @@ class GithubForge:
         """Honest per-install: ``ci_secrets`` needs the extra installed."""
         if capability == "ci_secrets":
             return importlib.util.find_spec("nacl") is not None
-        return capability in ("auto_merge", "force_cancel", "required_contexts")
+        return capability in (
+            "auto_merge",
+            "force_cancel",
+            "required_contexts",
+            "schedule_events",
+        )
 
     def repository(self, owner: str, name: str) -> Repository:
         """The view onto one repository. Cheap, no network."""
@@ -423,6 +433,33 @@ class _GithubRepository:
             is not None
         )
 
+    def protection(self, branch: str) -> Protection | None:
+        """The protection on *branch*, or None when none is configured.
+
+        Reading protection needs an administrating token; GitHub
+        answers 404 both for "no protection" and for a repository the
+        token cannot administer, so both read None here. ``strict`` on
+        the required checks is the up-to-date-before-merge rule, the
+        protocol's ``block_on_outdated``.
+        """
+        data = self._client.request(
+            f"{self._base}/branches/{quote(branch, safe='')}/protection",
+            none_on=(404,),
+        )
+        if data is None:
+            return None
+        checks = data.get("required_status_checks") or {}
+        reviews = data.get("required_pull_request_reviews") or {}
+        return Protection(
+            required_approvals=int(reviews.get("required_approving_review_count") or 0),
+            require_codeowner_review=(
+                bool(reviews.get("require_code_owner_reviews")) if reviews else None
+            ),
+            block_on_outdated=bool(checks.get("strict")),
+            block_on_rejected=bool(reviews),
+            required_contexts=tuple(str(c) for c in (checks.get("contexts") or [])),
+        )
+
     def web_url(self) -> str:
         """The repository's home page; string building, nothing on the wire."""
         return f"{self._forge._web_root}/{self._owner}/{self._name}"
@@ -475,6 +512,7 @@ def _as_pull_request(data: Mapping[str, Any]) -> PullRequest:
         head_sha=str(head.get("sha") or ""),
         base_branch=str(base.get("ref") or ""),
         url=str(data.get("html_url", "")),
+        author=str((data.get("user") or {}).get("login") or ""),
     )
 
 
@@ -621,6 +659,58 @@ class _GithubPullRequests:
         if data is None:
             raise ForgeError(f"no pull request {number} at {self._base}", status=404)
         return data.get("state") == "open" and data.get("auto_merge") is not None
+
+    def reviews(self, number: int) -> tuple[Review, ...]:
+        """The submitted reviews on pull request *number*."""
+        rows = self._client.request(f"{self._base}/pulls/{number}/reviews?per_page=100")
+        out: list[Review] = []
+        for row in rows or []:
+            author = str((row.get("user") or {}).get("login") or "")
+            state = str(row.get("state") or "")
+            verdicts: dict[str, ReviewState] = {
+                "APPROVED": "approved",
+                "CHANGES_REQUESTED": "changes_requested",
+                "COMMENTED": "commented",
+            }
+            verdict = verdicts.get(state)
+            # PENDING is an unsubmitted draft and DISMISSED verdicts no
+            # longer stand; neither is a review the caller may count.
+            if author and verdict is not None:
+                out.append(Review(author=author, state=verdict))
+        return tuple(out)
+
+    def schedule_events(self, number: int) -> tuple[ScheduleEvent, ...]:
+        """The merge-scheduling history, from the issue timeline."""
+        rows = self._client.request(
+            f"{self._base}/issues/{number}/timeline?per_page=100"
+        )
+        kinds: dict[str, ScheduleEventKind] = {
+            # One schedule, three spellings: GitHub names the enable
+            # event after the merge method, so a squash arm records
+            # auto_squash_enabled and a plain auto_merge_enabled never
+            # appears for it. Disabling is method-blind.
+            "auto_merge_enabled": "scheduled",
+            "auto_squash_enabled": "scheduled",
+            "auto_rebase_enabled": "scheduled",
+            "auto_merge_disabled": "unscheduled",
+            "merged": "merged",
+            "closed": "closed",
+            "reopened": "reopened",
+            "head_ref_force_pushed": "pushed",
+        }
+        out: list[ScheduleEvent] = []
+        for row in rows or []:
+            kind = kinds.get(str(row.get("event") or ""))
+            if kind is None:
+                continue
+            out.append(
+                ScheduleEvent(
+                    kind=kind,
+                    actor=str((row.get("actor") or {}).get("login") or ""),
+                    created=str(row.get("created_at") or ""),
+                )
+            )
+        return tuple(out)
 
     def comment(self, number: int, body: str) -> None:
         """Post *body* on pull request *number* (the issue comments API)."""

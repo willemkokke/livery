@@ -35,12 +35,17 @@ from livery.forge._types import (
     ItemState,
     Job,
     Label,
+    Protection,
     PullRequest,
     Release,
     RepoConfig,
     RepoInfo,
+    Review,
+    ReviewState,
     Run,
     RunStatus,
+    ScheduleEvent,
+    ScheduleEventKind,
     StateFilter,
 )
 
@@ -186,6 +191,7 @@ class GiteaForge:
             "force_cancel",
             "required_contexts",
             "ci_secrets",
+            "schedule_events",
         )
 
     def repository(self, owner: str, name: str) -> Repository:
@@ -393,6 +399,25 @@ class _GiteaRepository:
             is not None
         )
 
+    def protection(self, branch: str) -> Protection | None:
+        """The protection on *branch*, or None when none is configured."""
+        data = self._client.request(
+            f"{self._base}/branch_protections/{quote(branch, safe='')}",
+            none_on=(404,),
+        )
+        if data is None:
+            return None
+        return Protection(
+            required_approvals=int(data.get("required_approvals") or 0),
+            # Gitea has no codeowner-approval toggle to read.
+            require_codeowner_review=None,
+            block_on_outdated=bool(data.get("block_on_outdated_branch")),
+            block_on_rejected=bool(data.get("block_on_rejected_reviews")),
+            required_contexts=tuple(
+                str(c) for c in (data.get("status_check_contexts") or [])
+            ),
+        )
+
     def web_url(self) -> str:
         """The repository's home page; string building, nothing on the wire."""
         return f"{self._forge._web_root}/{self._owner}/{self._name}"
@@ -450,6 +475,7 @@ def _as_pull_request(data: Mapping[str, Any]) -> PullRequest:
         head_sha=str(head.get("sha") or ""),
         base_branch=str(base.get("ref") or ""),
         url=str(data.get("html_url", "")),
+        author=str((data.get("user") or {}).get("login") or ""),
     )
 
 
@@ -599,6 +625,57 @@ class _GiteaPullRequests:
             elif kind in ("pull_cancel_scheduled_merge", "close", "merge_pull"):
                 armed = False
         return armed
+
+    def reviews(self, number: int) -> tuple[Review, ...]:
+        """The submitted reviews on pull request *number*."""
+        rows = self._client.request(f"{self._base}/pulls/{number}/reviews")
+        out: list[Review] = []
+        for row in rows or []:
+            author = str((row.get("user") or {}).get("login") or "")
+            state = str(row.get("state") or "")
+            verdicts: dict[str, ReviewState] = {
+                "APPROVED": "approved",
+                "REQUEST_CHANGES": "changes_requested",
+                "COMMENT": "commented",
+            }
+            verdict = verdicts.get(state)
+            # PENDING is an unsubmitted draft and carries no verdict.
+            if author and verdict is not None:
+                out.append(Review(author=author, state=verdict))
+        return tuple(out)
+
+    def schedule_events(self, number: int) -> tuple[ScheduleEvent, ...]:
+        """The merge-scheduling history, from the issue timeline."""
+        events = self._client.paginate(
+            lambda page: (
+                self._client.request(
+                    f"{self._base}/issues/{number}/timeline?page={page}&limit=50"
+                )
+                or []
+            ),
+            subject=f"{self._base}/issues/{number}/timeline",
+        )
+        kinds: dict[str, ScheduleEventKind] = {
+            "pull_scheduled_merge": "scheduled",
+            "pull_cancel_scheduled_merge": "unscheduled",
+            "merge_pull": "merged",
+            "close": "closed",
+            "reopen": "reopened",
+            "pull_push": "pushed",
+        }
+        out: list[ScheduleEvent] = []
+        for event in events:
+            kind = kinds.get(str(event.get("type") or ""))
+            if kind is None:
+                continue
+            out.append(
+                ScheduleEvent(
+                    kind=kind,
+                    actor=str((event.get("user") or {}).get("login") or ""),
+                    created=str(event.get("created_at") or ""),
+                )
+            )
+        return tuple(out)
 
     def comment(self, number: int, body: str) -> None:
         """Post *body* on pull request *number* (the issue comments API)."""

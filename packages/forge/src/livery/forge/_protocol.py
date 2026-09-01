@@ -43,11 +43,14 @@ from livery.forge._types import (
     CombinedStatus,
     Issue,
     Job,
+    Protection,
     PullRequest,
     Release,
     RepoConfig,
     RepoInfo,
+    Review,
     Run,
+    ScheduleEvent,
     StateFilter,
 )
 
@@ -161,6 +164,24 @@ class PullRequests(Protocol):
 
         A pull request that left the open state reads unarmed, however
         it left it.
+        """
+        ...
+
+    def reviews(self, number: int) -> tuple[Review, ...]:
+        """The submitted reviews on pull request *number*.
+
+        Only verdicts arrive (approved, changes requested, commented);
+        drafts never do. Complete or raising, like every listing.
+        """
+        ...
+
+    def schedule_events(self, number: int) -> tuple[ScheduleEvent, ...]:
+        """The merge-scheduling history of pull request *number*.
+
+        Oldest first. The record that shows a created-then-lost
+        schedule. Raises livery.forge.Unsupported on a forge without
+        the ``schedule_events`` capability; ask
+        livery.forge.Forge.supports first.
         """
         ...
 
@@ -408,6 +429,17 @@ class Repository(Protocol):
 
     def branch_exists(self, branch: str) -> bool:
         """Whether *branch* exists on the repository."""
+        ...
+
+    def protection(self, branch: str) -> Protection | None:
+        """The protection configured for *branch*, or None when none is.
+
+        The read side of livery.forge.RepoConfig, normalised per
+        livery.forge.Protection: a flag the forge cannot express reads
+        as its inert value. Reading protection may need an
+        administrating token on some forges; a refusal raises
+        livery.forge.ForgeError for the caller to degrade on.
+        """
         ...
 
     def web_url(self) -> str:

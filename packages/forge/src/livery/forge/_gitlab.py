@@ -39,12 +39,15 @@ from livery.forge._types import (
     ItemState,
     Job,
     Label,
+    Protection,
     PullRequest,
     Release,
     RepoConfig,
     RepoInfo,
+    Review,
     Run,
     RunStatus,
+    ScheduleEvent,
     StateFilter,
 )
 
@@ -392,6 +395,34 @@ class _GitlabRepository:
             is not None
         )
 
+    def protection(self, branch: str) -> Protection | None:
+        """The protection on *branch*, or None when the branch is open.
+
+        GitLab splits the story across endpoints and tiers: the
+        protected-branch record says the branch is guarded, the
+        project approvals say how many approvals a merge needs, and
+        the richer per-path rules live behind paid tiers this read
+        does not pretend to see. What cannot be read reads as inert,
+        per livery.forge.Protection.
+        """
+        record = self._client.request(
+            f"{self._base}/protected_branches/{quote(branch, safe='')}",
+            none_on=(404,),
+        )
+        if record is None:
+            return None
+        approvals = (
+            self._client.request(f"{self._base}/approvals", none_on=(404,)) or {}
+        )
+        return Protection(
+            required_approvals=int(approvals.get("approvals_before_merge") or 0),
+            require_codeowner_review=bool(record.get("code_owner_approval_required"))
+            or None,
+            block_on_outdated=False,
+            block_on_rejected=False,
+            required_contexts=(),
+        )
+
     def web_url(self) -> str:
         """The project's home page; string building, nothing on the wire."""
         return f"{self._forge._web_root}/{self._owner}/{self._name}"
@@ -439,6 +470,7 @@ def _as_pull_request(data: Mapping[str, Any]) -> PullRequest:
         head_sha=str(data.get("sha") or ""),
         base_branch=str(data.get("target_branch") or ""),
         url=str(data.get("web_url", "")),
+        author=str((data.get("author") or {}).get("username") or ""),
     )
 
 
@@ -613,6 +645,32 @@ class _GitlabPullRequests:
             raise ForgeError(f"no merge request {number} at {self._base}", status=404)
         return data.get("state") == "opened" and bool(
             data.get("merge_when_pipeline_succeeds")
+        )
+
+    def reviews(self, number: int) -> tuple[Review, ...]:
+        """The approvals on merge request *number*, as reviews.
+
+        GitLab's review model is approvals: an approver appears here
+        as an ``approved`` review. Requested changes have no
+        first-class shape on GitLab, so none are ever reported.
+        """
+        data = self._client.request(
+            f"{self._base}/merge_requests/{number}/approvals", none_on=(404,)
+        )
+        if data is None:
+            return ()
+        out: list[Review] = []
+        for row in data.get("approved_by") or []:
+            login = str((row.get("user") or {}).get("username") or "")
+            if login:
+                out.append(Review(author=login, state="approved"))
+        return tuple(out)
+
+    def schedule_events(self, number: int) -> tuple[ScheduleEvent, ...]:
+        """Refused by name: GitLab keeps no readable scheduling history."""
+        raise Unsupported(
+            "GitLab records no merge-scheduling history the API reads back;"
+            " gate on supports('schedule_events')"
         )
 
     def comment(self, number: int, body: str) -> None:

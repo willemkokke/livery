@@ -266,6 +266,49 @@ def _addresses(driver: ForgeDriver) -> None:
     assert driver.forge.user_url("someone").endswith("someone")
 
 
+def _governance_reads(driver: ForgeDriver) -> None:
+    """author, protection, and the schedule history read back honestly.
+
+    Reviews are exercised against the fake only: submitting one needs
+    a second account, and the mapping is a thin normalisation each
+    backend's unit shape covers.
+    """
+    repo = driver.fresh_repo()
+    # A held run keeps the checks pending: GitHub refuses to schedule
+    # auto-merge on an already-green pull request (it would merge, not
+    # schedule), so the arm below needs an unfinished check.
+    sha = driver.push(repo.owner, repo.name, "feature", outcome="hang")
+    base = _default_branch(driver, repo)
+    pr = repo.pr.open("feature", base, "feat: governance", "")
+    assert pr.author == driver.forge.whoami()
+    if driver.forge.supports("required_contexts"):
+        repo.configure(RepoConfig(required_contexts=("gate",)))
+        protection = repo.protection(base)
+        assert protection is not None
+        assert "gate" in protection.required_contexts
+    if driver.forge.supports("schedule_events"):
+        if driver.forge.supports("auto_merge"):
+            repo.configure(RepoConfig(allow_auto_merge=True))
+            driver.await_mergeable(repo.owner, repo.name, pr.number)
+            repo.pr.arm(pr.number, title="feat: governance")
+            repo.pr.disarm(pr.number)
+            driver.settle(repo.owner, repo.name, sha)
+            kinds = [event.kind for event in repo.pr.schedule_events(pr.number)]
+            assert "scheduled" in kinds
+    else:
+        try:
+            repo.pr.schedule_events(pr.number)
+        except Unsupported:
+            pass
+        else:
+            raise AssertionError(
+                "schedule_events must refuse by name without the capability"
+            )
+    assert repo.pr.reviews(pr.number) == () or all(
+        review.author for review in repo.pr.reviews(pr.number)
+    )
+
+
 def _configure_is_idempotent(driver: ForgeDriver) -> None:
     """Configure applies stated fields and re-applies without error."""
     repo = driver.fresh_repo()
@@ -693,6 +736,7 @@ SCENARIOS: tuple[Scenario, ...] = (
     Scenario("branches", _branches),
     Scenario("tags", _tags),
     Scenario("addresses", _addresses),
+    Scenario("governance-reads", _governance_reads),
     Scenario("configure-is-idempotent", _configure_is_idempotent),
     Scenario(
         "configure-required-contexts",

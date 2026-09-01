@@ -28,6 +28,7 @@ _CAPABILITIES: tuple[Capability, ...] = (
     "force_cancel",
     "required_contexts",
     "ci_secrets",
+    "schedule_events",
 )
 
 
@@ -50,6 +51,7 @@ def status_flow(repo: Repository, git: GitOps) -> int:
 @task
 def status(
     watch: Annotated[bool, doc("follow until it lands or needs a person")] = False,
+    workflow: Annotated[bool, doc("the reserved workflows instead")] = False,
     interval: Annotated[int, doc("watch poll seconds")] = 15,
     timeout: Annotated[int, doc("watch deadline seconds")] = 1800,
 ) -> None:
@@ -59,9 +61,18 @@ def status(
     state keeps its own stable code (see livery.workshop._verdict), and
     the printed sentence always says what to do next. ``--watch``
     follows instead of reading once: the same classification, polled
-    until the branch lands or a person is needed.
+    until the branch lands or a person is needed. ``--workflow``
+    reads the reserved workflows instead, one line each with its
+    state, author, and, for a mid-publish release, the members whose
+    receipt tag is already cut.
     """
     repo, git = _resolved()
+    if workflow:
+        from livery.workshop._workflow_state import workflow_states
+        from livery.workshop._workflow_tasks import render_workflows
+
+        render_workflows(workflow_states(repo, git))
+        return
     if watch:
         follow(repo, git.current_branch(), git, interval=interval, timeout=timeout)
         return
