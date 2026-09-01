@@ -121,6 +121,8 @@ class GitlabForge:
         """
         headers = {"PRIVATE-TOKEN": token} if token else {}
         self._client = JsonClient(api_base, headers=headers, opener=opener, timeout=120)
+        # GitLab serves the API under /api/v4 on the web host.
+        self._web_root = api_base.rstrip("/").removesuffix("/api/v4")
 
     @classmethod
     def connect(
@@ -167,6 +169,10 @@ class GitlabForge:
     def repository(self, owner: str, name: str) -> Repository:
         """The view onto one repository. Cheap, no network."""
         return _GitlabRepository(self, self._client, owner, name)
+
+    def user_url(self, login: str) -> str:
+        """The address of *login*'s profile; nothing on the wire."""
+        return f"{self._web_root}/{login}"
 
     def create_repo(
         self,
@@ -385,6 +391,30 @@ class _GitlabRepository:
             )
             is not None
         )
+
+    def web_url(self) -> str:
+        """The project's home page; string building, nothing on the wire."""
+        return f"{self._forge._web_root}/{self._owner}/{self._name}"
+
+    def pr_url(self, number: int) -> str:
+        """The address of merge request *number*."""
+        return f"{self.web_url()}/-/merge_requests/{number}"
+
+    def issue_url(self, number: int) -> str:
+        """The address of issue *number*."""
+        return f"{self.web_url()}/-/issues/{number}"
+
+    def commit_url(self, sha: str) -> str:
+        """The address of commit *sha*."""
+        return f"{self.web_url()}/-/commit/{sha}"
+
+    def compare_url(self, base: str, head: str) -> str:
+        """The address comparing *base* to *head*."""
+        return f"{self.web_url()}/-/compare/{base}...{head}"
+
+    def tag_url(self, tag: str) -> str:
+        """The address of *tag*'s tag view."""
+        return f"{self.web_url()}/-/tags/{tag}"
 
     def delete_branch(self, branch: str) -> None:
         """Delete *branch*; one already gone is success."""

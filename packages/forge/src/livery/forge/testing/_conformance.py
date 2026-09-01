@@ -238,6 +238,34 @@ def _tags(driver: ForgeDriver) -> None:
     assert "packages/forge/v0.0.1" in repo.tags()
 
 
+def _addresses(driver: ForgeDriver) -> None:
+    """The address family builds each forge's own path shapes.
+
+    Compared by path, not by host: a server's configured external
+    address is authoritative for its web links and may differ from the
+    API base the backend derives from, so only the shapes below are
+    the protocol's promise.
+    """
+    repo = driver.fresh_repo()
+    driver.push(repo.owner, repo.name, "feature")
+    base = _default_branch(driver, repo)
+    pr = repo.pr.open("feature", base, "feat: addresses", "")
+    home = repo.web_url()
+    assert home.endswith(f"{repo.owner}/{repo.name}")
+    for built in (
+        repo.pr_url(pr.number),
+        repo.issue_url(1),
+        repo.commit_url("0" * 40),
+        repo.compare_url(base, "feature"),
+        repo.tag_url("v1.2.3"),
+    ):
+        assert built.startswith(f"{home}/")
+    # The pull request's own address, as the forge reports it, carries
+    # the path the built one must reproduce.
+    assert pr.url.endswith(repo.pr_url(pr.number).removeprefix(home))
+    assert driver.forge.user_url("someone").endswith("someone")
+
+
 def _configure_is_idempotent(driver: ForgeDriver) -> None:
     """Configure applies stated fields and re-applies without error."""
     repo = driver.fresh_repo()
@@ -664,6 +692,7 @@ SCENARIOS: tuple[Scenario, ...] = (
     Scenario("repo-lifecycle", _repo_lifecycle),
     Scenario("branches", _branches),
     Scenario("tags", _tags),
+    Scenario("addresses", _addresses),
     Scenario("configure-is-idempotent", _configure_is_idempotent),
     Scenario(
         "configure-required-contexts",

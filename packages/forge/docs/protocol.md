@@ -58,6 +58,7 @@ and discovery joins the protocol only when a workflow demands it.
 | `create_repo(owner, name, *, private, description)` | create, initialised with a default branch; raises when it exists |
 | `get_repo(owner, name)` | settings or None; the probe that makes creation re-runnable |
 | `delete_repo(owner, name)` | idempotent |
+| `user_url(login)` | the profile address; string building, nothing on the wire |
 
 ### `Repository`: repository-level
 
@@ -67,9 +68,25 @@ and discovery joins the protocol only when a workflow demands it.
 | `tags()` | every tag name; the release train's existence probe |
 | `branch_exists(branch)` | existence |
 | `delete_branch(branch)` | idempotent; the abort path's cleanup (merge-path deletion is configuration) |
+| `web_url()` | the repository's home page |
+| `pr_url(number)` | the pull request's address |
+| `issue_url(number)` | the issue's address |
+| `commit_url(sha)` | the commit's address |
+| `compare_url(base, head)` | the comparison's address |
+| `tag_url(tag)` | the tag or release view's address |
 
 Labels are spoken by name everywhere. `configure` ensures they exist;
 no separate label verbs exist.
+
+The address family is pure string building: nothing goes on the wire
+and no address is probed for existence, so a changelog or a message
+can carry links without spending a request. Each backend writes its
+own path shapes (`/pull/N` on GitHub, `/pulls/N` on Gitea,
+`/-/merge_requests/N` on GitLab), which is why the shapes live here
+rather than in every caller. A built address is compared with a
+reported one by path, never by host: a server's links follow its own
+configured external address, which need not be the host the API was
+reached on (see `quirks.md`).
 
 ### `pr`: pull requests
 

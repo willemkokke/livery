@@ -410,6 +410,35 @@ class Repository(Protocol):
         """Whether *branch* exists on the repository."""
         ...
 
+    def web_url(self) -> str:
+        """The repository's home page address.
+
+        Every ``*_url`` method builds strings from what the backend
+        already knows; nothing goes on the wire, and the address is
+        not probed for existence.
+        """
+        ...
+
+    def pr_url(self, number: int) -> str:
+        """The address of pull request *number*."""
+        ...
+
+    def issue_url(self, number: int) -> str:
+        """The address of issue *number*."""
+        ...
+
+    def commit_url(self, sha: str) -> str:
+        """The address of commit *sha*."""
+        ...
+
+    def compare_url(self, base: str, head: str) -> str:
+        """The address comparing *base* to *head* (refs or shas)."""
+        ...
+
+    def tag_url(self, tag: str) -> str:
+        """The address of *tag*'s release or tag view."""
+        ...
+
     def delete_branch(self, branch: str) -> None:
         """Delete *branch* from the repository.
 
@@ -456,6 +485,14 @@ class Forge(Protocol):
 
     def repository(self, owner: str, name: str) -> Repository:
         """The view onto one repository. Cheap, no network."""
+        ...
+
+    def user_url(self, login: str) -> str:
+        """The address of *login*'s profile page.
+
+        String building from the server the backend is bound to;
+        nothing goes on the wire and the login is not verified.
+        """
         ...
 
     def create_repo(
