@@ -37,6 +37,7 @@ commit_preprocessors = [
 # Keep a Changelog's sections. The comment prefix only orders the
 # groups, and the template strips it before printing.
 commit_parsers = [
+  { message = "^chore\\(release\\)", skip = true },
   { message = "^feat", group = "<!-- 0 -->Added" },
   { message = "^fix", group = "<!-- 1 -->Fixed" },
   { message = ".*", group = "<!-- 2 -->Changed" },

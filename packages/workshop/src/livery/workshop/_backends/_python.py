@@ -286,3 +286,169 @@ def run_test(
         return
     pytest.opts(in_process=False)(*dirs, "--cov=livery", "--cov-report=", *pytest_args)
     report_coverage(root, packages)
+
+
+def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
+    """Build *package*'s wheel and sdist into its ``dist/``; the dist dir.
+
+    Always from a clean ``dist/``: reusing an artifact from an
+    earlier build installs stale code under current tests, a silent
+    footgun bought off for seconds of build. *epoch* (a commit's
+    timestamp) rides ``SOURCE_DATE_EPOCH`` so a pure-Python rebuild
+    at the same ref is byte-identical.
+    """
+    import shutil
+
+    dist = package.directory / "dist"
+    shutil.rmtree(dist, ignore_errors=True)
+    env = dict(os.environ)
+    if epoch:
+        env["SOURCE_DATE_EPOCH"] = str(epoch)
+    result = subprocess.run(
+        ["uv", "build", "--out-dir", str(dist)],
+        cwd=package.directory,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+    if result.returncode != 0:
+        fail(
+            f"uv build ({package.name}) exited {result.returncode}:\n"
+            f"{result.stdout}{result.stderr}"
+        )
+    if not list(dist.glob("*.whl")):
+        fail(f"{package.name}: the build produced no wheel in {dist}")
+    return dist
+
+
+def _index_args(root: Path) -> tuple[str, ...]:
+    """The repo's ``[[tool.uv.index]]`` entries as install flags.
+
+    The isolated venv is bare and reads no project config, so without
+    this it resolves only from PyPI plus the local wheels, and a
+    custom index's already-published packages cannot resolve the way
+    a real consumer's do.
+    """
+    import tomllib
+
+    pyproject = root / "pyproject.toml"
+    if not pyproject.is_file():
+        return ()
+    data = tomllib.loads(pyproject.read_text("utf-8"))
+    args: list[str] = []
+    for entry in (data.get("tool", {}).get("uv", {}).get("index", [])) or []:
+        url = str(entry.get("url") or "")
+        if not url:
+            continue
+        args.append("--default-index" if entry.get("default") else "--index")
+        args.append(url)
+    return tuple(args)
+
+
+def run_isolated_test(
+    package: Package,
+    root: Path,
+    *,
+    release_dirs: tuple[Path, ...] = (),
+    resolution: str = "highest",
+) -> dict[str, str]:
+    """Install the built wheel into a fresh venv and test the installed copy.
+
+    One leg of the isolated validation; the caller runs it twice, the
+    floor leg (``resolution="lowest-direct"``, every direct dependency
+    at its declared floor, so a floor lying about compatibility fails
+    here) and the latest leg (the world a fresh consumer gets).
+
+    ``--find-links`` is limited to *release_dirs*, the co-released
+    set's ``dist/`` directories: a leftover wheel from a non-released
+    package must never mask that the release needs an unpublished
+    dependency version. Everything else resolves from the repo's
+    configured indexes, like a real consumer.
+
+    Returns the resolved version per distribution, the report's raw
+    material ("floor leg: livery-forge 0.1.0").
+    """
+    import json
+    import tempfile
+
+    wheels = list((package.directory / "dist").glob("*.whl"))
+    if not wheels:
+        fail(f"{package.name}: no wheel in dist/ to validate; build first")
+    with tempfile.TemporaryDirectory() as scratch:
+        venv = Path(scratch) / "venv"
+        for command in (
+            ["uv", "venv", str(venv)],
+            [
+                "uv",
+                "pip",
+                "install",
+                "--python",
+                str(venv / "bin" / "python"),
+                f"--resolution={resolution}",
+                *[f"--find-links={d}" for d in release_dirs],
+                *_index_args(root),
+                str(wheels[0]),
+            ],
+            # The runner installs at the default resolution on purpose:
+            # the floor leg's lowest-direct must starve the package's
+            # own dependencies, never drag pytest back a decade.
+            [
+                "uv",
+                "pip",
+                "install",
+                "--python",
+                str(venv / "bin" / "python"),
+                "pytest",
+            ],
+        ):
+            result = subprocess.run(
+                command, cwd=scratch, capture_output=True, text=True, check=False
+            )
+            if result.returncode != 0:
+                fail(
+                    f"{package.name} isolated install ({resolution}) exited"
+                    f" {result.returncode}:\n{result.stdout}{result.stderr}"
+                )
+        tests = package.directory / "tests"
+        if tests.is_dir():
+            result = subprocess.run(
+                [
+                    str(venv / "bin" / "python"),
+                    "-m",
+                    "pytest",
+                    str(tests),
+                    "-q",
+                    "-p",
+                    "no:cacheprovider",
+                ],
+                cwd=scratch,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode != 0:
+                fail(
+                    f"{package.name} isolated tests ({resolution}) failed:\n"
+                    f"{result.stdout[-4000:]}{result.stderr[-2000:]}"
+                )
+        listing = subprocess.run(
+            [
+                "uv",
+                "pip",
+                "list",
+                "--python",
+                str(venv / "bin" / "python"),
+                "--format",
+                "json",
+            ],
+            cwd=scratch,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        resolved: dict[str, str] = {}
+        if listing.returncode == 0:
+            for row in json.loads(listing.stdout or "[]"):
+                resolved[str(row.get("name", ""))] = str(row.get("version", ""))
+        return resolved

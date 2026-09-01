@@ -92,3 +92,33 @@ def graph_affected(base: str = "main") -> None:
         return
     for package in affected:
         print(f"  {package.path} ({package.name})")
+
+
+def order_topologically(packages: tuple[Package, ...]) -> tuple[Package, ...]:
+    """*packages* with every dependency before its dependents.
+
+    Kahn's walk over the ``[[depends]]`` edges restricted to the given
+    set; ties keep the input order so the result is deterministic. A
+    cycle cannot arise, the layering lint refuses one long before a
+    release asks.
+    """
+    chosen = {p.path for p in packages}
+    remaining = list(packages)
+    ordered: list[Package] = []
+    placed: set[str] = set()
+    while remaining:
+        for index, package in enumerate(remaining):
+            needs = {
+                edge.path
+                for edge in package.depends
+                if edge.path in chosen and edge.path not in placed
+            }
+            if not needs:
+                ordered.append(package)
+                placed.add(package.path)
+                del remaining[index]
+                break
+        else:  # pragma: no cover - guarded by the layering lint
+            ordered.extend(remaining)
+            break
+    return tuple(ordered)
