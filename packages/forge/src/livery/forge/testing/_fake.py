@@ -197,6 +197,10 @@ class FakeForge:
         """The view onto one repository. Cheap, no existence check."""
         return _FakeRepository(self, owner, name)
 
+    def user_url(self, login: str) -> str:
+        """The address of *login*'s profile under the ``fake://`` scheme."""
+        return f"fake://{login}"
+
     def create_repo(
         self,
         owner: str,
@@ -466,6 +470,30 @@ class _FakeRepository:
         """Whether *branch* exists."""
         state = self._fake._require_repo(self._owner, self._name)
         return branch in state.branches
+
+    def web_url(self) -> str:
+        """The repository's home page under the ``fake://`` scheme."""
+        return f"fake://{self._owner}/{self._name}"
+
+    def pr_url(self, number: int) -> str:
+        """The address of pull request *number*."""
+        return f"{self.web_url()}/pulls/{number}"
+
+    def issue_url(self, number: int) -> str:
+        """The address of issue *number*."""
+        return f"{self.web_url()}/issues/{number}"
+
+    def commit_url(self, sha: str) -> str:
+        """The address of commit *sha*."""
+        return f"{self.web_url()}/commit/{sha}"
+
+    def compare_url(self, base: str, head: str) -> str:
+        """The address comparing *base* to *head*."""
+        return f"{self.web_url()}/compare/{base}...{head}"
+
+    def tag_url(self, tag: str) -> str:
+        """The address of *tag*'s release view."""
+        return f"{self.web_url()}/releases/tag/{tag}"
 
     def delete_branch(self, branch: str) -> None:
         """Delete *branch*; a branch already gone is success."""

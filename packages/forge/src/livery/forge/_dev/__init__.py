@@ -49,7 +49,10 @@ if _FORGE_TESTS.is_dir():
     fixtures = forge.group("fixtures", help="Recorded HTTP fixtures (cassettes)")
 
     @fixtures.task(name="record")
-    def fixtures_record() -> None:
+    def fixtures_record(
+        scenario: Annotated[str, doc("record only this scenario, by its name")] = "",
+        backend: Annotated[str, doc("record only gitea, gitlab, or github")] = "",
+    ) -> None:
         """Re-record the conformance cassettes from the live containers.
 
         Runs the backend conformance suites against the seeded
@@ -57,20 +60,37 @@ if _FORGE_TESTS.is_dir():
         cassettes under forge's tests/cassettes/. Review the diff like
         code: a changed exchange is a changed contract with the
         server.
+
+        A new scenario needs only its own recording: name it with
+        ``--scenario`` (and a backend with ``--backend``) rather than
+        re-recording every exchange, which spends live quota and
+        rewrites cassettes nothing asked to change.
         """
         os.environ["LIVERY_FORGE_RECORD"] = "1"
         run_tests = pytest.opts(in_process=False)
-        run_tests(str(_FORGE_TESTS / "test_gitea_conformance.py"))
-        # One single-node GitLab absorbs about four concurrent
-        # writers; beyond that its own internals time out (Gitaly
-        # deadlines), so the recording run is capped rather than
-        # flaky.
-        run_tests(str(_FORGE_TESTS / "test_gitlab_conformance.py"), "-n", "4")
-        # GitHub scratch goes to the e2e organisation, never the
-        # signed-in user's profile: scratch stays out of personal
-        # namespaces, recording included.
-        os.environ["LIVERY_FORGE_E2E_OWNER"] = "livery-forge-e2e"
-        run_tests(str(_FORGE_TESTS / "test_github_conformance.py"), "-n", "4")
+        only = ("-k", scenario) if scenario else ()
+        backends = (backend,) if backend else ("gitea", "gitlab", "github")
+        for name in backends:
+            if name not in ("gitea", "gitlab", "github"):
+                fail(f"unknown backend {name!r}: gitea, gitlab, or github")
+        if "gitea" in backends:
+            run_tests(str(_FORGE_TESTS / "test_gitea_conformance.py"), *only)
+        if "gitlab" in backends:
+            # One single-node GitLab absorbs about four concurrent
+            # writers; beyond that its own internals time out (Gitaly
+            # deadlines), so the recording run is capped rather than
+            # flaky.
+            run_tests(
+                str(_FORGE_TESTS / "test_gitlab_conformance.py"), "-n", "4", *only
+            )
+        if "github" in backends:
+            # GitHub scratch goes to the e2e organisation, never the
+            # signed-in user's profile: scratch stays out of personal
+            # namespaces, recording included.
+            os.environ["LIVERY_FORGE_E2E_OWNER"] = "livery-forge-e2e"
+            run_tests(
+                str(_FORGE_TESTS / "test_github_conformance.py"), "-n", "4", *only
+            )
 
 
 _GITEA_URL = "http://localhost:3000"

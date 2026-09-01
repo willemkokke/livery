@@ -124,6 +124,13 @@ class GithubForge:
             headers["Authorization"] = f"Bearer {token}"
         self._client = JsonClient(api_base, headers=headers, opener=opener)
         self._opener = opener
+        # github.com's API lives on its own host; an Enterprise server
+        # serves the API under /api/v3 on the web host.
+        stripped = api_base.rstrip("/")
+        if stripped == "https://api.github.com":
+            self._web_root = "https://github.com"
+        else:
+            self._web_root = stripped.removesuffix("/api/v3")
 
     @classmethod
     def connect(
@@ -179,6 +186,10 @@ class GithubForge:
     def repository(self, owner: str, name: str) -> Repository:
         """The view onto one repository. Cheap, no network."""
         return _GithubRepository(self, self._client, owner, name)
+
+    def user_url(self, login: str) -> str:
+        """The address of *login*'s profile; nothing on the wire."""
+        return f"{self._web_root}/{login}"
 
     def create_repo(
         self,
@@ -411,6 +422,30 @@ class _GithubRepository:
             )
             is not None
         )
+
+    def web_url(self) -> str:
+        """The repository's home page; string building, nothing on the wire."""
+        return f"{self._forge._web_root}/{self._owner}/{self._name}"
+
+    def pr_url(self, number: int) -> str:
+        """The address of pull request *number*."""
+        return f"{self.web_url()}/pull/{number}"
+
+    def issue_url(self, number: int) -> str:
+        """The address of issue *number*."""
+        return f"{self.web_url()}/issues/{number}"
+
+    def commit_url(self, sha: str) -> str:
+        """The address of commit *sha*."""
+        return f"{self.web_url()}/commit/{sha}"
+
+    def compare_url(self, base: str, head: str) -> str:
+        """The address comparing *base* to *head*."""
+        return f"{self.web_url()}/compare/{base}...{head}"
+
+    def tag_url(self, tag: str) -> str:
+        """The address of *tag*'s release view."""
+        return f"{self.web_url()}/releases/tag/{tag}"
 
     def delete_branch(self, branch: str) -> None:
         """Delete *branch*; one already gone is success.
