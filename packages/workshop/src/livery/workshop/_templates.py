@@ -162,6 +162,16 @@ def project_drift(root: Path) -> list[str]:
                 drift.append(f"{relative}: rendered, but missing from the repository")
             elif _lf(committed.read_bytes()) != _lf(rendered.read_bytes()):
                 drift.append(f"{relative}: differs from its render")
+    from livery.workshop._ci_generate import generated_files
+
+    for path, content in generated_files(root, data).items():
+        relative_generated = path.relative_to(root)
+        if not path.is_file():
+            drift.append(
+                f"{relative_generated}: generated, but missing from the repository"
+            )
+        elif _lf(path.read_bytes()) != _lf(content.encode()):
+            drift.append(f"{relative_generated}: differs from its generation")
     return drift
 
 
@@ -223,6 +233,14 @@ def apply_project(root: Path) -> list[str]:
                 committed.parent.mkdir(parents=True, exist_ok=True)
                 committed.write_bytes(body)
                 changed.append(str(relative))
+    from livery.workshop._ci_generate import generated_files
+
+    for path, content in generated_files(root, data).items():
+        body = _lf(content.encode())
+        if not path.is_file() or _lf(path.read_bytes()) != body:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(body)
+            changed.append(str(path.relative_to(root)))
     return changed
 
 

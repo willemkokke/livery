@@ -79,6 +79,9 @@ convention = "google"
 # Test bodies explain themselves by name and assertion.
 "tests/**" = ["D1"]
 "**/tests/**" = ["D1"]
+# The CI emitters carry workflow YAML as string content; its lines
+# are the generated files' lines, not prose to wrap.
+"**/_ci_generate.py" = ["E501"]
 
 [tool.basedpyright]
 include = ["packages", "tests", "tasks.py"]

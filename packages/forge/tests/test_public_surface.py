@@ -39,6 +39,7 @@ def test_the_surface_is_declared() -> None:
         "RunStatus",
         "ScheduleEvent",
         "ScheduleEventKind",
+        "SimpleRegistry",
         "StateFilter",
         "Unsupported",
         "__version__",
