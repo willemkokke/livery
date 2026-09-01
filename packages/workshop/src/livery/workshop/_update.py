@@ -1,13 +1,11 @@
-"""``fm update``: bring this repository up to date, then submit it.
+"""The update family's file movers.
 
-One idempotent verb, run from a clean checkout of the base branch:
-bump every ``[[depends]]`` floor to the latest released tag, refresh
-the content channel (``fm sync``), refresh the rendered files (the
-render applier where the template source lives here, ``copier
-update`` at the installed workshop's tag everywhere else), and then
-become W3: branch, commit, and hand the branch to the submit flow.
-Nothing changed means nothing happens: no branch, no pull request,
-one line saying so.
+The pieces ``workflow.update`` drives: raise ``[[depends]]`` floors
+to the latest released tags, refresh the rendered files (the render
+applier where the template source lives here, ``copier update`` at
+the installed workshop's tag everywhere else), and read the newest
+release per package from the tags. The driver that branches,
+commits, and submits lives beside this module.
 """
 
 from __future__ import annotations
@@ -39,18 +37,24 @@ def latest_released(tags: tuple[str, ...]) -> dict[str, str]:
     return {path: ".".join(map(str, v)) for path, v in latest.items()}
 
 
-def bump_floors(root: Path, git: GitOps) -> list[str]:
-    """Raise every floor to the latest released tag; what changed.
+def bump_floors(root: Path, git: GitOps, *, only: tuple[str, ...] = ()) -> list[str]:
+    """Raise floors to the latest released tags; what changed.
 
-    A floor names the oldest version a dependant accepts; the wave
-    raises it to the newest release so instances move together. Both
-    homes move in step: the ``[[depends]]`` edge in ``livery.toml``
-    and the ``>=`` constraint in ``pyproject.toml``.
+    A floor names the oldest version a dependant accepts; this raises
+    it to the newest release so instances move together. Both homes
+    move in step: the ``[[depends]]`` edge in ``livery.toml`` and the
+    ``>=`` constraint in ``pyproject.toml``. *only* scopes the move
+    to floors on the named distributions (``livery-forge``); empty
+    moves every floor.
     """
+    packages = discover_packages(root)
+    dist_names = {p.path: p.name for p in packages}
     released = latest_released(git.tags())
     changed = []
-    for package in discover_packages(root):
+    for package in packages:
         for edge in package.depends:
+            if only and dist_names.get(edge.path, "") not in only:
+                continue
             newest = released.get(edge.path, "")
             if not edge.floor or not newest or newest == edge.floor:
                 continue

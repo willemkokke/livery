@@ -155,7 +155,7 @@ def test_an_unknown_other_is_left_strictly_alone() -> None:
     assert decision.action is WorkflowAction.START
 
 
-def test_dirty_tree_stops_except_a_preparing_update() -> None:
+def test_dirty_tree_stops_except_a_preparing_update_on_its_branch() -> None:
     assert _decide(dirty=True).action is WorkflowAction.STOP
     resumed = _decide(
         kind=WorkflowKind.UPDATE,
@@ -163,8 +163,20 @@ def test_dirty_tree_stops_except_a_preparing_update() -> None:
         members=(),
         wf=_wf(WorkflowState.PREPARING, name="update/templates"),
         dirty=True,
+        branch="workflow/update/templates",
     )
     assert resumed.action is WorkflowAction.START  # mid-conflict resume
+    # From any other branch the dirt is unrelated work: preparing
+    # would carry it onto the workflow branch, so the stop holds.
+    elsewhere = _decide(
+        kind=WorkflowKind.UPDATE,
+        name="update/templates",
+        members=(),
+        wf=_wf(WorkflowState.PREPARING, name="update/templates"),
+        dirty=True,
+    )
+    assert elsewhere.action is WorkflowAction.STOP
+    assert "uncommitted" in elsewhere.message
 
 
 def test_a_succeeded_leftover_tidies_before_the_behind_check() -> None:
