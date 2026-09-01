@@ -42,10 +42,12 @@ commit_parsers = [
   { message = ".*", group = "<!-- 2 -->Changed" },
 ]
 
-# Who wrote each change, resolved against the forge. A token makes
-# the lookup authenticated and works on a private repository; without
-# one the names of a public repository still resolve, and an
-# unresolved name simply prints without its author.
+# Who wrote each change, asked of the forge. The server root, not an
+# API path: git-cliff appends the API prefix itself, and a root that
+# already carries one becomes a doubled path the server answers 404
+# to. A repository the caller cannot read stops git-cliff outright,
+# so the workshop runs it offline when no token is in reach and says
+# so; the entry is then written without its authors.
 [remote.github]
 owner = "willemkokke"
 repo = "livery"
