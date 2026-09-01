@@ -546,7 +546,7 @@ def merge_flow(repo: Repository, git: GitOps, branch: str, *, title: str = "") -
     if status.state in ("pending", "none"):
         fail(
             f"CI is {status.state} for PR #{pr.number}: wait for the verdict"
-            " or `fm ci.watch`"
+            " or `fm status --watch`"
         )
     git.fetch()
     if git.behind_base(pr.base_branch):

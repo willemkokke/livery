@@ -492,7 +492,7 @@ def test_the_stalled_and_behind_verdicts_discriminate(
 def test_a_disarmed_verdict_still_raises_for_the_watcher(
     rig: tuple[FakeForge, SubmitGit],
 ) -> None:
-    # The classifier's code is unchanged: fm status and ci.watch still
+    # The classifier's code is unchanged: fm status (bare or --watch) still
     # answer 11 for a parked PR; only a deliberately unarmed submit
     # treats it as its own finish line.
     fake, git = rig

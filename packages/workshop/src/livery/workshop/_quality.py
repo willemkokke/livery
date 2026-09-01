@@ -175,9 +175,12 @@ def coverage_enforce() -> None:
     _python.enforce_coverage(root, _packages())
 
 
-@task
-def clean() -> None:
-    """Remove build artifacts and tool caches."""
+caches = group("caches", help="The workspace's derived caches")
+
+
+@caches.task(name="clear")
+def caches_clear() -> None:
+    """Remove build artifacts and checker caches."""
     import shutil
 
     root = workspace_root()

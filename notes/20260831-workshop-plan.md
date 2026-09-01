@@ -1,20 +1,6 @@
 # Building the workshop
 
-Status: phase 10 shipped 2026-09-01 (PR #58), then superseded the
-same day: the in-house miner retires for git-cliff (decision record).
-The verb realignment (abandon, submit.merge, submit --fix, sync +
-uv sync) is in flight; the workflow engine with the git-cliff release
-train is next, then dev releases on it. Phases 1-9
-shipped 2026-08-31 (PRs #12-#57). The affected engine scopes the gate to
-the changed packages' dependents' closure, per-package coverage
-floors live in each contract's `[qa]` table and gate the test step,
-the bootstrap's replaced-by table is annotated done line by line,
-and the workshop docs state the layer model as built. Phases 1-7
-shipped 2026-08-31 (PRs #12-#41; all five release legs green in run
-33416377299). The bootstrap
-plan's entry criteria are met: `livery-forge` 0.1.0 is on PyPI with
-all three backends passing the one conformance suite, the fixture
-harness is stable, and the compose loop is routine.
+Status: closed 2026-09-01, subsumed by `notes/20260901-workshop-plan.md`. Phases 1-10 shipped (PRs #12-#65); the remaining phases moved there, renumbered, under the engine redesign's contracts. This note stays as the record of the first build-out.
 
 ## The prompt (Willem)
 

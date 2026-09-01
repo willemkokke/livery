@@ -134,11 +134,11 @@ def test_new_package_renders_and_wires(
     real_run = subprocess.run
 
     def fake_run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
-        if cmd[:2] == ["uv", "lock"]:
+        if cmd[0] == "uv":
             return subprocess.CompletedProcess(cmd, 0, "", "")
         return real_run(cmd, **kwargs)
 
-    monkeypatch.setattr("livery.workshop._templates.subprocess.run", fake_run)
+    monkeypatch.setattr("livery.workshop._uv.subprocess.run", fake_run)
     with pytest.raises(_FAILURES):
         new_package("Bad Name")
     new_package("scratch")
