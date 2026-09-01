@@ -10,7 +10,10 @@ the merge-triggered generated workflows for all three kinds
 (release.yml keeps its filename so the PyPI trusted-publisher
 binding stands), the release verbs hidden. The release-PR title CI
 job is deferred to phase 8's path-filtered governance jobs, where
-the emitters grow conditions anyway. Subsumes `notes/20260831-workshop-plan.md`,
+the emitters grow conditions anyway. Phase 4 shipped 2026-09-01
+(PR #69). Phase 5 in flight: the update family on the engine, the
+parked wait-and-continue, resume, and the fresh-interpreter
+resubmit. Subsumes `notes/20260831-workshop-plan.md`,
 whose phases 1-10 shipped and whose remaining phases are carried
 forward here renumbered. The loop: one PR per phase, merged when
 green, forced-fault tests first, the hse audit closing each phase,
