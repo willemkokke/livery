@@ -35,9 +35,11 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
   closure over the `[[depends]]` graph); a change outside the
   packages runs everything.
 - `fm submit`: get the branch onto the remote, verified; `--armed`
-  lets it land, and the follow classifies the verdict with stable
-  exit codes. `fm status`, `fm ci.*`, `fm doctor`, and the
-  `workflow.*` exits stand beside it, all on
+  lets it land, `--fix` heals mechanical gate findings into the
+  branch, and the follow classifies the verdict with stable exit
+  codes. `fm submit.merge` lands a green, deliberately-unarmed PR;
+  `fm abandon` gives the feature up. `fm status`, `fm ci.*`, and
+  `fm doctor` stand beside them, all on
   [livery-forge](https://pypi.org/project/livery-forge/).
 - `fm template.check` keeps rendered files byte-identical to the
   template source the contract names (`[workspace] templates`: a

@@ -1,10 +1,10 @@
 # Building the workshop
 
-Status: phase 10 built, 2026-09-01, submitting. `fm release.prepare
-<path>` derives the bump and the grouped, linked, credited changelog
-entry from the conventional commits since the last release tag;
-version stamping moved behind the backend seam; the grammar gained
-the breaking marker and is published in the fragment. Phases 1-9
+Status: phase 10 shipped 2026-09-01 (PR #58), then superseded the
+same day: the in-house miner retires for git-cliff (decision record).
+The verb realignment (abandon, submit.merge, submit --fix, sync +
+uv sync) is in flight; the workflow engine with the git-cliff release
+train is next, then dev releases on it. Phases 1-9
 shipped 2026-08-31 (PRs #12-#57). The affected engine scopes the gate to
 the changed packages' dependents' closure, per-package coverage
 floors live in each contract's `[qa]` table and gate the test step,
@@ -663,6 +663,58 @@ starts; recorded here so the sequence is visible (Willem: post
   intent; more than one ahead refuses, lists the subjects, and asks
   for --title. Re-ships are untouched, where the default is already
   inert (it never rewrites the PR title or the squash subject).
+- 2026-09-01, the changelog engine (Willem, correcting phase 10's
+  unapproved in-house call): git-cliff replaces the miner and
+  `next_version`. `cliff.toml.jinja` ships through the template
+  channel (project and package kinds), as hse delivers it; bump
+  config expresses footman's practice (`features_always_bump_minor
+  = true`, `breaking_always_bump_major = false`); contributor
+  credit uses git-cliff's remote integration (tokens are ambient in
+  CI; the no-token degrade gets a forced-fault test). The title
+  grammar stays for submit. The forge protocol gains the URL family
+  (`pr_url`, `commit_url`, `user_url`, `compare_url`, ...), pure
+  per-backend string building, feeding the render context so
+  templates never re-encode forge path shapes.
+- 2026-09-01, the release story (Willem): hse's workflow engine
+  ports with multi-workflow identity `workflow/release-<set>`; the
+  base freeze narrows to a package-set intersection refusal.
+  Releases come in two modes: an atomic set (one PR, intra-set
+  floor bumps, tags pushed in dependency order) and a solo release
+  validated against already-released dependencies. The isolated leg
+  ports hse's shape verbatim: rebuild always, `--find-links`
+  limited to the co-released set, the repo's `[[tool.uv.index]]`
+  mirrored into the bare venv. Publishing is per package type
+  behind the backend seam (`build`/`publish` beside the isolated
+  test): classic PyPI by default, trusted publishing an opt-in
+  capability on the GitHub and GitLab templates, a configured
+  custom index wins, dev wheels go only to a custom index and
+  refuse without one, and a dev release of an unchanged package
+  refuses (`.devN` sorts below the release it names). A dev
+  release's changelog exists only in the wheel's README on the
+  index (`--unreleased` excerpt spliced at build time, restored
+  after).
+- 2026-09-01, verbs realigned (Willem, reviewing `fm --tree`):
+  `workflow.abort` was never hse's workflow.abort and its name lied
+  twice; it becomes top-level `abandon` (give up the feature: close,
+  delete both branches, back to base, dirty tree refuses).
+  `merge-now` becomes `submit.merge`, scoped to a green,
+  deliberately-unarmed PR, no force flag; merging red stays a
+  person's act in the forge UI. `submit --fix` heals mechanical
+  gate findings and folds them into the branch (amend while
+  unpushed, else a follow-up commit the squash collapses). `fm
+  format` checks by default and `--fix` rewrites, one flag across
+  format, lint, check, submit. `sync` also runs `uv sync`.
+  `update` moves under `workflow.` when the engine lands.
+  `release.*` collapses into hidden CI entries under
+  `workflow.release`. `start` (from hse, issue-driven) pairs with
+  `abandon` in phase 11 and abandon then also unassigns the issue.
+- 2026-09-01, global tasks (Willem): footman installed globally
+  (`uv tool install "footman[uv]"`) is the supported spelling, no
+  `uv run` in docs or habit. Pre-project verbs (`new.project`,
+  `new.repo`) ride `footman.tasks` entry points; footman#536 asks
+  stock `fm` to mount them the way a branded App's `builtin=`
+  already does. Until it lands, the user-rung tasks file is the
+  bridge.
 
 ## Open
 

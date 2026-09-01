@@ -380,11 +380,17 @@ class FakeForge:
             if pr.state != "open":
                 state.armed.pop(number)
                 continue
-            if self._derived_status(state, pr.head_sha).state == "success":
+            # Auto-merge judges the branch's current head, as the real
+            # forges do; the stored sha may predate a re-push.
+            head = state.branches.get(pr.head_branch, pr.head_sha)
+            if self._derived_status(state, head).state == "success":
                 state.armed.pop(number)
                 self._merge(state, pr)
 
     def _merge(self, state: _RepoState, pr: _PullRequestState) -> None:
+        # Freeze the head at the merge: an open pull request tracks its
+        # branch, and this is the moment tracking stops.
+        pr.head_sha = state.branches.get(pr.head_branch, pr.head_sha)
         pr.state = "closed"
         pr.merged = True
         if state.delete_branch_on_merge:
@@ -479,6 +485,11 @@ class _FakePullRequests:
         return self._fake._require_repo(self._owner, self._name)
 
     def _as_pull_request(self, pr: _PullRequestState) -> PullRequest:
+        # An open pull request's head follows its branch, as on the real
+        # forges; a merged or closed one keeps the sha it ended with.
+        head_sha = pr.head_sha
+        if pr.state == "open" and not pr.merged:
+            head_sha = self._state().branches.get(pr.head_branch, pr.head_sha)
         return PullRequest(
             number=pr.number,
             title=pr.title,
@@ -486,7 +497,7 @@ class _FakePullRequests:
             state=pr.state,
             merged=pr.merged,
             head_branch=pr.head_branch,
-            head_sha=pr.head_sha,
+            head_sha=head_sha,
             base_branch=pr.base_branch,
             url=f"fake://{self._owner}/{self._name}/pulls/{pr.number}",
         )
@@ -547,7 +558,12 @@ class _FakePullRequests:
 
     def close(self, number: int) -> None:
         """Close pull request *number*; closing a closed one is success."""
-        self._fake._require_pr(self._state(), number).state = "closed"
+        state = self._state()
+        pr = self._fake._require_pr(state, number)
+        if pr.state == "open":
+            # Tracking stops here, as at a merge.
+            pr.head_sha = state.branches.get(pr.head_branch, pr.head_sha)
+        pr.state = "closed"
 
     def reopen(self, number: int) -> None:
         """Reopen the closed, unmerged pull request *number*."""

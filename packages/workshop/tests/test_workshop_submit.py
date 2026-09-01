@@ -21,8 +21,8 @@ from livery.workshop._ci_tasks import cancel_flow, doctor_flow, rerun_flow, stat
 from livery.workshop._git_ops import GitOps
 from livery.workshop._submit import (
     Plan,
-    abort_flow,
-    merge_now_flow,
+    abandon_flow,
+    merge_flow,
     prepare,
     resolve_closes,
     submit_flow,
@@ -223,14 +223,53 @@ def test_slow_status_reads_keep_the_watch_in_flight(
     assert _repo(fake).pr.get(number) is not None
 
 
-def test_merge_now_rides_out_the_405_window(
+def test_submit_merge_refuses_red_and_pending(
+    rig: tuple[FakeForge, SubmitGit],
+) -> None:
+    # The refusals come before the happy path: a red head must name the
+    # red, a pending one must say wait, and neither may merge.
+    fake, git = rig
+    git.auto_settle = False
+    _submit(fake, git, armed=False, follow_to_verdict=False)
+    with pytest.raises(_FAILURES) as caught:
+        merge_flow(_repo(fake), git, "feat/1-first")
+    assert "wait" in str(caught.value)
+    git.outcome = "failure"
+    git.auto_settle = True
+    (git.root / "work.txt").write_text("more\n")
+    _git(git.root, "commit", "-am", "feat: more work")
+    _submit(fake, git, armed=False, follow_to_verdict=False)
+    with pytest.raises(_FAILURES) as caught:
+        merge_flow(_repo(fake), git, "feat/1-first")
+    assert "red" in str(caught.value)
+    pr = _repo(fake).pr.get(1)
+    assert pr is not None and not pr.merged
+
+
+def test_submit_merge_refuses_a_behind_head(
+    rig: tuple[FakeForge, SubmitGit],
+) -> None:
+    fake, git = rig
+    _submit(fake, git, armed=False, follow_to_verdict=False)
+    _git(git.root, "checkout", "main")
+    (git.root / "other.txt").write_text("moved\n")
+    _git(git.root, "add", ".")
+    _git(git.root, "commit", "-m", "feat: main moved")
+    _git(git.root, "push", "origin", "main")
+    _git(git.root, "checkout", "feat/1-first")
+    with pytest.raises(_FAILURES) as caught:
+        merge_flow(_repo(fake), git, "feat/1-first")
+    assert "behind" in str(caught.value)
+
+
+def test_submit_merge_rides_out_the_405_window(
     rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake, git = rig
     monkeypatch.setattr("time.sleep", lambda _s: None)
     _submit(fake, git, armed=False, follow_to_verdict=False)
     fake.faults.merge_405_window = 2
-    merge_now_flow(_repo(fake), "feat/1-first")
+    merge_flow(_repo(fake), git, "feat/1-first")
     pr = _repo(fake).pr.get(1)
     assert pr is not None and pr.merged
 
@@ -335,15 +374,65 @@ def test_a_given_title_updates_the_reused_pr(
     assert pr is not None and pr.title == "feat: the better title"
 
 
-def test_abort_is_idempotent(rig: tuple[FakeForge, SubmitGit]) -> None:
+def test_submit_fix_amends_rewrites_into_an_unpushed_head(
+    rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake, git = rig
+    # The gate's fixers rewrite a file; the fold must land it in HEAD
+    # without changing the subject, or the pushed commit lies.
+    monkeypatch.setattr(
+        "livery.workshop._submit._gate",
+        lambda fix: (git.root / "work.txt").write_text("healed\n"),
+    )
+    _submit(fake, git, gate=True, fix=True, armed=False, follow_to_verdict=False)
+    assert git.is_clean()
+    assert git.subjects_ahead("main") == ["feat: the first change"]
+    show = _git(git.root, "show", "HEAD:work.txt")
+    assert show == "healed\n"
+
+
+def test_submit_fix_commits_rewrites_on_a_pushed_head(
+    rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake, git = rig
+    _submit(fake, git, armed=False, follow_to_verdict=False)  # pushed, PR open
+    monkeypatch.setattr(
+        "livery.workshop._submit._gate",
+        lambda fix: (git.root / "work.txt").write_text("healed\n"),
+    )
+    _submit(fake, git, gate=True, fix=True, armed=False, follow_to_verdict=False)
+    # A pushed commit is never amended: the fixes ride a follow-up
+    # commit the squash merge collapses away.
+    assert git.subjects_ahead("main") == [
+        "chore: apply gate fixes",
+        "feat: the first change",
+    ]
+
+
+def test_abandon_refuses_a_dirty_tree(rig: tuple[FakeForge, SubmitGit]) -> None:
+    # The refusal first: abandoning deletes the branch, so uncommitted
+    # work must stop it before anything moves.
+    fake, git = rig
+    _submit(fake, git, armed=False, follow_to_verdict=False)
+    (git.root / "work.txt").write_text("uncommitted\n")
+    with pytest.raises(_FAILURES) as caught:
+        abandon_flow(_repo(fake), git, "feat/1-first", "main")
+    assert "uncommitted" in str(caught.value)
+    pr = _repo(fake).pr.get(1)
+    assert pr is not None and pr.state == "open"
+
+
+def test_abandon_is_idempotent(rig: tuple[FakeForge, SubmitGit]) -> None:
     fake, git = rig
     _submit(fake, git, armed=False, follow_to_verdict=False)
     repo = _repo(fake)
-    abort_flow(repo, git, "feat/1-first", "main")
+    abandon_flow(repo, git, "feat/1-first", "main")
     pr = repo.pr.get(1)
     assert pr is not None and pr.state == "closed" and not pr.merged
     assert not repo.branch_exists("feat/1-first")
-    abort_flow(repo, git, "feat/1-first", "main")  # second run: nothing left
+    assert git.current_branch() == "main"
+    assert not git.local_branch_exists("feat/1-first")
+    abandon_flow(repo, git, "feat/1-first", "main")  # second run: nothing left
 
 
 def test_status_and_rerun_and_doctor(rig: tuple[FakeForge, SubmitGit]) -> None:
