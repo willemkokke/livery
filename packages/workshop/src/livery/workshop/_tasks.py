@@ -28,6 +28,7 @@ from livery.workshop import (  # noqa: F401
     _sync,
     _templates,
     _update,
+    _update_driver,
     _workflow_tasks,
 )
 from livery.workshop._layers import SELF, layer_names, mount_layers

@@ -12,18 +12,14 @@ one line saying so.
 
 from __future__ import annotations
 
-import datetime
 import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Annotated
 
-import footman
-from footman import doc, fail
+from footman import fail
 
 from livery.workshop._git_ops import GitOps
-from livery.workshop._layers import workspace_root
 from livery.workshop._packages import discover_packages
 
 _RELEASE_TAG_RE = re.compile(r"^(packages/[^/]+)/v(\d+)\.(\d+)\.(\d+)$")
@@ -151,64 +147,3 @@ def _align_answers_source(root: Path, source: str) -> list[str]:
         answers.write_text(aligned, encoding="utf-8")
         return [f"answers _src_path now follows the contract: {source}"]
     return []
-
-
-def update_flow(
-    root: Path,
-    git: GitOps,
-    *,
-    armed: bool,
-    armed_reason: str = "",
-    base: str = "main",
-) -> None:
-    """The whole wave step for this instance; see the task docstring."""
-    if git.current_branch() != base:
-        fail(f"fm update starts from {base}: switch branches first")
-    if not git.is_clean():
-        fail("the working tree is not clean: commit or drop the changes first")
-    git.integrate(base)
-    from livery.workshop._sync import sync_workspace
-
-    notes = bump_floors(root, git)
-    notes += [f"sync: {line.strip()}" for line in sync_workspace(root)]
-    notes += [f"render: {line}" for line in refresh_rendered(root)]
-    if git.is_clean():
-        print("  nothing to update: floors, content, and render all current")
-        return
-    day = datetime.date.today().isoformat().replace("-", "")
-    branch = f"chore/update-{day}"
-    git.create_branch(branch)
-    body = "\n".join(f"- {note}" for note in notes)
-    git.commit_all(f"chore: the update wave\n\n{body}")
-    from livery.workshop._forge_lane import this_repository
-    from livery.workshop._submit import submit_flow
-
-    submit_flow(
-        this_repository(root),
-        git,
-        title="chore: the update wave",
-        body=body,
-        base=base,
-        armed=armed,
-        armed_reason=armed_reason,
-    )
-
-
-@footman.task
-def update(
-    armed: Annotated[bool, doc("arm the update's pull request")] = False,
-) -> None:
-    """Bring floors, content, and rendered files up to date, then submit.
-
-    Idempotent, and quiet when there is nothing to move: no branch and
-    no pull request are created for a current instance. A template
-    conflict surfaces as the submit flow's own verdict, never a silent
-    forced merge.
-    """
-    root = workspace_root()
-    if root is None:
-        fail("no workspace: no livery.toml above the working directory")
-    from livery.workshop._submit import arming_reason
-
-    reason = arming_reason(armed=armed, flag_given=footman.given("armed"))
-    update_flow(root, GitOps(root), armed=armed, armed_reason=reason)
