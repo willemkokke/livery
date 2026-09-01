@@ -185,3 +185,52 @@ class GitOps:
     def delete_local_branch(self, branch: str) -> None:
         """Delete the local *branch*, even if unmerged."""
         self._run("branch", "-D", branch)
+
+    def local_branches(self, prefix: str) -> tuple[str, ...]:
+        """Local branch names under *prefix* (``workflow/``), short form."""
+        out = self._run(
+            "for-each-ref", "--format=%(refname:short)", f"refs/heads/{prefix}"
+        )
+        return tuple(line.strip() for line in out.splitlines() if line.strip())
+
+    def remote_branches(self, prefix: str) -> tuple[str, ...]:
+        """Branch names under *prefix* on origin, asked of the remote.
+
+        ``ls-remote``, never the remote-tracking refs: a plain fetch
+        does not prune, so a stale tracking ref outlives the forge's
+        auto-delete and would resurrect a finished workflow.
+        """
+        out = self._run("ls-remote", "--heads", "origin", f"refs/heads/{prefix}*")
+        names: list[str] = []
+        for line in out.splitlines():
+            _, _, ref = line.partition("refs/heads/")
+            if ref.strip():
+                names.append(ref.strip())
+        return tuple(names)
+
+    def any_head(self, branch: str) -> str:
+        """*branch*'s head sha: local when present, else the remote's, else empty."""
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"],
+            cwd=self.root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+        result = subprocess.run(
+            ["git", "ls-remote", "origin", f"refs/heads/{branch}"],
+            cwd=self.root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.split()[0]
+        return ""
+
+    def log_paths(self, span: str, paths: tuple[str, ...]) -> tuple[str, ...]:
+        """The subjects in *span* touching *paths* (``a..b`` git range)."""
+        out = self._run("log", "--format=%s", span, "--", *paths)
+        return tuple(line for line in out.splitlines() if line.strip())

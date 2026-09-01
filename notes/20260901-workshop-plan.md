@@ -1,7 +1,7 @@
 # The workshop: engine, release train, and the road past 0.1.0
 
 Status: approved 2026-09-01 after Willem's review; executing.
-Phase 1 in flight. Subsumes `notes/20260831-workshop-plan.md`,
+Phase 1 shipped 2026-09-01 (PR #66). Phase 2 in flight. Subsumes `notes/20260831-workshop-plan.md`,
 whose phases 1-10 shipped and whose remaining phases are carried
 forward here renumbered. The loop: one PR per phase, merged when
 green, forced-fault tests first, the hse audit closing each phase,

@@ -265,19 +265,27 @@ class FakeForge:
     # -- the driver half ---------------------------------------------------
 
     def push(
-        self, owner: str, name: str, branch: str, *, outcome: Outcome = "success"
+        self,
+        owner: str,
+        name: str,
+        branch: str,
+        *,
+        outcome: Outcome = "success",
+        sha: str = "",
     ) -> str:
         """Simulate a git push: a new head sha on *branch*, CI starting.
 
-        Creates the branch when it is new, moves its head to a fresh
-        deterministic sha, and queues one run for that sha, as a push
-        trigger would. The run stays queued until
+        Creates the branch when it is new, moves its head to *sha*
+        (a rig pairing the fake with a real repository passes the
+        real commit, so sha-keyed reads agree across the seam) or a
+        fresh deterministic one, and queues one run for that sha, as
+        a push trigger would. The run stays queued until
         livery.forge.testing.FakeForge.settle applies *outcome* (a
         ``hang`` outcome is released to success there, or cancelled
         through the protocol). Returns the new head sha.
         """
         state = self._require_repo(owner, name)
-        sha = self._sha()
+        sha = sha or self._sha()
         state.branches[branch] = sha
         self._start_run(state, sha, workflow="ci.yml", event="push", outcome=outcome)
         return sha

@@ -174,7 +174,9 @@ def prepare(
             f"not on a feature branch (on {branch or '(detached)'!r}, base is"
             f" {base!r}): create a <type>/<slug> branch first"
         )
-    if not _BRANCH_RE.match(branch):
+    if not _BRANCH_RE.match(branch) and not branch.startswith("workflow/"):
+        # Reserved workflow branches are the engine's, named by their
+        # workflow identity, outside the feature grammar on purpose.
         fail(
             f"branch {branch!r} does not match <type>/<slug>"
             f" (types: {', '.join(_BRANCH_TYPES)})"
@@ -473,6 +475,35 @@ def submit_default(
     )
 
 
+def teardown_branch(repo: Repository, git: GitOps, branch: str, base: str) -> None:
+    """The one branch teardown every stop verb wears; idempotent.
+
+    Disarm, close the PR (a merged one is left alone), delete the
+    remote and local branch, and step back onto an up-to-date *base*
+    when standing on *branch*. Mechanism only: state gates, forces,
+    and refusals are the calling policy's job
+    (livery.workshop._submit.abandon_flow for a feature,
+    ``workflow.abort`` for a reserved workflow), so the two can never
+    drift apart.
+    """
+    pr = repo.pr.find_by_head(branch)
+    if pr is not None and not pr.merged:
+        if repo.pr.is_armed(pr.number):
+            repo.pr.disarm(pr.number)
+            print(f"  disarmed PR #{pr.number}")
+        repo.pr.close(pr.number)
+        print(f"  closed PR #{pr.number}")
+    if repo.branch_exists(branch):
+        repo.delete_branch(branch)
+        print(f"  deleted origin/{branch}")
+    if git.current_branch() == branch:
+        git.switch(base)
+        git.integrate(base)
+    if git.local_branch_exists(branch):
+        git.delete_local_branch(branch)
+        print(f"  deleted {branch}; back on {base}")
+
+
 def abandon_flow(repo: Repository, git: GitOps, branch: str, base: str) -> None:
     """Give the feature up: close the PR, delete both branches; idempotent.
 
@@ -488,25 +519,11 @@ def abandon_flow(repo: Repository, git: GitOps, branch: str, base: str) -> None:
             " them before abandoning"
         )
     pr = repo.pr.find_by_head(branch)
-    if pr is not None:
-        if pr.merged:
-            fail(f"PR #{pr.number} already merged: nothing to abandon")
-        if repo.pr.is_armed(pr.number):
-            repo.pr.disarm(pr.number)
-            print(f"  disarmed PR #{pr.number}")
-        repo.pr.close(pr.number)
-        print(f"  closed PR #{pr.number}")
-    else:
+    if pr is not None and pr.merged:
+        fail(f"PR #{pr.number} already merged: nothing to abandon")
+    if pr is None:
         print(f"  no open pull request for {branch}")
-    if repo.branch_exists(branch):
-        repo.delete_branch(branch)
-        print(f"  deleted origin/{branch}")
-    if git.current_branch() == branch:
-        git.switch(base)
-        git.integrate(base)
-    if git.local_branch_exists(branch):
-        git.delete_local_branch(branch)
-        print(f"  deleted {branch}; back on {base}")
+    teardown_branch(repo, git, branch, base)
 
 
 @footman.task

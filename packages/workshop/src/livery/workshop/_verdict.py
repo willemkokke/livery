@@ -48,6 +48,11 @@ _UNREACHABLE_BUDGET = 5
 #: 25 seconds before the merge landed.
 _MERGE_GRACE_POLLS = 8
 
+#: A blocker ends the watch only after holding this many
+#: consecutive polls (closed excepted): one-poll blips are races,
+#: not verdicts.
+_CONFIRM_POLLS = 2
+
 
 @dataclass(frozen=True)
 class Verdict:
@@ -185,6 +190,7 @@ def follow(
     deadline = time.monotonic() + timeout
     unreachable = 0
     green_polls = 0
+    confirm_streak = 0
     last_state = ""
     while True:
         try:
@@ -201,15 +207,38 @@ def follow(
         if verdict.state != last_state:
             print(f"  {verdict.state}: {verdict.detail}")
             last_state = verdict.state
+            confirm_streak = 0
         if verdict.state == "merged":
             return verdict
         if verdict.exit_code:
+            # A blocker must hold for two consecutive polls before it
+            # ends the watch: the submit-then-arm race, an async
+            # mergeability recompute, and a close-supersede all read
+            # as a blocker for one poll and clear on the next. CLOSED
+            # is the exception, definitive on a single read: a closed
+            # pull request does not reopen itself.
+            confirm_streak += 1
+            if verdict.state != "closed" and confirm_streak < _CONFIRM_POLLS:
+                time.sleep(interval)
+                continue
+            _record_ending(repo, verdict, branch)
             raise SystemExit(verdict.exit_code)
+        confirm_streak = 0
         if verdict.state == "in-flight" and verdict.detail.startswith("green"):
             green_polls += 1
         else:
             green_polls = 0
         if time.monotonic() >= deadline:
             print(f"  still in flight after {timeout:.0f}s")
+            _record_ending(repo, verdict, branch)
             raise SystemExit(EXIT_TIMEOUT)
         time.sleep(interval)
+
+
+def _record_ending(repo: Repository, verdict: Verdict, branch: str) -> None:
+    """Write the diagnostic bundle for a non-merged ending; best effort."""
+    from livery.workshop._diagnostics import record
+
+    path = record(repo, verdict, branch=branch)
+    if path is not None:
+        print(f"  diagnostics: {path}")
