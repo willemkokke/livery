@@ -142,7 +142,7 @@ def classify(
             "disarmed",
             EXIT_DISARMED,
             f"PR #{pr.number} is green and parked unarmed; arm it with"
-            " `fm submit --armed`, or merge it with `fm workflow.merge-now`",
+            " `fm submit --armed`, or merge it with `fm submit.merge`",
             pr.number,
         )
     if not grace_spent:

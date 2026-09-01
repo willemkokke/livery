@@ -120,13 +120,18 @@ def sync_workspace(root: Path) -> list[str]:
 
 @task
 def sync() -> None:
-    """Materialise every layer's content: fragments, skills, hooks, the stub.
+    """Materialise every layer's content and match the environment to the lock.
 
-    Idempotent: re-running it is the recovery procedure, and a quiet
-    run means everything already matched.
+    Fragments, skills, hooks, the stub, then ``uv sync`` so the
+    environment agrees with ``uv.lock``. Idempotent: re-running it is
+    the recovery procedure, and a quiet run means everything already
+    matched.
     """
+    from footman import run
+
     root = workspace_root()
     if root is None:
         fail("no workspace: no livery.toml above the working directory")
     for line in sync_workspace(root):
         print(line)
+    run(["uv", "sync"], title="Syncing the environment", cwd=root)

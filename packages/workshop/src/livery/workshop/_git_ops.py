@@ -124,10 +124,45 @@ class GitOps:
         """Create and switch to *name*."""
         self._run("checkout", "-b", name)
 
+    def switch(self, name: str) -> None:
+        """Switch to the existing branch *name*."""
+        self._run("switch", name)
+
     def commit_all(self, message: str) -> None:
         """Stage everything and commit with *message*."""
         self._run("add", "-A")
         self._run("commit", "-m", message)
+
+    def amend_all(self) -> None:
+        """Stage everything and fold it into HEAD, message kept."""
+        self._run("add", "-A")
+        self._run("commit", "--amend", "--no-edit")
+
+    def local_branch_exists(self, branch: str) -> bool:
+        """Whether *branch* exists locally."""
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"],
+            cwd=self.root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return result.returncode == 0
+
+    def remote_head(self, branch: str) -> str:
+        """``origin/<branch>``'s commit, or empty when it does not exist.
+
+        Reads the local remote-tracking ref, so call
+        livery.workshop._git_ops.GitOps.fetch first for a fresh answer.
+        """
+        result = subprocess.run(
+            ["git", "rev-parse", f"origin/{branch}"],
+            cwd=self.root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return result.stdout.strip() if result.returncode == 0 else ""
 
     def changed_paths(self, base: str) -> list[str]:
         """Repo-relative paths this branch touches, committed or not.

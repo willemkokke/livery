@@ -7,9 +7,10 @@ and follow until it lands or says what stopped it. Exits 10 and 17 self-heal by
 integrating the base and re-submitting; every other code surfaces
 unchanged, because skills, hooks, and humans branch on them.
 
-``fm workflow.abort`` is the exit: disarm, close the pull request,
-delete the remote branch. ``fm workflow.merge-now`` is the manual
-override, retrying through the forge's recompute window.
+``fm abandon`` is the exit: disarm, close the pull request, delete
+both branches, return to the base. ``fm submit.merge`` merges a
+green pull request that was deliberately left unarmed, and refuses
+anything less than green.
 
 The arming ladder, highest wins: ``--armed``/``--no-armed`` for one
 invocation; ``LIVERY_AUTOMERGE`` as the per-user standing preference;
@@ -42,7 +43,9 @@ from livery.workshop._verdict import (
     follow,
 )
 
-workflow = group("workflow", help="The branch workflow's exits and overrides")
+submit = group(
+    "submit", help="Gate, push, open-or-reuse the PR, arm, and watch it land"
+)
 
 #: Branch names submit accepts: the conventional type, a slash, a slug
 #: that may open with an issue number (``feat/41-title-rules``).
@@ -325,6 +328,7 @@ def submit_flow(
     armed: bool = False,
     armed_reason: str = "",
     gate: bool = True,
+    fix: bool = False,
     follow_to_verdict: bool = True,
     interval: float = 15,
     timeout: float = 1800,
@@ -337,7 +341,9 @@ def submit_flow(
     repository.
     """
     if gate:
-        _gate()
+        _gate(fix)
+        if fix and not git.is_clean():
+            _fold_fixes(git, base)
     else:
         print("  gate skipped (--no-gate): CI is now the first verifier")
     git.fetch()
@@ -386,15 +392,40 @@ def submit_flow(
         return number
 
 
-def _gate() -> None:
-    """The local gate; red raises before any network call."""
+def _gate(fix: bool = False) -> None:
+    """The local gate; red raises before any network call.
+
+    *fix* runs format and lint in their fix modes, so mechanical
+    findings heal instead of failing; the caller folds any rewrites
+    into the branch before pushing.
+    """
     from livery.workshop._quality import check
 
-    check()
+    check(fix=fix)
 
 
-@footman.task
-def submit(
+def _fold_fixes(git: GitOps, base: str) -> None:
+    """Put the gate's rewrites into the branch, consented by ``--fix``.
+
+    Amended into HEAD while the commit is still the branch's own and
+    unpushed; otherwise a follow-up commit, which the squash merge
+    collapses away. Amending is never applied to a pushed or base
+    commit: rewriting either would force-push or rewrite history the
+    remote already trusts.
+    """
+    git.fetch()
+    branch = git.current_branch()
+    pushed = git.remote_head(branch) == git.head_sha()
+    if pushed or not git.subjects_ahead(base):
+        git.commit_all("chore: apply gate fixes")
+        print("  gate fixes committed (the squash merge collapses this)")
+    else:
+        git.amend_all()
+        print("  gate fixes amended into HEAD")
+
+
+@submit.default
+def submit_default(
     title: Annotated[str, doc("PR title; defaults to HEAD's subject")] = "",
     body: Annotated[str, doc("PR body; defaults to HEAD's body")] = "",
     base: Annotated[str, doc("target branch")] = "main",
@@ -406,6 +437,7 @@ def submit(
         doc("arm auto-merge (ladder: flag, LIVERY_AUTOMERGE, [ci] automerge)"),
     ] = False,
     gate: Annotated[bool, doc("run `fm check` first")] = True,
+    fix: Annotated[bool, doc("heal mechanical gate findings, fold into HEAD")] = False,
     follow: Annotated[bool, doc("watch until it lands or says what stopped it")] = True,
     interval: Annotated[int, doc("watch poll seconds")] = 15,
     timeout: Annotated[int, doc("watch deadline seconds")] = 1800,
@@ -415,6 +447,9 @@ def submit(
     Idempotent: re-running it is the recovery procedure. Exits 10 and
     17 self-heal by integrating the base and re-submitting; the other
     verdict codes surface unchanged (see livery.workshop._verdict).
+    ``--fix`` runs the gate's format and lint in their fix modes and
+    folds any rewrites into the branch before pushing: amended into
+    HEAD while unpushed, a follow-up commit otherwise.
     """
     root = _root()
     from livery.workshop._forge_lane import this_repository
@@ -431,20 +466,31 @@ def submit(
         armed=armed,
         armed_reason=reason,
         gate=gate,
+        fix=fix,
         follow_to_verdict=follow,
         interval=interval,
         timeout=timeout,
     )
 
 
-def abort_flow(repo: Repository, git: GitOps, branch: str, base: str) -> None:
-    """Disarm, close, delete the remote branch; idempotent."""
+def abandon_flow(repo: Repository, git: GitOps, branch: str, base: str) -> None:
+    """Give the feature up: close the PR, delete both branches; idempotent.
+
+    A dirty tree refuses before anything else moves: abandoning
+    deletes the branch, and uncommitted work must be a person's
+    explicit loss, not a side effect.
+    """
     if not branch or branch == base:
         fail(f"not on a feature branch (on {branch or '(detached)'!r})")
+    if not git.is_clean():
+        fail(
+            "the working tree has uncommitted changes; commit or discard"
+            " them before abandoning"
+        )
     pr = repo.pr.find_by_head(branch)
     if pr is not None:
         if pr.merged:
-            fail(f"PR #{pr.number} already merged: nothing to abort")
+            fail(f"PR #{pr.number} already merged: nothing to abandon")
         if repo.pr.is_armed(pr.number):
             repo.pr.disarm(pr.number)
             print(f"  disarmed PR #{pr.number}")
@@ -455,27 +501,59 @@ def abort_flow(repo: Repository, git: GitOps, branch: str, base: str) -> None:
     if repo.branch_exists(branch):
         repo.delete_branch(branch)
         print(f"  deleted origin/{branch}")
+    if git.current_branch() == branch:
+        git.switch(base)
+        git.integrate(base)
+    if git.local_branch_exists(branch):
+        git.delete_local_branch(branch)
+        print(f"  deleted {branch}; back on {base}")
 
 
-@workflow.task(name="abort")
-def workflow_abort() -> None:
-    """Abort the branch's workflow: disarm, close the PR, delete the remote branch.
+@footman.task
+def abandon() -> None:
+    """Give up this feature: close the PR, delete the branches, return to base.
 
-    The local branch and its commits stay; deleting them is a person's
-    decision. Idempotent: a second run finds nothing left to undo.
+    Disarms and closes the pull request, deletes the remote and the
+    local branch, and leaves you on an up-to-date base. A dirty tree
+    refuses first. Idempotent: a second run finds nothing left to
+    undo.
     """
     root = _root()
     from livery.workshop._forge_lane import this_repository
 
     git = GitOps(root)
-    abort_flow(this_repository(root), git, git.current_branch(), "main")
+    abandon_flow(this_repository(root), git, git.current_branch(), "main")
 
 
-def merge_now_flow(repo: Repository, branch: str, *, title: str = "") -> None:
-    """Merge the branch's pull request immediately, riding out the 405 window."""
+def merge_flow(repo: Repository, git: GitOps, branch: str, *, title: str = "") -> None:
+    """Merge the branch's green pull request, riding out the 405 window.
+
+    The verb for a deliberately-unarmed pull request whose CI already
+    passed. Anything less than green refuses with the reason: red
+    names the failing job, pending says wait, behind base says
+    integrate. There is no force; merging red stays a person's act in
+    the forge's own interface.
+    """
     pr = repo.pr.find_by_head(branch)
     if pr is None:
         fail(f"no open pull request for {branch}")
+    status = repo.checks.status(pr.head_sha)
+    if status.state == "failure":
+        fail(
+            f"CI is red for PR #{pr.number}: fix it and `fm submit`."
+            " Merging red is the forge UI's decision, not this verb's."
+        )
+    if status.state in ("pending", "none"):
+        fail(
+            f"CI is {status.state} for PR #{pr.number}: wait for the verdict"
+            " or `fm ci.watch`"
+        )
+    git.fetch()
+    if git.behind_base(pr.base_branch):
+        fail(
+            f"PR #{pr.number} is behind {pr.base_branch}: `fm submit` to"
+            " integrate and re-verify first"
+        )
     subject = title or pr.title
     for attempt in range(1, _MERGE_NOW_ATTEMPTS + 1):
         try:
@@ -489,20 +567,22 @@ def merge_now_flow(repo: Repository, branch: str, *, title: str = "") -> None:
                 time.sleep(attempt)
                 continue
             raise
-        print(f"  merged PR #{pr.number} now")
+        print(f"  merged PR #{pr.number}")
         return
 
 
-@workflow.task(name="merge-now")
-def workflow_merge_now(
+@submit.task(name="merge")
+def submit_merge(
     title: Annotated[str, doc("squash subject; defaults to the PR title")] = "",
 ) -> None:
-    """The manual override: merge the branch's PR immediately.
+    """Merge this branch's green, deliberately-unarmed PR.
 
-    Idempotent through livery.forge.PullRequests.merge_now, and
-    patient through the forge's mergeability-recompute window (405).
+    Refuses red, pending, or behind-base, saying why. Idempotent
+    through livery.forge.PullRequests.merge_now, and patient through
+    the forge's mergeability-recompute window (405).
     """
     root = _root()
     from livery.workshop._forge_lane import this_repository
 
-    merge_now_flow(this_repository(root), GitOps(root).current_branch(), title=title)
+    git = GitOps(root)
+    merge_flow(this_repository(root), git, git.current_branch(), title=title)
