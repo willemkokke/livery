@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from footman import doc, group, parallel, task
+from footman import Forward, doc, group, parallel, task
 
 from livery.workshop._backends import _python, require_backends
 from livery.workshop._layers import workspace_root
@@ -35,14 +35,10 @@ def lint(fix: Annotated[bool, doc("apply safe fixes in place")] = False) -> None
 
 
 @task
-def format(check: bool = False) -> None:
-    """Format every package with its type's formatter.
-
-    Args:
-        check: report instead of rewriting
-    """
+def format(fix: Annotated[bool, doc("rewrite instead of reporting")] = False) -> None:
+    """Check every package's formatting; ``--fix`` rewrites."""
     _packages()
-    _python.run_format(check=check)
+    _python.run_format(check=not fix)
 
 
 @task
@@ -88,15 +84,14 @@ def check(
     affected: Annotated[
         bool, doc("scope the gate to the branch's affected packages")
     ] = False,
-    fix: Annotated[
-        bool, doc("rewrite formatting and apply safe lint fixes first")
-    ] = False,
+    fix: Forward[bool] = False,
 ) -> None:
     """Run the gate: format, lint, types, tests, render gate, in parallel.
 
-    ``--fix`` rewrites formatting and applies the linter's safe fixes
-    before the gate runs, so a mechanical finding heals instead of
-    failing. The gate itself still judges the result.
+    ``--fix`` runs format and lint in their fix modes: each prints
+    what it found, rewrites what is mechanical, and still fails on
+    what is not. The two rewrite the same files, so under ``--fix``
+    they run one after the other before the rest of the gate.
 
     ``--affected`` narrows every verb to the packages this branch's
     changes can influence (their dependents' closure). A change
@@ -104,10 +99,6 @@ def check(
     falls back to everything; ty and pyrefly always check their
     configured whole either way.
     """
-    if fix:
-        _packages()
-        _python.run_format()
-        _python.run_lint(fix=True)
     subset = _affected() if affected else None
     if affected and subset is not None:
         packages = _packages()
@@ -117,10 +108,19 @@ def check(
         if len(subset) < len(packages):
             names = ", ".join(package.path for package in subset)
             print(f"  affected: {names}")
-            _scoped_check(subset)
+            _scoped_check(subset, fix=fix)
             return
+    if fix:
+        format(fix=True)
+        lint(fix=True)
+        with parallel():
+            typecheck()
+            typecomplete()
+            test()
+            template_check()
+        return
     with parallel():
-        format(check=True)
+        format()
         lint()
         typecheck()
         typecomplete()
@@ -128,22 +128,27 @@ def check(
         template_check()
 
 
-def _scoped_check(subset: tuple[Package, ...]) -> None:
+def _scoped_check(subset: tuple[Package, ...], *, fix: bool = False) -> None:
     """The gate over *subset* only, each verb explicitly scoped.
 
     The render gate is skipped: its inputs are the root answers and
     the template source, which a package-scoped change cannot touch
     (touching them makes the change root-scoped, and the full gate
-    runs instead).
+    runs instead). ``fix`` behaves as in the whole gate: format and
+    lint rewrite serially first, then the rest run in parallel.
     """
     from footman import step
 
     root = workspace_root()
     assert root is not None
     paths = _python.package_paths(subset)
+    if fix:
+        step(lambda: _python.run_format(check=False, paths=paths), title="format")()
+        step(lambda: _python.run_lint(fix=True, paths=paths), title="lint")()
     with parallel():
-        step(lambda: _python.run_format(check=True, paths=paths), title="format")()
-        step(lambda: _python.run_lint(paths=paths), title="lint")()
+        if not fix:
+            step(lambda: _python.run_format(check=True, paths=paths), title="format")()
+            step(lambda: _python.run_lint(paths=paths), title="lint")()
         step(lambda: _python.run_typecheck(paths=paths), title="typecheck")()
         step(lambda: _python.run_typecomplete(subset), title="typecomplete")()
         step(

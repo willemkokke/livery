@@ -175,7 +175,7 @@ def test_check_affected_scopes_or_says_nothing(
     assert set(ran) == {"format", "lint", "types", "complete", "test"}
 
 
-def test_check_fix_heals_before_the_gate_judges(
+def test_check_fix_rewrites_serially_then_judges_the_rest(
     rig: tuple[FakeForge, Path],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -203,13 +203,16 @@ def test_check_fix_heals_before_the_gate_judges(
 
     monkeypatch.setattr(_quality, "parallel", contextlib.nullcontext)
     _quality.check(fix=True)
-    # The rewrite and the safe fixes run first; the gate still judges.
-    assert calls[0] == ("format", {})
+    # format and lint rewrite the same files, so they run first and in
+    # order; the rest of the gate still judges after them.
+    assert calls[0] == ("format", {"check": False})
     assert calls[1] == ("lint", {"fix": True})
-    judged = {name for name, _ in calls[2:]}
-    assert judged == {"format", "lint", "types", "complete", "test", "render"}
-    assert ("format", {"check": True}) in calls[2:]
-    assert ("lint", {"fix": False}) in calls[2:]
+    assert {name for name, _ in calls[2:]} == {"types", "complete", "test", "render"}
+    calls.clear()
+    # Without --fix nothing rewrites: format checks and lint reports.
+    _quality.check()
+    assert ("format", {"check": True}) in calls
+    assert ("lint", {"fix": False}) in calls
 
 
 def test_coverage_enforce_reads_the_workspace(
