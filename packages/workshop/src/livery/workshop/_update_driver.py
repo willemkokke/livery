@@ -6,9 +6,9 @@ installed workshop's template version (one workspace-atomic act;
 there is no per-package template update, one source at one version
 has nothing for it to mean), and
 ``workflow.update.dependencies [names...]`` brings dependencies
-current in both worlds, the lock for external ones and the floors
-for workspace siblings, which the lock cannot move because they
-resolve from source.
+current in both of their homes: the lock for external dependencies,
+and the floors for workspace siblings, which the lock cannot move
+because they resolve from source.
 
 An update prepared while a release flies parks unarmed and waits,
 watching the releases; when the last completes it re-runs itself,
@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import os
 import pathlib
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -31,6 +32,7 @@ from footman import doc, fail
 
 from livery.forge import Repository
 from livery.workshop._git_ops import GitOps
+from livery.workshop._packages import discover_packages
 from livery.workshop._update import bump_floors, refresh_rendered
 from livery.workshop._uv import run_uv
 from livery.workshop._workflow_engine import (
@@ -66,10 +68,12 @@ class UpdateDriver:
         *,
         armed: bool,
         names: tuple[str, ...] = (),
+        refresh: bool = False,
     ) -> None:
         self._root = root
         self._git = git
         self._names = names
+        self._refresh = refresh
         self.name = f"update/{flavor}"
         self.armed = armed
 
@@ -88,9 +92,13 @@ class UpdateDriver:
         it stands, redoing nothing: every subject on the branch is the
         driver's own conventional ``chore:`` line, so resuming is
         safe; a foreign subject stops with the options, someone's
-        hand-made commits are not silently shipped.
+        hand-made commits are not silently shipped. A *refresh*
+        driver (the re-run after a parked update's releases finish)
+        runs the work again on the branch instead, so the floors
+        those releases earned land as a second commit.
         """
         git = self._git
+        resumed = False
         if git.current_branch() == self.branch or git.local_branch_exists(self.branch):
             if git.current_branch() != self.branch:
                 git.switch(self.branch)
@@ -105,16 +113,24 @@ class UpdateDriver:
                         " `fm submit`, or abort the update with"
                         f" `fm workflow.abort {self.name}` and start over."
                     )
-                print("  resuming the committed update from its branch")
-                return Submission(title=subjects[-1], body="")
+                if not self._refresh:
+                    print("  resuming the committed update from its branch")
+                    return Submission(title=subjects[-1], body="")
+                resumed = True
         else:
             git.create_branch(self.branch)
         toolchain_before = _locked_workshop(self._root)
         notes = self._work()
         if git.is_clean():
+            if resumed:
+                # A refresh with nothing new: the committed work stands.
+                subjects = git.subjects_ahead(self.base)
+                return Submission(title=subjects[-1], body="")
             git.switch(self.base)
             git.delete_local_branch(self.branch)
             return None
+        run_uv("sync", root=self._root)
+        run_gate(self._root)
         title = f"chore: {self.name.replace('/', ' ')}"
         git.commit_all(title + "\n\n" + "\n".join(f"- {n}" for n in notes))
         toolchain_after = _locked_workshop(self._root)
@@ -136,22 +152,28 @@ class UpdateDriver:
             notes = bump_floors(self._root, self._git)
             notes += [f"render: {line}" for line in refresh_rendered(self._root)]
             return notes
+        # A named workspace sibling resolves from source, so the lock
+        # cannot move it: its movement is the floor, and only the
+        # named floors move. External names go to the lock. Bare
+        # moves everything in both homes.
+        siblings = {p.name for p in discover_packages(self._root)}
+        named_siblings = tuple(n for n in self._names if n in siblings)
+        external = tuple(n for n in self._names if n not in siblings)
         notes = []
-        if self._names:
-            for name in self._names:
-                run_uv("lock", "--upgrade-package", name, root=self._root)
-                notes.append(f"lock: upgraded {name}")
-        else:
+        if not self._names:
             run_uv("lock", "--upgrade", root=self._root)
             notes.append("lock: upgraded every dependency")
-        notes += bump_floors(self._root, self._git)
-        run_uv("sync", root=self._root)
+            notes += bump_floors(self._root, self._git)
+            return notes
+        for name in external:
+            run_uv("lock", "--upgrade-package", name, root=self._root)
+            notes.append(f"lock: upgraded {name}")
+        if named_siblings:
+            notes += bump_floors(self._root, self._git, only=named_siblings)
         return notes
 
     def _reexec(self) -> None:
         """Finish in a fresh process running the just-synced toolchain."""
-        import subprocess
-
         flavor = self.name.split("/", 1)[1]
         print(
             "  the update moved livery-workshop itself; finishing in a"
@@ -161,16 +183,37 @@ class UpdateDriver:
         command += list(self._names)
         if self.armed:
             command.append("--armed")
-        child = subprocess.run(
-            command,
-            cwd=self._root,
-            env={**os.environ, _REEXEC_FLAG: "1"},
-            check=False,
-        )
-        raise SystemExit(child.returncode)
+        code = _spawn(command, self._root, {**os.environ, _REEXEC_FLAG: "1"})
+        raise SystemExit(code)
 
     def on_merged(self) -> None:
         """Merging is an update's completion; nothing follows."""
+
+
+def _spawn(command: list[str], root: Path, env: dict[str, str]) -> int:
+    """Run *command* in *root* with *env*; the exit code."""
+    child = subprocess.run(command, cwd=root, env=env, check=False)
+    return child.returncode
+
+
+def run_gate(root: Path) -> None:
+    """Run the gate with ``--fix`` over the update's changes; red stops.
+
+    The gate's output streams to the terminal and its exit code is
+    the verdict. A red gate leaves the changes uncommitted on the
+    workflow branch: fix the tree there and run the same update verb
+    again, it resumes from that state.
+    """
+    result = subprocess.run(
+        ["uv", "run", "fm", "check", "--fix"], cwd=root, check=False
+    )
+    if result.returncode != 0:
+        fail(
+            f"the gate is red on the update's changes (exit"
+            f" {result.returncode}). The changes are uncommitted on this"
+            " branch: fix the tree, then run the same update verb again"
+            " to resume."
+        )
 
 
 def _live_releases(repo: Repository, git: GitOps) -> tuple[str, ...]:
@@ -190,7 +233,7 @@ def wait_for_releases(
     timeout: float = BOUNDED_WAIT,
     poll: float = WAIT_POLL,
 ) -> bool:
-    """Wait while releases fly; True when the way is clear.
+    """Wait while releases fly; True when none remains in flight.
 
     The parked update's promise: it finishes itself once the last
     release completes. Interactive runs wait indefinitely, Ctrl-C
@@ -240,8 +283,11 @@ def _drive(
     if not _live_releases(repo, git):
         return
     interactive = sys.stdin.isatty()
-    if wait_for_releases(repo, git, interactive=interactive):
-        fresh = UpdateDriver(root, git, flavor, armed=armed, names=names)
+    # timeout and poll read at call time so a bounded test can move them.
+    if wait_for_releases(
+        repo, git, interactive=interactive, timeout=BOUNDED_WAIT, poll=WAIT_POLL
+    ):
+        fresh = UpdateDriver(root, git, flavor, armed=armed, names=names, refresh=True)
         run_workflow(fresh, repo, git)
         return
     print(
@@ -274,13 +320,13 @@ def update_dependencies(
     *names: str,
     armed: Annotated[bool, doc("arm the update's PR to merge on green")] = False,
 ) -> None:
-    """Bring dependencies current in both worlds a dependency lives in.
+    """Bring dependencies current in both of their homes.
 
     Bare upgrades every external dependency through the lock and
     raises every sibling floor to its latest release; naming
     dependencies scopes which move, never where, one workspace lock
-    is one resolution. Siblings named here move their floors, since
-    the lock cannot move what resolves from source.
+    is one resolution. A named sibling moves its floor and only its
+    floor, since the lock cannot move what resolves from source.
     """
     _drive("dependencies", armed=armed, names=names)
 

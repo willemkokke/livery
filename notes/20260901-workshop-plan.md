@@ -11,9 +11,11 @@ the merge-triggered generated workflows for all three kinds
 binding stands), the release verbs hidden. The release-PR title CI
 job is deferred to phase 8's path-filtered governance jobs, where
 the emitters grow conditions anyway. Phase 4 shipped 2026-09-01
-(PR #69). Phase 5 in flight: the update family on the engine, the
-parked wait-and-continue, resume, and the fresh-interpreter
-resubmit. Subsumes `notes/20260831-workshop-plan.md`,
+(PR #69). Phase 5 shipped 2026-09-01 (PR #70); its audit found five
+gaps (named-sibling floor scoping, the gate run, and three untested
+paths), closed the same day in a follow-up PR that also scoped the
+dirty-tree resume carve-out to the workflow branch. Phase 6 next:
+dev releases. Subsumes `notes/20260831-workshop-plan.md`,
 whose phases 1-10 shipped and whose remaining phases are carried
 forward here renumbered. The loop: one PR per phase, merged when
 green, forced-fault tests first, the hse audit closing each phase,
@@ -472,6 +474,18 @@ Deliverables:
   toolchain (relates to footman#530).
 - A dirty tree refuses resume from another branch; a mid-conflict
   resume on the branch itself proceeds.
+
+Edge table:
+
+| Edge | Guard |
+| --- | --- |
+| Update branch carries a foreign commit | resume refuses, listing the subjects |
+| Killed between commit and submit | resume submits, the work is not redone |
+| A release outlasts the bounded wait | parks at exit 0 with the teaching |
+| The update moved the running workshop | fresh-interpreter resubmit, loop-guarded |
+| Dirty checkout elsewhere while an update PREPARES | resume carve-out scoped to the workflow branch |
+| A named dependency is a workspace sibling | its floor moves; the lock is never asked |
+| The gate is red on the update's changes | stop before the commit, resume taught |
 
 Acceptance:
 
@@ -968,6 +982,14 @@ not. Gates 0.1.0 together with phases 1-8.
   workshop owns the bundle, schema, storage, and retention. Each
   section guards itself, and a section's own read error is recorded
   as data, the scope-poor-token diagnosis.
+- 2026-09-01, the phase 5 audit close (audit finding, no ruling
+  needed): the parked re-run gets a refresh driver that re-runs the
+  work on the existing branch and commits the delta, so fresh
+  floors land while the plain killed-run resume still redoes
+  nothing; the two resumes differ because only the post-wait re-run
+  knows a release just moved the floors. The dirty-tree resume
+  carve-out is scoped to the workflow branch: from any other branch
+  the dirt is unrelated work and would ride onto the branch.
 
 ## Open
 

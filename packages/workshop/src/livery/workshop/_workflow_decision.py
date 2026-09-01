@@ -169,10 +169,16 @@ def workflow_decision(
             " bug, not a state a person can fix.",
         )
 
-    # A dirty tree is ambiguous, except a PREPARING update: its
-    # renderer leaves conflict markers, and re-running the verb is how
-    # a person resumes after resolving them.
-    resumable = kind is WorkflowKind.UPDATE and wf.state is WorkflowState.PREPARING
+    # A dirty tree is ambiguous, except a PREPARING update resumed on
+    # its own branch: the renderer leaves conflict markers there, and
+    # re-running the verb is how a person resumes after resolving
+    # them. From any other branch the dirt is somebody's unrelated
+    # work, and preparing would carry it onto the workflow branch.
+    resumable = (
+        kind is WorkflowKind.UPDATE
+        and wf.state is WorkflowState.PREPARING
+        and branch == own_branch
+    )
     if dirty and not resumable:
         return WorkflowDecision(WorkflowAction.STOP, _DIRTY)
 

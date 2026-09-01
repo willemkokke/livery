@@ -241,3 +241,16 @@ def test_floor_bumps_move_both_homes(tmp_path: Path) -> None:
     pyproject = (root / "packages" / "tool" / "pyproject.toml").read_text()
     assert "livery-core>=0.2.0" in pyproject
     assert bump_floors(root, git) == []  # already at the newest release
+
+
+def test_a_scoped_floor_bump_moves_only_the_named_sibling(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    _git(root, "tag", "packages/core/v0.2.0")
+    git = GitOps(root)
+    # A name outside the scope moves nothing, so a dependencies run
+    # naming only externals cannot drag every floor along.
+    assert bump_floors(root, git, only=("livery-other",)) == []
+    contract = (root / "packages" / "tool" / "livery.toml").read_text()
+    assert 'floor = "0.1.0"' in contract
+    changed = bump_floors(root, git, only=("livery-core",))
+    assert changed == ["packages/tool: floor on packages/core 0.1.0 -> 0.2.0"]
