@@ -4,8 +4,9 @@ One release shape for a set of N >= 1 packages: derive each member's
 version and entry through its ``cliff.toml``, bump floors within the
 set only, stamp, commit per member in dependency order, and hand the
 branch to the shared engine. The branch decides the act: main-family
-runs the real train, any other branch is the dev act (a later
-phase). ``--local`` is everything that stays on this machine:
+(``main`` and the engine's ``workflow/`` namespace) runs the real
+train, any other branch is the dev act, a wheel straight from the
+branch. ``--local`` is everything that stays on this machine:
 derive, build, validate, report, then roll the stamps back like a
 failed prepare, leaving ``dist/`` and the report.
 """
@@ -374,7 +375,7 @@ class ReleaseDriver:
         return Submission(title=f"chore(release): released {listed}", body=body)
 
     def on_merged(self) -> None:
-        """Publishing is the merge-triggered workflow's act (phase 4)."""
+        """Publishing is the merge-triggered workflow's act."""
         print(
             "  merged; the publish workflow takes it from here and the"
             " receipt tags say when each member is done"
@@ -443,6 +444,12 @@ def workflow_release(
     members = resolve_set(root, tuple(paths))
     git = GitOps(root)
     branch = git.current_branch()
+    if not branch:
+        fail(
+            "HEAD is detached, and the branch decides the act. Check out a"
+            " branch (main for the release train, any feature branch for a"
+            " dev build), then run this again."
+        )
     if branch != "main" and not branch.startswith("workflow/"):
         dev_release(root, git, members, local=local)
         return

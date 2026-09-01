@@ -14,9 +14,13 @@ the emitters grow conditions anyway. Phase 4 shipped 2026-09-01
 (PR #69). Phase 5 shipped 2026-09-01 (PR #70); its audit found five
 gaps (named-sibling floor scoping, the gate run, and three untested
 paths), closed the same day in a follow-up PR that also scoped the
-dirty-tree resume carve-out to the workflow branch. Phase 6 in
-flight: dev releases, the branch deciding, verified live against
-the local Gitea index. Subsumes `notes/20260831-workshop-plan.md`,
+dirty-tree resume carve-out to the workflow branch. Phase 6 shipped
+2026-09-01 (PR #72): dev releases, the branch deciding, verified
+live against the local Gitea index; its audit found the routing and
+three restore/skip paths unproven plus a detached-HEAD hole, closed
+the same day in a follow-up PR. Phase 7 next: the environment,
+detailed cut pending Willem's rulings on its forks. Subsumes
+`notes/20260831-workshop-plan.md`,
 whose phases 1-10 shipped and whose remaining phases are carried
 forward here renumbered. The loop: one PR per phase, merged when
 green, forced-fault tests first, the hse audit closing each phase,
@@ -1001,6 +1005,13 @@ not. Gates 0.1.0 together with phases 1-8.
   knows a release just moved the floors. The dirty-tree resume
   carve-out is scoped to the workflow branch: from any other branch
   the dirt is unrelated work and would ride onto the branch.
+- 2026-09-01, the phase 6 audit close (audit finding, no ruling
+  needed): a detached HEAD is a taught stop, the branch decides the
+  act and "" is not a branch; the branch sanitiser is ASCII-only
+  because PEP 440's local segment accepts nothing wider; the
+  routing, the terminal-no skip, the failing-build snapshot restore
+  on a dirty tree, and the task's interactive stamp each gained a
+  forcing test.
 
 ## Open
 
