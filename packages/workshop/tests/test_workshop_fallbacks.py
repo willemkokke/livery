@@ -229,3 +229,98 @@ def test_the_enforcement_reads_real_coverage_data(tmp_path: Path) -> None:
     )
     with pytest.raises(_FAILURES):
         _python.enforce_coverage(tmp_path, (package,))
+
+
+def _cliff_workspace(tmp_path: Path, kind: str) -> tuple[Path, Package]:
+    """A workspace whose contract names *kind*, with one package."""
+    (tmp_path / "livery.toml").write_text(f'[workspace]\n\n[forge]\nkind = "{kind}"\n')
+    directory = tmp_path / "packages" / "thing"
+    directory.mkdir(parents=True)
+    (directory / "cliff.toml").write_text("[changelog]\n")
+    package = Package(
+        directory=directory,
+        path="packages/thing",
+        name="livery-thing",
+        type="python",
+        depends=(),
+    )
+    return tmp_path, package
+
+
+def test_the_changelog_runs_offline_when_no_credential_is_in_reach(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # A private repository answers the author lookup only for a caller
+    # it can authenticate, and git-cliff stops rather than degrading.
+    # Without the token the run must go offline instead, or every
+    # release on a private forge dies at the changelog.
+    from livery.workshop import _cliff
+
+    root, package = _cliff_workspace(tmp_path, "gitea")
+    monkeypatch.delenv("GITEA_TOKEN", raising=False)
+    seen: list[list[str]] = []
+
+    def _fake_run(
+        command: list[str], **kwargs: Any
+    ) -> subprocess.CompletedProcess[str]:
+        seen.append(command)
+        return subprocess.CompletedProcess(command, 0, "## [Unreleased]\n", "")
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+    _cliff.unreleased_entry(root, package)
+    assert "--offline" in seen[0]
+    out = capsys.readouterr().out
+    assert "without its authors" in out and "GITEA_TOKEN" in out
+    # With the credential in reach the lookup is asked for.
+    seen.clear()
+    monkeypatch.setenv("GITEA_TOKEN", "a-token")
+    _cliff.unreleased_entry(root, package)
+    assert "--offline" not in seen[0]
+
+
+def test_a_refused_author_lookup_says_what_to_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _cliff
+
+    root, package = _cliff_workspace(tmp_path, "gitea")
+    monkeypatch.setenv("GITEA_TOKEN", "a-token")
+
+    def _refuse(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            command, 101, "", "Could not get gitea metadata: Status(404)"
+        )
+
+    monkeypatch.setattr(subprocess, "run", _refuse)
+    with pytest.raises(_FAILURES) as caught:
+        _cliff.bumped_version(root, package)
+    message = str(caught.value)
+    assert "GITEA_TOKEN" in message and "api_url" in message
+
+
+def test_a_missing_git_cliff_names_the_dependency(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _cliff
+
+    root, package = _cliff_workspace(tmp_path, "github")
+
+    def _absent(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        raise FileNotFoundError(command[0])
+
+    monkeypatch.setattr(subprocess, "run", _absent)
+    with pytest.raises(_FAILURES) as caught:
+        _cliff.bumped_version(root, package)
+    assert "git-cliff" in str(caught.value) and "fm sync" in str(caught.value)
+
+
+def test_a_package_without_the_contract_is_named(tmp_path: Path) -> None:
+    from livery.workshop import _cliff
+
+    root, package = _cliff_workspace(tmp_path, "github")
+    (package.directory / "cliff.toml").unlink()
+    with pytest.raises(_FAILURES) as caught:
+        _cliff.bumped_version(root, package)
+    assert "cliff.toml" in str(caught.value)

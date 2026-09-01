@@ -708,6 +708,18 @@ starts; recorded here so the sequence is visible (Willem: post
   `release.*` collapses into hidden CI entries under
   `workflow.release`. `start` (from hse, issue-driven) pairs with
   `abandon` in phase 11 and abandon then also unassigns the issue.
+- 2026-09-01, private forges are tier 1 (Willem: "gitea and private
+  repos are a tier 1 platform to support, so don't simplify based on
+  github/public"). Measured against the local Gitea, private
+  repository: git-cliff does **not** degrade when it cannot read a
+  remote, it aborts (exit 101, a panic), so an unauthenticated
+  private forge would kill every release at the changelog. The
+  workshop passes `--offline` when the kind's token variable is
+  absent and says the entry goes out without its authors. Two
+  template bugs the public-GitHub path had hidden: a Gitea workspace
+  with no `forge_url` took gitlab.com as its host, and `api_url`
+  carried an API path where git-cliff wants the server root, which
+  the server answers 404 to. Both fixed and banked as quirks.
 - 2026-09-01, what a package's render keeps owning: a package is
   rendered once and then written by its authors, so the render gate
   judges only `PACKAGE_MANAGED` (`cliff.toml` today) and

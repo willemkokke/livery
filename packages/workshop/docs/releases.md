@@ -23,6 +23,13 @@ not, or when a dependency floor names an unreleased version.
 An entry is written for review, never for trust: read it before the
 tag, and edit what a reader needs said differently.
 
+Authors are credited by asking the forge, which a private repository
+answers only for a caller it can authenticate. Set the forge's token
+variable (`GITHUB_TOKEN`, `GITEA_TOKEN`, `GITLAB_TOKEN`) and the
+names appear; without one the entry is written without them and says
+so. CI already carries the variable, so a release run credits
+authors whether the repository is public or private.
+
 Where the built wheel goes depends on the forge kind the workspace
 renders:
 

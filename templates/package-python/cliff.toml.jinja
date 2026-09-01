@@ -1,4 +1,5 @@
-{%- set web_root = forge_url.rstrip('/') if forge_url else ('https://github.com' if forge_kind == 'github' else 'https://gitlab.com') -%}
+{%- set public_host = {'github': 'https://github.com', 'gitea': 'https://gitea.com', 'gitlab': 'https://gitlab.com'} -%}
+{%- set web_root = forge_url.rstrip('/') if forge_url else public_host[forge_kind] -%}
 {%- set repo_url = web_root ~ '/' ~ forge_owner ~ '/' ~ project_name -%}
 {%- set pr_path = 'pull' if forge_kind == 'github' else ('pulls' if forge_kind == 'gitea' else '-/merge_requests') -%}
 # How {{ package_name }}'s changelog is written.
@@ -45,14 +46,16 @@ commit_parsers = [
   { message = ".*", group = "<!-- 2 -->Changed" },
 ]
 
-# Who wrote each change, resolved against the forge. A token makes
-# the lookup authenticated and works on a private repository; without
-# one the names of a public repository still resolve, and an
-# unresolved name simply prints without its author.
+# Who wrote each change, asked of the forge. The server root, not an
+# API path: git-cliff appends the API prefix itself, and a root that
+# already carries one becomes a doubled path the server answers 404
+# to. A repository the caller cannot read stops git-cliff outright,
+# so the workshop runs it offline when no token is in reach and says
+# so; the entry is then written without its authors.
 [remote.{{ forge_kind }}]
 owner = "{{ forge_owner }}"
 repo = "{{ project_name }}"
-{% if forge_url %}api_url = "{{ web_root }}/api/{{ 'v1' if forge_kind == 'gitea' else 'v4' }}"
+{% if forge_url %}api_url = "{{ web_root }}"
 {% endif %}
 [changelog]
 header = """
