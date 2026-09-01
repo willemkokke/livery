@@ -14,8 +14,9 @@ the emitters grow conditions anyway. Phase 4 shipped 2026-09-01
 (PR #69). Phase 5 shipped 2026-09-01 (PR #70); its audit found five
 gaps (named-sibling floor scoping, the gate run, and three untested
 paths), closed the same day in a follow-up PR that also scoped the
-dirty-tree resume carve-out to the workflow branch. Phase 6 next:
-dev releases. Subsumes `notes/20260831-workshop-plan.md`,
+dirty-tree resume carve-out to the workflow branch. Phase 6 in
+flight: dev releases, the branch deciding, verified live against
+the local Gitea index. Subsumes `notes/20260831-workshop-plan.md`,
 whose phases 1-10 shipped and whose remaining phases are carried
 forward here renumbered. The loop: one PR per phase, merged when
 green, forced-fault tests first, the hse audit closing each phase,
@@ -528,6 +529,16 @@ Deliverables:
 - The changelog is the unreleased excerpt spliced into the README
   under "What's New" for the build only and restored after; the
   index page is the only place it exists.
+
+Edge table:
+
+| Edge | Guard |
+| --- | --- |
+| No custom index configured | local degrade with the teaching, exit 0 |
+| pyproject stamped ahead of the tag | the refusal judges the tag; the dev act proceeds |
+| Headless publish without `--yes` | refusal teaches the flag; silence never publishes |
+| Dirty tree | `.dirty` rides the version; restore is snapshot-based, never git |
+| `--local` with an index configured | builds only, never asks, nothing leaves |
 
 Acceptance:
 
