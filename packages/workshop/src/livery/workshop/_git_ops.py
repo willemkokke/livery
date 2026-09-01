@@ -234,3 +234,7 @@ class GitOps:
         """The subjects in *span* touching *paths* (``a..b`` git range)."""
         out = self._run("log", "--format=%s", span, "--", *paths)
         return tuple(line for line in out.splitlines() if line.strip())
+
+    def commit_message(self, ref: str) -> str:
+        """*ref*'s full commit message, subject and body."""
+        return self._run("log", "-1", "--format=%B", ref)

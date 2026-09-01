@@ -1,7 +1,12 @@
 # The workshop: engine, release train, and the road past 0.1.0
 
 Status: approved 2026-09-01 after Willem's review; executing.
-Phase 1 shipped 2026-09-01 (PR #66). Phase 2 in flight. Subsumes `notes/20260831-workshop-plan.md`,
+Phase 1 shipped 2026-09-01 (PR #66); phase 2 shipped 2026-09-01
+(PR #67), its audit clean with the ruled deviations and one new
+banked quirk (GitHub's method-named auto-merge events). Phase 3 in
+flight: the driver, the base gate, the two-leg isolated validation,
+set prepare with rollback, recovery, and --local built; publish
+stays phase 4's. Subsumes `notes/20260831-workshop-plan.md`,
 whose phases 1-10 shipped and whose remaining phases are carried
 forward here renumbered. The loop: one PR per phase, merged when
 green, forced-fault tests first, the hse audit closing each phase,
