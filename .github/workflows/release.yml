@@ -1,44 +1,57 @@
 name: release
 
-# The train: push a tag shaped packages/<pkg>/v<semver> and only that
-# package releases. Tags are immutable and pushed alone.
+# The train: a workflow.release PR merges, this publishes its squash,
+# and the receipt tags are cut only after the index confirms each
+# member. A tag is a receipt, never a trigger. workflow_dispatch with
+# --ref is the recovery entry when a publish died mid-wave.
 on:
-  push:
-    tags: ["packages/*/v*"]
+  pull_request:
+    types: [closed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: the release squash to publish (recovery)
+        required: false
+        default: ""
 
 jobs:
   publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       startsWith(github.event.pull_request.head.ref, 'workflow/release/'))
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
       id-token: write
-      contents: read
+      contents: write
+    outputs:
+      members: ${{ steps.wave.outputs.members }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # The verify step checks floors against released tags.
+          ref: ${{ inputs.ref || github.event.pull_request.merge_commit_sha }}
           fetch-depth: 0
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - name: Sync (locked)
         run: uv sync --locked
-      - name: Verify tag against package
-        id: verify
-        run: uv run --no-sync fm release.verify "$GITHUB_REF_NAME"
-      - name: Build
-        run: uv build --package "${{ steps.verify.outputs.package }}" --out-dir dist
-      - name: Publish to PyPI (trusted publishing)
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
-        with:
-          packages-dir: dist
+      - name: Publish the wave
+        id: wave
+        run: >-
+          uv run --no-sync fm workflow.release.publish
+          --ref="${{ inputs.ref || github.event.pull_request.merge_commit_sha }}"
 
-  # The workshop's release aftermath (W6): the template snapshot,
-  # tagged v<semver> in lockstep with packages/workshop/v<semver>.
+  # The workshop release's aftermath: the template snapshot, tagged in
+  # lockstep with packages/workshop's receipt.
   templates:
-    if: startsWith(github.ref_name, 'packages/workshop/v')
     needs: [publish]
+    if: contains(needs.publish.outputs.members, 'livery-workshop')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.event.pull_request.merge_commit_sha }}
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - name: Sync (locked)
         run: uv sync --locked
@@ -50,4 +63,6 @@ jobs:
       - name: Publish the template snapshot
         env:
           GIT_SSH_COMMAND: ssh -i ~/.ssh/templates_deploy -o StrictHostKeyChecking=accept-new
-        run: uv run --no-sync fm release.templates "${GITHUB_REF_NAME#packages/workshop/v}"
+        run: >-
+          uv run --no-sync fm release.templates
+          "$(uv run --no-sync python -c 'import livery.workshop as w; print(w.__version__)')"

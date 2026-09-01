@@ -35,7 +35,7 @@ from livery.workshop._git_ops import GitOps
 from livery.workshop._layers import workspace_root
 from livery.workshop._packages import Package, discover_packages
 
-release = group("release", help="The path-tag release train")
+release = group("release", help="The release train's CI entries")
 
 _TAG_RE = re.compile(r"^(packages/[^/]+)/v(\d+\.\d+\.\d+)$")
 _SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
@@ -64,7 +64,9 @@ class ReleasePlan:
     version: str
 
 
-def verify_release(root: Path, tag: str) -> ReleasePlan:
+def verify_release(
+    root: Path, tag: str, *, coreleased: frozenset[str] = frozenset()
+) -> ReleasePlan:
     """Check *tag* against the tree; every finding fails verbatim.
 
     The agreements checked: the tag names an existing package; the
@@ -100,6 +102,11 @@ def verify_release(root: Path, tag: str) -> ReleasePlan:
         if not edge.floor:
             continue
         wanted = f"{edge.path}/v{edge.floor}"
+        if wanted in coreleased:
+            # An atomic set's intra-set floor: the wave cuts the
+            # dependency's receipt before this member publishes, so
+            # the tag it names exists by the time any consumer looks.
+            continue
         if wanted not in released:
             problems.append(
                 f"the floor on {edge.path} is {edge.floor}, and no tag"
@@ -110,7 +117,7 @@ def verify_release(root: Path, tag: str) -> ReleasePlan:
     return ReleasePlan(package=package, version=version)
 
 
-@release.task(name="verify")
+@release.task(name="verify", hidden=True)
 def release_verify(
     tag: Annotated[str, doc("the release tag, packages/<pkg>/v<semver>")],
 ) -> None:
@@ -174,7 +181,7 @@ def prepare_release(root: Path, path: str, version: str = "") -> list[str]:
     return changed
 
 
-@release.task(name="prepare")
+@release.task(name="prepare", hidden=True)
 def release_prepare(
     path: Annotated[str, doc("the package, e.g. packages/workshop")],
     version: Annotated[str, doc("the semver to stamp; empty derives it")] = "",
@@ -264,7 +271,7 @@ def _replace_tree(clone: Path, templates: Path) -> None:
     shutil.copytree(templates, clone, dirs_exist_ok=True)
 
 
-@release.task(name="templates")
+@release.task(name="templates", hidden=True)
 def release_templates(
     version: Annotated[str, doc("the workshop version being released")],
     remote: Annotated[str, doc("artifact repository url")] = TEMPLATES_REMOTE,

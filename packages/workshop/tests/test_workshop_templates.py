@@ -104,33 +104,52 @@ def _render_kind(tmp_path: Path, forge_kind: str, **extra: object) -> Path:
     return destination
 
 
-def test_each_forge_kind_renders_a_ci_definition_that_lints(
+def test_each_forge_kind_generates_a_ci_definition_that_lints(
     tmp_path: Path,
 ) -> None:
+    # Contract: generate over template. The workflow files are emitted
+    # from the answers, never rendered, so the template must produce
+    # none and the emitters must produce valid, gate-carrying YAML for
+    # every kind.
     import yaml
 
+    from livery.workshop._ci_generate import generate
+
+    answers = read_answers(ROOT / ".copier-answers.yml")
+
     github = _render_kind(tmp_path, "github")
-    ci = yaml.safe_load((github / ".github" / "workflows" / "ci.yml").read_text())
-    assert "gate" in ci["jobs"]
+    assert not (github / ".github").exists()  # nothing templated remains
     assert not (github / ".gitea").exists()
     assert not (github / ".gitlab-ci.yml").exists()
+    files = generate({**answers, "forge_kind": "github"})
+    ci = yaml.safe_load(files[".github/workflows/ci.yml"])
+    assert "gate" in ci["jobs"]
+    release = yaml.safe_load(files[".github/workflows/release.yml"])
+    assert "publish" in release["jobs"]
+    # The trigger is the merge, never a tag: tags are receipts.
+    assert "pull_request" in release[True] or "pull_request" in release["on"]
+
+    files = generate(
+        {
+            **answers,
+            "forge_kind": "gitea",
+            "publish_index": "https://forge.example.com/api/packages/o/pypi",
+        }
+    )
+    ci = yaml.safe_load(files[".gitea/workflows/ci.yml"])
+    assert "gate" in ci["jobs"]
+    release = yaml.safe_load(files[".gitea/workflows/release.yml"])
+    assert "publish" in release["jobs"]
+
+    files = generate({**answers, "forge_kind": "gitlab"})
+    pipeline = yaml.safe_load(files[".gitlab-ci.yml"])
+    assert "gate" in pipeline and "release-publish" in pipeline
+    assert pipeline["workflow"]["rules"]
 
     gitea = _render_kind(tmp_path, "gitea", forge_url="https://forge.example.com")
-    ci = yaml.safe_load((gitea / ".gitea" / "workflows" / "ci.yml").read_text())
-    assert "gate" in ci["jobs"]
-    release = yaml.safe_load(
-        (gitea / ".gitea" / "workflows" / "release.yml").read_text()
-    )
-    assert "publish" in release["jobs"]
     contract = (gitea / "livery.toml").read_text()
     assert 'url = "https://forge.example.com"' in contract
-    assert not (gitea / ".github").exists()
-
     gitlab = _render_kind(tmp_path, "gitlab")
-    pipeline = yaml.safe_load((gitlab / ".gitlab-ci.yml").read_text())
-    assert "gate" in pipeline and "release" in pipeline
-    assert pipeline["workflow"]["rules"]  # MRs, main, tags, LIVERY_WORKFLOW
-    assert not (gitlab / ".github").exists()
     for rendered in (github, gitea, gitlab):
         assert 'required_context = "gate"' in (rendered / "livery.toml").read_text()
 

@@ -320,6 +320,7 @@ class ReleaseDriver:
 
         require_verified_base(self._repo, git, self.base, force=self._force)
         plans = derive_plans(self._root, self._members)
+        mined_at = git.head_sha()
         git.create_branch(self.branch)
         prepared = False
         try:
@@ -340,8 +341,10 @@ class ReleaseDriver:
                 git.delete_local_branch(self.branch)
         listed = ", ".join(f"{plan.package.name} v{plan.version}" for plan in plans)
         title = f"chore(release): released {listed}"
-        body = "## Release summary\n" + "\n".join(
-            f"- **{plan.package.name}** v{plan.version}" for plan in plans
+        body = (
+            "## Release summary\n"
+            + "\n".join(f"- **{plan.package.name}** v{plan.version}" for plan in plans)
+            + f"\n\nMined-At: {mined_at}"
         )
         return Submission(title=title, body=body)
 
@@ -358,10 +361,15 @@ class ReleaseDriver:
             if rest:
                 stamped.append(rest)
         listed = ", ".join(stamped)
-        body = "## Release summary\n" + "\n".join(
-            f"- **{entry.split(' v')[0]}** v{entry.split(' v')[1]}"
-            for entry in stamped
-            if " v" in entry
+        mined_at = self._git._run("merge-base", "HEAD", f"origin/{self.base}").strip()
+        body = (
+            "## Release summary\n"
+            + "\n".join(
+                f"- **{entry.split(' v')[0]}** v{entry.split(' v')[1]}"
+                for entry in stamped
+                if " v" in entry
+            )
+            + f"\n\nMined-At: {mined_at}"
         )
         return Submission(title=f"chore(release): released {listed}", body=body)
 
@@ -441,3 +449,42 @@ def workflow_release(
         force_unverified_base=force_unverified_base,
     )
     run_workflow(driver, repo, git)
+
+
+@release_group.task(name="publish", hidden=True)
+def workflow_release_publish(
+    ref: Annotated[str, doc("the release squash; empty means HEAD")] = "",
+) -> None:
+    """Publish the squash at --ref: the wave, receipts cut per member.
+
+    The CI entry point after a release PR merges, and the recovery
+    entry when a publish died mid-wave: everything already tagged is
+    walked past. ``--ref`` exists because HEAD usually moves past the
+    squash before a recovery runs.
+    """
+    import os
+
+    from livery.forge import SimpleRegistry
+    from livery.workshop._layers import workspace_root
+    from livery.workshop._publish import publish_release
+
+    root = workspace_root()
+    if root is None:
+        fail("no workspace: no livery.toml above the working directory")
+    git = GitOps(root)
+    registry = SimpleRegistry(
+        os.environ.get("LIVERY_REGISTRY_URL", "https://pypi.org/simple")
+    )
+    receipts = publish_release(
+        root,
+        git,
+        lambda _package: registry,
+        ref=ref,
+        index_url=os.environ.get("LIVERY_PUBLISH_INDEX", ""),
+        token=os.environ.get("UV_PUBLISH_TOKEN", ""),
+    )
+    output = os.environ.get("GITHUB_OUTPUT", "")
+    if output:
+        names = " ".join(receipt.package.name for receipt in receipts)
+        with Path(output).open("a", encoding="utf-8") as handle:
+            handle.write(f"members={names}\n")

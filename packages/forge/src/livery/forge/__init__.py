@@ -35,6 +35,7 @@ from livery.forge._protocol import (
     Releases,
     Repository,
 )
+from livery.forge._registry import SimpleRegistry
 from livery.forge._types import (
     Capability,
     CheckState,
@@ -89,6 +90,7 @@ __all__ = [
     "RunStatus",
     "ScheduleEvent",
     "ScheduleEventKind",
+    "SimpleRegistry",
     "StateFilter",
     "Unsupported",
     "__version__",
