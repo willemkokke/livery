@@ -25,6 +25,7 @@ from livery.workshop._workflow_decision import (
     WorkflowAction,
     workflow_decision,
 )
+from livery.workshop._workflow_engine import Submission
 from livery.workshop._workflow_state import (
     Blocker,
     Signals,
@@ -475,11 +476,14 @@ class _StubDriver:
     def base(self) -> str:
         return "main"
 
-    def prepare(self):
+    def prepare(self) -> Submission | None:
         from livery.workshop._workflow_engine import Submission
 
         if self._git.current_branch() != self.branch:
-            self._git.create_branch(self.branch)
+            if self._git.local_branch_exists(self.branch):
+                self._git.switch(self.branch)
+            else:
+                self._git.create_branch(self.branch)
         marker = self._git.root / "update.txt"
         if not marker.exists():
             marker.write_text("updated\n")
@@ -590,3 +594,243 @@ def test_a_merged_workflow_is_found_by_sha_after_branch_deletion(
     assert repo.pr.find_by_head("workflow/update/templates") is None
     states = workflow_states(repo, git)
     assert [wf.state for wf in states] == [WorkflowState.SUCCEEDED]
+
+
+# --- the dark shells, lit: renderer, picker, configure, engine paths ---
+
+
+def test_render_workflows_prints_rows_and_the_empty_case(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from livery.workshop._workflow_tasks import render_workflows
+
+    render_workflows(())
+    assert "no reserved workflows" in capsys.readouterr().out
+    mid_publish = _wf(
+        WorkflowState.IN_PROGRESS,
+        name="release/forge+workshop",
+        author="willem",
+    )
+    mid_publish = WorkflowStatus(
+        **{**mid_publish.__dict__, "tagged": ("forge",), "detail": "publishing"}
+    )
+    render_workflows((mid_publish,))
+    out = capsys.readouterr().out
+    assert "release/forge+workshop: in_progress (willem)" in out
+    assert "tagged: forge" in out  # partial success is legible
+
+
+def test_the_interactive_picker_asks_and_silence_stops(
+    rig: tuple[FakeForge, GitOps], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake, git = rig
+    repo = _repo(fake)
+    first = _wf(WorkflowState.FAILED, name="release/forge")
+    second = _wf(WorkflowState.PREPARING, name="update/templates")
+    # Empty answer: nothing aborted, ever.
+    monkeypatch.setattr("builtins.input", lambda prompt: "")
+    with pytest.raises(SystemExit) as caught:
+        abort_policy(repo, git, (first, second), "", force=False, interactive=True)
+    assert "nothing aborted" in str(caught.value)
+    # A nonsense answer refuses by name.
+    monkeypatch.setattr("builtins.input", lambda prompt: "seven")
+    with pytest.raises(_FAILURES):
+        abort_policy(repo, git, (first, second), "", force=False, interactive=True)
+    # A picked number tears that one down.
+    git.create_branch("workflow/update/templates")
+    (git.root / "u.txt").write_text("u\n")
+    git.commit_all("chore: u")
+    git.switch("main")
+    monkeypatch.setattr("builtins.input", lambda prompt: "2")
+    monkeypatch.setattr(
+        "livery.workshop._workflow_tasks._reconcile_configuration", lambda: None
+    )
+    abort_policy(repo, git, (first, second), "", force=False, interactive=True)
+    assert not git.local_branch_exists("workflow/update/templates")
+
+
+def test_contract_config_reads_the_required_context(tmp_path: Path) -> None:
+    from livery.workshop._workflow_tasks import contract_config
+
+    (tmp_path / "livery.toml").write_text(
+        '[workspace]\n\n[ci]\nrequired_context = "the-gate"\n'
+    )
+    config = contract_config(tmp_path)
+    assert config.required_contexts == ("the-gate",)
+    assert config.squash_only is True
+    (tmp_path / "livery.toml").write_text("[workspace]\n")
+    assert contract_config(tmp_path).required_contexts == ("gate",)
+
+
+def test_the_reconcile_reports_a_refusal_and_never_raises(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from livery.workshop import _workflow_tasks
+
+    monkeypatch.setattr(_workflow_tasks, "_root", lambda: tmp_path)
+
+    def _refused(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess([], 1, "", "403: not an administrator")
+
+    monkeypatch.setattr(subprocess, "run", _refused)
+    _workflow_tasks._reconcile_configuration()
+    out = capsys.readouterr().out
+    assert "workflow.configure" in out and "403" in out
+
+
+def test_engine_merges_the_base_in_then_proceeds(
+    engine_rig: tuple[FakeForge, _EngineGit],
+) -> None:
+    from livery.workshop._workflow_engine import run_workflow
+
+    fake, git = engine_rig
+    # Advance main from a second clone so the driver starts behind.
+    other = git.root.parent / "other"
+    _git(git.root.parent, "clone", str(git.root.parent / "origin.git"), "other")
+    _git(other, "config", "user.email", "o@livery.local")
+    _git(other, "config", "user.name", "O")
+    (other / "ahead.txt").write_text("ahead\n")
+    _git(other, "add", ".")
+    _git(other, "commit", "-m", "feat: ahead")
+    _git(other, "push", "origin", "main")
+    driver = _StubDriver(git, armed=True)
+    run_workflow(driver, _repo(fake), git, current_user="fake-user")
+    pr = _repo(fake).pr.get(1)
+    assert pr is not None and pr.merged
+    assert (git.root / "ahead.txt").exists()  # the base came in first
+
+
+def test_engine_reopens_a_closed_pr_instead_of_duplicating(
+    engine_rig: tuple[FakeForge, _EngineGit],
+) -> None:
+    from livery.workshop._workflow_engine import run_workflow
+
+    fake, git = engine_rig
+    git.auto_settle = False
+    driver = _StubDriver(git, armed=False)
+    run_workflow(driver, _repo(fake), git, current_user="fake-user")
+    _repo(fake).pr.close(1)
+    git.switch("main")
+    again = _StubDriver(git, armed=False)
+    run_workflow(again, _repo(fake), git, current_user="fake-user")
+    pr = _repo(fake).pr.get(1)
+    assert pr is not None and pr.state == "open"  # reopened, not #2
+    assert _repo(fake).pr.get(2) is None
+
+
+def test_engine_says_nothing_to_submit_when_prepare_answers_none(
+    engine_rig: tuple[FakeForge, _EngineGit],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from livery.workshop._workflow_engine import run_workflow
+
+    fake, git = engine_rig
+
+    class _Done(_StubDriver):
+        def prepare(self) -> Submission | None:
+            return None
+
+    run_workflow(_Done(git, armed=True), _repo(fake), git, current_user="fake-user")
+    assert "nothing to submit" in capsys.readouterr().out
+
+
+def test_engine_tidies_its_own_leftover_then_starts_fresh(
+    engine_rig: tuple[FakeForge, _EngineGit],
+) -> None:
+    from livery.forge import RepoConfig
+    from livery.workshop._workflow_engine import run_workflow
+
+    fake, git = engine_rig
+    _repo(fake).configure(RepoConfig(delete_branch_on_merge=True))
+    driver = _StubDriver(git, armed=True)
+    run_workflow(driver, _repo(fake), git, current_user="fake-user")
+    first = _repo(fake).pr.get(1)
+    assert first is not None and first.merged
+    git.switch("main")
+    # In production the forge IS origin, so its branch deletion removes
+    # the real ref; the split rig mirrors that by hand.
+    _git(git.root, "push", "origin", ":workflow/update/templates")
+    # The fake's squash never reaches the real origin, so main still
+    # lacks the marker and the next update genuinely has work.
+    again = _StubDriver(git, armed=True)
+    run_workflow(again, _repo(fake), git, current_user="fake-user")
+    second = _repo(fake).pr.get(2)
+    assert second is not None and second.merged  # leftover tidied, fresh PR ran
+
+
+def test_a_merge_conflict_pulling_the_base_teaches_the_resume(
+    engine_rig: tuple[FakeForge, _EngineGit],
+) -> None:
+    from livery.workshop._workflow_engine import _merge_default
+
+    _fake, git = engine_rig
+    other = git.root.parent / "other2"
+    _git(git.root.parent, "clone", str(git.root.parent / "origin.git"), "other2")
+    _git(other, "config", "user.email", "o@livery.local")
+    _git(other, "config", "user.name", "O")
+    (other / "seed.txt").write_text("their line\n")
+    _git(other, "add", ".")
+    _git(other, "commit", "-m", "feat: theirs")
+    _git(other, "push", "origin", "main")
+    (git.root / "seed.txt").write_text("my line\n")
+    git.commit_all("feat: mine")
+    with pytest.raises(SystemExit) as caught:
+        _merge_default(git, "main")
+    assert "conflict" in str(caught.value)
+
+
+def test_gather_reads_receipts_and_an_unreadable_arm(
+    engine_rig: tuple[FakeForge, _EngineGit], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._workflow_state import gather, status_of
+
+    fake, git = engine_rig
+    git.auto_settle = False
+    name = "release/forge+workshop"
+    git.create_branch(f"workflow/{name}")
+    (git.root / "r.txt").write_text("r\n")
+    git.commit_all("feat: r")
+    git.push(f"workflow/{name}")
+    repo = _repo(fake)
+    pr = repo.pr.open(f"workflow/{name}", "main", "feat: r")
+    # An unreadable arm is None, and the detail says so.
+    monkeypatch.setattr(
+        repo.pr,
+        "is_armed",
+        lambda number: (_ for _ in ()).throw(ForgeError("403", status=403)),
+    )
+    signals = gather(repo, git, name)
+    assert signals is not None and signals.armed is None
+    assert "unreadable" in signals.detail
+    monkeypatch.undo()
+    # Merged with one member tagged: in progress, the ledger legible.
+    fresh = repo.pr.get(pr.number)
+    assert fresh is not None
+    fake.settle(OWNER, NAME, fresh.head_sha)
+    repo.pr.merge_now(pr.number, title="feat: r")
+    fake.create_tag(OWNER, NAME, "packages/forge/v9.9.9")
+    wf = status_of(gather(repo, git, name), name)
+    assert wf.state is WorkflowState.IN_PROGRESS
+    assert wf.tagged == ("forge",)
+    fake.create_tag(OWNER, NAME, "packages/workshop/v9.9.9")
+    wf = status_of(gather(repo, git, name), name)
+    assert wf.state is WorkflowState.SUCCEEDED
+
+
+def test_active_names_degrade_to_local_when_the_remote_is_gone(
+    rig: tuple[FakeForge, GitOps], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._workflow_state import active_workflow_names
+
+    fake, git = rig
+    git.create_branch("workflow/update/templates")
+    (git.root / "u.txt").write_text("u\n")
+    git.commit_all("chore: u")
+    monkeypatch.setattr(
+        type(git),
+        "remote_branches",
+        lambda self, prefix: (_ for _ in ()).throw(RuntimeError("offline")),
+    )
+    assert active_workflow_names(_repo(fake), git) == ("update/templates",)
