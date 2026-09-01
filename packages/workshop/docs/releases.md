@@ -1,15 +1,27 @@
 # Releases
 
 The train: push a tag shaped `packages/<pkg>/v<semver>` and only
-that package releases. `fm release.prepare <path>` without a version
-derives it from the conventional commits since the package's last
-release tag (after 1.0 a break bumps major, a feature minor,
+that package releases. Tags are immutable and pushed alone.
+
+`fm release.prepare <path>` without a version asks
+[git-cliff](https://git-cliff.org/) what the unreleased commits earn
+and writes the entry they make: sections grouped, pull requests
+linked, authors credited. A package with nothing unreleased is
+refused rather than given a new number. Each package states its own
+answer in its `cliff.toml`, rendered from the template with the
+package's tag line, its paths, and the forge its links point at, so
+the shape of an entry is changed by changing the template rather
+than by editing every package. The version rules there are
+footman's: after 1.0 a break bumps major, a feature minor,
 everything else patch; before 1.0 a feature bumps minor with breaks
-riding along) and writes the grouped changelog entry, pull requests
-linked and contributors credited, for review before the tag. Tags are immutable and pushed alone.
+riding along.
+
 `fm release.prepare` stamps the version into the three places that
 must agree, and `fm release.verify` refuses the tag when they do
 not, or when a dependency floor names an unreleased version.
+
+An entry is written for review, never for trust: read it before the
+tag, and edit what a reader needs said differently.
 
 Where the built wheel goes depends on the forge kind the workspace
 renders:

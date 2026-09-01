@@ -3,7 +3,9 @@
 _src_path: templates
 kind: package-python
 package_name: livery-forge
-package_description: "One interface to GitHub, Gitea, and GitLab — the livery ecosystem's forge."
+package_description: One interface to GitHub, Gitea, and GitLab — the livery ecosystem's
+  forge.
+package_dir: forge
 namespace_package: livery
 author_name: Willem Kokke
 author_email: mail@willem.net
@@ -12,3 +14,5 @@ forge_owner: willemkokke
 project_name: livery
 python_versions:
 - '3.11'
+forge_kind: github
+forge_url: ''

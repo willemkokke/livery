@@ -42,8 +42,9 @@ refactor, test; a `!` before the colon or a `BREAKING CHANGE:`
 footer marks a break. Versions follow footman's practice: after 1.0
 a break bumps major, a feature minor, everything else patch; before
 1.0 a feature bumps minor (breaks ride along) and everything else is
-a patch. `fm release.prepare <path>` derives the bump and the
-grouped changelog entry from the commits since the last release tag.
+a patch. `fm release.prepare <path>` derives the bump and the entry
+through git-cliff, per the package's rendered `cliff.toml`, from the
+commits since the last release tag.
 
 
 Conventional prefixes (`feat:`, `fix:`, `docs:`, `chore:`,

@@ -24,22 +24,16 @@ import subprocess
 import tempfile
 import tomllib
 from dataclasses import dataclass
-from datetime import date
 from pathlib import Path
 from typing import Annotated
 
 from footman import doc, fail, group
 
+from livery.workshop import _cliff
 from livery.workshop._backends import _python
-from livery.workshop._conventional import (
-    changelog_entry,
-    next_version,
-    parse_commit,
-)
 from livery.workshop._git_ops import GitOps
 from livery.workshop._layers import workspace_root
 from livery.workshop._packages import Package, discover_packages
-from livery.workshop._update import latest_released
 
 release = group("release", help="The path-tag release train")
 
@@ -133,74 +127,43 @@ def release_verify(
             handle.write(f"package={plan.package.name}\n")
 
 
-def _pr_url_base(root: Path) -> str:
-    """Where a pull request number links, per the contract's forge kind."""
-    contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
-    forge_table = contract.get("forge") or {}
-    kind = str(forge_table.get("kind", ""))
-    owner = str(forge_table.get("owner", ""))
-    if not kind or not owner:
-        return ""
-    from livery.workshop._forge_lane import remote_repo_name
-
-    host = str(forge_table.get("url", "")).rstrip("/") or {
-        "github": "https://github.com",
-        "gitlab": "https://gitlab.com",
-    }.get(kind, "")
-    if not host:
-        return ""
-    name = remote_repo_name(root)
-    suffix = {"github": "pull", "gitea": "pulls", "gitlab": "-/merge_requests"}[kind]
-    return f"{host}/{owner}/{name}/{suffix}"
-
-
 def prepare_release(root: Path, path: str, version: str = "") -> list[str]:
     """Stamp a release into *path*'s places; what changed.
 
-    Without *version*, the commits since the package's last release
-    tag derive it (livery.workshop._conventional.next_version) and
-    write the changelog entry: grouped sections, linked pull request
-    references, a contributors line, for review. A given *version*
-    wins and gets an empty entry for the human to write. Idempotent
-    either way: a place already carrying the version is left alone.
+    Without *version*, git-cliff derives it from the conventional
+    commits under the package's paths since its last release tag, and
+    writes the entry the package's ``cliff.toml`` shapes. A given
+    *version* wins and gets an empty entry for the human to write.
+    Idempotent either way: a place already carrying the version is
+    left alone.
     """
     packages = {package.path: package for package in discover_packages(root)}
     package = packages.get(path)
     if package is None:
         fail(f"{path} is not a workspace package")
-    git = GitOps(root)
     entry_body = ""
     if not version:
-        released = latest_released(git.tags())
-        last = released.get(path, "")
-        tag = f"{path}/v{last}" if last else ""
-        commits = [
-            parse_commit(sha, subject, body, name, email)
-            for sha, subject, body, name, email in git.commits_since(tag, path)
-        ]
-        if not commits:
-            print(f"  no commits touch {path} since its last release")
-            return []
         current = _python.current_version(package)
-        version = next_version(current, commits)
-        if version == current:
-            print(f"  {path} is already at {current} with nothing to release")
+        derived = _cliff.bumped_version(root, package)
+        if not derived or derived == current:
+            # git-cliff answers with the current version when nothing
+            # unreleased touches the package. Releasing it again would
+            # republish the same code under a version the index
+            # already has.
+            print(f"  nothing to release: no unreleased commits touch {path}")
             return []
-        entry_body = changelog_entry(
-            version,
-            date.today().isoformat(),
-            commits,
-            pr_url_base=_pr_url_base(root),
-        )
-        since = last or "the beginning"
-        print(f"  derived {version} from {len(commits)} commit(s) since {since}")
+        version = derived
+        entry_body = _cliff.unreleased_entry(root, package, version)
+        print(f"  derived {version} from the commits since {current}")
     if not _SEMVER_RE.fullmatch(version):
         fail(f"version {version!r} is not <major>.<minor>.<patch>")
     changed = _python.stamp_version(package).stamp(version)
     changelog = package.directory / "CHANGELOG.md"
     text = changelog.read_text("utf-8") if changelog.is_file() else "# Changelog\n"
     if f"## {version}" not in text and f"## [{version}]" not in text:
-        insert = "\n" + (entry_body or f"## [{version}]\n\n- \n")
+        # A blank line on each side, so the new entry and the one it
+        # sits above stay separate blocks.
+        insert = "\n" + (entry_body or f"## [{version}]\n\n-").strip() + "\n"
         first_entry = text.find("\n## ")
         if first_entry == -1:
             text = text.rstrip("\n") + "\n" + insert
@@ -218,12 +181,13 @@ def release_prepare(
 ) -> None:
     """Stamp a release: version derived from the commits unless given.
 
-    The derived path reads the conventional commits since the last
-    release tag, bumps per the published convention, and writes the
-    grouped changelog entry with linked pull requests and the
-    contributors line, for review. A given version wins and leaves
-    the entry for the human. ``fm release.verify`` is the check that
-    everything agrees before the tag is cut.
+    The derived path asks git-cliff what the unreleased commits earn,
+    through the package's own ``cliff.toml``, and writes the entry
+    they make: sections grouped, pull requests linked, authors
+    credited, for review. A package with nothing unreleased is
+    refused rather than given a new number. A given version wins and
+    leaves the entry for the human. ``fm release.verify`` is the
+    check that everything agrees before the tag is cut.
     """
     for name in prepare_release(_root(), path, version):
         print(f"  stamped: {name}")
