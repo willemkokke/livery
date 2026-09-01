@@ -277,7 +277,10 @@ def push_and_pr(
     """Disarm, push, find-or-open the pull request, arm per *armed*."""
     body = with_closes(plan.body, closes) if closes is not None else plan.body
     disarm_before_push(repo, git, plan.branch)
-    git.push(plan.branch)
+    # Found by branch name, so no push is needed first - and the
+    # refusal below must run before the push: a refusal that leaves a
+    # branch on the remote makes the next submit of a rebuilt branch
+    # fail non-fast-forward.
     pr = repo.pr.find_by_head(plan.branch)
     if pr is None:
         # A defaulted title is trustworthy only when it is unambiguous:
@@ -296,9 +299,11 @@ def push_and_pr(
                     f"{listed}\n"
                     '  pass the intent: --title="type(scope): subject"'
                 )
+        git.push(plan.branch)
         pr = repo.pr.open(plan.branch, plan.base, plan.title, body)
         print(f"  opened PR #{pr.number}: {pr.title}")
     else:
+        git.push(plan.branch)
         print(f"  reusing PR #{pr.number}")
         if plan.title_given and pr.title != plan.title:
             repo.pr.update_title(pr.number, plan.title)

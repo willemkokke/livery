@@ -293,6 +293,16 @@ def test_an_ambiguous_title_default_refuses_on_first_open(
         _submit(fake, git, armed=False, follow_to_verdict=False)
     assert "2 commits ahead" in str(caught.value)
     assert "the first change" in str(caught.value)
+    # The refusal happens before the push: a branch left on the remote
+    # would make the next submit of a rebuilt branch non-fast-forward.
+    heads = subprocess.run(
+        ["git", "ls-remote", "--heads", "origin", git.current_branch()],
+        cwd=git.root,
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    assert heads.stdout == ""
     number = _submit(
         fake,
         git,
