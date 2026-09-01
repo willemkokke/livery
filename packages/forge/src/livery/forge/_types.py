@@ -15,7 +15,11 @@ from dataclasses import dataclass
 from typing import Literal, TypeAlias
 
 Capability: TypeAlias = Literal[
-    "auto_merge", "force_cancel", "required_contexts", "ci_secrets"
+    "auto_merge",
+    "force_cancel",
+    "required_contexts",
+    "ci_secrets",
+    "schedule_events",
 ]
 """What livery.forge.Forge.supports answers for, by name.
 
@@ -30,6 +34,10 @@ Capability: TypeAlias = Literal[
   demands sealed-box encryption the standard library cannot provide,
   and no workflow stores a secret there, because trusted publishing
   replaces tokens on GitHub.
+- ``schedule_events``: the merge-scheduling history of a pull request
+  can be read back (livery.forge.PullRequests.schedule_events).
+  GitLab's backend declines: its system notes carry no reliable
+  scheduling record.
 """
 
 CheckState: TypeAlias = Literal["none", "pending", "success", "failure"]
@@ -149,6 +157,9 @@ class PullRequest:
         head_sha: The head commit. Persists after the branch is gone.
         base_branch: The branch the pull request targets.
         url: The pull request's page, for printing to a person.
+        author: The login of whoever opened it; empty when the forge
+            does not say. Compare with livery.forge.Forge.whoami, the
+            same namespace.
     """
 
     number: int
@@ -160,6 +171,7 @@ class PullRequest:
     head_sha: str
     base_branch: str
     url: str = ""
+    author: str = ""
 
 
 @dataclass(frozen=True)
@@ -272,3 +284,80 @@ class Issue:
     labels: tuple[str, ...] = ()
     assignees: tuple[str, ...] = ()
     url: str = ""
+
+
+ReviewState: TypeAlias = Literal["approved", "changes_requested", "commented"]
+"""A submitted review's verdict, normalised across the forges.
+
+Only ``approved`` and ``changes_requested`` decide anything; a
+``commented`` review supersedes nothing. Unsubmitted drafts are never
+reported.
+"""
+
+
+@dataclass(frozen=True)
+class Review:
+    """One submitted pull request review.
+
+    Attributes:
+        author: The login of the reviewer, the same namespace as
+            livery.forge.Forge.whoami.
+        state: The verdict, per livery.forge.ReviewState.
+    """
+
+    author: str
+    state: ReviewState
+
+
+@dataclass(frozen=True)
+class Protection:
+    """The branch protection a forge reports for one branch.
+
+    The read side of livery.forge.RepoConfig, normalised and honest:
+    a field a forge cannot express reads as its inert value, so a
+    caller gating on a flag never invents a blocker the forge would
+    not enforce.
+
+    Attributes:
+        required_approvals: Approving reviews the merge requires;
+            0 when none.
+        require_codeowner_review: True when a codeowner's approval is
+            required; None when the forge cannot say.
+        block_on_outdated: True when a head behind its base may not
+            merge.
+        block_on_rejected: True when a requested-changes review blocks
+            the merge.
+        required_contexts: The check contexts protection requires.
+    """
+
+    required_approvals: int = 0
+    require_codeowner_review: bool | None = None
+    block_on_outdated: bool = False
+    block_on_rejected: bool = False
+    required_contexts: tuple[str, ...] = ()
+
+
+ScheduleEventKind: TypeAlias = Literal[
+    "scheduled", "unscheduled", "merged", "closed", "reopened", "pushed"
+]
+"""What happened to a pull request's merge schedule, normalised."""
+
+
+@dataclass(frozen=True)
+class ScheduleEvent:
+    """One event in a pull request's merge-scheduling history.
+
+    The record that shows a created-then-lost schedule, which no
+    current-state read can. Available only where the forge keeps the
+    history (the ``schedule_events`` capability).
+
+    Attributes:
+        kind: What happened, per livery.forge.ScheduleEventKind.
+        actor: The login that caused it; empty when the forge does
+            not say.
+        created: When it happened, the forge's own timestamp string.
+    """
+
+    kind: ScheduleEventKind
+    actor: str = ""
+    created: str = ""

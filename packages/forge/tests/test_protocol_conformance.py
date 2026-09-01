@@ -20,7 +20,14 @@ def _gitlab_shaped() -> ForgeDriver:
 
 def _github_shaped() -> ForgeDriver:
     return FakeDriver(
-        FakeForge(capabilities=("auto_merge", "force_cancel", "required_contexts"))
+        FakeForge(
+            capabilities=(
+                "auto_merge",
+                "force_cancel",
+                "required_contexts",
+                "schedule_events",
+            )
+        )
     )
 
 

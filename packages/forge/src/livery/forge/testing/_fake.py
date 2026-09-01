@@ -30,11 +30,15 @@ from livery.forge._types import (
     Issue,
     Job,
     Label,
+    Protection,
     PullRequest,
     Release,
     RepoConfig,
     RepoInfo,
+    Review,
+    ReviewState,
     Run,
+    ScheduleEvent,
     StateFilter,
 )
 from livery.forge.testing._conformance import Outcome
@@ -44,6 +48,7 @@ _ALL_CAPABILITIES: tuple[Capability, ...] = (
     "force_cancel",
     "required_contexts",
     "ci_secrets",
+    "schedule_events",
 )
 
 
@@ -92,6 +97,9 @@ class _PullRequestState:
     head_sha: str
     base_branch: str
     comments: list[str] = field(default_factory=list)
+    author: str = "fake-user"
+    reviews: list[Review] = field(default_factory=list)
+    events: list[ScheduleEvent] = field(default_factory=list)
 
 
 @dataclass
@@ -139,6 +147,7 @@ class _RepoState:
     issues: dict[int, _IssueState] = field(default_factory=dict)
     releases: dict[str, Release] = field(default_factory=dict)
     runs: dict[int, _RunState] = field(default_factory=dict)
+    protections: dict[str, Protection] = field(default_factory=dict)
     next_pr: int = 1
     next_issue: int = 1
 
@@ -200,6 +209,19 @@ class FakeForge:
     def user_url(self, login: str) -> str:
         """The address of *login*'s profile under the ``fake://`` scheme."""
         return f"fake://{login}"
+
+    def set_protection(
+        self, owner: str, name: str, branch: str, protection: Protection
+    ) -> None:
+        """Test helper: what Repository.protection answers for *branch*."""
+        self._require_repo(owner, name).protections[branch] = protection
+
+    def review(
+        self, owner: str, name: str, number: int, author: str, state: ReviewState
+    ) -> None:
+        """Test helper: record a submitted review on a pull request."""
+        pr = self._require_pr(self._require_repo(owner, name), number)
+        pr.reviews.append(Review(author=author, state=state))
 
     def create_repo(
         self,
@@ -397,6 +419,7 @@ class FakeForge:
         pr.head_sha = state.branches.get(pr.head_branch, pr.head_sha)
         pr.state = "closed"
         pr.merged = True
+        pr.events.append(ScheduleEvent(kind="merged", actor="fake-user"))
         if state.delete_branch_on_merge:
             state.branches.pop(pr.head_branch, None)
             # The strictest conforming behaviour: a forge may clear the
@@ -453,6 +476,18 @@ class _FakeRepository:
             state.allow_auto_merge = config.allow_auto_merge
         if config.required_contexts is not None:
             state.required_contexts = config.required_contexts
+            # Asserting contexts creates the branch protection, as it
+            # does on the real forges, so the protection read answers.
+            existing = state.protections.get(state.default_branch)
+            state.protections[state.default_branch] = Protection(
+                required_approvals=existing.required_approvals if existing else 0,
+                require_codeowner_review=(
+                    existing.require_codeowner_review if existing else None
+                ),
+                block_on_outdated=existing.block_on_outdated if existing else False,
+                block_on_rejected=existing.block_on_rejected if existing else False,
+                required_contexts=config.required_contexts,
+            )
         if config.secrets is not None:
             state.secrets.update(config.secrets)
         if config.variables is not None:
@@ -470,6 +505,11 @@ class _FakeRepository:
         """Whether *branch* exists."""
         state = self._fake._require_repo(self._owner, self._name)
         return branch in state.branches
+
+    def protection(self, branch: str) -> Protection | None:
+        """The protection set through FakeForge.set_protection, or None."""
+        state = self._fake._require_repo(self._owner, self._name)
+        return state.protections.get(branch)
 
     def web_url(self) -> str:
         """The repository's home page under the ``fake://`` scheme."""
@@ -528,6 +568,7 @@ class _FakePullRequests:
             head_sha=head_sha,
             base_branch=pr.base_branch,
             url=f"fake://{self._owner}/{self._name}/pulls/{pr.number}",
+            author=pr.author,
         )
 
     def open(self, head: str, base: str, title: str, body: str = "") -> PullRequest:
@@ -591,6 +632,7 @@ class _FakePullRequests:
         if pr.state == "open":
             # Tracking stops here, as at a merge.
             pr.head_sha = state.branches.get(pr.head_branch, pr.head_sha)
+            pr.events.append(ScheduleEvent(kind="closed", actor="fake-user"))
         pr.state = "closed"
 
     def reopen(self, number: int) -> None:
@@ -644,19 +686,36 @@ class _FakePullRequests:
             self._fake.faults.lose_arm_schedule -= 1
             return
         state.armed[number] = (title, message)
+        pr.events.append(ScheduleEvent(kind="scheduled", actor="fake-user"))
         self._fake._settle(state)
 
     def disarm(self, number: int) -> bool:
         """Cancel a scheduled merge; True when one was cancelled."""
         state = self._state()
-        self._fake._require_pr(state, number)
-        return state.armed.pop(number, None) is not None
+        pr = self._fake._require_pr(state, number)
+        cancelled = state.armed.pop(number, None) is not None
+        if cancelled:
+            pr.events.append(ScheduleEvent(kind="unscheduled", actor="fake-user"))
+        return cancelled
 
     def is_armed(self, number: int) -> bool:
         """Whether pull request *number* has a merge scheduled."""
         state = self._state()
         pr = self._fake._require_pr(state, number)
         return number in state.armed and pr.state == "open"
+
+    def reviews(self, number: int) -> tuple[Review, ...]:
+        """The submitted reviews on pull request *number*."""
+        return tuple(self._fake._require_pr(self._state(), number).reviews)
+
+    def schedule_events(self, number: int) -> tuple[ScheduleEvent, ...]:
+        """The merge-scheduling history, oldest first."""
+        if not self._fake.supports("schedule_events"):
+            raise Unsupported(
+                "this forge keeps no readable scheduling history"
+                " (capability: schedule_events)"
+            )
+        return tuple(self._fake._require_pr(self._state(), number).events)
 
     def comment(self, number: int, body: str) -> None:
         """Post *body* on pull request *number*."""
