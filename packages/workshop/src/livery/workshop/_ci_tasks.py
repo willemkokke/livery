@@ -1,12 +1,13 @@
 """``fm status``, the ``ci`` group, and ``fm doctor``.
 
 ``status`` says where the current branch's pull request stands and
-exits that state's code (0 while nothing is wrong). The ``ci`` group
-works on the head commit's runs: ``ci.watch`` watches until the
-branch lands or something needs a person, ``ci.rerun`` re-runs the
-failed jobs, ``ci.cancel`` cancels what is still moving (the relief
-for a wedged queue). ``doctor`` says who you are, which server this
-is, and what it grants.
+exits that state's code (0 while nothing is wrong); ``--watch``
+follows instead of reading once. The ``ci`` group acts on the head
+commit's runs: ``ci.rerun`` re-runs the failed jobs, ``ci.cancel``
+cancels what is still moving (the relief for a wedged queue), and
+``ci.logs`` prints the job logs, the one read that stays here so
+logs reach an agent through fm. ``doctor`` says who you are, which
+server this is, and what it grants.
 """
 
 from __future__ import annotations
@@ -47,14 +48,23 @@ def status_flow(repo: Repository, git: GitOps) -> int:
 
 
 @task
-def status() -> None:
+def status(
+    watch: Annotated[bool, doc("follow until it lands or needs a person")] = False,
+    interval: Annotated[int, doc("watch poll seconds")] = 15,
+    timeout: Annotated[int, doc("watch deadline seconds")] = 1800,
+) -> None:
     """Say where the branch's pull request stands; exit that state's code.
 
     Exit 0 covers merged, in flight, and no pull request; each blocker
     state keeps its own stable code (see livery.workshop._verdict), and
-    the printed sentence always says what to do next.
+    the printed sentence always says what to do next. ``--watch``
+    follows instead of reading once: the same classification, polled
+    until the branch lands or a person is needed.
     """
     repo, git = _resolved()
+    if watch:
+        follow(repo, git.current_branch(), git, interval=interval, timeout=timeout)
+        return
     code = status_flow(repo, git)
     if code:
         raise SystemExit(code)
@@ -162,16 +172,6 @@ def ci_logs(
     """Print the head commit's job logs, failed jobs by default."""
     repo, git = _resolved()
     logs_flow(repo, git, lines=lines, failed_only=failed_only)
-
-
-@ci.task(name="watch")
-def ci_watch(
-    interval: Annotated[int, doc("poll seconds")] = 15,
-    timeout: Annotated[int, doc("deadline seconds")] = 1800,
-) -> None:
-    """Watch the branch until it lands or something needs a person."""
-    repo, git = _resolved()
-    follow(repo, git.current_branch(), git, interval=interval, timeout=timeout)
 
 
 def doctor_flow(forge: Forge) -> None:

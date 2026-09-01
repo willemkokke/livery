@@ -351,10 +351,11 @@ def new_package(
     _write_root_answers(root, answers)
     for changed in apply_project(root):
         print(f"  rendered: {changed}")
-    lock = subprocess.run(["uv", "lock"], cwd=root, capture_output=True, text=True)
-    if lock.returncode != 0:
-        fail(f"uv lock exited {lock.returncode}:\n{lock.stdout}{lock.stderr}")
-    print(f"  packages/{name}: rendered and wired; run `uv sync` to install it")
+    from livery.workshop._uv import run_uv
+
+    run_uv("lock", root=root)
+    run_uv("sync", root=root)
+    print(f"  packages/{name}: rendered, wired, and installed")
 
 
 def _write_root_answers(root: Path, answers: dict[str, Any]) -> None:

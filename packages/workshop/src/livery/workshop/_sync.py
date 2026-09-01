@@ -127,11 +127,11 @@ def sync() -> None:
     the recovery procedure, and a quiet run means everything already
     matched.
     """
-    from footman import run
+    from livery.workshop._uv import run_uv
 
     root = workspace_root()
     if root is None:
         fail("no workspace: no livery.toml above the working directory")
     for line in sync_workspace(root):
         print(line)
-    run(["uv", "sync"], title="Syncing the environment", cwd=root)
+    run_uv("sync", root=root)
