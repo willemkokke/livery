@@ -406,7 +406,7 @@ def local_release(root: Path, members: tuple[Package, ...]) -> None:
 release_group = workflow.group("release", help="The release train")
 
 
-@release_group.default
+@release_group.default(interactive=True)
 def workflow_release(
     *paths: str,
     armed: Annotated[bool, doc("arm the release PR to merge on green")] = False,
@@ -417,12 +417,18 @@ def workflow_release(
         bool, doc("release without waiting for the base's own CI")
     ] = False,
 ) -> None:
-    """Release a set of packages: one PR, receipts per member.
+    """Release a set of packages: the branch decides the act.
 
-    Names the set positionally (``packages/forge`` or just ``forge``);
-    the branch decides the act, and this driver is the main-family
-    one. Re-running is the recovery at every step.
+    Names the set positionally (``packages/forge`` or just ``forge``).
+    On a main-family branch this is the release train: one PR,
+    receipts per member, re-running the recovery at every step. On
+    any other branch it is the dev act: a wheel straight from the
+    branch at a dev version, published only to the configured custom
+    index after a confirmation, no reserved branch, no PR, no tags.
+    ``--local`` is everything that stays on this machine, on either
+    branch mode.
     """
+    from livery.workshop._dev_release import dev_release
     from livery.workshop._forge_lane import this_repository
     from livery.workshop._layers import workspace_root
 
@@ -436,6 +442,10 @@ def workflow_release(
         )
     members = resolve_set(root, tuple(paths))
     git = GitOps(root)
+    branch = git.current_branch()
+    if branch != "main" and not branch.startswith("workflow/"):
+        dev_release(root, git, members, local=local)
+        return
     if local:
         local_release(root, members)
         return
