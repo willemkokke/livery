@@ -112,6 +112,15 @@ package_description:
   type: str
   default: "{{ package_name }}: a livery workspace package."
 
+# The directory under packages/, which is also the package's tag
+# line. Recorded rather than derived from the destination: the render
+# gate renders into a scratch directory, and a derived value would
+# name that instead.
+package_dir:
+  type: str
+  default: "{{ _copier_conf.dst_path | basename }}"
+  when: false
+
 namespace_package:
   type: str
   help: "Dotted namespace the package lives in (PEP 420, no __init__)"

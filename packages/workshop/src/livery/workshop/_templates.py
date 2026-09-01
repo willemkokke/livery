@@ -165,6 +165,47 @@ def project_drift(root: Path) -> list[str]:
     return drift
 
 
+#: What a package's own render owns for good. Every other rendered
+#: file is a package's seed, which its authors then write: comparing
+#: those would report a living package as drift from its own birth.
+PACKAGE_MANAGED = ("cliff.toml",)
+
+
+def package_drift(root: Path) -> list[str]:
+    """The drift report for every package's managed rendered files.
+
+    Only the files in
+    livery.workshop._templates.PACKAGE_MANAGED are judged: a package
+    is rendered once and then written, so its seeds are not the
+    template's to keep. A package whose managed file is missing is
+    named, which is what a package rendered before the file existed
+    looks like.
+    """
+    source = local_template_dir(root)
+    if source is None:
+        fail("no local template source: the render gate needs one")
+    drift = []
+    packages = root / "packages"
+    for answers_path in sorted(packages.glob("*/.copier-answers.yml")):
+        directory = answers_path.parent
+        data = read_answers(answers_path)
+        with tempfile.TemporaryDirectory() as scratch:
+            render(source, Path(scratch), data)
+            for name in PACKAGE_MANAGED:
+                rendered = Path(scratch) / name
+                if not rendered.is_file():
+                    continue
+                committed = directory / name
+                relative = committed.relative_to(root)
+                if not committed.is_file():
+                    drift.append(
+                        f"{relative}: rendered, but missing from the repository"
+                    )
+                elif _lf(committed.read_bytes()) != _lf(rendered.read_bytes()):
+                    drift.append(f"{relative}: differs from its render")
+    return drift
+
+
 def apply_project(root: Path) -> list[str]:
     """Write the ``project`` render over *root*; the files that changed."""
     data = read_answers(root / _ANSWERS)
@@ -185,6 +226,35 @@ def apply_project(root: Path) -> list[str]:
     return changed
 
 
+def apply_packages(root: Path) -> list[str]:
+    """Write each package's managed rendered files; what changed.
+
+    Only livery.workshop._templates.PACKAGE_MANAGED is written. A
+    package's seeds belong to whoever has been writing them since it
+    was born, and rewriting those would replace a living package's
+    README, changelog, and sources with the template's stubs.
+    """
+    source = local_template_dir(root)
+    if source is None:
+        fail("no local template source: nothing to apply from")
+    changed = []
+    for answers_path in sorted((root / "packages").glob("*/.copier-answers.yml")):
+        directory = answers_path.parent
+        data = read_answers(answers_path)
+        with tempfile.TemporaryDirectory() as scratch:
+            render(source, Path(scratch), data)
+            for name in PACKAGE_MANAGED:
+                rendered = Path(scratch) / name
+                if not rendered.is_file():
+                    continue
+                committed = directory / name
+                body = _lf(rendered.read_bytes())
+                if not committed.is_file() or _lf(committed.read_bytes()) != body:
+                    committed.write_bytes(body)
+                    changed.append(str(committed.relative_to(root)))
+    return changed
+
+
 @template.task(name="check")
 def template_check() -> None:
     """Fail when a rendered file drifts from the template source.
@@ -195,7 +265,7 @@ def template_check() -> None:
     root = _root()
     if local_template_dir(root) is None:
         return
-    drift = project_drift(root)
+    drift = project_drift(root) + package_drift(root)
     if drift:
         fail(
             "rendered files drift from templates/:\n  "
@@ -207,15 +277,18 @@ def template_check() -> None:
 
 @template.task(name="apply")
 def template_apply() -> None:
-    """Re-render the ``project`` kind over the repository.
+    """Re-render the ``project`` kind and each package's managed files.
 
     The recovery procedure for drift, and the delivery step after a
-    template edit. Idempotent: a clean tree changes nothing.
+    template edit. A package's seeds are never rewritten: only the
+    files the template keeps owning
+    (livery.workshop._templates.PACKAGE_MANAGED). Idempotent: a clean
+    tree changes nothing.
     """
     root = _root()
     if local_template_dir(root) is None:
         fail("no local template source here: nothing to apply")
-    changed = apply_project(root)
+    changed = apply_project(root) + apply_packages(root)
     for name in changed:
         print(f"  rendered: {name}")
     if not changed:
@@ -254,6 +327,7 @@ def new_package(
         destination,
         {
             "kind": "package-python",
+            "package_dir": name,
             "package_name": package_name,
             "package_description": f"{package_name}: a livery workspace package.",
             "namespace_package": "livery",
@@ -261,6 +335,12 @@ def new_package(
             "author_email": answers.get("author_email", ""),
             "copyright_year": answers.get("copyright_year", ""),
             "forge_owner": answers.get("forge_owner", ""),
+            # The forge the workspace is on, carried down: a package's
+            # changelog links its own pull requests, and a default
+            # taken from the template would put a Gitea workspace's
+            # entries on github.com.
+            "forge_kind": answers.get("forge_kind", ""),
+            "forge_url": answers.get("forge_url", ""),
             "project_name": answers.get("project_name", ""),
             "python_versions": answers.get("python_versions", []),
         },

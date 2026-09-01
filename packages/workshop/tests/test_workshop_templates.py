@@ -6,7 +6,9 @@ import shutil
 from pathlib import Path
 
 from livery.workshop._templates import (
+    apply_packages,
     apply_project,
+    package_drift,
     project_drift,
     read_answers,
     render,
@@ -50,6 +52,35 @@ def test_the_monorepo_matches_its_own_render() -> None:
     # first instance, so a fresh render of the project kind agrees
     # with the committed tree byte for byte.
     assert project_drift(ROOT) == []
+    # Each package's managed files answer to the template too.
+    assert package_drift(ROOT) == []
+
+
+def test_package_drift_judges_only_the_managed_files(tmp_path: Path) -> None:
+    # The seeds must NOT be judged: a package writes its own README
+    # and changelog the moment it is born, and reporting those as
+    # drift would ask a living package to revert to its stub.
+    root = _template_instance(tmp_path)
+    apply_project(root)
+    package = root / "packages" / "thing"
+    package.mkdir(parents=True)
+    answers = read_answers(ROOT / "packages" / "workshop" / ".copier-answers.yml")
+    answers["package_name"] = "livery-thing"
+    (package / ".copier-answers.yml").write_text(
+        "\n".join(f"{key}: {value!r}" for key, value in answers.items()) + "\n"
+    )
+    # Nothing rendered yet: the managed file is named as missing.
+    assert package_drift(root) == [
+        "packages/thing/cliff.toml: rendered, but missing from the repository"
+    ]
+    assert "packages/thing/cliff.toml" in apply_packages(root)
+    assert package_drift(root) == []
+    assert apply_packages(root) == []  # idempotent
+    # A README the package's authors wrote is not the template's to keep.
+    (package / "README.md").write_text("# thing\n\nWritten by its authors.\n")
+    assert package_drift(root) == []
+    (package / "cliff.toml").write_text("# edited by hand\n")
+    assert package_drift(root) == ["packages/thing/cliff.toml: differs from its render"]
 
 
 def test_apply_settles_and_drift_names_the_file(tmp_path: Path) -> None:

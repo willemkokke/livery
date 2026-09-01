@@ -29,6 +29,48 @@ def _git(cwd: Path, *args: str) -> None:
     subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=True)
 
 
+def _cliff_config(name: str) -> str:
+    """The changelog contract, as the package template renders it.
+
+    Offline: no ``[remote]`` section, so nothing reaches for a forge
+    while the suite runs.
+    """
+    body = (
+        'body = """\n'
+        '{% if version %}## [{{ version | split(pat="/") | last'
+        ' | trim_start_matches(pat="v") }}] - '
+        '{{ timestamp | date(format="%Y-%m-%d") }}'
+        "{% else %}## [Unreleased]{% endif %}\n"
+        '{% for group, commits in commits | group_by(attribute="group") %}\n'
+        "### {{ group | striptags | trim }}\n"
+        "{% for commit in commits %}\n"
+        "- {{ commit.message | upper_first }}\n"
+        "{%- endfor %}\n"
+        "{% endfor %}\n"
+        '"""\n'
+    )
+    return (
+        "[bump]\n"
+        "features_always_bump_minor = true\n"
+        "breaking_always_bump_major = false\n"
+        f'initial_tag = "packages/{name}/v0.0.0"\n'
+        "\n[git]\n"
+        f'tag_pattern = "^packages/{name}/v?(.+)$"\n'
+        f'include_paths = ["packages/{name}/**"]\n'
+        "conventional_commits = true\n"
+        "filter_unconventional = false\n"
+        "protect_breaking_commits = true\n"
+        'sort_commits = "oldest"\n'
+        "commit_parsers = [\n"
+        '  { message = "^feat", group = "<!-- 0 -->Added" },\n'
+        '  { message = "^fix", group = "<!-- 1 -->Fixed" },\n'
+        '  { message = ".*", group = "<!-- 2 -->Changed" },\n'
+        "]\n"
+        "\n[changelog]\n"
+        'header = "# Changelog\\n"\n' + body + "trim = true\n"
+    )
+
+
 def _workspace(tmp_path: Path) -> Path:
     root = tmp_path / "ws"
     root.mkdir()
@@ -57,6 +99,7 @@ def _workspace(tmp_path: Path) -> Path:
         (directory / "src" / "livery" / name / "__init__.py").write_text(
             '__version__ = "0.2.0"\n'
         )
+        (directory / "cliff.toml").write_text(_cliff_config(name))
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "chore: seed")
     _git(root, "tag", "packages/core/v0.1.0")
@@ -97,12 +140,26 @@ def test_prepare_stamps_idempotently(tmp_path: Path) -> None:
     assert text.index("## [0.3.0]") < text.index("## 0.2.0")
 
 
+def test_prepare_refuses_a_package_with_nothing_unreleased(tmp_path: Path) -> None:
+    # The refusal first: a package whose tag already covers every
+    # commit must not mint a version, or the index gets the same code
+    # twice under different numbers.
+    root = _workspace(tmp_path)
+    _git(root, "tag", "packages/tool/v0.2.0")
+    assert prepare_release(root, "packages/tool") == []
+
+
+def test_prepare_names_the_missing_changelog_contract(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    (root / "packages" / "tool" / "cliff.toml").unlink()
+    with pytest.raises(_FAILURES) as caught:
+        prepare_release(root, "packages/tool")
+    assert "cliff.toml" in str(caught.value)
+
+
 def test_prepare_derives_the_bump_and_the_entry(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     _git(root, "tag", "packages/tool/v0.2.0")
-    (root / "packages" / "tool" / "src" / "livery" / "tool" / "extra.py").mkdir(
-        parents=True, exist_ok=False
-    ) if False else None
     new_file = root / "packages" / "tool" / "src" / "livery" / "tool" / "extra.py"
     new_file.write_text("x = 1\n")
     _git(root, "add", "-A")
@@ -118,8 +175,8 @@ def test_prepare_derives_the_bump_and_the_entry(tmp_path: Path) -> None:
     text = (root / "packages" / "tool" / "CHANGELOG.md").read_text()
     assert "## [0.3.0]" in text
     assert "### Added" in text
-    assert "the tool grows a verb" in text
-    assert "Contributors:" in text
+    assert "The tool grows a verb (#41)" in text
+    assert "\n\n## 0.2.0" in text  # the previous entry keeps its own block
     verify_release(root, "packages/tool/v0.3.0")
     # The tag closes the release; only then is a re-derivation a no-op.
     _git(root, "add", "-A")

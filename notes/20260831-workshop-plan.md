@@ -708,6 +708,15 @@ starts; recorded here so the sequence is visible (Willem: post
   `release.*` collapses into hidden CI entries under
   `workflow.release`. `start` (from hse, issue-driven) pairs with
   `abandon` in phase 11 and abandon then also unassigns the issue.
+- 2026-09-01, what a package's render keeps owning: a package is
+  rendered once and then written by its authors, so the render gate
+  judges only `PACKAGE_MANAGED` (`cliff.toml` today) and
+  `fm template.apply` writes only those. Judging the seeds would ask
+  a living package to revert its README, changelog, and sources to
+  the stub, which one careless full re-render did here before the
+  narrowing existed. The package directory is a recorded answer
+  (`package_dir`), never derived from the destination: the gate
+  renders into a scratch directory, and a derived value named that.
 - 2026-09-01, global tasks (Willem): footman installed globally
   (`uv tool install "footman[uv]"`) is the supported spelling, no
   `uv run` in docs or habit. Pre-project verbs (`new.project`,
