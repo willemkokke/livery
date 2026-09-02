@@ -26,7 +26,7 @@ from typing import Annotated
 from footman import Arg, doc, fail, group, suggest
 
 from livery.forge import ForgeError, Repository
-from livery.workshop._envfile import DEFAULT_HOME, _expand_tilde
+from livery.workshop._envfile import _expand_tilde
 from livery.workshop._git_ops import GitOps
 
 _KINDS = ("feat", "fix", "chore", "docs", "refactor")
@@ -95,11 +95,14 @@ def worktree_path(root: Path, number: int, title: str) -> Path:
     """Where the issue's worktree lives: under the runner's home.
 
     Outside every repository, so repo tooling never walks into a
-    worktree, and under the home so a worktree's venv hardlinks from
-    the same filesystem's cache. footman will expose the home
-    queryably; ``LIVERY_HOME`` is the bridge.
+    worktree, and under a per-user home so a worktree's venv
+    hardlinks from the same filesystem's cache. The runner's own
+    data directory is the home; ``LIVERY_HOME`` overrides it.
     """
-    home = Path(_expand_tilde(os.environ.get("LIVERY_HOME", "") or DEFAULT_HOME))
+    import footman
+
+    override = os.environ.get("LIVERY_HOME", "")
+    home = Path(_expand_tilde(override)) if override else footman.data_dir()
     return home / "worktrees" / root.name / f"{number}-{_slug(title)}"
 
 

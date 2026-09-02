@@ -90,6 +90,12 @@ def test_the_worktree_lives_under_the_runners_home(
     monkeypatch.setenv("LIVERY_HOME", str(tmp_path / "h"))
     path = worktree_path(tmp_path / "repo", 9, "Fix It Now")
     assert path == tmp_path / "h" / "worktrees" / "repo" / "9-fix-it-now"
+    # Without the override, the runner's own data directory is the
+    # home, asked of footman rather than guessed.
+    monkeypatch.delenv("LIVERY_HOME")
+    monkeypatch.setattr("footman.data_dir", lambda: tmp_path / "runner")
+    path = worktree_path(tmp_path / "repo", 9, "Fix It Now")
+    assert path == tmp_path / "runner" / "worktrees" / "repo" / "9-fix-it-now"
 
 
 def test_start_at_the_limit_warns_and_continues(

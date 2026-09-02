@@ -19,7 +19,7 @@ classifiers = [
 ]
 dependencies = [
     "livery-forge>=0.1.0",
-    "footman>=0.46",
+    "footman>=0.49",
     "toolroom>=0.6.1",
     # The template engine behind `fm template.check` and `fm
     # new.package`; pyyaml reads the adopted answers files.
@@ -28,6 +28,12 @@ dependencies = [
 ]
 
 [project.entry-points."footman.tasks"]
+"livery.workshop" = "livery.workshop._tasks"
+
+# The devkit advertisement: "meant to be mounted as built-in tasks".
+# `fm self.add livery-workshop` records the name; whether it mounts
+# stays the machine owner's call through builtins.discovery_mode.
+[project.entry-points."footman.builtin"]
 "livery.workshop" = "livery.workshop._tasks"
 
 [project.urls]

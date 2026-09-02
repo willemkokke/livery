@@ -371,11 +371,11 @@ wheels = [
 
 [[package]]
 name = "footman"
-version = "0.46.0"
+version = "0.49.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/d7/c4/5d3f98c9f15da4d2c2ac6807b7f1a23b9272d5438737297b623ab97c359c/footman-0.46.0.tar.gz", hash = "sha256:e68748cd9b605da72f72929c39abcde03b09ad7fd141ad174558028f0ff177ab", size = 421683, upload-time = "2026-08-24T17:52:24.902Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d8/fd/7c564faf1451c9b22ac8135eab6906fa6f0405b4f933e93109e94289557c/footman-0.49.0.tar.gz", hash = "sha256:79d34cd2064ae6bd63bd9056b5efe4b5a6299d63d4d2a24b8e4aace38a196ebb", size = 441974, upload-time = "2026-09-02T05:04:45.242Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4b/d3/ecfa9bb58e89dc4f65dab1c0047a51e16b15aec3deb29b4af0888a9d19e2/footman-0.46.0-py3-none-any.whl", hash = "sha256:ed0840c3fc3e39f5a5d118f3fbceb15216a2ad8bdf1a2db2214b030236c9bed3", size = 442916, upload-time = "2026-08-24T17:52:23.503Z" },
+    { url = "https://files.pythonhosted.org/packages/2a/08/12dfc43dd7d676a10f4512f717631ba23d4f0bd5d24667b036f8e52ba0ba/footman-0.49.0-py3-none-any.whl", hash = "sha256:0ab7095998187f84cada61345db1cae8fd1a87bd41afbb3c539556f485b6d3ab", size = 464826, upload-time = "2026-09-02T05:04:43.711Z" },
 ]
 
 [[package]]
@@ -588,7 +588,7 @@ dev = [
 dev = [
     { name = "basedpyright", specifier = ">=1.18" },
     { name = "coverage", extras = ["toml"], specifier = ">=7.10" },
-    { name = "footman", specifier = ">=0.44" },
+    { name = "footman", specifier = ">=0.49" },
     { name = "git-cliff", specifier = ">=2.13" },
     { name = "livery-forge", extras = ["github-secrets"], editable = "packages/forge" },
     { name = "livery-workshop", editable = "packages/workshop" },
@@ -633,7 +633,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "copier", specifier = ">=9.10" },
-    { name = "footman", specifier = ">=0.46" },
+    { name = "footman", specifier = ">=0.49" },
     { name = "livery-forge", editable = "packages/forge" },
     { name = "pyyaml", specifier = ">=6" },
     { name = "toolroom", specifier = ">=0.6.1" },
