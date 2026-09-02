@@ -30,6 +30,9 @@ jobs:
           # judged once, on the merged union, in the gate job below.
           LIVERY_COVERAGE_PARENT: "1"
         run: |
+          # The meter's module spelling: `-m footman` runs the
+          # default brand, so a branded runner cannot measure
+          # through it yet (footman#557 carries the question).
           uv run --no-sync coverage run -m footman check
           uv run --no-sync coverage combine
       - name: Leg coverage data

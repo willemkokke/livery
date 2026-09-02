@@ -111,6 +111,12 @@ templates_source:
     to the root, or a git URL (a fork, at your own risk)
   default: "https://github.com/willemkokke/workshop-templates"
 
+runner_prog:
+  type: str
+  default: fm
+  when: false
+  help: the CLI name the workshop runs under; injected at render time
+
 packages:
   type: yaml
   help: >-

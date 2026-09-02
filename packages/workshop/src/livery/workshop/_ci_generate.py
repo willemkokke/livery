@@ -29,7 +29,7 @@ def _csv(values: list[Any], *, quoted: bool = False) -> str:
     return ", ".join(f'"{v}"' if quoted else str(v) for v in values)
 
 
-def _github_gate(answers: dict[str, Any]) -> str:
+def _github_gate(answers: dict[str, Any], prog: str) -> str:
     context = answers.get("required_context", "gate")
     runners = _csv(list(answers.get("runners", ["ubuntu-latest"])))
     pythons = _csv(list(answers.get("python_versions", ["3.11"])), quoted=True)
@@ -60,11 +60,14 @@ jobs:
         run: uv sync --locked --python ${{{{ matrix.python }}}}
       - name: Gate, measured
         env:
-          # The parent `coverage run` meters the whole fm invocation;
+          # The parent `coverage run` meters the whole {prog} invocation;
           # the test step adds no second meter, and the floors are
           # judged once, on the merged union, in the gate job below.
           LIVERY_COVERAGE_PARENT: "1"
         run: |
+          # The meter's module spelling: `-m footman` runs the
+          # default brand, so a branded runner cannot measure
+          # through it yet (footman#557 carries the question).
           uv run --no-sync coverage run -m footman check
           uv run --no-sync coverage combine
       - name: Leg coverage data
@@ -99,7 +102,7 @@ jobs:
         run: |
           uv run --no-sync coverage combine coverage-data/*/.coverage
           uv run --no-sync coverage report --sort=cover
-          uv run --no-sync fm coverage.enforce
+          uv run --no-sync {prog} coverage.enforce
   release-title:
     if: startsWith(github.head_ref, 'workflow/release/')
     runs-on: ubuntu-latest
@@ -112,13 +115,13 @@ jobs:
       - uses: {SETUP_UV}
       - name: Sync (locked)
         run: uv sync --locked
-      - run: uv run --no-sync fm workflow.release.check-title --title "$TITLE"
+      - run: uv run --no-sync {prog} workflow.release.check-title --title "$TITLE"
         env:
           TITLE: ${{{{ github.event.pull_request.title }}}}
 """
 
 
-def _github_release(answers: dict[str, Any]) -> str:
+def _github_release(answers: dict[str, Any], prog: str) -> str:
     return f"""name: release
 
 # The train: a workflow.release PR merges, this publishes its squash,
@@ -160,7 +163,7 @@ jobs:
       - name: Publish the wave
         id: wave
         run: >-
-          uv run --no-sync fm workflow.release.publish
+          uv run --no-sync {prog} workflow.release.publish
           --ref="${{{{ inputs.ref || github.event.pull_request.merge_commit_sha }}}}"
 
   # The workshop release's aftermath: the template snapshot, tagged in
@@ -185,12 +188,12 @@ jobs:
         env:
           GIT_SSH_COMMAND: ssh -i ~/.ssh/templates_deploy -o StrictHostKeyChecking=accept-new
         run: >-
-          uv run --no-sync fm release.templates
+          uv run --no-sync {prog} release.templates
           "$(uv run --no-sync python -c 'import livery.workshop as w; print(w.__version__)')"
 """
 
 
-def _gitea_gate(answers: dict[str, Any]) -> str:
+def _gitea_gate(answers: dict[str, Any], prog: str) -> str:
     context = answers.get("required_context", "gate")
     runners = _csv(list(answers.get("runners", ["ubuntu-latest"])))
     pythons = _csv(list(answers.get("python_versions", ["3.11"])), quoted=True)
@@ -219,7 +222,7 @@ jobs:
       - name: Sync (locked)
         run: $HOME/.local/bin/uv sync --locked --python ${{{{ matrix.python }}}}
       - name: Gate
-        run: $HOME/.local/bin/uv run --no-sync fm check
+        run: $HOME/.local/bin/uv run --no-sync {prog} check
 
   # The one required context. Branch protection points here, so the
   # matrix can grow or shrink without touching repository settings.
@@ -245,13 +248,13 @@ jobs:
         run: $HOME/.local/bin/uv sync --locked
       - run: >-
           $HOME/.local/bin/uv run --no-sync
-          fm workflow.release.check-title --title "$TITLE"
+          {prog} workflow.release.check-title --title "$TITLE"
         env:
           TITLE: ${{{{ github.event.pull_request.title }}}}
 """
 
 
-def _gitea_release(answers: dict[str, Any]) -> str:
+def _gitea_release(answers: dict[str, Any], prog: str) -> str:
     first = next(iter(answers.get("runners", ["ubuntu-latest"])))
     index = answers.get("publish_index", "")
     return f"""name: release
@@ -284,12 +287,12 @@ jobs:
           LIVERY_PUBLISH_INDEX: "{index}"
           LIVERY_REGISTRY_URL: "{index and index.replace("/pypi", "/pypi/simple")}"
         run: >-
-          $HOME/.local/bin/uv run --no-sync fm workflow.release.publish
+          $HOME/.local/bin/uv run --no-sync {prog} workflow.release.publish
           --ref="${{{{ github.event.pull_request.merge_commit_sha }}}}"
 """
 
 
-def _gitlab_pipeline(answers: dict[str, Any]) -> str:
+def _gitlab_pipeline(answers: dict[str, Any], prog: str) -> str:
     context = answers.get("required_context", "gate")
     python = next(iter(answers.get("python_versions", ["3.11"])))
     index = answers.get("publish_index", "")
@@ -313,7 +316,7 @@ stages: [check, release]
     - when: on_success
   script:
     - uv sync --locked
-    - uv run --no-sync fm check
+    - uv run --no-sync {prog} check
 
 # The merge-triggered train: the squash of a workflow.release PR
 # lands on main carrying the release manifest in its title, and the
@@ -329,7 +332,7 @@ release-publish:
     - git fetch --tags
     - git remote set-url origin "https://oauth2:${{GITLAB_PUSH_TOKEN}}@${{CI_SERVER_HOST}}/${{CI_PROJECT_PATH}}.git"
     - uv sync --locked
-    - uv run --no-sync fm workflow.release.publish --ref="$CI_COMMIT_SHA"
+    - uv run --no-sync {prog} workflow.release.publish --ref="$CI_COMMIT_SHA"
   variables:
     LIVERY_PUBLISH_INDEX: "{index}"
     LIVERY_REGISTRY_URL: "{index and index + "/simple"}"
@@ -343,7 +346,7 @@ _CODEOWNERS_PATH = {
 }
 
 
-def _github_governance(answers: dict[str, Any]) -> str:
+def _github_governance(answers: dict[str, Any], prog: str) -> str:
     """The post-merge configure job: only governance paths spawn it.
 
     The admin secret is mounted here and nowhere else; a failed
@@ -366,13 +369,13 @@ jobs:
       - uses: {SETUP_UV}
       - name: Sync (locked)
         run: uv sync --locked
-      - run: uv run --no-sync fm workflow.configure
+      - run: uv run --no-sync {prog} workflow.configure
         env:
           GITHUB_ADMIN_TOKEN: ${{{{ secrets.LIVERY_ADMIN_TOKEN }}}}
 """
 
 
-def _gitea_governance(answers: dict[str, Any]) -> str:
+def _gitea_governance(answers: dict[str, Any], prog: str) -> str:
     """Gitea's spelling of the same path-filtered apply job.
 
     act_runner host mode, like the gate: no setup actions, uv from
@@ -396,13 +399,13 @@ jobs:
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
       - name: Sync (locked)
         run: $HOME/.local/bin/uv sync --locked
-      - run: $HOME/.local/bin/uv run --no-sync fm workflow.configure
+      - run: $HOME/.local/bin/uv run --no-sync {prog} workflow.configure
         env:
           GITEA_ADMIN_TOKEN: ${{{{ secrets.LIVERY_ADMIN_TOKEN }}}}
 """
 
 
-def _gitlab_governance(answers: dict[str, Any]) -> str:
+def _gitlab_governance(answers: dict[str, Any], prog: str) -> str:
     """GitLab's spelling: a pipeline job on the same pinned image."""
     python = next(iter(answers.get("python_versions", ["3.11"])))
     return f"""
@@ -417,28 +420,39 @@ governance-apply:
         - {_CODEOWNERS_PATH["gitlab"]}
   script:
     - uv sync --locked
-    - uv run --no-sync fm workflow.configure
+    - uv run --no-sync {prog} workflow.configure
   variables:
     GITLAB_ADMIN_TOKEN: $LIVERY_ADMIN_TOKEN
 """
 
 
 def generate(answers: dict[str, Any]) -> dict[str, str]:
-    """Every generated CI file for *answers*' forge kind, by path."""
+    """Every generated CI file for *answers*' forge kind, by path.
+
+    The workflows call the CLI by the name this process runs under
+    (livery.workshop._brand.runner_prog), so a branded runner emits
+    workflows that call itself and needs no configuration.
+    """
+    from livery.workshop._brand import runner_prog
+
+    prog = runner_prog()
     kind = str(answers.get("forge_kind", "github"))
     if kind == "github":
         return {
-            ".github/workflows/ci.yml": _github_gate(answers),
-            ".github/workflows/release.yml": _github_release(answers),
-            ".github/workflows/governance.yml": _github_governance(answers),
+            ".github/workflows/ci.yml": _github_gate(answers, prog),
+            ".github/workflows/release.yml": _github_release(answers, prog),
+            ".github/workflows/governance.yml": _github_governance(answers, prog),
         }
     if kind == "gitea":
         return {
-            ".gitea/workflows/ci.yml": _gitea_gate(answers),
-            ".gitea/workflows/release.yml": _gitea_release(answers),
-            ".gitea/workflows/governance.yml": _gitea_governance(answers),
+            ".gitea/workflows/ci.yml": _gitea_gate(answers, prog),
+            ".gitea/workflows/release.yml": _gitea_release(answers, prog),
+            ".gitea/workflows/governance.yml": _gitea_governance(answers, prog),
         }
-    return {".gitlab-ci.yml": _gitlab_pipeline(answers) + _gitlab_governance(answers)}
+    return {
+        ".gitlab-ci.yml": _gitlab_pipeline(answers, prog)
+        + _gitlab_governance(answers, prog)
+    }
 
 
 def generated_files(root: Path, answers: dict[str, Any]) -> dict[Path, str]:

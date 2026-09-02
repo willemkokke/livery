@@ -149,6 +149,12 @@ def project_drift(root: Path) -> list[str]:
     byte.
     """
     data = read_answers(root / _ANSWERS)
+    from livery.workshop._brand import runner_prog
+
+    # Injected at render time, never stored in the answers: the
+    # runner's name belongs to the process, so a branded CLI's
+    # drift gate demands branded files and apply re-emits them.
+    data = {**data, "runner_prog": runner_prog()}
     source = local_template_dir(root)
     if source is None:
         fail("no local template source: the render gate needs one")
@@ -224,6 +230,12 @@ def package_drift(root: Path) -> list[str]:
 def apply_project(root: Path) -> list[str]:
     """Write the ``project`` render over *root*; the files that changed."""
     data = read_answers(root / _ANSWERS)
+    from livery.workshop._brand import runner_prog
+
+    # Injected at render time, never stored in the answers: the
+    # runner's name belongs to the process, so a branded CLI's
+    # drift gate demands branded files and apply re-emits them.
+    data = {**data, "runner_prog": runner_prog()}
     source = local_template_dir(root)
     if source is None:
         fail("no local template source: nothing to apply from")
@@ -349,6 +361,8 @@ def new_package(
     if destination.exists():
         fail(f"{destination} already exists")
     answers = read_answers(root / _ANSWERS)
+    from livery.workshop._brand import runner_prog
+
     package_name = f"livery-{name}"
     render(
         template_dir,
@@ -371,6 +385,7 @@ def new_package(
             "forge_url": answers.get("forge_url", ""),
             "project_name": answers.get("project_name", ""),
             "python_versions": answers.get("python_versions", []),
+            "runner_prog": runner_prog(),
         },
     )
     members = list(answers.get("packages", []))
