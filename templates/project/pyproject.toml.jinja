@@ -170,7 +170,7 @@ deprecated = "error"
 unnecessary-type-conversion = "error"
 
 [tool.coverage.run]
-# Every fm child measures: the CI gate wraps `fm check` in
+# Every {{ runner_prog }} child measures: the CI gate wraps `{{ runner_prog }} check` in
 # `coverage run`, and the patch cascades through the task shells, the
 # out-of-process pytest, and its workers. Parallel data files merge
 # per leg, then across legs in the aggregating gate job.

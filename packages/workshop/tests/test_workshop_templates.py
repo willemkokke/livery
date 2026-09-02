@@ -5,6 +5,8 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+import pytest
+
 from livery.workshop._templates import (
     apply_packages,
     apply_project,
@@ -180,3 +182,58 @@ def test_a_package_renders_namespace_clean(tmp_path: Path) -> None:
     # The namespace stays PEP 420: no livery/__init__.py, ever.
     assert not (destination / "src" / "livery" / "__init__.py").exists()
     assert "livery-scratch" in (destination / "pyproject.toml").read_text()
+
+
+def test_the_emitters_call_the_running_brand(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import re
+
+    from livery.workshop import _brand
+    from livery.workshop._ci_generate import generate
+
+    monkeypatch.setattr(_brand, "runner_prog", lambda: "hse")
+    answers = read_answers(ROOT / ".copier-answers.yml")
+    for kind in ("github", "gitea", "gitlab"):
+        for path, content in generate({**answers, "forge_kind": kind}).items():
+            assert "hse check" in content or "hse workflow" in content, path
+            # No emitted verb still calls fm; the coverage meter's
+            # `-m footman` is the one named residue and matches no
+            # bare-word fm.
+            assert re.search(r"\bfm\b", content) is None, path
+
+
+def test_the_default_brand_emits_fm() -> None:
+    from livery.workshop._ci_generate import generate
+
+    answers = read_answers(ROOT / ".copier-answers.yml")
+    gate = generate({**answers, "forge_kind": "github"})[".github/workflows/ci.yml"]
+    assert "fm coverage.enforce" in gate
+
+
+def test_runner_prog_reads_the_installed_brand(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from footman import _paths
+
+    from livery.workshop._brand import runner_prog
+
+    monkeypatch.setattr(_paths, "_prog", "hse", raising=False)
+    assert runner_prog() == "hse"
+    monkeypatch.setattr(_paths, "_prog", "", raising=False)
+    assert runner_prog() == "fm"  # the default brand is the fallback
+
+
+def test_the_rendered_prose_spells_the_brand(tmp_path: Path) -> None:
+    from livery.workshop._templates import render
+
+    answers = read_answers(ROOT / ".copier-answers.yml")
+    destination = tmp_path / "branded"
+    render(
+        ROOT / "templates",
+        destination,
+        {**answers, "runner_prog": "hse"},
+    )
+    tasks = (destination / "tasks.py").read_text()
+    assert "uv run hse <task>" in tasks
+    assert "``hse check``" in tasks

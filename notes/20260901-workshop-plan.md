@@ -40,7 +40,15 @@ and the docs tree stale, closed the same day as issue #89.
 Phase 8b shipped 2026-09-02 (PR #88, issue #87, the workshop half);
 its audit found the emitted release-title and governance jobs
 unable to run as written and the configure/reconcile arms unforced,
-closed the same day as issue #91; the day also
+closed the same day as issue #91; the tier-union
+correction (issue #93, PR #94) then made GitLab's min_approvals a
+per-instance licence probe with the paid write paths implemented
+and schedule_events reconstructed from notes, awaiting a licensed
+surface for the paid-arm recording (open item 8). Phase 9 shipped
+2026-09-02 (issue #95): the emitters and rendered prose ask
+footman for the running brand's prog (footman#557 asks for a
+public accessor; footman._paths is the seam until then), so
+phases 1-9 gate 0.1.0; the day also
 landed issues as the way of work (PR #82), sync-as-one-stop with
 integrate closing issue #83 (PR #84), and the footman 0.49
 migration (PR #81). Subsumes
@@ -1499,6 +1507,17 @@ not. Gates 0.1.0 together with phases 1-8.
   them back) is unmeetable on GitLab; that reason is the documented
   one. The licensed arms are pinned replay tests from the
   documented API until a licensed surface exists (open item 8).
+- 2026-09-02, phase 9 (audit trail, no ruling needed, issue #95):
+  the emitters take the running brand's prog and every emitted verb
+  speaks it; the rendered project prose (tasks.py, the pyproject
+  meter comment) rides a render-time `runner_prog` answer injected
+  by drift and apply, never stored, so a branded runner's drift
+  gate demands branded files. footman 0.49.1 taken (its brand
+  substitution covers footman's own output, not a plugin accessor,
+  so footman#557 stays open and livery reads footman._paths._prog
+  with an fm fallback, the workaround comment naming the issue).
+  The one residue is the coverage meter's `-m footman`, which runs
+  the default brand; footman#557 carries that question too.
 
 ## Open
 
