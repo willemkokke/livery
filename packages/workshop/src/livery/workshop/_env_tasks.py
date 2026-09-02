@@ -1,6 +1,6 @@
 """The ``env`` group: enter, show, set, and verify the environment.
 
-The cascade (:mod:`livery.workshop._envfile`) is the one config
+The cascade (``livery.workshop._envfile``) is the one config
 mechanism; this module is every way it reaches a consumer: applied
 to each ``fm`` run (a pre-tasks hook, environment always winning),
 emitted for a shell or an agent or GitHub Actions, shown masked, set
@@ -83,11 +83,14 @@ def apply_cascade(inv: footman.Invocation) -> None:
     from livery.workshop._layers import workspace_root
 
     _ = inv
+    _APPLIED.clear()
     root = workspace_root()
     if root is None:
         return
     stack = load_cascade(root, Path.cwd())
     for key, value in stack.managed().items():
+        # Truthiness, not presence, matches the cascade's own
+        # env-wins rule: a key exported empty reads as unset.
         if not os.environ.get(key):
             os.environ[key] = value
             _APPLIED[key] = value
@@ -111,7 +114,7 @@ def workspace_delta(root: Path, cwd: Path) -> EnvDelta:
     stack = load_cascade(root, cwd)
     values = dict(stack.managed())
     for key, value in _APPLIED.items():
-        values.setdefault(key, value)
+        values.setdefault(key, os.environ.get(key, value))
     values["VIRTUAL_ENV"] = str(root / ".venv")
     return EnvDelta(values=values, paths=(str(root / ".venv" / "bin"),))
 
@@ -167,6 +170,22 @@ def emit_lines(delta: EnvDelta, dialect: str) -> list[str]:
 _COMPLETION_HOOK = (
     "# Interactive shells get completion; a pipe or script never does.\n"
     'case $- in *i*) eval "$(fm --setup-completion)";; esac'
+)
+
+# MenuComplete, because registering completions is only half the job:
+# PSReadLine's default Tab handler cycles candidates one keypress at a
+# time and shows neither the list nor the per-item help, so a shell
+# with completion fully working still feels like it has none. Guarded
+# twice over: PSReadLine is absent in constrained hosts, and a missing
+# module must not break entering the shell. No interactive guard:
+# pwsh has no reliable one-liner for it.
+_COMPLETION_PWSH = (
+    "if (Get-Command fm -ErrorAction SilentlyContinue) {"
+    ' $fmHook = (fm --setup-completion=pwsh 2>$null) -join "`n";'
+    " if ($fmHook) { $fmHook | Invoke-Expression } }"
+    "; if (-not $env:LIVERY_NO_SHELL_CUSTOMISATION"
+    " -and (Get-Module -ListAvailable PSReadLine)) {"
+    " Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete }"
 )
 
 
@@ -235,8 +254,10 @@ def env_emit(
     (evaluated by its env file, so no completion hook). ``--github``
     writes the runner's env files instead of printing.
     """
+    import sys
+
     root, cwd = _workspace()
-    dialect = target or "posix"
+    dialect = target or ("pwsh" if sys.platform == "win32" else "posix")
     if github:
         delta = workspace_delta(root, cwd)
         written = github_persist(delta, dict(os.environ))
@@ -246,8 +267,7 @@ def env_emit(
         return "\n".join(emit_lines(delta, dialect))
     delta = workspace_delta(root, cwd)
     lines = emit_lines(delta, dialect)
-    if dialect == "posix":
-        lines.append(_COMPLETION_HOOK)
+    lines.append(_COMPLETION_PWSH if dialect == "pwsh" else _COMPLETION_HOOK)
     return "\n".join(lines)
 
 
@@ -278,14 +298,31 @@ def env_show(
                 print(f"    {candidate}")
     if (shared / ".repo.shared.env").is_file():
         print(f"    {shared / '.repo.shared.env'}")
-    stack = load_cascade(root, cwd)
+    # The pre-tasks hook already exported every managed key into this
+    # process, so a live-environ load would classify everything as
+    # the shell's own. Subtracting the hook's contributions restores
+    # the files' provenance; a key the shell genuinely exported still
+    # reads as environment.
+    seen = {k: v for k, v in environ.items() if k not in _APPLIED}
+    stack = load_cascade(root, cwd, environ=seen)
+    files_only = load_cascade(root, cwd, environ={})
     if stack.values:
         print("  Variables:")
         width = max(len(key) for key in stack.values)
         for key in sorted(stack.values):
             value = stack.values[key] if full else _mask(key, stack.values[key])
             source = stack.sources[key].name
-            print(f"    {key:<{width}}  {value}  ({source})")
+            marker = ""
+            declared = files_only.values.get(key)
+            if (
+                stack.sources[key] is Source.environment
+                and declared is not None
+                and declared != stack.values[key]
+            ):
+                # An older export than the file declares: stale until
+                # the person re-enters.
+                marker = "  [stale - the files say otherwise; re-enter]"
+            print(f"    {key:<{width}}  {value}  ({source}){marker}")
     print("  PATH:")
     for index, entry in enumerate(environ.get("PATH", "").split(os.pathsep), 1):
         marker = "" if Path(entry).is_dir() else "  (missing)"
@@ -346,7 +383,11 @@ def env_set(
         "local": Source.local,
     }
     written = order[scope]
-    if environ.get(key):
+    # The pre-tasks hook exported the cascade into this process, so a
+    # bare environ check would call every file-defined key the
+    # shell's own and warn falsely; only a key the hook did not
+    # contribute is genuinely the shell's.
+    if environ.get(key) and key not in _APPLIED:
         print(
             f"  Note: {key} is set in your shell's own environment, which"
             " overrides every env file, so this value will not take effect"
@@ -361,6 +402,41 @@ def env_set(
                     " value will not take effect."
                 )
     print("  Restart your terminal (or the editor) for this to take effect.")
+
+
+def _uv_drift(root: Path) -> str:
+    """A DRIFT line when the running uv is not the lock's pin; else "".
+
+    uv rides the dev group, so the lock pins it exactly; the venv
+    tools follow the lock by construction, but uv itself is resolved
+    from the machine and can drift. A workspace without a lock has
+    no pin to judge against and answers "".
+    """
+    import subprocess
+
+    lock = root / "uv.lock"
+    if not lock.is_file():
+        return ""
+    text = lock.read_text("utf-8")
+    anchor = text.find('name = "uv"')
+    if anchor == -1:
+        return ""
+    pinned = ""
+    for line in text[anchor : anchor + 200].splitlines():
+        if line.startswith("version = "):
+            pinned = line.split('"')[1]
+            break
+    if not pinned:
+        return ""
+    probe = subprocess.run(
+        ["uv", "--version"], capture_output=True, text=True, check=False
+    )
+    running = probe.stdout.split()[1] if probe.stdout.split()[1:] else ""
+    if probe.returncode != 0 or not running:
+        return "uv: ? (could not read the running version)"
+    if running != pinned:
+        return f"uv: DRIFT (running {running}, the lock pins {pinned})"
+    return ""
 
 
 def tool_profile(root: Path) -> tuple[str, ...]:
@@ -395,9 +471,13 @@ def env_check() -> int:
     problems: list[str] = []
     venv_bin = root / ".venv" / "bin"
     for tool in tool_profile(root):
-        if shutil.which(tool) or (venv_bin / tool).is_file():
+        if not (shutil.which(tool) or (venv_bin / tool).is_file()):
+            problems.append(f"{tool}: MISSING")
             continue
-        problems.append(f"{tool}: MISSING")
+        if tool == "uv":
+            drift = _uv_drift(root)
+            if drift:
+                problems.append(drift)
     if not problems:
         print("  environment ok: every profile tool resolves")
         return 0

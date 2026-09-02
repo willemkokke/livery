@@ -40,7 +40,7 @@ def test_skills_and_hooks_are_materialised(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     sync_workspace(root)
     assert (root / ".claude" / "skills" / "create-plan" / "SKILL.md").is_file()
-    assert (root / ".claude" / "hooks" / "ruff_fix.py").is_file()
+    assert (root / ".claude" / "hooks" / "fm-hook.sh").is_file()
     ignore = (root / ".claude" / "skills" / ".gitignore").read_text()
     assert "/create-plan\n" in ignore
 

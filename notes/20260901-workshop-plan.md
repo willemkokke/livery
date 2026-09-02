@@ -21,8 +21,14 @@ three restore/skip paths unproven plus a detached-HEAD hole, closed
 the same day in a follow-up PR. Phase 7 cut 2026-09-02 into 7a and
 7b with the issue family ruled in full; the isolated-leg toolchain
 follow-up shipped 2026-09-02 (PR #75, which also fixed the floor
-leg's aimless starvation). Phase 7a in flight: the env engine and
-group, clean, and the hooks with their shim. Subsumes
+leg's aimless starvation). Phase 7a shipped 2026-09-02 (PR #76):
+the env engine and group, clean, and the hooks with their shim; its
+audit found the shadow warning and the show provenance lying under
+the cascade hook's own exports, the stop regex proven only by a
+fabricated shape, the uv-exact check missing, and the retired
+ruff_fix.py still shipped by sync, all closed the same day in a
+follow-up PR. Phase 7b in flight: the entered shell and the issue
+family. Subsumes
 `notes/20260831-workshop-plan.md`,
 whose phases 1-10 shipped and whose remaining phases are carried
 forward here renumbered. The loop: one PR per phase, merged when
@@ -629,8 +635,8 @@ Deliverables:
     safely (line breaks, invalid names) is refused. One PATH
     prepend line. Bare adds the interactive completion hook.
     `--agent` selects by file membership, secrets included
-    (availability is the point), the PATH family and structural
-    keys excluded. `--github` writes `GITHUB_ENV`/`GITHUB_PATH`
+    (availability is the point), the PATH family excluded (it is
+    composed per shell); the structural ``VIRTUAL_ENV`` rides. `--github` writes `GITHUB_ENV`/`GITHUB_PATH`
     only under `GITHUB_ACTIONS`, secret names filtered.
   - `env.show [--full]`: the sources preamble, secret-suffix
     masking, the PATH breakdown, stale rows flagged.
@@ -1235,6 +1241,18 @@ not. Gates 0.1.0 together with phases 1-8.
   installs and refuses above-floor drift; dev tools never enter
   `[project]`, and a per-package test group carries floors under
   the same tested-claim rule.
+- 2026-09-02, the phase 7a audit close (audit finding, no ruling
+  needed): the cascade hook's own exports are subtracted before
+  ``env.set`` calls a key the shell's and before ``env.show``
+  assigns provenance, and show flags a stale shell export whose
+  file disagrees; ``env.check`` judges uv exactly against the
+  lock's pin; the stop hook's FAIL match follows footman's real
+  one-space padding and pre-bash refuses ``|&`` too, both with
+  tests against the real shapes; the pwsh emission gets its own
+  completion hook and the dialect defaults per platform; the shim
+  ships as layer content (one source, materialised by sync) and
+  the retired ruff_fix.py is gone; the RST roles left in published
+  docstrings are swept.
 - 2026-09-02, not-started and hanging split (Willem): the base
   gate's timeout distinguishes a run that reported and hung from a
   tip that never got a run; detection of failed run creation is
