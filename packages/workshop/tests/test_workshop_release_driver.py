@@ -30,6 +30,7 @@ from livery.workshop._release_driver import (
 )
 from livery.workshop._workflow_engine import run_workflow
 
+ROOT = Path(__file__).resolve().parents[3]
 _FAILURES = (SystemExit, Failed)
 
 OWNER, NAME = "willemkokke", "livery"
@@ -370,16 +371,33 @@ def test_release_name_sorts_its_members() -> None:
     assert release_name(("workshop", "forge")) == "release/forge+workshop"
 
 
-def test_the_base_gate_times_out_naming_the_runners(
+def test_the_base_gate_timeout_names_failed_run_creation(
     workspace: tuple[FakeForge, GitOps, Path],
 ) -> None:
-    # A tip the forge never mints a run for: the gate waits, then the
-    # timeout names the condition instead of prescribing patience.
+    # A tip the forge never mints a run for: not started and hanging
+    # are different problems, and this timeout names run creation.
     fake, git, _root_dir = workspace
     repo = fake.repository(OWNER, NAME)
     with pytest.raises(_FAILURES) as caught:
         require_verified_base(repo, git, "main", timeout=0.2, poll=0.01)
-    assert "did not report green" in str(caught.value)
+    message = str(caught.value)
+    assert "never got a CI run" in message
+    assert "fresh push event" in message
+
+
+def test_the_base_gate_timeout_names_the_runners_when_a_run_hangs(
+    workspace: tuple[FakeForge, GitOps, Path],
+) -> None:
+    # A run exists and never finishes: the reader goes to the
+    # runners, not to minting push events.
+    fake, git, _root_dir = workspace
+    repo = fake.repository(OWNER, NAME)
+    git.fetch()
+    fake.push(OWNER, NAME, "main", sha=git.remote_head("main"))
+    with pytest.raises(_FAILURES) as caught:
+        require_verified_base(repo, git, "main", timeout=0.2, poll=0.01)
+    message = str(caught.value)
+    assert "never went green" in message and "runners" in message
 
 
 def test_the_isolated_legs_run_for_real_on_a_dependency_free_member(
@@ -417,6 +435,58 @@ def test_the_isolated_legs_run_for_real_on_a_dependency_free_member(
 
     validate_member(root, plan, (member / "dist",))
     assert list((member / "dist").glob("*.whl"))
+
+
+def test_the_toolchain_probe_refuses_a_moved_floor(
+    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The deliberate overlap, forced first: a toolchain pin that
+    # names one of the package's own floored dependencies lifts it
+    # after the starved install, and the probe must refuse rather
+    # than let the floor leg pass against the wrong version.
+    from livery.workshop._backends import _python
+
+    _fake, _git_seam, root = workspace
+    member = root / "packages" / "core"
+    (member / "pyproject.toml").write_text(
+        '[project]\nname = "livery-core"\nversion = "0.2.0"\n'
+        'requires-python = ">=3.11"\n'
+        'dependencies = ["packaging>=24.0"]\n'
+        "[build-system]\n"
+        'requires = ["uv_build>=0.7"]\nbuild-backend = "uv_build"\n'
+        "[tool.uv.build-backend]\n"
+        'module-name = "livery.core"\nnamespace = true\n'
+    )
+    packages = {p.directory.name: p for p in discover_packages(root)}
+    _python.build(packages["core"], root)
+
+    def _overlapping_pins(_root: Path, scratch: Path) -> Path:
+        pins = scratch / "dev-pins.txt"
+        pins.write_text("packaging==25.0\npytest\n")
+        return pins
+
+    monkeypatch.setattr(
+        "livery.workshop._backends._python._dev_pins", _overlapping_pins
+    )
+    with pytest.raises(_FAILURES) as caught:
+        _python.run_isolated_test(packages["core"], root, resolution="lowest-direct")
+    message = str(caught.value)
+    assert "moved direct dependencies" in message
+    assert "packaging 24.0 -> 25.0" in message
+
+
+def test_dev_pins_export_the_locks_resolution_or_none(tmp_path: Path) -> None:
+    from livery.workshop._backends._python import _dev_pins
+
+    # The monorepo has a lock and a dev group: the export carries the
+    # gate's own pytest pin.
+    pins = _dev_pins(ROOT, tmp_path)
+    assert pins is not None
+    assert "pytest==" in pins.read_text()
+    # A bare rig has neither: the leg falls back to bare pytest.
+    bare = tmp_path / "bare"
+    bare.mkdir()
+    assert _dev_pins(bare, tmp_path) is None
 
 
 def test_an_unresolvable_floor_fails_the_floor_leg_by_name(
