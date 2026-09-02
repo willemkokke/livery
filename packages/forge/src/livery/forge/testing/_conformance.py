@@ -692,20 +692,43 @@ def _issue_list_and_search(driver: ForgeDriver) -> None:
 
 
 def _issue_assign(driver: ForgeDriver) -> None:
-    """Assign sets the single assignee; assigned_to_me reads it back."""
+    """Assign adds; unassign removes only the caller; both re-runnable."""
     repo = driver.fresh_repo()
     issue = repo.issue.create("work", body="the order")
     me = driver.forge.whoami()
     repo.issue.assign(issue.number, me)
+    repo.issue.assign(issue.number, me)  # already assigned: a no-op
     driver.await_issue(repo.owner, repo.name, issue.number, assignee=me)
     mine = repo.issue.assigned_to_me()
     assert issue.number in [i.number for i in mine]
+    repo.issue.unassign(issue.number)
+    repo.issue.unassign(issue.number)  # not assigned: a no-op
+    fetched = repo.issue.get(issue.number)
+    assert fetched is not None and me not in fetched.assignees
     try:
         repo.issue.assign(issue.number + 999, me)
     except ForgeError:
         pass
     else:
         raise AssertionError("assigning a missing issue must raise")
+
+
+def _issue_close(driver: ForgeDriver) -> None:
+    """Close closes, is idempotent, and a missing number is refused."""
+    repo = driver.fresh_repo()
+    issue = repo.issue.create("done with this", body="the order")
+    repo.issue.comment(issue.number, "closed: wontfix - superseded")
+    repo.issue.close(issue.number)
+    repo.issue.close(issue.number)  # already closed: a no-op
+    fetched = repo.issue.get(issue.number)
+    assert fetched is not None and fetched.state == "closed"
+    assert issue.number not in [row.number for row in repo.issue.list(state="open")]
+    try:
+        repo.issue.close(issue.number + 999)
+    except ForgeError:
+        pass
+    else:
+        raise AssertionError("closing a missing issue must raise")
 
 
 def _issue_comment(driver: ForgeDriver) -> None:
@@ -780,5 +803,6 @@ SCENARIOS: tuple[Scenario, ...] = (
     Scenario("issue-list-and-search", _issue_list_and_search),
     Scenario("issue-assign", _issue_assign),
     Scenario("issue-comment", _issue_comment),
+    Scenario("issue-close", _issue_close),
 )
 """Every conformance scenario, in the order the groups are documented."""

@@ -66,3 +66,18 @@ def test_registry_protocol_is_importable() -> None:
     # No registry backend exists yet; the protocol must still be a
     # complete, importable contract.
     assert callable(Registry.versions)
+
+
+def test_unassign_removes_only_the_caller() -> None:
+    # The two-user case no live scenario can force with one token: a
+    # colleague's hand-made co-assignment survives a self-unassign.
+    fake = FakeForge()
+    fake.create_repo("acme", "example", private=True, description="t")
+    repo = fake.repository("acme", "example")
+    issue = repo.issue.create("work", body="the order")
+    repo.issue.assign(issue.number, fake.whoami())
+    repo.issue.assign(issue.number, "colleague")
+    repo.issue.unassign(issue.number)
+    fetched = repo.issue.get(issue.number)
+    assert fetched is not None
+    assert fetched.assignees == ("colleague",)

@@ -918,9 +918,16 @@ class _FakeIssues:
         )
 
     def assign(self, number: int, assignee: str) -> None:
-        """Make *assignee* the single assignee of issue *number*."""
+        """Add *assignee* to issue *number*'s assignees."""
         issue = self._fake._require_issue(self._state(), number)
-        issue.assignees = (assignee,)
+        if assignee not in issue.assignees:
+            issue.assignees = (*issue.assignees, assignee)
+
+    def unassign(self, number: int) -> None:
+        """Remove the authenticated user from issue *number*'s assignees."""
+        issue = self._fake._require_issue(self._state(), number)
+        me = self._fake.whoami()
+        issue.assignees = tuple(name for name in issue.assignees if name != me)
 
     def assigned_to_me(self) -> tuple[Issue, ...]:
         """The open issues assigned to the authenticated user."""
@@ -934,6 +941,10 @@ class _FakeIssues:
     def comment(self, number: int, body: str) -> None:
         """Post *body* on issue *number*."""
         self._fake._require_issue(self._state(), number).comments.append(body)
+
+    def close(self, number: int) -> None:
+        """Close issue *number*; a closed issue stays closed."""
+        self._fake._require_issue(self._state(), number).state = "closed"
 
 
 class _FakeReleases:
