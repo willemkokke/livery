@@ -371,7 +371,7 @@ jobs:
         run: uv sync --locked
       - run: uv run --no-sync {prog} workflow.configure
         env:
-          GITHUB_ADMIN_TOKEN: ${{{{ secrets.LIVERY_ADMIN_TOKEN }}}}
+          GITHUB_ADMIN_TOKEN: ${{{{ secrets.FORGE_ADMIN_TOKEN }}}}
 """
 
 
@@ -401,7 +401,7 @@ jobs:
         run: $HOME/.local/bin/uv sync --locked
       - run: $HOME/.local/bin/uv run --no-sync {prog} workflow.configure
         env:
-          GITEA_ADMIN_TOKEN: ${{{{ secrets.LIVERY_ADMIN_TOKEN }}}}
+          GITEA_ADMIN_TOKEN: ${{{{ secrets.FORGE_ADMIN_TOKEN }}}}
 """
 
 
@@ -422,7 +422,7 @@ governance-apply:
     - uv sync --locked
     - uv run --no-sync {prog} workflow.configure
   variables:
-    GITLAB_ADMIN_TOKEN: $LIVERY_ADMIN_TOKEN
+    GITLAB_ADMIN_TOKEN: $FORGE_ADMIN_TOKEN
 """
 
 
