@@ -41,6 +41,8 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
+import footman
+
 _MANIFEST = ".livery-materialised"
 """What this module *copied* into a directory: ``<hash> <name>`` lines.
 
@@ -283,9 +285,7 @@ def _write_gitignore(root: Path, managed: list[str]) -> None:
     real directory of the shipped name, and listing it here would make
     the override impossible to commit.
     """
-    from livery.workshop._brand import runner_prog
-
-    body = _GITIGNORE_HEADER.format(prog=runner_prog()) + "".join(
+    body = _GITIGNORE_HEADER.format(prog=footman.prog()) + "".join(
         f"/{name}\n" for name in sorted(managed)
     )
     body += f"/{_MANIFEST}\n/.gitignore\n"

@@ -18,6 +18,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import footman
+
 #: Pinned action shas, one place; version comments ride each use.
 CHECKOUT = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1"
 SETUP_UV = "astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1"
@@ -435,9 +437,7 @@ def generate(answers: dict[str, Any]) -> dict[str, str]:
     (livery.workshop._brand.runner_prog), so a branded runner emits
     workflows that call itself and needs no configuration.
     """
-    from livery.workshop._brand import runner_prog
-
-    prog = runner_prog()
+    prog = footman.prog()
     kind = str(answers.get("forge_kind", "github"))
     if kind == "github":
         return {

@@ -57,5 +57,5 @@ the shared env file in footman's config directory
 (`.repo.shared.env`), which the env cascade reads. The conformance suite runs three ways:
 
 - default: replays the committed cassettes, no container, no network.
-- `LIVERY_FORGE_LIVE=1`: live against the container.
+- `FORGE_LIVE=1`: live against the container.
 - `fm forge.fixtures.record`: live, rewriting the cassettes.

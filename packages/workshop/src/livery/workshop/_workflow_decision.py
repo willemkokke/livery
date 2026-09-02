@@ -18,7 +18,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from livery.workshop._brand import runner_prog
+import footman
+
 from livery.workshop._workflow_state import (
     WORKFLOW_PREFIX,
     WorkflowKind,
@@ -112,7 +113,7 @@ def workflow_decision(
             WorkflowAction.STOP,
             f"The forge cannot be reached to read the {_noun(kind)} state, so"
             " nothing here may act on a guess. Retry when the forge answers;"
-            f" `{runner_prog()} status --workflow` shows what is known meanwhile.",
+            f" `{footman.prog()} status --workflow` shows what is known meanwhile.",
         )
 
     if wf.author and current_user and wf.author != current_user and wf.state in ACTIVE:
@@ -120,8 +121,8 @@ def workflow_decision(
             WorkflowAction.STOP,
             f"A {_noun(kind)} on {name} is in flight, run by {wf.author}: it"
             " is theirs to drive. Coordinate with them, watch it with"
-            f" `{runner_prog()} status --workflow`, or abort it deliberately with"
-            f" `{runner_prog()} workflow.abort {name} --force` if you both agree it is"
+            f" `{footman.prog()} status --workflow`, or abort it deliberately with"
+            f" `{footman.prog()} workflow.abort {name} --force` if you both agree it is"
             " dead.",
         )
 
@@ -143,7 +144,7 @@ def workflow_decision(
                     f" {', '.join(overlap)} with this set. Options: wait for"
                     " it to land; release the disjoint remainder now"
                     " (drop the shared packages from your set); or, if it is"
-                    f" yours and dead, `{runner_prog()} workflow.abort {other.name}`.",
+                    f" yours and dead, `{footman.prog()} workflow.abort {other.name}`.",
                 )
 
     # A finished other leftover is tidied so branches never

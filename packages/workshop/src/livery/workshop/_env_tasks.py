@@ -22,7 +22,6 @@ from typing import Annotated, Literal
 import footman
 from footman import Arg, Stdout, doc, fail, group, pre_tasks
 
-from livery.workshop._brand import runner_prog
 from livery.workshop._envfile import (
     Source,
     cascade_dirs,
@@ -260,7 +259,7 @@ def env_emit(
     delta = workspace_delta(root, cwd)
     lines = emit_lines(delta, dialect)
     hook = _COMPLETION_PWSH if dialect == "pwsh" else _COMPLETION_HOOK
-    lines.append(hook.format(prog=runner_prog()))
+    lines.append(hook.format(prog=footman.prog()))
     return "\n".join(lines)
 
 
@@ -483,7 +482,7 @@ def env_check() -> int:
         print(f"    {index:>2}  {entry}{marker}")
     print(
         "  The profile derives from the present package types. Run"
-        f" `{runner_prog()} sync` to provision, or enter the environment with"
-        f" `{runner_prog()} shell`."
+        f" `{footman.prog()} sync` to provision, or enter the environment with"
+        f" `{footman.prog()} shell`."
     )
     return 1

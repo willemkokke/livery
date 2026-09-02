@@ -103,7 +103,7 @@ class GitlabConformanceDriver:
         self._gitlab = GitlabForge.connect(url=url, token=token, opener=opener)
         # Cloud legs point the scratch at the e2e group; the default
         # stays the compose seed group.
-        self._group = os.environ.get("LIVERY_FORGE_E2E_OWNER") or "livery"
+        self._group = os.environ.get("FORGE_E2E_OWNER") or "livery"
         self._client = JsonClient(
             f"{url.rstrip('/')}/api/v4",
             headers={"PRIVATE-TOKEN": token},

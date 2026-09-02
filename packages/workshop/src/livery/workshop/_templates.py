@@ -25,6 +25,7 @@ import tempfile
 from pathlib import Path
 from typing import Annotated, Any
 
+import footman
 import yaml
 from footman import doc, fail, group
 
@@ -149,12 +150,11 @@ def project_drift(root: Path) -> list[str]:
     byte.
     """
     data = read_answers(root / _ANSWERS)
-    from livery.workshop._brand import runner_prog
 
     # Injected at render time, never stored in the answers: the
     # runner's name belongs to the process, so a branded CLI's
     # drift gate demands branded files and apply re-emits them.
-    data = {**data, "runner_prog": runner_prog()}
+    data = {**data, "runner_prog": footman.prog()}
     source = local_template_dir(root)
     if source is None:
         fail("no local template source: the render gate needs one")
@@ -210,9 +210,8 @@ def package_drift(root: Path) -> list[str]:
     for answers_path in sorted(packages.glob("*/.copier-answers.yml")):
         directory = answers_path.parent
         data = read_answers(answers_path)
-        from livery.workshop._brand import runner_prog
 
-        data = {**data, "runner_prog": runner_prog()}
+        data = {**data, "runner_prog": footman.prog()}
         with tempfile.TemporaryDirectory() as scratch:
             render(source, Path(scratch), data)
             for name in PACKAGE_MANAGED:
@@ -233,12 +232,11 @@ def package_drift(root: Path) -> list[str]:
 def apply_project(root: Path) -> list[str]:
     """Write the ``project`` render over *root*; the files that changed."""
     data = read_answers(root / _ANSWERS)
-    from livery.workshop._brand import runner_prog
 
     # Injected at render time, never stored in the answers: the
     # runner's name belongs to the process, so a branded CLI's
     # drift gate demands branded files and apply re-emits them.
-    data = {**data, "runner_prog": runner_prog()}
+    data = {**data, "runner_prog": footman.prog()}
     source = local_template_dir(root)
     if source is None:
         fail("no local template source: nothing to apply from")
@@ -298,9 +296,8 @@ def apply_packages(root: Path) -> list[str]:
     for answers_path in sorted((root / "packages").glob("*/.copier-answers.yml")):
         directory = answers_path.parent
         data = read_answers(answers_path)
-        from livery.workshop._brand import runner_prog
 
-        data = {**data, "runner_prog": runner_prog()}
+        data = {**data, "runner_prog": footman.prog()}
         with tempfile.TemporaryDirectory() as scratch:
             render(source, Path(scratch), data)
             for name in PACKAGE_MANAGED:
@@ -325,7 +322,6 @@ def template_check() -> None:
     root = _root()
     if local_template_dir(root) is None:
         return
-    from livery.workshop._brand import runner_prog
 
     drift = project_drift(root) + package_drift(root)
     if drift:
@@ -333,7 +329,7 @@ def template_check() -> None:
             "rendered files drift from templates/:\n  "
             + "\n  ".join(drift)
             + "\n  edit templates/ (never the rendered copy) and run"
-            f" `{runner_prog()} template.apply`"
+            f" `{footman.prog()} template.apply`"
         )
 
 
@@ -383,7 +379,6 @@ def new_package(
     if destination.exists():
         fail(f"{destination} already exists")
     answers = read_answers(root / _ANSWERS)
-    from livery.workshop._brand import runner_prog
 
     package_name = f"livery-{name}"
     render(
@@ -407,7 +402,7 @@ def new_package(
             "forge_url": answers.get("forge_url", ""),
             "project_name": answers.get("project_name", ""),
             "python_versions": answers.get("python_versions", []),
-            "runner_prog": runner_prog(),
+            "runner_prog": footman.prog(),
         },
     )
     members = list(answers.get("packages", []))
@@ -425,11 +420,9 @@ def new_package(
 
 def _write_root_answers(root: Path, answers: dict[str, Any]) -> None:
     """Rewrite the root answers file, header and bookkeeping kept."""
-    from livery.workshop._brand import runner_prog
-
     body = (
         "# Managed by copier: this instance's identity and template\n"
-        f"# provenance. `{runner_prog()} new.package` appends to `packages`;"
+        f"# provenance. `{footman.prog()} new.package` appends to `packages`;"
         " edit other\n"
         "# values only when the workspace itself changes.\n"
         "_src_path: templates\n"

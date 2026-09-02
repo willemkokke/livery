@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
+import footman
 from footman import RunFailed, fail, run, stdin
 
 from livery.workshop._tree import agent_hooks
@@ -50,10 +51,10 @@ def _runs_runner() -> re.Pattern[str]:
     run but tests repoint it, and ``fm``/``footman`` always match so
     the stock spellings stay guarded under any brand.
     """
-    from livery.workshop._brand import runner_prog
-
     return re.compile(
-        r"^\s*(?:uv run(?: --\S+)* )?(?:" + re.escape(runner_prog()) + r"|fm|footman)\b"
+        r"^\s*(?:uv run(?: --\S+)* )?(?:"
+        + re.escape(footman.prog())
+        + r"|fm|footman)\b"
     )
 
 
