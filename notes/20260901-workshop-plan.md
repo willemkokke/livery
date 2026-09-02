@@ -1518,6 +1518,22 @@ not. Gates 0.1.0 together with phases 1-8.
   with an fm fallback, the workaround comment naming the issue).
   The one residue is the coverage meter's `-m footman`, which runs
   the default brand; footman#557 carries that question too.
+- 2026-09-02, the phase 9 audit close (audit finding, no ruling
+  needed, issue #97): the remote-source update arm, the only arm an
+  instance takes, now passes the brand as copier render data and
+  re-emits the generated artifacts (apply_generated, shared with
+  apply_project), forced by a test that updates a git-templated
+  instance under a monkeypatched brand and reads branded prose and
+  workflows back; the functional fm hardcodes now speak the brand
+  (the shell enter lines, the completion hooks, the pipe guard,
+  which keeps fm and footman guarded under any brand); the managed
+  headers (instance CLAUDE.md, the answers file, the gitignore) and
+  the template.apply teaching render the brand; the package render
+  paths inject it like the project ones; runner_prog's missing-seam
+  and broken-import arms and the never-stored property are forced.
+  The ~85 runtime teachings naming fm verbs in printed prose stay
+  fm-spelled: sweeping them multiplies the private-seam workaround,
+  so the sweep rides footman#557's public accessor (open item 9).
 
 ## Open
 
@@ -1563,3 +1579,9 @@ not. Gates 0.1.0 together with phases 1-8.
    the recording itself is `fm forge.fixtures.record
    --scenario=configure-approvals --backend=gitlab` plus re-running
    the premium replay suite against what reality answered.
+9. The runtime-teaching brand sweep: printed teachings across the
+   workshop name verbs as `fm ...` (about 85 sites), wrong words
+   under a branded runner. Swept when footman#557 lands a public
+   prog accessor, so the spelling comes from one supported call
+   instead of 85 copies of the private-seam workaround. Owner: the
+   phase that takes the footman release carrying #557.

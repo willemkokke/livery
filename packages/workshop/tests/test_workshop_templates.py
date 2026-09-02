@@ -237,3 +237,140 @@ def test_the_rendered_prose_spells_the_brand(tmp_path: Path) -> None:
     tasks = (destination / "tasks.py").read_text()
     assert "uv run hse <task>" in tasks
     assert "``hse check``" in tasks
+
+
+def test_the_rendered_answers_never_store_the_brand(tmp_path: Path) -> None:
+    from livery.workshop._templates import render
+
+    answers = read_answers(ROOT / ".copier-answers.yml")
+    destination = tmp_path / "branded"
+    render(ROOT / "templates", destination, {**answers, "runner_prog": "hse"})
+    stored = (destination / ".copier-answers.yml").read_text()
+    # The brand belongs to the process; a stored copy would pin the
+    # instance to the CLI that happened to render it.
+    assert "runner_prog" not in stored
+    # The meter comment rides the brand too.
+    assert "Every hse child" in (destination / "pyproject.toml").read_text()
+    assert "`hse sync`" in (destination / "CLAUDE.md").read_text()
+
+
+def test_runner_prog_survives_a_missing_or_broken_seam(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import builtins
+
+    from footman import _paths
+
+    from livery.workshop._brand import runner_prog
+
+    monkeypatch.delattr(_paths, "_prog")
+    assert runner_prog() == "fm"  # the attribute may move; fm holds
+
+    real_import = builtins.__import__
+
+    def _broken(name: str, *args: object, **kwargs: object) -> object:
+        if name == "footman":
+            raise ImportError("footman moved")
+        return real_import(name, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(builtins, "__import__", _broken)
+    assert runner_prog() == "fm"  # even the import may fail; fm holds
+
+
+def test_the_shell_and_completion_lines_run_the_brand() -> None:
+    from livery.workshop._env_tasks import _COMPLETION_HOOK, _COMPLETION_PWSH
+    from livery.workshop._shell import _POSIX_ENTER, _PWSH_ENTER
+
+    for template in (_POSIX_ENTER, _PWSH_ENTER):
+        line = template.format(prog="hse", root="'/w s'")
+        assert "hse -C=" in line and "fm -C" not in line
+    posix = _COMPLETION_HOOK.format(prog="hse")
+    assert "$(hse --setup-completion)" in posix
+    pwsh = _COMPLETION_PWSH.format(prog="hse")
+    assert "Get-Command hse" in pwsh
+    assert "(hse --setup-completion=pwsh" in pwsh
+    assert "{" in pwsh and "}" in pwsh  # the braces survived the format
+
+
+def test_the_pipe_guard_recognises_the_brand(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.workshop import _brand
+    from livery.workshop._hooks import _runs_runner
+
+    monkeypatch.setattr(_brand, "runner_prog", lambda: "hse")
+    pattern = _runs_runner()
+    assert pattern.search("hse check") is not None
+    assert pattern.search("uv run hse check") is not None
+    # The stock spellings stay guarded under any brand.
+    assert pattern.search("fm check") is not None
+    assert pattern.search("footman check") is not None
+    assert pattern.search("shse check") is None
+
+
+def test_the_gitignore_header_speaks_the_brand() -> None:
+    from livery.workshop._materialise import _GITIGNORE_HEADER
+
+    assert "`hse sync`" in _GITIGNORE_HEADER.format(prog="hse")
+
+
+def _instance_from_git_template(tmp_path: Path) -> tuple[Path, Path]:
+    """A scratch git template repo and an instance rendered from it."""
+    import shutil
+    import subprocess
+
+    from livery.workshop import __version__
+
+    repo = tmp_path / "template-repo"
+    shutil.copytree(ROOT / "templates", repo)
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.email", "t@l"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "T"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "seed"], cwd=repo, check=True)
+    subprocess.run(["git", "tag", f"v{__version__}"], cwd=repo, check=True)
+    instance = tmp_path / "instance"
+    answers = read_answers(ROOT / ".copier-answers.yml")
+    render(repo, instance, {**answers, "runner_prog": "fm"})
+    # copier update works only in a git-tracked destination, which
+    # every real instance is.
+    subprocess.run(["git", "init", "-q"], cwd=instance, check=True)
+    subprocess.run(["git", "config", "user.email", "t@l"], cwd=instance, check=True)
+    subprocess.run(["git", "config", "user.name", "T"], cwd=instance, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=instance, check=True)
+    subprocess.run(["git", "commit", "-qm", "seed"], cwd=instance, check=True)
+    return repo, instance
+
+
+def test_the_remote_update_arm_brands_and_reemits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The arm every instance takes: no local template directory, the
+    # source is a git repository, and rebranding is exactly this run
+    # under the branded CLI.
+    from livery.workshop import _brand, _templates
+    from livery.workshop._update import refresh_rendered
+
+    repo, instance = _instance_from_git_template(tmp_path)
+    assert "uv run fm <task>" in (instance / "tasks.py").read_text()
+    contract = (instance / "livery.toml").read_text()
+    lines = [
+        f'templates = "{repo}"' if line.startswith("templates = ") else line
+        for line in contract.splitlines()
+    ]
+    assert any(line.startswith("templates = ") for line in lines)
+    (instance / "livery.toml").write_text("\n".join(lines) + "\n")
+    import subprocess
+
+    subprocess.run(["git", "add", "-A"], cwd=instance, check=True)
+    subprocess.run(
+        ["git", "commit", "-qm", "point at the repo"], cwd=instance, check=True
+    )
+    monkeypatch.setattr(_templates, "local_template_dir", lambda _root: None)
+    monkeypatch.setattr(_brand, "runner_prog", lambda: "hse")
+    changed = refresh_rendered(instance)
+    assert changed  # the update reported work
+    tasks = (instance / "tasks.py").read_text()
+    assert "uv run hse <task>" in tasks and "uv run fm <task>" not in tasks
+    gate = (instance / ".github/workflows/ci.yml").read_text()
+    assert "hse coverage.enforce" in gate  # the workflows re-emitted branded

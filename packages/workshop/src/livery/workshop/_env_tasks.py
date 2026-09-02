@@ -160,7 +160,7 @@ def emit_lines(delta: EnvDelta, dialect: str) -> list[str]:
 
 _COMPLETION_HOOK = (
     "# Interactive shells get completion; a pipe or script never does.\n"
-    'case $- in *i*) eval "$(fm --setup-completion)";; esac'
+    'case $- in *i*) eval "$({prog} --setup-completion)";; esac'
 )
 
 # MenuComplete, because registering completions is only half the job:
@@ -171,12 +171,12 @@ _COMPLETION_HOOK = (
 # module must not break entering the shell. No interactive guard:
 # pwsh has no reliable one-liner for it.
 _COMPLETION_PWSH = (
-    "if (Get-Command fm -ErrorAction SilentlyContinue) {"
-    ' $fmHook = (fm --setup-completion=pwsh 2>$null) -join "`n";'
-    " if ($fmHook) { $fmHook | Invoke-Expression } }"
+    "if (Get-Command {prog} -ErrorAction SilentlyContinue) {{"
+    ' $fmHook = ({prog} --setup-completion=pwsh 2>$null) -join "`n";'
+    " if ($fmHook) {{ $fmHook | Invoke-Expression }} }}"
     "; if (-not $env:LIVERY_NO_SHELL_CUSTOMISATION"
-    " -and (Get-Module -ListAvailable PSReadLine)) {"
-    " Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete }"
+    " -and (Get-Module -ListAvailable PSReadLine)) {{"
+    " Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete }}"
 )
 
 
@@ -258,7 +258,10 @@ def env_emit(
         return "\n".join(emit_lines(delta, dialect))
     delta = workspace_delta(root, cwd)
     lines = emit_lines(delta, dialect)
-    lines.append(_COMPLETION_PWSH if dialect == "pwsh" else _COMPLETION_HOOK)
+    from livery.workshop._brand import runner_prog
+
+    hook = _COMPLETION_PWSH if dialect == "pwsh" else _COMPLETION_HOOK
+    lines.append(hook.format(prog=runner_prog()))
     return "\n".join(lines)
 
 

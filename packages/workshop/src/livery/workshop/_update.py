@@ -108,6 +108,7 @@ def refresh_rendered(root: Path) -> list[str]:
         return apply_project(root)
     notes = _align_answers_source(root, template_source(root))
     from livery.workshop import __version__
+    from livery.workshop._brand import runner_prog
 
     result = subprocess.run(
         [
@@ -118,6 +119,11 @@ def refresh_rendered(root: Path) -> list[str]:
             "--defaults",
             "--trust",
             "--skip-answered",
+            # The runner's name rides as render data, never an
+            # answer: rebranding an instance is exactly this run
+            # under the branded CLI.
+            "--data",
+            f"runner_prog={runner_prog()}",
             "--vcs-ref",
             f"v{__version__}",
             str(root),
@@ -130,7 +136,10 @@ def refresh_rendered(root: Path) -> list[str]:
         fail(
             f"copier update exited {result.returncode}:\n{result.stdout}{result.stderr}"
         )
-    return [*notes, "copier update ran; review the working tree"]
+    from livery.workshop._templates import apply_generated
+
+    generated = apply_generated(root)
+    return [*notes, "copier update ran; review the working tree", *generated]
 
 
 def _align_answers_source(root: Path, source: str) -> list[str]:

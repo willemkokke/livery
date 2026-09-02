@@ -210,6 +210,9 @@ def package_drift(root: Path) -> list[str]:
     for answers_path in sorted(packages.glob("*/.copier-answers.yml")):
         directory = answers_path.parent
         data = read_answers(answers_path)
+        from livery.workshop._brand import runner_prog
+
+        data = {**data, "runner_prog": runner_prog()}
         with tempfile.TemporaryDirectory() as scratch:
             render(source, Path(scratch), data)
             for name in PACKAGE_MANAGED:
@@ -250,6 +253,20 @@ def apply_project(root: Path) -> list[str]:
                 committed.parent.mkdir(parents=True, exist_ok=True)
                 committed.write_bytes(body)
                 changed.append(str(relative))
+    changed.extend(apply_generated(root, data))
+    return changed
+
+
+def apply_generated(root: Path, data: dict[str, Any] | None = None) -> list[str]:
+    """Write the emitted artifacts (CI files, codeowners); what changed.
+
+    The render half and this half together are apply_project; the
+    remote-source update runs copier itself and then this, so an
+    instance's generated workflows move with its workshop too.
+    """
+    if data is None:
+        data = read_answers(root / _ANSWERS)
+    changed: list[str] = []
     from livery.workshop._ci_generate import generated_files
     from livery.workshop._governance import codeowners_file
 
@@ -281,6 +298,9 @@ def apply_packages(root: Path) -> list[str]:
     for answers_path in sorted((root / "packages").glob("*/.copier-answers.yml")):
         directory = answers_path.parent
         data = read_answers(answers_path)
+        from livery.workshop._brand import runner_prog
+
+        data = {**data, "runner_prog": runner_prog()}
         with tempfile.TemporaryDirectory() as scratch:
             render(source, Path(scratch), data)
             for name in PACKAGE_MANAGED:
@@ -305,13 +325,15 @@ def template_check() -> None:
     root = _root()
     if local_template_dir(root) is None:
         return
+    from livery.workshop._brand import runner_prog
+
     drift = project_drift(root) + package_drift(root)
     if drift:
         fail(
             "rendered files drift from templates/:\n  "
             + "\n  ".join(drift)
             + "\n  edit templates/ (never the rendered copy) and run"
-            " `fm template.apply`"
+            f" `{runner_prog()} template.apply`"
         )
 
 
@@ -403,9 +425,12 @@ def new_package(
 
 def _write_root_answers(root: Path, answers: dict[str, Any]) -> None:
     """Rewrite the root answers file, header and bookkeeping kept."""
+    from livery.workshop._brand import runner_prog
+
     body = (
         "# Managed by copier: this instance's identity and template\n"
-        "# provenance. `fm new.package` appends to `packages`; edit other\n"
+        f"# provenance. `{runner_prog()} new.package` appends to `packages`;"
+        " edit other\n"
         "# values only when the workspace itself changes.\n"
         "_src_path: templates\n"
         + yaml.safe_dump(answers, sort_keys=False, allow_unicode=True)
