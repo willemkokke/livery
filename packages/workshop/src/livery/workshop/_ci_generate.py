@@ -100,6 +100,15 @@ jobs:
           uv run --no-sync coverage combine coverage-data/*/.coverage
           uv run --no-sync coverage report --sort=cover
           uv run --no-sync fm coverage.enforce
+  release-title:
+    if: startsWith(github.head_ref, 'workflow/release/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: {CHECKOUT}
+      - uses: {SETUP_UV}
+      - run: uv run fm workflow.release.check-title --title "$TITLE"
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
 """
 
 
@@ -215,6 +224,15 @@ jobs:
     steps:
       - name: Verdict
         run: test "${{{{ needs.check.result }}}}" = "success"
+  release-title:
+    if: startsWith(github.head_ref, 'workflow/release/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: {CHECKOUT}
+      - uses: {SETUP_UV}
+      - run: uv run fm workflow.release.check-title --title "$TITLE"
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
 """
 
 
@@ -303,6 +321,79 @@ release-publish:
 """
 
 
+_CODEOWNERS_PATH = {
+    "github": ".github/CODEOWNERS",
+    "gitea": ".gitea/CODEOWNERS",
+    "gitlab": ".gitlab/CODEOWNERS",
+}
+
+
+def _github_governance(answers: dict[str, Any]) -> str:
+    """The post-merge configure job: only governance paths spawn it.
+
+    The admin secret is mounted here and nowhere else; a failed
+    apply is a visible red job on main.
+    """
+    del answers
+    return f"""name: governance
+on:
+  push:
+    branches: [main]
+    paths:
+      - livery.toml
+      - packages/*/livery.toml
+      - {_CODEOWNERS_PATH["github"]}
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: {CHECKOUT}
+      - uses: {SETUP_UV}
+      - run: uv run fm workflow.configure
+        env:
+          GITHUB_ADMIN_TOKEN: ${{{{ secrets.LIVERY_ADMIN_TOKEN }}}}
+"""
+
+
+def _gitea_governance(answers: dict[str, Any]) -> str:
+    """Gitea's spelling of the same path-filtered apply job."""
+    del answers
+    return f"""name: governance
+on:
+  push:
+    branches: [main]
+    paths:
+      - livery.toml
+      - packages/*/livery.toml
+      - {_CODEOWNERS_PATH["gitea"]}
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: {CHECKOUT}
+      - uses: {SETUP_UV}
+      - run: uv run fm workflow.configure
+        env:
+          GITEA_ADMIN_TOKEN: ${{{{ secrets.LIVERY_ADMIN_TOKEN }}}}
+"""
+
+
+_GITLAB_GOVERNANCE = f"""
+governance-apply:
+  stage: release
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      changes:
+        - livery.toml
+        - packages/*/livery.toml
+        - {_CODEOWNERS_PATH["gitlab"]}
+  script:
+    - uv run fm workflow.configure
+  variables:
+    GITLAB_ADMIN_TOKEN: $LIVERY_ADMIN_TOKEN
+"""
+
+
 def generate(answers: dict[str, Any]) -> dict[str, str]:
     """Every generated CI file for *answers*' forge kind, by path."""
     kind = str(answers.get("forge_kind", "github"))
@@ -310,13 +401,15 @@ def generate(answers: dict[str, Any]) -> dict[str, str]:
         return {
             ".github/workflows/ci.yml": _github_gate(answers),
             ".github/workflows/release.yml": _github_release(answers),
+            ".github/workflows/governance.yml": _github_governance(answers),
         }
     if kind == "gitea":
         return {
             ".gitea/workflows/ci.yml": _gitea_gate(answers),
             ".gitea/workflows/release.yml": _gitea_release(answers),
+            ".gitea/workflows/governance.yml": _gitea_governance(answers),
         }
-    return {".gitlab-ci.yml": _gitlab_pipeline(answers)}
+    return {".gitlab-ci.yml": _gitlab_pipeline(answers) + _GITLAB_GOVERNANCE}
 
 
 def generated_files(root: Path, answers: dict[str, Any]) -> dict[Path, str]:

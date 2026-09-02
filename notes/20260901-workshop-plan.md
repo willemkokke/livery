@@ -34,7 +34,10 @@ between, completing the pre-bash rebase teaching. The 7b audit
 found two destruction-rule holes (close tore down before the
 --discard check could see the branch; stop could not see a
 worktree's uncommitted changes from the main checkout), closed the
-same day in a follow-up PR. Phase 8a in flight as issue #85 (the forge surface); the day also
+same day in a follow-up PR. Phase 8a shipped 2026-09-02 (PR #86, issue #85); its audit found
+the codeowner-review half untested, a GitLab section-ordering bug,
+and the docs tree stale, queued as the next audit-close issue.
+Phase 8b in flight as issue #87 (the workshop half); the day also
 landed issues as the way of work (PR #82), sync-as-one-stop with
 integrate closing issue #83 (PR #84), and the footman 0.49
 migration (PR #81). Subsumes
@@ -984,14 +987,45 @@ Acceptance (8a):
   protection payloads; replay green.
 - `uv run fm check` green.
 
-Acceptance (8b, detailed with its build): the owners declarations
-and their offline gate checks, CODEOWNERS as a managed generated
-artifact with drift compared against the same pure function, the
-post-merge configure job with path filters and the admin secret,
-the admin token ladder, the rename heal at submit, the reconcile
-silence ladder, the approvals-outstanding exit 0 naming who can
-still approve, the assignee-limit validation, and the release-PR
-title job deferred from phase 4.
+Acceptance (8b, issue #87):
+
+- The declarations parse with their defaults, entries guard the
+  governance files themselves, teams qualify under the forge
+  owner, and no declarations means no file and no requirement
+  (test_workshop_governance).
+- CODEOWNERS rides the managed generated artifacts: rendered by
+  the offline backend, compared and written by the drift gate, and
+  applied live to this repository (.github/CODEOWNERS committed).
+- The post-merge governance job is emitted path-filtered for all
+  three kinds with the admin secret mounted only there; the
+  monorepo's own governance.yml is committed.
+- configure refuses unknown owners naming where they are declared,
+  resolves the admin ladder, degrades the approvals half with a
+  note where the capability is declined, and a refused write
+  teaches the per-kind admin variable.
+- The reconcile ladder forced: silent on an untouched sha, runs on
+  a governance-touching one, a refused write teaches the token,
+  and an unreadable state gets the softened conditional note.
+- The rename heal forced at submit: the refusal teaches
+  `submit --fix --armed` and that --fix never implies the arm; the
+  --fix path applies through the admin ladder, states the parked
+  window, and a re-run read-compares to quiet green.
+- Approvals outstanding is a clean stop: exit 0 naming the count
+  and the eligible reviewers (owners of touched paths minus the
+  author minus those who approved), the arm surviving; the fake's
+  auto-merge honours required approvals, and the follow-up
+  approval alone merges it. Unreadable protection never asserts
+  the blocker.
+- The release-PR title check (deferred from phase 4) verifies the
+  squash subject against what the branch prepared, as a
+  non-required job in the generated gates.
+- doctor reports the admin ladder's state and the owner existence
+  check.
+- `uv run fm check` green.
+
+The monorepo declares its own owners (willemkokke on the root
+guard and both packages) through the template's owner answers, so
+the contract file remains fully rendered.
 
 ## Phase 9: the branded runner (was phase 12)
 

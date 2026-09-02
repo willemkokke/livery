@@ -10,6 +10,7 @@ arrive with their own modules; this one owns what every kind shares.
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from typing import Annotated
 
@@ -134,8 +135,13 @@ def abort_policy(
         )
     from livery.workshop._submit import teardown_branch
 
+    head_sha = ""
+    try:
+        head_sha = git.any_head(target.branch)
+    except Exception:
+        head_sha = ""
     teardown_branch(repo, git, target.branch, base)
-    _reconcile_configuration()
+    _reconcile_configuration(git, head_sha)
 
 
 def _active_names() -> tuple[str, ...]:
@@ -181,17 +187,30 @@ def workflow_abort(
 
 
 def contract_config(root: Path) -> RepoConfig:
-    """The repository settings the workspace contract states."""
+    """The repository settings the workspace contract states.
+
+    The approvals half derives from the owner declarations
+    (livery.workshop._governance): the highest declared count, with
+    codeowner review required whenever anyone is declared. A forge
+    without the min_approvals capability gets the config without
+    that half rather than a refusal: governance degrades to the
+    codeowners file alone, which is what the forge can honour.
+    """
     import tomllib
+
+    from livery.workshop._governance import governance_config
 
     contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
     ci = contract.get("ci") or {}
     context = str(ci.get("required_context") or "gate")
+    approvals = governance_config(root)
     return RepoConfig(
         squash_only=True,
         delete_branch_on_merge=True,
         allow_auto_merge=True,
         required_contexts=(context,),
+        min_approvals=approvals.min_approvals,
+        require_codeowner_review=approvals.require_codeowner_review,
     )
 
 
@@ -199,38 +218,123 @@ def contract_config(root: Path) -> RepoConfig:
 def workflow_configure() -> None:
     """Assert the contract's repository settings; idempotent drift repair.
 
-    Run at repository birth, as release aftercare, and after an
-    abort. A token the forge will not let administer refuses with the
-    grant it needed.
+    Run at repository birth, as release aftercare, after an abort,
+    and by the post-merge governance job. Resolves the admin ladder
+    (the per-kind ``*_ADMIN_TOKEN`` first, the everyday token as the
+    fallback); a refused write teaches the grant and the variable.
+    Declared owners the forge does not know refuse before anything
+    is applied: a review chain pointing at nobody is worse than
+    unapplied settings.
     """
-    root = _root()
-    from livery.workshop._forge_lane import this_repository
+    import tomllib
 
-    this_repository(root).configure(contract_config(root))
+    from livery.forge import ForgeError, Unsupported
+    from livery.workshop._forge_lane import admin_forge, admin_repository
+    from livery.workshop._governance import unknown_owners
+
+    root = _root()
+    repo, admin_var = admin_repository(root)
+    forge, _ = admin_forge(root)
+    contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
+    owner = str((contract.get("forge") or {}).get("owner", ""))
+    missing = unknown_owners(root, forge, owner)
+    if missing:
+        listed = "\n".join(f"    {entry}" for entry in missing)
+        fail(
+            "the owner declarations name people or teams this forge does"
+            f" not know:\n{listed}\n  Fix the declarations (or the org"
+            " membership) and re-run."
+        )
+    config = contract_config(root)
+    if config.min_approvals is not None and not forge.supports("min_approvals"):
+        # The forge cannot enforce the count (GitLab's paid tiers);
+        # the codeowners file still documents it, so the rest of the
+        # contract applies rather than nothing.
+        from dataclasses import replace
+
+        print(
+            "  note: this forge cannot enforce approval counts"
+            " (capability: min_approvals); the codeowners file still"
+            " names the reviewers"
+        )
+        config = replace(config, min_approvals=None, require_codeowner_review=None)
+    try:
+        repo.configure(config)
+    except ForgeError as error:
+        used = admin_var or "the everyday token"
+        others = "GITHUB_ADMIN_TOKEN / GITEA_ADMIN_TOKEN / GITLAB_ADMIN_TOKEN"
+        fail(
+            f"the forge refused the configuration using {used}:\n{error}\n"
+            "  An administrator's token applies it: set the per-kind admin"
+            f" variable ({others}) and re-run `fm workflow.configure`."
+        )
+    _ = Unsupported
     print("  repository configuration asserted from the contract")
 
 
-def _reconcile_configuration() -> None:
-    """Re-assert configuration after an abort, in a fresh process.
+def _spawn_configure() -> subprocess.CompletedProcess[str]:
+    """Run the configure verb in a fresh process; the reconcile's seam.
 
-    A fresh process because the abort may run inside a workflow whose
-    update rewrote this very toolchain. Best effort: a refusal is
-    reported, never fatal, the teardown already completed.
+    Fresh, because the abort may sit inside a workflow whose update
+    rewrote this very toolchain.
     """
     import subprocess
     import sys
 
-    result = subprocess.run(
+    return subprocess.run(
         [sys.executable, "-m", "footman", "workflow.configure"],
         capture_output=True,
         text=True,
         check=False,
         cwd=_root(),
     )
+
+
+def _reconcile_configuration(git: GitOps, head_sha: str) -> None:
+    """Re-assert configuration after an abort; silent when provably unneeded.
+
+    The ladder: an offline diff of the governance paths from the
+    aborted PR's head sha (which persists after the branch deletion)
+    skips everything untouched with certainty; touched paths run the
+    configure in a fresh process (the abort may sit inside a
+    workflow whose update rewrote this toolchain). Only a refused
+    write mentions the admin token, and a state that could not be
+    read gets the softened conditional note, never an asserted
+    problem.
+    """
+    from livery.workshop._governance import governance_paths
+
+    if head_sha:
+        try:
+            # The branch side of the diff: an aborted branch that
+            # touched governance may have applied protection before
+            # its merge (the rename heal), and the abort leaves main
+            # demanding the old contract.
+            changed = git._run(
+                "diff",
+                "--name-only",
+                f"origin/main...{head_sha}",
+                "--",
+                "livery.toml",
+                "packages/*/livery.toml",
+                *[p for p in governance_paths(_root()) if "*" not in p],
+            ).strip()
+        except Exception:
+            changed = "unknown"
+        if not changed:
+            return  # nothing config-implying moved: provably unneeded
+    result = _spawn_configure()
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip()
-        print(
-            "  note: the configuration reconcile was refused; an"
-            f" administrator runs `fm workflow.configure` to repair.\n"
-            f"  {detail}"
-        )
+        if "refused" in detail or "ADMIN_TOKEN" in detail:
+            print(
+                "  note: the configuration reconcile was refused; an"
+                f" administrator runs `fm workflow.configure` to repair.\n"
+                f"  {detail}"
+            )
+        else:
+            print(
+                "  note: the configuration could not be verified from here;"
+                " if governance settings changed, `fm workflow.configure`"
+                " re-asserts them."
+            )

@@ -187,6 +187,36 @@ def ci_logs(
 
 def doctor_flow(forge: Forge) -> None:
     """Print identity, server, and capabilities for *forge*."""
+    from livery.workshop._layers import workspace_root
+
+    root = workspace_root()
+    if root is not None:
+        import os
+        import tomllib
+
+        from livery.workshop._governance import unknown_owners
+
+        contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
+        owner = str((contract.get("forge") or {}).get("owner", ""))
+        kind = str((contract.get("forge") or {}).get("kind", ""))
+        admin_var = f"{kind.upper()}_ADMIN_TOKEN"
+        armed = (
+            "set"
+            if os.environ.get(admin_var)
+            else "unset (everyday token is the fallback)"
+        )
+        print(f"  admin ladder: {admin_var} {armed}")
+        try:
+            unknown = unknown_owners(root, forge, owner)
+        except Exception as error:
+            print(f"  owners: not checked ({error})")
+        else:
+            if unknown:
+                for entry in unknown:
+                    print(f"  owners: unknown {entry}")
+            else:
+                print("  owners: every declared owner exists on the forge")
+
     print(f"  {forge.whoami()} on {forge.server_version()}")
     granted = [name for name in _CAPABILITIES if forge.supports(name)]
     missing = [name for name in _CAPABILITIES if name not in granted]

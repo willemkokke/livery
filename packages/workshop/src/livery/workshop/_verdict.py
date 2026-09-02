@@ -163,6 +163,9 @@ def classify(
     current = repo.pr.get(pr.number)
     if current is not None and current.merged:
         return Verdict("merged", 0, f"PR #{pr.number} merged", pr.number)
+    outstanding = _approvals_outstanding(repo, pr.number, pr.base_branch, git)
+    if outstanding is not None:
+        return Verdict("awaiting-approvals", 0, outstanding, pr.number)
     return Verdict(
         "stalled",
         EXIT_STALLED,
@@ -170,6 +173,69 @@ def classify(
         " the evaluation (or a required review is missing)",
         pr.number,
     )
+
+
+def _approvals_outstanding(
+    repo: Repository, number: int, base: str, git: GitOps
+) -> str | None:
+    """The awaiting-approvals message, or None when reviews are not it.
+
+    Green and armed with reviews missing is nobody's error: the arm
+    survives, and the last approval merges it with nothing to
+    re-run. Answered only when protection is readable and actually
+    requires approvals the pull request does not have; an unreadable
+    protection stays with the stalled verdict's softer wording,
+    because a blocker must never be asserted from a state that could
+    not be read.
+    """
+    try:
+        protection = repo.protection(base)
+    except ForgeError:
+        return None
+    if protection is None or protection.required_approvals <= 0:
+        return None
+    try:
+        reviews = repo.pr.reviews(number)
+        details = repo.pr.get(number)
+    except ForgeError:
+        return None
+    approved = {r.author for r in reviews if r.state == "approved"}
+    needed = protection.required_approvals - len(approved)
+    if needed <= 0:
+        return None
+    author = details.author if details is not None else ""
+    eligible = _eligible_reviewers(git, base) - approved - {author}
+    who = ", ".join(sorted(eligible)) if eligible else "the declared owners"
+    plural = "approval" if needed == 1 else "approvals"
+    return (
+        f"green and armed, awaiting {needed} {plural}: {who} can give"
+        " them. The arm survives, so the last approval merges it with"
+        " nothing to re-run."
+    )
+
+
+def _eligible_reviewers(git: GitOps, base: str) -> set[str]:
+    """Owners of the touched paths, from the package declarations.
+
+    Best effort: an unreadable workspace answers empty and the
+    message falls back to naming the declared owners collectively.
+    """
+    try:
+        from livery.workshop._governance import governance_entries
+        from livery.workshop._layers import workspace_root
+
+        root = workspace_root()
+        if root is None:
+            return set()
+        touched = git._run("diff", "--name-only", f"origin/{base}...HEAD").splitlines()
+        owners: set[str] = set()
+        for entry in governance_entries(root):
+            prefix = entry.path.strip("/")
+            if any(name.startswith(prefix) for name in touched if name):
+                owners.update(owner for owner in entry.owners if "/" not in owner)
+        return owners
+    except Exception:
+        return set()
 
 
 def follow(
@@ -209,6 +275,10 @@ def follow(
             last_state = verdict.state
             confirm_streak = 0
         if verdict.state == "merged":
+            return verdict
+        if verdict.state == "awaiting-approvals":
+            # Not an error: the watch's job is done, the arm holds,
+            # and a human review is what happens next.
             return verdict
         if verdict.exit_code:
             # A blocker must hold for two consecutive polls before it

@@ -86,6 +86,24 @@ publish_index:
     {% if forge_kind == 'gitea' and forge_url
     %}{{ forge_url.rstrip('/') }}/api/packages/{{ forge_owner }}/pypi{% endif %}
 
+owner_users:
+  type: yaml
+  help: >-
+    Who reviews the workspace's own governance (user logins); these
+    owners guard the root contract and the codeowners file, so a
+    reviewer-count change is itself a reviewed merge
+  default: []
+
+owner_teams:
+  type: yaml
+  help: "Owning teams for the workspace's governance (team names)"
+  default: []
+
+owner_approvals:
+  type: int
+  help: "Approvals the governance paths require"
+  default: 1
+
 templates_source:
   type: str
   help: >-

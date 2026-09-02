@@ -333,6 +333,80 @@ def _push(git: GitOps, branch: str, *, force: bool) -> None:
         )
 
 
+def _required_context_at(git: GitOps, ref: str) -> str:
+    """The contract's required context at *ref*; "" when unreadable."""
+    try:
+        text = git._run("show", f"{ref}:livery.toml")
+    except GitError:
+        return ""
+    data = tomllib.loads(text)
+    return str((data.get("ci") or {}).get("required_context") or "gate")
+
+
+def _heal_context_rename(
+    repo: Repository, git: GitOps, plan: Plan, *, fix: bool, armed: bool
+) -> None:
+    """The one order-sensitive transition: a renamed required context.
+
+    The renaming branch produces the new context while protection
+    still demands the old, so its PR can never go green and the
+    post-merge apply never runs. Submit owns the heal because the
+    gate is offline by contract and submit already talks to the
+    forge: detected offline from the branch diff, refused teaching
+    that protection must move before the merge, healed under --fix
+    through the admin ladder with a read-compare keeping re-runs
+    quietly green. Between the apply and this PR's merge other
+    armed merges park (never fail) on the old context, so the
+    teaching recommends `fm submit --fix --armed` to close that
+    window at CI speed; --fix never implies --armed.
+    """
+    ours = _required_context_at(git, plan.branch)
+    theirs = _required_context_at(git, f"origin/{plan.base}")
+    if not ours or not theirs or ours == theirs:
+        return
+    if fix:
+        from livery.workshop._forge_lane import admin_repository
+        from livery.workshop._layers import workspace_root
+
+        root = workspace_root()
+        if root is None:
+            return
+        admin_repo, admin_var = admin_repository(root)
+        try:
+            protection = repo.protection(plan.base)
+        except ForgeError:
+            protection = None
+        if protection is not None and ours in protection.required_contexts:
+            return  # already applied: the re-run is quietly green
+        from livery.forge import RepoConfig
+
+        try:
+            admin_repo.configure(RepoConfig(required_contexts=(ours,)))
+        except ForgeError as error:
+            used = admin_var or "the everyday token"
+            fail(
+                f"the context rename could not be applied using {used}:\n"
+                f"{error}\n  An administrator sets the per-kind admin"
+                " variable and re-runs `fm submit --fix --armed`, or runs"
+                " `fm workflow.configure` from this branch."
+            )
+        print(
+            f"  protection now requires {ours!r} (was {theirs!r}); other"
+            " armed merges park on the old context until this PR lands,"
+            " so keep the rename diff minimal and land it fast."
+        )
+        return
+    fail(
+        f"this branch renames the required CI context ({theirs!r} ->"
+        f" {ours!r}), and protection still demands the old name, so this"
+        " PR can never go green until protection moves BEFORE the merge."
+        " Heal and submit in one step: `fm submit --fix --armed` (the"
+        " apply parks other armed merges until this lands; --fix never"
+        " implies --armed). Without an admin token in reach, an"
+        " administrator runs `fm workflow.configure` from this branch."
+    )
+
+
 def push_and_pr(
     repo: Repository,
     git: GitOps,
@@ -418,6 +492,7 @@ def submit_flow(
         print("  gate skipped (--no-gate): CI is now the first verifier")
     git.fetch()
     plan = prepare(git, title=title, body=body, base=base)
+    _heal_context_rename(repo, git, plan, fix=fix, armed=armed)
     linked = resolve_closes(repo, plan.branch, closes)
     if linked is not None:
         print(f"  Closes #{linked} on merge")

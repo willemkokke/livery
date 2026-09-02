@@ -58,6 +58,51 @@ def this_forge(root: Path) -> Forge:
     fail(f"unknown forge kind {kind!r}: use github, gitea, or gitlab")
 
 
+_ADMIN_VARS = {
+    "github": "GITHUB_ADMIN_TOKEN",
+    "gitea": "GITEA_ADMIN_TOKEN",
+    "gitlab": "GITLAB_ADMIN_TOKEN",
+}
+
+
+def admin_forge(root: Path) -> tuple[Forge, str]:
+    """The forge for an admin verb, and the variable that armed it.
+
+    Least privilege by split tokens: the everyday verbs never read
+    the admin variable, and the admin verbs (configure, the
+    post-abort reconcile) resolve admin-first with a fallback to the
+    everyday token; the fallback keeps a solo developer whose one
+    token already administers working with nothing extra. The second
+    value names the admin variable used, "" for the fallback, so a
+    refusal can teach the missing grant.
+    """
+    import os
+
+    contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
+    table = contract.get("forge") or {}
+    kind = str(table.get("kind", ""))
+    url = str(table.get("url", ""))
+    var = _ADMIN_VARS.get(kind, "")
+    token = os.environ.get(var, "") if var else ""
+    if not token:
+        return this_forge(root), ""
+    if kind == "github":
+        return GithubForge.connect(url=url, token=token), var
+    if kind == "gitea":
+        return GiteaForge.connect(url=url, token=token), var
+    return GitlabForge.connect(url=url, token=token), var
+
+
+def admin_repository(root: Path) -> tuple[Repository, str]:
+    """The repository bound to the admin ladder's forge."""
+    contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
+    owner = str((contract.get("forge") or {}).get("owner", ""))
+    if not owner:
+        fail("livery.toml [forge] must carry kind and owner")
+    forge, var = admin_forge(root)
+    return forge.repository(owner, remote_repo_name(root)), var
+
+
 def this_repository(root: Path) -> Repository:
     """The workspace's repository, per the contract and the remote."""
     contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))

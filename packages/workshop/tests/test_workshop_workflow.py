@@ -357,7 +357,7 @@ def test_abort_tears_down_a_safe_leftover_and_reconciles(
     reconciled: list[bool] = []
     monkeypatch.setattr(
         "livery.workshop._workflow_tasks._reconcile_configuration",
-        lambda: reconciled.append(True),
+        lambda _git, _sha: reconciled.append(True),
     )
     leftover = _wf(WorkflowState.FAILED, name="update/templates")
     abort_policy(repo, git, (leftover,), "", force=False)
@@ -651,7 +651,8 @@ def test_the_interactive_picker_asks_and_silence_stops(
     git.switch("main")
     monkeypatch.setattr("footman.select", lambda message, options: options[1][1])
     monkeypatch.setattr(
-        "livery.workshop._workflow_tasks._reconcile_configuration", lambda: None
+        "livery.workshop._workflow_tasks._reconcile_configuration",
+        lambda _git, _sha: None,
     )
     abort_policy(repo, git, (first, second), "", force=False, interactive=True)
     assert not git.local_branch_exists("workflow/update/templates")
@@ -666,6 +667,7 @@ def test_contract_config_reads_the_required_context(tmp_path: Path) -> None:
     config = contract_config(tmp_path)
     assert config.required_contexts == ("the-gate",)
     assert config.squash_only is True
+    assert config.min_approvals is None  # no owners: no requirement
     (tmp_path / "livery.toml").write_text("[workspace]\n")
     assert contract_config(tmp_path).required_contexts == ("gate",)
 
@@ -679,11 +681,18 @@ def test_the_reconcile_reports_a_refusal_and_never_raises(
 
     monkeypatch.setattr(_workflow_tasks, "_root", lambda: tmp_path)
 
-    def _refused(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
-        return subprocess.CompletedProcess([], 1, "", "403: not an administrator")
+    def _refused() -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            [], 1, "", "refused: 403, not an administrator (ADMIN_TOKEN)"
+        )
 
-    monkeypatch.setattr(subprocess, "run", _refused)
-    _workflow_tasks._reconcile_configuration()
+    monkeypatch.setattr(_workflow_tasks, "_spawn_configure", _refused)
+
+    class _NoDiffGit:
+        def _run(self, *args: str) -> str:
+            raise RuntimeError("no repository here")
+
+    _workflow_tasks._reconcile_configuration(_NoDiffGit(), "abc123")  # type: ignore[arg-type]
     out = capsys.readouterr().out
     assert "workflow.configure" in out and "403" in out
 

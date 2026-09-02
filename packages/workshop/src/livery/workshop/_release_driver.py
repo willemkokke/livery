@@ -493,6 +493,44 @@ def workflow_release(
     run_workflow(driver, repo, git)
 
 
+@release_group.task(name="check-title", hidden=True)
+def workflow_release_check_title(
+    title: Annotated[str, doc("the PR title CI observed")] = "",
+) -> None:
+    """Verify a release PR's title against the members' changelogs.
+
+    The squash subject becomes the merge commit and the manifest the
+    publish wave parses, so a hand-edited title that no longer names
+    what the changelogs prepared is refused here, in a non-required
+    CI job, before it can mislead. Not a required context: a red
+    here wants a human look, never a parked merge.
+    """
+    from livery.workshop._layers import workspace_root
+
+    root = workspace_root()
+    if root is None:
+        fail("no workspace: no livery.toml above the working directory")
+    git = GitOps(root)
+    branch = git.current_branch()
+    stamped: list[str] = []
+    for subject in reversed(git.subjects_ahead("main")):
+        _, _, rest = subject.partition("chore(release): ")
+        if rest:
+            stamped.append(rest)
+    expected = "chore(release): released " + ", ".join(stamped)
+    if not stamped:
+        print(f"  {branch}: no release commits; nothing to check")
+        return
+    if title and title != expected:
+        fail(
+            f"the PR title does not match what the branch prepared:\n"
+            f"    title:    {title}\n    prepared: {expected}\n"
+            "  The squash subject is the publish manifest; restore the"
+            " title or re-prepare."
+        )
+    print(f"  title matches the prepared release: {expected}")
+
+
 @release_group.task(name="publish", hidden=True)
 def workflow_release_publish(
     ref: Annotated[str, doc("the release squash; empty means HEAD")] = "",
