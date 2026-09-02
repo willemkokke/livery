@@ -184,7 +184,7 @@ def test_the_reconcile_is_silent_when_provably_unneeded(
 
     def _spawn() -> SimpleNamespace:
         ran.append("ran")
-        return SimpleNamespace(returncode=0, stdout="", stderr="")
+        return SimpleNamespace(code=0, stdout="", stderr="")
 
     monkeypatch.setattr(_workflow_tasks, "_spawn_configure", _spawn)
     _workflow_tasks._reconcile_configuration(git, sha)
@@ -215,7 +215,7 @@ def test_the_reconcile_runs_when_governance_paths_moved(
 
     def _refusing() -> SimpleNamespace:
         ran.append("ran")
-        return SimpleNamespace(returncode=1, stdout="", stderr="refused: ADMIN_TOKEN")
+        return SimpleNamespace(code=1, stdout="", stderr="refused: ADMIN_TOKEN")
 
     monkeypatch.setattr(_workflow_tasks, "_spawn_configure", _refusing)
     _workflow_tasks._reconcile_configuration(git, sha)
@@ -228,7 +228,7 @@ def test_the_reconcile_runs_when_governance_paths_moved(
     # Any other failure carries its reason verbatim too: the text is
     # never read as a boolean to pick a message.
     def _soft() -> SimpleNamespace:
-        return SimpleNamespace(returncode=1, stdout="", stderr="connection reset")
+        return SimpleNamespace(code=1, stdout="", stderr="connection reset")
 
     monkeypatch.setattr(_workflow_tasks, "_spawn_configure", _soft)
     _workflow_tasks._reconcile_configuration(git, sha)

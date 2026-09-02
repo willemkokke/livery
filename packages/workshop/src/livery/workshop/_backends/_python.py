@@ -14,12 +14,12 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
-import sys
 import tempfile
 import tomllib
 from pathlib import Path
 
+import footman
+import toolroom
 from footman import fail
 from toolroom import basedpyright, mypy, pyrefly, pytest, ruff, ruff_format, ty
 
@@ -169,16 +169,9 @@ def measured_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, fl
     """Per-package line coverage from the run's ``.coverage`` data."""
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as handle:
         report = handle.name
-    result = subprocess.run(
-        [sys.executable, "-m", "coverage", "json", "-o", report],
-        cwd=root,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        fail(
-            f"coverage json exited {result.returncode}:\n{result.stdout}{result.stderr}"
-        )
+    result = toolroom.coverage.opts(cwd=root)("json", "-o", report)
+    if result.code != 0:
+        fail(f"coverage json exited {result.code}:\n{result.stdout}{result.stderr}")
     data = json.loads(Path(report).read_text("utf-8"))
     Path(report).unlink(missing_ok=True)
     totals: dict[str, list[int]] = {package.path: [0, 0] for package in packages}
@@ -305,17 +298,12 @@ def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
     env = dict(os.environ)
     if epoch:
         env["SOURCE_DATE_EPOCH"] = str(epoch)
-    result = subprocess.run(
-        ["uv", "build", "--out-dir", str(dist)],
-        cwd=package.directory,
-        capture_output=True,
-        text=True,
-        check=False,
-        env=env,
-    )
-    if result.returncode != 0:
+    result = toolroom.uv.opts(
+        cwd=package.directory, nofail=True, recorded=False, env=env
+    )("build", "--out-dir", str(dist))
+    if result.code != 0:
         fail(
-            f"uv build ({package.name}) exited {result.returncode}:\n"
+            f"uv build ({package.name}) exited {result.code}:\n"
             f"{result.stdout}{result.stderr}"
         )
     if not list(dist.glob("*.whl")):
@@ -357,25 +345,18 @@ def _dev_pins(root: Path, scratch: Path) -> Path | None:
     pytest install.
     """
     pins = scratch / "dev-pins.txt"
-    result = subprocess.run(
-        [
-            "uv",
-            "export",
-            "--format",
-            "requirements-txt",
-            "--only-group",
-            "dev",
-            "--no-emit-project",
-            "--no-hashes",
-            "-o",
-            str(pins),
-        ],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        check=False,
+    result = toolroom.uv.opts(cwd=root, nofail=True, recorded=False)(
+        "export",
+        "--format",
+        "requirements-txt",
+        "--only-group",
+        "dev",
+        "--no-emit-project",
+        "--no-hashes",
+        "-o",
+        str(pins),
     )
-    if result.returncode != 0 or not pins.is_file():
+    if result.code != 0 or not pins.is_file():
         return None
     return pins
 
@@ -457,47 +438,38 @@ def run_isolated_test(
         venv = Path(scratch) / "venv"
         python = venv / "bin" / "python"
 
-        def _run_install(command: list[str]) -> None:
-            result = subprocess.run(
-                command, cwd=scratch, capture_output=True, text=True, check=False
-            )
-            if result.returncode != 0:
+        def _run_install(*args: str) -> None:
+            result = toolroom.uv.opts(cwd=scratch, nofail=True, recorded=False)(*args)
+            if result.code != 0:
                 fail(
                     f"{package.name} isolated install ({resolution}) exited"
-                    f" {result.returncode}:\n{result.stdout}{result.stderr}"
+                    f" {result.code}:\n{result.stdout}{result.stderr}"
                 )
 
         def _listing() -> dict[str, str]:
-            listing = subprocess.run(
-                ["uv", "pip", "list", "--python", str(python), "--format", "json"],
-                cwd=scratch,
-                capture_output=True,
-                text=True,
-                check=False,
+            listing = toolroom.uv.opts(cwd=scratch, nofail=True, recorded=False)(
+                "pip", "list", "--python", str(python), "--format", "json"
             )
             versions: dict[str, str] = {}
-            if listing.returncode == 0:
+            if listing.code == 0:
                 for row in json.loads(listing.stdout or "[]"):
                     versions[str(row.get("name", ""))] = str(row.get("version", ""))
             return versions
 
-        _run_install(["uv", "venv", str(venv)])
+        _run_install("venv", str(venv))
         _run_install(
-            [
-                "uv",
-                "pip",
-                "install",
-                "--python",
-                str(python),
-                f"--resolution={resolution}",
-                *[f"--find-links={d}" for d in release_dirs],
-                *_index_args(root),
-                str(wheels[0]),
-                # The declared dependencies ride the command line so
-                # the resolution strategy treats them as direct; see
-                # _direct_requirements.
-                *_direct_requirements(package),
-            ]
+            "pip",
+            "install",
+            "--python",
+            str(python),
+            f"--resolution={resolution}",
+            *[f"--find-links={d}" for d in release_dirs],
+            *_index_args(root),
+            str(wheels[0]),
+            # The declared dependencies ride the command line so
+            # the resolution strategy treats them as direct; see
+            # _direct_requirements.
+            *_direct_requirements(package),
         )
         before = _direct_versions(package, _listing())
         # The toolchain never rides the starved install: lowest-direct
@@ -506,10 +478,8 @@ def run_isolated_test(
         # when the pins already hold it.
         pins = _dev_pins(root, Path(scratch))
         if pins is not None:
-            _run_install(
-                ["uv", "pip", "install", "--python", str(python), "-r", str(pins)]
-            )
-        _run_install(["uv", "pip", "install", "--python", str(python), "pytest"])
+            _run_install("pip", "install", "--python", str(python), "-r", str(pins))
+        _run_install("pip", "install", "--python", str(python), "pytest")
         after = _direct_versions(package, _listing())
         moved = {
             name: (before[name], version)
@@ -528,7 +498,7 @@ def run_isolated_test(
             )
         tests = package.directory / "tests"
         if tests.is_dir():
-            result = subprocess.run(
+            result = footman.run(
                 [
                     str(venv / "bin" / "python"),
                     "-m",
@@ -539,11 +509,10 @@ def run_isolated_test(
                     "no:cacheprovider",
                 ],
                 cwd=scratch,
-                capture_output=True,
-                text=True,
-                check=False,
+                nofail=True,
+                recorded=False,
             )
-            if result.returncode != 0:
+            if result.code != 0:
                 fail(
                     f"{package.name} isolated tests ({resolution}) failed:\n"
                     f"{result.stdout[-4000:]}{result.stderr[-2000:]}"

@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Annotated
 
 import footman
+import toolroom
 from footman import doc, fail
 
 from livery.forge import ForgeError, Repository
@@ -142,8 +143,6 @@ def rollback_prepare(root: Path, members: tuple[Package, ...]) -> None:
     quietly: each member's changelog, pyproject, contract, and
     version files return to HEAD.
     """
-    import subprocess
-
     paths: list[str] = []
     for package in members:
         base = package.directory.relative_to(root)
@@ -154,12 +153,7 @@ def rollback_prepare(root: Path, members: tuple[Package, ...]) -> None:
         src = package.directory / "src"
         if src.is_dir():
             paths.extend(str(p.relative_to(root)) for p in src.rglob("__init__.py"))
-    subprocess.run(
-        ["git", "checkout", "--", *paths],
-        cwd=root,
-        capture_output=True,
-        check=False,
-    )
+    toolroom.git.opts(cwd=root, nofail=True, recorded=False)("checkout", "--", *paths)
 
 
 def validate_member(

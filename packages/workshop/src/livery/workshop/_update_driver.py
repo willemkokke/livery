@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Annotated
 
 import footman
+import toolroom
 from footman import doc, fail
 
 from livery.forge import Repository
@@ -187,7 +188,12 @@ class UpdateDriver:
             "  the update moved livery-workshop itself; finishing in a"
             " fresh interpreter running the new code"
         )
-        command = ["uv", "run", "fm", f"workflow.update.{flavor}"]
+        command = [
+            "uv",
+            "run",
+            footman.prog(),
+            f"workflow.update.{flavor}",
+        ]
         command += list(self._names)
         if self.armed:
             command.append("--armed")
@@ -212,13 +218,13 @@ def run_gate(root: Path) -> None:
     workflow branch: fix the tree there and run the same update verb
     again, it resumes from that state.
     """
-    result = subprocess.run(
-        ["uv", "run", "fm", "check", "--fix"], cwd=root, check=False
+    result = toolroom.uv.opts(cwd=root, nofail=True, recorded=False)(
+        "run", "fm", "check", "--fix"
     )
-    if result.returncode != 0:
+    if result.code != 0:
         fail(
             f"the gate is red on the update's changes (exit"
-            f" {result.returncode}). The changes are uncommitted on this"
+            f" {result.code}). The changes are uncommitted on this"
             " branch: fix the tree, then run the same update verb again"
             " to resume."
         )

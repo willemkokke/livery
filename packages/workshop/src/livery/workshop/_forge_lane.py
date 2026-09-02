@@ -11,10 +11,10 @@ those documented lookups.
 from __future__ import annotations
 
 import re
-import subprocess
 import tomllib
 from pathlib import Path
 
+import toolroom
 from footman import fail
 
 from livery.forge import Forge, GiteaForge, GithubForge, GitlabForge, Repository
@@ -26,14 +26,10 @@ _REMOTE_RE = re.compile(
 
 def remote_repo_name(root: Path) -> str:
     """The repository name the ``origin`` remote points at."""
-    result = subprocess.run(
-        ["git", "remote", "get-url", "origin"],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        check=False,
+    result = toolroom.git.opts(cwd=root, nofail=True, recorded=False)(
+        "remote", "get-url", "origin"
     )
-    if result.returncode != 0:
+    if result.code != 0:
         fail(f"no origin remote:\n{result.stdout}{result.stderr}")
     match = _REMOTE_RE.search(result.stdout.strip())
     if match is None:

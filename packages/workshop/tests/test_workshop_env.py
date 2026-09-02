@@ -633,7 +633,7 @@ def test_clean_reports_restore_and_remove_failures(
 
     def _sabotaged(target: Path, *args: str) -> object:
         if args[0] in ("checkout", "clean"):
-            return SimpleNamespace(returncode=1, stdout="", stderr="sabotaged")
+            return SimpleNamespace(code=1, stdout="", stderr="sabotaged")
         return real_query(target, *args)
 
     monkeypatch.setattr(_clean, "_query", _sabotaged)

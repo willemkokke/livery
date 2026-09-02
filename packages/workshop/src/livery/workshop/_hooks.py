@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Annotated
 
 import footman
+import toolroom
 from footman import RunFailed, fail, run, stdin
 
 from livery.workshop._tree import agent_hooks
@@ -161,18 +162,13 @@ def post_edit(event: Annotated[HookEvent, stdin]) -> None:
     not the hook, is the arbiter; this only saves round trips.
     """
     import contextlib
-    import subprocess
 
     path = event.tool_input.file_path
     if not path.endswith(".py") or not Path(path).is_file():
         return
     for args in (["check", "--fix", "--quiet"], ["format", "--quiet"]):
         with contextlib.suppress(OSError):
-            subprocess.run(
-                [sys.executable, "-m", "ruff", *args, path],
-                check=False,
-                capture_output=True,
-            )
+            toolroom.ruff.opts(nofail=True, recorded=False)(*args, path)
 
 
 _FAIL = re.compile(

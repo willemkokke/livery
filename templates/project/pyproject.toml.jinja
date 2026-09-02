@@ -173,6 +173,12 @@ python-version = "{{ python_versions[0] }}"
 deprecated = "error"
 unnecessary-type-conversion = "error"
 
+[tool.footman.notes]
+# Every misuse note fails the task at its boundary: a raw spawn or
+# an ambient write is fixed or deliberately classified, never
+# ambient. Loosen a single kind here with a reason, never the star.
+"*" = "error"
+
 [tool.coverage.run]
 # Every {{ runner_prog }} child measures: the CI gate arms
 # COVERAGE_PROCESS_START, the installed .pth starts the meter in

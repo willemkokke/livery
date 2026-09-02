@@ -1577,6 +1577,25 @@ not. Gates 0.1.0 together with phases 1-8.
   every site calls footman.prog() directly and _brand.py is
   deleted (the sync stub header formats at write time; a
   module-level f-string would freeze the brand at import).
+- 2026-09-02, every misuse note is banned (Willem: "* = error", the
+  hse guard never ported here, a missed reference port):
+  [tool.footman.notes] bans every note kind at the task boundary in
+  the workspace and the template, so a raw spawn or ambient write
+  is CI-red, which is why the warnings he saw at the terminal had
+  sailed through a green gate. Every external tool call now goes
+  through toolroom's typed handles (git, uv, copier, git-cliff,
+  ruff, coverage, pytest, code), which route through footman's run
+  and inherit the task's own directory and environment; cwd is
+  stated only where the target is genuinely elsewhere (GitOps's
+  bound root, scratch venvs, worktrees, package dirs), and
+  recorded=False nofail=True marks the quiet probes, hse's
+  convention. No hse-style query seam module: call sites speak the
+  handles directly (Willem's ruling). The two deliberate raw spawns
+  that remain, the entered shell and the update re-exec child,
+  state env and cwd themselves. footman self-spawns stay
+  footman.run. uv publish loses its shell=True: the dist glob
+  expands in python and the credential-carrying argv rides
+  recorded=False, out of receipts and recordings.
 
 ## Open
 

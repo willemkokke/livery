@@ -17,7 +17,6 @@ duplicate-tolerant publish making that safe.
 from __future__ import annotations
 
 import re
-import subprocess
 import threading
 import time
 from collections.abc import Callable
@@ -27,6 +26,7 @@ from pathlib import Path
 from typing import Protocol
 
 import footman
+import toolroom
 from footman import fail
 
 from livery.workshop._backends import _python
@@ -128,24 +128,17 @@ def ensure_git_identity(git: GitOps) -> None:
     Only when ``user.email`` is unset: the environment's GIT_* wins
     anyway, and a person's own configuration is never touched.
     """
-    probe = subprocess.run(
-        ["git", "config", "user.email"],
-        cwd=git.root,
-        capture_output=True,
-        text=True,
-        check=False,
+    probe = toolroom.git.opts(cwd=git.root, nofail=True, recorded=False)(
+        "config", "user.email"
     )
-    if probe.returncode == 0 and probe.stdout.strip():
+    if probe.code == 0 and probe.stdout.strip():
         return
     for key, value in (
         ("user.email", "release@livery.local"),
         ("user.name", "livery release"),
     ):
-        subprocess.run(
-            ["git", "config", key, value],
-            cwd=git.root,
-            capture_output=True,
-            check=False,
+        toolroom.git.opts(cwd=git.root, nofail=True, recorded=False)(
+            "config", key, value
         )
 
 
@@ -157,27 +150,24 @@ def publish_wheels(package: Package, *, index_url: str = "", token: str = "") ->
     attempt landed. Anything else, a rejected credential, an
     unreachable index, surfaces verbatim.
     """
-    command = ["uv", "publish"]
+    command = ["publish"]
     if index_url:
         command += ["--publish-url", index_url]
     if token:
+        # recorded=False keeps the credential-carrying argv out of
+        # receipts, --json, and recordings alike.
         command += ["--token", token]
-    command.append(str(package.directory / "dist" / "*"))
-    result = subprocess.run(
-        " ".join(command),
-        shell=True,
-        cwd=package.directory,
-        capture_output=True,
-        text=True,
-        check=False,
+    command += [str(path) for path in sorted((package.directory / "dist").glob("*"))]
+    result = toolroom.uv.opts(cwd=package.directory, nofail=True, recorded=False)(
+        *command
     )
-    if result.returncode == 0:
+    if result.code == 0:
         return True
     output = f"{result.stdout}{result.stderr}"
     if "already exists" in output or "duplicate" in output.lower():
         print(f"  {package.name}: already published; walking past")
         return False
-    fail(f"uv publish ({package.name}) exited {result.returncode}:\n{output}")
+    fail(f"uv publish ({package.name}) exited {result.code}:\n{output}")
     return False  # unreachable; fail raises
 
 

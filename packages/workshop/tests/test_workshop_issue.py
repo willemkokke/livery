@@ -179,12 +179,19 @@ def test_start_opens_a_worktree_by_default_and_provisions_it(
     created = repo.issue.create("tree work")
     provisioned: list[str] = []
 
-    def _run(argv: list[str], **kwargs: object) -> SimpleNamespace:
-        provisioned.append(" ".join(argv))
-        return SimpleNamespace(returncode=0, stdout="", stderr="")
+    import toolroom
+
+    def _uv(*args: str) -> SimpleNamespace:
+        provisioned.append("uv " + " ".join(args))
+        return SimpleNamespace(code=0, stdout="", stderr="")
 
     monkeypatch.setattr(
-        "livery.workshop._issue_tasks.subprocess", SimpleNamespace(run=_run)
+        "livery.workshop._issue_tasks.toolroom",
+        SimpleNamespace(
+            uv=SimpleNamespace(opts=lambda **_k: _uv),
+            code=toolroom.code,
+            ToolError=toolroom.ToolError,
+        ),
     )
     issue_start(str(created.number))
     path = worktree_path(root, created.number, "tree work")
@@ -477,8 +484,14 @@ def _started_in_worktree(
     repo = fake.repository("willemkokke", "livery")
     created = repo.issue.create(title)
     monkeypatch.setattr(
-        "livery.workshop._issue_tasks.subprocess",
-        SimpleNamespace(run=lambda *a, **k: SimpleNamespace(returncode=0)),
+        "livery.workshop._issue_tasks.toolroom",
+        SimpleNamespace(
+            uv=SimpleNamespace(
+                opts=lambda **_k: (
+                    lambda *_a: SimpleNamespace(code=0, stdout="", stderr="")
+                )
+            )
+        ),
     )
     issue_start(str(created.number))
     path = worktree_path(root, created.number, title)
@@ -676,8 +689,14 @@ def test_the_provision_failure_is_a_note_not_a_refusal(
     repo = fake.repository("willemkokke", "livery")
     created = repo.issue.create("cold tree")
     monkeypatch.setattr(
-        "livery.workshop._issue_tasks.subprocess",
-        SimpleNamespace(run=lambda *a, **k: SimpleNamespace(returncode=1)),
+        "livery.workshop._issue_tasks.toolroom",
+        SimpleNamespace(
+            uv=SimpleNamespace(
+                opts=lambda **_k: (
+                    lambda *_a: SimpleNamespace(code=1, stdout="", stderr="")
+                )
+            )
+        ),
     )
     issue_start(str(created.number))
     out = capsys.readouterr().out
@@ -704,13 +723,21 @@ def test_open_code_missing_binary_is_a_note(
 ) -> None:
     from types import SimpleNamespace
 
+    import toolroom
+
     from livery.workshop._issue_tasks import _open_work
 
     def _missing(*_a: object, **_k: object) -> object:
+        # Standalone, a missing binary surfaces as the OS's own error;
+        # hosted, toolroom's. The site catches both.
         raise FileNotFoundError("code")
 
     monkeypatch.setattr(
-        "livery.workshop._issue_tasks.subprocess", SimpleNamespace(run=_missing)
+        "livery.workshop._issue_tasks.toolroom",
+        SimpleNamespace(
+            code=SimpleNamespace(opts=lambda **_k: _missing),
+            ToolError=toolroom.ToolError,
+        ),
     )
     _open_work(tmp_path, "code")
     assert "not on PATH" in capsys.readouterr().out

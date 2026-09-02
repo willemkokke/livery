@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from typing import Any
 
 import pytest
 from footman import Failed
@@ -558,14 +557,18 @@ def test_new_package_renders_and_wires(
     root = _instance(tmp_path)
     monkeypatch.chdir(root)
 
-    real_run = subprocess.run
+    from types import SimpleNamespace
 
-    def fake_run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[Any]:
-        if cmd[0] == "uv":
-            return subprocess.CompletedProcess(cmd, 0, "", "")
-        return real_run(cmd, **kwargs)
-
-    monkeypatch.setattr("livery.workshop._uv.subprocess.run", fake_run)
+    monkeypatch.setattr(
+        "livery.workshop._uv.toolroom",
+        SimpleNamespace(
+            uv=SimpleNamespace(
+                opts=lambda **_k: (
+                    lambda *_a: SimpleNamespace(code=0, stdout="", stderr="")
+                )
+            )
+        ),
+    )
     with pytest.raises(_FAILURES):
         new_package("Bad Name")
     new_package("scratch")

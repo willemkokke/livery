@@ -18,12 +18,12 @@ Two safety properties, both about irreversibility:
 
 from __future__ import annotations
 
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
 import footman
+import toolroom
 from footman import doc, fail
 
 #: Never removed, at any depth, under any flag. A machine secret is
@@ -45,10 +45,8 @@ class CleanPlan:
         return not (self.modified or self.untracked)
 
 
-def _query(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["git", *args], cwd=root, capture_output=True, text=True, check=False
-    )
+def _query(root: Path, *args: str) -> toolroom.Result:
+    return toolroom.git.opts(cwd=root, nofail=True, recorded=False)(*args)
 
 
 def _protected(path: str) -> bool:
@@ -166,7 +164,7 @@ def clean_tree(
         return
     if plan.modified:
         restore = _query(root, "checkout", "--", ".")
-        if restore.returncode != 0:
+        if restore.code != 0:
             fail(f"could not restore tracked files: {restore.stderr.strip()}")
     for path in plan.untracked:
         # One path at a time, so the protected files simply never
@@ -179,7 +177,7 @@ def clean_tree(
         if everything:
             remove_args.append("-x")
         removed = _query(root, *remove_args, "--", path)
-        if removed.returncode != 0:
+        if removed.code != 0:
             print(f"  could not remove {path}: {removed.stderr.strip()}")
     print(
         f"  Restored: {len(plan.modified)} change(s) discarded,"
