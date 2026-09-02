@@ -554,14 +554,14 @@ def workflow_release_publish(
         fail("no workspace: no livery.toml above the working directory")
     git = GitOps(root)
     registry = SimpleRegistry(
-        os.environ.get("LIVERY_REGISTRY_URL", "https://pypi.org/simple")
+        os.environ.get("PYTHON_REGISTRY_URL", "https://pypi.org/simple")
     )
     receipts = publish_release(
         root,
         git,
         lambda _package: registry,
         ref=ref,
-        index_url=os.environ.get("LIVERY_PUBLISH_INDEX", ""),
+        index_url=os.environ.get("PYTHON_PUBLISH_INDEX", ""),
         token=os.environ.get("UV_PUBLISH_TOKEN", ""),
     )
     output = os.environ.get("GITHUB_OUTPUT", "")

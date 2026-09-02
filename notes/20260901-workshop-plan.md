@@ -1555,6 +1555,18 @@ not. Gates 0.1.0 together with phases 1-8.
   back to the module state on an older footman. Verified locally:
   with the variable set, a bare python start writes a parallel
   coverage data file.
+- 2026-09-02, no livery-named environment variables (Willem): the
+  product name belongs to no instance's environment, so
+  PYTHON_PUBLISH_INDEX and PYTHON_REGISTRY_URL (python-ecosystem
+  facts; another ecosystem's backend gets its own prefix),
+  FORGE_WORKFLOW (the gitlab dispatch routing variable),
+  WORKSHOP_AUTOMERGE, WORKSHOP_UPDATE_REEXEC, and
+  WORKSHOP_NO_SHELL_CUSTOMISATION. The livery-forge dev rig's own
+  knobs (LIVERY_FORGE_RECORD/LIVE/E2E_OWNER,
+  LIVERY_GITEA_RUNNER_TOKEN, LIVERY_GITLAB_IMAGE) keep their
+  product name: they configure the package's own containers, never
+  an instance. Also ruled: no fallbacks pre-1.0, so runner_prog is
+  footman.prog() alone, the lockfile flooring 0.50.
 
 ## Open
 

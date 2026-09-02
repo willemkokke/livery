@@ -121,7 +121,7 @@ not commit statuses.
 | `job_log` | `GET /projects/:path/jobs/:id/trace` | plain text |
 | `rerun` | `POST /projects/:path/pipelines/:id/retry` | retries failed and cancelled jobs, which is the `failed_only=True` contract; GitLab cannot re-run a whole pipeline under the same id, so `failed_only=False` also maps to retry and the docstring's "all of them" is best-effort here |
 | `cancel_run` | `POST /projects/:path/pipelines/:id/cancel` | GitLab answers 200 on an already finished pipeline, so the backend probes the pipeline first and raises the protocol's terminal-run `ForgeError` itself; a pipeline reads `canceling` (a live state) until its jobs acknowledge; `force=True` raises `Unsupported` naming `force_cancel` |
-| `dispatch` | `POST /projects/:path/pipeline` | `ref`, plus variables: the protocol's `workflow` travels as the `LIVERY_WORKFLOW` variable and `inputs` as further variables, for the pipeline's own rules to route on |
+| `dispatch` | `POST /projects/:path/pipeline` | `ref`, plus variables: the protocol's `workflow` travels as the `FORGE_WORKFLOW` variable and `inputs` as further variables, for the pipeline's own rules to route on |
 
 ## Releases
 

@@ -97,7 +97,7 @@ def test_no_index_degrades_to_local_with_the_teaching(
     root = _workspace(tmp_path)
     _grow_on_branch(root)
     git = GitOps(root)
-    monkeypatch.delenv("LIVERY_PUBLISH_INDEX", raising=False)
+    monkeypatch.delenv("PYTHON_PUBLISH_INDEX", raising=False)
     built: list[str] = []
 
     def _fake_build(_root: Path, plan: DevPlan) -> Path:
@@ -115,7 +115,7 @@ def test_no_index_degrades_to_local_with_the_teaching(
     )
     dev_release(root, git, discover_packages(root))
     out = capsys.readouterr().out
-    assert "--local" in out and "LIVERY_PUBLISH_INDEX" in out
+    assert "--local" in out and "PYTHON_PUBLISH_INDEX" in out
     assert "PyPI is never the fallback" in out
     assert len(built) == 1
 
@@ -126,7 +126,7 @@ def test_headless_without_yes_refuses_teaching_the_flag(
     root = _workspace(tmp_path)
     _grow_on_branch(root)
     git = GitOps(root)
-    monkeypatch.setenv("LIVERY_PUBLISH_INDEX", "https://example.test/simple")
+    monkeypatch.setenv("PYTHON_PUBLISH_INDEX", "https://example.test/simple")
     # Off a terminal footman.confirm answers its default no.
     monkeypatch.setattr(
         "livery.workshop._dev_release.footman.confirm", lambda *a, **k: False
@@ -142,7 +142,7 @@ def test_local_never_publishes_and_never_asks_even_with_an_index(
     root = _workspace(tmp_path)
     _grow_on_branch(root)
     git = GitOps(root)
-    monkeypatch.setenv("LIVERY_PUBLISH_INDEX", "https://example.test/simple")
+    monkeypatch.setenv("PYTHON_PUBLISH_INDEX", "https://example.test/simple")
     monkeypatch.setattr(
         "livery.workshop._dev_release.publish_wheels",
         lambda *a, **k: pytest.fail("--local publishes nothing"),
@@ -168,7 +168,7 @@ def test_a_confirmed_publish_goes_to_the_configured_index(
     root = _workspace(tmp_path)
     _grow_on_branch(root)
     git = GitOps(root)
-    monkeypatch.setenv("LIVERY_PUBLISH_INDEX", "https://example.test/simple")
+    monkeypatch.setenv("PYTHON_PUBLISH_INDEX", "https://example.test/simple")
     monkeypatch.setenv("UV_PUBLISH_TOKEN", "tok")
     monkeypatch.setattr(
         "livery.workshop._dev_release.footman.confirm", lambda *a, **k: True
@@ -223,7 +223,7 @@ def test_a_terminal_no_skips_the_member_and_continues(
     root = _workspace(tmp_path)
     _grow_on_branch(root)
     git = GitOps(root)
-    monkeypatch.setenv("LIVERY_PUBLISH_INDEX", "https://example.test/simple")
+    monkeypatch.setenv("PYTHON_PUBLISH_INDEX", "https://example.test/simple")
     monkeypatch.setattr(
         "livery.workshop._dev_release.footman.confirm", lambda *a, **k: False
     )

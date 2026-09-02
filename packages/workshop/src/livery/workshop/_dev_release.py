@@ -30,7 +30,7 @@ from livery.workshop._publish import publish_wheels
 from livery.workshop._update import latest_released
 
 #: The environment variable naming the custom index dev wheels go to.
-INDEX_VAR = "LIVERY_PUBLISH_INDEX"
+INDEX_VAR = "PYTHON_PUBLISH_INDEX"
 
 # The dev grammar's display form: 1.2.3-dev.branch.name.N+sha.date
 _SEMVER_DEV = re.compile(
