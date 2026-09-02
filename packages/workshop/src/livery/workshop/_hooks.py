@@ -42,7 +42,9 @@ class HookEvent:
 
 _QUOTED = re.compile(r"'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"")
 _RUNS_FM = re.compile(r"^\s*(?:uv run(?: --\S+)* )?f(?:m|ootman)\b")
-_TRUNCATES = re.compile(r"\|\s*(?:tail|head)\b")
+# `|&` is bash's pipe-with-stderr; it hides the exit code exactly
+# like a bare pipe, so both forms count.
+_TRUNCATES = re.compile(r"\|&?\s*(?:tail|head)\b")
 _PUSHES = re.compile(r"^\s*git\s+(?:-C\s+(\S+)\s+)?push\b")
 _PUSH_EXEMPT = re.compile(r"\s(?:--delete|-d|--tags)\b|\bpush\s+(?:\S+\s+)?main\b")
 
@@ -159,7 +161,9 @@ def post_edit(event: Annotated[HookEvent, stdin]) -> None:
 
 _FAIL = re.compile(
     r"fm: [\w.-]+: (?:RunFailed|exited with code \d+)"
-    r"|^FAIL {2,}[\w.-]+"
+    # footman pads the verdict word, so FAIL is followed by one
+    # space or more, never a fixed two.
+    r"|^FAIL +[\w.-]+"
     r"|fm: [\w.-]+: .*SystemExit",
     re.MULTILINE,
 )

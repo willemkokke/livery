@@ -4,7 +4,7 @@ Releasing and updating are the same shape underneath: cut a
 ``workflow/<name>`` branch, do some work, submit through
 livery.workshop._submit.submit_flow, and either publish or just
 merge. This module runs that shared lifecycle; a
-:class:`WorkflowDriver` plugs in only ``prepare`` (do the work) and
+``WorkflowDriver`` plugs in only ``prepare`` (do the work) and
 ``on_merged`` (a release publishes and tags; an update does
 nothing). Re-running the engine at any point is the recovery: the
 decision layer reads the state and does the right thing.

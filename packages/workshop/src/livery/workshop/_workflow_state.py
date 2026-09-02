@@ -7,9 +7,9 @@ coexist; this reader tells the truth per branch and never arbitrates
 between them, which is the decision layer's job
 (livery.workshop._workflow_decision.workflow_decision).
 
-Classification is a pure function (:func:`classify`) of gathered
+Classification is a pure function (``classify``) of gathered
 signals, so every mapping is testable with no I/O; the gathering
-(:func:`gather`) isolates the network and answers None when the
+(``gather``) isolates the network and answers None when the
 forge cannot be read. UNKNOWN is a first-class state, not an error:
 a blip must never read as "nothing running", so everything that
 mutates refuses on it.
@@ -139,7 +139,7 @@ def members_of(name: str) -> tuple[str, ...]:
 
 @dataclass(frozen=True)
 class Signals:
-    """The gathered inputs :func:`classify` maps to a state."""
+    """The gathered inputs ``classify`` maps to a state."""
 
     kind: WorkflowKind
     remote_branch: bool
@@ -311,7 +311,7 @@ def gather(
 
 
 def status_of(sig: Signals | None, name: str) -> WorkflowStatus:
-    """One workflow's :class:`WorkflowStatus` from its gathered signals."""
+    """One workflow's ``WorkflowStatus`` from its gathered signals."""
     kind = kind_of(name)
     branch = f"{WORKFLOW_PREFIX}{name}"
     if sig is None:

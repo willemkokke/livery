@@ -323,7 +323,9 @@ def _transcript(tmp_path: Path, result_text: str) -> Path:
 def test_stop_blocks_a_red_verdict_and_passes_everything_else(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    red = _transcript(tmp_path, "FAIL  check   (0.1s)\ngate exit: 1")
+    # The real shape: footman pads the verdict word, so FAIL is
+    # followed by a single space.
+    red = _transcript(tmp_path, "FAIL check   (0.1s)\ngate exit: 1")
     assert stop(_event(transcript_path=str(red))) == 2
     assert "stop again to proceed" in capsys.readouterr().err
     # The retry marker always passes: one nudge, never a loop.
@@ -431,3 +433,208 @@ def test_the_shim_propagates_only_the_hooks_own_refusal(tmp_path: Path) -> None:
             check=False,
         )
         assert result.returncode == expected, (code, result.returncode)
+
+
+# --- the audit-close forcing tests ---
+
+
+def test_pre_bash_blocks_pipes_and_only_pipes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.workshop._hooks import pre_bash
+
+    def _blocked(command: str) -> bool:
+        try:
+            pre_bash(_event(tool_input=ToolInput(command=command)))
+        except _FAILURES as caught:
+            assert "piping" in str(caught)
+            return True
+        return False
+
+    assert _blocked("uv run fm check | tail -4")
+    assert _blocked("fm check |& head")  # bash's pipe-with-stderr
+    assert not _blocked("fm check && echo done | tail")
+    assert not _blocked('rg "fm check" | head')
+    assert not _blocked("ls | head")
+
+
+def test_pre_bash_push_guard_blocks_conflicts_and_exempts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.workshop import _hooks
+
+    probes: list[str] = []
+
+    def _conflicts(_repo: object) -> bool:
+        probes.append("probed")
+        return True
+
+    monkeypatch.setattr(_hooks, "_push_conflicts", _conflicts)
+    with pytest.raises(_FAILURES) as caught:
+        _hooks.pre_bash(_event(tool_input=ToolInput(command="git push origin feat/x")))
+    assert "conflicts with origin/main" in str(caught.value)
+    # Deletions, tags, and main itself pass without probing.
+    probes.clear()
+    for exempt in (
+        "git push origin --delete feat/x",
+        "git push --tags",
+        "git push origin main",
+    ):
+        _hooks.pre_bash(_event(tool_input=ToolInput(command=exempt)))
+    assert probes == []
+
+
+def test_env_set_shadow_warnings_are_honest(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.workshop import _env_tasks
+
+    monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".repo.env").write_text("CASCADE_KEY=from-file\n")
+    # The hook exported the cascade: that is not the shell's own
+    # export, so a local write warns about nothing and takes effect.
+    monkeypatch.setattr(_env_tasks, "_APPLIED", {"CASCADE_KEY": "from-file"})
+    monkeypatch.setenv("CASCADE_KEY", "from-file")
+    _env_tasks.env_set("CASCADE_KEY", value="new", scope="local")
+    out = capsys.readouterr().out
+    assert "shell's own environment" not in out
+    # A genuinely shell-exported key still warns.
+    monkeypatch.setattr(_env_tasks, "_APPLIED", {})
+    _env_tasks.env_set("CASCADE_KEY", value="newer", scope="local")
+    assert "shell's own environment" in capsys.readouterr().out
+    # A repo-scope write shadowed by the local file names the winner.
+    monkeypatch.delenv("CASCADE_KEY")
+    _env_tasks.env_set("CASCADE_KEY", value="repo-value", scope="repo")
+    out = capsys.readouterr().out
+    assert "also defined in" in out and ".repo.env.local" in out
+
+
+def test_env_set_delete_is_confirmed(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.workshop import _env_tasks
+
+    monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+    local = tmp_path / ".repo.env.local"
+    local.write_text("DOOMED_KEY=x\n")
+    monkeypatch.setattr(
+        "livery.workshop._env_tasks.footman.confirm", lambda *a, **k: False
+    )
+    _env_tasks.env_set("DOOMED_KEY", scope="local")
+    assert "Left alone" in capsys.readouterr().out
+    assert "DOOMED_KEY" in local.read_text()
+    monkeypatch.setattr(
+        "livery.workshop._env_tasks.footman.confirm", lambda *a, **k: True
+    )
+    _env_tasks.env_set("DOOMED_KEY", scope="local")
+    assert "DOOMED_KEY" not in local.read_text()
+
+
+def test_env_show_keeps_file_provenance_and_flags_stale(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.workshop import _env_tasks
+
+    monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".repo.env").write_text("SHOWN_KEY=file-value\nOLD_KEY=new-value\n")
+    # SHOWN_KEY was exported by the hook: it must still read (repo).
+    monkeypatch.setattr(_env_tasks, "_APPLIED", {"SHOWN_KEY": "file-value"})
+    monkeypatch.setenv("SHOWN_KEY", "file-value")
+    # OLD_KEY carries a stale shell export the hook did not write.
+    monkeypatch.setenv("OLD_KEY", "old-value")
+    _env_tasks.env_show(full=True)
+    out = capsys.readouterr().out
+    assert "SHOWN_KEY" in out and "(repo)" in out
+    shown_line = next(line for line in out.splitlines() if "SHOWN_KEY" in line)
+    assert "(repo)" in shown_line
+    old_line = next(line for line in out.splitlines() if "OLD_KEY" in line)
+    assert "(environment)" in old_line and "stale" in old_line
+
+
+def test_env_check_reports_uv_drift_against_the_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._env_tasks import _uv_drift
+
+    running = subprocess.run(
+        ["uv", "--version"], capture_output=True, text=True, check=False
+    ).stdout.split()[1]
+    lock = tmp_path / "uv.lock"
+    lock.write_text(f'[[package]]\nname = "uv"\nversion = "{running}"\n')
+    assert _uv_drift(tmp_path) == ""
+    lock.write_text('[[package]]\nname = "uv"\nversion = "0.0.1"\n')
+    drift = _uv_drift(tmp_path)
+    assert "DRIFT" in drift and "0.0.1" in drift
+    assert _uv_drift(tmp_path / "absent") == ""  # no lock, no pin to judge
+
+
+def test_emit_appends_the_dialects_own_completion_hook(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _env_tasks
+
+    monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
+    posix = _env_tasks.env_emit("")
+    assert "case $-" in posix  # the interactive guard
+    pwsh = _env_tasks.env_emit("pwsh")
+    assert "MenuComplete" in pwsh and "case $-" not in pwsh
+    agent = _env_tasks.env_emit("", agent=True)
+    assert "case $-" not in agent  # an env file evaluates no hooks
+
+
+def test_clean_declined_confirm_leaves_everything_alone(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = _repo(tmp_path)
+    (root / "stray.txt").write_text("stray\n")
+    monkeypatch.setattr("livery.workshop._clean.footman.confirm", lambda *a, **k: False)
+    clean_tree(root)
+    assert "Left alone" in capsys.readouterr().out
+    assert (root / "stray.txt").is_file()
+
+
+def test_clean_reports_restore_and_remove_failures(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    from livery.workshop import _clean
+
+    root = _repo(tmp_path)
+    (root / "tracked.txt").write_text("changed\n")
+    (root / "stray.txt").write_text("stray\n")
+    real_query = _clean._query
+
+    def _sabotaged(target: Path, *args: str) -> object:
+        if args[0] in ("checkout", "clean"):
+            return SimpleNamespace(returncode=1, stdout="", stderr="sabotaged")
+        return real_query(target, *args)
+
+    monkeypatch.setattr(_clean, "_query", _sabotaged)
+    with pytest.raises(_FAILURES) as caught:
+        clean_tree(root, assume_yes=True)
+    assert "could not restore" in str(caught.value)
+
+    # With only untracked files, a failing removal is a per-path
+    # report, never a silent claimed removal.
+    (root / "tracked.txt").write_text("original\n")
+    plan_before = plan_clean(root, everything=False)
+    assert plan_before.modified == ()
+    clean_tree(root, assume_yes=True)
+    out = capsys.readouterr().out
+    assert "could not remove stray.txt" in out
+    assert (root / "stray.txt").is_file()

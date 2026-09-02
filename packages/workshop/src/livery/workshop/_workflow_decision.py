@@ -4,7 +4,7 @@ Every reserved-branch workflow shares one lifecycle: cut a
 ``workflow/<name>`` branch, do the work, open a squash PR, arm, and
 merge (a release then publishes). The engine
 (livery.workshop._workflow_engine.run_workflow) gathers the inputs,
-asks :func:`workflow_decision`, and acts; each driver plugs in only
+asks ``workflow_decision``, and acts; each driver plugs in only
 its do-the-work and after-the-merge steps.
 
 The decision is a pure function so every branch is table-testable.

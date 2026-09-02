@@ -88,7 +88,7 @@ def parse_env_file(path: Path) -> dict[str, str]:
     Comments and blank lines are skipped, surrounding quotes
     stripped, ``${VAR}`` left raw. The membership-only readers use
     this; full resolution goes through
-    :func:`livery.workshop._envfile.load_cascade`. A missing file
+    ``livery.workshop._envfile.load_cascade``. A missing file
     answers an empty dict.
     """
     result: dict[str, str] = {}
@@ -207,7 +207,7 @@ def resolve_all(stack: EnvStack, environ: dict[str, str]) -> None:
     """Substitute every value until stable; honour literals and escapes.
 
     A value that has not settled within
-    :data:`livery.workshop._envfile.MAX_SUBSTITUTION_PASSES` keeps
+    ``livery.workshop._envfile.MAX_SUBSTITUTION_PASSES`` keeps
     its raw text, unexpanded: showing ``$B`` is the answer a reader
     can act on, and half an expansion would look like a resolved
     value.
@@ -254,7 +254,7 @@ def preferred_home(stack: EnvStack, environ: dict[str, str] | None = None) -> st
     The environment beats every file; with no shipped default line
     the name may appear in no file at all, yet a plain exported
     ``LIVERY_HOME`` must still win. The caller applies
-    :data:`livery.workshop._envfile.DEFAULT_HOME` on "".
+    ``livery.workshop._envfile.DEFAULT_HOME`` on "".
     """
     env = environ or {}
     if env.get(_HOME_NAME):
@@ -336,7 +336,7 @@ def set_value(path: Path, key: str, value: str) -> None:
     The stack's one write primitive: creates the file and parents
     when missing, replaces the key's line in place when present,
     appends with a blank separator otherwise. The value is spelled
-    by :func:`livery.workshop._envfile.quote_value`, so what is read
+    by ``livery.workshop._envfile.quote_value``, so what is read
     back is what was set.
     """
     lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
@@ -359,7 +359,7 @@ def member_keys(repo_root: Path, cwd: Path, shared_dir: Path) -> set[str]:
 
     The one definition of which files make up the stack, for the
     membership consumers (the agent emission, ``env.show``): the
-    same files :func:`livery.workshop._envfile.load_cascade` folds
+    same files ``livery.workshop._envfile.load_cascade`` folds
     for a run from *cwd*.
     """
     keys: set[str] = set()
