@@ -18,8 +18,9 @@ dirty-tree resume carve-out to the workflow branch. Phase 6 shipped
 2026-09-01 (PR #72): dev releases, the branch deciding, verified
 live against the local Gitea index; its audit found the routing and
 three restore/skip paths unproven plus a detached-HEAD hole, closed
-the same day in a follow-up PR. Phase 7 next: the environment,
-detailed cut pending Willem's rulings on its forks. Subsumes
+the same day in a follow-up PR. Phase 7 cut 2026-09-02 into 7a and
+7b with the issue family ruled in full; the isolated-leg toolchain
+follow-up lands first. Subsumes
 `notes/20260831-workshop-plan.md`,
 whose phases 1-10 shipped and whose remaining phases are carried
 forward here renumbered. The loop: one PR per phase, merged when
@@ -553,26 +554,199 @@ Acceptance:
   the working tree byte-identical after the build.
 - `uv run fm check` green.
 
+## Follow-up before phase 7: the isolated leg's toolchain
+
+From the phase 4 review (side conversation, 2026-09-02). Lands as
+its own small PR before phase 7a.
+
+- The isolated venv installs the gate's own toolchain at locked
+  pins: `uv export --format requirements-txt --only-group dev
+  --no-emit-project --no-hashes` into the venv via
+  `uv pip install -r`, replacing the bare unpinned pytest install.
+  When a package grows a `[dependency-groups] test`,
+  `uv export --package <member>` serves it the same way. Rejected:
+  retargeting `uv sync` at the venv, whose exact-by-default install
+  would remove the floor-installed wheel.
+- The floor-honesty probe: after both installs the leg re-reads the
+  package's direct dependencies from the venv and fails taught when
+  any sits above its floor, because a pip-style second install can
+  silently move a floored package up to a locked pin.
+- Dev tools never enter `[project]` dependencies. Root dev-group
+  floors stay as documentation of the oldest used features; a
+  per-package test group carries floors under the same rule (a
+  floor is a compatibility claim you are prepared to test), and the
+  floor leg starves it too.
+
+Acceptance:
+
+- The deliberate-overlap forcing test first: a package depending on
+  a member of the toolchain's own tree, the probe refusing when the
+  second install lifts it above the floor.
+- The isolated leg's resolved versions match the lock's dev-group
+  pins for the toolchain.
+- `uv run fm check` green.
+
 ## Phase 7: the environment (was phase 11)
 
-Scope from hse's `env`, `shell`, `start`, `hooks`, `clean`, sized
-against `setup/` when the phase is cut in detail:
+Cut 2026-09-02 (decision record). Two PRs: 7a the entered
+environment, 7b the entered shell and the issue family. Each
+gate-green and mergeable alone; 7b consumes 7a's `env.emit`.
 
-- The env cascade: committed `.repo.env`, machine-shared, local
-  secrets; env-wins; `env.emit` (`--agent`, `--github`), `env.show`
-  masked, `env.set` scoped, `env.check` verifying the tool profile
-  derived from the present package types, not a global list.
-- Launchers: `shell`, hidden `shell.prepare`; the entered shell
-  evaluates `fm env.emit` at startup.
-- `start <issue>` (assign, branch from fresh base, `--wip`,
-  `--worktree`, `--agent`) paired with `abandon`, which then also
-  returns the issue to the pool. Issue-number completion.
-- Hooks `post-edit` and `stop` join `pre-bash`.
-- `clean` returns with hse's meaning: restore the tree, `*.env.local`
-  protected at any depth, the plan rendered and confirmed.
+### Phase 7a: the entered environment
 
-Acceptance detailed when the phase is cut; the shape is fixed here
-so nothing earlier squats on its names.
+Deliverables:
+
+- The env-file engine (from hse's `envfile.py`): parse, substitute,
+  cascade, write. Precedence, highest first: the process
+  environment always wins; `.repo.env.local` nearest to farthest;
+  `$LIVERY_HOME/.repo.shared.env`; committed `.repo.env` nearest to
+  farthest. hse's file names verbatim. The shared file's location
+  may itself be `${...}`-substituted, so the load is two-pass.
+  Substitution iterates to a fixed point with a 16-pass bound; a
+  value that does not settle keeps its raw text. Double quotes
+  substitute, single quotes are literal, unquoted values lose
+  inline comments.
+- The cascade applies to every `fm` run (a pre-tasks hook), so a
+  cold shell's `fm` still sees the repo's environment; environment
+  wins over every file.
+- The `env` group, no availability gates (it repairs cold stores):
+  - `env.emit [posix|pwsh] [--agent] [--github]`: dialect emission
+    with the quoting rules; a value or name that cannot be quoted
+    safely (line breaks, invalid names) is refused. One PATH
+    prepend line. Bare adds the interactive completion hook.
+    `--agent` selects by file membership, secrets included
+    (availability is the point), the PATH family and structural
+    keys excluded. `--github` writes `GITHUB_ENV`/`GITHUB_PATH`
+    only under `GITHUB_ACTIONS`, secret names filtered.
+  - `env.show [--full]`: the sources preamble, secret-suffix
+    masking, the PATH breakdown, stale rows flagged.
+  - `env.set KEY [--value] [--scope=local|shared|repo]`: no value
+    deletes behind a confirm; a set warns when a higher-precedence
+    source shadows it, naming the winner; the restart notice.
+  - `env.check`: the home set, every tool of the derived profile
+    resolves and matches. The profile derives from the present
+    package types (ruled 2026-09-01), pure python today: uv exact
+    from the lock, the venv tools by presence. Red prints the PATH
+    breakdown and the remedy naming `fm sync`.
+  - Not ported: hse's env schema variable, legacy renames, the
+    compiled/node tool lists, copier-cache warnings.
+- Hooks `post-edit` (ruff check --fix and format on the edited
+  Python file; best-effort, always exit 0: a formatter problem must
+  never block an edit) and `stop` (blocks ending a turn whose last
+  Bash result is a red fm verdict; a repeated stop passes) join
+  `pre-bash`. The shim propagates only the hook's own exit 2: a
+  guard that cannot run must not deny.
+- `clean [--all]`: plan from a pure read, render the plan, confirm,
+  `git checkout -- .` plus per-path `git clean`. `*.env.local` is
+  protected at any depth, including inside untracked directories
+  (never collapsed into their parent). Pathspecs are POSIX; the
+  removal's `-x` mirrors the plan's scope.
+
+Edge table:
+
+| Edge | Guard |
+| --- | --- |
+| Substitution that never settles | 16-pass bound; raw text kept |
+| Secret inside an untracked directory | directory enumerated, the secret kept |
+| Non-English locale, non-ASCII paths | `ls-files -z` and POSIX pathspecs, never parsed prose |
+| Hook infrastructure failure | exit 0; only the hook's own exit 2 blocks |
+| Value with a line break | emit and set refuse; it cannot be stored or quoted |
+| Cold store | emit refuses teaching `fm sync`; the group carries no gates |
+
+Acceptance:
+
+- The forced fallbacks first: each edge-table row's test.
+- A bare shell evaluating `fm env.emit posix` yields a working
+  `fm` (`env.check` green in it).
+- `uv run fm check` green.
+
+### Phase 7b: the entered shell and the issue family
+
+Deliverables:
+
+- `shell` and hidden `shell.prepare`: bash, zsh, pwsh; cmd is
+  refused naming pwsh (it has no startup file to inject, so a
+  launched cmd only inherits a cold caller and looks entered
+  without being entered). Per-dialect rc injection (bash
+  `--rcfile`, zsh a throwaway `ZDOTDIR` chaining to the user's,
+  pwsh `-NoExit`); the entered shell evaluates
+  `fm -C <root> --quiet env.emit <dialect>` at its own startup;
+  stderr stays live so a cold-store refusal teaches. POSIX execs;
+  Windows runs and forwards the exit code. `shell.prepare` answers
+  argv as JSON, writing the rc files is its job, and a plan that
+  needs environment variables is refused rather than half-worked.
+- forge: assignment becomes add and self-remove. `Issues.assign`
+  adds an assignee; `Issues.unassign(number)` removes the
+  authenticated user; per backend plus the fake, with a recorded
+  conformance scenario.
+- The assignee limit is workspace policy: a config value, default
+  1, enforced by the workshop on every forge including ones whose
+  native limit is higher. `issue.start` refuses at the limit naming
+  the holders. `configure` validating the limit against the forge
+  (free GitLab caps at one) lands with phase 8's governance
+  configure.
+- The `issue` group; bare `fm issue` lists open issues:
+  - `issue.create <title> [--type]`: file an issue.
+  - `issue.list`, `issue.search <text>`: reads, never a side
+    effect.
+  - `issue.start <issue>`: number or quoted title (title creates
+    first). Assign within the limit; branch
+    `<kind>/<number>-<slug>` always from a fetched
+    `origin/<base>`. A worktree is the default, named
+    `<number>-<slug>` under the runner's home
+    (`worktrees/<repo>/`; footman will expose the home, until then
+    `$LIVERY_HOME`). `--no-worktree` reuses the checkout, where a
+    dirty tree refuses naming `--wip` (park as a commit) as the
+    escape. `--agent[=name]` hands the issue to a coding agent in
+    its worktree and takes an initial prompt to append to the
+    minimal briefing; the worktree's CLAUDE.md stays the real
+    instructions. `--open=code|shell|none`; an editor opens
+    unasked only when interactive.
+  - `issue.stop <issue>`: stop working. Unassign self while the
+    issue is open; remove the local branch, and the worktree when
+    the work started in one (switch to the base first). The remote
+    branch is never touched: it stays the pool's copy. One
+    destruction rule: work that exists nowhere else is never
+    destroyed without `--discard`, with the prose tailored to the
+    situation (delta missing from the remote; the remote gone
+    while the issue is open, which is exceptional; the issue
+    already closed, naming the closure).
+  - `issue.close <issue> --reason [--message]`: close the issue
+    itself. The first act is the shared teardown's disarm; when
+    that finds the PR already merged, the supplied reason no
+    longer applies and close degrades to stop-style cleanup,
+    "issue already resolved, nothing left to do". Otherwise the
+    local and remote branch are removed by default
+    (`--keep-branch` retains them) and the removed head sha is
+    recorded in the close message. Reuses the one teardown
+    mechanism (contract 14).
+- Issue-number completion on start/stop/close from the open
+  issues, never raising: offline costs the suggestions, not the
+  command.
+- The CLAUDE.livery worktree line is updated in this PR: issue
+  worktrees live under the runner's home; `.claude/worktrees/`
+  remains the ad-hoc agent-session convention.
+
+Edge table:
+
+| Edge | Guard |
+| --- | --- |
+| Issue at the assignee limit | start refuses naming the holders |
+| Local-only work under stop or close | `--discard` required, taught per situation |
+| Remote branch gone while the issue is open | refusal explains the exceptional state |
+| close races a merging PR | disarm first; merged degrades to "already resolved" |
+| Title that looks like a number | `#`-stripped digits are a number, never a junk title |
+| Completion offline | suggestions empty, command intact |
+
+Acceptance:
+
+- The forced refusals first: each edge-table row's test.
+- On the fake: start-at-limit refusal, stop with an unpushed delta
+  refusing then passing with `--discard`, close recording the sha
+  and the merged-PR race degrading cleanly.
+- A live conformance recording of assign/unassign on all three
+  servers.
+- `uv run fm check` green.
 
 ## Template composition: the two axes (design, deferred build)
 
@@ -1012,6 +1186,40 @@ not. Gates 0.1.0 together with phases 1-8.
   routing, the terminal-no skip, the failing-build snapshot restore
   on a dirty tree, and the task's interactive stamp each gained a
   forcing test.
+- 2026-09-02, phase 7 lands as two PRs (Willem): 7a the entered
+  environment (env engine, env group, clean, hooks post-edit and
+  stop), 7b the entered shell and the issue family. The env file
+  names are hse's verbatim. cmd is left out, not worth the effort;
+  the refusal names pwsh.
+- 2026-09-02, the issue family (Willem): verbs are `issue.create`,
+  `issue.list`, `issue.search`, `issue.start`, `issue.stop`,
+  `issue.close`; no global `start`; bare `fm issue` lists. All of
+  it is the eventual surface and everything built now goes toward
+  it.
+- 2026-09-02, assignees are a policy limit (Willem): a config
+  value, default 1 so free GitLab needs nothing, honoured by the
+  workshop on every forge including ones that enforce no limit;
+  the protocol's assign becomes add plus self-remove; `configure`
+  errors when the forge cannot support the configured limit,
+  landing with phase 8's configure.
+- 2026-09-02, start's shape (Willem): a worktree is the default,
+  named after the issue, under the runner's home (footman will
+  expose the home queryably; `$LIVERY_HOME` is the bridge);
+  `--agent` takes an initial prompt.
+- 2026-09-02, stop and close (Willem, refined together): stop is
+  the local act, the remote branch untouched; nothing that exists
+  nowhere else is destroyed without `--discard`, prose tailored to
+  the situation. close closes the issue with a reason and optional
+  message, disarms through the shared teardown first, and a merged
+  PR degrades it to cleanup, "issue already resolved"; branches
+  removed by default with the removed sha in the close message.
+- 2026-09-02, the isolated leg's toolchain (side conversation,
+  reconstructed): the leg installs the gate's dev toolchain at the
+  lock's pins via `uv export`, never a retargeted sync; a
+  floor-honesty probe re-reads direct dependencies after both
+  installs and refuses above-floor drift; dev tools never enter
+  `[project]`, and a per-package test group carries floors under
+  the same tested-claim rule.
 
 ## Open
 
@@ -1034,3 +1242,7 @@ not. Gates 0.1.0 together with phases 1-8.
    deferred. Owner: composition-phase design.
 6. Whether repository governance (phase 8) gates 0.1.0 or follows
    it. Owner: Willem, at this plan's review.
+7. Automating the base-CI nudge if one forge's dropped-run rate
+   ever justifies it: the shape would be a capability-gated "can
+   this identity push to the base" probe, never try-and-roll-back.
+   Owner: whoever hits the rate; a direction, not a commitment.
