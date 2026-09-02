@@ -374,3 +374,43 @@ def test_the_remote_update_arm_brands_and_reemits(
     assert "uv run hse <task>" in tasks and "uv run fm <task>" not in tasks
     gate = (instance / ".github/workflows/ci.yml").read_text()
     assert "hse coverage.enforce" in gate  # the workflows re-emitted branded
+
+
+def test_no_runtime_string_spells_the_default_brand() -> None:
+    # The teachings speak the running brand; a literal `fm verb` in a
+    # non-docstring string is a regression this pin catches. The
+    # docstrings document with the default spelling on purpose.
+    import ast
+    import io
+    import tokenize
+
+    source_dir = ROOT / "packages" / "workshop" / "src" / "livery" / "workshop"
+    offenders: list[str] = []
+    for path in sorted(source_dir.rglob("*.py")):
+        source = path.read_text()
+        if "`fm " not in source and "    fm " not in source:
+            continue
+        docstrings: set[tuple[int, int]] = set()
+        for node in ast.walk(ast.parse(source)):
+            if isinstance(
+                node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+            ):
+                body = node.body
+                if body and isinstance(body[0], ast.Expr):
+                    value = body[0].value
+                    if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                        docstrings.add((value.lineno, value.col_offset))
+        for tok in tokenize.generate_tokens(io.StringIO(source).readline):
+            if (
+                tok.type == tokenize.STRING
+                and "`fm " in tok.string
+                and (tok.start[0], tok.start[1]) not in docstrings
+            ):
+                offenders.append(f"{path.name}:{tok.start[0]}")
+            # FSTRING_MIDDLE arrived with 3.12's f-string tokens; on
+            # an older tokenize the STRING arm above already covers
+            # f-strings whole.
+            middle = getattr(tokenize, "FSTRING_MIDDLE", None)
+            if middle is not None and tok.type == middle and "`fm " in tok.string:
+                offenders.append(f"{path.name}:{tok.start[0]}")
+    assert offenders == [], offenders

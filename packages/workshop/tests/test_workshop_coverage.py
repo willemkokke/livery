@@ -67,7 +67,7 @@ def test_a_measuring_parent_suspends_the_local_meter(
         raise AssertionError("enforcement belongs to the aggregating job")
 
     monkeypatch.setattr(_python, "enforce_coverage", refuse)
-    monkeypatch.setenv("LIVERY_COVERAGE_PARENT", "1")
+    monkeypatch.setenv("COVERAGE_PROCESS_START", "pyproject.toml")
     _python.run_test(packages=(package,), root=tmp_path)
     assert seen and not any("--cov" in arg for arg in seen[0])
 
@@ -90,7 +90,7 @@ def test_without_a_parent_the_meter_and_the_preview_run(
     monkeypatch.setattr(
         _python, "report_coverage", lambda root, packages: enforced.append(root)
     )
-    monkeypatch.delenv("LIVERY_COVERAGE_PARENT", raising=False)
+    monkeypatch.delenv("COVERAGE_PROCESS_START", raising=False)
     _python.run_test(packages=(package,), root=tmp_path, scoped=True)
     assert any("--cov=livery" in arg for arg in seen[0])
     assert "packages/thing/tests" not in seen[0]  # no tests dir exists

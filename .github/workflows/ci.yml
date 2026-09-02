@@ -25,15 +25,17 @@ jobs:
         run: uv sync --locked --python ${{ matrix.python }}
       - name: Gate, measured
         env:
-          # The parent `coverage run` meters the whole fm invocation;
-          # the test step adds no second meter, and the floors are
-          # judged once, on the merged union, in the gate job below.
-          LIVERY_COVERAGE_PARENT: "1"
+          # Coverage's own subprocess contract: the .pth the
+          # coverage-enable-subprocess dev dependency installs calls
+          # coverage.process_startup() in every python this venv
+          # starts, armed by this variable, so the whole fm
+          # invocation meters from interpreter start with no module
+          # spelling and no wrapper. The test step reads the same
+          # variable and adds no second meter; the floors are judged
+          # once, on the merged union, in the gate job below.
+          COVERAGE_PROCESS_START: pyproject.toml
         run: |
-          # The meter's module spelling: `-m footman` runs the
-          # default brand, so a branded runner cannot measure
-          # through it yet (footman#557 carries the question).
-          uv run --no-sync coverage run -m footman check
+          uv run --no-sync fm check
           uv run --no-sync coverage combine
       - name: Leg coverage data
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

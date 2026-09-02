@@ -18,6 +18,7 @@ from typing import Protocol
 from footman import fail
 
 from livery.forge import ForgeError, Repository
+from livery.workshop._brand import runner_prog
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._workflow_decision import (
     WorkflowAction,
@@ -134,7 +135,7 @@ def run_workflow(
         ):
             fail(
                 f"{driver.name} is already in flight and armed. Follow it"
-                " with `fm status --watch --workflow`, or re-run with"
+                f" with `{runner_prog()} status --watch --workflow`, or re-run with"
                 " --armed to re-assert the schedule deliberately."
             )
 
@@ -178,7 +179,8 @@ def run_workflow(
                 arm = False
                 print(
                     f"  Release {parked_by[0]} is in flight: submitting"
-                    " unarmed. After it lands, re-run `fm workflow.update`"
+                    " unarmed. After it lands, re-run"
+                    f" `{runner_prog()} workflow.update`"
                     " (the re-run also raises floors to the fresh release),"
                     " then arm."
                 )

@@ -33,6 +33,7 @@ import footman
 from footman import doc, fail, group
 
 from livery.forge import ForgeError, Repository
+from livery.workshop._brand import runner_prog
 from livery.workshop._conventional import TITLE_RE, TYPES
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._layers import workspace_root
@@ -305,14 +306,14 @@ def _push(git: GitOps, branch: str, *, force: bool) -> None:
                 " this branch does not. Add the fix as a new commit (the"
                 " squash collapses it anyway) and re-submit; or, if you"
                 " rewrote history deliberately (a rebase onto the base),"
-                " re-run with `fm submit --force`."
+                f" re-run with `{runner_prog()} submit --force`."
             )
         return
     if branch.startswith("workflow/"):
         fail(
             "a workflow branch is never force-pushed: its commits are the"
             " record recovery reads, and the engine re-prepares instead."
-            " Re-run the workflow verb, or `fm workflow.abort` it."
+            f" Re-run the workflow verb, or `{runner_prog()} workflow.abort` it."
         )
     if git.remote_head(branch):
         discards = git._run("log", "--format=%s", f"{branch}..origin/{branch}").strip()
@@ -373,7 +374,7 @@ def _heal_context_rename(
             fail(
                 "the context rename needs the workspace contract and no"
                 " livery.toml is above the working directory; run"
-                " `fm submit --fix` from inside the workspace"
+                f" `{runner_prog()} submit --fix` from inside the workspace"
             )
         admin_repo, admin_var = admin_repository(root)
         try:
@@ -394,8 +395,8 @@ def _heal_context_rename(
             fail(
                 f"the context rename could not be applied using {used}:\n"
                 f"{error}\n  An administrator sets the per-kind admin"
-                " variable and re-runs `fm submit --fix --armed`, or runs"
-                " `fm workflow.configure` from this branch."
+                f" variable and re-runs `{runner_prog()} submit --fix --armed`, or runs"
+                f" `{runner_prog()} workflow.configure` from this branch."
             )
         print(
             f"  protection now requires {ours!r} (was {theirs!r}); other"
@@ -407,10 +408,10 @@ def _heal_context_rename(
         f"this branch renames the required CI context ({theirs!r} ->"
         f" {ours!r}), and protection still demands the old name, so this"
         " PR can never go green until protection moves BEFORE the merge."
-        " Heal and submit in one step: `fm submit --fix --armed` (the"
+        f" Heal and submit in one step: `{runner_prog()} submit --fix --armed` (the"
         " apply parks other armed merges until this lands; --fix never"
         " implies --armed). Without an admin token in reach, an"
-        " administrator runs `fm workflow.configure` from this branch."
+        f" administrator runs `{runner_prog()} workflow.configure` from this branch."
     )
 
 
@@ -534,7 +535,7 @@ def submit_flow(
                 except GitError as exc2:
                     fail(
                         f"the merge stopped on a conflict; resolve it, commit,"
-                        f" and re-run `fm submit`:\n{exc2}"
+                        f" and re-run `{runner_prog()} submit`:\n{exc2}"
                     )
                 if gate:
                     _gate()
@@ -590,7 +591,7 @@ def submit_default(
         footman.default(ci_automerge),
         doc("arm auto-merge (ladder: flag, LIVERY_AUTOMERGE, [ci] automerge)"),
     ] = False,
-    gate: Annotated[bool, doc("run `fm check` first")] = True,
+    gate: Annotated[bool, doc(f"run `{runner_prog()} check` first")] = True,
     fix: Annotated[bool, doc("heal mechanical gate findings, fold into HEAD")] = False,
     force: Annotated[
         bool, doc("force-push with a lease after a deliberate history rewrite")
@@ -723,18 +724,18 @@ def merge_flow(repo: Repository, git: GitOps, branch: str, *, title: str = "") -
     status = repo.checks.status(pr.head_sha)
     if status.state == "failure":
         fail(
-            f"CI is red for PR #{pr.number}: fix it and `fm submit`."
+            f"CI is red for PR #{pr.number}: fix it and `{runner_prog()} submit`."
             " Merging red is the forge UI's decision, not this verb's."
         )
     if status.state in ("pending", "none"):
         fail(
             f"CI is {status.state} for PR #{pr.number}: wait for the verdict"
-            " or `fm status --watch`"
+            f" or `{runner_prog()} status --watch`"
         )
     git.fetch()
     if git.behind_base(pr.base_branch):
         fail(
-            f"PR #{pr.number} is behind {pr.base_branch}: `fm submit` to"
+            f"PR #{pr.number} is behind {pr.base_branch}: `{runner_prog()} submit` to"
             " integrate and re-verify first"
         )
     subject = title or pr.title

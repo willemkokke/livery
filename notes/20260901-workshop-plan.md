@@ -1543,6 +1543,18 @@ not. Gates 0.1.0 together with phases 1-8.
   count is asked for), and a workspace whose highest count is zero
   asserts no codeowner requirement either, because a forge that
   forbids self-approval deadlocks a solo repo on that gate alone.
+- 2026-09-02, brand-ready runtime (Willem's direction, issue #101):
+  every printed teaching speaks the running brand through one
+  helper (docstrings keep the default spelling: published prose
+  cannot interpolate a runtime); the CI meter moves to coverage's
+  subprocess contract, COVERAGE_PROCESS_START armed by the
+  coverage-enable-subprocess .pth, so the emitted gate line is a
+  plain branded verb and LIVERY_COVERAGE_PARENT retires (the test
+  backend reads coverage's own variable to skip the second meter);
+  runner_prog prefers footman.prog() (public in 0.50.0, taken) and falls
+  back to the module state on an older footman. Verified locally:
+  with the variable set, a bare python start writes a parallel
+  coverage data file.
 
 ## Open
 
@@ -1592,11 +1604,12 @@ not. Gates 0.1.0 together with phases 1-8.
    workshop name verbs as `fm ...` (about 85 sites), wrong words
    under a branded runner. Swept when footman#557 lands a public
    prog accessor, so the spelling comes from one supported call
-   instead of 85 copies of the private-seam workaround. Owner: the
-   phase that takes the footman release carrying #557. Resolved
-   direction 2026-09-02: footman#557 closed via #558 (footman.prog()
-   and footman.dist(), releasing as 0.49.2); the sweep runs when
-   0.49.2 is taken, together with replacing the emitted coverage
+   instead of 85 copies of the private-seam workaround. Resolved
+   2026-09-02 (issue #101): swept; a tokenizer pin keeps any new
+   runtime string from spelling the default brand. Direction
+   2026-09-02: footman#557 closed via #558 (footman.prog()
+   and footman.dist(), shipped in 0.50.0); the sweep ran when
+   0.50.0 was taken, together with replacing the emitted coverage
    meter's `-m footman` by coverage's subprocess contract
    (COVERAGE_PROCESS_START armed by a .pth), Willem's ruling, so the
    gate line is a plain branded verb and no brand module name is

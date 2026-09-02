@@ -29,6 +29,7 @@ from typing import Protocol
 from footman import fail
 
 from livery.workshop._backends import _python
+from livery.workshop._brand import runner_prog
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package, discover_packages
 
@@ -115,7 +116,7 @@ def movement_check(root: Path, git: GitOps, package: Package, ref: str) -> None:
         fail(
             f"{package.name}: commits the stamped entry never saw are in"
             f" this squash:\n{listed}\n  the release went stale after"
-            " prepare. Re-run `fm workflow.release` to re-derive on the"
+            f" prepare. Re-run `{runner_prog()} workflow.release` to re-derive on the"
             " moved base; publishing this squash would ship code the"
             " changelog does not cover."
         )

@@ -29,6 +29,7 @@ import time
 from dataclasses import dataclass
 
 from livery.forge import ForgeError, Repository
+from livery.workshop._brand import runner_prog
 from livery.workshop._git_ops import GitOps
 
 EXIT_CONFLICTS = 10
@@ -112,7 +113,8 @@ def classify(
         return Verdict(
             "closed",
             EXIT_CLOSED,
-            f"PR #{pr.number} is closed unmerged; `fm submit` after reopening,"
+            f"PR #{pr.number} is closed unmerged; `{runner_prog()} submit`"
+            " after reopening,"
             " or start over",
             pr.number,
         )
@@ -150,7 +152,8 @@ def classify(
             "disarmed",
             EXIT_DISARMED,
             f"PR #{pr.number} is green and parked unarmed; arm it with"
-            " `fm submit --armed`, or merge it with `fm submit.merge`",
+            f" `{runner_prog()} submit --armed`, or merge it with"
+            f" `{runner_prog()} submit.merge`",
             pr.number,
         )
     if not grace_spent:
