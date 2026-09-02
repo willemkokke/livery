@@ -277,11 +277,12 @@ def run_test(
             for package in packages
             if (package.directory / "tests").is_dir()
         )
-    if os.environ.get("LIVERY_COVERAGE_PARENT") == "1":
-        # A parent `coverage run` is measuring the whole fm invocation
-        # (the CI gate), so the run adds no second meter and the
-        # enforcement happens once, on the merged union, in the
-        # aggregating job.
+    if os.environ.get("COVERAGE_PROCESS_START"):
+        # Coverage's own subprocess variable: when it is set, every
+        # python this venv starts is already metered from interpreter
+        # start (the CI gate arms it), so the run adds no second
+        # meter and the enforcement happens once, on the merged
+        # union, in the aggregating job.
         pytest.opts(in_process=False)(*dirs, *pytest_args)
         return
     pytest.opts(in_process=False)(*dirs, "--cov=livery", "--cov-report=", *pytest_args)

@@ -364,7 +364,7 @@ def test_env_check_red_prints_the_breakdown_and_the_remedy(
     assert _env_tasks.env_check() == 1
     out = capsys.readouterr().out
     assert "uv: MISSING" in out
-    assert "PATH:" in out and "fm sync" in out
+    assert "PATH:" in out and "sync" in out
     # With tools resolving, the same shell reports ok.
     monkeypatch.setattr(
         "livery.workshop._env_tasks.shutil.which", lambda _tool: "/usr/bin/tool"

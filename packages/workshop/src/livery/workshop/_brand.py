@@ -13,14 +13,17 @@ from __future__ import annotations
 def runner_prog() -> str:
     """The command name of the CLI this process runs under.
 
-    Workaround: footman installs the running brand into
-    ``footman._paths`` and exposes no public accessor yet
-    (footman#557 asks for one), so the private attribute is the
-    source, with the default brand's ``fm`` as the fallback. Switch
-    to the public accessor and delete this note together when the
-    ask lands.
+    ``footman.prog()`` is the source (public since footman 0.50);
+    on an older footman the same value is read from the installed
+    brand's module state (footman#557 records that arrangement).
+    The default brand's ``fm`` is the fallback either way.
     """
     try:
+        import footman
+
+        prog = getattr(footman, "prog", None)
+        if callable(prog):
+            return str(prog() or "fm")
         from footman import _paths
 
         return str(getattr(_paths, "_prog", "") or "fm")

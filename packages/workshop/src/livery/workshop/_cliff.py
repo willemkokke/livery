@@ -17,6 +17,7 @@ from pathlib import Path
 
 from footman import fail
 
+from livery.workshop._brand import runner_prog
 from livery.workshop._packages import Package
 
 #: Where a package's changelog contract lives.
@@ -56,7 +57,7 @@ def config_path(package: Package) -> Path:
     path = package.directory / CONFIG_NAME
     if not path.is_file():
         fail(
-            f"{package.path} has no {CONFIG_NAME}: run `fm template.apply`"
+            f"{package.path} has no {CONFIG_NAME}: run `{runner_prog()} template.apply`"
             " (or re-render the package) so the changelog contract exists"
         )
     return path
@@ -90,7 +91,7 @@ def _run(root: Path, package: Package, *args: str) -> str:
     except FileNotFoundError:
         fail(
             "git-cliff is not installed: it writes the changelogs, and the"
-            " dev group declares it. Run `fm sync`."
+            f" dev group declares it. Run `{runner_prog()} sync`."
         )
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip() or "(no output)"

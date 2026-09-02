@@ -25,6 +25,8 @@ from typing import TYPE_CHECKING
 
 from footman import fail, task
 
+from livery.workshop._brand import runner_prog
+
 if TYPE_CHECKING:
     from livery.workshop._git_ops import GitOps
 
@@ -32,7 +34,7 @@ from livery.workshop._layers import layer_names, workspace_root
 from livery.workshop._materialise import materialise, write_lf
 
 _STUB_HEADER = (
-    "<!-- Managed by `fm sync`: one import per layer fragment, in layer\n"
+    f"<!-- Managed by `{runner_prog()} sync`: one import per layer fragment, in layer\n"
     "     order, then the repository's own CLAUDE.project.md, which always\n"
     "     wins. Edit CLAUDE.project.md, never this file. -->\n"
 )
@@ -171,7 +173,7 @@ def _rebase_step(git: GitOps, onto: str, *, interactive: bool) -> bool:
             print(
                 f"  left {branch} behind {onto}: it carries commits by"
                 f" {listed}, and rewriting them orphans every other copy."
-                " Bring the base in by merge instead: `fm integrate`."
+                f" Bring the base in by merge instead: `{runner_prog()} integrate`."
             )
             return False
     outcome = _try_rebase(git, onto)
@@ -190,13 +192,13 @@ def _rebase_step(git: GitOps, onto: str, *, interactive: bool) -> bool:
             git._run("rebase", onto)
         raise SystemExit(
             "  the rebase is started and waiting on you: resolve the"
-            " conflicts, `git rebase --continue`, then run `fm sync`"
+            f" conflicts, `git rebase --continue`, then run `{runner_prog()} sync`"
             " again."
         )
     print(
         f"  left {branch} behind {onto}: the rebase has conflicts. Run"
-        " `fm sync` interactively to resolve them, or bring the base in"
-        " by merge with `fm integrate`."
+        f" `{runner_prog()} sync` interactively to resolve them, or bring the base in"
+        f" by merge with `{runner_prog()} integrate`."
     )
     return False
 

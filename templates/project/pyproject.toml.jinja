@@ -41,6 +41,10 @@ dev = [
     # `patch = ["subprocess"]` needs coverage 7.10 or newer.
     "pytest-cov>=5",
     "coverage[toml]>=7.10",
+    # Installs the .pth that arms coverage.process_startup() in every
+    # python the venv starts when COVERAGE_PROCESS_START is set: how
+    # the CI gate meters the whole invocation without wrapping it.
+    "coverage-enable-subprocess>=1.0",
     # Parallelise the suite across cores (`-n auto`, wired into addopts).
     "pytest-xdist>=3.6",
     # The changelog engine the release train drives, per package,
@@ -170,8 +174,9 @@ deprecated = "error"
 unnecessary-type-conversion = "error"
 
 [tool.coverage.run]
-# Every {{ runner_prog }} child measures: the CI gate wraps `{{ runner_prog }} check` in
-# `coverage run`, and the patch cascades through the task shells, the
+# Every {{ runner_prog }} child measures: the CI gate arms
+# COVERAGE_PROCESS_START, the installed .pth starts the meter in
+# every python, and the patch cascades through the task shells, the
 # out-of-process pytest, and its workers. Parallel data files merge
 # per leg, then across legs in the aggregating gate job.
 patch = ["subprocess"]
