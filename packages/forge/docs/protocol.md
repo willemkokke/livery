@@ -44,8 +44,8 @@ and discovery joins the protocol only when a workflow demands it.
 | `force_cancel` | a run whose runner stopped answering can be cancelled immediately | yes | yes | no |
 | `required_contexts` | branch protection names the check contexts that must pass | yes | yes | no |
 | `ci_secrets` | `RepoConfig.secrets` can be stored through the backend | with the `github-secrets` extra (sealed-box encryption via PyNaCl); a bare install declines by name | yes | yes (masked variables) |
-| `min_approvals` | protection can require approving reviews (and a codeowner's) before merge | yes | yes | no (approval rules are a paid tier) |
-| `schedule_events` | the merge-scheduling history of a pull request can be read | yes | yes | no (`is_armed` reads the live field instead) |
+| `min_approvals` | protection can require approving reviews (and a codeowner's) before merge | yes | yes | per instance: GitLab licence-gates approval rules, and `supports` probes the licence once per connection |
+| `schedule_events` | the merge-scheduling history of a pull request can be read | yes | yes | yes (reconstructed from system notes and state events) |
 
 ## The verbs
 

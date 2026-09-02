@@ -253,7 +253,7 @@ def workflow_configure() -> None:
         # the codeowners file still documents it, so the rest of the
         # contract applies rather than nothing.
         print(
-            "  note: this forge cannot enforce approval counts"
+            "  note: this instance cannot enforce approval counts"
             " (capability: min_approvals); the codeowners file still"
             " names the reviewers"
         )

@@ -50,6 +50,7 @@ from livery.forge._types import (
     Run,
     RunStatus,
     ScheduleEvent,
+    ScheduleEventKind,
     StateFilter,
 )
 
@@ -128,6 +129,8 @@ class GitlabForge:
         self._client = JsonClient(api_base, headers=headers, opener=opener, timeout=120)
         # GitLab serves the API under /api/v4 on the web host.
         self._web_root = api_base.rstrip("/").removesuffix("/api/v4")
+        #: The licence probe's cached answer; None until first asked.
+        self._min_approvals: bool | None = None
 
     @classmethod
     def connect(
@@ -168,13 +171,44 @@ class GitlabForge:
         return str(data.get("version", ""))
 
     def supports(self, capability: Capability) -> bool:
-        """Auto-merge and secrets yes; the rest GitLab declines.
+        """Honest per instance: approvals depend on the licence.
 
-        Force-cancel and required contexts have no free-tier
-        equivalent, schedule events are not exposed, and required
-        approval rules (``min_approvals``) are a paid feature.
+        ``auto_merge``, ``ci_secrets``, and ``schedule_events`` are
+        every tier's. ``min_approvals`` is probed once per connection
+        and cached: GitLab licence-gates approval rules, so the first
+        ask reads a visible project's approval-rules endpoint, which
+        an unlicensed server answers with 404. ``force_cancel`` and
+        ``required_contexts`` are declined at every tier: no tier
+        cancels a run harder than plain cancel, and no tier's
+        protection names check contexts.
         """
-        return capability in ("auto_merge", "ci_secrets")
+        if capability == "min_approvals":
+            return self._probe_min_approvals()
+        return capability in ("auto_merge", "ci_secrets", "schedule_events")
+
+    def _probe_min_approvals(self) -> bool:
+        """Whether this instance's licence grants approval rules.
+
+        The rules API is project-scoped, so the probe reads through
+        the first project the token can see. A token that sees no
+        project answers no: the capability cannot be exercised where
+        it cannot even be probed.
+        """
+        answer = self._min_approvals
+        if answer is None:
+            projects = (
+                self._client.request("/projects?membership=true&per_page=1") or []
+            )
+            if not projects:
+                answer = False
+            else:
+                rules = self._client.request(
+                    f"/projects/{int(projects[0]['id'])}/approval_rules?per_page=1",
+                    none_on=(403, 404),
+                )
+                answer = rules is not None
+            self._min_approvals = answer
+        return answer
 
     def repository(self, owner: str, name: str) -> Repository:
         """The view onto one repository. Cheap, no network."""
@@ -373,11 +407,14 @@ class _GitlabRepository:
             # Refused before anything else applies: assert nothing
             # you will refuse, and the verb stays idempotent for a
             # caller that probes supports() first.
-            raise Unsupported(
-                "this forge cannot require approving reviews through its"
-                " free tier (capability: min_approvals): GitLab ties"
-                " required approval rules to paid tiers"
-            )
+            if not self._forge.supports("min_approvals"):
+                raise Unsupported(
+                    "this instance cannot require approving reviews"
+                    " (capability: min_approvals): GitLab licence-gates"
+                    " approval rules, and this server's licence does not"
+                    " grant them"
+                )
+            self._configure_approvals(config)
         patch: dict[str, Any] = {}
         if config.default_branch is not None:
             patch["default_branch"] = config.default_branch
@@ -403,6 +440,64 @@ class _GitlabRepository:
                 self._put_variable(key, value, masked=False)
         if config.labels is not None:
             self._ensure_labels(config.labels)
+
+    def _configure_approvals(self, config: RepoConfig) -> None:
+        """Apply the approvals half on a licensed instance.
+
+        The count lands on the project's any-approver approval rule,
+        created or updated after a read. The codeowner requirement is
+        a field on the protected default branch, which is protected
+        first when it is not yet; only that field is ever written, so
+        an existing protection's access levels stay untouched.
+        """
+        if config.min_approvals is not None:
+            rules = self._client.request(f"{self._base}/approval_rules") or []
+            any_rule = next(
+                (
+                    rule
+                    for rule in rules
+                    if str(rule.get("rule_type")) == "any_approver"
+                ),
+                None,
+            )
+            if any_rule is None:
+                self._client.request(
+                    f"{self._base}/approval_rules",
+                    method="POST",
+                    data={
+                        "name": "Any approver",
+                        "rule_type": "any_approver",
+                        "approvals_required": config.min_approvals,
+                    },
+                )
+            elif int(any_rule.get("approvals_required") or 0) != config.min_approvals:
+                self._client.request(
+                    f"{self._base}/approval_rules/{int(any_rule['id'])}",
+                    method="PUT",
+                    data={"approvals_required": config.min_approvals},
+                )
+        if config.require_codeowner_review is not None:
+            info = self._forge.get_repo(self._owner, self._name)
+            if info is None:
+                raise ForgeError(f"{self._owner}/{self._name} does not exist")
+            branch = info.default_branch
+            record = self._client.request(
+                f"{self._base}/protected_branches/{quote(branch, safe='')}",
+                none_on=(404,),
+            )
+            wanted = config.require_codeowner_review
+            if record is None:
+                self._client.request(
+                    f"{self._base}/protected_branches",
+                    method="POST",
+                    data={"name": branch, "code_owner_approval_required": wanted},
+                )
+            elif bool(record.get("code_owner_approval_required")) != wanted:
+                self._client.request(
+                    f"{self._base}/protected_branches/{quote(branch, safe='')}",
+                    method="PATCH",
+                    data={"code_owner_approval_required": wanted},
+                )
 
     def _put_variable(self, key: str, value: str, *, masked: bool) -> None:
         """Create or update one CI variable; masked when the rules allow.
@@ -478,12 +573,13 @@ class _GitlabRepository:
     def protection(self, branch: str) -> Protection | None:
         """The protection on *branch*, or None when the branch is open.
 
-        GitLab splits the story across endpoints and tiers: the
-        protected-branch record says the branch is guarded, the
-        project approvals say how many approvals a merge needs, and
-        the richer per-path rules live behind paid tiers this read
-        does not pretend to see. What cannot be read reads as inert,
-        per livery.forge.Protection.
+        GitLab splits the story across endpoints and licence tiers:
+        the protected-branch record says the branch is guarded and
+        carries the codeowner requirement, the approval rules say how
+        many approvals a merge needs (the highest count over the
+        rules; an unlicensed server has none and reads as zero).
+        What cannot be read reads as inert, per
+        livery.forge.Protection.
         """
         record = self._client.request(
             f"{self._base}/protected_branches/{quote(branch, safe='')}",
@@ -491,11 +587,15 @@ class _GitlabRepository:
         )
         if record is None:
             return None
-        approvals = (
-            self._client.request(f"{self._base}/approvals", none_on=(404,)) or {}
+        rules = (
+            self._client.request(f"{self._base}/approval_rules", none_on=(403, 404))
+            or []
         )
         return Protection(
-            required_approvals=int(approvals.get("approvals_before_merge") or 0),
+            required_approvals=max(
+                (int(rule.get("approvals_required") or 0) for rule in rules),
+                default=0,
+            ),
             require_codeowner_review=bool(record.get("code_owner_approval_required"))
             or None,
             block_on_outdated=False,
@@ -747,11 +847,85 @@ class _GitlabPullRequests:
         return tuple(out)
 
     def schedule_events(self, number: int) -> tuple[ScheduleEvent, ...]:
-        """Refused by name: GitLab keeps no readable scheduling history."""
-        raise Unsupported(
-            "GitLab records no merge-scheduling history the API reads back;"
-            " gate on supports('schedule_events')"
+        """The merge-scheduling history, from notes and state events.
+
+        GitLab keeps no dedicated timeline; the system notes carry
+        the schedule ("enabled an automatic merge ..." when set,
+        "canceled ..." or "aborted ..." when lost) and the resource
+        state events carry merged, closed, and reopened. Both are
+        read and merged oldest first by timestamp. The note wording
+        is a parsing contract with the server; a wording change
+        breaks this read, never the schedule itself.
+        """
+        notes = self._client.paginate(
+            lambda page: (
+                self._client.request(
+                    f"{self._base}/merge_requests/{number}/notes"
+                    f"?page={page}&per_page=50&sort=asc"
+                )
+                or []
+            ),
+            subject=f"{self._base}/merge_requests/{number}/notes",
         )
+        out: list[tuple[str, ScheduleEvent]] = []
+        for note in notes:
+            if not note.get("system"):
+                continue
+            body = str(note.get("body") or "")
+            kind: ScheduleEventKind | None = None
+            if body.startswith("enabled an automatic merge"):
+                kind = "scheduled"
+            elif body.startswith(
+                ("canceled the automatic merge", "aborted the automatic merge")
+            ):
+                kind = "unscheduled"
+            elif body.startswith("added ") and "commit" in body:
+                kind = "pushed"
+            if kind is None:
+                continue
+            created = str(note.get("created_at") or "")
+            out.append(
+                (
+                    created,
+                    ScheduleEvent(
+                        kind=kind,
+                        actor=str((note.get("author") or {}).get("username") or ""),
+                        created=created,
+                    ),
+                )
+            )
+        states = self._client.paginate(
+            lambda page: (
+                self._client.request(
+                    f"{self._base}/merge_requests/{number}/resource_state_events"
+                    f"?page={page}&per_page=50"
+                )
+                or []
+            ),
+            subject=f"{self._base}/merge_requests/{number}/resource_state_events",
+        )
+        kinds: dict[str, ScheduleEventKind] = {
+            "merged": "merged",
+            "closed": "closed",
+            "reopened": "reopened",
+        }
+        for event in states:
+            kind_mapped = kinds.get(str(event.get("state") or ""))
+            if kind_mapped is None:
+                continue
+            created = str(event.get("created_at") or "")
+            out.append(
+                (
+                    created,
+                    ScheduleEvent(
+                        kind=kind_mapped,
+                        actor=str((event.get("user") or {}).get("username") or ""),
+                        created=created,
+                    ),
+                )
+            )
+        out.sort(key=lambda pair: pair[0])
+        return tuple(event for _, event in out)
 
     def comment(self, number: int, body: str) -> None:
         """Post *body* as a note on merge request *number*."""
