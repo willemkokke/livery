@@ -14,10 +14,10 @@ import subprocess
 from pathlib import Path
 from typing import Annotated
 
+import footman
 from footman import doc, fail, group, suggest
 
 from livery.forge import RepoConfig, Repository
-from livery.workshop._brand import runner_prog
 from livery.workshop._git_ops import GitOps
 from livery.workshop._layers import workspace_root
 from livery.workshop._workflow_state import (
@@ -90,8 +90,6 @@ def abort_policy(
     elif len(states) == 1:
         target = states[0]
     elif interactive:
-        import footman
-
         options: list[tuple[str, WorkflowStatus | None]] = [
             (f"{wf.name} ({wf.author or 'unknown author'}, {wf.state.value})", wf)
             for wf in states
@@ -105,7 +103,7 @@ def abort_policy(
             raise SystemExit("  nothing aborted")
     else:
         listed = "\n".join(
-            f"    {runner_prog()} workflow.abort {wf.name}"
+            f"    {footman.prog()} workflow.abort {wf.name}"
             + (f"  ({wf.author}, {wf.state.value})" if wf.author else "")
             for wf in states
         )
@@ -123,7 +121,7 @@ def abort_policy(
         fail(
             f"{target.name}'s state could not be read, and a blip must never"
             " look like permission to tear down. Retry when the forge"
-            f" answers, or `{runner_prog()} workflow.abort {target.name}"
+            f" answers, or `{footman.prog()} workflow.abort {target.name}"
             " --force` if you"
             " know it is dead."
         )
@@ -132,7 +130,7 @@ def abort_policy(
         fail(
             f"{target.name} is {target.state.value} ({who}); aborting it"
             " loses in-flight work. Wait for it, coordinate with its"
-            f" author, or `{runner_prog()} workflow.abort {target.name}"
+            f" author, or `{footman.prog()} workflow.abort {target.name}"
             " --force` to tear"
             " it down deliberately."
         )
@@ -277,7 +275,7 @@ def workflow_configure() -> None:
         # verbatim, never half-teach a token that would not help.
         fail(
             f"the forge declined part of the configuration:\n{error}\n"
-            f"  `{runner_prog()} doctor` says what this forge grants."
+            f"  `{footman.prog()} doctor` says what this forge grants."
         )
     except ForgeError as error:
         used = admin_var or "the everyday token"
@@ -285,7 +283,7 @@ def workflow_configure() -> None:
         fail(
             f"the forge refused the configuration using {used}:\n{error}\n"
             "  An administrator's token applies it: set the per-kind admin"
-            f" variable ({others}) and re-run `{runner_prog()} workflow.configure`."
+            f" variable ({others}) and re-run `{footman.prog()} workflow.configure`."
         )
     print("  repository configuration asserted from the contract")
 
@@ -347,7 +345,7 @@ def _reconcile_configuration(git: GitOps, head_sha: str) -> None:
         indented = "\n".join(f"  {line}" for line in detail.splitlines())
         print(
             "  note: the configuration could not be re-asserted from here;"
-            f" if governance settings changed, `{runner_prog()} workflow.configure`"
+            f" if governance settings changed, `{footman.prog()} workflow.configure`"
             " repairs them (an administrator's token may be needed):\n"
             f"{indented}"
         )

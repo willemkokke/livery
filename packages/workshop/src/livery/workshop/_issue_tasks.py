@@ -23,10 +23,10 @@ import sys
 from pathlib import Path
 from typing import Annotated
 
+import footman
 from footman import Arg, ask, doc, fail, group, suggest
 
 from livery.forge import ForgeError, Repository
-from livery.workshop._brand import runner_prog
 from livery.workshop._git_ops import GitOps
 
 _KINDS = ("feat", "fix", "chore", "docs", "refactor")
@@ -205,7 +205,7 @@ def issue_list() -> None:
 def issue_search(text: Arg[str] = "") -> None:
     """The open issues whose title or body contains *text*."""
     if not text:
-        fail(f"name the text to search for: `{runner_prog()} issue.search watcher`")
+        fail(f"name the text to search for: `{footman.prog()} issue.search watcher`")
     root = _workspace()
     for row in _repo(root).issue.search(text):
         print(f"  #{row.number}  {row.title}")
@@ -222,7 +222,7 @@ def issue_create(
     labels costs the label, never the issue.
     """
     if not title:
-        fail(f'name the issue: `{runner_prog()} issue.create "fix the flaky watch"`')
+        fail(f'name the issue: `{footman.prog()} issue.create "fix the flaky watch"`')
     root = _workspace()
     repo = _repo(root)
     if type not in _KINDS:
@@ -273,8 +273,8 @@ def issue_start(
     """
     if not ref:
         fail(
-            f"name an issue: a number (`{runner_prog()} issue.start 123`) or a quoted"
-            f' title (`{runner_prog()} issue.start "fix the flaky watch"`)'
+            f"name an issue: a number (`{footman.prog()} issue.start 123`) or a quoted"
+            f' title (`{footman.prog()} issue.start "fix the flaky watch"`)'
         )
     root = _workspace()
     repo = _repo(root)
@@ -355,7 +355,7 @@ def issue_start(
             # provision degrades to a note, not a refusal, because
             # the worktree itself is ready to work in.
             print(
-                f"  Note: `{runner_prog()} sync` in the worktree failed; run it there"
+                f"  Note: `{footman.prog()} sync` in the worktree failed; run it there"
             )
         if agent:
             _launch_agent(
@@ -375,7 +375,7 @@ def issue_start(
                 f"  Park them and reuse this checkout:  fm issue.start --wip"
                 f" --no-worktree {work.number}\n"
                 "  Or work in a linked worktree:       "
-                f"{runner_prog()} issue.start"
+                f"{footman.prog()} issue.start"
                 f" {work.number}"
             )
     if git.local_branch_exists(branch):
@@ -469,7 +469,7 @@ def issue_stop(
         if match is None:
             fail(
                 "not on an issue branch: name the issue"
-                f" (`{runner_prog()} issue.stop 123`) or run it from the branch."
+                f" (`{footman.prog()} issue.stop 123`) or run it from the branch."
             )
         number = int(match.group(1))
     branch = _find_branch(git, number)
@@ -552,7 +552,7 @@ def issue_close(
     if not ref:
         fail(
             "name the issue to close:"
-            f" `{runner_prog()} issue.close 123 --reason=wontfix`"
+            f" `{footman.prog()} issue.close 123 --reason=wontfix`"
         )
     if not reason:
         fail(

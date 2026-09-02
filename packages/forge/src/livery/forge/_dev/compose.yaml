@@ -48,7 +48,7 @@ services:
       GITEA_INSTANCE_URL: http://gitea:3000
       # Minted by `fm forge.dev seed` and passed through by the task;
       # never written into this file.
-      GITEA_RUNNER_REGISTRATION_TOKEN: ${LIVERY_GITEA_RUNNER_TOKEN:-}
+      GITEA_RUNNER_REGISTRATION_TOKEN: ${GITEA_RUNNER_TOKEN:-}
       GITEA_RUNNER_NAME: livery-dev
       # Host mode: jobs run inside the runner container itself. The
       # conformance workflows are shell one-liners, so no Docker socket
@@ -65,12 +65,12 @@ services:
     # The image is architecture-dependent: GitLab ships no official
     # arm64 container, but it does ship official arm64 omnibus
     # packages, which the community image wraps. `fm forge.dev.up`
-    # detects the machine and sets LIVERY_GITLAB_IMAGE (an explicit
+    # detects the machine and sets GITLAB_IMAGE (an explicit
     # value in the environment wins):
     #   amd64: gitlab/gitlab-ce (official)
     #   arm64: yrzr/gitlab-ce-arm64v8 (official omnibus, community wrap)
     # Long-lived: started once and kept, minutes to become healthy.
-    image: ${LIVERY_GITLAB_IMAGE:-gitlab/gitlab-ce:latest}
+    image: ${GITLAB_IMAGE:-gitlab/gitlab-ce:latest}
     profiles: [gitlab]
     shm_size: 512m
     environment:

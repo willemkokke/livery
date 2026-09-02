@@ -1,9 +1,9 @@
 """The one conformance suite, run against the GitHub backend.
 
 Modes as for the other harnesses: default replays the committed
-cassettes with no network; ``LIVERY_FORGE_RECORD=1`` records against
+cassettes with no network; ``FORGE_RECORD=1`` records against
 github.com scratch repositories under the signed-in user;
-``LIVERY_FORGE_LIVE=1`` runs live without recording. Live modes
+``FORGE_LIVE=1`` runs live without recording. Live modes
 resolve the token the backend's own way (``GITHUB_TOKEN``, then
 ``gh auth token``) and skip when neither answers.
 """
@@ -28,8 +28,8 @@ from livery.forge.testing import (
 
 CASSETTES = Path(__file__).parent / "cassettes" / "github"
 
-RECORD = os.environ.get("LIVERY_FORGE_RECORD") == "1"
-LIVE = RECORD or os.environ.get("LIVERY_FORGE_LIVE") == "1"
+RECORD = os.environ.get("FORGE_RECORD") == "1"
+LIVE = RECORD or os.environ.get("FORGE_LIVE") == "1"
 
 REPLAY_TOKEN = "replay-token"
 

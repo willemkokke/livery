@@ -127,7 +127,7 @@ class GithubConformanceDriver:
         # personal profile; the env overrides for a different org. The
         # owner must not derive from whoami: replay would then depend
         # on who recorded.
-        self._owner = os.environ.get("LIVERY_FORGE_E2E_OWNER") or "livery-forge-e2e"
+        self._owner = os.environ.get("FORGE_E2E_OWNER") or "livery-forge-e2e"
         self._counter = 0
         self._created: list[tuple[str, str]] = []
         self._files = 0

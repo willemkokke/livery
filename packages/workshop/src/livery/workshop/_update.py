@@ -15,6 +15,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import footman
 from footman import fail
 
 from livery.workshop._git_ops import GitOps
@@ -108,7 +109,6 @@ def refresh_rendered(root: Path) -> list[str]:
         return apply_project(root)
     notes = _align_answers_source(root, template_source(root))
     from livery.workshop import __version__
-    from livery.workshop._brand import runner_prog
 
     result = subprocess.run(
         [
@@ -123,7 +123,7 @@ def refresh_rendered(root: Path) -> list[str]:
             # answer: rebranding an instance is exactly this run
             # under the branded CLI.
             "--data",
-            f"runner_prog={runner_prog()}",
+            f"runner_prog={footman.prog()}",
             "--vcs-ref",
             f"v{__version__}",
             str(root),

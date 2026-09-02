@@ -1,8 +1,8 @@
 """The one conformance suite, run against the GitLab backend.
 
 Modes as for the Gitea harness: default replays the committed
-cassettes with no container; ``LIVERY_FORGE_RECORD=1`` records from
-the live compose container; ``LIVERY_FORGE_LIVE=1`` runs live without
+cassettes with no container; ``FORGE_RECORD=1`` records from
+the live compose container; ``FORGE_LIVE=1`` runs live without
 recording.
 """
 
@@ -25,8 +25,8 @@ from livery.forge.testing import (
 
 CASSETTES = Path(__file__).parent / "cassettes" / "gitlab"
 
-RECORD = os.environ.get("LIVERY_FORGE_RECORD") == "1"
-LIVE = RECORD or os.environ.get("LIVERY_FORGE_LIVE") == "1"
+RECORD = os.environ.get("FORGE_RECORD") == "1"
+LIVE = RECORD or os.environ.get("FORGE_LIVE") == "1"
 
 REPLAY_TOKEN = "replay-token"
 

@@ -23,9 +23,8 @@ from importlib import resources
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import footman
 from footman import fail, task
-
-from livery.workshop._brand import runner_prog
 
 if TYPE_CHECKING:
     from livery.workshop._git_ops import GitOps
@@ -33,8 +32,10 @@ if TYPE_CHECKING:
 from livery.workshop._layers import layer_names, workspace_root
 from livery.workshop._materialise import materialise, write_lf
 
+# Formatted at write time: a module-level f-string would freeze the
+# brand at import.
 _STUB_HEADER = (
-    f"<!-- Managed by `{runner_prog()} sync`: one import per layer fragment, in layer\n"
+    "<!-- Managed by `{prog} sync`: one import per layer fragment, in layer\n"
     "     order, then the repository's own CLAUDE.project.md, which always\n"
     "     wins. Edit CLAUDE.project.md, never this file. -->\n"
 )
@@ -105,7 +106,7 @@ def sync_workspace(root: Path) -> list[str]:
 
     ordered = [name for name in _GUIDANCE_FIRST if name in fragments]
     ordered += [name for name in sorted(fragments) if name not in _GUIDANCE_FIRST]
-    stub = _STUB_HEADER
+    stub = _STUB_HEADER.format(prog=footman.prog())
     stub += "".join(f"@.workshop/{name}\n" for name in ordered)
     stub += "@CLAUDE.project.md\n"
     stub_path = root / "CLAUDE.md"
@@ -173,7 +174,7 @@ def _rebase_step(git: GitOps, onto: str, *, interactive: bool) -> bool:
             print(
                 f"  left {branch} behind {onto}: it carries commits by"
                 f" {listed}, and rewriting them orphans every other copy."
-                f" Bring the base in by merge instead: `{runner_prog()} integrate`."
+                f" Bring the base in by merge instead: `{footman.prog()} integrate`."
             )
             return False
     outcome = _try_rebase(git, onto)
@@ -192,13 +193,13 @@ def _rebase_step(git: GitOps, onto: str, *, interactive: bool) -> bool:
             git._run("rebase", onto)
         raise SystemExit(
             "  the rebase is started and waiting on you: resolve the"
-            f" conflicts, `git rebase --continue`, then run `{runner_prog()} sync`"
+            f" conflicts, `git rebase --continue`, then run `{footman.prog()} sync`"
             " again."
         )
     print(
         f"  left {branch} behind {onto}: the rebase has conflicts. Run"
-        f" `{runner_prog()} sync` interactively to resolve them, or bring the base in"
-        f" by merge with `{runner_prog()} integrate`."
+        f" `{footman.prog()} sync` interactively to resolve them, or bring the base in"
+        f" by merge with `{footman.prog()} integrate`."
     )
     return False
 

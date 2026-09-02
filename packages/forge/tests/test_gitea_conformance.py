@@ -4,9 +4,9 @@ Three modes, chosen by environment:
 
 - default: replay each scenario's committed cassette; no container, no
   network. This is the merge-path mode.
-- ``LIVERY_FORGE_RECORD=1``: run live against the seeded compose
+- ``FORGE_RECORD=1``: run live against the seeded compose
   container and rewrite the cassettes.
-- ``LIVERY_FORGE_LIVE=1``: run live without recording.
+- ``FORGE_LIVE=1``: run live without recording.
 
 Live modes read the credentials `fm forge.dev.up` writes to
 .forge.dev.env and skip when the file is missing.
@@ -31,8 +31,8 @@ from livery.forge.testing import (
 
 CASSETTES = Path(__file__).parent / "cassettes" / "gitea"
 
-RECORD = os.environ.get("LIVERY_FORGE_RECORD") == "1"
-LIVE = RECORD or os.environ.get("LIVERY_FORGE_LIVE") == "1"
+RECORD = os.environ.get("FORGE_RECORD") == "1"
+LIVE = RECORD or os.environ.get("FORGE_LIVE") == "1"
 
 #: The stand-in credential a replay run holds; scrubbing maps it onto
 #: the recording's REDACTED values.

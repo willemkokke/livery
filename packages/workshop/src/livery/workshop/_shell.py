@@ -26,6 +26,7 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import footman
 from footman import Arg, Stdout, group
 
 _KINDS = ("bash", "zsh", "pwsh")
@@ -131,9 +132,8 @@ def shell_launch_plan(kind: str, *, root: Path, tmp_dir: Path) -> ShellLaunch:
     if kind not in _KINDS:
         raise SystemExit(f"unknown shell kind '{kind}' - one of: {', '.join(_KINDS)}")
     binary = _resolve_binary(kind)
-    from livery.workshop._brand import runner_prog
 
-    enter = _POSIX_ENTER.format(prog=runner_prog(), root=_posix_root(root))
+    enter = _POSIX_ENTER.format(prog=footman.prog(), root=_posix_root(root))
     if kind == "bash":
         rc = tmp_dir / "livery-shell-bashrc"
         content = f'[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"\n{enter}\n'
@@ -160,7 +160,7 @@ def shell_launch_plan(kind: str, *, root: Path, tmp_dir: Path) -> ShellLaunch:
             "-NoLogo",
             "-NoExit",
             "-Command",
-            _PWSH_ENTER.format(prog=runner_prog(), root=_pwsh_root(root)),
+            _PWSH_ENTER.format(prog=footman.prog(), root=_pwsh_root(root)),
         ]
     )
 

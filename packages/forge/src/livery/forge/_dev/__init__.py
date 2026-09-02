@@ -67,7 +67,7 @@ if _FORGE_TESTS.is_dir():
         re-recording every exchange, which spends live quota and
         rewrites cassettes nothing asked to change.
         """
-        os.environ["LIVERY_FORGE_RECORD"] = "1"
+        os.environ["FORGE_RECORD"] = "1"
         run_tests = pytest.opts(in_process=False)
         only = ("-k", scenario) if scenario else ()
         backends = (backend,) if backend else ("gitea", "gitlab", "github")
@@ -88,7 +88,7 @@ if _FORGE_TESTS.is_dir():
             # GitHub scratch goes to the e2e organisation, never the
             # signed-in user's profile: scratch stays out of personal
             # namespaces, recording included.
-            os.environ["LIVERY_FORGE_E2E_OWNER"] = "livery-forge-e2e"
+            os.environ["FORGE_E2E_OWNER"] = "livery-forge-e2e"
             run_tests(
                 str(_FORGE_TESTS / "test_github_conformance.py"), "-n", "4", *only
             )
@@ -129,9 +129,9 @@ def _gitlab_image() -> str:
 
     GitLab ships no official arm64 container but does ship official
     arm64 omnibus packages, which the community image wraps. An
-    explicit LIVERY_GITLAB_IMAGE in the environment wins.
+    explicit GITLAB_IMAGE in the environment wins.
     """
-    override = os.environ.get("LIVERY_GITLAB_IMAGE", "")
+    override = os.environ.get("GITLAB_IMAGE", "")
     if override:
         return override
     if platform.machine().lower() in ("arm64", "aarch64"):
@@ -142,8 +142,8 @@ def _gitlab_image() -> str:
 def _compose_env() -> dict[str, str]:
     """The environment every compose invocation runs with."""
     merged = dict(os.environ)
-    merged.setdefault("LIVERY_GITEA_RUNNER_TOKEN", "")
-    merged.setdefault("LIVERY_GITLAB_IMAGE", _gitlab_image())
+    merged.setdefault("GITEA_RUNNER_TOKEN", "")
+    merged.setdefault("GITLAB_IMAGE", _gitlab_image())
     return merged
 
 
@@ -274,7 +274,7 @@ def dev_up(
     if profile in ("gitea", "all"):
         _compose("--profile", "gitea", "up", "-d", "--wait", "gitea")
         _seed_gitea()
-        token = _read_dev_env().get("LIVERY_GITEA_RUNNER_TOKEN", "")
+        token = _read_dev_env().get("GITEA_RUNNER_TOKEN", "")
         _compose(
             "--profile",
             "gitea",
@@ -283,7 +283,7 @@ def dev_up(
             "up",
             "-d",
             "act_runner",
-            env={"LIVERY_GITEA_RUNNER_TOKEN": token},
+            env={"GITEA_RUNNER_TOKEN": token},
         )
         print(f"  gitea: {_GITEA_URL}  credentials: {_dev_env_path().name}")
     if profile in ("gitlab", "all"):
@@ -367,7 +367,7 @@ def _seed_gitea() -> None:
         {
             "GITEA_URL": _GITEA_URL,
             "GITEA_TOKEN": token,
-            "LIVERY_GITEA_RUNNER_TOKEN": runner.stdout.strip(),
+            "GITEA_RUNNER_TOKEN": runner.stdout.strip(),
         }
     )
     print(f"  seed: gitea credentials written to {_dev_env_path().name}")

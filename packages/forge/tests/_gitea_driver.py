@@ -109,7 +109,7 @@ class GiteaConformanceDriver:
         self._gitea = GiteaForge.connect(url=url, token=token, opener=opener)
         # Cloud legs point the scratch at the e2e organisation; the
         # default stays the compose seed org.
-        self._owner_org = os.environ.get("LIVERY_FORGE_E2E_OWNER") or "livery"
+        self._owner_org = os.environ.get("FORGE_E2E_OWNER") or "livery"
         self._client = JsonClient(
             f"{url.rstrip('/')}/api/v1",
             headers={"Authorization": f"token {token}", "Accept": "application/json"},

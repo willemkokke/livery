@@ -23,7 +23,6 @@ from footman import fail
 
 from livery.workshop import _cliff
 from livery.workshop._backends import _python
-from livery.workshop._brand import runner_prog
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package
 from livery.workshop._publish import publish_wheels
@@ -214,7 +213,7 @@ def dev_release(
             if not sys.stdin.isatty():
                 raise SystemExit(
                     "a dev release without a terminal needs the explicit"
-                    f" --yes global (`{runner_prog()} --yes workflow.release ...`);"
+                    f" --yes global (`{footman.prog()} --yes workflow.release ...`);"
                     " silence never publishes."
                 )
             print(f"  skipped {plan.package.name}")

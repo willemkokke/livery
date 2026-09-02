@@ -28,10 +28,10 @@ import time
 from pathlib import Path
 from typing import Annotated
 
+import footman
 from footman import doc, fail
 
 from livery.forge import Repository
-from livery.workshop._brand import runner_prog
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import discover_packages
 from livery.workshop._update import bump_floors, refresh_rendered
@@ -117,8 +117,9 @@ class UpdateDriver:
                     fail(
                         "the update branch carries commits this driver did"
                         f" not make:\n{listed}\n  submit them yourself with"
-                        f" `{runner_prog()} submit`, or abort the update with"
-                        f" `{runner_prog()} workflow.abort {self.name}` and start over."
+                        f" `{footman.prog()} submit`, or abort the update with"
+                        f" `{footman.prog()} workflow.abort {self.name}` and"
+                        " start over."
                     )
                 if not self._refresh:
                     print("  resuming the committed update from its branch")
@@ -259,7 +260,7 @@ def wait_for_releases(
             print(
                 f"  Release(s) in progress: {listed}. This update will be"
                 " finished automatically once they all finish. Ctrl-C is"
-                f" safe; run `{runner_prog()} workflow.update` any time to continue"
+                f" safe; run `{footman.prog()} workflow.update` any time to continue"
                 " later."
             )
         if not interactive and time.monotonic() >= deadline:
@@ -299,7 +300,7 @@ def _drive(
         return
     print(
         "  still parked: the release outlasted the wait. Run"
-        f" `{runner_prog()} workflow.update` any time to continue; the re-run also"
+        f" `{footman.prog()} workflow.update` any time to continue; the re-run also"
         " raises floors to whatever released meanwhile."
     )
 

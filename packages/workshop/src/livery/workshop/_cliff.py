@@ -15,9 +15,9 @@ import subprocess
 import tomllib
 from pathlib import Path
 
+import footman
 from footman import fail
 
-from livery.workshop._brand import runner_prog
 from livery.workshop._packages import Package
 
 #: Where a package's changelog contract lives.
@@ -57,7 +57,8 @@ def config_path(package: Package) -> Path:
     path = package.directory / CONFIG_NAME
     if not path.is_file():
         fail(
-            f"{package.path} has no {CONFIG_NAME}: run `{runner_prog()} template.apply`"
+            f"{package.path} has no {CONFIG_NAME}:"
+            f" run `{footman.prog()} template.apply`"
             " (or re-render the package) so the changelog contract exists"
         )
     return path
@@ -91,7 +92,7 @@ def _run(root: Path, package: Package, *args: str) -> str:
     except FileNotFoundError:
         fail(
             "git-cliff is not installed: it writes the changelogs, and the"
-            f" dev group declares it. Run `{runner_prog()} sync`."
+            f" dev group declares it. Run `{footman.prog()} sync`."
         )
     if result.returncode != 0:
         detail = result.stderr.strip() or result.stdout.strip() or "(no output)"

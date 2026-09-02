@@ -189,17 +189,17 @@ def test_the_emitters_call_the_running_brand(
 ) -> None:
     import re
 
-    from livery.workshop import _brand
+    import footman
+
     from livery.workshop._ci_generate import generate
 
-    monkeypatch.setattr(_brand, "runner_prog", lambda: "hse")
+    monkeypatch.setattr(footman, "prog", lambda: "hse")
     answers = read_answers(ROOT / ".copier-answers.yml")
     for kind in ("github", "gitea", "gitlab"):
         for path, content in generate({**answers, "forge_kind": kind}).items():
             assert "hse check" in content or "hse workflow" in content, path
-            # No emitted verb still calls fm; the coverage meter's
-            # `-m footman` is the one named residue and matches no
-            # bare-word fm.
+            # No emitted word spells fm under a brand: the meter is
+            # env-armed, so not even a module spelling remains.
             assert re.search(r"\bfm\b", content) is None, path
 
 
@@ -209,18 +209,6 @@ def test_the_default_brand_emits_fm() -> None:
     answers = read_answers(ROOT / ".copier-answers.yml")
     gate = generate({**answers, "forge_kind": "github"})[".github/workflows/ci.yml"]
     assert "fm coverage.enforce" in gate
-
-
-def test_runner_prog_reads_the_installed_brand(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import footman
-
-    from livery.workshop._brand import runner_prog
-
-    assert runner_prog() == "fm"  # the default brand
-    monkeypatch.setattr(footman, "prog", lambda: "hse")
-    assert runner_prog() == "hse"
 
 
 def test_the_rendered_prose_spells_the_brand(tmp_path: Path) -> None:
@@ -271,10 +259,11 @@ def test_the_shell_and_completion_lines_run_the_brand() -> None:
 def test_the_pipe_guard_recognises_the_brand(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from livery.workshop import _brand
+    import footman
+
     from livery.workshop._hooks import _runs_runner
 
-    monkeypatch.setattr(_brand, "runner_prog", lambda: "hse")
+    monkeypatch.setattr(footman, "prog", lambda: "hse")
     pattern = _runs_runner()
     assert pattern.search("hse check") is not None
     assert pattern.search("uv run hse check") is not None
@@ -324,7 +313,9 @@ def test_the_remote_update_arm_brands_and_reemits(
     # The arm every instance takes: no local template directory, the
     # source is a git repository, and rebranding is exactly this run
     # under the branded CLI.
-    from livery.workshop import _brand, _templates
+    import footman
+
+    from livery.workshop import _templates
     from livery.workshop._update import refresh_rendered
 
     repo, instance = _instance_from_git_template(tmp_path)
@@ -343,7 +334,7 @@ def test_the_remote_update_arm_brands_and_reemits(
         ["git", "commit", "-qm", "point at the repo"], cwd=instance, check=True
     )
     monkeypatch.setattr(_templates, "local_template_dir", lambda _root: None)
-    monkeypatch.setattr(_brand, "runner_prog", lambda: "hse")
+    monkeypatch.setattr(footman, "prog", lambda: "hse")
     changed = refresh_rendered(instance)
     assert changed  # the update reported work
     tasks = (instance / "tasks.py").read_text()

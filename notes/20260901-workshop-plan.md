@@ -1567,6 +1567,16 @@ not. Gates 0.1.0 together with phases 1-8.
   product name: they configure the package's own containers, never
   an instance. Also ruled: no fallbacks pre-1.0, so runner_prog is
   footman.prog() alone, the lockfile flooring 0.50.
+- 2026-09-02, livery is only the workspace name (Willem): a LIVERY_
+  variable would need a livery package or a cross-package concern,
+  and none exists, so the rig knobs went too (GITEA_RUNNER_TOKEN,
+  GITLAB_IMAGE, FORGE_RECORD, FORGE_LIVE, FORGE_E2E_OWNER); the
+  shared env file's stored token key follows on the next
+  forge.dev.up. runner_prog itself dissolved: with the workaround
+  and fallback gone it renamed footman.prog() and nothing more, so
+  every site calls footman.prog() directly and _brand.py is
+  deleted (the sync stub header formats at write time; a
+  module-level f-string would freeze the brand at import).
 
 ## Open
 

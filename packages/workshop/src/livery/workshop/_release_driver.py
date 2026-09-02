@@ -18,12 +18,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
+import footman
 from footman import doc, fail
 
 from livery.forge import ForgeError, Repository
 from livery.workshop import _cliff
 from livery.workshop._backends import _python
-from livery.workshop._brand import runner_prog
 from livery.workshop._git_ops import GitOps
 from livery.workshop._graph import order_topologically
 from livery.workshop._packages import Package, discover_packages
@@ -89,7 +89,7 @@ def derive_plans(root: Path, members: tuple[Package, ...]) -> tuple[MemberPlan, 
             f"nothing unreleased touches: {names}. Options: drop them from"
             " the set (release the rest now); or, if a hollow re-release is"
             " truly meant, stamp a version explicitly with"
-            f" `{runner_prog()} release.prepare <path> <version>`."
+            f" `{footman.prog()} release.prepare <path> <version>`."
         )
     return tuple(plans)
 
@@ -244,7 +244,8 @@ def require_verified_base(
         if status.state == "failure":
             fail(
                 f"{base}'s own CI is red, and a release publishes that tree."
-                f" Fix {base} first (`{runner_prog()} ci.logs` on it names the job), or"
+                f" Fix {base} first (`{footman.prog()} ci.logs` on it names"
+                " the job), or"
                 " release with --force-unverified-base if you accept an"
                 " unvouched tree."
             )
@@ -275,7 +276,8 @@ def require_verified_base(
                 fail(
                     f"{base} reported a run but never went green within"
                     f" {timeout / 60:.0f} minutes. Check the runners"
-                    f" (`{runner_prog()} status --watch` on a branch follows a run), or"
+                    f" (`{footman.prog()} status --watch` on a branch follows"
+                    " a run), or"
                     " --force-unverified-base."
                 )
             fail(
@@ -464,8 +466,8 @@ def workflow_release(
         fail("no workspace: no livery.toml above the working directory")
     if not paths:
         fail(
-            f"name the set: `{runner_prog()} workflow.release forge` (one package) or"
-            f" `{runner_prog()} workflow.release forge workshop` (an atomic set)"
+            f"name the set: `{footman.prog()} workflow.release forge` (one package) or"
+            f" `{footman.prog()} workflow.release forge workshop` (an atomic set)"
         )
     members = resolve_set(root, tuple(paths))
     git = GitOps(root)
