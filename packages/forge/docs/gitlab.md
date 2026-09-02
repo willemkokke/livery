@@ -35,16 +35,18 @@ the asynchronous behaviours it taught are in
 | `force_cancel` | no | pipelines have plain cancel only; declined by name |
 | `required_contexts` | no | protection cannot name required check contexts; external status checks are tier-gated (Ultimate) and out of protocol |
 | `ci_secrets` | yes | one variables API serves both; a secret is stored masked where the value satisfies the masking rules |
-| `min_approvals` | no | required approval rules are a paid tier; `configure` declines by name before anything applies |
-| `schedule_events` | no | no scheduling timeline is exposed; `is_armed` reads the live `merge_when_pipeline_succeeds` field instead |
+| `min_approvals` | per instance | GitLab licence-gates approval rules; `supports` probes a visible project's rules endpoint once per connection (404 on an unlicensed server, the observed CE answer) and caches the answer. An unlicensed instance's `configure` declines by name before anything applies |
+| `schedule_events` | yes | reconstructed: the system notes carry the schedule and the resource state events carry merged, closed, and reopened, merged oldest first by timestamp. The note wording is a parsing contract with the server |
 
-Approval rules are modelled and declined: the `min_approvals`
-capability answers no, and stating `min_approvals` or
-`require_codeowner_review` in `configure` raises `Unsupported`
-naming it. Merge trains (Premium) and external status checks
-(Ultimate) stay out of the protocol entirely. The container the
-backend develops against is CE, so every mapped endpoint below is a
-CE endpoint.
+Approval rules are implemented and licence-probed: on a licensed
+instance `configure` writes the count and the codeowner requirement
+and `protection` reads them back; on an unlicensed one `supports`
+answers no and `configure` declines by name before anything applies.
+Merge trains (Premium) and external status checks (Ultimate) stay
+out of the protocol entirely. The container the backend develops
+against is CE, so the unlicensed arms are recorded live and the
+licensed arms are pinned replay tests from the documented API,
+awaiting a licensed surface to record against.
 
 ## Forge
 
@@ -67,13 +69,14 @@ CE endpoint.
 | `configure`: `delete_branch_on_merge` | `PUT /projects/:path` | `remove_source_branch_after_merge` |
 | `configure`: `allow_auto_merge` | none needed | merge when pipeline succeeds is always available; the field is a no-op here |
 | `configure`: `required_contexts` | none | raises `Unsupported`; the nearest CE fact, `only_allow_merge_if_pipeline_succeeds`, is a boolean and cannot name contexts |
-| `configure`: `min_approvals` / `require_codeowner_review` | none | raises `Unsupported` naming `min_approvals` before anything applies; approval rules are a paid tier |
+| `configure`: `min_approvals` | `GET`/`POST /projects/:path/approval_rules`, `PUT /projects/:path/approval_rules/:id` | the any-approver rule, created or updated after a read; an unlicensed instance raises `Unsupported` naming `min_approvals` before anything applies |
+| `configure`: `require_codeowner_review` | `POST` / `PATCH /projects/:path/protected_branches` | the `code_owner_approval_required` field on the protected default branch, protecting it first when it is not yet; only that field is written, so existing access levels stay |
 | `configure`: protection | `POST /projects/:path/protected_branches` | the default branch, direct pushes to maintainers-and-up; re-running with the same levels is a no-op |
 | `configure`: `secrets` / `variables` | `POST` / `PUT /projects/:path/variables` | one variables API serves both; a secret is stored `masked` where its value satisfies GitLab's masking rules (single line, 8 characters or more, base64 alphabet) and stored unmasked otherwise, which the backend reports rather than hides |
 | `configure`: `labels` | `POST` / `PUT /projects/:path/labels` | by name; create when missing, update colour and description when present |
 | `tags` | `GET /projects/:path/repository/tags` | names only |
 | `branch_exists` | `GET /projects/:path/repository/branches/:branch` | 404 is False; the branch name is URL-encoded |
-| `protection` | `GET /projects/:path/protected_branches/:branch` plus `GET /projects/:path/approvals` | the guarded flag and the approval count come from different endpoints; the per-path rules behind paid tiers read as inert |
+| `protection` | `GET /projects/:path/protected_branches/:branch` plus `GET /projects/:path/approval_rules` | the guarded flag and the codeowner field from the record, the approval count as the highest over the rules; an unlicensed server's rules 404 and read as zero |
 | `delete_branch` | `DELETE /projects/:path/repository/branches/:branch` | 404 is success |
 
 
@@ -84,7 +87,9 @@ heading carries a per-path approval count in the file itself, the
 one dialect that can. A heading owns every entry after it until the
 next heading, so the plain entries render first and each counted
 entry gets its own trailing section. Enforcing the counts needs a
-paid tier; on CE the file is documentation and reviewer routing.
+paid tier; on CE the file is documentation and reviewer routing,
+and on a licensed instance `configure` turns enforcement on through
+`code_owner_approval_required`.
 
 ## Pull requests (merge requests)
 
@@ -100,6 +105,7 @@ paid tier; on CE the file is documentation and reviewer routing.
 | `arm` | `PUT /projects/:path/merge_requests/:iid/merge` with `merge_when_pipeline_succeeds: true` | 405 until the mergeability recompute finishes and the head pipeline associates with the MR, both asynchronous; the backend surfaces the 405 verbatim and callers retry. The scheduled merge and its branch deletion land asynchronously after the pipeline succeeds: always observed, never assumed |
 | `disarm` | `POST /projects/:path/merge_requests/:iid/cancel_merge_when_pipeline_succeeds` | a refusal because nothing is scheduled maps to False, not an error |
 | `is_armed` | `GET /projects/:path/merge_requests/:iid` | the `merge_when_pipeline_succeeds` field: readable state, no timeline walk |
+| `schedule_events` | `GET /projects/:path/merge_requests/:iid/notes` plus `GET .../resource_state_events` | reconstructed: system notes beginning "enabled an automatic merge" / "canceled the automatic merge" / "aborted the automatic merge" / "added N commit" map to scheduled, unscheduled, and pushed; state events carry merged, closed, reopened; merged oldest first by timestamp |
 | `comment` | `POST /projects/:path/merge_requests/:iid/notes` | `body` |
 
 ## Checks

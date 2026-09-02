@@ -8,22 +8,22 @@
       "status": 200,
       "reason": "OK",
       "content_type": "application/json",
-      "response_body": "{\"id\":552,\"description\":\"\",\"name\":\"conf-status-progression-1\",\"name_with_namespace\":\"livery / conf-status-progression-1\",\"path\":\"conf-status-progression-1\",\"path_with_namespace\":\"livery/conf-status-progression-1\",\"created_at\":\"2026-08-31T15:41:27.030Z\",\"default_branch\":\"main\",\"tag_list\":[],\"topics\":[],\"ssh_url_to_repo\":\"git@localhost:livery/conf-status-progression-1.git\",\"http_url_to_repo\":\"http://localhost:8929/livery/conf-status-progression-1.git\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1\",\"readme_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/blob/main/README.md\",\"forks_count\":0,\"avatar_url\":null,\"star_count\":0,\"last_activity_at\":\"2026-08-31T15:41:27.005Z\",\"visibility\":\"private\",\"namespace\":{\"id\":2,\"name\":\"livery\",\"path\":\"livery\",\"kind\":\"group\",\"full_path\":\"livery\",\"parent_id\":null,\"avatar_url\":null,\"web_url\":\"http://localhost:8929/groups/livery\"},\"repository_storage\":\"default\",\"_links\":{\"self\":\"http://localhost:8929/api/v4/projects/552\",\"issues\":\"http://localhost:8929/api/v4/projects/552/issues\",\"merge_requests\":\"http://localhost:8929/api/v4/projects/552/merge_requests\",\"repo_branches\":\"http://localhost:8929/api/v4/projects/552/repository/branches\",\"labels\":\"http://localhost:8929/api/v4/projects/552/labels\",\"events\":\"http://localhost:8929/api/v4/projects/552/events\",\"members\":\"http://localhost:8929/api/v4/projects/552/members\",\"cluster_agents\":\"http://localhost:8929/api/v4/projects/552/cluster_agents\"},\"marked_for_deletion_at\":null,\"marked_for_deletion_on\":null,\"packages_enabled\":true,\"empty_repo\":false,\"archived\":false,\"resolve_outdated_diff_discussions\":false,\"container_expiration_policy\":{\"cadence\":\"1d\",\"enabled\":false,\"keep_n\":10,\"older_than\":\"90d\",\"name_regex\":\".*\",\"name_regex_keep\":null,\"next_run_at\":\"2026-09-01T15:41:27.034Z\"},\"repository_object_format\":\"sha1\",\"issues_enabled\":true,\"merge_requests_enabled\":true,\"wiki_enabled\":true,\"jobs_enabled\":true,\"snippets_enabled\":true,\"container_registry_enabled\":true,\"service_desk_enabled\":false,\"service_desk_address\":null,\"can_create_merge_request_in\":true,\"issues_access_level\":\"enabled\",\"repository_access_level\":\"enabled\",\"merge_requests_access_level\":\"enabled\",\"forking_access_level\":\"enabled\",\"wiki_access_level\":\"enabled\",\"builds_access_level\":\"enabled\",\"snippets_access_level\":\"enabled\",\"pages_access_level\":\"private\",\"analytics_access_level\":\"enabled\",\"container_registry_access_level\":\"enabled\",\"security_and_compliance_access_level\":\"private\",\"releases_access_level\":\"enabled\",\"environments_access_level\":\"enabled\",\"feature_flags_access_level\":\"enabled\",\"infrastructure_access_level\":\"enabled\",\"monitor_access_level\":\"enabled\",\"model_experiments_access_level\":\"enabled\",\"model_registry_access_level\":\"enabled\",\"package_registry_access_level\":\"enabled\",\"emails_disabled\":false,\"emails_enabled\":true,\"show_diff_preview_in_email\":true,\"shared_runners_enabled\":true,\"lfs_enabled\":true,\"creator_id\":1,\"import_url\":null,\"import_type\":null,\"import_status\":\"none\",\"import_error\":null,\"open_issues_count\":0,\"description_html\":\"\",\"updated_at\":\"2026-08-31T15:41:27.374Z\",\"ci_default_git_depth\":20,\"ci_delete_pipelines_in_seconds\":null,\"ci_forward_deployment_enabled\":true,\"ci_forward_deployment_rollback_allowed\":true,\"ci_job_token_scope_enabled\":false,\"ci_separated_caches\":true,\"ci_allow_fork_pipelines_to_run_in_parent_project\":true,\"ci_id_token_sub_claim_components\":[\"project_path\",\"ref_type\",\"ref\"],\"build_git_strategy\":\"fetch\",\"keep_latest_artifact\":true,\"restrict_user_defined_variables\":true,\"ci_pipeline_variables_minimum_override_role\":\"maintainer\",\"runner_token_expiration_interval\":null,\"group_runners_enabled\":true,\"resource_group_default_process_mode\":\"unordered\",\"auto_cancel_pending_pipelines\":\"enabled\",\"build_timeout\":3600,\"auto_devops_enabled\":true,\"auto_devops_deploy_strategy\":\"continuous\",\"ci_push_repository_for_job_token_allowed\":false,\"runners_token\":\"REDACTED\",\"ci_config_path\":null,\"public_jobs\":true,\"shared_with_groups\":[],\"only_allow_merge_if_pipeline_succeeds\":false,\"allow_merge_on_skipped_pipeline\":null,\"request_access_enabled\":true,\"only_allow_merge_if_all_discussions_are_resolved\":false,\"remove_source_branch_after_merge\":true,\"printing_merge_request_link_enabled\":true,\"merge_method\":\"merge\",\"merge_request_title_regex\":null,\"merge_request_title_regex_description\":null,\"squash_option\":\"default_off\",\"enforce_auth_checks_on_uploads\":true,\"suggestion_commit_message\":null,\"merge_commit_template\":null,\"squash_commit_template\":null,\"issue_branch_template\":null,\"warn_about_potentially_unwanted_characters\":true,\"autoclose_referenced_issues\":true,\"max_artifacts_size\":null,\"permissions\":{\"project_access\":null,\"group_access\":{\"access_level\":50,\"notification_level\":3}}}",
+      "response_body": "{\"id\":574,\"description\":\"\",\"name\":\"conf-status-progression-1\",\"name_with_namespace\":\"livery / conf-status-progression-1\",\"path\":\"conf-status-progression-1\",\"path_with_namespace\":\"livery/conf-status-progression-1\",\"created_at\":\"2026-09-02T10:33:42.084Z\",\"default_branch\":\"main\",\"tag_list\":[],\"topics\":[],\"ssh_url_to_repo\":\"git@localhost:livery/conf-status-progression-1.git\",\"http_url_to_repo\":\"http://localhost:8929/livery/conf-status-progression-1.git\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1\",\"readme_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/blob/main/README.md\",\"forks_count\":0,\"avatar_url\":null,\"star_count\":0,\"last_activity_at\":\"2026-09-02T10:33:42.055Z\",\"visibility\":\"private\",\"namespace\":{\"id\":2,\"name\":\"livery\",\"path\":\"livery\",\"kind\":\"group\",\"full_path\":\"livery\",\"parent_id\":null,\"avatar_url\":null,\"web_url\":\"http://localhost:8929/groups/livery\"},\"repository_storage\":\"default\",\"_links\":{\"self\":\"http://localhost:8929/api/v4/projects/574\",\"issues\":\"http://localhost:8929/api/v4/projects/574/issues\",\"merge_requests\":\"http://localhost:8929/api/v4/projects/574/merge_requests\",\"repo_branches\":\"http://localhost:8929/api/v4/projects/574/repository/branches\",\"labels\":\"http://localhost:8929/api/v4/projects/574/labels\",\"events\":\"http://localhost:8929/api/v4/projects/574/events\",\"members\":\"http://localhost:8929/api/v4/projects/574/members\",\"cluster_agents\":\"http://localhost:8929/api/v4/projects/574/cluster_agents\"},\"marked_for_deletion_at\":null,\"marked_for_deletion_on\":null,\"packages_enabled\":true,\"empty_repo\":false,\"archived\":false,\"resolve_outdated_diff_discussions\":false,\"container_expiration_policy\":{\"cadence\":\"1d\",\"enabled\":false,\"keep_n\":10,\"older_than\":\"90d\",\"name_regex\":\".*\",\"name_regex_keep\":null,\"next_run_at\":\"2026-09-03T10:33:42.089Z\"},\"repository_object_format\":\"sha1\",\"issues_enabled\":true,\"merge_requests_enabled\":true,\"wiki_enabled\":true,\"jobs_enabled\":true,\"snippets_enabled\":true,\"container_registry_enabled\":true,\"service_desk_enabled\":false,\"service_desk_address\":null,\"can_create_merge_request_in\":true,\"issues_access_level\":\"enabled\",\"repository_access_level\":\"enabled\",\"merge_requests_access_level\":\"enabled\",\"forking_access_level\":\"enabled\",\"wiki_access_level\":\"enabled\",\"builds_access_level\":\"enabled\",\"snippets_access_level\":\"enabled\",\"pages_access_level\":\"private\",\"analytics_access_level\":\"enabled\",\"container_registry_access_level\":\"enabled\",\"security_and_compliance_access_level\":\"private\",\"releases_access_level\":\"enabled\",\"environments_access_level\":\"enabled\",\"feature_flags_access_level\":\"enabled\",\"infrastructure_access_level\":\"enabled\",\"monitor_access_level\":\"enabled\",\"model_experiments_access_level\":\"enabled\",\"model_registry_access_level\":\"enabled\",\"package_registry_access_level\":\"enabled\",\"emails_disabled\":false,\"emails_enabled\":true,\"show_diff_preview_in_email\":true,\"shared_runners_enabled\":true,\"lfs_enabled\":true,\"creator_id\":1,\"import_url\":null,\"import_type\":null,\"import_status\":\"none\",\"import_error\":null,\"open_issues_count\":0,\"description_html\":\"\",\"updated_at\":\"2026-09-02T10:33:42.509Z\",\"ci_default_git_depth\":20,\"ci_delete_pipelines_in_seconds\":null,\"ci_forward_deployment_enabled\":true,\"ci_forward_deployment_rollback_allowed\":true,\"ci_job_token_scope_enabled\":false,\"ci_separated_caches\":true,\"ci_allow_fork_pipelines_to_run_in_parent_project\":true,\"ci_id_token_sub_claim_components\":[\"project_path\",\"ref_type\",\"ref\"],\"build_git_strategy\":\"fetch\",\"keep_latest_artifact\":true,\"restrict_user_defined_variables\":true,\"ci_pipeline_variables_minimum_override_role\":\"maintainer\",\"runner_token_expiration_interval\":null,\"group_runners_enabled\":true,\"resource_group_default_process_mode\":\"unordered\",\"auto_cancel_pending_pipelines\":\"enabled\",\"build_timeout\":3600,\"auto_devops_enabled\":true,\"auto_devops_deploy_strategy\":\"continuous\",\"ci_push_repository_for_job_token_allowed\":false,\"runners_token\":\"REDACTED\",\"ci_config_path\":null,\"public_jobs\":true,\"shared_with_groups\":[],\"only_allow_merge_if_pipeline_succeeds\":false,\"allow_merge_on_skipped_pipeline\":null,\"request_access_enabled\":true,\"only_allow_merge_if_all_discussions_are_resolved\":false,\"remove_source_branch_after_merge\":true,\"printing_merge_request_link_enabled\":true,\"merge_method\":\"merge\",\"merge_request_title_regex\":null,\"merge_request_title_regex_description\":null,\"squash_option\":\"default_off\",\"enforce_auth_checks_on_uploads\":true,\"suggestion_commit_message\":null,\"merge_commit_template\":null,\"squash_commit_template\":null,\"issue_branch_template\":null,\"warn_about_potentially_unwanted_characters\":true,\"autoclose_referenced_issues\":true,\"max_artifacts_size\":null,\"permissions\":{\"project_access\":null,\"group_access\":{\"access_level\":50,\"notification_level\":3}}}",
       "location": ""
     },
     {
       "method": "PUT",
-      "url": "http://localhost:8929/api/v4/projects/552",
-      "request_body": "{\"path\": \"corpse-552\", \"name\": \"corpse-552\"}",
+      "url": "http://localhost:8929/api/v4/projects/574",
+      "request_body": "{\"path\": \"corpse-574\", \"name\": \"corpse-574\"}",
       "status": 200,
       "reason": "OK",
       "content_type": "application/json",
-      "response_body": "{\"id\":552,\"description\":\"\",\"name\":\"corpse-552\",\"name_with_namespace\":\"livery / corpse-552\",\"path\":\"corpse-552\",\"path_with_namespace\":\"livery/corpse-552\",\"created_at\":\"2026-08-31T15:41:27.030Z\",\"default_branch\":\"main\",\"tag_list\":[],\"topics\":[],\"ssh_url_to_repo\":\"git@localhost:livery/corpse-552.git\",\"http_url_to_repo\":\"http://localhost:8929/livery/corpse-552.git\",\"web_url\":\"http://localhost:8929/livery/corpse-552\",\"readme_url\":\"http://localhost:8929/livery/corpse-552/-/blob/main/README.md\",\"forks_count\":0,\"avatar_url\":null,\"star_count\":0,\"last_activity_at\":\"2026-09-02T10:33:41.712Z\",\"visibility\":\"private\",\"namespace\":{\"id\":2,\"name\":\"livery\",\"path\":\"livery\",\"kind\":\"group\",\"full_path\":\"livery\",\"parent_id\":null,\"avatar_url\":null,\"web_url\":\"http://localhost:8929/groups/livery\"},\"repository_storage\":\"default\",\"_links\":{\"self\":\"http://localhost:8929/api/v4/projects/552\",\"issues\":\"http://localhost:8929/api/v4/projects/552/issues\",\"merge_requests\":\"http://localhost:8929/api/v4/projects/552/merge_requests\",\"repo_branches\":\"http://localhost:8929/api/v4/projects/552/repository/branches\",\"labels\":\"http://localhost:8929/api/v4/projects/552/labels\",\"events\":\"http://localhost:8929/api/v4/projects/552/events\",\"members\":\"http://localhost:8929/api/v4/projects/552/members\",\"cluster_agents\":\"http://localhost:8929/api/v4/projects/552/cluster_agents\"},\"marked_for_deletion_at\":null,\"marked_for_deletion_on\":null,\"packages_enabled\":true,\"empty_repo\":false,\"archived\":false,\"resolve_outdated_diff_discussions\":false,\"container_expiration_policy\":{\"cadence\":\"1d\",\"enabled\":false,\"keep_n\":10,\"older_than\":\"90d\",\"name_regex\":\".*\",\"name_regex_keep\":null,\"next_run_at\":\"2026-09-01T15:41:27.034Z\"},\"repository_object_format\":\"sha1\",\"issues_enabled\":true,\"merge_requests_enabled\":true,\"wiki_enabled\":true,\"jobs_enabled\":true,\"snippets_enabled\":true,\"container_registry_enabled\":true,\"service_desk_enabled\":false,\"service_desk_address\":null,\"can_create_merge_request_in\":true,\"issues_access_level\":\"enabled\",\"repository_access_level\":\"enabled\",\"merge_requests_access_level\":\"enabled\",\"forking_access_level\":\"enabled\",\"wiki_access_level\":\"enabled\",\"builds_access_level\":\"enabled\",\"snippets_access_level\":\"enabled\",\"pages_access_level\":\"private\",\"analytics_access_level\":\"enabled\",\"container_registry_access_level\":\"enabled\",\"security_and_compliance_access_level\":\"private\",\"releases_access_level\":\"enabled\",\"environments_access_level\":\"enabled\",\"feature_flags_access_level\":\"enabled\",\"infrastructure_access_level\":\"enabled\",\"monitor_access_level\":\"enabled\",\"model_experiments_access_level\":\"enabled\",\"model_registry_access_level\":\"enabled\",\"package_registry_access_level\":\"enabled\",\"emails_disabled\":false,\"emails_enabled\":true,\"show_diff_preview_in_email\":true,\"shared_runners_enabled\":true,\"lfs_enabled\":true,\"creator_id\":1,\"import_url\":null,\"import_type\":null,\"import_status\":\"none\",\"import_error\":null,\"open_issues_count\":0,\"description_html\":\"\",\"updated_at\":\"2026-09-02T10:33:41.726Z\",\"ci_default_git_depth\":20,\"ci_delete_pipelines_in_seconds\":null,\"ci_forward_deployment_enabled\":true,\"ci_forward_deployment_rollback_allowed\":true,\"ci_job_token_scope_enabled\":false,\"ci_separated_caches\":true,\"ci_allow_fork_pipelines_to_run_in_parent_project\":true,\"ci_id_token_sub_claim_components\":[\"project_path\",\"ref_type\",\"ref\"],\"build_git_strategy\":\"fetch\",\"keep_latest_artifact\":true,\"restrict_user_defined_variables\":true,\"ci_pipeline_variables_minimum_override_role\":\"maintainer\",\"runner_token_expiration_interval\":null,\"group_runners_enabled\":true,\"resource_group_default_process_mode\":\"unordered\",\"auto_cancel_pending_pipelines\":\"enabled\",\"build_timeout\":3600,\"auto_devops_enabled\":true,\"auto_devops_deploy_strategy\":\"continuous\",\"ci_push_repository_for_job_token_allowed\":false,\"runners_token\":\"REDACTED\",\"ci_config_path\":null,\"public_jobs\":true,\"shared_with_groups\":[],\"only_allow_merge_if_pipeline_succeeds\":false,\"allow_merge_on_skipped_pipeline\":null,\"request_access_enabled\":true,\"only_allow_merge_if_all_discussions_are_resolved\":false,\"remove_source_branch_after_merge\":true,\"printing_merge_request_link_enabled\":true,\"merge_method\":\"merge\",\"merge_request_title_regex\":null,\"merge_request_title_regex_description\":null,\"squash_option\":\"default_off\",\"enforce_auth_checks_on_uploads\":true,\"suggestion_commit_message\":null,\"merge_commit_template\":null,\"squash_commit_template\":null,\"issue_branch_template\":null,\"warn_about_potentially_unwanted_characters\":true,\"autoclose_referenced_issues\":true,\"max_artifacts_size\":null}",
+      "response_body": "{\"id\":574,\"description\":\"\",\"name\":\"corpse-574\",\"name_with_namespace\":\"livery / corpse-574\",\"path\":\"corpse-574\",\"path_with_namespace\":\"livery/corpse-574\",\"created_at\":\"2026-09-02T10:33:42.084Z\",\"default_branch\":\"main\",\"tag_list\":[],\"topics\":[],\"ssh_url_to_repo\":\"git@localhost:livery/corpse-574.git\",\"http_url_to_repo\":\"http://localhost:8929/livery/corpse-574.git\",\"web_url\":\"http://localhost:8929/livery/corpse-574\",\"readme_url\":\"http://localhost:8929/livery/corpse-574/-/blob/main/README.md\",\"forks_count\":0,\"avatar_url\":null,\"star_count\":0,\"last_activity_at\":\"2026-09-02T12:19:39.282Z\",\"visibility\":\"private\",\"namespace\":{\"id\":2,\"name\":\"livery\",\"path\":\"livery\",\"kind\":\"group\",\"full_path\":\"livery\",\"parent_id\":null,\"avatar_url\":null,\"web_url\":\"http://localhost:8929/groups/livery\"},\"repository_storage\":\"default\",\"_links\":{\"self\":\"http://localhost:8929/api/v4/projects/574\",\"issues\":\"http://localhost:8929/api/v4/projects/574/issues\",\"merge_requests\":\"http://localhost:8929/api/v4/projects/574/merge_requests\",\"repo_branches\":\"http://localhost:8929/api/v4/projects/574/repository/branches\",\"labels\":\"http://localhost:8929/api/v4/projects/574/labels\",\"events\":\"http://localhost:8929/api/v4/projects/574/events\",\"members\":\"http://localhost:8929/api/v4/projects/574/members\",\"cluster_agents\":\"http://localhost:8929/api/v4/projects/574/cluster_agents\"},\"marked_for_deletion_at\":null,\"marked_for_deletion_on\":null,\"packages_enabled\":true,\"empty_repo\":false,\"archived\":false,\"resolve_outdated_diff_discussions\":false,\"container_expiration_policy\":{\"cadence\":\"1d\",\"enabled\":false,\"keep_n\":10,\"older_than\":\"90d\",\"name_regex\":\".*\",\"name_regex_keep\":null,\"next_run_at\":\"2026-09-03T10:33:42.089Z\"},\"repository_object_format\":\"sha1\",\"issues_enabled\":true,\"merge_requests_enabled\":true,\"wiki_enabled\":true,\"jobs_enabled\":true,\"snippets_enabled\":true,\"container_registry_enabled\":true,\"service_desk_enabled\":false,\"service_desk_address\":null,\"can_create_merge_request_in\":true,\"issues_access_level\":\"enabled\",\"repository_access_level\":\"enabled\",\"merge_requests_access_level\":\"enabled\",\"forking_access_level\":\"enabled\",\"wiki_access_level\":\"enabled\",\"builds_access_level\":\"enabled\",\"snippets_access_level\":\"enabled\",\"pages_access_level\":\"private\",\"analytics_access_level\":\"enabled\",\"container_registry_access_level\":\"enabled\",\"security_and_compliance_access_level\":\"private\",\"releases_access_level\":\"enabled\",\"environments_access_level\":\"enabled\",\"feature_flags_access_level\":\"enabled\",\"infrastructure_access_level\":\"enabled\",\"monitor_access_level\":\"enabled\",\"model_experiments_access_level\":\"enabled\",\"model_registry_access_level\":\"enabled\",\"package_registry_access_level\":\"enabled\",\"emails_disabled\":false,\"emails_enabled\":true,\"show_diff_preview_in_email\":true,\"shared_runners_enabled\":true,\"lfs_enabled\":true,\"creator_id\":1,\"import_url\":null,\"import_type\":null,\"import_status\":\"none\",\"import_error\":null,\"open_issues_count\":0,\"description_html\":\"\",\"updated_at\":\"2026-09-02T12:19:39.295Z\",\"ci_default_git_depth\":20,\"ci_delete_pipelines_in_seconds\":null,\"ci_forward_deployment_enabled\":true,\"ci_forward_deployment_rollback_allowed\":true,\"ci_job_token_scope_enabled\":false,\"ci_separated_caches\":true,\"ci_allow_fork_pipelines_to_run_in_parent_project\":true,\"ci_id_token_sub_claim_components\":[\"project_path\",\"ref_type\",\"ref\"],\"build_git_strategy\":\"fetch\",\"keep_latest_artifact\":true,\"restrict_user_defined_variables\":true,\"ci_pipeline_variables_minimum_override_role\":\"maintainer\",\"runner_token_expiration_interval\":null,\"group_runners_enabled\":true,\"resource_group_default_process_mode\":\"unordered\",\"auto_cancel_pending_pipelines\":\"enabled\",\"build_timeout\":3600,\"auto_devops_enabled\":true,\"auto_devops_deploy_strategy\":\"continuous\",\"ci_push_repository_for_job_token_allowed\":false,\"runners_token\":\"REDACTED\",\"ci_config_path\":null,\"public_jobs\":true,\"shared_with_groups\":[],\"only_allow_merge_if_pipeline_succeeds\":false,\"allow_merge_on_skipped_pipeline\":null,\"request_access_enabled\":true,\"only_allow_merge_if_all_discussions_are_resolved\":false,\"remove_source_branch_after_merge\":true,\"printing_merge_request_link_enabled\":true,\"merge_method\":\"merge\",\"merge_request_title_regex\":null,\"merge_request_title_regex_description\":null,\"squash_option\":\"default_off\",\"enforce_auth_checks_on_uploads\":true,\"suggestion_commit_message\":null,\"merge_commit_template\":null,\"squash_commit_template\":null,\"issue_branch_template\":null,\"warn_about_potentially_unwanted_characters\":true,\"autoclose_referenced_issues\":true,\"max_artifacts_size\":null}",
       "location": ""
     },
     {
       "method": "DELETE",
-      "url": "http://localhost:8929/api/v4/projects/livery%2Fcorpse-552",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fcorpse-574",
       "request_body": "",
       "status": 202,
       "reason": "Accepted",
@@ -48,7 +48,7 @@
       "status": 200,
       "reason": "OK",
       "content_type": "application/json",
-      "response_body": "[{\"id\":2,\"name\":\"livery\",\"path\":\"livery\",\"kind\":\"group\",\"full_path\":\"livery\",\"parent_id\":null,\"avatar_url\":null,\"web_url\":\"http://localhost:8929/groups/livery\",\"members_count_with_descendants\":1,\"root_repository_size\":139504,\"projects_count\":573}]",
+      "response_body": "[{\"id\":2,\"name\":\"livery\",\"path\":\"livery\",\"kind\":\"group\",\"full_path\":\"livery\",\"parent_id\":null,\"avatar_url\":null,\"web_url\":\"http://localhost:8929/groups/livery\",\"members_count_with_descendants\":1,\"root_repository_size\":140742,\"projects_count\":613}]",
       "location": ""
     },
     {
@@ -58,7 +58,7 @@
       "status": 201,
       "reason": "Created",
       "content_type": "application/json",
-      "response_body": "{\"id\":574,\"description\":\"\",\"name\":\"conf-status-progression-1\",\"name_with_namespace\":\"livery / conf-status-progression-1\",\"path\":\"conf-status-progression-1\",\"path_with_namespace\":\"livery/conf-status-progression-1\",\"created_at\":\"2026-09-02T10:33:42.084Z\",\"default_branch\":\"main\",\"tag_list\":[],\"topics\":[],\"ssh_url_to_repo\":\"git@localhost:livery/conf-status-progression-1.git\",\"http_url_to_repo\":\"http://localhost:8929/livery/conf-status-progression-1.git\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1\",\"readme_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/blob/main/README.md\",\"forks_count\":0,\"avatar_url\":null,\"star_count\":0,\"last_activity_at\":\"2026-09-02T10:33:42.055Z\",\"visibility\":\"private\",\"namespace\":{\"id\":2,\"name\":\"livery\",\"path\":\"livery\",\"kind\":\"group\",\"full_path\":\"livery\",\"parent_id\":null,\"avatar_url\":null,\"web_url\":\"http://localhost:8929/groups/livery\"},\"repository_storage\":\"default\",\"_links\":{\"self\":\"http://localhost:8929/api/v4/projects/574\",\"issues\":\"http://localhost:8929/api/v4/projects/574/issues\",\"merge_requests\":\"http://localhost:8929/api/v4/projects/574/merge_requests\",\"repo_branches\":\"http://localhost:8929/api/v4/projects/574/repository/branches\",\"labels\":\"http://localhost:8929/api/v4/projects/574/labels\",\"events\":\"http://localhost:8929/api/v4/projects/574/events\",\"members\":\"http://localhost:8929/api/v4/projects/574/members\",\"cluster_agents\":\"http://localhost:8929/api/v4/projects/574/cluster_agents\"},\"marked_for_deletion_at\":null,\"marked_for_deletion_on\":null,\"packages_enabled\":true,\"empty_repo\":false,\"archived\":false,\"resolve_outdated_diff_discussions\":false,\"container_expiration_policy\":{\"cadence\":\"1d\",\"enabled\":false,\"keep_n\":10,\"older_than\":\"90d\",\"name_regex\":\".*\",\"name_regex_keep\":null,\"next_run_at\":\"2026-09-03T10:33:42.089Z\"},\"repository_object_format\":\"sha1\",\"issues_enabled\":true,\"merge_requests_enabled\":true,\"wiki_enabled\":true,\"jobs_enabled\":true,\"snippets_enabled\":true,\"container_registry_enabled\":true,\"service_desk_enabled\":false,\"service_desk_address\":null,\"can_create_merge_request_in\":true,\"issues_access_level\":\"enabled\",\"repository_access_level\":\"enabled\",\"merge_requests_access_level\":\"enabled\",\"forking_access_level\":\"enabled\",\"wiki_access_level\":\"enabled\",\"builds_access_level\":\"enabled\",\"snippets_access_level\":\"enabled\",\"pages_access_level\":\"private\",\"analytics_access_level\":\"enabled\",\"container_registry_access_level\":\"enabled\",\"security_and_compliance_access_level\":\"private\",\"releases_access_level\":\"enabled\",\"environments_access_level\":\"enabled\",\"feature_flags_access_level\":\"enabled\",\"infrastructure_access_level\":\"enabled\",\"monitor_access_level\":\"enabled\",\"model_experiments_access_level\":\"enabled\",\"model_registry_access_level\":\"enabled\",\"package_registry_access_level\":\"enabled\",\"emails_disabled\":false,\"emails_enabled\":true,\"show_diff_preview_in_email\":true,\"shared_runners_enabled\":true,\"lfs_enabled\":true,\"creator_id\":1,\"import_url\":null,\"import_type\":null,\"import_status\":\"none\",\"import_error\":null,\"open_issues_count\":0,\"description_html\":\"\",\"updated_at\":\"2026-09-02T10:33:42.084Z\",\"ci_default_git_depth\":20,\"ci_delete_pipelines_in_seconds\":null,\"ci_forward_deployment_enabled\":true,\"ci_forward_deployment_rollback_allowed\":true,\"ci_job_token_scope_enabled\":false,\"ci_separated_caches\":true,\"ci_allow_fork_pipelines_to_run_in_parent_project\":true,\"ci_id_token_sub_claim_components\":[\"project_path\",\"ref_type\",\"ref\"],\"build_git_strategy\":\"fetch\",\"keep_latest_artifact\":true,\"restrict_user_defined_variables\":false,\"ci_pipeline_variables_minimum_override_role\":\"developer\",\"runner_token_expiration_interval\":null,\"group_runners_enabled\":true,\"resource_group_default_process_mode\":\"unordered\",\"auto_cancel_pending_pipelines\":\"enabled\",\"build_timeout\":3600,\"auto_devops_enabled\":true,\"auto_devops_deploy_strategy\":\"continuous\",\"ci_push_repository_for_job_token_allowed\":false,\"runners_token\":\"REDACTED\",\"ci_config_path\":null,\"public_jobs\":true,\"shared_with_groups\":[],\"only_allow_merge_if_pipeline_succeeds\":false,\"allow_merge_on_skipped_pipeline\":null,\"request_access_enabled\":true,\"only_allow_merge_if_all_discussions_are_resolved\":false,\"remove_source_branch_after_merge\":true,\"printing_merge_request_link_enabled\":true,\"merge_method\":\"merge\",\"merge_request_title_regex\":null,\"merge_request_title_regex_description\":null,\"squash_option\":\"default_off\",\"enforce_auth_checks_on_uploads\":true,\"suggestion_commit_message\":null,\"merge_commit_template\":null,\"squash_commit_template\":null,\"issue_branch_template\":null,\"warn_about_potentially_unwanted_characters\":true,\"autoclose_referenced_issues\":true,\"max_artifacts_size\":null}",
+      "response_body": "{\"id\":614,\"description\":\"\",\"name\":\"conf-status-progression-1\",\"name_with_namespace\":\"livery / conf-status-progression-1\",\"path\":\"conf-status-progression-1\",\"path_with_namespace\":\"livery/conf-status-progression-1\",\"created_at\":\"2026-09-02T12:19:39.583Z\",\"default_branch\":\"main\",\"tag_list\":[],\"topics\":[],\"ssh_url_to_repo\":\"git@localhost:livery/conf-status-progression-1.git\",\"http_url_to_repo\":\"http://localhost:8929/livery/conf-status-progression-1.git\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1\",\"readme_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/blob/main/README.md\",\"forks_count\":0,\"avatar_url\":null,\"star_count\":0,\"last_activity_at\":\"2026-09-02T12:19:39.557Z\",\"visibility\":\"private\",\"namespace\":{\"id\":2,\"name\":\"livery\",\"path\":\"livery\",\"kind\":\"group\",\"full_path\":\"livery\",\"parent_id\":null,\"avatar_url\":null,\"web_url\":\"http://localhost:8929/groups/livery\"},\"repository_storage\":\"default\",\"_links\":{\"self\":\"http://localhost:8929/api/v4/projects/614\",\"issues\":\"http://localhost:8929/api/v4/projects/614/issues\",\"merge_requests\":\"http://localhost:8929/api/v4/projects/614/merge_requests\",\"repo_branches\":\"http://localhost:8929/api/v4/projects/614/repository/branches\",\"labels\":\"http://localhost:8929/api/v4/projects/614/labels\",\"events\":\"http://localhost:8929/api/v4/projects/614/events\",\"members\":\"http://localhost:8929/api/v4/projects/614/members\",\"cluster_agents\":\"http://localhost:8929/api/v4/projects/614/cluster_agents\"},\"marked_for_deletion_at\":null,\"marked_for_deletion_on\":null,\"packages_enabled\":true,\"empty_repo\":false,\"archived\":false,\"resolve_outdated_diff_discussions\":false,\"container_expiration_policy\":{\"cadence\":\"1d\",\"enabled\":false,\"keep_n\":10,\"older_than\":\"90d\",\"name_regex\":\".*\",\"name_regex_keep\":null,\"next_run_at\":\"2026-09-03T12:19:39.588Z\"},\"repository_object_format\":\"sha1\",\"issues_enabled\":true,\"merge_requests_enabled\":true,\"wiki_enabled\":true,\"jobs_enabled\":true,\"snippets_enabled\":true,\"container_registry_enabled\":true,\"service_desk_enabled\":false,\"service_desk_address\":null,\"can_create_merge_request_in\":true,\"issues_access_level\":\"enabled\",\"repository_access_level\":\"enabled\",\"merge_requests_access_level\":\"enabled\",\"forking_access_level\":\"enabled\",\"wiki_access_level\":\"enabled\",\"builds_access_level\":\"enabled\",\"snippets_access_level\":\"enabled\",\"pages_access_level\":\"private\",\"analytics_access_level\":\"enabled\",\"container_registry_access_level\":\"enabled\",\"security_and_compliance_access_level\":\"private\",\"releases_access_level\":\"enabled\",\"environments_access_level\":\"enabled\",\"feature_flags_access_level\":\"enabled\",\"infrastructure_access_level\":\"enabled\",\"monitor_access_level\":\"enabled\",\"model_experiments_access_level\":\"enabled\",\"model_registry_access_level\":\"enabled\",\"package_registry_access_level\":\"enabled\",\"emails_disabled\":false,\"emails_enabled\":true,\"show_diff_preview_in_email\":true,\"shared_runners_enabled\":true,\"lfs_enabled\":true,\"creator_id\":1,\"import_url\":null,\"import_type\":null,\"import_status\":\"none\",\"import_error\":null,\"open_issues_count\":0,\"description_html\":\"\",\"updated_at\":\"2026-09-02T12:19:39.583Z\",\"ci_default_git_depth\":20,\"ci_delete_pipelines_in_seconds\":null,\"ci_forward_deployment_enabled\":true,\"ci_forward_deployment_rollback_allowed\":true,\"ci_job_token_scope_enabled\":false,\"ci_separated_caches\":true,\"ci_allow_fork_pipelines_to_run_in_parent_project\":true,\"ci_id_token_sub_claim_components\":[\"project_path\",\"ref_type\",\"ref\"],\"build_git_strategy\":\"fetch\",\"keep_latest_artifact\":true,\"restrict_user_defined_variables\":false,\"ci_pipeline_variables_minimum_override_role\":\"developer\",\"runner_token_expiration_interval\":null,\"group_runners_enabled\":true,\"resource_group_default_process_mode\":\"unordered\",\"auto_cancel_pending_pipelines\":\"enabled\",\"build_timeout\":3600,\"auto_devops_enabled\":true,\"auto_devops_deploy_strategy\":\"continuous\",\"ci_push_repository_for_job_token_allowed\":false,\"runners_token\":\"REDACTED\",\"ci_config_path\":null,\"public_jobs\":true,\"shared_with_groups\":[],\"only_allow_merge_if_pipeline_succeeds\":false,\"allow_merge_on_skipped_pipeline\":null,\"request_access_enabled\":true,\"only_allow_merge_if_all_discussions_are_resolved\":false,\"remove_source_branch_after_merge\":true,\"printing_merge_request_link_enabled\":true,\"merge_method\":\"merge\",\"merge_request_title_regex\":null,\"merge_request_title_regex_description\":null,\"squash_option\":\"default_off\",\"enforce_auth_checks_on_uploads\":true,\"suggestion_commit_message\":null,\"merge_commit_template\":null,\"squash_commit_template\":null,\"issue_branch_template\":null,\"warn_about_potentially_unwanted_characters\":true,\"autoclose_referenced_issues\":true,\"max_artifacts_size\":null}",
       "location": ""
     },
     {
@@ -68,7 +68,7 @@
       "status": 200,
       "reason": "OK",
       "content_type": "application/json",
-      "response_body": "{\"id\":574,\"description\":\"\",\"name\":\"conf-status-progression-1\",\"name_with_namespace\":\"livery / conf-status-progression-1\",\"path\":\"conf-status-progression-1\",\"path_with_namespace\":\"livery/conf-status-progression-1\",\"created_at\":\"2026-09-02T10:33:42.084Z\",\"default_branch\":\"main\",\"tag_list\":[],\"topics\":[],\"ssh_url_to_repo\":\"git@localhost:livery/conf-status-progression-1.git\",\"http_url_to_repo\":\"http://localhost:8929/livery/conf-status-progression-1.git\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1\",\"readme_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/blob/main/README.md\",\"forks_count\":0,\"avatar_url\":null,\"star_count\":0,\"last_activity_at\":\"2026-09-02T10:33:42.055Z\",\"visibility\":\"private\",\"namespace\":{\"id\":2,\"name\":\"livery\",\"path\":\"livery\",\"kind\":\"group\",\"full_path\":\"livery\",\"parent_id\":null,\"avatar_url\":null,\"web_url\":\"http://localhost:8929/groups/livery\"},\"repository_storage\":\"default\",\"_links\":{\"self\":\"http://localhost:8929/api/v4/projects/574\",\"issues\":\"http://localhost:8929/api/v4/projects/574/issues\",\"merge_requests\":\"http://localhost:8929/api/v4/projects/574/merge_requests\",\"repo_branches\":\"http://localhost:8929/api/v4/projects/574/repository/branches\",\"labels\":\"http://localhost:8929/api/v4/projects/574/labels\",\"events\":\"http://localhost:8929/api/v4/projects/574/events\",\"members\":\"http://localhost:8929/api/v4/projects/574/members\",\"cluster_agents\":\"http://localhost:8929/api/v4/projects/574/cluster_agents\"},\"marked_for_deletion_at\":null,\"marked_for_deletion_on\":null,\"packages_enabled\":true,\"empty_repo\":false,\"archived\":false,\"resolve_outdated_diff_discussions\":false,\"container_expiration_policy\":{\"cadence\":\"1d\",\"enabled\":false,\"keep_n\":10,\"older_than\":\"90d\",\"name_regex\":\".*\",\"name_regex_keep\":null,\"next_run_at\":\"2026-09-03T10:33:42.089Z\"},\"repository_object_format\":\"sha1\",\"issues_enabled\":true,\"merge_requests_enabled\":true,\"wiki_enabled\":true,\"jobs_enabled\":true,\"snippets_enabled\":true,\"container_registry_enabled\":true,\"service_desk_enabled\":false,\"service_desk_address\":null,\"can_create_merge_request_in\":true,\"issues_access_level\":\"enabled\",\"repository_access_level\":\"enabled\",\"merge_requests_access_level\":\"enabled\",\"forking_access_level\":\"enabled\",\"wiki_access_level\":\"enabled\",\"builds_access_level\":\"enabled\",\"snippets_access_level\":\"enabled\",\"pages_access_level\":\"private\",\"analytics_access_level\":\"enabled\",\"container_registry_access_level\":\"enabled\",\"security_and_compliance_access_level\":\"private\",\"releases_access_level\":\"enabled\",\"environments_access_level\":\"enabled\",\"feature_flags_access_level\":\"enabled\",\"infrastructure_access_level\":\"enabled\",\"monitor_access_level\":\"enabled\",\"model_experiments_access_level\":\"enabled\",\"model_registry_access_level\":\"enabled\",\"package_registry_access_level\":\"enabled\",\"emails_disabled\":false,\"emails_enabled\":true,\"show_diff_preview_in_email\":true,\"shared_runners_enabled\":true,\"lfs_enabled\":true,\"creator_id\":1,\"import_url\":null,\"import_type\":null,\"import_status\":\"none\",\"import_error\":null,\"open_issues_count\":0,\"description_html\":\"\",\"updated_at\":\"2026-09-02T10:33:42.084Z\",\"ci_default_git_depth\":20,\"ci_delete_pipelines_in_seconds\":null,\"ci_forward_deployment_enabled\":true,\"ci_forward_deployment_rollback_allowed\":true,\"ci_job_token_scope_enabled\":false,\"ci_separated_caches\":true,\"ci_allow_fork_pipelines_to_run_in_parent_project\":true,\"ci_id_token_sub_claim_components\":[\"project_path\",\"ref_type\",\"ref\"],\"build_git_strategy\":\"fetch\",\"keep_latest_artifact\":true,\"restrict_user_defined_variables\":true,\"ci_pipeline_variables_minimum_override_role\":\"maintainer\",\"runner_token_expiration_interval\":null,\"group_runners_enabled\":true,\"resource_group_default_process_mode\":\"unordered\",\"auto_cancel_pending_pipelines\":\"enabled\",\"build_timeout\":3600,\"auto_devops_enabled\":true,\"auto_devops_deploy_strategy\":\"continuous\",\"ci_push_repository_for_job_token_allowed\":false,\"runners_token\":\"REDACTED\",\"ci_config_path\":null,\"public_jobs\":true,\"shared_with_groups\":[],\"only_allow_merge_if_pipeline_succeeds\":false,\"allow_merge_on_skipped_pipeline\":null,\"request_access_enabled\":true,\"only_allow_merge_if_all_discussions_are_resolved\":false,\"remove_source_branch_after_merge\":true,\"printing_merge_request_link_enabled\":true,\"merge_method\":\"merge\",\"merge_request_title_regex\":null,\"merge_request_title_regex_description\":null,\"squash_option\":\"default_off\",\"enforce_auth_checks_on_uploads\":true,\"suggestion_commit_message\":null,\"merge_commit_template\":null,\"squash_commit_template\":null,\"issue_branch_template\":null,\"warn_about_potentially_unwanted_characters\":true,\"autoclose_referenced_issues\":true,\"max_artifacts_size\":null}",
+      "response_body": "{\"id\":614,\"description\":\"\",\"name\":\"conf-status-progression-1\",\"name_with_namespace\":\"livery / conf-status-progression-1\",\"path\":\"conf-status-progression-1\",\"path_with_namespace\":\"livery/conf-status-progression-1\",\"created_at\":\"2026-09-02T12:19:39.583Z\",\"default_branch\":\"main\",\"tag_list\":[],\"topics\":[],\"ssh_url_to_repo\":\"git@localhost:livery/conf-status-progression-1.git\",\"http_url_to_repo\":\"http://localhost:8929/livery/conf-status-progression-1.git\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1\",\"readme_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/blob/main/README.md\",\"forks_count\":0,\"avatar_url\":null,\"star_count\":0,\"last_activity_at\":\"2026-09-02T12:19:39.557Z\",\"visibility\":\"private\",\"namespace\":{\"id\":2,\"name\":\"livery\",\"path\":\"livery\",\"kind\":\"group\",\"full_path\":\"livery\",\"parent_id\":null,\"avatar_url\":null,\"web_url\":\"http://localhost:8929/groups/livery\"},\"repository_storage\":\"default\",\"_links\":{\"self\":\"http://localhost:8929/api/v4/projects/614\",\"issues\":\"http://localhost:8929/api/v4/projects/614/issues\",\"merge_requests\":\"http://localhost:8929/api/v4/projects/614/merge_requests\",\"repo_branches\":\"http://localhost:8929/api/v4/projects/614/repository/branches\",\"labels\":\"http://localhost:8929/api/v4/projects/614/labels\",\"events\":\"http://localhost:8929/api/v4/projects/614/events\",\"members\":\"http://localhost:8929/api/v4/projects/614/members\",\"cluster_agents\":\"http://localhost:8929/api/v4/projects/614/cluster_agents\"},\"marked_for_deletion_at\":null,\"marked_for_deletion_on\":null,\"packages_enabled\":true,\"empty_repo\":false,\"archived\":false,\"resolve_outdated_diff_discussions\":false,\"container_expiration_policy\":{\"cadence\":\"1d\",\"enabled\":false,\"keep_n\":10,\"older_than\":\"90d\",\"name_regex\":\".*\",\"name_regex_keep\":null,\"next_run_at\":\"2026-09-03T12:19:39.588Z\"},\"repository_object_format\":\"sha1\",\"issues_enabled\":true,\"merge_requests_enabled\":true,\"wiki_enabled\":true,\"jobs_enabled\":true,\"snippets_enabled\":true,\"container_registry_enabled\":true,\"service_desk_enabled\":false,\"service_desk_address\":null,\"can_create_merge_request_in\":true,\"issues_access_level\":\"enabled\",\"repository_access_level\":\"enabled\",\"merge_requests_access_level\":\"enabled\",\"forking_access_level\":\"enabled\",\"wiki_access_level\":\"enabled\",\"builds_access_level\":\"enabled\",\"snippets_access_level\":\"enabled\",\"pages_access_level\":\"private\",\"analytics_access_level\":\"enabled\",\"container_registry_access_level\":\"enabled\",\"security_and_compliance_access_level\":\"private\",\"releases_access_level\":\"enabled\",\"environments_access_level\":\"enabled\",\"feature_flags_access_level\":\"enabled\",\"infrastructure_access_level\":\"enabled\",\"monitor_access_level\":\"enabled\",\"model_experiments_access_level\":\"enabled\",\"model_registry_access_level\":\"enabled\",\"package_registry_access_level\":\"enabled\",\"emails_disabled\":false,\"emails_enabled\":true,\"show_diff_preview_in_email\":true,\"shared_runners_enabled\":true,\"lfs_enabled\":true,\"creator_id\":1,\"import_url\":null,\"import_type\":null,\"import_status\":\"none\",\"import_error\":null,\"open_issues_count\":0,\"description_html\":\"\",\"updated_at\":\"2026-09-02T12:19:39.583Z\",\"ci_default_git_depth\":20,\"ci_delete_pipelines_in_seconds\":null,\"ci_forward_deployment_enabled\":true,\"ci_forward_deployment_rollback_allowed\":true,\"ci_job_token_scope_enabled\":false,\"ci_separated_caches\":true,\"ci_allow_fork_pipelines_to_run_in_parent_project\":true,\"ci_id_token_sub_claim_components\":[\"project_path\",\"ref_type\",\"ref\"],\"build_git_strategy\":\"fetch\",\"keep_latest_artifact\":true,\"restrict_user_defined_variables\":true,\"ci_pipeline_variables_minimum_override_role\":\"maintainer\",\"runner_token_expiration_interval\":null,\"group_runners_enabled\":true,\"resource_group_default_process_mode\":\"unordered\",\"auto_cancel_pending_pipelines\":\"enabled\",\"build_timeout\":3600,\"auto_devops_enabled\":true,\"auto_devops_deploy_strategy\":\"continuous\",\"ci_push_repository_for_job_token_allowed\":false,\"runners_token\":\"REDACTED\",\"ci_config_path\":null,\"public_jobs\":true,\"shared_with_groups\":[],\"only_allow_merge_if_pipeline_succeeds\":false,\"allow_merge_on_skipped_pipeline\":null,\"request_access_enabled\":true,\"only_allow_merge_if_all_discussions_are_resolved\":false,\"remove_source_branch_after_merge\":true,\"printing_merge_request_link_enabled\":true,\"merge_method\":\"merge\",\"merge_request_title_regex\":null,\"merge_request_title_regex_description\":null,\"squash_option\":\"default_off\",\"enforce_auth_checks_on_uploads\":true,\"suggestion_commit_message\":null,\"merge_commit_template\":null,\"squash_commit_template\":null,\"issue_branch_template\":null,\"warn_about_potentially_unwanted_characters\":true,\"autoclose_referenced_issues\":true,\"max_artifacts_size\":null}",
       "location": ""
     },
     {
@@ -78,7 +78,7 @@
       "status": 201,
       "reason": "Created",
       "content_type": "application/json",
-      "response_body": "{\"id\":\"92b848ff64cb88afaa525c9ef145afccf5359bea\",\"short_id\":\"92b848ff\",\"created_at\":\"2026-09-02T10:33:42.000+00:00\",\"parent_ids\":[\"a3a3897553c49cd2a4c765544dcbaf07372fd56b\"],\"title\":\"conf: seed pipeline\",\"message\":\"conf: seed pipeline\",\"author_name\":\"Administrator\",\"author_email\":\"gitlab_admin_6ce3d2@example.com\",\"authored_date\":\"2026-09-02T10:33:42.000+00:00\",\"committer_name\":\"Administrator\",\"committer_email\":\"gitlab_admin_6ce3d2@example.com\",\"committed_date\":\"2026-09-02T10:33:42.000+00:00\",\"trailers\":{},\"extended_trailers\":{},\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/commit/92b848ff64cb88afaa525c9ef145afccf5359bea\",\"stats\":{\"additions\":38,\"deletions\":0,\"total\":38},\"status\":null,\"project_id\":574,\"last_pipeline\":null}",
+      "response_body": "{\"id\":\"c355fa4ec7aed726a14c7af9ab07657b64f50659\",\"short_id\":\"c355fa4e\",\"created_at\":\"2026-09-02T12:19:39.000+00:00\",\"parent_ids\":[\"e4eb4efdd0c41c47bbae6936592bf9e2e8a4fadd\"],\"title\":\"conf: seed pipeline\",\"message\":\"conf: seed pipeline\",\"author_name\":\"Administrator\",\"author_email\":\"gitlab_admin_6ce3d2@example.com\",\"authored_date\":\"2026-09-02T12:19:39.000+00:00\",\"committer_name\":\"Administrator\",\"committer_email\":\"gitlab_admin_6ce3d2@example.com\",\"committed_date\":\"2026-09-02T12:19:39.000+00:00\",\"trailers\":{},\"extended_trailers\":{},\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/commit/c355fa4ec7aed726a14c7af9ab07657b64f50659\",\"stats\":{\"additions\":38,\"deletions\":0,\"total\":38},\"status\":null,\"project_id\":614,\"last_pipeline\":null}",
       "location": ""
     },
     {
@@ -108,12 +108,12 @@
       "status": 201,
       "reason": "Created",
       "content_type": "application/json",
-      "response_body": "{\"id\":\"66b9bf536035cfeb04f98286f5cbcaf0ccda424a\",\"short_id\":\"66b9bf53\",\"created_at\":\"2026-09-02T10:33:42.000+00:00\",\"parent_ids\":[\"92b848ff64cb88afaa525c9ef145afccf5359bea\"],\"title\":\"conf: push live [conf:hang]\",\"message\":\"conf: push live [conf:hang]\",\"author_name\":\"Administrator\",\"author_email\":\"gitlab_admin_6ce3d2@example.com\",\"authored_date\":\"2026-09-02T10:33:42.000+00:00\",\"committer_name\":\"Administrator\",\"committer_email\":\"gitlab_admin_6ce3d2@example.com\",\"committed_date\":\"2026-09-02T10:33:42.000+00:00\",\"trailers\":{},\"extended_trailers\":{},\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/commit/66b9bf536035cfeb04f98286f5cbcaf0ccda424a\",\"stats\":{\"additions\":1,\"deletions\":0,\"total\":1},\"status\":null,\"project_id\":574,\"last_pipeline\":null}",
+      "response_body": "{\"id\":\"14276b8977f867602c560335c36040742c99f2da\",\"short_id\":\"14276b89\",\"created_at\":\"2026-09-02T12:19:40.000+00:00\",\"parent_ids\":[\"c355fa4ec7aed726a14c7af9ab07657b64f50659\"],\"title\":\"conf: push live [conf:hang]\",\"message\":\"conf: push live [conf:hang]\",\"author_name\":\"Administrator\",\"author_email\":\"gitlab_admin_6ce3d2@example.com\",\"authored_date\":\"2026-09-02T12:19:40.000+00:00\",\"committer_name\":\"Administrator\",\"committer_email\":\"gitlab_admin_6ce3d2@example.com\",\"committed_date\":\"2026-09-02T12:19:40.000+00:00\",\"trailers\":{},\"extended_trailers\":{},\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/commit/14276b8977f867602c560335c36040742c99f2da\",\"stats\":{\"additions\":1,\"deletions\":0,\"total\":1},\"status\":null,\"project_id\":614,\"last_pipeline\":null}",
       "location": ""
     },
     {
       "method": "GET",
-      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=66b9bf536035cfeb04f98286f5cbcaf0ccda424a",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=14276b8977f867602c560335c36040742c99f2da",
       "request_body": "",
       "status": 200,
       "reason": "OK",
@@ -123,22 +123,72 @@
     },
     {
       "method": "GET",
-      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=66b9bf536035cfeb04f98286f5cbcaf0ccda424a",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=14276b8977f867602c560335c36040742c99f2da",
       "request_body": "",
       "status": 200,
       "reason": "OK",
       "content_type": "application/json",
-      "response_body": "[{\"id\":893,\"iid\":2,\"project_id\":574,\"sha\":\"66b9bf536035cfeb04f98286f5cbcaf0ccda424a\",\"ref\":\"live\",\"status\":\"pending\",\"source\":\"push\",\"created_at\":\"2026-09-02T10:33:43.169Z\",\"updated_at\":\"2026-09-02T10:33:43.430Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/893\",\"name\":null}]",
+      "response_body": "[]",
       "location": ""
     },
     {
       "method": "GET",
-      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=66b9bf536035cfeb04f98286f5cbcaf0ccda424a",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=14276b8977f867602c560335c36040742c99f2da",
       "request_body": "",
       "status": 200,
       "reason": "OK",
       "content_type": "application/json",
-      "response_body": "[{\"id\":893,\"iid\":2,\"project_id\":574,\"sha\":\"66b9bf536035cfeb04f98286f5cbcaf0ccda424a\",\"ref\":\"live\",\"status\":\"pending\",\"source\":\"push\",\"created_at\":\"2026-09-02T10:33:43.169Z\",\"updated_at\":\"2026-09-02T10:33:43.430Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/893\",\"name\":null}]",
+      "response_body": "[]",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=14276b8977f867602c560335c36040742c99f2da",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json",
+      "response_body": "[]",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=14276b8977f867602c560335c36040742c99f2da",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json",
+      "response_body": "[]",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=14276b8977f867602c560335c36040742c99f2da",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json",
+      "response_body": "[]",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=14276b8977f867602c560335c36040742c99f2da",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json",
+      "response_body": "[{\"id\":957,\"iid\":2,\"project_id\":614,\"sha\":\"14276b8977f867602c560335c36040742c99f2da\",\"ref\":\"live\",\"status\":\"created\",\"source\":\"push\",\"created_at\":\"2026-09-02T12:19:46.134Z\",\"updated_at\":\"2026-09-02T12:19:46.134Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/957\",\"name\":null}]",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=14276b8977f867602c560335c36040742c99f2da",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json",
+      "response_body": "[{\"id\":957,\"iid\":2,\"project_id\":614,\"sha\":\"14276b8977f867602c560335c36040742c99f2da\",\"ref\":\"live\",\"status\":\"created\",\"source\":\"push\",\"created_at\":\"2026-09-02T12:19:46.134Z\",\"updated_at\":\"2026-09-02T12:19:46.134Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/957\",\"name\":null}]",
       "location": ""
     },
     {
@@ -158,22 +208,22 @@
       "status": 201,
       "reason": "Created",
       "content_type": "application/json",
-      "response_body": "{\"id\":\"48aca5802a8cb1a470ede415fb4f3b17d4a82ba8\",\"short_id\":\"48aca580\",\"created_at\":\"2026-09-02T10:33:43.000+00:00\",\"parent_ids\":[\"92b848ff64cb88afaa525c9ef145afccf5359bea\"],\"title\":\"conf: push green [conf:success]\",\"message\":\"conf: push green [conf:success]\",\"author_name\":\"Administrator\",\"author_email\":\"gitlab_admin_6ce3d2@example.com\",\"authored_date\":\"2026-09-02T10:33:43.000+00:00\",\"committer_name\":\"Administrator\",\"committer_email\":\"gitlab_admin_6ce3d2@example.com\",\"committed_date\":\"2026-09-02T10:33:43.000+00:00\",\"trailers\":{},\"extended_trailers\":{},\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/commit/48aca5802a8cb1a470ede415fb4f3b17d4a82ba8\",\"stats\":{\"additions\":1,\"deletions\":0,\"total\":1},\"status\":null,\"project_id\":574,\"last_pipeline\":null}",
+      "response_body": "{\"id\":\"9333d5b0c99fa42ce0ffa4068f914d7658f4ced6\",\"short_id\":\"9333d5b0\",\"created_at\":\"2026-09-02T12:19:46.000+00:00\",\"parent_ids\":[\"c355fa4ec7aed726a14c7af9ab07657b64f50659\"],\"title\":\"conf: push green [conf:success]\",\"message\":\"conf: push green [conf:success]\",\"author_name\":\"Administrator\",\"author_email\":\"gitlab_admin_6ce3d2@example.com\",\"authored_date\":\"2026-09-02T12:19:46.000+00:00\",\"committer_name\":\"Administrator\",\"committer_email\":\"gitlab_admin_6ce3d2@example.com\",\"committed_date\":\"2026-09-02T12:19:46.000+00:00\",\"trailers\":{},\"extended_trailers\":{},\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/commit/9333d5b0c99fa42ce0ffa4068f914d7658f4ced6\",\"stats\":{\"additions\":1,\"deletions\":0,\"total\":1},\"status\":null,\"project_id\":614,\"last_pipeline\":null}",
       "location": ""
     },
     {
       "method": "POST",
       "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/repository/tags",
-      "request_body": "{\"tag_name\": \"release-48aca5802a8cb1a470ede415fb4f3b17d4a82ba8\", \"ref\": \"48aca5802a8cb1a470ede415fb4f3b17d4a82ba8\"}",
+      "request_body": "{\"tag_name\": \"release-9333d5b0c99fa42ce0ffa4068f914d7658f4ced6\", \"ref\": \"9333d5b0c99fa42ce0ffa4068f914d7658f4ced6\"}",
       "status": 201,
       "reason": "Created",
       "content_type": "application/json",
-      "response_body": "{\"name\":\"release-48aca5802a8cb1a470ede415fb4f3b17d4a82ba8\",\"message\":\"\",\"target\":\"48aca5802a8cb1a470ede415fb4f3b17d4a82ba8\",\"commit\":{\"id\":\"48aca5802a8cb1a470ede415fb4f3b17d4a82ba8\",\"short_id\":\"48aca580\",\"created_at\":\"2026-09-02T10:33:43.000+00:00\",\"parent_ids\":[\"92b848ff64cb88afaa525c9ef145afccf5359bea\"],\"title\":\"conf: push green [conf:success]\",\"message\":\"conf: push green [conf:success]\",\"author_name\":\"Administrator\",\"author_email\":\"gitlab_admin_6ce3d2@example.com\",\"authored_date\":\"2026-09-02T10:33:43.000+00:00\",\"committer_name\":\"Administrator\",\"committer_email\":\"gitlab_admin_6ce3d2@example.com\",\"committed_date\":\"2026-09-02T10:33:43.000+00:00\",\"trailers\":{},\"extended_trailers\":{},\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/commit/48aca5802a8cb1a470ede415fb4f3b17d4a82ba8\"},\"protected\":false,\"created_at\":null}",
+      "response_body": "{\"name\":\"release-9333d5b0c99fa42ce0ffa4068f914d7658f4ced6\",\"message\":\"\",\"target\":\"9333d5b0c99fa42ce0ffa4068f914d7658f4ced6\",\"commit\":{\"id\":\"9333d5b0c99fa42ce0ffa4068f914d7658f4ced6\",\"short_id\":\"9333d5b0\",\"created_at\":\"2026-09-02T12:19:46.000+00:00\",\"parent_ids\":[\"c355fa4ec7aed726a14c7af9ab07657b64f50659\"],\"title\":\"conf: push green [conf:success]\",\"message\":\"conf: push green [conf:success]\",\"author_name\":\"Administrator\",\"author_email\":\"gitlab_admin_6ce3d2@example.com\",\"authored_date\":\"2026-09-02T12:19:46.000+00:00\",\"committer_name\":\"Administrator\",\"committer_email\":\"gitlab_admin_6ce3d2@example.com\",\"committed_date\":\"2026-09-02T12:19:46.000+00:00\",\"trailers\":{},\"extended_trailers\":{},\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/commit/9333d5b0c99fa42ce0ffa4068f914d7658f4ced6\"},\"protected\":false,\"created_at\":null}",
       "location": ""
     },
     {
       "method": "GET",
-      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=48aca5802a8cb1a470ede415fb4f3b17d4a82ba8",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=9333d5b0c99fa42ce0ffa4068f914d7658f4ced6",
       "request_body": "",
       "status": 200,
       "reason": "OK",
@@ -183,32 +233,112 @@
     },
     {
       "method": "GET",
-      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=48aca5802a8cb1a470ede415fb4f3b17d4a82ba8",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=9333d5b0c99fa42ce0ffa4068f914d7658f4ced6",
       "request_body": "",
       "status": 200,
       "reason": "OK",
       "content_type": "application/json",
-      "response_body": "[{\"id\":894,\"iid\":3,\"project_id\":574,\"sha\":\"48aca5802a8cb1a470ede415fb4f3b17d4a82ba8\",\"ref\":\"green\",\"status\":\"running\",\"source\":\"push\",\"created_at\":\"2026-09-02T10:33:44.138Z\",\"updated_at\":\"2026-09-02T10:33:44.926Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/894\",\"name\":null}]",
+      "response_body": "[]",
       "location": ""
     },
     {
       "method": "GET",
-      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=48aca5802a8cb1a470ede415fb4f3b17d4a82ba8",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=9333d5b0c99fa42ce0ffa4068f914d7658f4ced6",
       "request_body": "",
       "status": 200,
       "reason": "OK",
       "content_type": "application/json",
-      "response_body": "[{\"id\":894,\"iid\":3,\"project_id\":574,\"sha\":\"48aca5802a8cb1a470ede415fb4f3b17d4a82ba8\",\"ref\":\"green\",\"status\":\"success\",\"source\":\"push\",\"created_at\":\"2026-09-02T10:33:44.138Z\",\"updated_at\":\"2026-09-02T10:33:45.538Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/894\",\"name\":null}]",
+      "response_body": "[]",
       "location": ""
     },
     {
       "method": "GET",
-      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=48aca5802a8cb1a470ede415fb4f3b17d4a82ba8",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=9333d5b0c99fa42ce0ffa4068f914d7658f4ced6",
       "request_body": "",
       "status": 200,
       "reason": "OK",
       "content_type": "application/json",
-      "response_body": "[{\"id\":894,\"iid\":3,\"project_id\":574,\"sha\":\"48aca5802a8cb1a470ede415fb4f3b17d4a82ba8\",\"ref\":\"green\",\"status\":\"success\",\"source\":\"push\",\"created_at\":\"2026-09-02T10:33:44.138Z\",\"updated_at\":\"2026-09-02T10:33:45.538Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/894\",\"name\":null}]",
+      "response_body": "[]",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=9333d5b0c99fa42ce0ffa4068f914d7658f4ced6",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json",
+      "response_body": "[]",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=9333d5b0c99fa42ce0ffa4068f914d7658f4ced6",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json",
+      "response_body": "[{\"id\":959,\"iid\":3,\"project_id\":614,\"sha\":\"9333d5b0c99fa42ce0ffa4068f914d7658f4ced6\",\"ref\":\"green\",\"status\":\"created\",\"source\":\"push\",\"created_at\":\"2026-09-02T12:19:52.073Z\",\"updated_at\":\"2026-09-02T12:19:52.073Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/959\",\"name\":null}]",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=9333d5b0c99fa42ce0ffa4068f914d7658f4ced6",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json",
+      "response_body": "[{\"id\":959,\"iid\":3,\"project_id\":614,\"sha\":\"9333d5b0c99fa42ce0ffa4068f914d7658f4ced6\",\"ref\":\"green\",\"status\":\"created\",\"source\":\"push\",\"created_at\":\"2026-09-02T12:19:52.073Z\",\"updated_at\":\"2026-09-02T12:19:52.073Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/959\",\"name\":null}]",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=9333d5b0c99fa42ce0ffa4068f914d7658f4ced6",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json",
+      "response_body": "[{\"id\":959,\"iid\":3,\"project_id\":614,\"sha\":\"9333d5b0c99fa42ce0ffa4068f914d7658f4ced6\",\"ref\":\"green\",\"status\":\"pending\",\"source\":\"push\",\"created_at\":\"2026-09-02T12:19:52.073Z\",\"updated_at\":\"2026-09-02T12:19:53.922Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/959\",\"name\":null}]",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=9333d5b0c99fa42ce0ffa4068f914d7658f4ced6",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json",
+      "response_body": "[{\"id\":959,\"iid\":3,\"project_id\":614,\"sha\":\"9333d5b0c99fa42ce0ffa4068f914d7658f4ced6\",\"ref\":\"green\",\"status\":\"running\",\"source\":\"push\",\"created_at\":\"2026-09-02T12:19:52.073Z\",\"updated_at\":\"2026-09-02T12:19:55.467Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/959\",\"name\":null}]",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=9333d5b0c99fa42ce0ffa4068f914d7658f4ced6",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json",
+      "response_body": "[{\"id\":959,\"iid\":3,\"project_id\":614,\"sha\":\"9333d5b0c99fa42ce0ffa4068f914d7658f4ced6\",\"ref\":\"green\",\"status\":\"running\",\"source\":\"push\",\"created_at\":\"2026-09-02T12:19:52.073Z\",\"updated_at\":\"2026-09-02T12:19:55.467Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/959\",\"name\":null}]",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=9333d5b0c99fa42ce0ffa4068f914d7658f4ced6",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json",
+      "response_body": "[{\"id\":959,\"iid\":3,\"project_id\":614,\"sha\":\"9333d5b0c99fa42ce0ffa4068f914d7658f4ced6\",\"ref\":\"green\",\"status\":\"success\",\"source\":\"push\",\"created_at\":\"2026-09-02T12:19:52.073Z\",\"updated_at\":\"2026-09-02T12:19:56.999Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/959\",\"name\":null}]",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=9333d5b0c99fa42ce0ffa4068f914d7658f4ced6",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json",
+      "response_body": "[{\"id\":959,\"iid\":3,\"project_id\":614,\"sha\":\"9333d5b0c99fa42ce0ffa4068f914d7658f4ced6\",\"ref\":\"green\",\"status\":\"success\",\"source\":\"push\",\"created_at\":\"2026-09-02T12:19:52.073Z\",\"updated_at\":\"2026-09-02T12:19:56.999Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/959\",\"name\":null}]",
       "location": ""
     },
     {
@@ -228,22 +358,22 @@
       "status": 201,
       "reason": "Created",
       "content_type": "application/json",
-      "response_body": "{\"id\":\"e85c5f207af7cdde638ef01722f474b863d6e6c6\",\"short_id\":\"e85c5f20\",\"created_at\":\"2026-09-02T10:33:46.000+00:00\",\"parent_ids\":[\"92b848ff64cb88afaa525c9ef145afccf5359bea\"],\"title\":\"conf: push red [conf:failure]\",\"message\":\"conf: push red [conf:failure]\",\"author_name\":\"Administrator\",\"author_email\":\"gitlab_admin_6ce3d2@example.com\",\"authored_date\":\"2026-09-02T10:33:46.000+00:00\",\"committer_name\":\"Administrator\",\"committer_email\":\"gitlab_admin_6ce3d2@example.com\",\"committed_date\":\"2026-09-02T10:33:46.000+00:00\",\"trailers\":{},\"extended_trailers\":{},\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/commit/e85c5f207af7cdde638ef01722f474b863d6e6c6\",\"stats\":{\"additions\":1,\"deletions\":0,\"total\":1},\"status\":null,\"project_id\":574,\"last_pipeline\":null}",
+      "response_body": "{\"id\":\"f64968c8806335c3177a3e1ac1b16ddac94d5c17\",\"short_id\":\"f64968c8\",\"created_at\":\"2026-09-02T12:19:57.000+00:00\",\"parent_ids\":[\"c355fa4ec7aed726a14c7af9ab07657b64f50659\"],\"title\":\"conf: push red [conf:failure]\",\"message\":\"conf: push red [conf:failure]\",\"author_name\":\"Administrator\",\"author_email\":\"gitlab_admin_6ce3d2@example.com\",\"authored_date\":\"2026-09-02T12:19:57.000+00:00\",\"committer_name\":\"Administrator\",\"committer_email\":\"gitlab_admin_6ce3d2@example.com\",\"committed_date\":\"2026-09-02T12:19:57.000+00:00\",\"trailers\":{},\"extended_trailers\":{},\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/commit/f64968c8806335c3177a3e1ac1b16ddac94d5c17\",\"stats\":{\"additions\":1,\"deletions\":0,\"total\":1},\"status\":null,\"project_id\":614,\"last_pipeline\":null}",
       "location": ""
     },
     {
       "method": "POST",
       "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/repository/tags",
-      "request_body": "{\"tag_name\": \"release-e85c5f207af7cdde638ef01722f474b863d6e6c6\", \"ref\": \"e85c5f207af7cdde638ef01722f474b863d6e6c6\"}",
+      "request_body": "{\"tag_name\": \"release-f64968c8806335c3177a3e1ac1b16ddac94d5c17\", \"ref\": \"f64968c8806335c3177a3e1ac1b16ddac94d5c17\"}",
       "status": 201,
       "reason": "Created",
       "content_type": "application/json",
-      "response_body": "{\"name\":\"release-e85c5f207af7cdde638ef01722f474b863d6e6c6\",\"message\":\"\",\"target\":\"e85c5f207af7cdde638ef01722f474b863d6e6c6\",\"commit\":{\"id\":\"e85c5f207af7cdde638ef01722f474b863d6e6c6\",\"short_id\":\"e85c5f20\",\"created_at\":\"2026-09-02T10:33:46.000+00:00\",\"parent_ids\":[\"92b848ff64cb88afaa525c9ef145afccf5359bea\"],\"title\":\"conf: push red [conf:failure]\",\"message\":\"conf: push red [conf:failure]\",\"author_name\":\"Administrator\",\"author_email\":\"gitlab_admin_6ce3d2@example.com\",\"authored_date\":\"2026-09-02T10:33:46.000+00:00\",\"committer_name\":\"Administrator\",\"committer_email\":\"gitlab_admin_6ce3d2@example.com\",\"committed_date\":\"2026-09-02T10:33:46.000+00:00\",\"trailers\":{},\"extended_trailers\":{},\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/commit/e85c5f207af7cdde638ef01722f474b863d6e6c6\"},\"protected\":false,\"created_at\":null}",
+      "response_body": "{\"name\":\"release-f64968c8806335c3177a3e1ac1b16ddac94d5c17\",\"message\":\"\",\"target\":\"f64968c8806335c3177a3e1ac1b16ddac94d5c17\",\"commit\":{\"id\":\"f64968c8806335c3177a3e1ac1b16ddac94d5c17\",\"short_id\":\"f64968c8\",\"created_at\":\"2026-09-02T12:19:57.000+00:00\",\"parent_ids\":[\"c355fa4ec7aed726a14c7af9ab07657b64f50659\"],\"title\":\"conf: push red [conf:failure]\",\"message\":\"conf: push red [conf:failure]\",\"author_name\":\"Administrator\",\"author_email\":\"gitlab_admin_6ce3d2@example.com\",\"authored_date\":\"2026-09-02T12:19:57.000+00:00\",\"committer_name\":\"Administrator\",\"committer_email\":\"gitlab_admin_6ce3d2@example.com\",\"committed_date\":\"2026-09-02T12:19:57.000+00:00\",\"trailers\":{},\"extended_trailers\":{},\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/commit/f64968c8806335c3177a3e1ac1b16ddac94d5c17\"},\"protected\":false,\"created_at\":null}",
       "location": ""
     },
     {
       "method": "GET",
-      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=e85c5f207af7cdde638ef01722f474b863d6e6c6",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=f64968c8806335c3177a3e1ac1b16ddac94d5c17",
       "request_body": "",
       "status": 200,
       "reason": "OK",
@@ -253,92 +383,122 @@
     },
     {
       "method": "GET",
-      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=e85c5f207af7cdde638ef01722f474b863d6e6c6",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=f64968c8806335c3177a3e1ac1b16ddac94d5c17",
       "request_body": "",
       "status": 200,
       "reason": "OK",
       "content_type": "application/json",
-      "response_body": "[{\"id\":895,\"iid\":4,\"project_id\":574,\"sha\":\"e85c5f207af7cdde638ef01722f474b863d6e6c6\",\"ref\":\"red\",\"status\":\"pending\",\"source\":\"push\",\"created_at\":\"2026-09-02T10:33:46.547Z\",\"updated_at\":\"2026-09-02T10:33:46.772Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/895\",\"name\":null}]",
+      "response_body": "[{\"id\":963,\"iid\":4,\"project_id\":614,\"sha\":\"f64968c8806335c3177a3e1ac1b16ddac94d5c17\",\"ref\":\"red\",\"status\":\"pending\",\"source\":\"push\",\"created_at\":\"2026-09-02T12:19:58.315Z\",\"updated_at\":\"2026-09-02T12:19:58.631Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/963\",\"name\":null}]",
       "location": ""
     },
     {
       "method": "GET",
-      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=e85c5f207af7cdde638ef01722f474b863d6e6c6",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=f64968c8806335c3177a3e1ac1b16ddac94d5c17",
       "request_body": "",
       "status": 200,
       "reason": "OK",
       "content_type": "application/json",
-      "response_body": "[{\"id\":895,\"iid\":4,\"project_id\":574,\"sha\":\"e85c5f207af7cdde638ef01722f474b863d6e6c6\",\"ref\":\"red\",\"status\":\"failed\",\"source\":\"push\",\"created_at\":\"2026-09-02T10:33:46.547Z\",\"updated_at\":\"2026-09-02T10:33:48.178Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/895\",\"name\":null}]",
+      "response_body": "[{\"id\":963,\"iid\":4,\"project_id\":614,\"sha\":\"f64968c8806335c3177a3e1ac1b16ddac94d5c17\",\"ref\":\"red\",\"status\":\"pending\",\"source\":\"push\",\"created_at\":\"2026-09-02T12:19:58.315Z\",\"updated_at\":\"2026-09-02T12:19:58.631Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/963\",\"name\":null}]",
       "location": ""
     },
     {
       "method": "GET",
-      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=e85c5f207af7cdde638ef01722f474b863d6e6c6",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=f64968c8806335c3177a3e1ac1b16ddac94d5c17",
       "request_body": "",
       "status": 200,
       "reason": "OK",
       "content_type": "application/json",
-      "response_body": "[{\"id\":895,\"iid\":4,\"project_id\":574,\"sha\":\"e85c5f207af7cdde638ef01722f474b863d6e6c6\",\"ref\":\"red\",\"status\":\"failed\",\"source\":\"push\",\"created_at\":\"2026-09-02T10:33:46.547Z\",\"updated_at\":\"2026-09-02T10:33:48.178Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/895\",\"name\":null}]",
+      "response_body": "[{\"id\":963,\"iid\":4,\"project_id\":614,\"sha\":\"f64968c8806335c3177a3e1ac1b16ddac94d5c17\",\"ref\":\"red\",\"status\":\"pending\",\"source\":\"push\",\"created_at\":\"2026-09-02T12:19:58.315Z\",\"updated_at\":\"2026-09-02T12:19:58.631Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/963\",\"name\":null}]",
       "location": ""
     },
     {
       "method": "GET",
-      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=66b9bf536035cfeb04f98286f5cbcaf0ccda424a",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=f64968c8806335c3177a3e1ac1b16ddac94d5c17",
       "request_body": "",
       "status": 200,
       "reason": "OK",
       "content_type": "application/json",
-      "response_body": "[{\"id\":893,\"iid\":2,\"project_id\":574,\"sha\":\"66b9bf536035cfeb04f98286f5cbcaf0ccda424a\",\"ref\":\"live\",\"status\":\"running\",\"source\":\"push\",\"created_at\":\"2026-09-02T10:33:43.169Z\",\"updated_at\":\"2026-09-02T10:33:44.824Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/893\",\"name\":null}]",
+      "response_body": "[{\"id\":963,\"iid\":4,\"project_id\":614,\"sha\":\"f64968c8806335c3177a3e1ac1b16ddac94d5c17\",\"ref\":\"red\",\"status\":\"failed\",\"source\":\"push\",\"created_at\":\"2026-09-02T12:19:58.315Z\",\"updated_at\":\"2026-09-02T12:20:01.850Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/963\",\"name\":null}]",
       "location": ""
     },
     {
       "method": "GET",
-      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines/893",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=f64968c8806335c3177a3e1ac1b16ddac94d5c17",
       "request_body": "",
       "status": 200,
       "reason": "OK",
       "content_type": "application/json",
-      "response_body": "{\"id\":893,\"iid\":2,\"project_id\":574,\"sha\":\"66b9bf536035cfeb04f98286f5cbcaf0ccda424a\",\"ref\":\"live\",\"status\":\"running\",\"source\":\"push\",\"created_at\":\"2026-09-02T10:33:43.169Z\",\"updated_at\":\"2026-09-02T10:33:44.824Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/893\",\"before_sha\":\"0000000000000000000000000000000000000000\",\"tag\":false,\"yaml_errors\":null,\"user\":{\"id\":1,\"username\":\"root\",\"public_email\":null,\"name\":\"Administrator\",\"state\":\"active\",\"locked\":false,\"avatar_url\":\"https://www.gravatar.com/avatar/786eb2fe57ea2b141ab5a90a80da1609c973f1d1a6b817b36f46a0d7f2b37f03?s=80\\u0026d=identicon\",\"web_url\":\"http://localhost:8929/root\"},\"started_at\":\"2026-09-02T10:33:44.823Z\",\"finished_at\":null,\"committed_at\":null,\"duration\":null,\"queued_duration\":1,\"coverage\":null,\"detailed_status\":{\"icon\":\"status_running\",\"text\":\"Running\",\"label\":\"running\",\"group\":\"running\",\"tooltip\":\"running\",\"has_details\":false,\"details_path\":\"/livery/conf-status-progression-1/-/pipelines/893\",\"illustration\":null,\"favicon\":\"/assets/ci_favicons/favicon_status_running-9c635b2419a8e1ec991c993061b89cc5aefc0743bb238ecd0c381e7741a70e8c.png\"},\"archived\":false,\"name\":null}",
+      "response_body": "[{\"id\":963,\"iid\":4,\"project_id\":614,\"sha\":\"f64968c8806335c3177a3e1ac1b16ddac94d5c17\",\"ref\":\"red\",\"status\":\"failed\",\"source\":\"push\",\"created_at\":\"2026-09-02T12:19:58.315Z\",\"updated_at\":\"2026-09-02T12:20:01.850Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/963\",\"name\":null}]",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=14276b8977f867602c560335c36040742c99f2da",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json",
+      "response_body": "[{\"id\":957,\"iid\":2,\"project_id\":614,\"sha\":\"14276b8977f867602c560335c36040742c99f2da\",\"ref\":\"live\",\"status\":\"running\",\"source\":\"push\",\"created_at\":\"2026-09-02T12:19:46.134Z\",\"updated_at\":\"2026-09-02T12:19:50.000Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/957\",\"name\":null}]",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines/957",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json",
+      "response_body": "{\"id\":957,\"iid\":2,\"project_id\":614,\"sha\":\"14276b8977f867602c560335c36040742c99f2da\",\"ref\":\"live\",\"status\":\"running\",\"source\":\"push\",\"created_at\":\"2026-09-02T12:19:46.134Z\",\"updated_at\":\"2026-09-02T12:19:50.000Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/957\",\"before_sha\":\"0000000000000000000000000000000000000000\",\"tag\":false,\"yaml_errors\":null,\"user\":{\"id\":1,\"username\":\"root\",\"public_email\":null,\"name\":\"Administrator\",\"state\":\"active\",\"locked\":false,\"avatar_url\":\"https://www.gravatar.com/avatar/786eb2fe57ea2b141ab5a90a80da1609c973f1d1a6b817b36f46a0d7f2b37f03?s=80\\u0026d=identicon\",\"web_url\":\"http://localhost:8929/root\"},\"started_at\":\"2026-09-02T12:19:50.000Z\",\"finished_at\":null,\"committed_at\":null,\"duration\":null,\"queued_duration\":3,\"coverage\":null,\"detailed_status\":{\"icon\":\"status_running\",\"text\":\"Running\",\"label\":\"running\",\"group\":\"running\",\"tooltip\":\"running\",\"has_details\":false,\"details_path\":\"/livery/conf-status-progression-1/-/pipelines/957\",\"illustration\":null,\"favicon\":\"/assets/ci_favicons/favicon_status_running-9c635b2419a8e1ec991c993061b89cc5aefc0743bb238ecd0c381e7741a70e8c.png\"},\"archived\":false,\"name\":null}",
       "location": ""
     },
     {
       "method": "POST",
-      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines/893/cancel",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines/957/cancel",
       "request_body": "",
       "status": 200,
       "reason": "OK",
       "content_type": "application/json",
-      "response_body": "{\"id\":893,\"iid\":2,\"project_id\":574,\"sha\":\"66b9bf536035cfeb04f98286f5cbcaf0ccda424a\",\"ref\":\"live\",\"status\":\"running\",\"source\":\"push\",\"created_at\":\"2026-09-02T10:33:43.169Z\",\"updated_at\":\"2026-09-02T10:33:44.824Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/893\",\"before_sha\":\"0000000000000000000000000000000000000000\",\"tag\":false,\"yaml_errors\":null,\"user\":{\"id\":1,\"username\":\"root\",\"public_email\":null,\"name\":\"Administrator\",\"state\":\"active\",\"locked\":false,\"avatar_url\":\"https://www.gravatar.com/avatar/786eb2fe57ea2b141ab5a90a80da1609c973f1d1a6b817b36f46a0d7f2b37f03?s=80\\u0026d=identicon\",\"web_url\":\"http://localhost:8929/root\"},\"started_at\":\"2026-09-02T10:33:44.823Z\",\"finished_at\":null,\"committed_at\":null,\"duration\":null,\"queued_duration\":1,\"coverage\":null,\"detailed_status\":{\"icon\":\"status_running\",\"text\":\"Running\",\"label\":\"running\",\"group\":\"running\",\"tooltip\":\"running\",\"has_details\":false,\"details_path\":\"/livery/conf-status-progression-1/-/pipelines/893\",\"illustration\":null,\"favicon\":\"/assets/ci_favicons/favicon_status_running-9c635b2419a8e1ec991c993061b89cc5aefc0743bb238ecd0c381e7741a70e8c.png\"},\"archived\":false}",
+      "response_body": "{\"id\":957,\"iid\":2,\"project_id\":614,\"sha\":\"14276b8977f867602c560335c36040742c99f2da\",\"ref\":\"live\",\"status\":\"running\",\"source\":\"push\",\"created_at\":\"2026-09-02T12:19:46.134Z\",\"updated_at\":\"2026-09-02T12:19:50.000Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/957\",\"before_sha\":\"0000000000000000000000000000000000000000\",\"tag\":false,\"yaml_errors\":null,\"user\":{\"id\":1,\"username\":\"root\",\"public_email\":null,\"name\":\"Administrator\",\"state\":\"active\",\"locked\":false,\"avatar_url\":\"https://www.gravatar.com/avatar/786eb2fe57ea2b141ab5a90a80da1609c973f1d1a6b817b36f46a0d7f2b37f03?s=80\\u0026d=identicon\",\"web_url\":\"http://localhost:8929/root\"},\"started_at\":\"2026-09-02T12:19:50.000Z\",\"finished_at\":null,\"committed_at\":null,\"duration\":null,\"queued_duration\":3,\"coverage\":null,\"detailed_status\":{\"icon\":\"status_running\",\"text\":\"Running\",\"label\":\"running\",\"group\":\"running\",\"tooltip\":\"running\",\"has_details\":false,\"details_path\":\"/livery/conf-status-progression-1/-/pipelines/957\",\"illustration\":null,\"favicon\":\"/assets/ci_favicons/favicon_status_running-9c635b2419a8e1ec991c993061b89cc5aefc0743bb238ecd0c381e7741a70e8c.png\"},\"archived\":false}",
       "location": ""
     },
     {
       "method": "POST",
       "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/repository/tags",
-      "request_body": "{\"tag_name\": \"release-66b9bf536035cfeb04f98286f5cbcaf0ccda424a\", \"ref\": \"66b9bf536035cfeb04f98286f5cbcaf0ccda424a\"}",
+      "request_body": "{\"tag_name\": \"release-14276b8977f867602c560335c36040742c99f2da\", \"ref\": \"14276b8977f867602c560335c36040742c99f2da\"}",
       "status": 201,
       "reason": "Created",
       "content_type": "application/json",
-      "response_body": "{\"name\":\"release-66b9bf536035cfeb04f98286f5cbcaf0ccda424a\",\"message\":\"\",\"target\":\"66b9bf536035cfeb04f98286f5cbcaf0ccda424a\",\"commit\":{\"id\":\"66b9bf536035cfeb04f98286f5cbcaf0ccda424a\",\"short_id\":\"66b9bf53\",\"created_at\":\"2026-09-02T10:33:42.000+00:00\",\"parent_ids\":[\"92b848ff64cb88afaa525c9ef145afccf5359bea\"],\"title\":\"conf: push live [conf:hang]\",\"message\":\"conf: push live [conf:hang]\",\"author_name\":\"Administrator\",\"author_email\":\"gitlab_admin_6ce3d2@example.com\",\"authored_date\":\"2026-09-02T10:33:42.000+00:00\",\"committer_name\":\"Administrator\",\"committer_email\":\"gitlab_admin_6ce3d2@example.com\",\"committed_date\":\"2026-09-02T10:33:42.000+00:00\",\"trailers\":{},\"extended_trailers\":{},\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/commit/66b9bf536035cfeb04f98286f5cbcaf0ccda424a\"},\"protected\":false,\"created_at\":null}",
+      "response_body": "{\"name\":\"release-14276b8977f867602c560335c36040742c99f2da\",\"message\":\"\",\"target\":\"14276b8977f867602c560335c36040742c99f2da\",\"commit\":{\"id\":\"14276b8977f867602c560335c36040742c99f2da\",\"short_id\":\"14276b89\",\"created_at\":\"2026-09-02T12:19:40.000+00:00\",\"parent_ids\":[\"c355fa4ec7aed726a14c7af9ab07657b64f50659\"],\"title\":\"conf: push live [conf:hang]\",\"message\":\"conf: push live [conf:hang]\",\"author_name\":\"Administrator\",\"author_email\":\"gitlab_admin_6ce3d2@example.com\",\"authored_date\":\"2026-09-02T12:19:40.000+00:00\",\"committer_name\":\"Administrator\",\"committer_email\":\"gitlab_admin_6ce3d2@example.com\",\"committed_date\":\"2026-09-02T12:19:40.000+00:00\",\"trailers\":{},\"extended_trailers\":{},\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/commit/14276b8977f867602c560335c36040742c99f2da\"},\"protected\":false,\"created_at\":null}",
       "location": ""
     },
     {
       "method": "GET",
-      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=66b9bf536035cfeb04f98286f5cbcaf0ccda424a",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=14276b8977f867602c560335c36040742c99f2da",
       "request_body": "",
       "status": 200,
       "reason": "OK",
       "content_type": "application/json",
-      "response_body": "[{\"id\":893,\"iid\":2,\"project_id\":574,\"sha\":\"66b9bf536035cfeb04f98286f5cbcaf0ccda424a\",\"ref\":\"live\",\"status\":\"canceling\",\"source\":\"push\",\"created_at\":\"2026-09-02T10:33:43.169Z\",\"updated_at\":\"2026-09-02T10:33:48.722Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/893\",\"name\":null}]",
+      "response_body": "[{\"id\":957,\"iid\":2,\"project_id\":614,\"sha\":\"14276b8977f867602c560335c36040742c99f2da\",\"ref\":\"live\",\"status\":\"canceling\",\"source\":\"push\",\"created_at\":\"2026-09-02T12:19:46.134Z\",\"updated_at\":\"2026-09-02T12:20:02.354Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/957\",\"name\":null}]",
       "location": ""
     },
     {
       "method": "GET",
-      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=66b9bf536035cfeb04f98286f5cbcaf0ccda424a",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=14276b8977f867602c560335c36040742c99f2da",
       "request_body": "",
       "status": 200,
       "reason": "OK",
       "content_type": "application/json",
-      "response_body": "[{\"id\":893,\"iid\":2,\"project_id\":574,\"sha\":\"66b9bf536035cfeb04f98286f5cbcaf0ccda424a\",\"ref\":\"live\",\"status\":\"canceled\",\"source\":\"push\",\"created_at\":\"2026-09-02T10:33:43.169Z\",\"updated_at\":\"2026-09-02T10:33:49.813Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/893\",\"name\":null}]",
+      "response_body": "[{\"id\":957,\"iid\":2,\"project_id\":614,\"sha\":\"14276b8977f867602c560335c36040742c99f2da\",\"ref\":\"live\",\"status\":\"canceling\",\"source\":\"push\",\"created_at\":\"2026-09-02T12:19:46.134Z\",\"updated_at\":\"2026-09-02T12:20:02.354Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/957\",\"name\":null}]",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:8929/api/v4/projects/livery%2Fconf-status-progression-1/pipelines?page=1&per_page=50&sha=14276b8977f867602c560335c36040742c99f2da",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json",
+      "response_body": "[{\"id\":957,\"iid\":2,\"project_id\":614,\"sha\":\"14276b8977f867602c560335c36040742c99f2da\",\"ref\":\"live\",\"status\":\"canceled\",\"source\":\"push\",\"created_at\":\"2026-09-02T12:19:46.134Z\",\"updated_at\":\"2026-09-02T12:20:04.386Z\",\"web_url\":\"http://localhost:8929/livery/conf-status-progression-1/-/pipelines/957\",\"name\":null}]",
       "location": ""
     }
   ]

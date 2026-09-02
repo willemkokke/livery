@@ -1484,6 +1484,21 @@ not. Gates 0.1.0 together with phases 1-8.
   and drops its unused armed parameter; configure's refusal,
   degrade, and refused-write arms, the emitters, and doctor's
   governance lines each gained forcing tests.
+- 2026-09-02, the protocol targets the union (Willem, issue #93):
+  implement GitLab's paid-only features as thoroughly as possible so
+  the three forges present a feature set as unified as possible; the
+  free-tier ceiling was never asked for. `min_approvals` becomes a
+  per-instance licence probe (a visible project's approval-rules
+  endpoint, 404 observed on CE 18.9, cached per connection),
+  `configure` writes the any-approver rule and
+  `code_owner_approval_required` on the protected default branch,
+  `protection` reads the highest rule count back, and
+  `schedule_events` is implemented from system notes plus resource
+  state events (live-recordable on CE). `required_contexts` stays
+  declined at every tier because its contract (name contexts, read
+  them back) is unmeetable on GitLab; that reason is the documented
+  one. The licensed arms are pinned replay tests from the
+  documented API until a licensed surface exists (open item 8).
 
 ## Open
 
@@ -1518,3 +1533,14 @@ not. Gates 0.1.0 together with phases 1-8.
    empty-diff squash-merging needs a recorded verification on all
    three servers before anything names it. Owner: whoever hits the
    rate; a direction, not a commitment.
+8. Recording GitLab's licensed arms live. The min_approvals write
+   path (approval rules, code_owner_approval_required) and the
+   licensed probe answer are pinned replay tests from the
+   documented API; a licensed GitLab surface (a gitlab.com Premium
+   namespace, or an EE trial licence on a container) records them
+   for real and brings configure-approvals into the gitlab
+   conformance run. Owner: Willem arranges the surface (ruled
+   2026-09-02: "we will get access to a gitlab surface somehow");
+   the recording itself is `fm forge.fixtures.record
+   --scenario=configure-approvals --backend=gitlab` plus re-running
+   the premium replay suite against what reality answered.
