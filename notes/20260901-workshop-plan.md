@@ -1269,6 +1269,13 @@ not. Gates 0.1.0 together with phases 1-8.
   whether the work starts. Refines the assignees-are-a-policy-limit
   ruling; issue.start is idempotent end to end (an existing branch
   and worktree are reused and reopened).
+- 2026-09-02, footman 0.49 migrated (the boundary PR): floors to
+  0.49 in all three homes; livery-workshop advertises
+  `footman.builtin`; the issue worktree home is the runner's own
+  data directory (`footman.data_dir()`) with `LIVERY_HOME` the
+  override, cashing in the queryable-home ruling; the `expose=`
+  audit found nothing to change, livery has no pre-project verbs
+  until phase 13; open item 1 closes.
 - 2026-09-02, footman 0.49 at the phase boundary (Willem): migrate
   as its own PR when the current phase's work lands, using as much
   of the new surface as fits: the `[builtins]` table and
@@ -1309,10 +1316,13 @@ not. Gates 0.1.0 together with phases 1-8.
 
 ## Open
 
-1. footman#536 (stock `fm` mounts `footman.tasks` entry points):
-   external dependency of the global-verbs story (`new.project`,
-   `new.repo` outside a workspace). Owner: Willem, in footman.
-   Bridge until then: the user-rung tasks file.
+1. Resolved 2026-09-02 by footman 0.49: built-in tasks are the
+   cascade's outermost rung, `fm self.add` records a devkit's
+   `footman.builtin` advertisement, and `builtins.user` names the
+   rest. livery-workshop advertises itself; the user-rung bridge
+   retires. The global verbs themselves (`new.project`, the initial
+   sparse checkout) still arrive with phase 13, as
+   `expose="global_only"` tasks.
 2. The standalone integrate verb (hse's `hse merge`, our submit
    self-heal as its own spelling): wanted, and `merge` is taken by
    `submit.merge`. Candidate name `fm integrate`. Owner: Willem,
