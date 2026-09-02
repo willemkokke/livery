@@ -576,14 +576,26 @@ its own small PR before phase 7a.
   per-package test group carries floors under the same rule (a
   floor is a compatibility claim you are prepared to test), and the
   floor leg starves it too.
+- The starvation aimed right: to the resolver a wheel file's own
+  dependencies are transitive, so `--resolution=lowest-direct` on
+  the wheel alone starved nothing (found by this follow-up's own
+  forcing test). The leg lists the package's declared dependencies
+  explicitly beside the wheel, making them direct.
+- The base gate's timeout tells not-started from hanging: a tip
+  that reported a run and never went green sends the reader to the
+  runners; a tip with zero contexts throughout names run creation
+  and the fresh-push-event remedy.
 
 Acceptance:
 
-- The deliberate-overlap forcing test first: a package depending on
-  a member of the toolchain's own tree, the probe refusing when the
-  second install lifts it above the floor.
-- The isolated leg's resolved versions match the lock's dev-group
-  pins for the toolchain.
+- The deliberate-overlap forcing test first: a floored direct
+  dependency the toolchain pins higher; the starved install
+  resolves the floor, the pins lift it, the probe refuses naming
+  the movement.
+- `_dev_pins` exports the monorepo lock's pytest pin; a bare rig
+  answers None and the leg falls back to bare pytest.
+- Both timeout messages forced on the fake: zero contexts
+  throughout, and a run that hangs.
 - `uv run fm check` green.
 
 ## Phase 7: the environment (was phase 11)
@@ -1220,6 +1232,16 @@ not. Gates 0.1.0 together with phases 1-8.
   installs and refuses above-floor drift; dev tools never enter
   `[project]`, and a per-package test group carries floors under
   the same tested-claim rule.
+- 2026-09-02, not-started and hanging split (Willem): the base
+  gate's timeout distinguishes a run that reported and hung from a
+  tip that never got a run; detection of failed run creation is
+  uniform across the three forges, the safe remedy is not, and the
+  nudge stays a printed teaching. Gitea's wedged actions queue is
+  fixed upstream in 1.27.3 (banked with the quirk); the nudge
+  candidate becomes the empty-commit PR (open item 7). Building
+  the timeout split's forcing test exposed that lowest-direct
+  never starved the wheel's own dependencies (transitive to the
+  resolver); the leg now lists them explicitly.
 
 ## Open
 
@@ -1243,6 +1265,14 @@ not. Gates 0.1.0 together with phases 1-8.
 6. Whether repository governance (phase 8) gates 0.1.0 or follows
    it. Owner: Willem, at this plan's review.
 7. Automating the base-CI nudge if one forge's dropped-run rate
-   ever justifies it: the shape would be a capability-gated "can
-   this identity push to the base" probe, never try-and-roll-back.
-   Owner: whoever hits the rate; a direction, not a commitment.
+   ever justifies it. The candidate shape (2026-09-02): an
+   empty-commit PR merged through the normal path, which needs no
+   push permission and whose squash carries the same tree as the
+   old tip, so its run vouches the tree the release publishes.
+   Limits: it cures a dropped event, not a wedged runner queue
+   (its own checks need runs to merge); required approvals tax it
+   once governance lands, unless an admin token bypasses them
+   where the forge and its protection settings allow; and
+   empty-diff squash-merging needs a recorded verification on all
+   three servers before anything names it. Owner: whoever hits the
+   rate; a direction, not a commitment.

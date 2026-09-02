@@ -346,6 +346,76 @@ def _index_args(root: Path) -> tuple[str, ...]:
     return tuple(args)
 
 
+def _dev_pins(root: Path, scratch: Path) -> Path | None:
+    """The lock's dev-group resolution as exact pins; None without one.
+
+    ``uv export`` reads the workspace lock offline, so the isolated
+    venv's toolchain arrives at the versions the gate itself tested
+    with. A workspace without a lock or a dev group (a bare rig, a
+    consumer checkout) answers None and the leg falls back to a bare
+    pytest install.
+    """
+    pins = scratch / "dev-pins.txt"
+    result = subprocess.run(
+        [
+            "uv",
+            "export",
+            "--format",
+            "requirements-txt",
+            "--only-group",
+            "dev",
+            "--no-emit-project",
+            "--no-hashes",
+            "-o",
+            str(pins),
+        ],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0 or not pins.is_file():
+        return None
+    return pins
+
+
+def _direct_requirements(package: Package) -> tuple[str, ...]:
+    """The requirement strings *package*'s ``[project]`` declares.
+
+    The isolated install lists them explicitly beside the wheel: to
+    the resolver a wheel file's own dependencies are transitive, so
+    ``--resolution=lowest-direct`` would leave them at highest and
+    the floor leg would starve nothing. Named on the command line
+    they are direct, and the starvation lands where the leg aims it.
+    """
+    import tomllib
+
+    pyproject = package.directory / "pyproject.toml"
+    if not pyproject.is_file():
+        return ()
+    data = tomllib.loads(pyproject.read_text("utf-8"))
+    return tuple(
+        str(requirement)
+        for requirement in data.get("project", {}).get("dependencies", []) or []
+    )
+
+
+def _direct_versions(package: Package, resolved: dict[str, str]) -> dict[str, str]:
+    """The resolved versions of *package*'s own direct dependencies."""
+    import re
+
+    names = []
+    for requirement in _direct_requirements(package):
+        match = re.match(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)", requirement)
+        if match:
+            names.append(match.group(1).lower().replace("_", "-"))
+    return {
+        name: version
+        for name, version in resolved.items()
+        if name.lower().replace("_", "-") in names
+    }
+
+
 def run_isolated_test(
     package: Package,
     root: Path,
@@ -366,6 +436,13 @@ def run_isolated_test(
     dependency version. Everything else resolves from the repo's
     configured indexes, like a real consumer.
 
+    The toolchain installs after the wheel, at the lock's dev-group
+    pins where a lock exists (bare pytest otherwise), and a probe
+    then re-reads the package's own direct dependencies: the second
+    install is pip-shaped and moves versions without erroring, so a
+    toolchain pin that overlaps a floored dependency would silently
+    undo the starvation. Movement is a taught refusal.
+
     Returns the resolved version per distribution, the report's raw
     material ("floor leg: livery-forge 0.1.0").
     """
@@ -377,31 +454,9 @@ def run_isolated_test(
         fail(f"{package.name}: no wheel in dist/ to validate; build first")
     with tempfile.TemporaryDirectory() as scratch:
         venv = Path(scratch) / "venv"
-        for command in (
-            ["uv", "venv", str(venv)],
-            [
-                "uv",
-                "pip",
-                "install",
-                "--python",
-                str(venv / "bin" / "python"),
-                f"--resolution={resolution}",
-                *[f"--find-links={d}" for d in release_dirs],
-                *_index_args(root),
-                str(wheels[0]),
-            ],
-            # The runner installs at the default resolution on purpose:
-            # the floor leg's lowest-direct must starve the package's
-            # own dependencies, never drag pytest back a decade.
-            [
-                "uv",
-                "pip",
-                "install",
-                "--python",
-                str(venv / "bin" / "python"),
-                "pytest",
-            ],
-        ):
+        python = venv / "bin" / "python"
+
+        def _run_install(command: list[str]) -> None:
             result = subprocess.run(
                 command, cwd=scratch, capture_output=True, text=True, check=False
             )
@@ -410,6 +465,66 @@ def run_isolated_test(
                     f"{package.name} isolated install ({resolution}) exited"
                     f" {result.returncode}:\n{result.stdout}{result.stderr}"
                 )
+
+        def _listing() -> dict[str, str]:
+            listing = subprocess.run(
+                ["uv", "pip", "list", "--python", str(python), "--format", "json"],
+                cwd=scratch,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            versions: dict[str, str] = {}
+            if listing.returncode == 0:
+                for row in json.loads(listing.stdout or "[]"):
+                    versions[str(row.get("name", ""))] = str(row.get("version", ""))
+            return versions
+
+        _run_install(["uv", "venv", str(venv)])
+        _run_install(
+            [
+                "uv",
+                "pip",
+                "install",
+                "--python",
+                str(python),
+                f"--resolution={resolution}",
+                *[f"--find-links={d}" for d in release_dirs],
+                *_index_args(root),
+                str(wheels[0]),
+                # The declared dependencies ride the command line so
+                # the resolution strategy treats them as direct; see
+                # _direct_requirements.
+                *_direct_requirements(package),
+            ]
+        )
+        before = _direct_versions(package, _listing())
+        # The toolchain never rides the starved install: lowest-direct
+        # aimed at it once dragged pytest back a decade. Locked pins
+        # where the workspace has them; pytest is a no-op re-request
+        # when the pins already hold it.
+        pins = _dev_pins(root, Path(scratch))
+        if pins is not None:
+            _run_install(
+                ["uv", "pip", "install", "--python", str(python), "-r", str(pins)]
+            )
+        _run_install(["uv", "pip", "install", "--python", str(python), "pytest"])
+        after = _direct_versions(package, _listing())
+        moved = {
+            name: (before[name], version)
+            for name, version in after.items()
+            if name in before and before[name] != version
+        }
+        if moved:
+            listed = ", ".join(
+                f"{name} {was} -> {now}" for name, (was, now) in sorted(moved.items())
+            )
+            fail(
+                f"{package.name}: the toolchain install moved direct"
+                f" dependencies the {resolution} leg had resolved: {listed}."
+                " The starvation must stay honest; align the dev-group pin"
+                " with the floor, or release the dependency first."
+            )
         tests = package.directory / "tests"
         if tests.is_dir():
             result = subprocess.run(
@@ -432,23 +547,4 @@ def run_isolated_test(
                     f"{package.name} isolated tests ({resolution}) failed:\n"
                     f"{result.stdout[-4000:]}{result.stderr[-2000:]}"
                 )
-        listing = subprocess.run(
-            [
-                "uv",
-                "pip",
-                "list",
-                "--python",
-                str(venv / "bin" / "python"),
-                "--format",
-                "json",
-            ],
-            cwd=scratch,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        resolved: dict[str, str] = {}
-        if listing.returncode == 0:
-            for row in json.loads(listing.stdout or "[]"):
-                resolved[str(row.get("name", ""))] = str(row.get("version", ""))
-        return resolved
+        return _listing()

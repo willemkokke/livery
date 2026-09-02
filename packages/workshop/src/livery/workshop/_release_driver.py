@@ -205,9 +205,21 @@ def require_verified_base(
     vouching there is. Green, not merely not-red; red is a verdict
     waiting cannot improve; a skip-ci tip will never get a run; an
     unreachable forge fails open, the engine's UNKNOWN story says it
-    better. A tip with zero reported contexts gets one nudge, an
-    empty commit minting a fresh push event, refused harmlessly where
-    protection forbids it.
+    better.
+
+    Zero reported contexts after minutes means run creation itself
+    failed, and every forge can do it: Gitea's actions queue could
+    wedge before 1.27.3, GitHub silently drops a push's workflow-run
+    creation under load, and GitLab can never mint the pipeline (a
+    job-queue backlog, or workflow rules evaluating to nothing). The
+    combined-status read
+    reports all three identically, so detection is uniform; the safe
+    remedy is not (whether a tool may push to the base varies per
+    forge and protection), so the silent tip gets a printed teaching
+    naming the fresh-push-event remedy, never an automatic push. The
+    timeout tells the two conditions apart: a run that reported and
+    hung sends the reader to the runners, a tip that never got a run
+    names run creation.
     """
     if force:
         print("  base verification skipped (--force-unverified-base)")
@@ -216,6 +228,7 @@ def require_verified_base(
     announced = False
     silent_since: float | None = None
     nudged = False
+    ever_reported = False
     while True:
         try:
             git.fetch()
@@ -242,6 +255,7 @@ def require_verified_base(
             )
         now = time.monotonic()
         if status.contexts:
+            ever_reported = True
             silent_since = None
         elif silent_since is None:
             silent_since = now
@@ -253,10 +267,21 @@ def require_verified_base(
                 " needed (an empty commit mints one)."
             )
         if now >= deadline:
+            # Not started and hanging are different problems with
+            # different remedies, so the timeout names the one that
+            # actually happened.
+            if ever_reported:
+                fail(
+                    f"{base} reported a run but never went green within"
+                    f" {timeout / 60:.0f} minutes. Check the runners"
+                    " (`fm status --watch` on a branch follows a run), or"
+                    " --force-unverified-base."
+                )
             fail(
-                f"{base} did not report green within {timeout / 60:.0f}"
-                " minutes. Check the runners (`fm status --watch` on a"
-                " branch follows a run), or --force-unverified-base."
+                f"{base}'s tip never got a CI run in {timeout / 60:.0f}"
+                " minutes: run creation itself failed, and waiting cannot"
+                " fix that. A fresh push event mints a run (an empty"
+                " commit, or its PR merged), or --force-unverified-base."
             )
         if not announced:
             announced = True
