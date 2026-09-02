@@ -614,7 +614,7 @@ Acceptance:
 
 ## Follow-up: sync as the one-stop, and the integrate verb
 
-Ruled 2026-09-02; lands as its own PR after the home retirement.
+Ruled 2026-09-02; shipped as issue #83's PR.
 
 - `fm sync` also brings the checkout current: fast-forward when
   possible; otherwise rebase onto the updated remote branch, then
@@ -1292,6 +1292,10 @@ not. Gates 0.1.0 together with phases 1-8.
   ships as layer content (one source, materialised by sync) and
   the retired ruff_fix.py is gone; the RST roles left in published
   docstrings are swept.
+- 2026-09-02, governance gates 0.1.0 (Willem): phase 8 stays in
+  the 0.1.0 gate set (open item 6 closes); and merging on shared
+  branches is accepted, the squash erasing the merge commits, with
+  the subject-readers exempting `Merge ` lines.
 - 2026-09-02, a batch of rulings (Willem): the monorepo release
   view derives from tags plus per-package changelogs, never a
   second git-cliff config (open item 3 closes). Template
@@ -1392,8 +1396,7 @@ not. Gates 0.1.0 together with phases 1-8.
 5. Direction ruled 2026-09-02 (conan 2 for C/C++, a Maya-module
    package type for plugin distribution); the delivery detail
    stays with the composition-phase cut.
-6. Whether repository governance (phase 8) gates 0.1.0 or follows
-   it. Owner: Willem, needed at the phase 8 cut. (The sibling
+6. Resolved 2026-09-02: governance gates 0.1.0. (The sibling
    admin-bypass question is ruled: disabled.)
 7. Automating the base-CI nudge if one forge's dropped-run rate
    ever justifies it. The candidate shape (2026-09-02): an

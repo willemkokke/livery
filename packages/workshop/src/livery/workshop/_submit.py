@@ -181,7 +181,19 @@ def prepare(
             f"branch {branch!r} does not match <type>/<slug>"
             f" (types: {', '.join(_BRANCH_TYPES)})"
         )
-    resolved_title = title or git.head_subject()
+    # A merge commit (the engine's MERGE_DEFAULT, `fm integrate`) can
+    # be HEAD, and "Merge branch ..." is never the intent: the last
+    # real subject is. The squash erases the merge commits anyway.
+    default_title = git.head_subject()
+    if not title and default_title.startswith("Merge "):
+        real = [
+            subject
+            for subject in git.subjects_ahead(base)
+            if not subject.startswith("Merge ")
+        ]
+        if real:
+            default_title = real[-1]
+    resolved_title = title or default_title
     if not _TITLE_RE.match(resolved_title):
         fail(
             f"PR title rejected: {resolved_title!r}\n"
@@ -346,7 +358,11 @@ def push_and_pr(
         # recurring mis-title hse lived with). Re-submits never enter
         # this branch, where the default is inert anyway.
         if not plan.title_given:
-            subjects = git.subjects_ahead(plan.base)
+            subjects = [
+                subject
+                for subject in git.subjects_ahead(plan.base)
+                if not subject.startswith("Merge ")
+            ]
             if len(subjects) > 1:
                 listed = "\n".join(f"    - {subject}" for subject in subjects)
                 fail(
