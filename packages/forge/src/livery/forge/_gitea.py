@@ -414,9 +414,10 @@ class _GiteaRepository:
         if config.min_approvals is not None:
             payload["required_approvals"] = config.min_approvals
         if config.require_codeowner_review is not None:
-            # Gitea has no codeowner-approval switch; the nearest
-            # honest lever is blocking on official review requests,
-            # which codeowners files feed.
+            # Gitea has no codeowner-approval switch; the closest
+            # enforceable substitute is blocking on official review
+            # requests, which codeowners files feed. The substitution
+            # is documented on RepoConfig.require_codeowner_review.
             payload["block_on_official_review_requests"] = (
                 config.require_codeowner_review
             )
@@ -484,8 +485,13 @@ class _GiteaRepository:
             return None
         return Protection(
             required_approvals=int(data.get("required_approvals") or 0),
-            # Gitea has no codeowner-approval toggle to read.
-            require_codeowner_review=None,
+            # Gitea has no codeowner-approval toggle; configure writes
+            # the codeowner ask as block-on-official-review-requests
+            # (the substitution RepoConfig.require_codeowner_review
+            # documents), so the read answers through the same field.
+            require_codeowner_review=bool(
+                data.get("block_on_official_review_requests")
+            ),
             block_on_outdated=bool(data.get("block_on_outdated_branch")),
             block_on_rejected=bool(data.get("block_on_rejected_reviews")),
             required_contexts=tuple(

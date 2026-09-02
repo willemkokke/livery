@@ -41,7 +41,7 @@ def test_gitea_renders_the_same_shape_at_its_location() -> None:
 def test_gitlab_sections_express_the_count_in_the_file() -> None:
     rendered = _gitlab().codeowners(ENTRIES)
     assert rendered.path == ".gitlab/CODEOWNERS"
-    assert "[owners-2][2]" in rendered.content
+    assert "[owners-1][2]" in rendered.content
     assert "/packages/workshop/ @bob" in rendered.content
     assert rendered.notes == ()  # nothing approximated
 
@@ -96,3 +96,77 @@ def test_a_user_namespace_answers_itself_and_no_teams() -> None:
     )
     assert forge.members("solo") == ("solo",)
     assert forge.teams("solo") == ()
+
+
+def test_gitea_user_namespace_answers_itself_and_no_teams() -> None:
+    # Gitea's org endpoints 404 on a personal namespace; the
+    # fallback answers the login itself and an empty team list.
+    cassette = Cassette()
+    cassette.exchanges.extend(
+        [
+            _exchange(
+                "GET",
+                "http://gitea.local/api/v1/orgs/solo/members?limit=50&page=1",
+                404,
+                "{}",
+            ),
+            _exchange(
+                "GET",
+                "http://gitea.local/api/v1/orgs/solo/teams?limit=50&page=1",
+                404,
+                "{}",
+            ),
+        ]
+    )
+    forge = GiteaForge(
+        "http://gitea.local/api/v1",
+        token="t",
+        opener=ReplayOpener(cassette, secrets=("dummy",)),
+    )
+    assert forge.members("solo") == ("solo",)
+    assert forge.teams("solo") == ()
+
+
+def test_gitlab_user_namespace_answers_itself_and_no_teams() -> None:
+    # GitLab's group endpoints 404 on a personal namespace; same
+    # fallback shape as the other backends.
+    cassette = Cassette()
+    cassette.exchanges.extend(
+        [
+            _exchange(
+                "GET",
+                "http://gitlab.local/api/v4/groups/solo/members?per_page=100&page=1",
+                404,
+                "{}",
+            ),
+            _exchange(
+                "GET",
+                "http://gitlab.local/api/v4/groups/solo/subgroups?per_page=100&page=1",
+                404,
+                "{}",
+            ),
+        ]
+    )
+    forge = GitlabForge(
+        "http://gitlab.local/api/v4",
+        token="t",
+        opener=ReplayOpener(cassette, secrets=("dummy",)),
+    )
+    assert forge.members("solo") == ("solo",)
+    assert forge.teams("solo") == ()
+
+
+def test_gitlab_sections_cannot_absorb_a_later_plain_entry() -> None:
+    # A GitLab section owns every entry after its heading until the
+    # next heading, so a plain entry rendered after a counted one
+    # would inherit its count. The dialect renders plain entries
+    # first and each counted entry as its own trailing section.
+    adverse = (
+        CodeownersEntry(path="/packages/a/", owners=("alice",), min_approvals=2),
+        CodeownersEntry(path="/packages/b/", owners=("bob",)),
+    )
+    rendered = _gitlab().codeowners(adverse)
+    lines = rendered.content.splitlines()
+    assert lines[0] == "/packages/b/ @bob"  # plain, before any section
+    assert lines[1] == "[owners-1][2]"
+    assert lines[2] == "/packages/a/ @alice"

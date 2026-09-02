@@ -10,8 +10,9 @@ given) and the token as ``GITHUB_TOKEN`` first, then ``gh auth token``,
 so a machine with a signed-in gh CLI needs no configuration. The token
 belongs to the resolved host and no other.
 
-Capabilities: ``auto_merge``, ``force_cancel``, and
-``required_contexts`` are supported. ``ci_secrets`` depends on the
+Capabilities: ``auto_merge``, ``force_cancel``, ``required_contexts``,
+``schedule_events``, and ``min_approvals`` are supported.
+``ci_secrets`` depends on the
 ``github-secrets`` extra: the secrets API demands sealed-box
 encryption (libsodium), which PyNaCl provides and the standard
 library cannot, so ``livery-forge[github-secrets]`` turns the
@@ -462,12 +463,15 @@ class _GithubRepository:
                 "required_approving_review_count": approvals,
                 "require_code_owner_reviews": codeowner,
             }
+        # restrictions and the review settings this protocol does not
+        # model are cleared by the whole-rule PUT; strict is modelled
+        # (block_on_outdated) and preserved like the rest.
         self._client.request(
             f"{self._base}/branches/{quote(info.default_branch, safe='')}/protection",
             method="PUT",
             data={
                 "required_status_checks": {
-                    "strict": False,
+                    "strict": current.block_on_outdated if current else False,
                     "contexts": list(contexts),
                 },
                 "enforce_admins": True,

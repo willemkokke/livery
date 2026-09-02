@@ -737,15 +737,26 @@ def _governance_listings(driver: ForgeDriver) -> None:
 
 
 def _configure_approvals(driver: ForgeDriver) -> None:
-    """Approvals apply through protection and read back; idempotent."""
+    """Approvals and the codeowner ask apply and read back; preserved.
+
+    The contexts land first and must survive the later
+    approvals-only write: a whole-rule protection API (GitHub's)
+    may not clear what the caller did not state.
+    """
     repo = driver.fresh_repo()
-    repo.configure(RepoConfig(min_approvals=1))
-    protection = repo.protection("main")
+    branch = _default_branch(driver, repo)
+    context = driver.required_context()
+    repo.configure(RepoConfig(required_contexts=(context,)))
+    repo.configure(RepoConfig(min_approvals=1, require_codeowner_review=True))
+    protection = repo.protection(branch)
     assert protection is not None
     assert protection.required_approvals == 1
+    assert protection.require_codeowner_review is True
+    assert context in protection.required_contexts  # preserved
     repo.configure(RepoConfig(min_approvals=1))  # a re-run changes nothing
-    protection = repo.protection("main")
+    protection = repo.protection(branch)
     assert protection is not None and protection.required_approvals == 1
+    assert context in protection.required_contexts
 
 
 def _approvals_declined(driver: ForgeDriver) -> None:

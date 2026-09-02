@@ -168,7 +168,12 @@ class GitlabForge:
         return str(data.get("version", ""))
 
     def supports(self, capability: Capability) -> bool:
-        """Auto-merge and secrets yes; force-cancel and contexts no."""
+        """Auto-merge and secrets yes; the rest GitLab declines.
+
+        Force-cancel and required contexts have no free-tier
+        equivalent, schedule events are not exposed, and required
+        approval rules (``min_approvals``) are a paid feature.
+        """
         return capability in ("auto_merge", "ci_secrets")
 
     def repository(self, owner: str, name: str) -> Repository:
@@ -214,14 +219,22 @@ class GitlabForge:
 
         A section headed ``[name][n]`` carries the per-path approval
         count in the file itself, the one dialect that can; nothing
-        is approximated. Enforcing the counts still needs a paid
-        tier, which the ``min_approvals`` capability declines.
+        is approximated. Every entry after a heading belongs to that
+        section until the next one, so the plain entries render
+        first and each counted entry gets its own section after
+        them: order in the input can never leak a count onto a
+        neighbour. Enforcing the counts still needs a paid tier,
+        which the ``min_approvals`` capability declines.
         """
+        plain = [entry for entry in entries if entry.min_approvals <= 1]
+        counted = [entry for entry in entries if entry.min_approvals > 1]
         lines = []
-        for index, entry in enumerate(entries, 1):
+        for entry in plain:
             owners = " ".join(f"@{name}" for name in entry.owners)
-            if entry.min_approvals > 1:
-                lines.append(f"[owners-{index}][{entry.min_approvals}]")
+            lines.append(f"{entry.path} {owners}")
+        for index, entry in enumerate(counted, 1):
+            owners = " ".join(f"@{name}" for name in entry.owners)
+            lines.append(f"[owners-{index}][{entry.min_approvals}]")
             lines.append(f"{entry.path} {owners}")
         return Codeowners(
             path=".gitlab/CODEOWNERS",
@@ -357,6 +370,9 @@ class _GitlabRepository:
         if config.min_approvals is not None or (
             config.require_codeowner_review is not None
         ):
+            # Refused before anything else applies: assert nothing
+            # you will refuse, and the verb stays idempotent for a
+            # caller that probes supports() first.
             raise Unsupported(
                 "this forge cannot require approving reviews through its"
                 " free tier (capability: min_approvals): GitLab ties"

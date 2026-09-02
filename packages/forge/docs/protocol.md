@@ -44,6 +44,8 @@ and discovery joins the protocol only when a workflow demands it.
 | `force_cancel` | a run whose runner stopped answering can be cancelled immediately | yes | yes | no |
 | `required_contexts` | branch protection names the check contexts that must pass | yes | yes | no |
 | `ci_secrets` | `RepoConfig.secrets` can be stored through the backend | with the `github-secrets` extra (sealed-box encryption via PyNaCl); a bare install declines by name | yes | yes (masked variables) |
+| `min_approvals` | protection can require approving reviews (and a codeowner's) before merge | yes | yes | no (approval rules are a paid tier) |
+| `schedule_events` | the merge-scheduling history of a pull request can be read | yes | yes | no (`is_armed` reads the live field instead) |
 
 ## The verbs
 
@@ -59,6 +61,9 @@ and discovery joins the protocol only when a workflow demands it.
 | `get_repo(owner, name)` | settings or None; the probe that makes creation re-runnable |
 | `delete_repo(owner, name)` | idempotent |
 | `user_url(login)` | the profile address; string building, nothing on the wire |
+| `members(owner)` | the org's member logins; a user namespace answers its one login (the endpoints 404 there) |
+| `teams(owner)` | the org's team names; a user namespace answers empty |
+| `codeowners(entries)` | renders the forge's CODEOWNERS dialect from neutral entries; pure string building, offline |
 
 ### `Repository`: repository-level
 
@@ -67,6 +72,7 @@ and discovery joins the protocol only when a workflow demands it.
 | `configure(config)` | idempotent drift repair; None fields untouched; see `livery.forge.RepoConfig` |
 | `tags()` | every tag name; the release train's existence probe |
 | `branch_exists(branch)` | existence |
+| `protection(branch)` | the branch's `livery.forge.Protection`, or None; what a backend cannot read reads as inert |
 | `delete_branch(branch)` | idempotent; the abort path's cleanup (merge-path deletion is configuration) |
 | `web_url()` | the repository's home page |
 | `pr_url(number)` | the pull request's address |
@@ -102,6 +108,8 @@ reached on (see `quirks.md`).
 | `arm(number, *, title, message)` | merge when green, server-side; disarm before any push |
 | `disarm(number)` | cancels the schedule; True when one existed |
 | `is_armed(number)` | the schedule's state; a non-open pull request reads unarmed |
+| `reviews(number)` | the submitted review verdicts; drafts never arrive |
+| `schedule_events(number)` | the merge-scheduling history, oldest first; capability-gated (`schedule_events`) |
 | `comment(number, body)` | the evidence channel |
 
 The arming contract: pushing to an armed pull request races the

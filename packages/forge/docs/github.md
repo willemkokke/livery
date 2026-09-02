@@ -17,7 +17,7 @@ verbatim.
 
 ## Capabilities
 
-`auto_merge`, `force_cancel`, and `required_contexts` are supported.
+`auto_merge`, `force_cancel`, `required_contexts`, `min_approvals`, and `schedule_events` are supported.
 `ci_secrets` depends on the `github-secrets` extra: GitHub's secrets
 API takes only values sealed to the repository's public key
 (libsodium), so `livery-forge[github-secrets]` installs PyNaCl and
@@ -54,6 +54,18 @@ answers for the running install.
   conformance driver's `await_issue` bound.
 - `mergeable` is computed asynchronously after a pull request opens;
   merging inside that window is refused and callers retry.
+- Branch protection is one whole-rule PUT: the pieces the caller did
+  not state (contexts, approvals, the codeowner ask, the up-to-date
+  requirement) are read back and re-sent, so an approvals-only write
+  cannot clear the contexts. Push restrictions and the review
+  settings the protocol does not model are cleared by that PUT.
+  Admins are always bound (`enforce_admins`).
+- `members` and `teams` speak the org endpoints; on a personal
+  namespace they 404, and the fallback answers the login itself and
+  an empty team list. The codeowners dialect is
+  `.github/CODEOWNERS`; a per-path approval count above one is
+  approximated repository-wide and reported in the rendering's
+  notes.
 
 ## Fixtures
 

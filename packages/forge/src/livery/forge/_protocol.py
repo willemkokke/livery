@@ -433,8 +433,11 @@ class Repository(Protocol):
         Project birth and release aftercare run the same call.
 
         Raises livery.forge.Unsupported when a stated field needs a
-        capability the forge declines by name, ``required_contexts``
-        being the known case.
+        capability the forge declines by name: ``required_contexts``
+        and ``min_approvals`` on GitLab, ``ci_secrets`` on a GitHub
+        install without the ``github-secrets`` extra. A decline can
+        land after other stated fields already applied, so probe
+        ``supports()`` first when that matters.
         """
         ...
 
