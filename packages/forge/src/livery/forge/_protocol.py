@@ -349,11 +349,20 @@ class Issues(Protocol):
         ...
 
     def assign(self, number: int, assignee: str) -> None:
-        """Make *assignee* the issue's single assignee.
+        """Add *assignee* to the issue's assignees.
 
-        Replaces the assignee list rather than appending: assignment
-        means "this person is working on it now", and the list is the
-        answer to who that is.
+        Adds rather than replaces, so a colleague's assignment
+        survives; how many assignees an issue may carry is workspace
+        policy, enforced by the caller, because the forges' own
+        limits differ (GitLab's free tier carries one).
+        """
+        ...
+
+    def unassign(self, number: int) -> None:
+        """Remove the authenticated user from the issue's assignees.
+
+        Only the caller's own assignment: a colleague's stays. Not
+        being assigned is a no-op, so re-running is the recovery.
         """
         ...
 
@@ -363,6 +372,15 @@ class Issues(Protocol):
 
     def comment(self, number: int, body: str) -> None:
         """Post *body* as a comment on issue *number*."""
+        ...
+
+    def close(self, number: int) -> None:
+        """Close issue *number*; closing a closed issue is a no-op.
+
+        Idempotent so re-running is the recovery. The reason belongs
+        in a comment posted before the close: every forge keeps the
+        thread, none has a first-class close reason worth abstracting.
+        """
         ...
 
 

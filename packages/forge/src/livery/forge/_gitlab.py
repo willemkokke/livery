@@ -1002,14 +1002,71 @@ class _GitlabIssues:
         issues.sort(key=lambda issue: issue.number)
         return tuple(issues)
 
+    def _assignee_ids(self, number: int) -> tuple[int, ...]:
+        """The issue's current assignees, as GitLab user ids.
+
+        A tuple, because inside this class ``list`` names the issue
+        listing, not the builtin.
+        """
+        data = self._client.request(f"{self._base}/issues/{number}")
+        return tuple(
+            int(person["id"])
+            for person in (data or {}).get("assignees") or []
+            if person.get("id") is not None
+        )
+
     def assign(self, number: int, assignee: str) -> None:
-        """Make *assignee* the single assignee, replacing the list."""
+        """Add *assignee* to the issue's assignees.
+
+        GitLab's PUT replaces the whole list, so the add is a
+        read-modify-write over the current assignee ids. The free
+        tier keeps one assignee and silently drops the rest; the
+        caller's policy limit is what makes that honest.
+        """
         if self.get(number) is None:
             raise ForgeError(f"no issue {number} at {self._base}", status=404)
+        ids = self._assignee_ids(number)
+        wanted = self._user_id(assignee)
+        if wanted not in ids:
+            ids = (*ids, wanted)
         self._client.request(
             f"{self._base}/issues/{number}",
             method="PUT",
-            data={"assignee_ids": [self._user_id(assignee)]},
+            data={"assignee_ids": list(ids)},
+        )
+
+    def unassign(self, number: int) -> None:
+        """Remove the authenticated user from the issue's assignees."""
+        if self.get(number) is None:
+            raise ForgeError(f"no issue {number} at {self._base}", status=404)
+        ids = self._assignee_ids(number)
+        mine = self._user_id(self._forge.whoami())
+        if mine not in ids:
+            return
+        # 0 is GitLab's documented clear-all sentinel; an empty list
+        # is ignored by some versions, which would leave the caller
+        # assigned while reporting success.
+        self._client.request(
+            f"{self._base}/issues/{number}",
+            method="PUT",
+            data={"assignee_ids": [i for i in ids if i != mine] or [0]},
+        )
+
+    def close(self, number: int) -> None:
+        """Close issue *number*; a closed issue stays closed.
+
+        ``state_event=close`` on an already-closed issue is refused
+        by GitLab, so the current state gates the write.
+        """
+        issue = self.get(number)
+        if issue is None:
+            raise ForgeError(f"no issue {number} at {self._base}", status=404)
+        if issue.state == "closed":
+            return
+        self._client.request(
+            f"{self._base}/issues/{number}",
+            method="PUT",
+            data={"state_event": "close"},
         )
 
     def assigned_to_me(self) -> tuple[Issue, ...]:

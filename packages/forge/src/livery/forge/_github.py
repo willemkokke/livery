@@ -1041,13 +1041,23 @@ class _GithubIssues:
         return tuple(issues)
 
     def assign(self, number: int, assignee: str) -> None:
-        """Make *assignee* the single assignee, replacing the list."""
+        """Add *assignee* to the issue's assignees."""
         if self.get(number) is None:
             raise ForgeError(f"no issue {number} at {self._base}", status=404)
         self._client.request(
-            f"{self._base}/issues/{number}",
-            method="PATCH",
+            f"{self._base}/issues/{number}/assignees",
+            method="POST",
             data={"assignees": [assignee]},
+        )
+
+    def unassign(self, number: int) -> None:
+        """Remove the authenticated user from the issue's assignees."""
+        if self.get(number) is None:
+            raise ForgeError(f"no issue {number} at {self._base}", status=404)
+        self._client.request(
+            f"{self._base}/issues/{number}/assignees",
+            method="DELETE",
+            data={"assignees": [self._forge.whoami()]},
         )
 
     def assigned_to_me(self) -> tuple[Issue, ...]:
@@ -1066,4 +1076,14 @@ class _GithubIssues:
             f"{self._base}/issues/{number}/comments",
             method="POST",
             data={"body": body},
+        )
+
+    def close(self, number: int) -> None:
+        """Close issue *number*; a closed issue stays closed."""
+        if self.get(number) is None:
+            raise ForgeError(f"no issue {number} at {self._base}", status=404)
+        self._client.request(
+            f"{self._base}/issues/{number}",
+            method="PATCH",
+            data={"state": "closed"},
         )

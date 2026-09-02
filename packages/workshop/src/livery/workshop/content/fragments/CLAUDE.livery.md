@@ -22,7 +22,9 @@ with `origin/main`.
   hides until the day it is the only path left. A fallback without a
   test forcing it is untested code.
 
-- Agent sessions work in worktrees under `.claude/worktrees/`.
+- Ad-hoc agent sessions work in worktrees under `.claude/worktrees/`.
+  Issue work (`fm issue.start`) lives in worktrees under the runner's
+  home (`$LIVERY_HOME/worktrees/<repo>/`), outside every repository.
 - Failure reasons are printed verbatim, never read as booleans.
 - Never pipe the output of a command whose verdict you depend on: a
   pipe replaces its exit code with the filter's and truncates the

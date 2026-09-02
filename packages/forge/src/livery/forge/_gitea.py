@@ -954,11 +954,35 @@ class _GiteaIssues:
         return tuple(issues)
 
     def assign(self, number: int, assignee: str) -> None:
-        """Make *assignee* the single assignee, replacing the list."""
+        """Add *assignee* to the issue's assignees.
+
+        Gitea's PATCH replaces the whole list, so the add is a
+        read-modify-write over the current assignees.
+        """
+        issue = self.get(number)
+        if issue is None:
+            raise ForgeError(f"no issue {number} at {self._base}", status=404)
+        assignees = list(issue.assignees)
+        if assignee not in assignees:
+            assignees.append(assignee)
         self._client.request(
             f"{self._base}/issues/{number}",
             method="PATCH",
-            data={"assignees": [assignee]},
+            data={"assignees": assignees},
+        )
+
+    def unassign(self, number: int) -> None:
+        """Remove the authenticated user from the issue's assignees."""
+        issue = self.get(number)
+        if issue is None:
+            raise ForgeError(f"no issue {number} at {self._base}", status=404)
+        me = self._forge.whoami()
+        if me not in issue.assignees:
+            return
+        self._client.request(
+            f"{self._base}/issues/{number}",
+            method="PATCH",
+            data={"assignees": [name for name in issue.assignees if name != me]},
         )
 
     def assigned_to_me(self) -> tuple[Issue, ...]:
@@ -975,4 +999,14 @@ class _GiteaIssues:
             f"{self._base}/issues/{number}/comments",
             method="POST",
             data={"body": body},
+        )
+
+    def close(self, number: int) -> None:
+        """Close issue *number*; a closed issue stays closed."""
+        if self.get(number) is None:
+            raise ForgeError(f"no issue {number} at {self._base}", status=404)
+        self._client.request(
+            f"{self._base}/issues/{number}",
+            method="PATCH",
+            data={"state": "closed"},
         )
