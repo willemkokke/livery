@@ -37,6 +37,8 @@ from livery.forge._protocol import Checks, Issues, PullRequests, Releases, Repos
 from livery.forge._types import (
     Capability,
     CheckState,
+    Codeowners,
+    CodeownersEntry,
     CombinedStatus,
     Conclusion,
     Issue,
@@ -191,11 +193,65 @@ class GithubForge:
             "force_cancel",
             "required_contexts",
             "schedule_events",
+            "min_approvals",
         )
 
     def repository(self, owner: str, name: str) -> Repository:
         """The view onto one repository. Cheap, no network."""
         return _GithubRepository(self, self._client, owner, name)
+
+    def members(self, owner: str) -> tuple[str, ...]:
+        """The org's member logins; a user namespace is its one login."""
+        try:
+            rows = self._client.paginate(
+                lambda page: self._client.request(
+                    f"/orgs/{quote(owner)}/members?per_page=100&page={page}"
+                ),
+                subject=f"/orgs/{owner}/members",
+            )
+        except ForgeError as error:
+            if error.status == 404:
+                return (owner,)
+            raise
+        return tuple(sorted(str(row.get("login", "")) for row in rows))
+
+    def teams(self, owner: str) -> tuple[str, ...]:
+        """The org's team slugs; a user namespace has none."""
+        try:
+            rows = self._client.paginate(
+                lambda page: self._client.request(
+                    f"/orgs/{quote(owner)}/teams?per_page=100&page={page}"
+                ),
+                subject=f"/orgs/{owner}/teams",
+            )
+        except ForgeError as error:
+            if error.status == 404:
+                return ()
+            raise
+        return tuple(sorted(str(row.get("slug", "")) for row in rows))
+
+    def codeowners(self, entries: tuple[CodeownersEntry, ...]) -> Codeowners:
+        """GitHub's dialect: ``.github/CODEOWNERS``, ``@owner`` lines.
+
+        A per-path approval count has no spelling here; protection
+        approximates it repository-wide, and the note says so.
+        """
+        lines = []
+        notes = []
+        for entry in entries:
+            owners = " ".join(f"@{name}" for name in entry.owners)
+            lines.append(f"{entry.path} {owners}")
+            if entry.min_approvals > 1:
+                notes.append(
+                    f"{entry.path}: {entry.min_approvals} approvals wanted;"
+                    " GitHub expresses one repository-wide count through"
+                    " protection, not per path"
+                )
+        return Codeowners(
+            path=".github/CODEOWNERS",
+            content="\n".join(lines) + "\n" if lines else "",
+            notes=tuple(notes),
+        )
 
     def user_url(self, login: str) -> str:
         """The address of *login*'s profile; nothing on the wire."""
@@ -318,8 +374,12 @@ class _GithubRepository:
             patch["allow_auto_merge"] = config.allow_auto_merge
         if patch:
             self._client.request(self._base, method="PATCH", data=patch)
-        if config.required_contexts is not None:
-            self._protect_default_branch(config.required_contexts)
+        if (
+            config.required_contexts is not None
+            or config.min_approvals is not None
+            or config.require_codeowner_review is not None
+        ):
+            self._protect_default_branch(config)
         if config.secrets is not None:
             if importlib.util.find_spec("nacl") is None:
                 raise Unsupported(
@@ -365,11 +425,43 @@ class _GithubRepository:
                 },
             )
 
-    def _protect_default_branch(self, contexts: tuple[str, ...]) -> None:
-        """Require *contexts* on the default branch's protection."""
+    def _protect_default_branch(self, config: RepoConfig) -> None:
+        """Apply the protection half of *config* as one rule.
+
+        GitHub's protection PUT replaces the whole rule, so the
+        pieces the caller did not state are read back and preserved.
+        Admins are always bound (``enforce_admins``): a protection
+        that exempts admins is a bypass nobody reviewed, and the
+        one case that would want it (automating the base-CI nudge)
+        is an explicit future ruling, never a default.
+        """
         info = self._forge.get_repo(self._owner, self._name)
         if info is None:
             raise ForgeError(f"{self._owner}/{self._name} does not exist")
+        current = self.protection(info.default_branch)
+        contexts = (
+            config.required_contexts
+            if config.required_contexts is not None
+            else (current.required_contexts if current else ())
+        )
+        approvals = (
+            config.min_approvals
+            if config.min_approvals is not None
+            else (current.required_approvals if current else 0)
+        )
+        codeowner = (
+            config.require_codeowner_review
+            if config.require_codeowner_review is not None
+            else bool(current.require_codeowner_review)
+            if current
+            else False
+        )
+        reviews = None
+        if approvals or codeowner:
+            reviews = {
+                "required_approving_review_count": approvals,
+                "require_code_owner_reviews": codeowner,
+            }
         self._client.request(
             f"{self._base}/branches/{quote(info.default_branch, safe='')}/protection",
             method="PUT",
@@ -378,8 +470,8 @@ class _GithubRepository:
                     "strict": False,
                     "contexts": list(contexts),
                 },
-                "enforce_admins": False,
-                "required_pull_request_reviews": None,
+                "enforce_admins": True,
+                "required_pull_request_reviews": reviews,
                 "restrictions": None,
             },
         )

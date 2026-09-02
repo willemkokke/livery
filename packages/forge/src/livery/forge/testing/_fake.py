@@ -25,6 +25,8 @@ from livery.forge._errors import ForgeError, Unsupported
 from livery.forge._protocol import Checks, Issues, PullRequests, Releases, Repository
 from livery.forge._types import (
     Capability,
+    Codeowners,
+    CodeownersEntry,
     CombinedStatus,
     Conclusion,
     Issue,
@@ -49,6 +51,7 @@ _ALL_CAPABILITIES: tuple[Capability, ...] = (
     "required_contexts",
     "ci_secrets",
     "schedule_events",
+    "min_approvals",
 )
 
 
@@ -184,6 +187,8 @@ class FakeForge:
         self._version = version
         self._capabilities = frozenset(capabilities)
         self._repos: dict[tuple[str, str], _RepoState] = {}
+        self._members: dict[str, tuple[str, ...]] = {}
+        self._teams: dict[str, tuple[str, ...]] = {}
         self._next_sha = 1
         self._next_run = 1
         self._next_job = 1
@@ -205,6 +210,41 @@ class FakeForge:
     def repository(self, owner: str, name: str) -> Repository:
         """The view onto one repository. Cheap, no existence check."""
         return _FakeRepository(self, owner, name)
+
+    def set_members(self, owner: str, members: tuple[str, ...]) -> None:
+        """Test helper: what ``members(owner)`` answers for an org."""
+        self._members[owner] = members
+
+    def set_teams(self, owner: str, teams: tuple[str, ...]) -> None:
+        """Test helper: what ``teams(owner)`` answers for an org."""
+        self._teams[owner] = teams
+
+    def members(self, owner: str) -> tuple[str, ...]:
+        """Configured members; a namespace nobody configured is a user."""
+        return self._members.get(owner, (owner,))
+
+    def teams(self, owner: str) -> tuple[str, ...]:
+        """Configured teams; a namespace nobody configured has none."""
+        return self._teams.get(owner, ())
+
+    def codeowners(self, entries: tuple[CodeownersEntry, ...]) -> Codeowners:
+        """The fake's dialect: a root ``CODEOWNERS``, GitHub-shaped."""
+        lines = []
+        notes = []
+        for entry in entries:
+            owners = " ".join(f"@{name}" for name in entry.owners)
+            lines.append(f"{entry.path} {owners}")
+            if entry.min_approvals > 1:
+                notes.append(
+                    f"{entry.path}: {entry.min_approvals} approvals wanted;"
+                    " the fake expresses one repository-wide count through"
+                    " protection, not per path"
+                )
+        return Codeowners(
+            path="CODEOWNERS",
+            content="\n".join(lines) + "\n" if lines else "",
+            notes=tuple(notes),
+        )
 
     def user_url(self, login: str) -> str:
         """The address of *login*'s profile under the ``fake://`` scheme."""
@@ -482,6 +522,31 @@ class _FakeRepository:
             state.delete_branch_on_merge = config.delete_branch_on_merge
         if config.allow_auto_merge is not None:
             state.allow_auto_merge = config.allow_auto_merge
+        if config.min_approvals is not None or (
+            config.require_codeowner_review is not None
+        ):
+            if not self._fake.supports("min_approvals"):
+                raise Unsupported(
+                    "this forge cannot require approving reviews"
+                    " (capability: min_approvals)"
+                )
+            branch = state.default_branch
+            current = state.protections.get(branch, Protection())
+            state.protections[branch] = Protection(
+                required_approvals=(
+                    config.min_approvals
+                    if config.min_approvals is not None
+                    else current.required_approvals
+                ),
+                require_codeowner_review=(
+                    config.require_codeowner_review
+                    if config.require_codeowner_review is not None
+                    else current.require_codeowner_review
+                ),
+                block_on_outdated=current.block_on_outdated,
+                block_on_rejected=current.block_on_rejected,
+                required_contexts=current.required_contexts,
+            )
         if config.required_contexts is not None:
             state.required_contexts = config.required_contexts
             # Asserting contexts creates the branch protection, as it
@@ -1025,6 +1090,10 @@ class FakeDriver:
     def fresh_repo(self) -> Repository:
         """A new repository with an initialised default branch."""
         owner, name = self.unused_repo_name()
+        # An org shape for the listings: the caller is a member, as
+        # on any real forge the scenarios run against.
+        self.fake.set_members(owner, (self.fake.whoami(), "colleague"))
+        self.fake.set_teams(owner, ("core",))
         return self.fake.create_repo(owner, name)
 
     def push(
@@ -1078,6 +1147,11 @@ class FakeDriver:
     def await_merged(self, repo_owner: str, repo_name: str, number: int) -> None:
         """The fake merges inside settle: nothing to await."""
         self.fake._require_pr(self.fake._require_repo(repo_owner, repo_name), number)
+
+    def await_branch(
+        self, repo_owner: str, repo_name: str, branch: str, *, present: bool
+    ) -> None:
+        """The fake is immediately consistent."""
 
     def await_issue(
         self, repo_owner: str, repo_name: str, number: int, *, assignee: str = ""

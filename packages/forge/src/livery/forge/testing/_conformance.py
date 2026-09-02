@@ -143,6 +143,17 @@ class ForgeDriver(Protocol):
         """
         ...
 
+    def await_branch(
+        self, repo_owner: str, repo_name: str, branch: str, *, present: bool
+    ) -> None:
+        """Return once *branch*'s existence matches *present*.
+
+        Branch reads are eventually consistent on github.com (a
+        deleted branch answers for seconds afterwards); the fake is
+        immediate, a real driver polls.
+        """
+        ...
+
     def await_issue(
         self, repo_owner: str, repo_name: str, number: int, *, assignee: str = ""
     ) -> None:
@@ -224,8 +235,10 @@ def _branches(driver: ForgeDriver) -> None:
     repo = driver.fresh_repo()
     assert not repo.branch_exists("feature")
     driver.push(repo.owner, repo.name, "feature")
+    driver.await_branch(repo.owner, repo.name, "feature", present=True)
     assert repo.branch_exists("feature")
     repo.delete_branch("feature")
+    driver.await_branch(repo.owner, repo.name, "feature", present=False)
     assert not repo.branch_exists("feature")
     repo.delete_branch("feature")  # idempotent
 
@@ -713,6 +726,39 @@ def _issue_assign(driver: ForgeDriver) -> None:
         raise AssertionError("assigning a missing issue must raise")
 
 
+def _governance_listings(driver: ForgeDriver) -> None:
+    """Members carries the caller; teams answers, empty allowed."""
+    repo = driver.fresh_repo()
+    me = driver.forge.whoami()
+    members = driver.forge.members(repo.owner)
+    assert me in members
+    teams = driver.forge.teams(repo.owner)
+    assert isinstance(teams, tuple)
+
+
+def _configure_approvals(driver: ForgeDriver) -> None:
+    """Approvals apply through protection and read back; idempotent."""
+    repo = driver.fresh_repo()
+    repo.configure(RepoConfig(min_approvals=1))
+    protection = repo.protection("main")
+    assert protection is not None
+    assert protection.required_approvals == 1
+    repo.configure(RepoConfig(min_approvals=1))  # a re-run changes nothing
+    protection = repo.protection("main")
+    assert protection is not None and protection.required_approvals == 1
+
+
+def _approvals_declined(driver: ForgeDriver) -> None:
+    """A forge without the capability declines by its name."""
+    repo = driver.fresh_repo()
+    try:
+        repo.configure(RepoConfig(min_approvals=1))
+    except Unsupported as refusal:
+        assert "min_approvals" in str(refusal)
+    else:
+        raise AssertionError("min_approvals must be declined by name")
+
+
 def _issue_close(driver: ForgeDriver) -> None:
     """Close closes, is idempotent, and a missing number is refused."""
     repo = driver.fresh_repo()
@@ -804,5 +850,8 @@ SCENARIOS: tuple[Scenario, ...] = (
     Scenario("issue-assign", _issue_assign),
     Scenario("issue-comment", _issue_comment),
     Scenario("issue-close", _issue_close),
+    Scenario("governance-listings", _governance_listings),
+    Scenario("configure-approvals", _configure_approvals, requires=("min_approvals",)),
+    Scenario("approvals-declined", _approvals_declined, forbids=("min_approvals",)),
 )
 """Every conformance scenario, in the order the groups are documented."""
