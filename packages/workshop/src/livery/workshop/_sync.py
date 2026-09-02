@@ -21,8 +21,12 @@ from __future__ import annotations
 import importlib
 from importlib import resources
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from footman import fail, task
+
+if TYPE_CHECKING:
+    from livery.workshop._git_ops import GitOps
 
 from livery.workshop._layers import layer_names, workspace_root
 from livery.workshop._materialise import materialise, write_lf
@@ -118,20 +122,205 @@ def sync_workspace(root: Path) -> list[str]:
     return lines
 
 
-@task
-def sync() -> None:
-    """Materialise every layer's content and match the environment to the lock.
+def _foreign_authors(git: GitOps, onto: str) -> set[str]:
+    """Author emails a rebase onto *onto* would rewrite; never this user's."""
+    me = git._run("config", "user.email").strip()
+    authors = git._run("log", "--format=%ae", f"{onto}..HEAD").strip()
+    return {email for email in authors.splitlines() if email and email != me}
 
-    Fragments, skills, hooks, the stub, then ``uv sync`` so the
-    environment agrees with ``uv.lock``. Idempotent: re-running it is
-    the recovery procedure, and a quiet run means everything already
-    matched.
+
+def _try_rebase(git: GitOps, onto: str) -> str:
+    """Attempt a rebase onto *onto*: ``clean`` or ``conflict``.
+
+    A conflicted attempt is aborted, so the branch is exactly as it
+    was: the caller decides whether a person resolves it.
     """
+    from livery.workshop._git_ops import GitError
+
+    try:
+        git._run("rebase", onto)
+    except GitError:
+        git._run("rebase", "--abort")
+        return "conflict"
+    return "clean"
+
+
+def _rebase_step(git: GitOps, onto: str, *, interactive: bool) -> bool:
+    """One rebase of the current branch onto *onto*; whether it landed.
+
+    Foreign-authored commits gate the rebase: rewriting them orphans
+    every other copy of the branch, so the shared-branch case goes
+    through ``fm integrate`` (a merge) unless a person says
+    otherwise. A conflicted rebase is never entered silently: an
+    interactive run may choose to resolve it now, everything else
+    parks with the teaching.
+    """
+    import footman
+
+    branch = git.current_branch()
+    foreign = _foreign_authors(git, onto)
+    if foreign:
+        listed = ", ".join(sorted(foreign))
+        if not (
+            interactive
+            and footman.confirm(
+                f"rebasing {branch} onto {onto} rewrites commits by"
+                f" {listed}; their copies would be orphaned. Rebase anyway?"
+            )
+        ):
+            print(
+                f"  left {branch} behind {onto}: it carries commits by"
+                f" {listed}, and rewriting them orphans every other copy."
+                " Bring the base in by merge instead: `fm integrate`."
+            )
+            return False
+    outcome = _try_rebase(git, onto)
+    if outcome == "clean":
+        print(f"  rebased {branch} onto {onto}")
+        return True
+    if interactive and footman.confirm(
+        f"rebasing {branch} onto {onto} hits conflicts. Start the rebase"
+        " and resolve them now?"
+    ):
+        import contextlib
+
+        from livery.workshop._git_ops import GitError
+
+        with contextlib.suppress(GitError):
+            git._run("rebase", onto)
+        raise SystemExit(
+            "  the rebase is started and waiting on you: resolve the"
+            " conflicts, `git rebase --continue`, then run `fm sync`"
+            " again."
+        )
+    print(
+        f"  left {branch} behind {onto}: the rebase has conflicts. Run"
+        " `fm sync` interactively to resolve them, or bring the base in"
+        " by merge with `fm integrate`."
+    )
+    return False
+
+
+def bring_current(root: Path, git: GitOps, *, interactive: bool) -> None:
+    """Bring the current checkout up to date; the one-stop's first act.
+
+    ``main`` only ever fast-forwards. A reserved ``workflow/`` branch
+    belongs to the engine, a detached HEAD names no branch, and a
+    dirty tree is never moved: each skips with its note. A feature
+    branch fast-forwards onto its moved remote, rebases onto it when
+    diverged, then rebases onto the base; a rebase of a pushed
+    branch finishes the job with the leased force-push, because
+    rebased-locally with a stale remote is the worst state.
+    """
+    _ = root
+    branch = git.current_branch()
+    if not branch:
+        print("  detached HEAD: nothing to bring current")
+        return
+    git.fetch()
+    if branch == "main":
+        try:
+            git._run("merge", "--ff-only", "origin/main")
+        except Exception:
+            print(
+                "  main has local commits origin does not: never rebased,"
+                " never merged here. Move them to a branch."
+            )
+        return
+    if branch.startswith("workflow/"):
+        return  # the engine owns a workflow branch's staleness
+    if not git.is_clean():
+        print("  uncommitted changes: the branch stays where it is")
+        return
+    rebased = False
+    remote_exists = branch in git.remote_branches("")
+    if remote_exists:
+        ahead_remote = git._run(
+            "rev-list", "--count", f"origin/{branch}..{branch}"
+        ).strip()
+        behind_remote = git._run(
+            "rev-list", "--count", f"{branch}..origin/{branch}"
+        ).strip()
+        if behind_remote != "0":
+            if ahead_remote == "0":
+                git._run("merge", "--ff-only", f"origin/{branch}")
+                print(f"  fast-forwarded {branch} to origin/{branch}")
+            elif not _rebase_step(git, f"origin/{branch}", interactive=interactive):
+                return
+            else:
+                rebased = True
+    behind_base = git._run("rev-list", "--count", f"{branch}..origin/main").strip()
+    if behind_base != "0":
+        if not _rebase_step(git, "origin/main", interactive=interactive):
+            return
+        rebased = True
+    if rebased and remote_exists:
+        # The same commits, rewritten: the lease guards anything a
+        # colleague pushed since the fetch above.
+        git.push_force(branch)
+        print(f"  origin/{branch} follows (leased force-push)")
+
+
+@task(interactive=True)
+def sync() -> None:
+    """Bring the checkout current, materialise content, match the lock.
+
+    The one-stop: fast-forward or rebase the current branch (asking
+    before anything conflicted or shared), then every layer's
+    fragments, skills, and hooks, then ``uv sync`` so the
+    environment agrees with ``uv.lock``. Idempotent: re-running it
+    is the recovery procedure.
+    """
+    import sys
+
+    from livery.workshop._git_ops import GitOps
     from livery.workshop._uv import run_uv
 
     root = workspace_root()
     if root is None:
         fail("no workspace: no livery.toml above the working directory")
+    bring_current(root, GitOps(root), interactive=sys.stdin.isatty())
     for line in sync_workspace(root):
         print(line)
     run_uv("sync", root=root)
+
+
+@task
+def integrate() -> None:
+    """Bring ``origin/main`` into the current branch by merge.
+
+    The shared-branch spelling: a merge never rewrites, so every
+    other copy of the branch stays valid, and the squash erases the
+    merge commit at landing. A conflict stops with git's own words;
+    resolve, commit, and re-run.
+    """
+    from livery.workshop._git_ops import GitError, GitOps
+
+    root = workspace_root()
+    if root is None:
+        fail("no workspace: no livery.toml above the working directory")
+    git = GitOps(root)
+    branch = git.current_branch()
+    if not branch or branch == "main" or branch.startswith("workflow/"):
+        fail(
+            "integrate brings origin/main into a feature branch, and"
+            f" you are on {branch or '(detached)'!r}."
+        )
+    if not git.is_clean():
+        fail(
+            "the working tree has uncommitted changes: commit them first,"
+            " so the merge has one parent to speak for you."
+        )
+    before = git.head_sha()
+    try:
+        git.integrate("main")
+    except GitError as error:
+        fail(
+            f"the merge stopped on conflicts:\n{error}\n  Resolve them,"
+            " `git commit`, and the branch is current; re-running any verb"
+            " is the recovery."
+        )
+    if git.head_sha() == before:
+        print("  already current with origin/main")
+    else:
+        print(f"  merged origin/main into {branch}")

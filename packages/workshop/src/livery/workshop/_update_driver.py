@@ -104,7 +104,13 @@ class UpdateDriver:
                 git.switch(self.branch)
             subjects = git.subjects_ahead(self.base)
             if subjects:
-                foreign = [s for s in subjects if not s.startswith("chore:")]
+                # A "Merge " subject is the engine's own MERGE_DEFAULT
+                # bringing the base in, never someone's hand-made work.
+                foreign = [
+                    s
+                    for s in subjects
+                    if not s.startswith("chore:") and not s.startswith("Merge ")
+                ]
                 if foreign:
                     listed = "\n".join(f"    {s}" for s in foreign)
                     fail(
