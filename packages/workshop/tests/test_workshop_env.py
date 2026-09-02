@@ -31,6 +31,18 @@ from livery.workshop._hooks import HookEvent, ToolInput, post_edit, stop
 _FAILURES = (SystemExit, Failed)
 
 
+@pytest.fixture(autouse=True)
+def _isolated_shared(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the machine's own shared env file out of every test.
+
+    The cascade defaults its shared dir to the runner's real config
+    directory, which on a developer machine holds live tokens.
+    """
+    home = tmp_path / "shared-home"
+    home.mkdir(exist_ok=True)
+    monkeypatch.setattr("footman.config_dir", lambda: home)
+
+
 # --- the cascade: refusals and edge rows first ---
 
 
@@ -82,17 +94,17 @@ def test_precedence_is_kind_major_and_nearest_wins(tmp_path: Path) -> None:
     assert stack.managed().get("KEY") is None
 
 
-def test_the_shared_dir_resolves_from_the_repo_files_first(
-    tmp_path: Path,
+def test_the_shared_dir_defaults_to_the_runners_config_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # The two-pass load: LIVERY_HOME named only in a local file, and
-    # the shared store there still contributes.
+    # A footman plugin owns no home: the shared file lives in the
+    # runner's config directory, asked of footman.
     root = tmp_path / "repo"
     root.mkdir()
-    home = tmp_path / "elsewhere"
+    home = tmp_path / "runner-config"
     home.mkdir()
     (home / ".repo.shared.env").write_text("FROM_SHARED=yes\n")
-    (root / ".repo.env.local").write_text(f"LIVERY_HOME={home}\n")
+    monkeypatch.setattr("footman.config_dir", lambda: home)
     stack = load_cascade(root, root, environ={})
     assert stack.values["FROM_SHARED"] == "yes"
 

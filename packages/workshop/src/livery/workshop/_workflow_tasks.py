@@ -88,17 +88,19 @@ def abort_policy(
     elif len(states) == 1:
         target = states[0]
     elif interactive:
-        print("  several workflows are in flight:")
-        for index, wf in enumerate(states, 1):
-            author = wf.author or "unknown author"
-            print(f"    {index}. {wf.name} ({author}, {wf.state.value})")
-        answer = input("  abort which? (number, or empty to stop) ").strip()
-        if not answer:
+        import footman
+
+        options: list[tuple[str, WorkflowStatus | None]] = [
+            (f"{wf.name} ({wf.author or 'unknown author'}, {wf.state.value})", wf)
+            for wf in states
+        ]
+        options.append(("nothing - leave them all running", None))
+        picked = footman.select("abort which?", options)
+        # The select's typing admits a bare-label pick; every option
+        # here carries a value, so a str can only mean no target.
+        target = picked if not isinstance(picked, str) else None
+        if target is None:
             raise SystemExit("  nothing aborted")
-        try:
-            target = states[int(answer) - 1]
-        except (ValueError, IndexError):
-            fail(f"{answer!r} names none of the listed workflows")
     else:
         listed = "\n".join(
             f"    fm workflow.abort {wf.name}"
@@ -145,7 +147,7 @@ def _active_names() -> tuple[str, ...]:
         return ()
 
 
-@workflow.task(name="abort")
+@workflow.task(name="abort", interactive=True)
 def workflow_abort(
     name: Annotated[
         str,

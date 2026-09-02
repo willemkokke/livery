@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from _gitea_driver import ROOT, GiteaConformanceDriver
+from _gitea_driver import GiteaConformanceDriver
 from livery.forge import Unsupported
 from livery.forge.testing import (
     SCENARIOS,
@@ -40,14 +40,24 @@ REPLAY_TOKEN = "replay-token"
 
 
 def _dev_env() -> dict[str, str]:
-    env_file = ROOT / ".forge.dev.env"
-    if not env_file.is_file():
-        return {}
-    pairs = {}
-    for line in env_file.read_text().splitlines():
-        if "=" in line and not line.startswith("#"):
-            key, _, value = line.partition("=")
-            pairs[key] = value
+    """Container credentials: the live environment, then the shared file.
+
+    Under `fm` the cascade already exported them; a bare pytest run
+    reads the shared env file the containers were seeded into.
+    """
+    import footman
+
+    pairs = {
+        key: os.environ[key]
+        for key in ("GITEA_URL", "GITEA_TOKEN", "GITLAB_URL", "GITLAB_TOKEN")
+        if os.environ.get(key)
+    }
+    shared = footman.config_dir() / ".repo.shared.env"
+    if shared.is_file():
+        for line in shared.read_text().splitlines():
+            if "=" in line and not line.startswith("#"):
+                key, _, value = line.partition("=")
+                pairs.setdefault(key.strip(), value.strip())
     return pairs
 
 
@@ -62,7 +72,7 @@ def test_gitea_conformance(scenario: Scenario) -> None:
 def _run_live(scenario: Scenario) -> None:
     env = _dev_env()
     if "GITEA_TOKEN" not in env:
-        pytest.skip("no .forge.dev.env: run `fm forge.dev.up` first")
+        pytest.skip("no container credentials: run `fm forge.dev.up` first")
     cassette = Cassette()
     opener = RecordingOpener(
         cassette,

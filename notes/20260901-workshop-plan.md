@@ -612,6 +612,36 @@ Acceptance:
   throughout, and a run that hangs.
 - `uv run fm check` green.
 
+## Follow-up: sync as the one-stop, and the integrate verb
+
+Ruled 2026-09-02; lands as its own PR after the home retirement.
+
+- `fm sync` also brings the checkout current: fast-forward when
+  possible; otherwise rebase onto the updated remote branch, then
+  onto the base, when clean; interactive asks before a conflicted
+  rebase, non-interactive parks at exit 0 with the teaching (sync
+  runs inside worktree provisioning and must not fail a start).
+- Rebase is the default because squash-only merging makes final
+  history identical either way and rebase keeps subjects clean,
+  which the subject-reading code paths (PR-title default, update
+  resume, release recovery) depend on. The one good merge reason
+  is a branch carrying someone else's commits: rebase rewrites
+  every other copy's upstream, so commits by another author gate
+  the rebase behind the interactive ask, and `fm integrate` is the
+  merge-shaped spelling for the shared-branch case (a thin policy
+  over submit's existing self-heal).
+- A rebase of a pushed branch finishes the job: the leased
+  force-push rides in the same consent, because rebased-locally
+  with a stale remote is the worst state.
+- Out of bounds: `main` (ff-only), `workflow/*` (the engine's
+  MERGE_DEFAULT owns staleness), detached HEAD, a dirty tree, and
+  a branch checked out in another worktree (git refuses; sync
+  names the worktree).
+- The subject-reading paths exempt `Merge ` subjects explicitly:
+  the engine's own MERGE_DEFAULT mints them on workflow branches,
+  where the update resume's foreign-subject check would misread
+  one today.
+
 ## Phase 7: the environment (was phase 11)
 
 Cut 2026-09-02 (decision record). Two PRs: 7a the entered
@@ -1262,6 +1292,35 @@ not. Gates 0.1.0 together with phases 1-8.
   ships as layer content (one source, materialised by sync) and
   the retired ruff_fix.py is gone; the RST roles left in published
   docstrings are swept.
+- 2026-09-02, a batch of rulings (Willem): the monorepo release
+  view derives from tags plus per-package changelogs, never a
+  second git-cliff config (open item 3 closes). Template
+  composition builds both axes, layer overlays and the kind
+  hierarchy (open item 4 closes). Binaries get a general publish
+  story: company-wide conan 2 for linkable C/C++, and a
+  Maya-module package type that embeds the plugin for distribution
+  (open item 5's direction; detail at the composition cut). The
+  admin bypass of protection stays disabled: configure binds
+  admins (enforce-on-admins, apply-to-admins), revisited only if
+  the nudge automation ever needs to merge past approvals, with
+  the hope that Gitea 1.28 drops fewer runs. The nudge evidence
+  question waits until this system reproduces the condition; the
+  hse evidence has been through too many revisions to trust
+  untranslated.
+- 2026-09-02, development goes through issues (Willem): every
+  piece of work is an issue, started with `fm issue.start`, worked
+  in its worktree, closed by its merge; soft enforcement (a
+  convention, not a submit refusal) until the flow proves itself.
+  The stress test is the point.
+- 2026-09-02, no livery home (Willem): a footman plugin owns no
+  home. `LIVERY_HOME` and `~/.livery` retire; worktrees and
+  diagnostics live under `footman.data_dir()`, the shared env file
+  under `footman.config_dir()`, and `.forge.dev.env` retires with
+  `forge.dev.up` writing the shared file key by key. footman
+  documenting the folders it reserves inside its home is filed
+  upstream. `ask()`+`suggest()` are documented in footman now; the
+  abort picker moves onto the dynamic select and the issue family
+  asks with suggestions.
 - 2026-09-02, assignment is documentation (Willem): not being able
   to assign yourself is never a refusal, only a warning that others
   will not see you working on the issue until something lands, so
@@ -1327,17 +1386,15 @@ not. Gates 0.1.0 together with phases 1-8.
    self-heal as its own spelling): wanted, and `merge` is taken by
    `submit.merge`. Candidate name `fm integrate`. Owner: Willem,
    naming ruling at phase 1 review.
-3. The derived monorepo release view's exact shape (docs phase):
-   from tags plus per-package changelogs, or one git-cliff run over
-   all commits. Owner: docs-phase design.
-4. The template composition design (the section above): ruling
-   wanted on both axes before phase 8 builds the overlay half.
-   Owner: Willem, at this plan's review.
-5. Where a built Maya plugin is delivered (no PyPI-shaped index
-   applies): an artifact store, a forge release attachment, or
-   deferred. Owner: composition-phase design.
+3. Resolved 2026-09-02: from tags plus per-package changelogs,
+   at docs build time.
+4. Resolved 2026-09-02: both axes.
+5. Direction ruled 2026-09-02 (conan 2 for C/C++, a Maya-module
+   package type for plugin distribution); the delivery detail
+   stays with the composition-phase cut.
 6. Whether repository governance (phase 8) gates 0.1.0 or follows
-   it. Owner: Willem, at this plan's review.
+   it. Owner: Willem, needed at the phase 8 cut. (The sibling
+   admin-bypass question is ruled: disabled.)
 7. Automating the base-CI nudge if one forge's dropped-run rate
    ever justifies it. The candidate shape (2026-09-02): an
    empty-commit PR merged through the normal path, which needs no

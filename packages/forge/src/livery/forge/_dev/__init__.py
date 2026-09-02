@@ -2,8 +2,9 @@
 
 `fm forge.dev.up` starts and seeds Gitea (with its act_runner) and
 GitLab (with its shell-executor runner) from the compose file shipped
-in this package; the minted credentials land in the gitignored
-``.forge.dev.env`` at the workspace root, which live test runs read.
+in this package; the minted credentials land key by key in the
+shared env file in the runner's config directory
+(``.repo.shared.env``), which the cascade and live test runs read.
 Every verb is idempotent: re-running it is the recovery procedure, and
 every seed probes before acting.
 
@@ -117,8 +118,10 @@ def _workspace_root() -> Path:
 
 
 def _dev_env_path() -> Path:
-    """Where the seeds write the minted credentials. Gitignored."""
-    return _workspace_root() / ".forge.dev.env"
+    """The shared env file the cascade reads: the runner's config dir."""
+    import footman
+
+    return footman.config_dir() / ".repo.shared.env"
 
 
 def _gitlab_image() -> str:
@@ -224,12 +227,24 @@ def _read_dev_env() -> dict[str, str]:
 
 
 def _update_dev_env(updates: dict[str, str]) -> None:
-    """Merge *updates* into .forge.dev.env, keeping the other keys."""
-    pairs = _read_dev_env()
-    pairs.update(updates)
-    lines = ["# Minted by `fm forge.dev.seed` for the local containers. Gitignored."]
-    lines += [f"{key}={value}" for key, value in sorted(pairs.items())]
-    _dev_env_path().write_text("\n".join(lines) + "\n")
+    """Set *updates* in the shared env file, key by key.
+
+    The file is the person's own cross-repo config, so nothing here
+    may rewrite it wholesale: each key replaces its own line or
+    appends, and every other line stays exactly as written.
+    """
+    path = _dev_env_path()
+    lines = path.read_text().splitlines() if path.is_file() else []
+    for key, value in sorted(updates.items()):
+        entry = f"{key}={value}"
+        for index, line in enumerate(lines):
+            if line.split("=", 1)[0].strip() == key:
+                lines[index] = entry
+                break
+        else:
+            lines.append(entry)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n")
 
 
 def _wait_for_gitea() -> None:

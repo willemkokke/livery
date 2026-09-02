@@ -23,16 +23,12 @@ import footman
 from footman import Arg, Stdout, doc, fail, group, pre_tasks
 
 from livery.workshop._envfile import (
-    DEFAULT_HOME,
-    EnvStack,
     Source,
-    _expand_tilde,
     cascade_dirs,
     is_secret_name,
     load_cascade,
     member_keys,
     parse_env_file,
-    preferred_home,
     set_value,
 )
 
@@ -57,16 +53,11 @@ def _workspace() -> tuple[Path, Path]:
     return root, Path.cwd()
 
 
-def _shared_dir(root: Path, cwd: Path, environ: dict[str, str]) -> Path:
-    stack = EnvStack()
-    from livery.workshop._envfile import load_layer, resolve_all
+def _shared_dir() -> Path:
+    """Where ``.repo.shared.env`` lives: the runner's config directory."""
+    import footman
 
-    for directory in cascade_dirs(root, cwd):
-        load_layer(directory / ".repo.env", Source.repo, stack, environ)
-    for directory in cascade_dirs(root, cwd):
-        load_layer(directory / ".repo.env.local", Source.local, stack, environ)
-    resolve_all(stack, environ)
-    return Path(_expand_tilde(preferred_home(stack, environ) or DEFAULT_HOME))
+    return footman.config_dir()
 
 
 @pre_tasks
@@ -198,7 +189,7 @@ def agent_delta(root: Path, cwd: Path, environ: dict[str, str]) -> EnvDelta:
     on purpose, availability is the point; the PATH family is
     excluded, it is composed per shell.
     """
-    shared = _shared_dir(root, cwd, environ)
+    shared = _shared_dir()
     keys = member_keys(root, cwd, shared)
     values = {
         key: environ.get(key, _APPLIED.get(key, ""))
@@ -289,7 +280,7 @@ def env_show(
     """
     root, cwd = _workspace()
     environ = dict(os.environ)
-    shared = _shared_dir(root, cwd, environ)
+    shared = _shared_dir()
     print("  Sources:")
     for directory in cascade_dirs(root, cwd):
         for name in (".repo.env", ".repo.env.local"):
@@ -340,14 +331,15 @@ def env_set(
     """Set or delete one variable in the chosen scope's file.
 
     ``local`` writes ``.repo.env.local`` at the workspace root,
-    ``shared`` the person-wide ``$LIVERY_HOME/.repo.shared.env``,
+    ``shared`` the person-wide ``.repo.shared.env`` in the runner's
+    config directory,
     ``repo`` the committed ``.repo.env``. After a write the
     higher-precedence sources are checked: a shadowed value is named
     rather than discovered later.
     """
-    root, cwd = _workspace()
+    root, _cwd = _workspace()
     environ = dict(os.environ)
-    shared = _shared_dir(root, cwd, environ)
+    shared = _shared_dir()
     files = {
         "local": root / ".repo.env.local",
         "shared": shared / ".repo.shared.env",

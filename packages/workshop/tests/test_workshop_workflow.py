@@ -396,7 +396,7 @@ def test_record_writes_prunes_and_never_raises(
 ) -> None:
     fake, _git_seam = rig
     repo = _repo(fake)
-    monkeypatch.setenv("LIVERY_HOME", str(tmp_path / "home"))
+    monkeypatch.setattr("footman.data_dir", lambda: tmp_path / "home")
     for index in range(23):
         path = record(
             repo,
@@ -438,7 +438,7 @@ def test_closed_is_definitive_on_a_single_read(
 ) -> None:
     fake, git = rig
     repo = _repo(fake)
-    monkeypatch.setenv("LIVERY_HOME", str(tmp_path / "home"))
+    monkeypatch.setattr("footman.data_dir", lambda: tmp_path / "home")
     monkeypatch.setattr(
         "livery.workshop._verdict.classify",
         lambda *a, **k: Verdict("closed", 12, "closed unmerged", 1),
@@ -639,21 +639,17 @@ def test_the_interactive_picker_asks_and_silence_stops(
     repo = _repo(fake)
     first = _wf(WorkflowState.FAILED, name="release/forge")
     second = _wf(WorkflowState.PREPARING, name="update/templates")
-    # Empty answer: nothing aborted, ever.
-    monkeypatch.setattr("builtins.input", lambda prompt: "")
+    # Declining the select aborts nothing, ever.
+    monkeypatch.setattr("footman.select", lambda message, options: None)
     with pytest.raises(SystemExit) as caught:
         abort_policy(repo, git, (first, second), "", force=False, interactive=True)
     assert "nothing aborted" in str(caught.value)
-    # A nonsense answer refuses by name.
-    monkeypatch.setattr("builtins.input", lambda prompt: "seven")
-    with pytest.raises(_FAILURES):
-        abort_policy(repo, git, (first, second), "", force=False, interactive=True)
     # A picked number tears that one down.
     git.create_branch("workflow/update/templates")
     (git.root / "u.txt").write_text("u\n")
     git.commit_all("chore: u")
     git.switch("main")
-    monkeypatch.setattr("builtins.input", lambda prompt: "2")
+    monkeypatch.setattr("footman.select", lambda message, options: options[1][1])
     monkeypatch.setattr(
         "livery.workshop._workflow_tasks._reconcile_configuration", lambda: None
     )

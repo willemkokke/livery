@@ -13,7 +13,6 @@ from pathlib import Path
 
 import pytest
 
-from _gitea_driver import ROOT
 from _gitlab_driver import GitlabConformanceDriver
 from livery.forge import Unsupported
 from livery.forge.testing import (
@@ -33,14 +32,24 @@ REPLAY_TOKEN = "replay-token"
 
 
 def _dev_env() -> dict[str, str]:
-    env_file = ROOT / ".forge.dev.env"
-    if not env_file.is_file():
-        return {}
-    pairs = {}
-    for line in env_file.read_text().splitlines():
-        if "=" in line and not line.startswith("#"):
-            key, _, value = line.partition("=")
-            pairs[key] = value
+    """Container credentials: the live environment, then the shared file.
+
+    Under `fm` the cascade already exported them; a bare pytest run
+    reads the shared env file the containers were seeded into.
+    """
+    import footman
+
+    pairs = {
+        key: os.environ[key]
+        for key in ("GITEA_URL", "GITEA_TOKEN", "GITLAB_URL", "GITLAB_TOKEN")
+        if os.environ.get(key)
+    }
+    shared = footman.config_dir() / ".repo.shared.env"
+    if shared.is_file():
+        for line in shared.read_text().splitlines():
+            if "=" in line and not line.startswith("#"):
+                key, _, value = line.partition("=")
+                pairs.setdefault(key.strip(), value.strip())
     return pairs
 
 

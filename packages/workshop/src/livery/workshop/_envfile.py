@@ -4,10 +4,8 @@ Every ``.repo.env`` in the wild is written against these rules:
 
 - **Precedence** (highest first, kind-major): the pre-existing
   process environment, ``.repo.env.local`` files (nearest to
-  farthest), ``$LIVERY_HOME/.repo.shared.env``, committed
-  ``.repo.env`` files (nearest to farthest). The shared file's
-  location may itself use ``${...}``, so a first pass over the
-  repo-level files resolves it.
+  farthest), ``.repo.shared.env`` in the runner's config directory,
+  committed ``.repo.env`` files (nearest to farthest).
 - **Values**: ``~`` expands at the start of a raw value; double
   quotes strip and allow substitution; single quotes strip and are
   literal; an unquoted value loses inline ``#`` comments and
@@ -38,13 +36,6 @@ _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _LITERAL = "\x00literal\x00"
 _ESCAPED_DOLLAR = "\x00dollar\x00"
 
-#: The shared store's default: per user, shared by every repo on the
-#: machine. Override per machine in ``.repo.env.local`` or in the
-#: environment.
-DEFAULT_HOME = "~/.livery"
-
-_HOME_NAME = "LIVERY_HOME"
-
 
 class Source(IntEnum):
     """Where a stack value came from (lower is higher precedence)."""
@@ -54,7 +45,7 @@ class Source(IntEnum):
     local = 1
     """``.repo.env.local`` (per machine, gitignored)."""
     shared = 2
-    """``$LIVERY_HOME/.repo.shared.env`` (per person, cross-repo)."""
+    """``.repo.shared.env`` in the runner's config directory."""
     repo = 3
     """``.repo.env`` (committed repo config)."""
 
@@ -248,20 +239,6 @@ def cascade_dirs(repo_root: Path, cwd: Path) -> list[Path]:
     return dirs
 
 
-def preferred_home(stack: EnvStack, environ: dict[str, str] | None = None) -> str:
-    """The winning ``LIVERY_HOME``, or "" when nothing set it.
-
-    The environment beats every file; with no shipped default line
-    the name may appear in no file at all, yet a plain exported
-    ``LIVERY_HOME`` must still win. The caller applies
-    ``livery.workshop._envfile.DEFAULT_HOME`` on "".
-    """
-    env = environ or {}
-    if env.get(_HOME_NAME):
-        return env[_HOME_NAME]
-    return stack.values.get(_HOME_NAME, "")
-
-
 def load_cascade(
     repo_root: Path,
     cwd: Path,
@@ -278,12 +255,9 @@ def load_cascade(
     committed files nearest to farthest, so a machine override beats
     committed config at any depth.
 
-    *shared_dir* is where ``.repo.shared.env`` lives (the livery
-    home); when None it is resolved from the repo-level files first,
-    the two-pass behaviour: the home may be named only by the
-    environment or a file, and either way the shared store's file
-    still loads. *environ* defaults to ``os.environ`` and is
-    injectable for tests.
+    *shared_dir* is where ``.repo.shared.env`` lives; None means the
+    runner's own config directory, asked of footman. *environ*
+    defaults to ``os.environ`` and is injectable for tests.
     """
     env = dict(os.environ) if environ is None else environ
     dirs = cascade_dirs(repo_root, cwd)
@@ -291,14 +265,9 @@ def load_cascade(
     local = [d / ".repo.env.local" for d in dirs]
 
     if shared_dir is None:
-        first_pass = EnvStack()
-        for path in committed:
-            load_layer(path, Source.repo, first_pass, env)
-        for path in local:
-            load_layer(path, Source.local, first_pass, env)
-        resolve_all(first_pass, env)
-        home = preferred_home(first_pass, env) or DEFAULT_HOME
-        shared_dir = Path(_expand_tilde(home))
+        import footman
+
+        shared_dir = footman.config_dir()
 
     stack = EnvStack()
     for path in committed:
