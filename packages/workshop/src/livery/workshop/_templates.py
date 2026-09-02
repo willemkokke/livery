@@ -19,13 +19,12 @@ re-applying the ``project`` render.
 from __future__ import annotations
 
 import re
-import subprocess
-import sys
 import tempfile
 from pathlib import Path
 from typing import Annotated, Any
 
 import footman
+import toolroom
 import yaml
 from footman import doc, fail, group
 
@@ -96,28 +95,21 @@ def render(template_dir: Path, destination: Path, data: dict[str, Any]) -> None:
         yaml.safe_dump(data, handle)
         data_file = handle.name
     try:
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "copier",
-                "copy",
-                "--defaults",
-                "--trust",
-                "--overwrite",
-                "--quiet",
-                "--data-file",
-                data_file,
-                str(template_dir),
-                str(destination),
-            ],
-            capture_output=True,
-            text=True,
+        result = toolroom.copier(
+            "copy",
+            "--defaults",
+            "--trust",
+            "--overwrite",
+            "--quiet",
+            "--data-file",
+            data_file,
+            str(template_dir),
+            str(destination),
         )
     finally:
         Path(data_file).unlink(missing_ok=True)
-    if result.returncode != 0:
-        fail(f"copier exited {result.returncode}:\n{result.stdout}{result.stderr}")
+    if result.code != 0:
+        fail(f"copier exited {result.code}:\n{result.stdout}{result.stderr}")
 
 
 def _lf(data: bytes) -> bytes:

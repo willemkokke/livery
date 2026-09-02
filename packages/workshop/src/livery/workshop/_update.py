@@ -11,11 +11,10 @@ commits, and submits lives beside this module.
 from __future__ import annotations
 
 import re
-import subprocess
-import sys
 from pathlib import Path
 
 import footman
+import toolroom
 from footman import fail
 
 from livery.workshop._git_ops import GitOps
@@ -110,32 +109,21 @@ def refresh_rendered(root: Path) -> list[str]:
     notes = _align_answers_source(root, template_source(root))
     from livery.workshop import __version__
 
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "copier",
-            "update",
-            "--defaults",
-            "--trust",
-            "--skip-answered",
-            # The runner's name rides as render data, never an
-            # answer: rebranding an instance is exactly this run
-            # under the branded CLI.
-            "--data",
-            f"runner_prog={footman.prog()}",
-            "--vcs-ref",
-            f"v{__version__}",
-            str(root),
-        ],
-        capture_output=True,
-        text=True,
-        cwd=root,
+    result = toolroom.copier.opts(cwd=root)(
+        "update",
+        "--defaults",
+        "--trust",
+        "--skip-answered",  # The runner's name rides as render data, never an
+        # answer: rebranding an instance is exactly this run
+        # under the branded CLI.
+        "--data",
+        f"runner_prog={footman.prog()}",
+        "--vcs-ref",
+        f"v{__version__}",
+        str(root),
     )
-    if result.returncode != 0:
-        fail(
-            f"copier update exited {result.returncode}:\n{result.stdout}{result.stderr}"
-        )
+    if result.code != 0:
+        fail(f"copier update exited {result.code}:\n{result.stdout}{result.stderr}")
     from livery.workshop._templates import apply_generated
 
     generated = apply_generated(root)

@@ -10,7 +10,6 @@ arrive with their own modules; this one owns what every kind shares.
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 from typing import Annotated
 
@@ -288,20 +287,18 @@ def workflow_configure() -> None:
     print("  repository configuration asserted from the contract")
 
 
-def _spawn_configure() -> subprocess.CompletedProcess[str]:
+def _spawn_configure() -> footman.Result:
     """Run the configure verb in a fresh process; the reconcile's seam.
 
     Fresh, because the abort may sit inside a workflow whose update
     rewrote this very toolchain.
     """
-    import subprocess
     import sys
 
-    return subprocess.run(
+    return footman.run(
         [sys.executable, "-m", "footman", "workflow.configure"],
-        capture_output=True,
-        text=True,
-        check=False,
+        nofail=True,
+        recorded=False,
         cwd=_root(),
     )
 
@@ -340,7 +337,7 @@ def _reconcile_configuration(git: GitOps, head_sha: str) -> None:
         if not changed:
             return  # nothing config-implying moved: provably unneeded
     result = _spawn_configure()
-    if result.returncode != 0:
+    if result.code != 0:
         detail = result.stderr.strip() or result.stdout.strip() or "(no output)"
         indented = "\n".join(f"  {line}" for line in detail.splitlines())
         print(

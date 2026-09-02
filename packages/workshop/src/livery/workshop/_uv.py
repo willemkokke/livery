@@ -8,23 +8,16 @@ footman's fail.
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
+import toolroom
 from footman import fail
 
 
 def run_uv(*args: str, root: Path) -> None:
     """Run ``uv *args`` at *root*; a failure carries uv's own words."""
-    result = subprocess.run(
-        ["uv", *args],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
+    result = toolroom.uv.opts(cwd=root, nofail=True, recorded=False)(*args)
+    if result.code != 0:
         fail(
-            f"uv {' '.join(args)} exited {result.returncode}:\n"
-            f"{result.stdout}{result.stderr}"
+            f"uv {' '.join(args)} exited {result.code}:\n{result.stdout}{result.stderr}"
         )

@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 import footman
+import toolroom
 from footman import Arg, Stdout, doc, fail, group, pre_tasks
 
 from livery.workshop._envfile import (
@@ -405,8 +406,6 @@ def _uv_drift(root: Path) -> str:
     from the machine and can drift. A workspace without a lock has
     no pin to judge against and answers "".
     """
-    import subprocess
-
     lock = root / "uv.lock"
     if not lock.is_file():
         return ""
@@ -421,11 +420,9 @@ def _uv_drift(root: Path) -> str:
             break
     if not pinned:
         return ""
-    probe = subprocess.run(
-        ["uv", "--version"], capture_output=True, text=True, check=False
-    )
+    probe = toolroom.uv.opts(nofail=True, recorded=False)("--version")
     running = probe.stdout.split()[1] if probe.stdout.split()[1:] else ""
-    if probe.returncode != 0 or not running:
+    if probe.code != 0 or not running:
         return "uv: ? (could not read the running version)"
     if running != pinned:
         return f"uv: DRIFT (running {running}, the lock pins {pinned})"

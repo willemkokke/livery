@@ -20,13 +20,13 @@ from __future__ import annotations
 import os
 import re
 import shutil
-import subprocess
 import tempfile
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
+import toolroom
 from footman import doc, fail, group
 
 from livery.workshop import _cliff
@@ -200,17 +200,15 @@ def release_prepare(
         print(f"  stamped: {name}")
 
 
-def _run_git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["git", *args], cwd=cwd, capture_output=True, text=True, check=False
-    )
+def _run_git(cwd: Path, *args: str) -> toolroom.Result:
+    return toolroom.git.opts(cwd=cwd, nofail=True, recorded=False)(*args)
 
 
 def _git_or_fail(cwd: Path, *args: str) -> str:
     result = _run_git(cwd, *args)
-    if result.returncode != 0:
+    if result.code != 0:
         fail(
-            f"git {' '.join(args)} exited {result.returncode}:"
+            f"git {' '.join(args)} exited {result.code}:"
             f"\n{result.stdout}{result.stderr}"
         )
     return result.stdout
@@ -246,7 +244,7 @@ def publish_templates(
             # --cached against the tag sees additions and deletions the
             # worktree diff would miss.
             diff = _run_git(clone, "diff", "--cached", "--quiet", f"v{version}", "--")
-            if diff.returncode == 0:
+            if diff.code == 0:
                 return f"v{version} already published with this content"
             fail(
                 f"v{version} is already published with different content:"

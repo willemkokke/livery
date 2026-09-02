@@ -681,9 +681,13 @@ def test_the_reconcile_reports_a_refusal_and_never_raises(
 
     monkeypatch.setattr(_workflow_tasks, "_root", lambda: tmp_path)
 
-    def _refused() -> subprocess.CompletedProcess[str]:
-        return subprocess.CompletedProcess(
-            [], 1, "", "refused: 403, not an administrator (ADMIN_TOKEN)"
+    def _refused() -> object:
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            code=1,
+            stdout="",
+            stderr="refused: 403, not an administrator (ADMIN_TOKEN)",
         )
 
     monkeypatch.setattr(_workflow_tasks, "_spawn_configure", _refused)

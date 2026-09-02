@@ -35,8 +35,9 @@ from importlib import resources
 from pathlib import Path
 from typing import Annotated
 
+import footman
+import toolroom
 from footman import doc, fail, group
-from toolroom import pytest
 
 forge = group("forge", help="livery.forge development")
 dev = forge.group("dev", help="Local forge containers (Gitea and GitLab)")
@@ -67,30 +68,44 @@ if _FORGE_TESTS.is_dir():
         re-recording every exchange, which spends live quota and
         rewrites cassettes nothing asked to change.
         """
-        os.environ["FORGE_RECORD"] = "1"
-        run_tests = pytest.opts(in_process=False)
+        # The recording switch travels as explicit child env, never an
+        # ambient write.
+        base_env = {**os.environ, "FORGE_RECORD": "1"}
+
+        def run_tests(*args: str, env: dict[str, str]) -> None:
+            toolroom.pytest.opts(env=env, capture=False)(*args)
+
         only = ("-k", scenario) if scenario else ()
         backends = (backend,) if backend else ("gitea", "gitlab", "github")
         for name in backends:
             if name not in ("gitea", "gitlab", "github"):
                 fail(f"unknown backend {name!r}: gitea, gitlab, or github")
         if "gitea" in backends:
-            run_tests(str(_FORGE_TESTS / "test_gitea_conformance.py"), *only)
+            run_tests(
+                str(_FORGE_TESTS / "test_gitea_conformance.py"), *only, env=base_env
+            )
         if "gitlab" in backends:
             # One single-node GitLab absorbs about four concurrent
             # writers; beyond that its own internals time out (Gitaly
             # deadlines), so the recording run is capped rather than
             # flaky.
             run_tests(
-                str(_FORGE_TESTS / "test_gitlab_conformance.py"), "-n", "4", *only
+                str(_FORGE_TESTS / "test_gitlab_conformance.py"),
+                "-n",
+                "4",
+                *only,
+                env=base_env,
             )
         if "github" in backends:
             # GitHub scratch goes to the e2e organisation, never the
             # signed-in user's profile: scratch stays out of personal
             # namespaces, recording included.
-            os.environ["FORGE_E2E_OWNER"] = "livery-forge-e2e"
             run_tests(
-                str(_FORGE_TESTS / "test_github_conformance.py"), "-n", "4", *only
+                str(_FORGE_TESTS / "test_github_conformance.py"),
+                "-n",
+                "4",
+                *only,
+                env={**base_env, "FORGE_E2E_OWNER": "livery-forge-e2e"},
             )
 
 
@@ -119,8 +134,6 @@ def _workspace_root() -> Path:
 
 def _dev_env_path() -> Path:
     """The shared env file the cascade reads: the runner's config dir."""
-    import footman
-
     return footman.config_dir() / ".repo.shared.env"
 
 

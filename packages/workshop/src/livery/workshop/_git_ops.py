@@ -9,8 +9,9 @@ use.
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
+
+import toolroom
 
 
 class GitError(RuntimeError):
@@ -28,16 +29,10 @@ class GitOps:
         self.root = root
 
     def _run(self, *args: str) -> str:
-        result = subprocess.run(
-            ["git", *args],
-            cwd=self.root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if result.returncode != 0:
+        result = toolroom.git.opts(cwd=self.root, nofail=True, recorded=False)(*args)
+        if result.code != 0:
             raise GitError(
-                f"git {' '.join(args)} exited {result.returncode}:"
+                f"git {' '.join(args)} exited {result.code}:"
                 f"\n{result.stdout}{result.stderr}"
             )
         return result.stdout
@@ -94,25 +89,13 @@ class GitOps:
         moves; exit 1 with conflicts is the answer, any other failure
         raises.
         """
-        result = subprocess.run(
-            [
-                "git",
-                "merge-tree",
-                "--write-tree",
-                "--name-only",
-                "HEAD",
-                f"origin/{base}",
-            ],
-            cwd=self.root,
-            capture_output=True,
-            text=True,
-            check=False,
+        result = toolroom.git.opts(cwd=self.root, nofail=True, recorded=False)(
+            "merge-tree", "--write-tree", "--name-only", "HEAD", f"origin/{base}"
         )
-        if result.returncode in (0, 1):
-            return result.returncode == 1
+        if result.code in (0, 1):
+            return result.code == 1
         raise GitError(
-            f"git merge-tree exited {result.returncode}:"
-            f"\n{result.stdout}{result.stderr}"
+            f"git merge-tree exited {result.code}:\n{result.stdout}{result.stderr}"
         )
 
     def integrate(self, base: str) -> None:
@@ -150,14 +133,10 @@ class GitOps:
 
     def local_branch_exists(self, branch: str) -> bool:
         """Whether *branch* exists locally."""
-        result = subprocess.run(
-            ["git", "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"],
-            cwd=self.root,
-            capture_output=True,
-            text=True,
-            check=False,
+        result = toolroom.git.opts(cwd=self.root, nofail=True, recorded=False)(
+            "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"
         )
-        return result.returncode == 0
+        return result.code == 0
 
     def remote_head(self, branch: str) -> str:
         """``origin/<branch>``'s commit, or empty when it does not exist.
@@ -165,14 +144,10 @@ class GitOps:
         Reads the local remote-tracking ref, so call
         livery.workshop._git_ops.GitOps.fetch first for a fresh answer.
         """
-        result = subprocess.run(
-            ["git", "rev-parse", f"origin/{branch}"],
-            cwd=self.root,
-            capture_output=True,
-            text=True,
-            check=False,
+        result = toolroom.git.opts(cwd=self.root, nofail=True, recorded=False)(
+            "rev-parse", f"origin/{branch}"
         )
-        return result.stdout.strip() if result.returncode == 0 else ""
+        return result.stdout.strip() if result.code == 0 else ""
 
     def changed_paths(self, base: str) -> list[str]:
         """Repo-relative paths this branch touches, committed or not.
@@ -220,23 +195,15 @@ class GitOps:
 
     def any_head(self, branch: str) -> str:
         """*branch*'s head sha: local when present, else the remote's, else empty."""
-        result = subprocess.run(
-            ["git", "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"],
-            cwd=self.root,
-            capture_output=True,
-            text=True,
-            check=False,
+        result = toolroom.git.opts(cwd=self.root, nofail=True, recorded=False)(
+            "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"
         )
-        if result.returncode == 0 and result.stdout.strip():
+        if result.code == 0 and result.stdout.strip():
             return result.stdout.strip()
-        result = subprocess.run(
-            ["git", "ls-remote", "origin", f"refs/heads/{branch}"],
-            cwd=self.root,
-            capture_output=True,
-            text=True,
-            check=False,
+        result = toolroom.git.opts(cwd=self.root, nofail=True, recorded=False)(
+            "ls-remote", "origin", f"refs/heads/{branch}"
         )
-        if result.returncode == 0 and result.stdout.strip():
+        if result.code == 0 and result.stdout.strip():
             return result.stdout.split()[0]
         return ""
 

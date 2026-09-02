@@ -11,11 +11,11 @@ The release verbs call these; nothing else reads commit history.
 from __future__ import annotations
 
 import os
-import subprocess
 import tomllib
 from pathlib import Path
 
 import footman
+import toolroom
 from footman import fail
 
 from livery.workshop._packages import Package
@@ -75,26 +75,22 @@ def _run(root: Path, package: Package, *args: str) -> str:
     the message a bare ``FileNotFoundError`` carries says nothing a
     reader can act on.
     """
-    command = ["git-cliff", "--config", str(config_path(package)), *args]
+    command = ["--config", str(config_path(package)), *args]
     if not credit_is_reachable(root):
         variable = TOKEN_VARIABLE.get(_forge_kind(root), "")
         named = f" set {variable} to credit them" if variable else ""
         print(f"  writing the entry without its authors:{named or ' no forge token'}")
         command.append("--offline")
     try:
-        result = subprocess.run(
-            command,
-            cwd=root,
-            capture_output=True,
-            text=True,
-            check=False,
+        result = toolroom.git_cliff.opts(cwd=root, nofail=True, recorded=False)(
+            *command
         )
-    except FileNotFoundError:
+    except (FileNotFoundError, toolroom.ToolError):
         fail(
             "git-cliff is not installed: it writes the changelogs, and the"
             f" dev group declares it. Run `{footman.prog()} sync`."
         )
-    if result.returncode != 0:
+    if result.code != 0:
         detail = result.stderr.strip() or result.stdout.strip() or "(no output)"
         if "metadata" in detail:
             # The forge refused the lookup the credit needs: the token
@@ -106,7 +102,7 @@ def _run(root: Path, package: Package, *args: str) -> str:
                 f" read this repository, and that {CONFIG_NAME}'s api_url names"
                 " the server root"
             )
-        fail(f"git-cliff exited {result.returncode}:\n{detail}")
+        fail(f"git-cliff exited {result.code}:\n{detail}")
     return result.stdout
 
 
