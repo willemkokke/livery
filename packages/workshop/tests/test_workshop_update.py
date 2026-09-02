@@ -377,7 +377,7 @@ def test_the_reexec_guard_prevents_a_loop(
 
     monkeypatch.setattr("livery.workshop._update_driver._spawn", _no_spawn)
     # The guard: inside the re-executed child, never spawn again.
-    monkeypatch.setenv("LIVERY_UPDATE_REEXEC", "1")
+    monkeypatch.setenv("WORKSHOP_UPDATE_REEXEC", "1")
     driver = UpdateDriver(root, git, "templates", armed=False)
     assert driver.prepare() is not None
     assert spawned == []
@@ -399,11 +399,11 @@ def test_an_update_moving_the_workshop_finishes_in_a_fresh_interpreter(
     spawned: list[tuple[list[str], str]] = []
 
     def _record(command: list[str], _root: Path, env: dict[str, str]) -> int:
-        spawned.append((command, env.get("LIVERY_UPDATE_REEXEC", "")))
+        spawned.append((command, env.get("WORKSHOP_UPDATE_REEXEC", "")))
         return 7
 
     monkeypatch.setattr("livery.workshop._update_driver._spawn", _record)
-    monkeypatch.delenv("LIVERY_UPDATE_REEXEC", raising=False)
+    monkeypatch.delenv("WORKSHOP_UPDATE_REEXEC", raising=False)
     driver = UpdateDriver(root, git, "templates", armed=True)
     with pytest.raises(SystemExit) as caught:
         driver.prepare()
@@ -541,14 +541,14 @@ def test_the_arming_ladder_names_its_level(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("LIVERY_AUTOMERGE", raising=False)
+    monkeypatch.delenv("WORKSHOP_AUTOMERGE", raising=False)
     assert "this invocation" in arming_reason(armed=True, flag_given=True)
     assert "--no-armed" in arming_reason(armed=False, flag_given=True)
     assert "nothing configured" in arming_reason(armed=False, flag_given=False)
     (tmp_path / "livery.toml").write_text("[ci]\nautomerge = true\n")
     assert "committed repo policy" in arming_reason(armed=True, flag_given=False)
     assert ci_automerge() is True
-    monkeypatch.setenv("LIVERY_AUTOMERGE", "1")
+    monkeypatch.setenv("WORKSHOP_AUTOMERGE", "1")
     assert "standing preference" in arming_reason(armed=True, flag_given=False)
 
 

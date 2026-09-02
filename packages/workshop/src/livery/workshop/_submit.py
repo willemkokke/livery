@@ -13,7 +13,7 @@ green pull request that was deliberately left unarmed, and refuses
 anything less than green.
 
 The arming ladder, highest wins: ``--armed``/``--no-armed`` for one
-invocation; ``LIVERY_AUTOMERGE`` as the per-user standing preference;
+invocation; ``WORKSHOP_AUTOMERGE`` as the per-user standing preference;
 the workspace contract's ``[ci] automerge`` as committed repo policy;
 off. The ladder is footman's option ladder; only the printed reason
 is derived here.
@@ -93,8 +93,8 @@ def arming_reason(*, armed: bool, flag_given: bool) -> str:
     """One sentence naming the ladder level that decided *armed*."""
     if flag_given:
         return f"--{'' if armed else 'no-'}armed (this invocation)"
-    if os.environ.get("LIVERY_AUTOMERGE") is not None:
-        return "LIVERY_AUTOMERGE (per-user standing preference)"
+    if os.environ.get("WORKSHOP_AUTOMERGE") is not None:
+        return "WORKSHOP_AUTOMERGE (per-user standing preference)"
     root = workspace_root()
     if root is not None:
         contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
@@ -587,9 +587,9 @@ def submit_default(
     closes: Annotated[int, doc("issue to close on merge; 0 = from branch name")] = 0,
     armed: Annotated[
         bool,
-        footman.env("LIVERY_AUTOMERGE"),
+        footman.env("WORKSHOP_AUTOMERGE"),
         footman.default(ci_automerge),
-        doc("arm auto-merge (ladder: flag, LIVERY_AUTOMERGE, [ci] automerge)"),
+        doc("arm auto-merge (ladder: flag, WORKSHOP_AUTOMERGE, [ci] automerge)"),
     ] = False,
     gate: Annotated[bool, doc(f"run `{runner_prog()} check` first")] = True,
     fix: Annotated[bool, doc("heal mechanical gate findings, fold into HEAD")] = False,

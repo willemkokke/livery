@@ -37,9 +37,9 @@ workflow:
   rules:
     - if: $CI_COMMIT_TAG
       when: never
-    # Dispatched pipelines route by variable, the LIVERY_WORKFLOW
+    # Dispatched pipelines route by variable, the FORGE_WORKFLOW
     # convention.
-    - if: $LIVERY_WORKFLOW
+    - if: $FORGE_WORKFLOW
     # Otherwise push pipelines only: `when: always` would also admit
     # merge-request pipelines, duplicating every run on a branch with
     # an open MR.

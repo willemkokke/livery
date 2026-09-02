@@ -13,11 +13,13 @@ resolves the server once, an explicit ``url`` beating the configured
 ``GITLAB_URL``, and reads ``GITLAB_TOKEN`` unless a token is passed.
 The token belongs to the configured host and no other.
 
-Capabilities: ``auto_merge`` (merge when pipeline succeeds) and
-``ci_secrets`` (masked variables) are supported. ``force_cancel`` and
+Capabilities: ``auto_merge`` (merge when pipeline succeeds),
+``ci_secrets`` (masked variables), and ``schedule_events``
+(reconstructed from system notes and state events) are supported;
+``min_approvals`` is probed per instance, because GitLab
+licence-gates approval rules. ``force_cancel`` and
 ``required_contexts`` are declined by name: pipelines have plain
-cancel only, and protection cannot name required check contexts on any
-tier this backend models.
+cancel only, and no tier's protection names required check contexts.
 """
 
 from __future__ import annotations
@@ -1089,10 +1091,10 @@ class _GitlabChecks:
         """Trigger the project's pipeline on *ref*.
 
         GitLab has one pipeline definition per project; *workflow*
-        travels as the ``LIVERY_WORKFLOW`` variable for the pipeline's
+        travels as the ``FORGE_WORKFLOW`` variable for the pipeline's
         own rules to route on, and *inputs* as further variables.
         """
-        variables = [{"key": "LIVERY_WORKFLOW", "value": workflow}]
+        variables = [{"key": "FORGE_WORKFLOW", "value": workflow}]
         variables += [
             {"key": key, "value": value} for key, value in (inputs or {}).items()
         ]

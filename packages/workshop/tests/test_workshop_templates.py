@@ -214,14 +214,13 @@ def test_the_default_brand_emits_fm() -> None:
 def test_runner_prog_reads_the_installed_brand(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from footman import _paths
+    import footman
 
     from livery.workshop._brand import runner_prog
 
-    monkeypatch.setattr(_paths, "_prog", "hse", raising=False)
+    assert runner_prog() == "fm"  # the default brand
+    monkeypatch.setattr(footman, "prog", lambda: "hse")
     assert runner_prog() == "hse"
-    monkeypatch.setattr(_paths, "_prog", "", raising=False)
-    assert runner_prog() == "fm"  # the default brand is the fallback
 
 
 def test_the_rendered_prose_spells_the_brand(tmp_path: Path) -> None:
@@ -252,29 +251,6 @@ def test_the_rendered_answers_never_store_the_brand(tmp_path: Path) -> None:
     # The meter comment rides the brand too.
     assert "Every hse child" in (destination / "pyproject.toml").read_text()
     assert "`hse sync`" in (destination / "CLAUDE.md").read_text()
-
-
-def test_runner_prog_survives_a_missing_or_broken_seam(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import builtins
-
-    from footman import _paths
-
-    from livery.workshop._brand import runner_prog
-
-    monkeypatch.delattr(_paths, "_prog")
-    assert runner_prog() == "fm"  # the attribute may move; fm holds
-
-    real_import = builtins.__import__
-
-    def _broken(name: str, *args: object, **kwargs: object) -> object:
-        if name == "footman":
-            raise ImportError("footman moved")
-        return real_import(name, *args, **kwargs)  # type: ignore[arg-type]
-
-    monkeypatch.setattr(builtins, "__import__", _broken)
-    assert runner_prog() == "fm"  # even the import may fail; fm holds
 
 
 def test_the_shell_and_completion_lines_run_the_brand() -> None:

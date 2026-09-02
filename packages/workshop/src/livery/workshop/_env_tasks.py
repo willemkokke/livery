@@ -175,7 +175,7 @@ _COMPLETION_PWSH = (
     "if (Get-Command {prog} -ErrorAction SilentlyContinue) {{"
     ' $fmHook = ({prog} --setup-completion=pwsh 2>$null) -join "`n";'
     " if ($fmHook) {{ $fmHook | Invoke-Expression }} }}"
-    "; if (-not $env:LIVERY_NO_SHELL_CUSTOMISATION"
+    "; if (-not $env:WORKSHOP_NO_SHELL_CUSTOMISATION"
     " -and (Get-Module -ListAvailable PSReadLine)) {{"
     " Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete }}"
 )

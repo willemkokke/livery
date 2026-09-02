@@ -52,7 +52,7 @@ BOUNDED_WAIT = 15 * 60
 WAIT_POLL = 15
 
 #: The loop guard for the fresh-interpreter resubmit.
-_REEXEC_FLAG = "LIVERY_UPDATE_REEXEC"
+_REEXEC_FLAG = "WORKSHOP_UPDATE_REEXEC"
 
 
 class UpdateDriver:
