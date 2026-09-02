@@ -413,6 +413,9 @@ def test_the_bash_plan_writes_an_rc_that_chains_and_enters(
 def test_the_zsh_plan_needs_env_and_prepare_refuses_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # The binary is stubbed before any plan is built: the CI runners
+    # have no zsh, and the plan's shape is what is under test.
+    monkeypatch.setattr("livery.workshop._shell.shutil.which", lambda _k: "/bin/zsh")
     plan = shell_launch_plan("zsh", root=tmp_path, tmp_dir=tmp_path)
     assert "ZDOTDIR" in plan.env
     zshrc = next(
