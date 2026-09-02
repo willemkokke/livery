@@ -39,6 +39,8 @@ from livery.forge._registry import SimpleRegistry
 from livery.forge._types import (
     Capability,
     CheckState,
+    Codeowners,
+    CodeownersEntry,
     CombinedStatus,
     Conclusion,
     Issue,
@@ -64,6 +66,8 @@ __all__ = [
     "Capability",
     "CheckState",
     "Checks",
+    "Codeowners",
+    "CodeownersEntry",
     "CombinedStatus",
     "Conclusion",
     "Forge",

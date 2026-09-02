@@ -29,6 +29,8 @@ from livery.forge._protocol import Checks, Issues, PullRequests, Releases, Repos
 from livery.forge._types import (
     Capability,
     CheckState,
+    Codeowners,
+    CodeownersEntry,
     CombinedStatus,
     Conclusion,
     Issue,
@@ -190,6 +192,7 @@ class GiteaForge:
             "auto_merge",
             "force_cancel",
             "required_contexts",
+            "min_approvals",
             "ci_secrets",
             "schedule_events",
         )
@@ -197,6 +200,59 @@ class GiteaForge:
     def repository(self, owner: str, name: str) -> Repository:
         """The view onto one repository. Cheap, no network."""
         return _GiteaRepository(self, self._client, owner, name)
+
+    def members(self, owner: str) -> tuple[str, ...]:
+        """The org's member logins; a user namespace is its one login."""
+        try:
+            rows = self._client.paginate(
+                lambda page: self._client.request(
+                    f"/orgs/{quote(owner)}/members?limit=50&page={page}"
+                ),
+                subject=f"/orgs/{owner}/members",
+            )
+        except ForgeError as error:
+            if error.status == 404:
+                return (owner,)
+            raise
+        return tuple(sorted(str(row.get("login", "")) for row in rows))
+
+    def teams(self, owner: str) -> tuple[str, ...]:
+        """The org's team names; a user namespace has none."""
+        try:
+            rows = self._client.paginate(
+                lambda page: self._client.request(
+                    f"/orgs/{quote(owner)}/teams?limit=50&page={page}"
+                ),
+                subject=f"/orgs/{owner}/teams",
+            )
+        except ForgeError as error:
+            if error.status == 404:
+                return ()
+            raise
+        return tuple(sorted(str(row.get("name", "")) for row in rows))
+
+    def codeowners(self, entries: tuple[CodeownersEntry, ...]) -> Codeowners:
+        """Gitea's dialect: ``.gitea/CODEOWNERS``, ``@owner`` lines.
+
+        Same shape as GitHub's; a per-path approval count is
+        approximated repository-wide through protection.
+        """
+        lines = []
+        notes = []
+        for entry in entries:
+            owners = " ".join(f"@{name}" for name in entry.owners)
+            lines.append(f"{entry.path} {owners}")
+            if entry.min_approvals > 1:
+                notes.append(
+                    f"{entry.path}: {entry.min_approvals} approvals wanted;"
+                    " Gitea expresses one repository-wide count through"
+                    " protection, not per path"
+                )
+        return Codeowners(
+            path=".gitea/CODEOWNERS",
+            content="\n".join(lines) + "\n" if lines else "",
+            notes=tuple(notes),
+        )
 
     def user_url(self, login: str) -> str:
         """The address of *login*'s profile; nothing on the wire."""
@@ -310,8 +366,12 @@ class _GiteaRepository:
             self._client.request(self._base, method="PATCH", data=patch)
         # allow_auto_merge needs no switch: scheduling a merge is always
         # available on Gitea.
-        if config.required_contexts is not None:
-            self._protect_default_branch(config.required_contexts)
+        if (
+            config.required_contexts is not None
+            or config.min_approvals is not None
+            or config.require_codeowner_review is not None
+        ):
+            self._protect_default_branch(config)
         if config.secrets is not None:
             for key, value in config.secrets.items():
                 self._client.request(
@@ -333,18 +393,33 @@ class _GiteaRepository:
         if config.labels is not None:
             self._ensure_labels(config.labels)
 
-    def _protect_default_branch(self, contexts: tuple[str, ...]) -> None:
-        """Require *contexts* on the default branch's protection rule."""
+    def _protect_default_branch(self, config: RepoConfig) -> None:
+        """Apply the protection half of *config* as one rule.
+
+        Admins are always bound (``apply_to_admins``): a protection
+        that exempts admins is a bypass nobody reviewed.
+        """
         info = self._forge.get_repo(self._owner, self._name)
         if info is None:
             raise ForgeError(f"{self._owner}/{self._name} does not exist")
         branch = info.default_branch
-        payload = {
+        payload: dict[str, object] = {
             "branch_name": branch,
             "rule_name": branch,
-            "enable_status_check": True,
-            "status_check_contexts": list(contexts),
+            "apply_to_admins": True,
         }
+        if config.required_contexts is not None:
+            payload["enable_status_check"] = True
+            payload["status_check_contexts"] = list(config.required_contexts)
+        if config.min_approvals is not None:
+            payload["required_approvals"] = config.min_approvals
+        if config.require_codeowner_review is not None:
+            # Gitea has no codeowner-approval switch; the nearest
+            # honest lever is blocking on official review requests,
+            # which codeowners files feed.
+            payload["block_on_official_review_requests"] = (
+                config.require_codeowner_review
+            )
         existing = self._client.request(
             f"{self._base}/branch_protections/{quote(branch)}", none_on=(404,)
         )

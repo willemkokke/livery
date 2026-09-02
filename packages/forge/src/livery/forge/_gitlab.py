@@ -33,6 +33,8 @@ from livery.forge._http import JsonClient, Opener
 from livery.forge._protocol import Checks, Issues, PullRequests, Releases, Repository
 from livery.forge._types import (
     Capability,
+    Codeowners,
+    CodeownersEntry,
     CombinedStatus,
     Conclusion,
     Issue,
@@ -173,6 +175,60 @@ class GitlabForge:
         """The view onto one repository. Cheap, no network."""
         return _GitlabRepository(self, self._client, owner, name)
 
+    def members(self, owner: str) -> tuple[str, ...]:
+        """The group's member usernames; a user namespace is its login."""
+        try:
+            rows = self._client.paginate(
+                lambda page: self._client.request(
+                    f"/groups/{quote(owner, safe='')}/members?per_page=100&page={page}"
+                ),
+                subject=f"/groups/{owner}/members",
+            )
+        except ForgeError as error:
+            if error.status == 404:
+                return (owner,)
+            raise
+        return tuple(sorted(str(row.get("username", "")) for row in rows))
+
+    def teams(self, owner: str) -> tuple[str, ...]:
+        """GitLab's teams are its subgroups: their full paths.
+
+        A personal namespace has no subgroups and answers empty.
+        """
+        try:
+            rows = self._client.paginate(
+                lambda page: self._client.request(
+                    f"/groups/{quote(owner, safe='')}/subgroups?per_page=100"
+                    f"&page={page}"
+                ),
+                subject=f"/groups/{owner}/subgroups",
+            )
+        except ForgeError as error:
+            if error.status == 404:
+                return ()
+            raise
+        return tuple(sorted(str(row.get("full_path", "")) for row in rows))
+
+    def codeowners(self, entries: tuple[CodeownersEntry, ...]) -> Codeowners:
+        """GitLab's dialect: ``.gitlab/CODEOWNERS`` with sections.
+
+        A section headed ``[name][n]`` carries the per-path approval
+        count in the file itself, the one dialect that can; nothing
+        is approximated. Enforcing the counts still needs a paid
+        tier, which the ``min_approvals`` capability declines.
+        """
+        lines = []
+        for index, entry in enumerate(entries, 1):
+            owners = " ".join(f"@{name}" for name in entry.owners)
+            if entry.min_approvals > 1:
+                lines.append(f"[owners-{index}][{entry.min_approvals}]")
+            lines.append(f"{entry.path} {owners}")
+        return Codeowners(
+            path=".gitlab/CODEOWNERS",
+            content="\n".join(lines) + "\n" if lines else "",
+            notes=(),
+        )
+
     def user_url(self, login: str) -> str:
         """The address of *login*'s profile; nothing on the wire."""
         return f"{self._web_root}/{login}"
@@ -298,6 +354,14 @@ class _GitlabRepository:
 
     def configure(self, config: RepoConfig) -> None:
         """Assert the stated settings; every step probes before acting."""
+        if config.min_approvals is not None or (
+            config.require_codeowner_review is not None
+        ):
+            raise Unsupported(
+                "this forge cannot require approving reviews through its"
+                " free tier (capability: min_approvals): GitLab ties"
+                " required approval rules to paid tiers"
+            )
         patch: dict[str, Any] = {}
         if config.default_branch is not None:
             patch["default_branch"] = config.default_branch

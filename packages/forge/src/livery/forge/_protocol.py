@@ -40,6 +40,8 @@ from typing import Protocol
 
 from livery.forge._types import (
     Capability,
+    Codeowners,
+    CodeownersEntry,
     CombinedStatus,
     Issue,
     Job,
@@ -535,6 +537,35 @@ class Forge(Protocol):
 
     def repository(self, owner: str, name: str) -> Repository:
         """The view onto one repository. Cheap, no network."""
+        ...
+
+    def members(self, owner: str) -> tuple[str, ...]:
+        """The login names under *owner*, an organisation or group.
+
+        A personal namespace answers exactly its one login: the
+        governance declarations validate against this listing, and a
+        solo repository's only member is its owner.
+        """
+        ...
+
+    def teams(self, owner: str) -> tuple[str, ...]:
+        """The team names under *owner*, as the forge spells them.
+
+        GitHub and Gitea answer team slugs; GitLab's teams are its
+        subgroups and it answers group paths. A personal namespace
+        has none and answers empty.
+        """
+        ...
+
+    def codeowners(self, entries: tuple[CodeownersEntry, ...]) -> Codeowners:
+        """Render *entries* as this forge's codeowners file.
+
+        Pure string building, nothing on the wire: the canonical
+        location and syntax are the forge's, the declarations are
+        neutral. What a dialect cannot express (a per-path approval
+        count outside GitLab's sections) is approximated and named
+        in the result's notes, never dropped silently.
+        """
         ...
 
     def user_url(self, login: str) -> str:

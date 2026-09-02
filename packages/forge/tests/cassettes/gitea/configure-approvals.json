@@ -1,0 +1,125 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "method": "DELETE",
+      "url": "http://localhost:3000/api/v1/repos/livery/conf-configure-approvals-1",
+      "request_body": "",
+      "status": 404,
+      "reason": "Not Found",
+      "content_type": "application/json;charset=utf-8",
+      "response_body": "{\"message\":\"not found\",\"url\":\"http://gitea:3000/api/swagger\"}",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3000/api/v1/orgs/livery",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json;charset=utf-8",
+      "response_body": "{\"id\":2,\"name\":\"livery\",\"full_name\":\"\",\"email\":\"\",\"avatar_url\":\"http://localhost:3000/avatars/b5651a968b1e0b08fd4b384f9e648459e5bcfb16f0afcd946b061a220b301316\",\"description\":\"\",\"website\":\"\",\"location\":\"\",\"visibility\":\"public\",\"repo_admin_change_team_access\":false,\"username\":\"livery\"}",
+      "location": ""
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3000/api/v1/orgs/livery/repos",
+      "request_body": "{\"name\": \"conf-configure-approvals-1\", \"private\": true, \"description\": \"\", \"auto_init\": true}",
+      "status": 201,
+      "reason": "Created",
+      "content_type": "application/json;charset=utf-8",
+      "response_body": "{\"id\":214,\"owner\":{\"id\":2,\"login\":\"livery\",\"login_name\":\"\",\"source_id\":0,\"full_name\":\"\",\"email\":\"\",\"avatar_url\":\"http://localhost:3000/avatars/b5651a968b1e0b08fd4b384f9e648459e5bcfb16f0afcd946b061a220b301316\",\"html_url\":\"http://localhost:3000/livery\",\"language\":\"\",\"is_admin\":false,\"last_login\":\"0001-01-01T00:00:00Z\",\"created\":\"2026-08-31T01:46:59Z\",\"restricted\":false,\"active\":false,\"prohibit_login\":false,\"location\":\"\",\"website\":\"\",\"description\":\"\",\"visibility\":\"public\",\"followers_count\":0,\"following_count\":0,\"starred_repos_count\":0,\"username\":\"livery\"},\"name\":\"conf-configure-approvals-1\",\"full_name\":\"livery/conf-configure-approvals-1\",\"description\":\"\",\"empty\":false,\"private\":true,\"fork\":false,\"template\":false,\"mirror\":false,\"size\":24,\"language\":\"\",\"languages_url\":\"http://gitea:3000/api/v1/repos/livery/conf-configure-approvals-1/languages\",\"html_url\":\"http://localhost:3000/livery/conf-configure-approvals-1\",\"url\":\"http://gitea:3000/api/v1/repos/livery/conf-configure-approvals-1\",\"link\":\"\",\"ssh_url\":\"git@localhost:livery/conf-configure-approvals-1.git\",\"clone_url\":\"http://localhost:3000/livery/conf-configure-approvals-1.git\",\"original_url\":\"\",\"website\":\"\",\"stars_count\":0,\"forks_count\":0,\"watchers_count\":1,\"branch_count\":1,\"open_issues_count\":0,\"open_pr_counter\":0,\"release_counter\":0,\"default_branch\":\"main\",\"archived\":false,\"created_at\":\"2026-09-02T10:33:05Z\",\"updated_at\":\"2026-09-02T10:33:05Z\",\"archived_at\":\"1970-01-01T00:00:00Z\",\"permissions\":{\"admin\":true,\"push\":true,\"pull\":true},\"has_code\":true,\"has_issues\":true,\"internal_tracker\":{\"enable_time_tracker\":true,\"allow_only_contributors_to_track_time\":true,\"enable_issue_dependencies\":true},\"has_wiki\":true,\"has_pull_requests\":true,\"has_projects\":true,\"projects_mode\":\"all\",\"has_releases\":true,\"has_packages\":true,\"has_actions\":true,\"ignore_whitespace_conflicts\":false,\"allow_merge_commits\":true,\"allow_rebase\":true,\"allow_rebase_explicit\":true,\"allow_squash_merge\":true,\"allow_fast_forward_only_merge\":true,\"allow_merge_update\":true,\"allow_rebase_update\":true,\"allow_manual_merge\":false,\"autodetect_manual_merge\":false,\"default_delete_branch_after_merge\":false,\"default_merge_style\":\"merge\",\"default_update_style\":\"merge\",\"default_allow_maintainer_edit\":true,\"avatar_url\":\"\",\"internal\":false,\"mirror_interval\":\"\",\"object_format_name\":\"sha1\",\"mirror_updated\":\"0001-01-01T00:00:00Z\",\"mirror_last_sync_at\":\"0001-01-01T00:00:00Z\",\"topics\":[],\"licenses\":[]}",
+      "location": ""
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3000/api/v1/repos/livery/conf-configure-approvals-1/contents/.gitea/workflows/conf.yml",
+      "request_body": "{\"content\": \"bmFtZTogY29uZgpvbjoKICBwdXNoOgogICAgYnJhbmNoZXM6IFsiKioiXQogIHdvcmtmbG93X2Rpc3BhdGNoOgpqb2JzOgogIGdhdGU6CiAgICBydW5zLW9uOiB1YnVudHUtbGF0ZXN0CiAgICBzdGVwczoKICAgICAgLSBuYW1lOiB2ZXJkaWN0CiAgICAgICAgc2hlbGw6IHNoCiAgICAgICAgZW52OgogICAgICAgICAgR0lUSFVCX1RPS0VOOiAke3sgZ2l0aHViLnRva2VuIH19CiAgICAgICAgcnVuOiB8CiAgICAgICAgICBpZiBncmVwIC1xICJjb25mOmZhaWx1cmUiICIkR0lUSFVCX0VWRU5UX1BBVEgiOyB0aGVuCiAgICAgICAgICAgIGVjaG8gInZlcmRpY3Q6IGZhaWx1cmUiCiAgICAgICAgICAgIGV4aXQgMQogICAgICAgICAgZmkKICAgICAgICAgIGlmIGdyZXAgLXEgImNvbmY6aGFuZyIgIiRHSVRIVUJfRVZFTlRfUEFUSCI7IHRoZW4KICAgICAgICAgICAgZWNobyAiaG9sZGluZyB1bnRpbCByZWxlYXNlZCIKICAgICAgICAgICAgaT0wCiAgICAgICAgICAgIHVybD0iJEdJVEhVQl9BUElfVVJML3JlcG9zLyRHSVRIVUJfUkVQT1NJVE9SWS90YWdzL3JlbGVhc2UtJEdJVEhVQl9TSEEiCiAgICAgICAgICAgIGF1dGhlZD0kKHByaW50ZiAlcyAiJEdJVEhVQl9TRVJWRVJfVVJMIiB8IHNlZCAicyM6Ly8jOi8veC1hY2Nlc3MtdG9rZW46JEdJVEhVQl9UT0tFTkAjIikKICAgICAgICAgICAgdW50aWwgd2dldCAtcSAtTyAvZGV2L251bGwgXAogICAgICAgICAgICAgICAgLS1oZWFkZXIgIkF1dGhvcml6YXRpb246IHRva2VuICRHSVRIVUJfVE9LRU4iICIkdXJsIiBcCiAgICAgICAgICAgICAgICB8fCBnaXQgbHMtcmVtb3RlIC1xICIkYXV0aGVkJEdJVEhVQl9SRVBPU0lUT1JZIiBcCiAgICAgICAgICAgICAgICAicmVmcy90YWdzL3JlbGVhc2UtJEdJVEhVQl9TSEEiIHwgZ3JlcCAtcSAuOyBkbwogICAgICAgICAgICAgIGk9JCgoaSsxKSkKICAgICAgICAgICAgICBpZiBbICIkaSIgLWd0IDMwMCBdOyB0aGVuIGV4aXQgMTsgZmkKICAgICAgICAgICAgICBzbGVlcCAyCiAgICAgICAgICAgIGRvbmUKICAgICAgICAgIGZpCiAgICAgICAgICBlY2hvICJ2ZXJkaWN0OiBzdWNjZXNzIgo=\", \"message\": \"conf: seed workflow\", \"branch\": \"main\"}",
+      "status": 201,
+      "reason": "Created",
+      "content_type": "application/json;charset=utf-8",
+      "response_body": "{\"content\":{\"name\":\"conf.yml\",\"path\":\".gitea/workflows/conf.yml\",\"sha\":\"47e81325a3d0164c60529bf54355741c7351f038\",\"last_commit_sha\":\"7bcac6c72a166857b158cca4aaac412653e2c535\",\"last_committer_date\":\"2026-09-02T10:33:05Z\",\"last_author_date\":\"2026-09-02T10:33:05Z\",\"type\":\"file\",\"mode\":\"100644\",\"size\":1067,\"encoding\":\"base64\",\"content\":\"bmFtZTogY29uZgpvbjoKICBwdXNoOgogICAgYnJhbmNoZXM6IFsiKioiXQogIHdvcmtmbG93X2Rpc3BhdGNoOgpqb2JzOgogIGdhdGU6CiAgICBydW5zLW9uOiB1YnVudHUtbGF0ZXN0CiAgICBzdGVwczoKICAgICAgLSBuYW1lOiB2ZXJkaWN0CiAgICAgICAgc2hlbGw6IHNoCiAgICAgICAgZW52OgogICAgICAgICAgR0lUSFVCX1RPS0VOOiAke3sgZ2l0aHViLnRva2VuIH19CiAgICAgICAgcnVuOiB8CiAgICAgICAgICBpZiBncmVwIC1xICJjb25mOmZhaWx1cmUiICIkR0lUSFVCX0VWRU5UX1BBVEgiOyB0aGVuCiAgICAgICAgICAgIGVjaG8gInZlcmRpY3Q6IGZhaWx1cmUiCiAgICAgICAgICAgIGV4aXQgMQogICAgICAgICAgZmkKICAgICAgICAgIGlmIGdyZXAgLXEgImNvbmY6aGFuZyIgIiRHSVRIVUJfRVZFTlRfUEFUSCI7IHRoZW4KICAgICAgICAgICAgZWNobyAiaG9sZGluZyB1bnRpbCByZWxlYXNlZCIKICAgICAgICAgICAgaT0wCiAgICAgICAgICAgIHVybD0iJEdJVEhVQl9BUElfVVJML3JlcG9zLyRHSVRIVUJfUkVQT1NJVE9SWS90YWdzL3JlbGVhc2UtJEdJVEhVQl9TSEEiCiAgICAgICAgICAgIGF1dGhlZD0kKHByaW50ZiAlcyAiJEdJVEhVQl9TRVJWRVJfVVJMIiB8IHNlZCAicyM6Ly8jOi8veC1hY2Nlc3MtdG9rZW46JEdJVEhVQl9UT0tFTkAjIikKICAgICAgICAgICAgdW50aWwgd2dldCAtcSAtTyAvZGV2L251bGwgXAogICAgICAgICAgICAgICAgLS1oZWFkZXIgIkF1dGhvcml6YXRpb246IHRva2VuICRHSVRIVUJfVE9LRU4iICIkdXJsIiBcCiAgICAgICAgICAgICAgICB8fCBnaXQgbHMtcmVtb3RlIC1xICIkYXV0aGVkJEdJVEhVQl9SRVBPU0lUT1JZIiBcCiAgICAgICAgICAgICAgICAicmVmcy90YWdzL3JlbGVhc2UtJEdJVEhVQl9TSEEiIHwgZ3JlcCAtcSAuOyBkbwogICAgICAgICAgICAgIGk9JCgoaSsxKSkKICAgICAgICAgICAgICBpZiBbICIkaSIgLWd0IDMwMCBdOyB0aGVuIGV4aXQgMTsgZmkKICAgICAgICAgICAgICBzbGVlcCAyCiAgICAgICAgICAgIGRvbmUKICAgICAgICAgIGZpCiAgICAgICAgICBlY2hvICJ2ZXJkaWN0OiBzdWNjZXNzIgo=\",\"target\":null,\"url\":\"http://gitea:3000/api/v1/repos/livery/conf-configure-approvals-1/contents/.gitea/workflows/conf.yml?ref=main\",\"html_url\":\"http://gitea:3000/livery/conf-configure-approvals-1/src/branch/main/.gitea/workflows/conf.yml\",\"git_url\":\"http://gitea:3000/api/v1/repos/livery/conf-configure-approvals-1/git/blobs/47e81325a3d0164c60529bf54355741c7351f038\",\"download_url\":\"http://gitea:3000/livery/conf-configure-approvals-1/raw/branch/main/.gitea/workflows/conf.yml\",\"submodule_git_url\":null,\"_links\":{\"self\":\"http://gitea:3000/api/v1/repos/livery/conf-configure-approvals-1/contents/.gitea/workflows/conf.yml?ref=main\",\"git\":\"http://gitea:3000/api/v1/repos/livery/conf-configure-approvals-1/git/blobs/47e81325a3d0164c60529bf54355741c7351f038\",\"html\":\"http://gitea:3000/livery/conf-configure-approvals-1/src/branch/main/.gitea/workflows/conf.yml\"}},\"commit\":{\"url\":\"http://gitea:3000/api/v1/repos/livery/conf-configure-approvals-1/git/commits/7bcac6c72a166857b158cca4aaac412653e2c535\",\"sha\":\"7bcac6c72a166857b158cca4aaac412653e2c535\",\"created\":\"0001-01-01T00:00:00Z\",\"html_url\":\"http://gitea:3000/livery/conf-configure-approvals-1/commit/7bcac6c72a166857b158cca4aaac412653e2c535\",\"author\":{\"name\":\"livery-admin\",\"email\":\"admin@livery.local\",\"date\":\"2026-09-02T10:33:05Z\"},\"committer\":{\"name\":\"livery-admin\",\"email\":\"admin@livery.local\",\"date\":\"2026-09-02T10:33:05Z\"},\"parents\":[{\"url\":\"http://gitea:3000/api/v1/repos/livery/conf-configure-approvals-1/git/commits/9f13f20843bf082e5a8e96578a95d70acf8ab61d\",\"sha\":\"9f13f20843bf082e5a8e96578a95d70acf8ab61d\",\"created\":\"0001-01-01T00:00:00Z\"}],\"message\":\"conf: seed workflow\\n\",\"tree\":{\"url\":\"http://gitea:3000/api/v1/repos/livery/conf-configure-approvals-1/git/trees/567de0c24a22a9b1fd80b2bdc2f2078512871d77\",\"sha\":\"567de0c24a22a9b1fd80b2bdc2f2078512871d77\",\"created\":\"0001-01-01T00:00:00Z\"}},\"verification\":{\"verified\":false,\"reason\":\"gpg.error.not_signed_commit\",\"signature\":\"\",\"signer\":null,\"payload\":\"\"}}",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3000/api/v1/repos/livery/conf-configure-approvals-1",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json;charset=utf-8",
+      "response_body": "{\"id\":214,\"owner\":{\"id\":2,\"login\":\"livery\",\"login_name\":\"\",\"source_id\":0,\"full_name\":\"\",\"email\":\"\",\"avatar_url\":\"http://localhost:3000/avatars/b5651a968b1e0b08fd4b384f9e648459e5bcfb16f0afcd946b061a220b301316\",\"html_url\":\"http://localhost:3000/livery\",\"language\":\"\",\"is_admin\":false,\"last_login\":\"0001-01-01T00:00:00Z\",\"created\":\"2026-08-31T01:46:59Z\",\"restricted\":false,\"active\":false,\"prohibit_login\":false,\"location\":\"\",\"website\":\"\",\"description\":\"\",\"visibility\":\"public\",\"followers_count\":0,\"following_count\":0,\"starred_repos_count\":0,\"username\":\"livery\"},\"name\":\"conf-configure-approvals-1\",\"full_name\":\"livery/conf-configure-approvals-1\",\"description\":\"\",\"empty\":false,\"private\":true,\"fork\":false,\"template\":false,\"mirror\":false,\"size\":24,\"language\":\"\",\"languages_url\":\"http://gitea:3000/api/v1/repos/livery/conf-configure-approvals-1/languages\",\"html_url\":\"http://localhost:3000/livery/conf-configure-approvals-1\",\"url\":\"http://gitea:3000/api/v1/repos/livery/conf-configure-approvals-1\",\"link\":\"\",\"ssh_url\":\"git@localhost:livery/conf-configure-approvals-1.git\",\"clone_url\":\"http://localhost:3000/livery/conf-configure-approvals-1.git\",\"original_url\":\"\",\"website\":\"\",\"stars_count\":0,\"forks_count\":0,\"watchers_count\":1,\"branch_count\":1,\"open_issues_count\":0,\"open_pr_counter\":0,\"release_counter\":0,\"default_branch\":\"main\",\"archived\":false,\"created_at\":\"2026-09-02T10:33:05Z\",\"updated_at\":\"2026-09-02T10:33:05Z\",\"archived_at\":\"1970-01-01T00:00:00Z\",\"permissions\":{\"admin\":true,\"push\":true,\"pull\":true},\"has_code\":true,\"has_issues\":true,\"internal_tracker\":{\"enable_time_tracker\":true,\"allow_only_contributors_to_track_time\":true,\"enable_issue_dependencies\":true},\"has_wiki\":true,\"has_pull_requests\":true,\"has_projects\":true,\"projects_mode\":\"all\",\"has_releases\":true,\"has_packages\":true,\"has_actions\":true,\"ignore_whitespace_conflicts\":false,\"allow_merge_commits\":true,\"allow_rebase\":true,\"allow_rebase_explicit\":true,\"allow_squash_merge\":true,\"allow_fast_forward_only_merge\":true,\"allow_merge_update\":true,\"allow_rebase_update\":true,\"allow_manual_merge\":false,\"autodetect_manual_merge\":false,\"default_delete_branch_after_merge\":false,\"default_merge_style\":\"merge\",\"default_update_style\":\"merge\",\"default_allow_maintainer_edit\":true,\"avatar_url\":\"\",\"internal\":false,\"mirror_interval\":\"\",\"object_format_name\":\"sha1\",\"mirror_updated\":\"0001-01-01T00:00:00Z\",\"mirror_last_sync_at\":\"0001-01-01T00:00:00Z\",\"topics\":[],\"licenses\":[]}",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3000/api/v1/repos/livery/conf-configure-approvals-1/branch_protections/main",
+      "request_body": "",
+      "status": 404,
+      "reason": "Not Found",
+      "content_type": "application/json;charset=utf-8",
+      "response_body": "{\"message\":\"not found\",\"url\":\"http://gitea:3000/api/swagger\"}",
+      "location": ""
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3000/api/v1/repos/livery/conf-configure-approvals-1/branch_protections",
+      "request_body": "{\"branch_name\": \"main\", \"rule_name\": \"main\", \"apply_to_admins\": true, \"required_approvals\": 1}",
+      "status": 201,
+      "reason": "Created",
+      "content_type": "application/json;charset=utf-8",
+      "response_body": "{\"branch_name\":\"main\",\"rule_name\":\"main\",\"priority\":1,\"enable_push\":false,\"enable_push_whitelist\":false,\"push_whitelist_usernames\":[],\"push_whitelist_teams\":[],\"push_whitelist_deploy_keys\":false,\"enable_force_push\":false,\"enable_force_push_allowlist\":false,\"force_push_allowlist_usernames\":[],\"force_push_allowlist_teams\":[],\"force_push_allowlist_deploy_keys\":false,\"enable_merge_whitelist\":false,\"merge_whitelist_usernames\":[],\"merge_whitelist_teams\":[],\"enable_bypass_allowlist\":false,\"bypass_allowlist_usernames\":[],\"bypass_allowlist_teams\":[],\"enable_status_check\":false,\"status_check_contexts\":null,\"required_approvals\":1,\"enable_approvals_whitelist\":false,\"approvals_whitelist_username\":[],\"approvals_whitelist_teams\":[],\"block_on_rejected_reviews\":false,\"block_on_official_review_requests\":false,\"block_on_codeowner_reviews\":false,\"block_on_outdated_branch\":false,\"dismiss_stale_approvals\":false,\"ignore_stale_approvals\":false,\"require_signed_commits\":false,\"protected_file_patterns\":\"\",\"unprotected_file_patterns\":\"\",\"block_admin_merge_override\":false,\"created_at\":\"2026-09-02T10:33:05Z\",\"updated_at\":\"2026-09-02T10:33:05Z\"}",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3000/api/v1/repos/livery/conf-configure-approvals-1/branch_protections/main",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json;charset=utf-8",
+      "response_body": "{\"branch_name\":\"main\",\"rule_name\":\"main\",\"priority\":1,\"enable_push\":false,\"enable_push_whitelist\":false,\"push_whitelist_usernames\":[],\"push_whitelist_teams\":[],\"push_whitelist_deploy_keys\":false,\"enable_force_push\":false,\"enable_force_push_allowlist\":false,\"force_push_allowlist_usernames\":[],\"force_push_allowlist_teams\":[],\"force_push_allowlist_deploy_keys\":false,\"enable_merge_whitelist\":false,\"merge_whitelist_usernames\":[],\"merge_whitelist_teams\":[],\"enable_bypass_allowlist\":false,\"bypass_allowlist_usernames\":[],\"bypass_allowlist_teams\":[],\"enable_status_check\":false,\"status_check_contexts\":null,\"required_approvals\":1,\"enable_approvals_whitelist\":false,\"approvals_whitelist_username\":[],\"approvals_whitelist_teams\":[],\"block_on_rejected_reviews\":false,\"block_on_official_review_requests\":false,\"block_on_codeowner_reviews\":false,\"block_on_outdated_branch\":false,\"dismiss_stale_approvals\":false,\"ignore_stale_approvals\":false,\"require_signed_commits\":false,\"protected_file_patterns\":\"\",\"unprotected_file_patterns\":\"\",\"block_admin_merge_override\":false,\"created_at\":\"2026-09-02T10:33:05Z\",\"updated_at\":\"2026-09-02T10:33:05Z\"}",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3000/api/v1/repos/livery/conf-configure-approvals-1",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json;charset=utf-8",
+      "response_body": "{\"id\":214,\"owner\":{\"id\":2,\"login\":\"livery\",\"login_name\":\"\",\"source_id\":0,\"full_name\":\"\",\"email\":\"\",\"avatar_url\":\"http://localhost:3000/avatars/b5651a968b1e0b08fd4b384f9e648459e5bcfb16f0afcd946b061a220b301316\",\"html_url\":\"http://localhost:3000/livery\",\"language\":\"\",\"is_admin\":false,\"last_login\":\"0001-01-01T00:00:00Z\",\"created\":\"2026-08-31T01:46:59Z\",\"restricted\":false,\"active\":false,\"prohibit_login\":false,\"location\":\"\",\"website\":\"\",\"description\":\"\",\"visibility\":\"public\",\"followers_count\":0,\"following_count\":0,\"starred_repos_count\":0,\"username\":\"livery\"},\"name\":\"conf-configure-approvals-1\",\"full_name\":\"livery/conf-configure-approvals-1\",\"description\":\"\",\"empty\":false,\"private\":true,\"fork\":false,\"template\":false,\"mirror\":false,\"size\":24,\"language\":\"\",\"languages_url\":\"http://gitea:3000/api/v1/repos/livery/conf-configure-approvals-1/languages\",\"html_url\":\"http://localhost:3000/livery/conf-configure-approvals-1\",\"url\":\"http://gitea:3000/api/v1/repos/livery/conf-configure-approvals-1\",\"link\":\"\",\"ssh_url\":\"git@localhost:livery/conf-configure-approvals-1.git\",\"clone_url\":\"http://localhost:3000/livery/conf-configure-approvals-1.git\",\"original_url\":\"\",\"website\":\"\",\"stars_count\":0,\"forks_count\":0,\"watchers_count\":1,\"branch_count\":1,\"open_issues_count\":0,\"open_pr_counter\":0,\"release_counter\":0,\"default_branch\":\"main\",\"archived\":false,\"created_at\":\"2026-09-02T10:33:05Z\",\"updated_at\":\"2026-09-02T10:33:05Z\",\"archived_at\":\"1970-01-01T00:00:00Z\",\"permissions\":{\"admin\":true,\"push\":true,\"pull\":true},\"has_code\":true,\"has_issues\":true,\"internal_tracker\":{\"enable_time_tracker\":true,\"allow_only_contributors_to_track_time\":true,\"enable_issue_dependencies\":true},\"has_wiki\":true,\"has_pull_requests\":true,\"has_projects\":true,\"projects_mode\":\"all\",\"has_releases\":true,\"has_packages\":true,\"has_actions\":true,\"ignore_whitespace_conflicts\":false,\"allow_merge_commits\":true,\"allow_rebase\":true,\"allow_rebase_explicit\":true,\"allow_squash_merge\":true,\"allow_fast_forward_only_merge\":true,\"allow_merge_update\":true,\"allow_rebase_update\":true,\"allow_manual_merge\":false,\"autodetect_manual_merge\":false,\"default_delete_branch_after_merge\":false,\"default_merge_style\":\"merge\",\"default_update_style\":\"merge\",\"default_allow_maintainer_edit\":true,\"avatar_url\":\"\",\"internal\":false,\"mirror_interval\":\"\",\"object_format_name\":\"sha1\",\"mirror_updated\":\"0001-01-01T00:00:00Z\",\"mirror_last_sync_at\":\"0001-01-01T00:00:00Z\",\"topics\":[],\"licenses\":[]}",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3000/api/v1/repos/livery/conf-configure-approvals-1/branch_protections/main",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json;charset=utf-8",
+      "response_body": "{\"branch_name\":\"main\",\"rule_name\":\"main\",\"priority\":1,\"enable_push\":false,\"enable_push_whitelist\":false,\"push_whitelist_usernames\":[],\"push_whitelist_teams\":[],\"push_whitelist_deploy_keys\":false,\"enable_force_push\":false,\"enable_force_push_allowlist\":false,\"force_push_allowlist_usernames\":[],\"force_push_allowlist_teams\":[],\"force_push_allowlist_deploy_keys\":false,\"enable_merge_whitelist\":false,\"merge_whitelist_usernames\":[],\"merge_whitelist_teams\":[],\"enable_bypass_allowlist\":false,\"bypass_allowlist_usernames\":[],\"bypass_allowlist_teams\":[],\"enable_status_check\":false,\"status_check_contexts\":null,\"required_approvals\":1,\"enable_approvals_whitelist\":false,\"approvals_whitelist_username\":[],\"approvals_whitelist_teams\":[],\"block_on_rejected_reviews\":false,\"block_on_official_review_requests\":false,\"block_on_codeowner_reviews\":false,\"block_on_outdated_branch\":false,\"dismiss_stale_approvals\":false,\"ignore_stale_approvals\":false,\"require_signed_commits\":false,\"protected_file_patterns\":\"\",\"unprotected_file_patterns\":\"\",\"block_admin_merge_override\":false,\"created_at\":\"2026-09-02T10:33:05Z\",\"updated_at\":\"2026-09-02T10:33:05Z\"}",
+      "location": ""
+    },
+    {
+      "method": "PATCH",
+      "url": "http://localhost:3000/api/v1/repos/livery/conf-configure-approvals-1/branch_protections/main",
+      "request_body": "{\"branch_name\": \"main\", \"rule_name\": \"main\", \"apply_to_admins\": true, \"required_approvals\": 1}",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json;charset=utf-8",
+      "response_body": "{\"branch_name\":\"main\",\"rule_name\":\"main\",\"priority\":1,\"enable_push\":false,\"enable_push_whitelist\":false,\"push_whitelist_usernames\":[],\"push_whitelist_teams\":[],\"push_whitelist_deploy_keys\":false,\"enable_force_push\":false,\"enable_force_push_allowlist\":false,\"force_push_allowlist_usernames\":[],\"force_push_allowlist_teams\":[],\"force_push_allowlist_deploy_keys\":false,\"enable_merge_whitelist\":false,\"merge_whitelist_usernames\":[],\"merge_whitelist_teams\":[],\"enable_bypass_allowlist\":false,\"bypass_allowlist_usernames\":[],\"bypass_allowlist_teams\":[],\"enable_status_check\":false,\"status_check_contexts\":null,\"required_approvals\":1,\"enable_approvals_whitelist\":false,\"approvals_whitelist_username\":[],\"approvals_whitelist_teams\":[],\"block_on_rejected_reviews\":false,\"block_on_official_review_requests\":false,\"block_on_codeowner_reviews\":false,\"block_on_outdated_branch\":false,\"dismiss_stale_approvals\":false,\"ignore_stale_approvals\":false,\"require_signed_commits\":false,\"protected_file_patterns\":\"\",\"unprotected_file_patterns\":\"\",\"block_admin_merge_override\":false,\"created_at\":\"2026-09-02T10:33:05Z\",\"updated_at\":\"2026-09-02T10:33:05Z\"}",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3000/api/v1/repos/livery/conf-configure-approvals-1/branch_protections/main",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json;charset=utf-8",
+      "response_body": "{\"branch_name\":\"main\",\"rule_name\":\"main\",\"priority\":1,\"enable_push\":false,\"enable_push_whitelist\":false,\"push_whitelist_usernames\":[],\"push_whitelist_teams\":[],\"push_whitelist_deploy_keys\":false,\"enable_force_push\":false,\"enable_force_push_allowlist\":false,\"force_push_allowlist_usernames\":[],\"force_push_allowlist_teams\":[],\"force_push_allowlist_deploy_keys\":false,\"enable_merge_whitelist\":false,\"merge_whitelist_usernames\":[],\"merge_whitelist_teams\":[],\"enable_bypass_allowlist\":false,\"bypass_allowlist_usernames\":[],\"bypass_allowlist_teams\":[],\"enable_status_check\":false,\"status_check_contexts\":null,\"required_approvals\":1,\"enable_approvals_whitelist\":false,\"approvals_whitelist_username\":[],\"approvals_whitelist_teams\":[],\"block_on_rejected_reviews\":false,\"block_on_official_review_requests\":false,\"block_on_codeowner_reviews\":false,\"block_on_outdated_branch\":false,\"dismiss_stale_approvals\":false,\"ignore_stale_approvals\":false,\"require_signed_commits\":false,\"protected_file_patterns\":\"\",\"unprotected_file_patterns\":\"\",\"block_admin_merge_override\":false,\"created_at\":\"2026-09-02T10:33:05Z\",\"updated_at\":\"2026-09-02T10:33:05Z\"}",
+      "location": ""
+    }
+  ]
+}

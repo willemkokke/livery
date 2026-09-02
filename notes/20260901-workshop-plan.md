@@ -34,7 +34,10 @@ between, completing the pre-bash rebase teaching. The 7b audit
 found two destruction-rule holes (close tore down before the
 --discard check could see the branch; stop could not see a
 worktree's uncommitted changes from the main checkout), closed the
-same day in a follow-up PR. Phase 8's cut next. Subsumes
+same day in a follow-up PR. Phase 8a in flight as issue #85 (the forge surface); the day also
+landed issues as the way of work (PR #82), sync-as-one-stop with
+integrate closing issue #83 (PR #84), and the footman 0.49
+migration (PR #81). Subsumes
 `notes/20260831-workshop-plan.md`,
 whose phases 1-10 shipped and whose remaining phases are carried
 forward here renumbered. The loop: one PR per phase, merged when
@@ -955,8 +958,40 @@ Deliverables:
   re-run. hse's exit 18 error is the ruled deviation. Forcing tests
   against a protection-enabled repo.
 
-Acceptance detailed when the phase is cut; timing relative to 0.1.0
-is open item 6.
+Two PRs: 8a the forge surface (issue #85), 8b the workshop half.
+Governance gates 0.1.0 (open item 6, resolved).
+
+Edge table (8a):
+
+| Edge | Guard |
+| --- | --- |
+| A personal namespace has no org endpoints | members answers the one login, teams answers empty, off the 404 |
+| A per-path approval count outside GitLab | approximated through protection and named in the rendering's notes |
+| GitLab's paid approval rules | the min_approvals capability declines by name; configure refuses taught |
+| GitHub's whole-rule protection PUT | unset pieces read back and preserved, never silently cleared |
+| Admin bypass of protection | never left open: enforce-on-admins and apply-to-admins always set |
+| github.com serves a deleted branch for seconds | driver-side await_branch poll (quirk banked) |
+
+Acceptance (8a):
+
+- The dialect unit tests offline: GitHub and Gitea note their
+  approximation, GitLab's sections carry the count, empty renders
+  empty, the 404 user-namespace fallback forced through a replay.
+- The three new conformance scenarios recorded live on all three
+  servers: governance-listings, configure-approvals (read-back and
+  idempotent re-run), approvals-declined naming the capability.
+- The full cassette sets re-recorded under the admins-bound
+  protection payloads; replay green.
+- `uv run fm check` green.
+
+Acceptance (8b, detailed with its build): the owners declarations
+and their offline gate checks, CODEOWNERS as a managed generated
+artifact with drift compared against the same pure function, the
+post-merge configure job with path filters and the admin secret,
+the admin token ladder, the rename heal at submit, the reconcile
+silence ladder, the approvals-outstanding exit 0 naming who can
+still approve, the assignee-limit validation, and the release-PR
+title job deferred from phase 4.
 
 ## Phase 9: the branded runner (was phase 12)
 

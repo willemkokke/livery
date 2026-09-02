@@ -13,6 +13,8 @@ def test_the_surface_is_declared() -> None:
         "Capability",
         "CheckState",
         "Checks",
+        "Codeowners",
+        "CodeownersEntry",
         "CombinedStatus",
         "Conclusion",
         "Forge",

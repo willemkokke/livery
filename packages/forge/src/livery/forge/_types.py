@@ -20,6 +20,7 @@ Capability: TypeAlias = Literal[
     "required_contexts",
     "ci_secrets",
     "schedule_events",
+    "min_approvals",
 ]
 """What livery.forge.Forge.supports answers for, by name.
 
@@ -34,6 +35,11 @@ Capability: TypeAlias = Literal[
   demands sealed-box encryption the standard library cannot provide,
   and no workflow stores a secret there, because trusted publishing
   replaces tokens on GitHub.
+- ``min_approvals``: protection can require a number of approving
+  reviews (and a codeowner's), applied by
+  livery.forge.Repository.configure. GitLab ties required approval
+  rules to paid tiers, so its backend declines; the decline is what
+  keeps a one-assignee, one-approver policy honest there.
 - ``schedule_events``: the merge-scheduling history of a pull request
   can be read back (livery.forge.PullRequests.schedule_events).
   GitLab's backend declines: its system notes carry no reliable
@@ -118,6 +124,14 @@ class RepoConfig:
             protection requires before a merge. Setting this on a
             forge without the ``required_contexts`` capability raises
             livery.forge.Unsupported.
+        min_approvals: Approving reviews the default branch's
+            protection requires before a merge. Applied with admins
+            bound: protection that exempts admins is a bypass nobody
+            reviewed, so configure never leaves one open. Needs the
+            ``min_approvals`` capability.
+        require_codeowner_review: True also requires an approval from
+            a codeowner of the touched paths. Rides the same
+            capability.
         secrets: CI secrets to store, by name. Write-only: no protocol
             operation reads a secret back. Setting this on a forge
             without the ``ci_secrets`` capability raises
@@ -133,6 +147,8 @@ class RepoConfig:
     delete_branch_on_merge: bool | None = None
     allow_auto_merge: bool | None = None
     required_contexts: tuple[str, ...] | None = None
+    min_approvals: int | None = None
+    require_codeowner_review: bool | None = None
     secrets: Mapping[str, str] | None = None
     variables: Mapping[str, str] | None = None
     labels: tuple[Label, ...] | None = None
@@ -307,6 +323,43 @@ class Review:
 
     author: str
     state: ReviewState
+
+
+@dataclass(frozen=True)
+class CodeownersEntry:
+    """One neutral ownership declaration a codeowners file expresses.
+
+    Attributes:
+        path: The repository path the owners review (a directory or
+            glob, forge-neutral, ``/`` separators).
+        owners: User logins and team names, without any ``@`` sigil;
+            the backend adds its forge's spelling.
+        min_approvals: Approvals this path needs. Only GitLab's
+            sections express a per-path count in the file itself;
+            the other forges approximate through protection and say
+            so in the rendering's notes.
+    """
+
+    path: str
+    owners: tuple[str, ...]
+    min_approvals: int = 0
+
+
+@dataclass(frozen=True)
+class Codeowners:
+    """A rendered codeowners file: where it lives and what it says.
+
+    Attributes:
+        path: The forge's canonical location for the file, relative
+            to the repository root.
+        content: The file's text in the forge's syntax.
+        notes: What the rendering approximated rather than expressed,
+            one sentence each; empty when everything was expressed.
+    """
+
+    path: str
+    content: str
+    notes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

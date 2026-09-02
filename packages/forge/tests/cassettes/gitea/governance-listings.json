@@ -1,0 +1,75 @@
+{
+  "format": 1,
+  "exchanges": [
+    {
+      "method": "DELETE",
+      "url": "http://localhost:3000/api/v1/repos/livery/conf-governance-listings-1",
+      "request_body": "",
+      "status": 404,
+      "reason": "Not Found",
+      "content_type": "application/json;charset=utf-8",
+      "response_body": "{\"message\":\"not found\",\"url\":\"http://gitea:3000/api/swagger\"}",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3000/api/v1/orgs/livery",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json;charset=utf-8",
+      "response_body": "{\"id\":2,\"name\":\"livery\",\"full_name\":\"\",\"email\":\"\",\"avatar_url\":\"http://localhost:3000/avatars/b5651a968b1e0b08fd4b384f9e648459e5bcfb16f0afcd946b061a220b301316\",\"description\":\"\",\"website\":\"\",\"location\":\"\",\"visibility\":\"public\",\"repo_admin_change_team_access\":false,\"username\":\"livery\"}",
+      "location": ""
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3000/api/v1/orgs/livery/repos",
+      "request_body": "{\"name\": \"conf-governance-listings-1\", \"private\": true, \"description\": \"\", \"auto_init\": true}",
+      "status": 201,
+      "reason": "Created",
+      "content_type": "application/json;charset=utf-8",
+      "response_body": "{\"id\":213,\"owner\":{\"id\":2,\"login\":\"livery\",\"login_name\":\"\",\"source_id\":0,\"full_name\":\"\",\"email\":\"\",\"avatar_url\":\"http://localhost:3000/avatars/b5651a968b1e0b08fd4b384f9e648459e5bcfb16f0afcd946b061a220b301316\",\"html_url\":\"http://localhost:3000/livery\",\"language\":\"\",\"is_admin\":false,\"last_login\":\"0001-01-01T00:00:00Z\",\"created\":\"2026-08-31T01:46:59Z\",\"restricted\":false,\"active\":false,\"prohibit_login\":false,\"location\":\"\",\"website\":\"\",\"description\":\"\",\"visibility\":\"public\",\"followers_count\":0,\"following_count\":0,\"starred_repos_count\":0,\"username\":\"livery\"},\"name\":\"conf-governance-listings-1\",\"full_name\":\"livery/conf-governance-listings-1\",\"description\":\"\",\"empty\":false,\"private\":true,\"fork\":false,\"template\":false,\"mirror\":false,\"size\":24,\"language\":\"\",\"languages_url\":\"http://gitea:3000/api/v1/repos/livery/conf-governance-listings-1/languages\",\"html_url\":\"http://localhost:3000/livery/conf-governance-listings-1\",\"url\":\"http://gitea:3000/api/v1/repos/livery/conf-governance-listings-1\",\"link\":\"\",\"ssh_url\":\"git@localhost:livery/conf-governance-listings-1.git\",\"clone_url\":\"http://localhost:3000/livery/conf-governance-listings-1.git\",\"original_url\":\"\",\"website\":\"\",\"stars_count\":0,\"forks_count\":0,\"watchers_count\":1,\"branch_count\":1,\"open_issues_count\":0,\"open_pr_counter\":0,\"release_counter\":0,\"default_branch\":\"main\",\"archived\":false,\"created_at\":\"2026-09-02T10:33:04Z\",\"updated_at\":\"2026-09-02T10:33:04Z\",\"archived_at\":\"1970-01-01T00:00:00Z\",\"permissions\":{\"admin\":true,\"push\":true,\"pull\":true},\"has_code\":true,\"has_issues\":true,\"internal_tracker\":{\"enable_time_tracker\":true,\"allow_only_contributors_to_track_time\":true,\"enable_issue_dependencies\":true},\"has_wiki\":true,\"has_pull_requests\":true,\"has_projects\":true,\"projects_mode\":\"all\",\"has_releases\":true,\"has_packages\":true,\"has_actions\":true,\"ignore_whitespace_conflicts\":false,\"allow_merge_commits\":true,\"allow_rebase\":true,\"allow_rebase_explicit\":true,\"allow_squash_merge\":true,\"allow_fast_forward_only_merge\":true,\"allow_merge_update\":true,\"allow_rebase_update\":true,\"allow_manual_merge\":false,\"autodetect_manual_merge\":false,\"default_delete_branch_after_merge\":false,\"default_merge_style\":\"merge\",\"default_update_style\":\"merge\",\"default_allow_maintainer_edit\":true,\"avatar_url\":\"\",\"internal\":false,\"mirror_interval\":\"\",\"object_format_name\":\"sha1\",\"mirror_updated\":\"0001-01-01T00:00:00Z\",\"mirror_last_sync_at\":\"0001-01-01T00:00:00Z\",\"topics\":[],\"licenses\":[]}",
+      "location": ""
+    },
+    {
+      "method": "POST",
+      "url": "http://localhost:3000/api/v1/repos/livery/conf-governance-listings-1/contents/.gitea/workflows/conf.yml",
+      "request_body": "{\"content\": \"bmFtZTogY29uZgpvbjoKICBwdXNoOgogICAgYnJhbmNoZXM6IFsiKioiXQogIHdvcmtmbG93X2Rpc3BhdGNoOgpqb2JzOgogIGdhdGU6CiAgICBydW5zLW9uOiB1YnVudHUtbGF0ZXN0CiAgICBzdGVwczoKICAgICAgLSBuYW1lOiB2ZXJkaWN0CiAgICAgICAgc2hlbGw6IHNoCiAgICAgICAgZW52OgogICAgICAgICAgR0lUSFVCX1RPS0VOOiAke3sgZ2l0aHViLnRva2VuIH19CiAgICAgICAgcnVuOiB8CiAgICAgICAgICBpZiBncmVwIC1xICJjb25mOmZhaWx1cmUiICIkR0lUSFVCX0VWRU5UX1BBVEgiOyB0aGVuCiAgICAgICAgICAgIGVjaG8gInZlcmRpY3Q6IGZhaWx1cmUiCiAgICAgICAgICAgIGV4aXQgMQogICAgICAgICAgZmkKICAgICAgICAgIGlmIGdyZXAgLXEgImNvbmY6aGFuZyIgIiRHSVRIVUJfRVZFTlRfUEFUSCI7IHRoZW4KICAgICAgICAgICAgZWNobyAiaG9sZGluZyB1bnRpbCByZWxlYXNlZCIKICAgICAgICAgICAgaT0wCiAgICAgICAgICAgIHVybD0iJEdJVEhVQl9BUElfVVJML3JlcG9zLyRHSVRIVUJfUkVQT1NJVE9SWS90YWdzL3JlbGVhc2UtJEdJVEhVQl9TSEEiCiAgICAgICAgICAgIGF1dGhlZD0kKHByaW50ZiAlcyAiJEdJVEhVQl9TRVJWRVJfVVJMIiB8IHNlZCAicyM6Ly8jOi8veC1hY2Nlc3MtdG9rZW46JEdJVEhVQl9UT0tFTkAjIikKICAgICAgICAgICAgdW50aWwgd2dldCAtcSAtTyAvZGV2L251bGwgXAogICAgICAgICAgICAgICAgLS1oZWFkZXIgIkF1dGhvcml6YXRpb246IHRva2VuICRHSVRIVUJfVE9LRU4iICIkdXJsIiBcCiAgICAgICAgICAgICAgICB8fCBnaXQgbHMtcmVtb3RlIC1xICIkYXV0aGVkJEdJVEhVQl9SRVBPU0lUT1JZIiBcCiAgICAgICAgICAgICAgICAicmVmcy90YWdzL3JlbGVhc2UtJEdJVEhVQl9TSEEiIHwgZ3JlcCAtcSAuOyBkbwogICAgICAgICAgICAgIGk9JCgoaSsxKSkKICAgICAgICAgICAgICBpZiBbICIkaSIgLWd0IDMwMCBdOyB0aGVuIGV4aXQgMTsgZmkKICAgICAgICAgICAgICBzbGVlcCAyCiAgICAgICAgICAgIGRvbmUKICAgICAgICAgIGZpCiAgICAgICAgICBlY2hvICJ2ZXJkaWN0OiBzdWNjZXNzIgo=\", \"message\": \"conf: seed workflow\", \"branch\": \"main\"}",
+      "status": 201,
+      "reason": "Created",
+      "content_type": "application/json;charset=utf-8",
+      "response_body": "{\"content\":{\"name\":\"conf.yml\",\"path\":\".gitea/workflows/conf.yml\",\"sha\":\"47e81325a3d0164c60529bf54355741c7351f038\",\"last_commit_sha\":\"5f1ea15c89141167a771c4cea5ae624255178cd6\",\"last_committer_date\":\"2026-09-02T10:33:04Z\",\"last_author_date\":\"2026-09-02T10:33:04Z\",\"type\":\"file\",\"mode\":\"100644\",\"size\":1067,\"encoding\":\"base64\",\"content\":\"bmFtZTogY29uZgpvbjoKICBwdXNoOgogICAgYnJhbmNoZXM6IFsiKioiXQogIHdvcmtmbG93X2Rpc3BhdGNoOgpqb2JzOgogIGdhdGU6CiAgICBydW5zLW9uOiB1YnVudHUtbGF0ZXN0CiAgICBzdGVwczoKICAgICAgLSBuYW1lOiB2ZXJkaWN0CiAgICAgICAgc2hlbGw6IHNoCiAgICAgICAgZW52OgogICAgICAgICAgR0lUSFVCX1RPS0VOOiAke3sgZ2l0aHViLnRva2VuIH19CiAgICAgICAgcnVuOiB8CiAgICAgICAgICBpZiBncmVwIC1xICJjb25mOmZhaWx1cmUiICIkR0lUSFVCX0VWRU5UX1BBVEgiOyB0aGVuCiAgICAgICAgICAgIGVjaG8gInZlcmRpY3Q6IGZhaWx1cmUiCiAgICAgICAgICAgIGV4aXQgMQogICAgICAgICAgZmkKICAgICAgICAgIGlmIGdyZXAgLXEgImNvbmY6aGFuZyIgIiRHSVRIVUJfRVZFTlRfUEFUSCI7IHRoZW4KICAgICAgICAgICAgZWNobyAiaG9sZGluZyB1bnRpbCByZWxlYXNlZCIKICAgICAgICAgICAgaT0wCiAgICAgICAgICAgIHVybD0iJEdJVEhVQl9BUElfVVJML3JlcG9zLyRHSVRIVUJfUkVQT1NJVE9SWS90YWdzL3JlbGVhc2UtJEdJVEhVQl9TSEEiCiAgICAgICAgICAgIGF1dGhlZD0kKHByaW50ZiAlcyAiJEdJVEhVQl9TRVJWRVJfVVJMIiB8IHNlZCAicyM6Ly8jOi8veC1hY2Nlc3MtdG9rZW46JEdJVEhVQl9UT0tFTkAjIikKICAgICAgICAgICAgdW50aWwgd2dldCAtcSAtTyAvZGV2L251bGwgXAogICAgICAgICAgICAgICAgLS1oZWFkZXIgIkF1dGhvcml6YXRpb246IHRva2VuICRHSVRIVUJfVE9LRU4iICIkdXJsIiBcCiAgICAgICAgICAgICAgICB8fCBnaXQgbHMtcmVtb3RlIC1xICIkYXV0aGVkJEdJVEhVQl9SRVBPU0lUT1JZIiBcCiAgICAgICAgICAgICAgICAicmVmcy90YWdzL3JlbGVhc2UtJEdJVEhVQl9TSEEiIHwgZ3JlcCAtcSAuOyBkbwogICAgICAgICAgICAgIGk9JCgoaSsxKSkKICAgICAgICAgICAgICBpZiBbICIkaSIgLWd0IDMwMCBdOyB0aGVuIGV4aXQgMTsgZmkKICAgICAgICAgICAgICBzbGVlcCAyCiAgICAgICAgICAgIGRvbmUKICAgICAgICAgIGZpCiAgICAgICAgICBlY2hvICJ2ZXJkaWN0OiBzdWNjZXNzIgo=\",\"target\":null,\"url\":\"http://gitea:3000/api/v1/repos/livery/conf-governance-listings-1/contents/.gitea/workflows/conf.yml?ref=main\",\"html_url\":\"http://gitea:3000/livery/conf-governance-listings-1/src/branch/main/.gitea/workflows/conf.yml\",\"git_url\":\"http://gitea:3000/api/v1/repos/livery/conf-governance-listings-1/git/blobs/47e81325a3d0164c60529bf54355741c7351f038\",\"download_url\":\"http://gitea:3000/livery/conf-governance-listings-1/raw/branch/main/.gitea/workflows/conf.yml\",\"submodule_git_url\":null,\"_links\":{\"self\":\"http://gitea:3000/api/v1/repos/livery/conf-governance-listings-1/contents/.gitea/workflows/conf.yml?ref=main\",\"git\":\"http://gitea:3000/api/v1/repos/livery/conf-governance-listings-1/git/blobs/47e81325a3d0164c60529bf54355741c7351f038\",\"html\":\"http://gitea:3000/livery/conf-governance-listings-1/src/branch/main/.gitea/workflows/conf.yml\"}},\"commit\":{\"url\":\"http://gitea:3000/api/v1/repos/livery/conf-governance-listings-1/git/commits/5f1ea15c89141167a771c4cea5ae624255178cd6\",\"sha\":\"5f1ea15c89141167a771c4cea5ae624255178cd6\",\"created\":\"0001-01-01T00:00:00Z\",\"html_url\":\"http://gitea:3000/livery/conf-governance-listings-1/commit/5f1ea15c89141167a771c4cea5ae624255178cd6\",\"author\":{\"name\":\"livery-admin\",\"email\":\"admin@livery.local\",\"date\":\"2026-09-02T10:33:04Z\"},\"committer\":{\"name\":\"livery-admin\",\"email\":\"admin@livery.local\",\"date\":\"2026-09-02T10:33:04Z\"},\"parents\":[{\"url\":\"http://gitea:3000/api/v1/repos/livery/conf-governance-listings-1/git/commits/b348dabf2472d6783832443470909782957b6f74\",\"sha\":\"b348dabf2472d6783832443470909782957b6f74\",\"created\":\"0001-01-01T00:00:00Z\"}],\"message\":\"conf: seed workflow\\n\",\"tree\":{\"url\":\"http://gitea:3000/api/v1/repos/livery/conf-governance-listings-1/git/trees/58b095a37312e108b1d8a407db5022776ed524ea\",\"sha\":\"58b095a37312e108b1d8a407db5022776ed524ea\",\"created\":\"0001-01-01T00:00:00Z\"}},\"verification\":{\"verified\":false,\"reason\":\"gpg.error.not_signed_commit\",\"signature\":\"\",\"signer\":null,\"payload\":\"\"}}",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3000/api/v1/user",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json;charset=utf-8",
+      "response_body": "{\"id\":1,\"login\":\"livery-admin\",\"login_name\":\"\",\"source_id\":0,\"full_name\":\"\",\"email\":\"admin@livery.local\",\"avatar_url\":\"http://localhost:3000/avatars/e9f16902fb3673c6fda4e1372dd17e7d16c7442cf13f822ad0a756556a3fb572\",\"html_url\":\"http://localhost:3000/livery-admin\",\"language\":\"\",\"is_admin\":true,\"last_login\":\"1970-01-01T00:00:00Z\",\"created\":\"2026-08-31T01:46:59Z\",\"restricted\":false,\"active\":true,\"prohibit_login\":false,\"location\":\"\",\"website\":\"\",\"description\":\"\",\"visibility\":\"public\",\"followers_count\":0,\"following_count\":0,\"starred_repos_count\":0,\"username\":\"livery-admin\"}",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3000/api/v1/orgs/livery/members?limit=50&page=1",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json;charset=utf-8",
+      "response_body": "[{\"id\":1,\"login\":\"livery-admin\",\"login_name\":\"\",\"source_id\":0,\"full_name\":\"\",\"email\":\"admin@livery.local\",\"avatar_url\":\"http://localhost:3000/avatars/e9f16902fb3673c6fda4e1372dd17e7d16c7442cf13f822ad0a756556a3fb572\",\"html_url\":\"http://localhost:3000/livery-admin\",\"language\":\"\",\"is_admin\":true,\"last_login\":\"1970-01-01T00:00:00Z\",\"created\":\"2026-08-31T01:46:59Z\",\"restricted\":false,\"active\":true,\"prohibit_login\":false,\"location\":\"\",\"website\":\"\",\"description\":\"\",\"visibility\":\"public\",\"followers_count\":0,\"following_count\":0,\"starred_repos_count\":0,\"username\":\"livery-admin\"}]",
+      "location": ""
+    },
+    {
+      "method": "GET",
+      "url": "http://localhost:3000/api/v1/orgs/livery/teams?limit=50&page=1",
+      "request_body": "",
+      "status": 200,
+      "reason": "OK",
+      "content_type": "application/json;charset=utf-8",
+      "response_body": "[{\"id\":1,\"name\":\"Owners\",\"description\":\"\",\"organization\":null,\"includes_all_repositories\":true,\"permission\":\"owner\",\"units\":[\"repo.code\",\"repo.issues\",\"repo.releases\",\"repo.ext_wiki\",\"repo.ext_issues\",\"repo.projects\",\"repo.packages\",\"repo.pulls\",\"repo.wiki\",\"repo.actions\"],\"units_map\":{\"repo.pulls\":\"owner\",\"repo.releases\":\"owner\",\"repo.wiki\":\"owner\",\"repo.projects\":\"owner\",\"repo.actions\":\"owner\",\"repo.ext_wiki\":\"read\",\"repo.ext_issues\":\"read\",\"repo.packages\":\"owner\",\"repo.code\":\"owner\",\"repo.issues\":\"owner\"},\"can_create_org_repo\":true,\"visibility\":\"limited\"}]",
+      "location": ""
+    }
+  ]
+}

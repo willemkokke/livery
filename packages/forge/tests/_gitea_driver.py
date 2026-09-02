@@ -286,6 +286,22 @@ class GiteaConformanceDriver:
             subject=f"pull request {number} to merge",
         )
 
+    def await_branch(
+        self, repo_owner: str, repo_name: str, branch: str, *, present: bool
+    ) -> None:
+        """Poll until the branch read agrees with *present*.
+
+        github.com's branch read lags a delete by seconds; polling
+        here keeps the scenario about the contract, not the lag.
+        """
+        repo = self.forge.repository(repo_owner, repo_name)
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            if repo.branch_exists(branch) == present:
+                return
+            time.sleep(1)
+        raise AssertionError(f"{branch} existence never became {present} within 60s")
+
     def await_issue(
         self, repo_owner: str, repo_name: str, number: int, *, assignee: str = ""
     ) -> None:
