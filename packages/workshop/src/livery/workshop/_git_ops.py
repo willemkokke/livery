@@ -67,6 +67,16 @@ class GitOps:
         """Push *branch* to origin, setting upstream."""
         self._run("push", "-u", "origin", branch)
 
+    def push_force(self, branch: str) -> None:
+        """Force-push *branch*, leased on the last-seen remote state.
+
+        ``--force-with-lease``, never a bare force: the push is
+        refused when origin moved past what this clone last fetched,
+        so a colleague's commits pushed since then cannot be
+        clobbered blind.
+        """
+        self._run("push", "--force-with-lease", "-u", "origin", branch)
+
     def subjects_ahead(self, base: str) -> list[str]:
         """The subjects of the commits HEAD carries beyond ``origin/<base>``."""
         out = self._run("log", "--format=%s", f"origin/{base}..HEAD")

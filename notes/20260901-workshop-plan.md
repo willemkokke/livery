@@ -27,8 +27,11 @@ audit found the shadow warning and the show provenance lying under
 the cascade hook's own exports, the stop regex proven only by a
 fabricated shape, the uv-exact check missing, and the retired
 ruff_fix.py still shipped by sync, all closed the same day in a
-follow-up PR. Phase 7b in flight: the entered shell and the issue
-family. Subsumes
+follow-up PR. Phase 7b shipped 2026-09-02 (PR #78; one CI red, a
+zsh-less runner resolving a real binary a test should have stubbed,
+fixed as a ride-along commit); its audit next. `fm submit --force`
+(leased) landed between, completing the pre-bash rebase teaching.
+Subsumes
 `notes/20260831-workshop-plan.md`,
 whose phases 1-10 shipped and whose remaining phases are carried
 forward here renumbered. The loop: one PR per phase, merged when
@@ -1253,6 +1256,17 @@ not. Gates 0.1.0 together with phases 1-8.
   ships as layer content (one source, materialised by sync) and
   the retired ruff_fix.py is gone; the RST roles left in published
   docstrings are swept.
+- 2026-09-02, submit --force with a lease (Willem): the pre-bash
+  push guard's own remedy (rebase onto the base, push) dead-ended
+  without it, and a needed raw-git exception marks a missing verb.
+  `fm submit --force` pushes ``--force-with-lease``, names the
+  commits the force discards before pushing (the flag is consent to
+  discard those, not consent in the abstract), is refused on
+  ``workflow/`` branches (their commits are the record recovery
+  reads; the engine re-prepares), and is never implied. The
+  non-fast-forward refusal teaches both arms: a fix commit (the
+  default, squash collapses it), or a deliberate rebase then
+  --force.
 - 2026-09-02, not-started and hanging split (Willem): the base
   gate's timeout distinguishes a run that reported and hung from a
   tip that never got a run; detection of failed run creation is

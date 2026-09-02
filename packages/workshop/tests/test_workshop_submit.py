@@ -68,6 +68,12 @@ class SubmitGit(GitOps):
         if self.auto_settle:
             self.fake.settle(OWNER, NAME, sha)
 
+    def push_force(self, branch: str) -> None:
+        super().push_force(branch)
+        sha = self.fake.push(OWNER, NAME, branch, outcome=self.outcome)
+        if self.auto_settle:
+            self.fake.settle(OWNER, NAME, sha)
+
 
 @pytest.fixture
 def rig(tmp_path: Path) -> tuple[FakeForge, SubmitGit]:
@@ -563,3 +569,70 @@ def test_conflicts_classify_before_arming(rig: tuple[FakeForge, SubmitGit]) -> N
     _git(other, "push", "origin", "main")
     verdict = classify(_repo(fake), "feat/1-first", git)
     assert verdict.exit_code == EXIT_CONFLICTS
+
+
+def test_force_is_refused_on_workflow_branches(
+    rig: tuple[FakeForge, SubmitGit],
+) -> None:
+    fake, git = rig
+    _git(git.root, "checkout", "-b", "workflow/release/forge")
+    with pytest.raises(_FAILURES) as caught:
+        _submit(fake, git, force=True, follow_to_verdict=False)
+    message = str(caught.value)
+    assert "never force-pushed" in message
+    assert "workflow.abort" in message
+
+
+def test_a_rejected_push_teaches_the_fix_commit_and_the_force(
+    rig: tuple[FakeForge, SubmitGit],
+) -> None:
+    fake, git = rig
+    _submit(fake, git, follow_to_verdict=False)
+    _git(git.root, "commit", "--amend", "-m", "feat: the first change, rewritten")
+    with pytest.raises(_FAILURES) as caught:
+        _submit(fake, git, follow_to_verdict=False)
+    message = str(caught.value)
+    assert "new commit" in message and "submit --force" in message
+
+
+def test_force_names_the_discarded_commits_and_lands(
+    rig: tuple[FakeForge, SubmitGit],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fake, git = rig
+    _submit(fake, git, follow_to_verdict=False)
+    _git(git.root, "commit", "--amend", "-m", "feat: the first change, rewritten")
+    _submit(fake, git, force=True, follow_to_verdict=False)
+    out = capsys.readouterr().out
+    assert "forcing discards these commits" in out
+    assert "feat: the first change" in out  # the old tip, named
+    remote = _git(git.root, "ls-remote", "origin", "feat/1-first").split()[0]
+    local = _git(git.root, "rev-parse", "HEAD").strip()
+    assert remote == local
+    assert "reusing PR #1" in out
+
+
+def test_the_lease_refuses_an_advance_this_clone_never_saw(
+    tmp_path: Path, rig: tuple[FakeForge, SubmitGit]
+) -> None:
+    # The push-level guard, forced without the flow's fetch: a
+    # colleague's commit that arrived after our last fetch makes the
+    # lease refuse rather than clobber blind.
+    _fake, git = rig
+    git.push("feat/1-first")
+    other = tmp_path / "other"
+    _git(tmp_path, "clone", str(tmp_path / "origin.git"), "other")
+    _git(other, "config", "user.email", "o@livery.local")
+    _git(other, "config", "user.name", "Other")
+    _git(other, "checkout", "feat/1-first")
+    (other / "theirs.txt").write_text("theirs\n")
+    _git(other, "add", ".")
+    _git(other, "commit", "-m", "feat: a colleague advanced the branch")
+    _git(other, "push", "origin", "feat/1-first")
+    _git(git.root, "commit", "--amend", "-m", "feat: rewritten locally")
+    from livery.workshop._git_ops import GitError
+
+    with pytest.raises(GitError) as caught:
+        git.push_force("feat/1-first")
+    text = str(caught.value)
+    assert "stale info" in text or "rejected" in text

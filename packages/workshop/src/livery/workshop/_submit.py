@@ -271,6 +271,56 @@ def _merge_title(repo: Repository, plan: Plan) -> str:
     return (pr.title.strip() if pr else "") or plan.title
 
 
+def _push(git: GitOps, branch: str, *, force: bool) -> None:
+    """Push *branch*, or force it with a lease and full disclosure.
+
+    A force is refused on ``workflow/`` branches: recovery reads the
+    ref, the branch's commits are the durable record of what was
+    prepared, and the engine re-prepares instead of rewriting. Before
+    a force, the commits it discards from origin are named: the flag
+    is consent to discard those commits, not consent in the abstract
+    (the flow fetched already, so the listing is current up to the
+    push itself, which the lease guards).
+    """
+    if not force:
+        try:
+            git.push(branch)
+        except GitError as error:
+            if "non-fast-forward" not in str(error) and "rejected" not in str(error):
+                raise
+            fail(
+                f"the push of {branch} was rejected: origin holds commits"
+                " this branch does not. Add the fix as a new commit (the"
+                " squash collapses it anyway) and re-submit; or, if you"
+                " rewrote history deliberately (a rebase onto the base),"
+                " re-run with `fm submit --force`."
+            )
+        return
+    if branch.startswith("workflow/"):
+        fail(
+            "a workflow branch is never force-pushed: its commits are the"
+            " record recovery reads, and the engine re-prepares instead."
+            " Re-run the workflow verb, or `fm workflow.abort` it."
+        )
+    if git.remote_head(branch):
+        discards = git._run("log", "--format=%s", f"{branch}..origin/{branch}").strip()
+        if discards:
+            listed = "\n".join(f"    - {line}" for line in discards.splitlines())
+            print(f"  forcing discards these commits on origin/{branch}:\n{listed}")
+        else:
+            print("  forcing; origin holds nothing this branch does not")
+    try:
+        git.push_force(branch)
+    except GitError as error:
+        if "stale info" not in str(error) and "rejected" not in str(error):
+            raise
+        fail(
+            f"the lease refused the force: origin/{branch} moved past what"
+            f" this clone last saw.\n{error}\n  Fetch to see what arrived"
+            " (`git fetch origin`), then decide again and re-run."
+        )
+
+
 def push_and_pr(
     repo: Repository,
     git: GitOps,
@@ -278,6 +328,7 @@ def push_and_pr(
     *,
     closes: int | None,
     armed: bool,
+    force: bool = False,
 ) -> int:
     """Disarm, push, find-or-open the pull request, arm per *armed*."""
     body = with_closes(plan.body, closes) if closes is not None else plan.body
@@ -304,11 +355,11 @@ def push_and_pr(
                     f"{listed}\n"
                     '  pass the intent: --title="type(scope): subject"'
                 )
-        git.push(plan.branch)
+        _push(git, plan.branch, force=force)
         pr = repo.pr.open(plan.branch, plan.base, plan.title, body)
         print(f"  opened PR #{pr.number}: {pr.title}")
     else:
-        git.push(plan.branch)
+        _push(git, plan.branch, force=force)
         print(f"  reusing PR #{pr.number}")
         if plan.title_given and pr.title != plan.title:
             repo.pr.update_title(pr.number, plan.title)
@@ -331,6 +382,7 @@ def submit_flow(
     armed_reason: str = "",
     gate: bool = True,
     fix: bool = False,
+    force: bool = False,
     follow_to_verdict: bool = True,
     interval: float = 15,
     timeout: float = 1800,
@@ -355,7 +407,7 @@ def submit_flow(
         print(f"  Closes #{linked} on merge")
     if armed_reason:
         print(f"  arming: {'on' if armed else 'off'} - decided by {armed_reason}")
-    number = push_and_pr(repo, git, plan, closes=linked, armed=armed)
+    number = push_and_pr(repo, git, plan, closes=linked, armed=armed, force=force)
     if not follow_to_verdict:
         return number
     heals = 0
@@ -388,7 +440,9 @@ def submit_flow(
                     )
                 if gate:
                     _gate()
-                number = push_and_pr(repo, git, plan, closes=linked, armed=armed)
+                number = push_and_pr(
+                    repo, git, plan, closes=linked, armed=armed, force=force
+                )
                 continue
             raise
         return number
@@ -440,6 +494,9 @@ def submit_default(
     ] = False,
     gate: Annotated[bool, doc("run `fm check` first")] = True,
     fix: Annotated[bool, doc("heal mechanical gate findings, fold into HEAD")] = False,
+    force: Annotated[
+        bool, doc("force-push with a lease after a deliberate history rewrite")
+    ] = False,
     follow: Annotated[bool, doc("watch until it lands or says what stopped it")] = True,
     interval: Annotated[int, doc("watch poll seconds")] = 15,
     timeout: Annotated[int, doc("watch deadline seconds")] = 1800,
@@ -468,6 +525,7 @@ def submit_default(
         armed=armed,
         armed_reason=reason,
         gate=gate,
+        force=force,
         fix=fix,
         follow_to_verdict=follow,
         interval=interval,
