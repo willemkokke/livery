@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --no-sync fm hooks.pre-bash 1>&2"
+            "command": "if [ -f .claude/hooks/fm-hook.sh ]; then bash .claude/hooks/fm-hook.sh pre-bash; else exit 0; fi"
           }
         ]
       }
@@ -17,7 +17,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run --no-sync python .claude/hooks/ruff_fix.py"
+            "command": "if [ -f .claude/hooks/fm-hook.sh ]; then bash .claude/hooks/fm-hook.sh post-edit; else exit 0; fi"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f .claude/hooks/fm-hook.sh ]; then bash .claude/hooks/fm-hook.sh stop; else exit 0; fi"
           }
         ]
       }

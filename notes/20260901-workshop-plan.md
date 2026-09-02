@@ -20,7 +20,9 @@ live against the local Gitea index; its audit found the routing and
 three restore/skip paths unproven plus a detached-HEAD hole, closed
 the same day in a follow-up PR. Phase 7 cut 2026-09-02 into 7a and
 7b with the issue family ruled in full; the isolated-leg toolchain
-follow-up lands first. Subsumes
+follow-up shipped 2026-09-02 (PR #75, which also fixed the floor
+leg's aimless starvation). Phase 7a in flight: the env engine and
+group, clean, and the hooks with their shim. Subsumes
 `notes/20260831-workshop-plan.md`,
 whose phases 1-10 shipped and whose remaining phases are carried
 forward here renumbered. The loop: one PR per phase, merged when
@@ -663,7 +665,8 @@ Edge table:
 | Non-English locale, non-ASCII paths | `ls-files -z` and POSIX pathspecs, never parsed prose |
 | Hook infrastructure failure | exit 0; only the hook's own exit 2 blocks |
 | Value with a line break | emit and set refuse; it cannot be stored or quoted |
-| Cold store | emit refuses teaching `fm sync`; the group carries no gates |
+| Cold checkout | the env group carries no availability gates |
+| Hook's own refusal vs infrastructure failure | the shim propagates only exit 2 |
 
 Acceptance:
 

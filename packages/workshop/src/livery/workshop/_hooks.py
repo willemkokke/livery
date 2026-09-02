@@ -1,14 +1,20 @@
 """Agent lifecycle hooks: the guards a session's tooling runs.
 
-Wired from ``.claude/settings.json`` as a ``PreToolUse`` hook; the
-event arrives on stdin and the verdict is the exit code (2 refuses).
+Wired from ``.claude/settings.json`` through one shim
+(``.claude/hooks/fm-hook.sh``); each event arrives on stdin and the
+verdict is the exit code: 0 is quiet, 2 blocks the gated action with
+stderr as the agent's feedback. The shim propagates only the hook's
+own 2 and turns every other failure into 0, because a guard that
+cannot run must not deny.
 """
 
 from __future__ import annotations
 
 import dataclasses
 import re
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Annotated
 
 from footman import RunFailed, fail, run, stdin
@@ -31,6 +37,7 @@ class HookEvent:
     tool_input: ToolInput = dataclasses.field(default_factory=ToolInput)
     stop_hook_active: bool = False
     session_id: str = ""
+    transcript_path: str = ""
 
 
 _QUOTED = re.compile(r"'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"")
@@ -125,3 +132,102 @@ def pre_bash(event: Annotated[HookEvent, stdin]) -> None:
                 "the gate, then push.",
                 code=2,
             )
+
+
+@agent_hooks.task(name="post-edit")
+def post_edit(event: Annotated[HookEvent, stdin]) -> None:
+    """Keep the edited Python file ruff-clean; never block an edit.
+
+    Best-effort by design: every outcome exits 0 and says nothing,
+    because a formatter problem must never block an edit. The gate,
+    not the hook, is the arbiter; this only saves round trips.
+    """
+    import contextlib
+    import subprocess
+
+    path = event.tool_input.file_path
+    if not path.endswith(".py") or not Path(path).is_file():
+        return
+    for args in (["check", "--fix", "--quiet"], ["format", "--quiet"]):
+        with contextlib.suppress(OSError):
+            subprocess.run(
+                [sys.executable, "-m", "ruff", *args, path],
+                check=False,
+                capture_output=True,
+            )
+
+
+_FAIL = re.compile(
+    r"fm: [\w.-]+: (?:RunFailed|exited with code \d+)"
+    r"|^FAIL {2,}[\w.-]+"
+    r"|fm: [\w.-]+: .*SystemExit",
+    re.MULTILINE,
+)
+
+
+def _last_bash_result(transcript: Path) -> str:
+    """The transcript's last Bash tool_result text; "" when none.
+
+    Any read or parse problem degrades to "" and the hook passes: the
+    guard exists to catch an unreported red verdict, not to make the
+    transcript's format a way to trap a session.
+    """
+    import json
+
+    last_bash_ids: set[str] = set()
+    last_result = ""
+    try:
+        lines = transcript.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return ""
+    for line in lines:
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        content = ((entry.get("message") or {}).get("content")) or []
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") == "tool_use" and block.get("name") == "Bash":
+                last_bash_ids.add(str(block.get("id")))
+            elif (
+                block.get("type") == "tool_result"
+                and str(block.get("tool_use_id")) in last_bash_ids
+            ):
+                inner = block.get("content")
+                if isinstance(inner, str):
+                    last_result = inner
+                elif isinstance(inner, list):
+                    last_result = " ".join(
+                        str(part.get("text", ""))
+                        for part in inner
+                        if isinstance(part, dict)
+                    )
+    return last_result
+
+
+@agent_hooks.task(name="stop")
+def stop(event: Annotated[HookEvent, stdin]) -> int:
+    """Block ending a turn whose last Bash result is a red fm verdict.
+
+    ``stop_hook_active`` (the harness's retry marker) always passes,
+    so a deliberate stop with a reported failure costs one nudge and
+    never loops.
+    """
+    if event.stop_hook_active:
+        return 0
+    transcript = Path(event.transcript_path)
+    if not transcript.is_file():
+        return 0
+    if not _FAIL.search(_last_bash_result(transcript)):
+        return 0
+    sys.stderr.write(
+        "The last Bash result in this turn is a FAILED fm command."
+        " Fix it now, or - if the failure is deliberate and already"
+        " reported to the user in your final message - stop again to"
+        " proceed.\n"
+    )
+    return 2

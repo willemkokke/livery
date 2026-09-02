@@ -1,0 +1,433 @@
+"""The env cascade, its emissions, clean's protections, and the hooks."""
+
+from __future__ import annotations
+
+import os
+import subprocess
+from pathlib import Path
+
+import pytest
+from footman import Failed
+
+from livery.workshop._clean import CleanPlan, clean_tree, plan_clean, render_plan
+from livery.workshop._env_tasks import (
+    EnvDelta,
+    agent_delta,
+    emit_lines,
+    github_persist,
+    tool_profile,
+    workspace_delta,
+)
+from livery.workshop._envfile import (
+    Source,
+    load_cascade,
+    member_keys,
+    parse_env_file,
+    quote_value,
+    set_value,
+)
+from livery.workshop._hooks import HookEvent, ToolInput, post_edit, stop
+
+_FAILURES = (SystemExit, Failed)
+
+
+# --- the cascade: refusals and edge rows first ---
+
+
+def test_an_unsettling_substitution_keeps_its_raw_text(tmp_path: Path) -> None:
+    # A=$B beside B=$A never settles; the bound stops the loop and
+    # the raw text is the answer a reader can act on.
+    (tmp_path / ".repo.env").write_text('A="$B"\nB="$A"\nC="plain"\n')
+    stack = load_cascade(tmp_path, tmp_path, shared_dir=tmp_path, environ={})
+    assert stack.values["A"] == "$B"
+    assert stack.values["B"] == "$A"
+    assert stack.values["C"] == "plain"
+
+
+def test_quoting_rules_and_the_escaped_dollar(tmp_path: Path) -> None:
+    (tmp_path / ".repo.env").write_text(
+        'BASE="/opt"\n'
+        'DOUBLE="$BASE/bin"\n'
+        "SINGLE='$BASE/bin'\n"
+        "BARE=value # trailing comment\n"
+        'ESCAPED="\\$BASE"\n'
+    )
+    stack = load_cascade(tmp_path, tmp_path, shared_dir=tmp_path, environ={})
+    assert stack.values["DOUBLE"] == "/opt/bin"
+    assert stack.values["SINGLE"] == "$BASE/bin"  # single quotes are literal
+    assert stack.values["BARE"] == "value"
+    assert stack.values["ESCAPED"] == "$BASE"
+
+
+def test_precedence_is_kind_major_and_nearest_wins(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    nested = root / "packages" / "deep"
+    nested.mkdir(parents=True)
+    shared = tmp_path / "home"
+    shared.mkdir()
+    (root / ".repo.env").write_text("KEY=repo-far\nONLY_REPO=repo\n")
+    (nested / ".repo.env").write_text("KEY=repo-near\n")
+    (shared / ".repo.shared.env").write_text("KEY=shared\nONLY_SHARED=s\n")
+    (root / ".repo.env.local").write_text("KEY=local-far\n")
+    (nested / ".repo.env.local").write_text("KEY=local-near\n")
+    stack = load_cascade(root, nested, shared_dir=shared, environ={})
+    assert stack.values["KEY"] == "local-near"
+    assert stack.sources["KEY"] is Source.local
+    assert stack.values["ONLY_SHARED"] == "s"
+    assert stack.values["ONLY_REPO"] == "repo"
+    # The pre-existing environment beats every file.
+    stack = load_cascade(root, nested, shared_dir=shared, environ={"KEY": "from-shell"})
+    assert stack.values["KEY"] == "from-shell"
+    assert stack.sources["KEY"] is Source.environment
+    assert stack.managed().get("KEY") is None
+
+
+def test_the_shared_dir_resolves_from_the_repo_files_first(
+    tmp_path: Path,
+) -> None:
+    # The two-pass load: LIVERY_HOME named only in a local file, and
+    # the shared store there still contributes.
+    root = tmp_path / "repo"
+    root.mkdir()
+    home = tmp_path / "elsewhere"
+    home.mkdir()
+    (home / ".repo.shared.env").write_text("FROM_SHARED=yes\n")
+    (root / ".repo.env.local").write_text(f"LIVERY_HOME={home}\n")
+    stack = load_cascade(root, root, environ={})
+    assert stack.values["FROM_SHARED"] == "yes"
+
+
+def test_quote_value_round_trips_and_refuses_line_breaks(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="line break"):
+        quote_value("a\nb")
+    path = tmp_path / ".repo.env"
+    set_value(path, "SPACED", " padded ")
+    set_value(path, "COMMENTED", "a#b")
+    set_value(path, "PLAIN", "x")
+    set_value(path, "PLAIN", "y")  # replaces in place
+    parsed = parse_env_file(path)
+    assert parsed["SPACED"] == " padded "
+    assert parsed["COMMENTED"] == "a#b"
+    assert parsed["PLAIN"] == "y"
+    assert path.read_text().count("PLAIN=") == 1
+
+
+def test_member_keys_enumerates_every_layer(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    root.mkdir()
+    shared = tmp_path / "home"
+    shared.mkdir()
+    (root / ".repo.env").write_text("A=1\n")
+    (root / ".repo.env.local").write_text("B=2\n")
+    (shared / ".repo.shared.env").write_text("C=3\n")
+    assert member_keys(root, root, shared) == {"A", "B", "C"}
+
+
+# --- the emissions ---
+
+
+def test_emit_refuses_what_cannot_be_quoted() -> None:
+    with pytest.raises(_FAILURES) as caught:
+        emit_lines(EnvDelta(values={"BAD NAME": "x"}), "posix")
+    assert "exportable" in str(caught.value)
+    with pytest.raises(_FAILURES) as caught:
+        emit_lines(EnvDelta(values={"KEY": "a\nb"}), "posix")
+    assert "line break" in str(caught.value)
+
+
+def test_emit_quotes_both_dialects_and_prepends_path_once() -> None:
+    delta = EnvDelta(
+        values={"TOKEN_X": "it's"},
+        paths=("/w/.venv/bin", "/extra"),
+    )
+    posix = emit_lines(delta, "posix")
+    assert posix[0] == "export TOKEN_X='it'\\''s'"
+    assert posix[-1] == "export PATH='/w/.venv/bin':'/extra':\"$PATH\""
+    pwsh = emit_lines(delta, "pwsh")
+    assert pwsh[0] == "$env:TOKEN_X = 'it''s'"
+    assert pwsh[-1] == "$env:PATH = '/w/.venv/bin;/extra;' + $env:PATH"
+    assert sum("PATH" in line for line in posix) == 1
+
+
+def test_the_workspace_delta_carries_the_cascade_and_the_venv(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".repo.env").write_text("SOME_FLAG=on\n")
+    delta = workspace_delta(tmp_path, tmp_path)
+    assert delta.values["SOME_FLAG"] == "on"
+    assert delta.values["VIRTUAL_ENV"] == str(tmp_path / ".venv")
+    assert delta.paths == (str(tmp_path / ".venv" / "bin"),)
+
+
+def test_the_agent_delta_selects_by_membership_secrets_included(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".repo.env.local").write_text("GITEA_TOKEN=secret\nPATH=/evil\n")
+    environ = {"GITEA_TOKEN": "live-secret", "UNRELATED": "x"}
+    delta = agent_delta(tmp_path, tmp_path, environ)
+    # Membership selects, the live value wins, the PATH family never
+    # rides, and a variable no file defines stays the session's own.
+    assert delta.values["GITEA_TOKEN"] == "live-secret"
+    assert "PATH" not in delta.values
+    assert "UNRELATED" not in delta.values
+    assert delta.values["VIRTUAL_ENV"] == str(tmp_path / ".venv")
+
+
+def test_github_persist_needs_actions_and_filters_secrets(
+    tmp_path: Path,
+) -> None:
+    delta = EnvDelta(values={"PLAIN": "1", "API_TOKEN": "s"}, paths=("/w/.venv/bin",))
+    with pytest.raises(_FAILURES) as caught:
+        github_persist(delta, {})
+    assert "GITHUB_ENV" in str(caught.value)
+    env_file = tmp_path / "env"
+    path_file = tmp_path / "path"
+    written = github_persist(
+        delta,
+        {
+            "GITHUB_ACTIONS": "true",
+            "GITHUB_ENV": str(env_file),
+            "GITHUB_PATH": str(path_file),
+        },
+    )
+    assert env_file.read_text() == "PLAIN=1\n"  # the secret never lands
+    assert path_file.read_text() == "/w/.venv/bin\n"
+    assert "PLAIN" in written and "API_TOKEN" not in written
+
+
+def test_the_tool_profile_derives_from_package_types(tmp_path: Path) -> None:
+    profile = tool_profile(tmp_path)  # no packages: the base profile
+    assert "uv" in profile and "ruff" in profile and "pyrefly" in profile
+
+
+# --- clean: the protections before the removals ---
+
+
+def _repo(tmp_path: Path) -> Path:
+    root = tmp_path / "repo"
+    root.mkdir()
+    subprocess.run(["git", "init", "-q", "--initial-branch=main"], cwd=root, check=True)
+    subprocess.run(["git", "config", "user.email", "t@l"], cwd=root, check=True)
+    subprocess.run(["git", "config", "user.name", "T"], cwd=root, check=True)
+    (root / "tracked.txt").write_text("original\n")
+    (root / ".gitignore").write_text("ignored.log\n")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    subprocess.run(["git", "commit", "-qm", "chore: seed"], cwd=root, check=True)
+    return root
+
+
+def test_a_secret_inside_an_untracked_directory_is_kept(tmp_path: Path) -> None:
+    # The untracked listing collapses a directory into one entry; a
+    # secret nested inside it must not be removed with its parent.
+    root = _repo(tmp_path)
+    nest = root / "scratch" / "deep"
+    nest.mkdir(parents=True)
+    (nest / "creds.env.local").write_text("TOKEN=x\n")
+    (nest / "junk.txt").write_text("junk\n")
+    (root / "scratch" / "other.txt").write_text("junk\n")
+    plan = plan_clean(root, everything=False)
+    assert plan.protected == ("scratch/deep/creds.env.local",)
+    assert set(plan.untracked) == {"scratch/deep/junk.txt", "scratch/other.txt"}
+    clean_tree(root, assume_yes=True)
+    assert (nest / "creds.env.local").is_file()
+    assert not (nest / "junk.txt").exists()
+
+
+def test_clean_restores_tracked_and_mirrors_the_all_scope(tmp_path: Path) -> None:
+    root = _repo(tmp_path)
+    (root / "tracked.txt").write_text("changed\n")
+    (root / "stray.txt").write_text("stray\n")
+    (root / "ignored.log").write_text("build output\n")
+    # Without --all the gitignored file is not a candidate.
+    plan = plan_clean(root, everything=False)
+    assert "ignored.log" not in plan.untracked
+    clean_tree(root, assume_yes=True)
+    assert (root / "tracked.txt").read_text() == "original\n"
+    assert not (root / "stray.txt").exists()
+    assert (root / "ignored.log").is_file()
+    # With --all the removal's -x mirrors the plan, so the gitignored
+    # file both lists and actually goes.
+    (root / "ignored.log").write_text("build output\n")
+    plan = plan_clean(root, everything=True)
+    assert "ignored.log" in plan.untracked
+    clean_tree(root, everything=True, assume_yes=True)
+    assert not (root / "ignored.log").exists()
+
+
+def test_an_empty_plan_says_so_and_names_protected_files(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = _repo(tmp_path)
+    (root / ".repo.env.local").write_text("TOKEN=x\n")
+    clean_tree(root, assume_yes=True)
+    out = capsys.readouterr().out
+    assert "Nothing to clean" in out
+    assert "KEEP (secret)    .repo.env.local" in out
+    assert (root / ".repo.env.local").is_file()
+
+
+def test_render_plan_lists_all_three_kinds() -> None:
+    plan = CleanPlan(
+        modified=("a.txt",), untracked=("b.txt",), protected=("c.env.local",)
+    )
+    lines = render_plan(plan)
+    assert lines[0].startswith("  discard changes  a.txt")
+    assert lines[1].startswith("  remove           b.txt")
+    assert lines[2].startswith("  KEEP (secret)    c.env.local")
+
+
+# --- the hooks: the guard that cannot fire, then the ones that do ---
+
+
+def _event(**kwargs: object) -> HookEvent:
+    return HookEvent(**kwargs)  # type: ignore[arg-type]
+
+
+def test_post_edit_is_best_effort_and_touches_only_python(
+    tmp_path: Path,
+) -> None:
+    victim = tmp_path / "messy.py"
+    victim.write_text("x=1\n")
+    post_edit(_event(tool_input=ToolInput(file_path=str(victim))))
+    assert victim.read_text() == "x = 1\n"  # ruff format ran
+    # A missing file and a non-Python file are silent no-ops.
+    post_edit(_event(tool_input=ToolInput(file_path=str(tmp_path / "gone.py"))))
+    other = tmp_path / "notes.md"
+    other.write_text("#Heading\n")
+    post_edit(_event(tool_input=ToolInput(file_path=str(other))))
+    assert other.read_text() == "#Heading\n"
+
+
+def _transcript(tmp_path: Path, result_text: str) -> Path:
+    import json
+
+    transcript = tmp_path / "t.jsonl"
+    lines = [
+        {"message": {"content": [{"type": "tool_use", "name": "Bash", "id": "b1"}]}},
+        {
+            "message": {
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "b1",
+                        "content": result_text,
+                    }
+                ]
+            }
+        },
+    ]
+    transcript.write_text("\n".join(json.dumps(line) for line in lines))
+    return transcript
+
+
+def test_stop_blocks_a_red_verdict_and_passes_everything_else(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    red = _transcript(tmp_path, "FAIL  check   (0.1s)\ngate exit: 1")
+    assert stop(_event(transcript_path=str(red))) == 2
+    assert "stop again to proceed" in capsys.readouterr().err
+    # The retry marker always passes: one nudge, never a loop.
+    assert stop(_event(transcript_path=str(red), stop_hook_active=True)) == 0
+    green = _transcript(tmp_path, "ok   check  (0.1s)\nall green")
+    assert stop(_event(transcript_path=str(green))) == 0
+    # A missing or unreadable transcript passes: the guard that
+    # cannot run must not deny.
+    assert stop(_event(transcript_path=str(tmp_path / "absent.jsonl"))) == 0
+    mangled = tmp_path / "m.jsonl"
+    mangled.write_text("not json at all\n")
+    assert stop(_event(transcript_path=str(mangled))) == 0
+
+
+def test_env_check_red_prints_the_breakdown_and_the_remedy(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.workshop import _env_tasks
+
+    monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: tmp_path)
+    monkeypatch.setattr("livery.workshop._env_tasks.shutil.which", lambda _tool: None)
+    assert _env_tasks.env_check() == 1
+    out = capsys.readouterr().out
+    assert "uv: MISSING" in out
+    assert "PATH:" in out and "fm sync" in out
+    # With tools resolving, the same shell reports ok.
+    monkeypatch.setattr(
+        "livery.workshop._env_tasks.shutil.which", lambda _tool: "/usr/bin/tool"
+    )
+    assert _env_tasks.env_check() == 0
+
+
+def test_apply_cascade_defaults_absent_keys_and_never_overrides(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _env_tasks
+
+    (tmp_path / ".repo.env").write_text("CASCADE_FLAG=file\nPRESET=file\n")
+    monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: tmp_path)
+    monkeypatch.setattr(_env_tasks, "_APPLIED", {})
+    monkeypatch.setenv("PRESET", "shell")
+    monkeypatch.delenv("CASCADE_FLAG", raising=False)
+    from typing import cast
+
+    import footman
+
+    _env_tasks.apply_cascade(cast(footman.Invocation, None))
+    try:
+        assert os.environ["CASCADE_FLAG"] == "file"
+        assert os.environ["PRESET"] == "shell"  # the environment wins
+        assert _env_tasks._APPLIED == {"CASCADE_FLAG": "file"}
+        # The emitter merges the applied keys back, so the hook's own
+        # contribution is never misread as the shell's.
+        delta = workspace_delta(tmp_path, tmp_path)
+        assert delta.values["CASCADE_FLAG"] == "file"
+    finally:
+        os.environ.pop("CASCADE_FLAG", None)
+
+
+def test_a_non_ascii_untracked_path_is_planned_and_removed(
+    tmp_path: Path,
+) -> None:
+    # `git clean -n` would C-quote this name and a locale could hide
+    # it entirely; the NUL-separated listing carries it as data.
+    root = _repo(tmp_path)
+    (root / "café.txt").write_text("x\n")
+    plan = plan_clean(root, everything=False)
+    assert "café.txt" in plan.untracked
+    clean_tree(root, assume_yes=True)
+    assert not (root / "café.txt").exists()
+
+
+_SHIM = Path(__file__).resolve().parents[3] / ".claude" / "hooks" / "fm-hook.sh"
+
+
+def test_the_shim_turns_infrastructure_failure_into_a_pass(
+    tmp_path: Path,
+) -> None:
+    # A guard that cannot run must not deny: with neither fm nor uv
+    # resolvable, the shim answers 0 and the session lives.
+    result = subprocess.run(
+        ["/bin/bash", str(_SHIM), "pre-bash"],
+        env={"PATH": str(tmp_path)},
+        input="",
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+
+
+def test_the_shim_propagates_only_the_hooks_own_refusal(tmp_path: Path) -> None:
+    for code, expected in ((2, 2), (1, 0), (3, 0)):
+        fake = tmp_path / "fm"
+        fake.write_text(f"#!/bin/sh\nexit {code}\n")
+        fake.chmod(0o755)
+        result = subprocess.run(
+            ["/bin/bash", str(_SHIM), "stop"],
+            env={"PATH": f"{tmp_path}:/usr/bin:/bin"},
+            input="",
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == expected, (code, result.returncode)
