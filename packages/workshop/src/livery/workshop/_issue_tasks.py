@@ -23,10 +23,9 @@ import sys
 from pathlib import Path
 from typing import Annotated
 
-from footman import Arg, doc, fail, group, suggest
+from footman import Arg, ask, doc, fail, group, suggest
 
 from livery.forge import ForgeError, Repository
-from livery.workshop._envfile import _expand_tilde
 from livery.workshop._git_ops import GitOps
 
 _KINDS = ("feat", "fix", "chore", "docs", "refactor")
@@ -96,14 +95,13 @@ def worktree_path(root: Path, number: int, title: str) -> Path:
 
     Outside every repository, so repo tooling never walks into a
     worktree, and under a per-user home so a worktree's venv
-    hardlinks from the same filesystem's cache. The runner's own
-    data directory is the home; ``LIVERY_HOME`` overrides it.
+    hardlinks from the same filesystem's cache. The home is the
+    runner's own data directory, asked of footman: a footman plugin
+    owns no home of its own.
     """
     import footman
 
-    override = os.environ.get("LIVERY_HOME", "")
-    home = Path(_expand_tilde(override)) if override else footman.data_dir()
-    return home / "worktrees" / root.name / f"{number}-{_slug(title)}"
+    return footman.data_dir() / "worktrees" / root.name / f"{number}-{_slug(title)}"
 
 
 def _open_numbers() -> list[str]:
@@ -240,7 +238,7 @@ def issue_create(
 
 @issue.task(name="start", interactive=True)
 def issue_start(
-    ref: Annotated[Arg[str], suggest(_open_numbers, strict=False)] = "",
+    ref: Annotated[Arg[str], ask(), suggest(_open_numbers, strict=False)] = "",
     type: Annotated[str, doc("kind override: feat, fix, chore, docs, refactor")] = "",
     wip: Annotated[
         bool, doc("park the dirty tree as a commit and reuse this checkout")
@@ -443,7 +441,7 @@ def _open_work(path: Path, how: str) -> None:
 
 @issue.task(name="stop")
 def issue_stop(
-    ref: Annotated[Arg[str], suggest(_open_numbers, strict=False)] = "",
+    ref: Annotated[Arg[str], ask(), suggest(_open_numbers, strict=False)] = "",
     discard: Annotated[bool, doc("destroy work that exists nowhere else")] = False,
 ) -> None:
     """Stop working on an issue: unassign, clean up the local state.
@@ -531,7 +529,7 @@ def _remove_local(root: Path, git: GitOps, branch: str) -> list[str]:
 
 @issue.task(name="close", interactive=True)
 def issue_close(
-    ref: Annotated[Arg[str], suggest(_open_numbers, strict=False)] = "",
+    ref: Annotated[Arg[str], ask(), suggest(_open_numbers, strict=False)] = "",
     reason: Annotated[str, doc("why: done, wontfix, duplicate, stale, ...")] = "",
     message: Annotated[str, doc("free-text detail for the close comment")] = "",
     keep_branch: Annotated[bool, doc("retain the local and remote branch")] = False,

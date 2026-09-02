@@ -15,7 +15,6 @@ Structural fields only, no bodies, no tokens: a bundle is shareable.
 from __future__ import annotations
 
 import json
-import os
 from collections.abc import Callable
 from dataclasses import asdict
 from datetime import UTC, datetime
@@ -33,10 +32,10 @@ KEEP = 20
 
 
 def diagnostics_dir() -> Path:
-    """Where bundles live: the user state directory, never the repo."""
-    base = os.environ.get("LIVERY_HOME", "")
-    root = Path(base) if base else Path.home() / ".livery"
-    return root / "diagnostics"
+    """Where bundles live: the runner's data directory, never the repo."""
+    import footman
+
+    return footman.data_dir() / "diagnostics"
 
 
 def _safely(section: Callable[[], Any]) -> Any:

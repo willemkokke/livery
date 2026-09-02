@@ -22,9 +22,16 @@ with `origin/main`.
   hides until the day it is the only path left. A fallback without a
   test forcing it is untested code.
 
-- Ad-hoc agent sessions work in worktrees under `.claude/worktrees/`.
-  Issue work (`fm issue.start`) lives in worktrees under the runner's
-  home (`$LIVERY_HOME/worktrees/<repo>/`), outside every repository.
+- Development goes through issues: file one (`fm issue.create` or
+  `fm issue.start "title"`), work it in its worktree, and let the
+  merge close it. Branches follow `<kind>/<number>-<slug>` so the
+  close wires itself.
+- Issue worktrees (`fm issue.start`) live under the runner's data
+  directory (`worktrees/<repo>/`), outside every repository. Ad-hoc
+  agent sessions may still use `.claude/worktrees/`.
+- Person-wide configuration and tokens live in `.repo.shared.env`
+  in the runner's config directory, so every checkout and worktree
+  starts warm; `fm env.set KEY --scope=shared` writes it.
 - Failure reasons are printed verbatim, never read as booleans.
 - Never pipe the output of a command whose verdict you depend on: a
   pipe replaces its exit code with the filter's and truncates the

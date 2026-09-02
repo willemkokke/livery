@@ -61,7 +61,7 @@ def rig(
         "livery.workshop._forge_lane.this_repository", lambda _root: repo
     )
     monkeypatch.setattr("livery.workshop._issue_tasks._me", lambda _repo: "fake-user")
-    monkeypatch.setenv("LIVERY_HOME", str(tmp_path / "home"))
+    monkeypatch.setattr("footman.data_dir", lambda: tmp_path / "home")
     monkeypatch.chdir(root)
     return root, fake, git
 
@@ -87,12 +87,8 @@ def test_the_assignee_limit_is_workspace_policy(tmp_path: Path) -> None:
 def test_the_worktree_lives_under_the_runners_home(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("LIVERY_HOME", str(tmp_path / "h"))
-    path = worktree_path(tmp_path / "repo", 9, "Fix It Now")
-    assert path == tmp_path / "h" / "worktrees" / "repo" / "9-fix-it-now"
-    # Without the override, the runner's own data directory is the
-    # home, asked of footman rather than guessed.
-    monkeypatch.delenv("LIVERY_HOME")
+    # The home is the runner's own data directory, asked of footman:
+    # a footman plugin owns no home of its own.
     monkeypatch.setattr("footman.data_dir", lambda: tmp_path / "runner")
     path = worktree_path(tmp_path / "repo", 9, "Fix It Now")
     assert path == tmp_path / "runner" / "worktrees" / "repo" / "9-fix-it-now"
