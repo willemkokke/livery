@@ -36,8 +36,8 @@ _KINDS = ("bash", "zsh", "pwsh")
 # teaches. {root} arrives already quoted for the dialect: a checkout
 # path may hold a quote or a space, and spliced raw it ends the
 # string early and breaks the whole eval.
-_POSIX_ENTER = 'eval "$(fm -C={root} --quiet env.emit posix)"'
-_PWSH_ENTER = '(fm -C={root} --quiet env.emit pwsh) -join "`n" | Invoke-Expression'
+_POSIX_ENTER = 'eval "$({prog} -C={root} --quiet env.emit posix)"'
+_PWSH_ENTER = '({prog} -C={root} --quiet env.emit pwsh) -join "`n" | Invoke-Expression'
 
 
 def _posix_root(root: Path) -> str:
@@ -131,7 +131,9 @@ def shell_launch_plan(kind: str, *, root: Path, tmp_dir: Path) -> ShellLaunch:
     if kind not in _KINDS:
         raise SystemExit(f"unknown shell kind '{kind}' - one of: {', '.join(_KINDS)}")
     binary = _resolve_binary(kind)
-    enter = _POSIX_ENTER.format(root=_posix_root(root))
+    from livery.workshop._brand import runner_prog
+
+    enter = _POSIX_ENTER.format(prog=runner_prog(), root=_posix_root(root))
     if kind == "bash":
         rc = tmp_dir / "livery-shell-bashrc"
         content = f'[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"\n{enter}\n'
@@ -158,7 +160,7 @@ def shell_launch_plan(kind: str, *, root: Path, tmp_dir: Path) -> ShellLaunch:
             "-NoLogo",
             "-NoExit",
             "-Command",
-            _PWSH_ENTER.format(root=_pwsh_root(root)),
+            _PWSH_ENTER.format(prog=runner_prog(), root=_pwsh_root(root)),
         ]
     )
 

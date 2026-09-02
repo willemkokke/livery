@@ -41,7 +41,22 @@ class HookEvent:
 
 
 _QUOTED = re.compile(r"'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"")
-_RUNS_FM = re.compile(r"^\s*(?:uv run(?: --\S+)* )?f(?:m|ootman)\b")
+
+
+def _runs_runner() -> re.Pattern[str]:
+    """The pattern matching an invocation of the running CLI.
+
+    Built per call, not at import: the brand installs before tasks
+    run but tests repoint it, and ``fm``/``footman`` always match so
+    the stock spellings stay guarded under any brand.
+    """
+    from livery.workshop._brand import runner_prog
+
+    return re.compile(
+        r"^\s*(?:uv run(?: --\S+)* )?(?:" + re.escape(runner_prog()) + r"|fm|footman)\b"
+    )
+
+
 # `|&` is bash's pipe-with-stderr; it hides the exit code exactly
 # like a bare pipe, so both forms count.
 _TRUNCATES = re.compile(r"\|&?\s*(?:tail|head)\b")
@@ -110,7 +125,7 @@ def pre_bash(event: Annotated[HookEvent, stdin]) -> None:
     if any(
         _TRUNCATES.search(segment[match.end() :])
         for segment in blind
-        if (match := _RUNS_FM.search(segment)) is not None
+        if (match := _runs_runner().search(segment)) is not None
     ):
         fail(
             "piping a footman command into tail/head replaces its exit code "

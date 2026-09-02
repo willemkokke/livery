@@ -55,7 +55,7 @@ next refresh upgrades it.
 """
 
 _GITIGNORE_HEADER = (
-    "# Managed by `fm sync` - the entries below are materialised from the\n"
+    "# Managed by `{prog} sync` - the entries below are materialised from the\n"
     "# mounted layers' wheels. This list is deliberately self-scoped: a\n"
     "# skill you add yourself is NOT ignored and commits normally.\n"
 )
@@ -283,7 +283,11 @@ def _write_gitignore(root: Path, managed: list[str]) -> None:
     real directory of the shipped name, and listing it here would make
     the override impossible to commit.
     """
-    body = _GITIGNORE_HEADER + "".join(f"/{name}\n" for name in sorted(managed))
+    from livery.workshop._brand import runner_prog
+
+    body = _GITIGNORE_HEADER.format(prog=runner_prog()) + "".join(
+        f"/{name}\n" for name in sorted(managed)
+    )
     body += f"/{_MANIFEST}\n/.gitignore\n"
     path = root / ".gitignore"
     if not path.exists() or path.read_text(encoding="utf-8") != body:
