@@ -481,6 +481,9 @@ def test_the_stalled_and_behind_verdicts_discriminate(
         pr = StubPRs()
         checks = repo.checks
 
+        def protection(self, branch: str) -> None:
+            return None
+
     stalled = classify(StubRepo(), "feat/1-first", git, grace_spent=True)  # type: ignore[arg-type]
     assert stalled.exit_code == EXIT_STALLED
     other = git.root.parent / "other"
@@ -636,3 +639,82 @@ def test_the_lease_refuses_an_advance_this_clone_never_saw(
         git.push_force("feat/1-first")
     text = str(caught.value)
     assert "stale info" in text or "rejected" in text
+
+
+def _contract(clone: Path, context: str) -> None:
+    (clone / "livery.toml").write_text(
+        '[workspace]\n\n[forge]\nkind = "github"\nowner = "acme"\n\n'
+        f'[ci]\nrequired_context = "{context}"\n'
+    )
+
+
+def test_a_context_rename_refuses_teaching_fix_armed(
+    rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake, git = rig
+    _contract(git.root, "gate")
+    _git(git.root, "checkout", "main")
+    _git(git.root, "add", "-A")
+    _git(git.root, "commit", "-m", "chore: contract")
+    _git(git.root, "push", "origin", "main")
+    _git(git.root, "checkout", "feat/1-first")
+    _contract(git.root, "the-new-gate")
+    _git(git.root, "add", "-A")
+    _git(git.root, "commit", "-m", "feat: rename the required context")
+    monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: git.root)
+    with pytest.raises(_FAILURES) as caught:
+        _submit(fake, git, follow_to_verdict=False)
+    message = str(caught.value)
+    assert "renames the required CI context" in message
+    assert "submit --fix --armed" in message
+    assert "--fix never" in message  # the flag never implies the arm
+
+
+def test_fix_applies_the_rename_and_rereruns_quietly(
+    rig: tuple[FakeForge, SubmitGit],
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.forge import Protection
+
+    fake, git = rig
+    _contract(git.root, "gate")
+    _git(git.root, "checkout", "main")
+    _git(git.root, "add", "-A")
+    _git(git.root, "commit", "-m", "chore: contract")
+    _git(git.root, "push", "origin", "main")
+    _git(git.root, "checkout", "feat/1-first")
+    _contract(git.root, "the-new-gate")
+    _git(git.root, "add", "-A")
+    _git(git.root, "commit", "-m", "feat: rename the required context")
+    monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: git.root)
+    monkeypatch.setattr(
+        "livery.workshop._forge_lane.admin_repository",
+        lambda _root: (_repo(fake), "GITHUB_ADMIN_TOKEN"),
+    )
+    _submit(
+        fake,
+        git,
+        fix=True,
+        gate=False,
+        follow_to_verdict=False,
+        title="feat: rename the required context",
+    )
+    out = capsys.readouterr().out
+    assert "protection now requires 'the-new-gate'" in out
+    assert "park" in out  # the window cost is stated
+    # The heal landed on the fake; a re-run read-compares and is
+    # quietly green, applying nothing twice.
+    fake.set_protection(
+        OWNER, NAME, "main", Protection(required_contexts=("the-new-gate",))
+    )
+    _submit(
+        fake,
+        git,
+        fix=True,
+        gate=False,
+        follow_to_verdict=False,
+        title="feat: rename the required context",
+    )
+    out = capsys.readouterr().out
+    assert "protection now requires" not in out

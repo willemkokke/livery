@@ -21,6 +21,10 @@ layers:
 - livery.workshop
 - livery.forge
 required_context: gate
+owner_users:
+- willemkokke
+owner_teams: []
+owner_approvals: 1
 templates_source: templates
 packages:
 - dir: forge

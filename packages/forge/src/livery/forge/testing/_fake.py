@@ -447,7 +447,11 @@ class FakeForge:
         """Merge every armed pull request whose checks are green.
 
         The server-side half of auto-merge, run after every state
-        change a real forge would evaluate the schedule on.
+        change a real forge would evaluate the schedule on. A base
+        protection requiring approvals holds the merge until enough
+        approving reviews exist, as the real forges do: green and
+        armed with reviews missing is the parked state the
+        awaiting-approvals verdict reads.
         """
         for number in list(state.armed):
             pr = state.prs[number]
@@ -457,9 +461,17 @@ class FakeForge:
             # Auto-merge judges the branch's current head, as the real
             # forges do; the stored sha may predate a re-push.
             head = state.branches.get(pr.head_branch, pr.head_sha)
-            if self._derived_status(state, head).state == "success":
-                state.armed.pop(number)
-                self._merge(state, pr)
+            if self._derived_status(state, head).state != "success":
+                continue
+            protection = state.protections.get(pr.base_branch)
+            if protection is not None and protection.required_approvals > 0:
+                approved = {
+                    review.author for review in pr.reviews if review.state == "approved"
+                }
+                if len(approved) < protection.required_approvals:
+                    continue  # parked: the arm survives, reviews decide
+            state.armed.pop(number)
+            self._merge(state, pr)
 
     def _merge(self, state: _RepoState, pr: _PullRequestState) -> None:
         # Freeze the head at the merge: an open pull request tracks its
