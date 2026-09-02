@@ -24,7 +24,7 @@ required_context: gate
 owner_users:
 - willemkokke
 owner_teams: []
-owner_approvals: 1
+owner_approvals: 0
 templates_source: templates
 packages:
 - dir: forge

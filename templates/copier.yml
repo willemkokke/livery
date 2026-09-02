@@ -101,8 +101,8 @@ owner_teams:
 
 owner_approvals:
   type: int
-  help: "Approvals the governance paths require"
-  default: 1
+  help: "Approvals the governance paths require (0 documents owners without gating)"
+  default: 0
 
 templates_source:
   type: str

@@ -27,11 +27,17 @@ def _owners_table(contract: dict[str, Any]) -> dict[str, Any]:
 
 
 def owners_of(contract: dict[str, Any]) -> tuple[tuple[str, ...], tuple[str, ...], int]:
-    """A contract's ``(users, teams, approvals)`` owner declaration."""
+    """A contract's ``(users, teams, approvals)`` owner declaration.
+
+    Approvals default to zero: declared owners document and route
+    review without gating the merge until a count is asked for,
+    which is what a solo maintainer needs (a forge that forbids
+    self-approval deadlocks a solo repo on any required review).
+    """
     table = _owners_table(contract)
     users = tuple(str(name) for name in table.get("users", []) if str(name).strip())
     teams = tuple(str(name) for name in table.get("teams", []) if str(name).strip())
-    approvals = int(table.get("approvals", 1 if (users or teams) else 0))
+    approvals = int(table.get("approvals", 0))
     return users, teams, approvals
 
 
@@ -140,9 +146,14 @@ def governance_config(root: Path) -> RepoConfig:
     entries = governance_entries(root)
     if not entries:
         return RepoConfig()
+    highest = max(entry.min_approvals for entry in entries)
+    # A count of zero asserts zero and requires no codeowner review
+    # either: on a forge that forbids self-approval, a codeowner
+    # requirement alone still deadlocks a solo repo, and ownership
+    # stays documented in the file.
     return RepoConfig(
-        min_approvals=max(entry.min_approvals for entry in entries),
-        require_codeowner_review=True,
+        min_approvals=highest,
+        require_codeowner_review=highest > 0,
     )
 
 

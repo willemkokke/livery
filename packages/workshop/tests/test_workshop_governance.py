@@ -54,7 +54,9 @@ def test_owner_declarations_parse_with_their_defaults() -> None:
     )
     assert users == ("a",) and teams == ("t",) and approvals == 3
     users, teams, approvals = owners_of({"owners": {"users": ["a"]}})
-    assert approvals == 1  # declared owners default to one approval
+    # Declared owners document and route review; they gate nothing
+    # until a count is asked for, so a solo repo never deadlocks.
+    assert approvals == 0
     users, teams, approvals = owners_of({})
     assert users == () and teams == () and approvals == 0
 
@@ -90,8 +92,18 @@ def test_no_declarations_means_no_file_and_no_requirement(
 def test_the_config_takes_the_highest_declared_count(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     config = governance_config(root)
-    assert config.min_approvals == 2  # the root guard's, over core's 1
+    assert config.min_approvals == 2  # the root guard's, over core's 0
     assert config.require_codeowner_review is True
+
+    # A workspace whose declarations all sit at zero documents
+    # ownership without gating: no codeowner requirement either, or
+    # a forge that forbids self-approval deadlocks a solo repo.
+    (root / "livery.toml").write_text(
+        (root / "livery.toml").read_text().replace("approvals = 2", "approvals = 0")
+    )
+    config = governance_config(root)
+    assert config.min_approvals == 0
+    assert config.require_codeowner_review is False
 
 
 def test_the_rendered_file_is_the_forges_dialect(tmp_path: Path) -> None:
@@ -478,8 +490,8 @@ def test_governance_jobs_are_runnable_where_they_land() -> None:
     # else.
     for path, content in github.items():
         if "governance" not in path:
-            assert "LIVERY_ADMIN_TOKEN" not in content
-    assert "LIVERY_ADMIN_TOKEN" in gov
+            assert "FORGE_ADMIN_TOKEN" not in content
+    assert "FORGE_ADMIN_TOKEN" in gov
 
     gitea = generate({"forge_kind": "gitea", "runners": ["host-linux"]})
     gov = gitea[".gitea/workflows/governance.yml"]

@@ -22,7 +22,7 @@ owner = "willemkokke"
 [owners]
 users = ["willemkokke"]
 teams = []
-approvals = 1
+approvals = 0
 
 [ci]
 runners = ["ubuntu-latest", "macos-latest", "windows-latest"]

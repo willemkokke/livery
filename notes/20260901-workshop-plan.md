@@ -1534,6 +1534,15 @@ not. Gates 0.1.0 together with phases 1-8.
   The ~85 runtime teachings naming fm verbs in printed prose stay
   fm-spelled: sweeping them multiplies the private-seam workaround,
   so the sweep rides footman#557's public accessor (open item 9).
+- 2026-09-02, the admin secret and the approvals default (Willem,
+  issue #99): the governance job's repository secret is
+  FORGE_ADMIN_TOKEN, product-neutral, because the workshop is
+  branded and an hse instance must not carry a livery-named secret;
+  declared owners now default to zero required approvals (the
+  declaration documents and routes review, it gates nothing until a
+  count is asked for), and a workspace whose highest count is zero
+  asserts no codeowner requirement either, because a forge that
+  forbids self-approval deadlocks a solo repo on that gate alone.
 
 ## Open
 
@@ -1584,4 +1593,12 @@ not. Gates 0.1.0 together with phases 1-8.
    under a branded runner. Swept when footman#557 lands a public
    prog accessor, so the spelling comes from one supported call
    instead of 85 copies of the private-seam workaround. Owner: the
-   phase that takes the footman release carrying #557.
+   phase that takes the footman release carrying #557. Resolved
+   direction 2026-09-02: footman#557 closed via #558 (footman.prog()
+   and footman.dist(), releasing as 0.49.2); the sweep runs when
+   0.49.2 is taken, together with replacing the emitted coverage
+   meter's `-m footman` by coverage's subprocess contract
+   (COVERAGE_PROCESS_START armed by a .pth), Willem's ruling, so the
+   gate line is a plain branded verb and no brand module name is
+   ever needed. An hse brand is expected imminently and is the
+   first consumer.
