@@ -131,7 +131,10 @@ class RepoConfig:
             ``min_approvals`` capability.
         require_codeowner_review: True also requires an approval from
             a codeowner of the touched paths. Rides the same
-            capability.
+            capability. Gitea has no codeowner toggle and substitutes
+            blocking on official review requests, which the
+            codeowners file feeds; the read side answers through the
+            same field.
         secrets: CI secrets to store, by name. Write-only: no protocol
             operation reads a secret back. Setting this on a forge
             without the ``ci_secrets`` capability raises

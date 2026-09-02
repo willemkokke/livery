@@ -36,8 +36,8 @@ found two destruction-rule holes (close tore down before the
 worktree's uncommitted changes from the main checkout), closed the
 same day in a follow-up PR. Phase 8a shipped 2026-09-02 (PR #86, issue #85); its audit found
 the codeowner-review half untested, a GitLab section-ordering bug,
-and the docs tree stale, queued as the next audit-close issue.
-Phase 8b in flight as issue #87 (the workshop half); the day also
+and the docs tree stale, closed the same day as issue #89.
+Phase 8b shipped 2026-09-02 (PR #88, issue #87, the workshop half); the day also
 landed issues as the way of work (PR #82), sync-as-one-stop with
 integrate closing issue #83 (PR #84), and the footman 0.49
 migration (PR #81). Subsumes
@@ -1445,6 +1445,21 @@ not. Gates 0.1.0 together with phases 1-8.
   the timeout split's forcing test exposed that lowest-direct
   never starved the wheel's own dependencies (transitive to the
   resolver); the leg now lists them explicitly.
+- 2026-09-02, the phase 8a audit close (audit finding, no ruling
+  needed, issue #89): the conformance approvals scenario asserts
+  the codeowner half and lands contexts first so a whole-rule
+  protection API is forced to preserve what the caller did not
+  state (GitHub re-sends strict and the contexts from read-back;
+  re-recorded live); the GitLab dialect renders plain entries
+  before any section, because a section owns every entry until the
+  next heading; Gitea reads the codeowner answer back through
+  block-on-official-review-requests, and the substitution is
+  stated on RepoConfig; the 404 user-namespace fallback has replay
+  tests on all three backends; the fake declines min_approvals
+  before anything applies, matching GitLab; the docs tree carries
+  the governance surface (capabilities, members/teams/codeowners,
+  protection, the dialects) and gitea.md stops naming the retired
+  .forge.dev.env.
 
 ## Open
 

@@ -35,11 +35,16 @@ the asynchronous behaviours it taught are in
 | `force_cancel` | no | pipelines have plain cancel only; declined by name |
 | `required_contexts` | no | protection cannot name required check contexts; external status checks are tier-gated (Ultimate) and out of protocol |
 | `ci_secrets` | yes | one variables API serves both; a secret is stored masked where the value satisfies the masking rules |
+| `min_approvals` | no | required approval rules are a paid tier; `configure` declines by name before anything applies |
+| `schedule_events` | no | no scheduling timeline is exposed; `is_armed` reads the live `merge_when_pipeline_succeeds` field instead |
 
-Tier-gated features the protocol deliberately does not model:
-approval rules (Premium), merge trains (Premium), external status
-checks (Ultimate). The container the backend develops against is CE,
-so every mapped endpoint below is a CE endpoint.
+Approval rules are modelled and declined: the `min_approvals`
+capability answers no, and stating `min_approvals` or
+`require_codeowner_review` in `configure` raises `Unsupported`
+naming it. Merge trains (Premium) and external status checks
+(Ultimate) stay out of the protocol entirely. The container the
+backend develops against is CE, so every mapped endpoint below is a
+CE endpoint.
 
 ## Forge
 
@@ -50,6 +55,8 @@ so every mapped endpoint below is a CE endpoint.
 | `create_repo` | `POST /projects` | `visibility` from `private`; when the owner is a group, `namespace_id` is resolved first (`GET /namespaces?search=`); `initialize_with_readme` so the default branch exists, as the protocol requires |
 | `get_repo` | `GET /projects/:path` | 404 is None; a redirect route can serve a renamed corpse with 200 for the old path, so the answer's `path_with_namespace` is verified before it counts |
 | `delete_repo` | `DELETE /projects/:path` | 404 is success, and so are the two shapes of "already deleting": 400 "marked for deletion" and 405 "moved". Deletion is asynchronous and the path stays reserved until it lands; a creator reusing a path renames the leftover aside first, because rename is synchronous |
+| `members` | `GET /groups/:owner/members` | usernames; a personal namespace 404s and answers its one login |
+| `teams` | `GET /groups/:owner/subgroups` | GitLab's teams are its subgroups, answered as full paths; a personal namespace answers empty |
 
 ## Repository
 
@@ -60,12 +67,24 @@ so every mapped endpoint below is a CE endpoint.
 | `configure`: `delete_branch_on_merge` | `PUT /projects/:path` | `remove_source_branch_after_merge` |
 | `configure`: `allow_auto_merge` | none needed | merge when pipeline succeeds is always available; the field is a no-op here |
 | `configure`: `required_contexts` | none | raises `Unsupported`; the nearest CE fact, `only_allow_merge_if_pipeline_succeeds`, is a boolean and cannot name contexts |
+| `configure`: `min_approvals` / `require_codeowner_review` | none | raises `Unsupported` naming `min_approvals` before anything applies; approval rules are a paid tier |
 | `configure`: protection | `POST /projects/:path/protected_branches` | the default branch, direct pushes to maintainers-and-up; re-running with the same levels is a no-op |
 | `configure`: `secrets` / `variables` | `POST` / `PUT /projects/:path/variables` | one variables API serves both; a secret is stored `masked` where its value satisfies GitLab's masking rules (single line, 8 characters or more, base64 alphabet) and stored unmasked otherwise, which the backend reports rather than hides |
 | `configure`: `labels` | `POST` / `PUT /projects/:path/labels` | by name; create when missing, update colour and description when present |
 | `tags` | `GET /projects/:path/repository/tags` | names only |
 | `branch_exists` | `GET /projects/:path/repository/branches/:branch` | 404 is False; the branch name is URL-encoded |
+| `protection` | `GET /projects/:path/protected_branches/:branch` plus `GET /projects/:path/approvals` | the guarded flag and the approval count come from different endpoints; the per-path rules behind paid tiers read as inert |
 | `delete_branch` | `DELETE /projects/:path/repository/branches/:branch` | 404 is success |
+
+
+## Codeowners
+
+The dialect is `.gitlab/CODEOWNERS` with sections: a `[name][n]`
+heading carries a per-path approval count in the file itself, the
+one dialect that can. A heading owns every entry after it until the
+next heading, so the plain entries render first and each counted
+entry gets its own trailing section. Enforcing the counts needs a
+paid tier; on CE the file is documentation and reviewer routing.
 
 ## Pull requests (merge requests)
 

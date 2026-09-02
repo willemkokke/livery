@@ -513,6 +513,17 @@ class _FakeRepository:
 
     def configure(self, config: RepoConfig) -> None:
         """Apply the stated fields; leave None fields untouched."""
+        if (
+            config.min_approvals is not None
+            or config.require_codeowner_review is not None
+        ) and not self._fake.supports("min_approvals"):
+            # Refused before anything applies, like the other
+            # capability gates: assert nothing you will refuse.
+            raise Unsupported(
+                "this forge cannot require approving reviews"
+                " (capability: min_approvals)"
+            )
+
         state = self._fake._require_repo(self._owner, self._name)
         if config.required_contexts is not None and not self._fake.supports(
             "required_contexts"
@@ -537,11 +548,6 @@ class _FakeRepository:
         if config.min_approvals is not None or (
             config.require_codeowner_review is not None
         ):
-            if not self._fake.supports("min_approvals"):
-                raise Unsupported(
-                    "this forge cannot require approving reviews"
-                    " (capability: min_approvals)"
-                )
             branch = state.default_branch
             current = state.protections.get(branch, Protection())
             state.protections[branch] = Protection(
