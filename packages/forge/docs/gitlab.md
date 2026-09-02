@@ -113,6 +113,8 @@ not commit statuses.
 | `get` | `GET /projects/:path/issues/:iid` | the protocol number is the iid; `description` is the body |
 | `list` | `GET /projects/:path/issues?state=` | GitLab spells the open state `opened`; the backend translates |
 | `search` | `GET /projects/:path/issues?search=&in=title,description&labels=` | server-side text search over title and body |
-| `assign` | `PUT /projects/:path/issues/:iid` | `assignee_ids` with the one resolved id, replacing the list |
+| `assign` | `PUT /projects/:path/issues/:iid` | `assignee_ids` as a read-modify-write over the current ids: GitLab replaces the whole list, so the add re-sends it with one more |
+| `unassign` | `PUT /projects/:path/issues/:iid` | the current ids minus the caller's; `[0]` is the documented clear sentinel, an empty list is ignored by some versions |
+| `close` | `PUT /projects/:path/issues/:iid` | `state_event=close`, gated on the current state: GitLab refuses the event on a closed issue |
 | `assigned_to_me` | `GET /projects/:path/issues?scope=assigned_to_me&state=opened` | |
 | `comment` | `POST /projects/:path/issues/:iid/notes` | `body` |

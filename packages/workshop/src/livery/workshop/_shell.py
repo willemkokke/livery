@@ -10,7 +10,7 @@ the final interactive shell. A cold checkout fails loudly inside the
 opened shell: the emission's refusal prints to stderr, never a shell
 that merely looks entered.
 
-The launch decisions are data (:func:`shell_launch_plan` answers
+The launch decisions are data (``shell_launch_plan`` answers
 argv, environment, and rc files) so every branch tests as a plain
 call; the task body only writes and execs them.
 """
