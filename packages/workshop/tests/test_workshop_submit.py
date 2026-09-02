@@ -718,3 +718,46 @@ def test_fix_applies_the_rename_and_rereruns_quietly(
     )
     out = capsys.readouterr().out
     assert "protection now requires" not in out
+
+
+def test_a_refused_admin_write_teaches_instead_of_half_healing(
+    rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.forge import ForgeError
+
+    fake, git = rig
+    _contract(git.root, "gate")
+    _git(git.root, "checkout", "main")
+    _git(git.root, "add", "-A")
+    _git(git.root, "commit", "-m", "chore: contract")
+    _git(git.root, "push", "origin", "main")
+    _git(git.root, "checkout", "feat/1-first")
+    _contract(git.root, "the-new-gate")
+    _git(git.root, "add", "-A")
+    _git(git.root, "commit", "-m", "feat: rename the required context")
+    monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: git.root)
+
+    class _Refused:
+        def protection(self, branch: str) -> object:
+            raise ForgeError("admin required to read protection", status=403)
+
+        def configure(self, config: object) -> None:
+            raise ForgeError("403 must be an administrator", status=403)
+
+    monkeypatch.setattr(
+        "livery.workshop._forge_lane.admin_repository",
+        lambda _root: (_Refused(), ""),
+    )
+    with pytest.raises(_FAILURES) as caught:
+        _submit(
+            fake,
+            git,
+            fix=True,
+            gate=False,
+            follow_to_verdict=False,
+            title="feat: rename the required context",
+        )
+    text = str(caught.value)
+    assert "403 must be an administrator" in text  # verbatim
+    assert "the everyday token" in text  # which rung refused
+    assert "admin variable" in text  # and the repair

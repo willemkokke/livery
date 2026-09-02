@@ -70,7 +70,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # check-title compares against origin/main, which a shallow
+          # checkout does not have.
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-      - run: uv run fm workflow.release.check-title --title "$TITLE"
+      - name: Sync (locked)
+        run: uv sync --locked
+      - run: uv run --no-sync fm workflow.release.check-title --title "$TITLE"
         env:
-          TITLE: ${ github.event.pull_request.title }
+          TITLE: ${{ github.event.pull_request.title }}

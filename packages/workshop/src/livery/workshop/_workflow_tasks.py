@@ -245,21 +245,37 @@ def workflow_configure() -> None:
             f" not know:\n{listed}\n  Fix the declarations (or the org"
             " membership) and re-run."
         )
+    from dataclasses import replace
+
     config = contract_config(root)
     if config.min_approvals is not None and not forge.supports("min_approvals"):
         # The forge cannot enforce the count (GitLab's paid tiers);
         # the codeowners file still documents it, so the rest of the
         # contract applies rather than nothing.
-        from dataclasses import replace
-
         print(
             "  note: this forge cannot enforce approval counts"
             " (capability: min_approvals); the codeowners file still"
             " names the reviewers"
         )
         config = replace(config, min_approvals=None, require_codeowner_review=None)
+    if config.required_contexts is not None and not forge.supports("required_contexts"):
+        # GitLab: protection cannot name check contexts; the
+        # pipeline's own rules gate merges there instead.
+        print(
+            "  note: this forge cannot name required check contexts"
+            " (capability: required_contexts); the pipeline's own rules"
+            " gate merges instead"
+        )
+        config = replace(config, required_contexts=None)
     try:
         repo.configure(config)
+    except Unsupported as error:
+        # A decline the probes above did not predict: name it
+        # verbatim, never half-teach a token that would not help.
+        fail(
+            f"the forge declined part of the configuration:\n{error}\n"
+            "  `fm doctor` says what this forge grants."
+        )
     except ForgeError as error:
         used = admin_var or "the everyday token"
         others = "GITHUB_ADMIN_TOKEN / GITEA_ADMIN_TOKEN / GITLAB_ADMIN_TOKEN"
@@ -268,7 +284,6 @@ def workflow_configure() -> None:
             "  An administrator's token applies it: set the per-kind admin"
             f" variable ({others}) and re-run `fm workflow.configure`."
         )
-    _ = Unsupported
     print("  repository configuration asserted from the contract")
 
 
@@ -297,10 +312,10 @@ def _reconcile_configuration(git: GitOps, head_sha: str) -> None:
     aborted PR's head sha (which persists after the branch deletion)
     skips everything untouched with certainty; touched paths run the
     configure in a fresh process (the abort may sit inside a
-    workflow whose update rewrote this toolchain). Only a refused
-    write mentions the admin token, and a state that could not be
-    read gets the softened conditional note, never an asserted
-    problem.
+    workflow whose update rewrote this toolchain). A failed
+    configure prints its reason verbatim under a conditional note,
+    never an asserted problem: the abort already succeeded, and the
+    repair verb is the same either way.
     """
     from livery.workshop._governance import governance_paths
 
@@ -325,16 +340,11 @@ def _reconcile_configuration(git: GitOps, head_sha: str) -> None:
             return  # nothing config-implying moved: provably unneeded
     result = _spawn_configure()
     if result.returncode != 0:
-        detail = result.stderr.strip() or result.stdout.strip()
-        if "refused" in detail or "ADMIN_TOKEN" in detail:
-            print(
-                "  note: the configuration reconcile was refused; an"
-                f" administrator runs `fm workflow.configure` to repair.\n"
-                f"  {detail}"
-            )
-        else:
-            print(
-                "  note: the configuration could not be verified from here;"
-                " if governance settings changed, `fm workflow.configure`"
-                " re-asserts them."
-            )
+        detail = result.stderr.strip() or result.stdout.strip() or "(no output)"
+        indented = "\n".join(f"  {line}" for line in detail.splitlines())
+        print(
+            "  note: the configuration could not be re-asserted from here;"
+            " if governance settings changed, `fm workflow.configure`"
+            " repairs them (an administrator's token may be needed):\n"
+            f"{indented}"
+        )

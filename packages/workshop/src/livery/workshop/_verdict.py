@@ -16,9 +16,11 @@ Exit codes:
     16: green and armed with no merge; the server lost the evaluation.
     17: the head is behind the base; integrate and re-submit.
 
-A required-review blocker has no code: the frozen livery.forge
-protocol carries no review surface, so a review-blocked pull request
-reads as 16 and the message says what to check.
+A required-review blocker is not an error: readable protection with
+approvals outstanding reads as ``awaiting-approvals``, exit 0, and
+the message names the missing count and the eligible reviewers.
+Protection the token cannot read is never asserted as a blocker; the
+pull request reads as 16 and the message says what to check.
 """
 
 from __future__ import annotations
@@ -61,9 +63,10 @@ class Verdict:
     Attributes:
         state: A short name: ``merged``, ``in-flight``, ``conflicts``,
             ``disarmed``, ``closed``, ``ci-failed``, ``stalled``,
-            ``behind``, ``no-pr``.
+            ``behind``, ``awaiting-approvals``, ``no-pr``.
         exit_code: The stable code for the state; 0 when nothing is
-            wrong (``merged``, ``in-flight``, ``no-pr``).
+            wrong (``merged``, ``in-flight``, ``awaiting-approvals``,
+            ``no-pr``).
         detail: One sentence for a person, naming the evidence.
         pr_number: The pull request, when one exists.
     """

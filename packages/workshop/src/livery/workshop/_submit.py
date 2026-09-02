@@ -344,7 +344,7 @@ def _required_context_at(git: GitOps, ref: str) -> str:
 
 
 def _heal_context_rename(
-    repo: Repository, git: GitOps, plan: Plan, *, fix: bool, armed: bool
+    repo: Repository, git: GitOps, plan: Plan, *, fix: bool
 ) -> None:
     """The one order-sensitive transition: a renamed required context.
 
@@ -370,10 +370,17 @@ def _heal_context_rename(
 
         root = workspace_root()
         if root is None:
-            return
+            fail(
+                "the context rename needs the workspace contract and no"
+                " livery.toml is above the working directory; run"
+                " `fm submit --fix` from inside the workspace"
+            )
         admin_repo, admin_var = admin_repository(root)
         try:
-            protection = repo.protection(plan.base)
+            # Read through the admin ladder too: GitHub gates the
+            # protection read on admin, and an unreadable state must
+            # not turn the quiet re-run into a re-apply.
+            protection = admin_repo.protection(plan.base)
         except ForgeError:
             protection = None
         if protection is not None and ours in protection.required_contexts:
@@ -492,7 +499,7 @@ def submit_flow(
         print("  gate skipped (--no-gate): CI is now the first verifier")
     git.fetch()
     plan = prepare(git, title=title, body=body, base=base)
-    _heal_context_rename(repo, git, plan, fix=fix, armed=armed)
+    _heal_context_rename(repo, git, plan, fix=fix)
     linked = resolve_closes(repo, plan.branch, closes)
     if linked is not None:
         print(f"  Closes #{linked} on merge")

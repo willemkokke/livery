@@ -37,7 +37,10 @@ worktree's uncommitted changes from the main checkout), closed the
 same day in a follow-up PR. Phase 8a shipped 2026-09-02 (PR #86, issue #85); its audit found
 the codeowner-review half untested, a GitLab section-ordering bug,
 and the docs tree stale, closed the same day as issue #89.
-Phase 8b shipped 2026-09-02 (PR #88, issue #87, the workshop half); the day also
+Phase 8b shipped 2026-09-02 (PR #88, issue #87, the workshop half);
+its audit found the emitted release-title and governance jobs
+unable to run as written and the configure/reconcile arms unforced,
+closed the same day as issue #91; the day also
 landed issues as the way of work (PR #82), sync-as-one-stop with
 integrate closing issue #83 (PR #84), and the footman 0.49
 migration (PR #81). Subsumes
@@ -1460,6 +1463,27 @@ not. Gates 0.1.0 together with phases 1-8.
   the governance surface (capabilities, members/teams/codeowners,
   protection, the dialects) and gitea.md stops naming the retired
   .forge.dev.env.
+- 2026-09-02, the phase 8b audit close (audit finding, no ruling
+  needed, issue #91): the emitted release-title job now receives
+  the actual PR title (the f-string emitter collapsed the Actions
+  expression to a literal, and the committed file matched the
+  emitter, so the drift gate saw both wrong; the emitter tests now
+  pin the two-brace expression), checks out full history so
+  check-title can diff against origin/main, and syncs locked; the
+  gitea release-title and governance jobs use the host-mode shape
+  on the configured runner; the gitlab governance job pins the uv
+  image and syncs locked; workflow.configure degrades
+  required_contexts like min_approvals (GitLab no longer dies on
+  an uncaught Unsupported after half-applying) and an unpredicted
+  decline fails naming the reason verbatim without token teaching;
+  the reconcile prints the failure reason verbatim in one arm
+  instead of reading the text as a boolean; the verdict module
+  docstring names awaiting-approvals; the heal reads protection
+  through the admin ladder (a non-admin re-run stays quietly
+  green), fails instead of silently returning without a workspace,
+  and drops its unused armed parameter; configure's refusal,
+  degrade, and refused-write arms, the emitters, and doctor's
+  governance lines each gained forcing tests.
 
 ## Open
 

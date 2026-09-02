@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from footman import Failed
 
-from livery.forge import RepoConfig
+from livery.forge import RepoConfig, Repository
 from livery.forge.testing import FakeForge
 from livery.workshop._git_ops import GitOps
 from livery.workshop._governance import (
@@ -209,16 +209,19 @@ def test_the_reconcile_runs_when_governance_paths_moved(
     _workflow_tasks._reconcile_configuration(git, sha)
     out = capsys.readouterr().out
     assert ran == ["ran"]
-    assert "administrator" in out  # a refused write teaches the token
+    # The reason arrives verbatim, never summarised away.
+    assert "refused: ADMIN_TOKEN" in out
+    assert "administrator" in out and "workflow.configure" in out
 
-    # An unreadable-shaped failure gets the softened conditional note.
+    # Any other failure carries its reason verbatim too: the text is
+    # never read as a boolean to pick a message.
     def _soft() -> SimpleNamespace:
         return SimpleNamespace(returncode=1, stdout="", stderr="connection reset")
 
     monkeypatch.setattr(_workflow_tasks, "_spawn_configure", _soft)
     _workflow_tasks._reconcile_configuration(git, sha)
     out = capsys.readouterr().out
-    assert "could not be verified" in out and "re-asserts" in out
+    assert "connection reset" in out and "workflow.configure" in out
 
 
 def test_the_check_title_task_refuses_a_drifted_title(
@@ -329,3 +332,205 @@ def test_unreadable_protection_never_asserts_a_review_blocker(
     # could not be read.
     verdict = classify(repo, "feat/2-work", git, grace_spent=True)
     assert verdict.state == "stalled"
+
+
+def _configure_rig(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[Path, FakeForge, Repository]:
+    """workflow.configure against the fake through the admin seams."""
+    root = _workspace(tmp_path)
+    monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: root)
+    monkeypatch.chdir(root)
+    fake = FakeForge()
+    fake.create_repo("acme", "ws", private=True, description="t")
+    fake.set_members("acme", ("alice", "bob"))
+    fake.set_teams("acme", ("reviewers",))
+    repo = fake.repository("acme", "ws")
+    monkeypatch.setattr(
+        "livery.workshop._forge_lane.admin_repository",
+        lambda _root: (repo, "GITHUB_ADMIN_TOKEN"),
+    )
+    monkeypatch.setattr(
+        "livery.workshop._forge_lane.admin_forge",
+        lambda _root: (fake, "GITHUB_ADMIN_TOKEN"),
+    )
+    return root, fake, repo
+
+
+def test_configure_refuses_unknown_owners_before_applying(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._workflow_tasks import workflow_configure
+
+    _root, fake, repo = _configure_rig(tmp_path, monkeypatch)
+    fake.set_members("acme", ("alice",))  # bob is declared and unknown
+    with pytest.raises(_FAILURES) as caught:
+        workflow_configure()
+    text = str(caught.value)
+    assert "does not know" in text and "user bob" in text
+    assert repo.protection("main") is None  # nothing was applied
+
+
+def test_configure_degrades_the_approval_count_with_a_note(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.workshop._workflow_tasks import workflow_configure
+
+    _root, fake, repo = _configure_rig(tmp_path, monkeypatch)
+    real = fake.supports
+    monkeypatch.setattr(
+        fake, "supports", lambda c: False if c == "min_approvals" else real(c)
+    )
+    workflow_configure()
+    out = capsys.readouterr().out
+    assert "cannot enforce approval counts" in out
+    assert "asserted from the contract" in out
+    protection = repo.protection("main")
+    assert protection is not None
+    assert protection.required_approvals == 0  # degraded, not asserted
+    assert "gate" in protection.required_contexts  # the rest applied
+
+
+def test_configure_degrades_required_contexts_like_gitlab(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.workshop._workflow_tasks import workflow_configure
+
+    _root, fake, _repo = _configure_rig(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        fake,
+        "supports",
+        lambda c: c not in ("min_approvals", "required_contexts"),
+    )
+    workflow_configure()  # never an uncaught Unsupported
+    out = capsys.readouterr().out
+    assert "cannot name required check contexts" in out
+    assert "asserted from the contract" in out
+
+
+def test_configure_teaches_the_ladder_on_a_refused_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.forge import ForgeError
+    from livery.workshop._workflow_tasks import workflow_configure
+
+    _root, _fake, repo = _configure_rig(tmp_path, monkeypatch)
+
+    def _refuse(config: object) -> None:
+        raise ForgeError("403 admin required", status=403)
+
+    monkeypatch.setattr(repo, "configure", _refuse)
+    with pytest.raises(_FAILURES) as caught:
+        workflow_configure()
+    text = str(caught.value)
+    assert "403 admin required" in text  # the server's words, verbatim
+    assert "GITHUB_ADMIN_TOKEN" in text and "GITLAB_ADMIN_TOKEN" in text
+
+
+def test_configure_names_an_unpredicted_decline_verbatim(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.forge import Unsupported
+    from livery.workshop._workflow_tasks import workflow_configure
+
+    _root, _fake, repo = _configure_rig(tmp_path, monkeypatch)
+
+    def _decline(config: object) -> None:
+        raise Unsupported("cannot store that (capability: whatever)")
+
+    monkeypatch.setattr(repo, "configure", _decline)
+    with pytest.raises(_FAILURES) as caught:
+        workflow_configure()
+    text = str(caught.value)
+    assert "declined part of the configuration" in text
+    assert "capability: whatever" in text  # verbatim, no token teaching
+    assert "ADMIN_TOKEN" not in text
+
+
+def test_the_release_title_job_receives_the_actual_title() -> None:
+    from livery.workshop._ci_generate import generate
+
+    for kind in ("github", "gitea"):
+        gate = generate({"forge_kind": kind})[f".{kind}/workflows/ci.yml"]
+        job = gate.split("release-title:")[1]
+        # The f-string emitter must collapse to the two-brace Actions
+        # expression; a single-braced `${ ... }` is a literal string
+        # the check would compare against instead of the title.
+        assert "TITLE: ${{ github.event.pull_request.title }}" in job
+        assert "${ github" not in gate
+        # check-title diffs against origin/main: full history needed.
+        assert "fetch-depth: 0" in job
+        assert "sync" in job and "--no-sync" in job  # locked toolchain
+
+
+def test_governance_jobs_are_runnable_where_they_land() -> None:
+    from livery.workshop._ci_generate import generate
+
+    github = generate({"forge_kind": "github"})
+    gov = github[".github/workflows/governance.yml"]
+    assert "uv sync --locked" in gov
+    assert "uv run --no-sync fm workflow.configure" in gov
+    # The admin secret is mounted in the governance job and nowhere
+    # else.
+    for path, content in github.items():
+        if "governance" not in path:
+            assert "LIVERY_ADMIN_TOKEN" not in content
+    assert "LIVERY_ADMIN_TOKEN" in gov
+
+    gitea = generate({"forge_kind": "gitea", "runners": ["host-linux"]})
+    gov = gitea[".gitea/workflows/governance.yml"]
+    # act_runner host mode: uv from its installer, on the configured
+    # runner label, no setup actions.
+    assert "astral.sh/uv/install.sh" in gov
+    assert "runs-on: host-linux" in gov
+    assert "setup-uv" not in gov
+    title_job = gitea[".gitea/workflows/ci.yml"].split("release-title:")[1]
+    assert "runs-on: host-linux" in title_job
+    assert "astral.sh/uv/install.sh" in title_job
+
+    gitlab = generate({"forge_kind": "gitlab", "python_versions": ["3.12"]})
+    section = gitlab[".gitlab-ci.yml"].split("governance-apply:")[1]
+    # Without an image the job lands on the runner default, where uv
+    # does not exist.
+    assert "image: ghcr.io/astral-sh/uv:python3.12-bookworm" in section
+    assert "uv sync --locked" in section
+    assert "uv run --no-sync fm workflow.configure" in section
+
+
+def test_doctor_prints_the_ladder_and_the_owner_verdicts(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.workshop._ci_tasks import doctor_flow
+
+    root = _workspace(tmp_path)
+    monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: root)
+    monkeypatch.chdir(root)
+    monkeypatch.delenv("GITHUB_ADMIN_TOKEN", raising=False)
+    fake = FakeForge()
+    fake.set_members("acme", ("alice", "bob"))
+    fake.set_teams("acme", ("reviewers",))
+    doctor_flow(fake)
+    out = capsys.readouterr().out
+    assert "admin ladder: GITHUB_ADMIN_TOKEN unset" in out
+    assert "every declared owner exists" in out
+
+    monkeypatch.setenv("GITHUB_ADMIN_TOKEN", "x")
+    fake.set_members("acme", ("alice",))  # bob becomes unknown
+    doctor_flow(fake)
+    out = capsys.readouterr().out
+    assert "admin ladder: GITHUB_ADMIN_TOKEN set" in out
+    assert "unknown user bob" in out
+
+    def _broken(owner: str) -> tuple[str, ...]:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(fake, "members", _broken)
+    doctor_flow(fake)
+    out = capsys.readouterr().out
+    assert "owners: not checked (boom)" in out  # the check fails open
