@@ -957,7 +957,9 @@ class _GiteaIssues:
         """Add *assignee* to the issue's assignees.
 
         Gitea's PATCH replaces the whole list, so the add is a
-        read-modify-write over the current assignees.
+        read-modify-write over the current assignees: two adds racing
+        can lose one, and the caller's assignee policy is what keeps
+        concurrent assignment rare.
         """
         issue = self.get(number)
         if issue is None:

@@ -56,8 +56,8 @@ def assignee_limit(root: Path) -> int:
 
     ``[issues] assignees`` in the root ``livery.toml``, default 1 so
     a free GitLab needs nothing. Enforced by the workshop on every
-    forge, including ones whose native limit is higher; ``configure``
-    validating it against the forge lands with governance.
+    forge, including ones whose native limit is higher; whether the
+    forge itself can honour it is ``configure``'s check.
     """
     import tomllib
 
@@ -138,15 +138,39 @@ def _find_branch(git: GitOps, number: int) -> str:
     return ""
 
 
-def _only_local_work(git: GitOps, branch: str) -> str:
+def _worktree_for(git: GitOps, root: Path, branch: str) -> str:
+    """The linked worktree holding *branch*; "" when none does."""
+    listing = git._run("worktree", "list", "--porcelain")
+    tree = ""
+    current: dict[str, str] = {}
+    for line in [*listing.splitlines(), ""]:
+        if not line.strip():
+            if current.get("branch", "").endswith(f"refs/heads/{branch}"):
+                tree = current.get("worktree", "")
+            current = {}
+            continue
+        key, _, value = line.partition(" ")
+        current[key] = value
+    if tree and Path(tree).resolve() == root.resolve():
+        return ""
+    return tree
+
+
+def _only_local_work(git: GitOps, root: Path, branch: str) -> str:
     """Why *branch* holds work that exists nowhere else; "" when safe.
 
-    Dirty counts only when the checkout stands on the branch; ahead
-    is measured against the remote branch when one exists, and
-    against the base when none does.
+    Dirt is looked for where the branch actually lives: this
+    checkout when it stands on the branch, the branch's linked
+    worktree otherwise. Ahead is measured against the remote branch
+    when one exists, and against the base when none does.
     """
     if git.current_branch() == branch and not git.is_clean():
-        return "the working tree has uncommitted changes"
+        return "uncommitted changes"
+    tree = _worktree_for(git, root, branch)
+    if tree:
+        status = git._run("-C", tree, "status", "--porcelain").strip()
+        if status:
+            return f"uncommitted changes in the worktree {tree}"
     remote = f"origin/{branch}"
     upstream = remote if branch in git.remote_branches("") else "origin/main"
     count = git._run("rev-list", "--count", f"{upstream}..{branch}").strip()
@@ -232,7 +256,10 @@ def issue_start(
     """Start work on an issue: assign it, branch, and open the work.
 
     REF is a number (a leading ``#`` is accepted) or a quoted title,
-    which files the issue first. The branch is
+    which files the issue first. Assignment is documentation: at the
+    workspace's assignee limit, or when the forge refuses the write,
+    the start proceeds with a warning that others will not see you
+    on the issue. The branch is
     ``<kind>/<number>-<slug>``, always from a fetched
     ``origin/main`` so a stale base is impossible. A worktree under
     the runner's home is the default; ``--no-worktree`` reuses this
@@ -263,25 +290,36 @@ def issue_start(
             fail(f"issue #{number} does not exist in this repository")
         work = found
     else:
-        work = repo.issue.create(title, labels=(f"kind/{type or 'feat'}",))
+        try:
+            work = repo.issue.create(title, labels=(f"kind/{type or 'feat'}",))
+        except ForgeError:
+            work = repo.issue.create(title)
+            print("  Note: the kind label was refused; filed without it")
         print(f"  filed #{work.number}: {work.title}")
 
+    # Assignment is documentation, never a gate: it tells the pool
+    # who is working, and not being listed costs visibility, not the
+    # work. At the limit the assign is skipped with the warning; a
+    # forge that refuses the write costs the same visibility.
     limit = assignee_limit(root)
-    holders = [name for name in work.assignees if name != me]
     if me not in work.assignees and len(work.assignees) >= limit:
         listed = ", ".join(work.assignees)
-        fail(
-            f"issue #{work.number} is already assigned to {listed}, and the"
-            f" workspace's assignee limit is {limit}. Coordinate with them,"
-            " pick another issue, or raise `[issues] assignees` in"
-            " livery.toml if this issue truly takes more people."
+        print(
+            f"  Warning: #{work.number} is assigned to {listed} and the"
+            f" workspace's assignee limit is {limit}, so you will not be"
+            " listed as working on it until something lands. Coordinate"
+            " with them; `[issues] assignees` in livery.toml raises the"
+            " limit if this issue takes more people."
         )
-    _ = holders
-    try:
-        if me and me not in work.assignees:
-            repo.issue.assign(work.number, me)
-    except ForgeError as error:
-        print(f"  Note: could not assign the issue ({error}); continuing")
+    else:
+        try:
+            if me and me not in work.assignees:
+                repo.issue.assign(work.number, me)
+        except ForgeError as error:
+            print(
+                f"  Note: could not assign the issue ({error}); others"
+                " will not see you working on it, so communicate."
+            )
 
     kind = _issue_kind(work.labels, type)
     branch = branch_name(kind, work.number, work.title)
@@ -289,9 +327,19 @@ def issue_start(
 
     if worktree:
         path = worktree_path(root, work.number, work.title)
+        if path.is_dir() or git.local_branch_exists(branch):
+            # Re-running start is its recovery: the work is already
+            # open, so say where and open it again.
+            print(f"  already started: {branch} at {path}")
+            if agent:
+                _launch_agent(
+                    agent, path, work.number, work.title, work.body, branch, prompt
+                )
+                return
+            _open_work(path, open)
+            return
         path.parent.mkdir(parents=True, exist_ok=True)
-        added = git._run("worktree", "add", str(path), "-b", branch, "origin/main")
-        _ = added
+        git._run("worktree", "add", str(path), "-b", branch, "origin/main")
         print(f"  worktree {path} on {branch}")
         provision = subprocess.run(
             ["uv", "run", "fm", "sync"],
@@ -325,6 +373,10 @@ def issue_start(
                 f"  Or work in a linked worktree:       fm issue.start"
                 f" {work.number}"
             )
+    if git.local_branch_exists(branch):
+        git.switch(branch)
+        print(f"  already started: back on {branch}")
+        return
     git._run("checkout", "-b", branch, "origin/main")
     print(f"  on {branch}")
 
@@ -371,7 +423,12 @@ def _launch_agent(
 def _open_work(path: Path, how: str) -> None:
     mode = how or ("code" if sys.stdout.isatty() else "none")
     if mode == "code":
-        subprocess.run(["code", str(path)], check=False)
+        try:
+            subprocess.run(["code", str(path)], check=False)
+        except OSError:
+            # Opening an editor is a convenience, never the work: a
+            # machine without `code` gets the path instead.
+            print(f"  `code` is not on PATH; the worktree is at {path}")
     elif mode == "shell":
         from livery.workshop._shell import launch_shell
 
@@ -418,7 +475,7 @@ def issue_stop(
     state = work.state if work is not None else "unknown"
     remote_exists = branch in git.remote_branches("")
     only_local = (
-        _only_local_work(git, branch) if git.local_branch_exists(branch) else ""
+        _only_local_work(git, root, branch) if git.local_branch_exists(branch) else ""
     )
     if only_local and not discard:
         if state == "closed":
@@ -448,30 +505,25 @@ def issue_stop(
         except ForgeError as error:
             print(f"  Note: could not unassign ({error}); continuing")
 
-    _remove_local(root, git, branch)
-    print(f"  stopped: local state for #{number} is gone; the remote branch stays")
+    removed = _remove_local(root, git, branch)
+    what = " and ".join(removed) if removed else "nothing local to remove"
+    print(f"  stopped #{number}: {what}; the remote branch stays")
 
 
-def _remove_local(root: Path, git: GitOps, branch: str) -> None:
-    """Remove the branch's worktree and the local branch itself."""
-    listing = git._run("worktree", "list", "--porcelain")
-    tree: str = ""
-    current: dict[str, str] = {}
-    for line in [*listing.splitlines(), ""]:
-        if not line.strip():
-            if current.get("branch", "").endswith(f"refs/heads/{branch}"):
-                tree = current.get("worktree", "")
-            current = {}
-            continue
-        key, _, value = line.partition(" ")
-        current[key] = value
-    if tree and Path(tree).resolve() != root.resolve():
+def _remove_local(root: Path, git: GitOps, branch: str) -> list[str]:
+    """Remove the branch's worktree and local branch; what was removed."""
+    removed: list[str] = []
+    tree = _worktree_for(git, root, branch)
+    if tree:
         git._run("worktree", "remove", "--force", tree)
         print(f"  removed worktree {tree}")
+        removed.append("the worktree")
     elif git.current_branch() == branch:
         git.switch("main")
     if git.local_branch_exists(branch):
         git.delete_local_branch(branch)
+        removed.append("the local branch")
+    return removed
 
 
 @issue.task(name="close", interactive=True)
@@ -512,7 +564,18 @@ def issue_close(
     git.fetch()
     branch = _find_branch(git, number)
     tip = git.any_head(branch) if branch else ""
+
+    # The destruction rule runs before anything is torn down: the
+    # teardown deletes branches, and a refusal that checks afterwards
+    # would be checking a branch that is already gone.
+    only_local = (
+        _only_local_work(git, root, branch)
+        if branch and git.local_branch_exists(branch)
+        else ""
+    )
+
     merged = False
+    live = None
     if branch:
         try:
             live = repo.pr.find_by_head(branch, state="all")
@@ -520,28 +583,24 @@ def issue_close(
             live = None
         if live is not None and live.merged:
             merged = True
-        elif live is not None and live.state == "open":
-            from livery.workshop._submit import teardown_branch
-
-            print(f"  tearing down PR #{live.number} through the shared teardown")
-            teardown_branch(repo, git, branch, "main")
 
     if merged:
         if reason:
             print("  Note: the PR merged, so the supplied reason does not apply")
         if git.local_branch_exists(branch):
-            _remove_local(root, git, branch)
+            if only_local and not discard:
+                print(
+                    f"  kept {branch}: it holds {only_local}; pass --discard"
+                    " to remove it"
+                )
+            else:
+                _remove_local(root, git, branch)
         if work.state == "open":
             repo.issue.comment(number, "closed: resolved by the merged PR")
             repo.issue.close(number)
         print("  issue already resolved, nothing left to do")
         return
 
-    only_local = (
-        _only_local_work(git, branch)
-        if branch and git.local_branch_exists(branch)
-        else ""
-    )
     if only_local and not discard and not keep_branch:
         fail(
             f"the branch for #{number} holds {only_local} that exists"
@@ -550,10 +609,16 @@ def issue_close(
             " work with the issue."
         )
 
+    if live is not None and live.state == "open":
+        from livery.workshop._submit import teardown_branch
+
+        print(f"  ending PR #{live.number} through the shared teardown")
+        teardown_branch(repo, git, branch, "main", keep_branches=keep_branch)
+
     removed_sha = ""
     if branch and not keep_branch:
-        # The tip was read before the teardown could delete the
-        # branch: the close comment records where the work got to.
+        # The tip was read before the teardown deleted the branch:
+        # the close comment records where the work got to.
         removed_sha = tip
         _remove_local(root, git, branch)
         if branch in git.remote_branches(""):

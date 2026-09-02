@@ -1019,9 +1019,10 @@ class _GitlabIssues:
         """Add *assignee* to the issue's assignees.
 
         GitLab's PUT replaces the whole list, so the add is a
-        read-modify-write over the current assignee ids. The free
-        tier keeps one assignee and silently drops the rest; the
-        caller's policy limit is what makes that honest.
+        read-modify-write over the current assignee ids: two adds
+        racing can lose one. The free tier keeps one assignee and
+        silently drops the rest; the caller's policy limit is what
+        makes both honest.
         """
         if self.get(number) is None:
             raise ForgeError(f"no issue {number} at {self._base}", status=404)

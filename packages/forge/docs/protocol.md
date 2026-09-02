@@ -136,9 +136,11 @@ the waiting caller.
 | `get(number)` | body included, or None |
 | `list(*, state)` | issues only, never pull requests |
 | `search(text, *, state, labels)` | matches title and body; the deduplication probe |
-| `assign(number, assignee)` | replaces the assignee list |
+| `assign(number, assignee)` | adds to the assignees; a colleague's stays. How many an issue may carry is the caller's policy |
+| `unassign(number)` | removes only the authenticated user; not being assigned is a no-op |
 | `assigned_to_me()` | the open issues assigned to the token's user |
 | `comment(number, body)` | evidence the body cannot carry |
+| `close(number)` | closes; closing a closed issue is a no-op, so re-running is the recovery |
 
 ### `Registry`: one method, apart from the forge
 

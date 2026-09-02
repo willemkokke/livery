@@ -29,9 +29,12 @@ fabricated shape, the uv-exact check missing, and the retired
 ruff_fix.py still shipped by sync, all closed the same day in a
 follow-up PR. Phase 7b shipped 2026-09-02 (PR #78; one CI red, a
 zsh-less runner resolving a real binary a test should have stubbed,
-fixed as a ride-along commit); its audit next. `fm submit --force`
-(leased) landed between, completing the pre-bash rebase teaching.
-Subsumes
+fixed as a ride-along commit). `fm submit --force` (leased) landed
+between, completing the pre-bash rebase teaching. The 7b audit
+found two destruction-rule holes (close tore down before the
+--discard check could see the branch; stop could not see a
+worktree's uncommitted changes from the main checkout), closed the
+same day in a follow-up PR. Phase 8's cut next. Subsumes
 `notes/20260831-workshop-plan.md`,
 whose phases 1-10 shipped and whose remaining phases are carried
 forward here renumbered. The loop: one PR per phase, merged when
@@ -704,17 +707,20 @@ Deliverables:
   authenticated user; per backend plus the fake, with a recorded
   conformance scenario.
 - The assignee limit is workspace policy: a config value, default
-  1, enforced by the workshop on every forge including ones whose
-  native limit is higher. `issue.start` refuses at the limit naming
-  the holders. `configure` validating the limit against the forge
-  (free GitLab caps at one) lands with phase 8's governance
-  configure.
+  1, honoured by the workshop on every forge including ones whose
+  native limit is higher. At the limit `issue.start` warns naming
+  the holders and continues: assignment documents who is working,
+  it never gates the work. `configure` validating the limit against
+  the forge (free GitLab caps at one) lands with phase 8's
+  governance configure.
 - The `issue` group; bare `fm issue` lists open issues:
   - `issue.create <title> [--type]`: file an issue.
   - `issue.list`, `issue.search <text>`: reads, never a side
     effect.
   - `issue.start <issue>`: number or quoted title (title creates
-    first). Assign within the limit; branch
+    first). Assignment is documentation, never a gate: at the limit
+    (or on a refused write) the start proceeds with a warning that
+    others will not see you on the issue, so communicate; branch
     `<kind>/<number>-<slug>` always from a fetched
     `origin/<base>`. A worktree is the default, named
     `<number>-<slug>` under the runner's home
@@ -755,7 +761,7 @@ Edge table:
 
 | Edge | Guard |
 | --- | --- |
-| Issue at the assignee limit | start refuses naming the holders |
+| Issue at the assignee limit | start warns naming the holders, and proceeds |
 | Local-only work under stop or close | `--discard` required, taught per situation |
 | Remote branch gone while the issue is open | refusal explains the exceptional state |
 | close races a merging PR | disarm first; merged degrades to "already resolved" |
@@ -765,7 +771,7 @@ Edge table:
 Acceptance:
 
 - The forced refusals first: each edge-table row's test.
-- On the fake: start-at-limit refusal, stop with an unpushed delta
+- On the fake: the start-at-limit warning, stop with an unpushed delta
   refusing then passing with `--discard`, close recording the sha
   and the merged-PR race degrading cleanly.
 - A live conformance recording of assign/unassign on all three
@@ -1256,6 +1262,29 @@ not. Gates 0.1.0 together with phases 1-8.
   ships as layer content (one source, materialised by sync) and
   the retired ruff_fix.py is gone; the RST roles left in published
   docstrings are swept.
+- 2026-09-02, assignment is documentation (Willem): not being able
+  to assign yourself is never a refusal, only a warning that others
+  will not see you working on the issue until something lands, so
+  communicate. The limit caps what the workshop writes, never
+  whether the work starts. Refines the assignees-are-a-policy-limit
+  ruling; issue.start is idempotent end to end (an existing branch
+  and worktree are reused and reopened).
+- 2026-09-02, footman 0.49 at the phase boundary (Willem): migrate
+  as its own PR when the current phase's work lands, using as much
+  of the new surface as fits: the `[builtins]` table and
+  `footman.builtin` entry point for livery-workshop, the `expose=`
+  audit, `fm self.*`, and the new location accessors.
+- 2026-09-02, the phase 7b audit close (audit finding, no ruling
+  needed): the destruction rule runs before any teardown, so a
+  refusal checks a branch that still exists; the shared teardown
+  gains keep_branches (the PR ends, both branches stay) so
+  --keep-branch holds with an open PR; only-local looks for dirt
+  where the branch actually lives, the linked worktree included;
+  a merged close keeps an only-local delta without --discard
+  instead of destroying it; start's re-run resumes instead of
+  erroring; the fail-opens, the provision note, the offline
+  completion, the missing editor, and the pwsh plan each gained a
+  forcing test; the forge issue docs state the add semantics.
 - 2026-09-02, submit --force with a lease (Willem): the pre-bash
   push guard's own remedy (rebase onto the base, push) dead-ended
   without it, and a needed raw-git exception marks a missing verb.

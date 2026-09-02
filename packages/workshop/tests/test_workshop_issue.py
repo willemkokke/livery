@@ -92,18 +92,24 @@ def test_the_worktree_lives_under_the_runners_home(
     assert path == tmp_path / "h" / "worktrees" / "repo" / "9-fix-it-now"
 
 
-def test_start_refuses_at_the_assignee_limit_naming_the_holders(
+def test_start_at_the_limit_warns_and_continues(
     rig: tuple[Path, FakeForge, GitOps],
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
-    _root, fake, _git_seam = rig
+    # Assignment is documentation, not a gate: at the limit the work
+    # still starts; only the listing is lost, and the warning says
+    # to communicate.
+    _root, fake, git = rig
     repo = fake.repository("willemkokke", "livery")
     created = repo.issue.create("held work")
     repo.issue.assign(created.number, "colleague")
-    with pytest.raises(_FAILURES) as caught:
-        issue_start(str(created.number), worktree=False)
-    message = str(caught.value)
-    assert "colleague" in message
-    assert "[issues] assignees" in message and "livery.toml" in message
+    issue_start(str(created.number), worktree=False)
+    out = capsys.readouterr().out
+    assert "Warning" in out and "colleague" in out
+    assert "[issues] assignees" in out and "livery.toml" in out
+    assert git.current_branch().startswith(f"feat/{created.number}-")
+    live = repo.issue.get(created.number)
+    assert live is not None and live.assignees == ("colleague",)
 
 
 def test_start_refuses_a_missing_number_and_a_bad_type(
@@ -290,7 +296,15 @@ def test_close_tears_down_the_open_pr_and_records_the_sha(
     repo.pr.open(branch, "main", "feat: submitted work")
     torn: list[str] = []
 
-    def _teardown(_repo: object, _git: GitOps, target: str, _base: str) -> None:
+    def _teardown(
+        _repo: object,
+        _git: GitOps,
+        target: str,
+        _base: str,
+        *,
+        keep_branches: bool = False,
+    ) -> None:
+        _ = keep_branches
         torn.append(target)
         repo.pr.close(1)
         _git._run("push", "origin", "--delete", target)
@@ -445,3 +459,288 @@ def test_default_kind_follows_the_shell_variable(
     assert default_kind() == "zsh"
     monkeypatch.setenv("SHELL", "/opt/fish")
     assert default_kind() == "bash"
+
+
+# --- the audit-close forcing tests ---
+
+
+def _started_in_worktree(
+    rig: tuple[Path, FakeForge, GitOps],
+    monkeypatch: pytest.MonkeyPatch,
+    title: str = "tree work",
+) -> tuple[Path, FakeForge, GitOps, int, str, Path]:
+    from types import SimpleNamespace
+
+    root, fake, git = rig
+    repo = fake.repository("willemkokke", "livery")
+    created = repo.issue.create(title)
+    monkeypatch.setattr(
+        "livery.workshop._issue_tasks.subprocess",
+        SimpleNamespace(run=lambda *a, **k: SimpleNamespace(returncode=0)),
+    )
+    issue_start(str(created.number))
+    path = worktree_path(root, created.number, title)
+    branch = f"feat/{created.number}-{'-'.join(title.split())}"
+    return root, fake, git, created.number, branch, path
+
+
+def test_close_refuses_before_any_teardown_when_work_is_only_local(
+    rig: tuple[Path, FakeForge, GitOps],
+) -> None:
+    # The ordering hole the audit found: the refusal must fire while
+    # the PR is still open and the branch still exists, never after a
+    # teardown already destroyed both.
+    root, fake, git, number, branch = _started(rig)
+    repo = fake.repository("willemkokke", "livery")
+    (root / "pushed.txt").write_text("p\n")
+    git.commit_all("feat: pushed part")
+    _git(root, "push", "origin", branch)
+    fake.push("willemkokke", "livery", branch, sha=git.head_sha())
+    repo.pr.open(branch, "main", "feat: pushed part")
+    (root / "unpushed.txt").write_text("u\n")
+    git.commit_all("feat: the unpushed delta")
+    with pytest.raises(_FAILURES) as caught:
+        issue_close(str(number), reason="wontfix")
+    assert "--discard" in str(caught.value)
+    live = repo.pr.get(1)
+    assert live is not None and live.state == "open"  # nothing torn down
+    assert git.local_branch_exists(branch)
+
+
+def test_close_keep_branch_ends_the_pr_and_keeps_both_branches(
+    rig: tuple[Path, FakeForge, GitOps],
+) -> None:
+    root, fake, git, number, branch = _started(rig)
+    repo = fake.repository("willemkokke", "livery")
+    (root / "work.txt").write_text("w\n")
+    git.commit_all("feat: kept work")
+    _git(root, "push", "origin", branch)
+    fake.push("willemkokke", "livery", branch, sha=git.head_sha())
+    repo.pr.open(branch, "main", "feat: kept work")
+    issue_close(str(number), reason="stale", keep_branch=True)
+    live = repo.pr.get(1)
+    assert live is not None and live.state == "closed" and not live.merged
+    assert git.local_branch_exists(branch)
+    remote = subprocess.run(
+        ["git", "ls-remote", "--heads", "origin", branch],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert branch in remote
+
+
+def test_close_on_merged_keeps_an_only_local_delta_without_discard(
+    rig: tuple[Path, FakeForge, GitOps], capsys: pytest.CaptureFixture[str]
+) -> None:
+    root, fake, git, number, branch = _started(rig)
+    repo = fake.repository("willemkokke", "livery")
+    (root / "work.txt").write_text("w\n")
+    git.commit_all("feat: landed work")
+    _git(root, "push", "origin", branch)
+    tip = git.head_sha()
+    fake.push("willemkokke", "livery", branch, sha=tip)
+    repo.pr.open(branch, "main", "feat: landed work")
+    fake.settle("willemkokke", "livery", tip)
+    repo.pr.merge_now(1, title="feat: landed work")
+    (root / "leftover.txt").write_text("l\n")
+    git.commit_all("feat: a leftover past the merge")
+    issue_close(str(number), reason="done")
+    out = capsys.readouterr().out
+    assert "kept" in out and "--discard" in out
+    assert git.local_branch_exists(branch)  # the leftover survived
+
+
+def test_stop_from_main_removes_a_clean_worktree(
+    rig: tuple[Path, FakeForge, GitOps], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _root, _fake, git, number, branch, path = _started_in_worktree(rig, monkeypatch)
+    _git(path, "push", "-u", "origin", branch)
+    issue_stop(str(number))
+    assert not path.exists()
+    assert not git.local_branch_exists(branch)
+
+
+def test_stop_sees_uncommitted_worktree_changes_from_the_main_checkout(
+    rig: tuple[Path, FakeForge, GitOps], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The audit's second hole: the dirt lives in the worktree, stop
+    # runs from the main checkout, and the refusal must still fire.
+    _root, _fake, _git_seam, number, branch, path = _started_in_worktree(
+        rig, monkeypatch
+    )
+    _git(path, "push", "-u", "origin", branch)
+    (path / "precious.txt").write_text("uncommitted\n")
+    with pytest.raises(_FAILURES) as caught:
+        issue_stop(str(number))
+    message = str(caught.value)
+    assert "worktree" in message and "--discard" in message
+    assert (path / "precious.txt").is_file()
+    issue_stop(str(number), discard=True)
+    assert not path.exists()
+
+
+def test_stop_off_an_issue_branch_teaches(
+    rig: tuple[Path, FakeForge, GitOps],
+) -> None:
+    with pytest.raises(_FAILURES) as caught:
+        issue_stop()
+    assert "not on an issue branch" in str(caught.value)
+
+
+def test_stop_with_a_remote_only_branch_reports_honestly(
+    rig: tuple[Path, FakeForge, GitOps], capsys: pytest.CaptureFixture[str]
+) -> None:
+    root, fake, git, number, branch = _started(rig)
+    _git(root, "push", "origin", branch)
+    git.switch("main")
+    git.delete_local_branch(branch)
+    issue_stop(str(number))
+    out = capsys.readouterr().out
+    assert "nothing local to remove" in out
+    live = fake.repository("willemkokke", "livery").issue.get(number)
+    assert live is not None and live.assignees == ()
+
+
+def test_start_reruns_resume_instead_of_erroring(
+    rig: tuple[Path, FakeForge, GitOps], capsys: pytest.CaptureFixture[str]
+) -> None:
+    _root, _fake, git, number, branch = _started(rig)
+    issue_start(str(number), worktree=False)  # the re-run
+    assert "already started" in capsys.readouterr().out
+    assert git.current_branch() == branch
+
+
+def test_start_with_a_title_survives_a_label_refusal(
+    rig: tuple[Path, FakeForge, GitOps],
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.forge import ForgeError
+    from livery.forge.testing import _fake as fake_module
+
+    real_create = fake_module._FakeIssues.create
+
+    def _refusing(self: object, title: str, **kwargs: object) -> object:
+        if kwargs.get("labels"):
+            raise ForgeError("labels are refused here", status=422)
+        return real_create(self, title, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(fake_module._FakeIssues, "create", _refusing)
+    issue_start("titled work", worktree=False)
+    out = capsys.readouterr().out
+    assert "filed #" in out and "without it" in out
+
+
+def test_the_fail_opens_note_and_continue(
+    rig: tuple[Path, FakeForge, GitOps],
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.forge import ForgeError
+    from livery.forge.testing import _fake as fake_module
+
+    root, fake, git = rig
+    repo = fake.repository("willemkokke", "livery")
+    created = repo.issue.create("scoped token work")
+
+    def _refuse(*_a: object, **_k: object) -> None:
+        raise ForgeError("token lacks issue-write", status=403)
+
+    # assign fail-open: the branch is still cut.
+    monkeypatch.setattr(fake_module._FakeIssues, "assign", _refuse)
+    issue_start(str(created.number), worktree=False)
+    out = capsys.readouterr().out
+    assert "could not assign" in out
+    assert git.current_branch().startswith(f"feat/{created.number}-")
+    # unassign fail-open: the local cleanup still happens.
+    _git(root, "push", "origin", git.current_branch())
+    monkeypatch.setattr(fake_module._FakeIssues, "unassign", _refuse)
+    issue_stop(str(created.number))
+    out = capsys.readouterr().out
+    assert "could not unassign" in out
+    assert git.current_branch() == "main"
+
+
+def test_the_provision_failure_is_a_note_not_a_refusal(
+    rig: tuple[Path, FakeForge, GitOps],
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    root, fake, _git = rig
+    repo = fake.repository("willemkokke", "livery")
+    created = repo.issue.create("cold tree")
+    monkeypatch.setattr(
+        "livery.workshop._issue_tasks.subprocess",
+        SimpleNamespace(run=lambda *a, **k: SimpleNamespace(returncode=1)),
+    )
+    issue_start(str(created.number))
+    out = capsys.readouterr().out
+    assert "fm sync` in the worktree failed" in out
+    assert worktree_path(root, created.number, "cold tree").is_dir()
+
+
+def test_completion_offline_costs_the_suggestions_never_the_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.workshop._issue_tasks import _open_numbers
+
+    def _broken() -> object:
+        raise RuntimeError("offline")
+
+    monkeypatch.setattr("livery.workshop._layers.workspace_root", _broken)
+    assert _open_numbers() == []
+
+
+def test_open_code_missing_binary_is_a_note(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    from livery.workshop._issue_tasks import _open_work
+
+    def _missing(*_a: object, **_k: object) -> object:
+        raise FileNotFoundError("code")
+
+    monkeypatch.setattr(
+        "livery.workshop._issue_tasks.subprocess", SimpleNamespace(run=_missing)
+    )
+    _open_work(tmp_path, "code")
+    assert "not on PATH" in capsys.readouterr().out
+
+
+def test_the_agent_not_installed_teaching(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._issue_tasks import _launch_agent
+
+    monkeypatch.setattr("livery.workshop._issue_tasks.os.chdir", lambda _p: None)
+
+    def _no_exec(*_a: object) -> None:
+        raise OSError("not found")
+
+    monkeypatch.setattr("livery.workshop._issue_tasks.os.execvp", _no_exec)
+    with pytest.raises(_FAILURES) as caught:
+        _launch_agent("claude", tmp_path, 1, "t", "b", "feat/1-t", "")
+    assert "not installed" in str(caught.value)
+
+
+def test_the_pwsh_plan_enters_through_invoke_expression(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "livery.workshop._shell.shutil.which", lambda _k: "/usr/bin/pwsh"
+    )
+    hostile = tmp_path / "odd'name"
+    hostile.mkdir()
+    plan = shell_launch_plan("pwsh", root=hostile, tmp_dir=tmp_path)
+    command = plan.argv[-1]
+    assert "Invoke-Expression" in command and "env.emit pwsh" in command
+    # The single quote is doubled, PowerShell's own splice.
+    assert "odd''name" in command
+    assert plan.files == {} and plan.env == {}
