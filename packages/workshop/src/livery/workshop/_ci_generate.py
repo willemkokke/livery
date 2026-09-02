@@ -105,10 +105,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: {CHECKOUT}
+        with:
+          # check-title compares against origin/main, which a shallow
+          # checkout does not have.
+          fetch-depth: 0
       - uses: {SETUP_UV}
-      - run: uv run fm workflow.release.check-title --title "$TITLE"
+      - name: Sync (locked)
+        run: uv sync --locked
+      - run: uv run --no-sync fm workflow.release.check-title --title "$TITLE"
         env:
-          TITLE: ${{ github.event.pull_request.title }}
+          TITLE: ${{{{ github.event.pull_request.title }}}}
 """
 
 
@@ -226,13 +232,22 @@ jobs:
         run: test "${{{{ needs.check.result }}}}" = "success"
   release-title:
     if: startsWith(github.head_ref, 'workflow/release/')
-    runs-on: ubuntu-latest
+    runs-on: {first}
     steps:
-      - uses: {CHECKOUT}
-      - uses: {SETUP_UV}
-      - run: uv run fm workflow.release.check-title --title "$TITLE"
+      - uses: actions/checkout@v4
+        with:
+          # check-title compares against origin/main, which a shallow
+          # checkout does not have.
+          fetch-depth: 0
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Sync (locked)
+        run: $HOME/.local/bin/uv sync --locked
+      - run: >-
+          $HOME/.local/bin/uv run --no-sync
+          fm workflow.release.check-title --title "$TITLE"
         env:
-          TITLE: ${{ github.event.pull_request.title }}
+          TITLE: ${{{{ github.event.pull_request.title }}}}
 """
 
 
@@ -349,15 +364,21 @@ jobs:
     steps:
       - uses: {CHECKOUT}
       - uses: {SETUP_UV}
-      - run: uv run fm workflow.configure
+      - name: Sync (locked)
+        run: uv sync --locked
+      - run: uv run --no-sync fm workflow.configure
         env:
           GITHUB_ADMIN_TOKEN: ${{{{ secrets.LIVERY_ADMIN_TOKEN }}}}
 """
 
 
 def _gitea_governance(answers: dict[str, Any]) -> str:
-    """Gitea's spelling of the same path-filtered apply job."""
-    del answers
+    """Gitea's spelling of the same path-filtered apply job.
+
+    act_runner host mode, like the gate: no setup actions, uv from
+    its installer, on the configured runner label.
+    """
+    first = next(iter(answers.get("runners", ["ubuntu-latest"])))
     return f"""name: governance
 on:
   push:
@@ -368,19 +389,26 @@ on:
       - {_CODEOWNERS_PATH["gitea"]}
 jobs:
   apply:
-    runs-on: ubuntu-latest
+    runs-on: {first}
     steps:
-      - uses: {CHECKOUT}
-      - uses: {SETUP_UV}
-      - run: uv run fm workflow.configure
+      - uses: actions/checkout@v4
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Sync (locked)
+        run: $HOME/.local/bin/uv sync --locked
+      - run: $HOME/.local/bin/uv run --no-sync fm workflow.configure
         env:
           GITEA_ADMIN_TOKEN: ${{{{ secrets.LIVERY_ADMIN_TOKEN }}}}
 """
 
 
-_GITLAB_GOVERNANCE = f"""
+def _gitlab_governance(answers: dict[str, Any]) -> str:
+    """GitLab's spelling: a pipeline job on the same pinned image."""
+    python = next(iter(answers.get("python_versions", ["3.11"])))
+    return f"""
 governance-apply:
   stage: release
+  image: ghcr.io/astral-sh/uv:python{python}-bookworm
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       changes:
@@ -388,7 +416,8 @@ governance-apply:
         - packages/*/livery.toml
         - {_CODEOWNERS_PATH["gitlab"]}
   script:
-    - uv run fm workflow.configure
+    - uv sync --locked
+    - uv run --no-sync fm workflow.configure
   variables:
     GITLAB_ADMIN_TOKEN: $LIVERY_ADMIN_TOKEN
 """
@@ -409,7 +438,7 @@ def generate(answers: dict[str, Any]) -> dict[str, str]:
             ".gitea/workflows/release.yml": _gitea_release(answers),
             ".gitea/workflows/governance.yml": _gitea_governance(answers),
         }
-    return {".gitlab-ci.yml": _gitlab_pipeline(answers) + _GITLAB_GOVERNANCE}
+    return {".gitlab-ci.yml": _gitlab_pipeline(answers) + _gitlab_governance(answers)}
 
 
 def generated_files(root: Path, answers: dict[str, Any]) -> dict[Path, str]:
