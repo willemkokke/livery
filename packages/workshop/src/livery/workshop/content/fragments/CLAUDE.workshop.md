@@ -1,4 +1,4 @@
-# The livery workshop's rules
+# The workshop's rules
 
 The base layer's fragment: only the rules the workshop itself
 enforces. A repository's own facts (identity, intent, layout beyond
@@ -96,8 +96,8 @@ This is the final form; there are no typing clean-up passes later.
 
 ## Workspace shape
 
-- `packages/<name>/`: one package, discovered by its `livery.toml`.
+- `packages/<name>/`: one package, discovered by its `workshop.toml`.
 - `packages/<name>/docs/`: plain markdown, the seed of the rendered
   per-package site. Write it as that site, never as scratch.
 - `tasks.py`: `plugin("livery.workshop")`, the whole dev loop.
-- `livery.toml`: the workspace contract (layers, forge, runners).
+- `workshop.toml`: the workspace contract (layers, forge, runners).

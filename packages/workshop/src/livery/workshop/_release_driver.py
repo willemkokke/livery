@@ -109,7 +109,7 @@ def bump_set_floors(root: Path, plans: tuple[MemberPlan, ...]) -> list[str]:
     dirs = {plan.package.name: plan.package.directory for plan in plans}
     changed: list[str] = []
     for plan in plans:
-        for home in ("pyproject.toml", "livery.toml"):
+        for home in ("pyproject.toml", "workshop.toml"):
             path = plan.package.directory / home
             if not path.is_file():
                 continue
@@ -148,7 +148,7 @@ def rollback_prepare(root: Path, members: tuple[Package, ...]) -> None:
         base = package.directory.relative_to(root)
         paths.extend(
             str(base / name)
-            for name in ("CHANGELOG.md", "pyproject.toml", "livery.toml")
+            for name in ("CHANGELOG.md", "pyproject.toml", "workshop.toml")
         )
         src = package.directory / "src"
         if src.is_dir():
@@ -457,7 +457,7 @@ def workflow_release(
 
     root = workspace_root()
     if root is None:
-        fail("no workspace: no livery.toml above the working directory")
+        fail("no workspace: no workshop.toml above the working directory")
     if not paths:
         fail(
             f"name the set: `{footman.prog()} workflow.release forge` (one package) or"
@@ -506,7 +506,7 @@ def workflow_release_check_title(
 
     root = workspace_root()
     if root is None:
-        fail("no workspace: no livery.toml above the working directory")
+        fail("no workspace: no workshop.toml above the working directory")
     git = GitOps(root)
     branch = git.current_branch()
     stamped: list[str] = []
@@ -547,7 +547,7 @@ def workflow_release_publish(
 
     root = workspace_root()
     if root is None:
-        fail("no workspace: no livery.toml above the working directory")
+        fail("no workspace: no workshop.toml above the working directory")
     git = GitOps(root)
     registry = SimpleRegistry(
         os.environ.get("PYTHON_REGISTRY_URL", "https://pypi.org/simple")

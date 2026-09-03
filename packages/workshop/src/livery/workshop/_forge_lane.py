@@ -39,12 +39,12 @@ def remote_repo_name(root: Path) -> str:
 
 def this_forge(root: Path) -> Forge:
     """The workspace's forge, per the contract's ``[forge]`` table."""
-    contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
+    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
     forge_table = contract.get("forge") or {}
     kind = str(forge_table.get("kind", ""))
     url = str(forge_table.get("url", ""))
     if not kind:
-        fail("livery.toml [forge] must carry kind and owner")
+        fail("workshop.toml [forge] must carry kind and owner")
     if kind == "github":
         return GithubForge.connect(url=url)
     if kind == "gitea":
@@ -74,7 +74,7 @@ def admin_forge(root: Path) -> tuple[Forge, str]:
     """
     import os
 
-    contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
+    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
     table = contract.get("forge") or {}
     kind = str(table.get("kind", ""))
     url = str(table.get("url", ""))
@@ -91,18 +91,18 @@ def admin_forge(root: Path) -> tuple[Forge, str]:
 
 def admin_repository(root: Path) -> tuple[Repository, str]:
     """The repository bound to the admin ladder's forge."""
-    contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
+    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
     owner = str((contract.get("forge") or {}).get("owner", ""))
     if not owner:
-        fail("livery.toml [forge] must carry kind and owner")
+        fail("workshop.toml [forge] must carry kind and owner")
     forge, var = admin_forge(root)
     return forge.repository(owner, remote_repo_name(root)), var
 
 
 def this_repository(root: Path) -> Repository:
     """The workspace's repository, per the contract and the remote."""
-    contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
+    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
     owner = str((contract.get("forge") or {}).get("owner", ""))
     if not owner:
-        fail("livery.toml [forge] must carry kind and owner")
+        fail("workshop.toml [forge] must carry kind and owner")
     return this_forge(root).repository(owner, remote_repo_name(root))

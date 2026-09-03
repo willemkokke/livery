@@ -32,7 +32,7 @@ workflow = group("workflow", help="The reserved-branch lifecycles")
 def _root() -> Path:
     root = workspace_root()
     if root is None:
-        fail("no workspace: no livery.toml above the working directory")
+        fail("no workspace: no workshop.toml above the working directory")
     return root
 
 
@@ -200,7 +200,7 @@ def contract_config(root: Path) -> RepoConfig:
 
     from livery.workshop._governance import governance_config
 
-    contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
+    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
     ci = contract.get("ci") or {}
     context = str(ci.get("required_context") or "gate")
     approvals = governance_config(root)
@@ -235,7 +235,7 @@ def workflow_configure() -> None:
     root = _root()
     repo, admin_var = admin_repository(root)
     forge, _ = admin_forge(root)
-    contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
+    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
     owner = str((contract.get("forge") or {}).get("owner", ""))
     missing = unknown_owners(root, forge, owner)
     if missing:
@@ -328,8 +328,8 @@ def _reconcile_configuration(git: GitOps, head_sha: str) -> None:
                 "--name-only",
                 f"origin/main...{head_sha}",
                 "--",
-                "livery.toml",
-                "packages/*/livery.toml",
+                "workshop.toml",
+                "packages/*/workshop.toml",
                 *[p for p in governance_paths(_root()) if "*" not in p],
             ).strip()
         except Exception:

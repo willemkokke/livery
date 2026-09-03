@@ -38,10 +38,10 @@ def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[FakeForge, Pat
     _git(tmp_path, "clone", str(origin), "ws")
     _git(root, "config", "user.email", "t@livery.local")
     _git(root, "config", "user.name", "T")
-    (root / "livery.toml").write_text("[workspace]\n")
+    (root / "workshop.toml").write_text("[workspace]\n")
     package = root / "packages" / "thing"
     (package / "src" / "livery" / "thing").mkdir(parents=True)
-    (package / "livery.toml").write_text('type = "python"\nname = "livery-thing"\n')
+    (package / "workshop.toml").write_text('type = "python"\nname = "livery-thing"\n')
     (package / "pyproject.toml").write_text(
         '[project]\nname = "livery-thing"\ndependencies = []\n'
     )
@@ -108,7 +108,7 @@ def test_graph_affected_prints_the_reach(
     _graph.graph_affected()
     out = capsys.readouterr().out
     assert "packages/thing (livery-thing)" in out
-    (root / "livery.toml").write_text("[workspace]\n# root\n")
+    (root / "workshop.toml").write_text("[workspace]\n# root\n")
     _graph.graph_affected()
     out = capsys.readouterr().out
     assert "everything" in out
@@ -265,7 +265,7 @@ def test_forge_lane_reads_the_contract_and_the_remote(
 
     connected = FakeConnectable()
     for kind in ("github", "gitea", "gitlab"):
-        (root / "livery.toml").write_text(
+        (root / "workshop.toml").write_text(
             f'[workspace]\n[forge]\nkind = "{kind}"\nowner = "acme"\n'
         )
         import livery.forge as forge
@@ -278,9 +278,9 @@ def test_forge_lane_reads_the_contract_and_the_remote(
             )
         _forge_lane.this_repository(root)
         assert connected.repositories[-1] == ("acme", "widgets")
-    (root / "livery.toml").write_text('[workspace]\n[forge]\nkind = "svn"\n')
+    (root / "workshop.toml").write_text('[workspace]\n[forge]\nkind = "svn"\n')
     with pytest.raises(_FAILURES):
         _forge_lane.this_forge(root)
-    (root / "livery.toml").write_text("[workspace]\n")
+    (root / "workshop.toml").write_text("[workspace]\n")
     with pytest.raises(_FAILURES):
         _forge_lane.this_repository(root)

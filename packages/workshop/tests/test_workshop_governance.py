@@ -36,10 +36,10 @@ def _workspace(tmp_path: Path, *, owners: bool = True) -> Path:
         if owners
         else ""
     )
-    (root / "livery.toml").write_text(
+    (root / "workshop.toml").write_text(
         f'[workspace]\n\n[forge]\nkind = "github"\nowner = "acme"\n\n{owner_block}'
     )
-    (root / "packages" / "core" / "livery.toml").write_text(
+    (root / "packages" / "core" / "workshop.toml").write_text(
         'type = "python"\nname = "livery-core"\n\n[owners]\nusers = ["bob"]\n'
     )
     (root / "packages" / "core" / "pyproject.toml").write_text(
@@ -68,10 +68,10 @@ def test_entries_guard_the_governance_files_and_qualify_teams(
     entries = governance_entries(root)
     paths = [entry.path for entry in entries]
     # Config-as-code guarded by itself: the contract and the file.
-    assert "/livery.toml" in paths
+    assert "/workshop.toml" in paths
     assert "/.github/CODEOWNERS" in paths
     assert "/packages/core/" in paths
-    guard = next(entry for entry in entries if entry.path == "/livery.toml")
+    guard = next(entry for entry in entries if entry.path == "/workshop.toml")
     assert guard.owners == ("alice", "acme/reviewers")
     assert guard.min_approvals == 2
 
@@ -81,7 +81,7 @@ def test_no_declarations_means_no_file_and_no_requirement(
 ) -> None:
     root = tmp_path / "bare"
     (root / "packages").mkdir(parents=True)
-    (root / "livery.toml").write_text(
+    (root / "workshop.toml").write_text(
         '[workspace]\n\n[forge]\nkind = "github"\nowner = "acme"\n'
     )
     assert governance_entries(root) == ()
@@ -98,8 +98,8 @@ def test_the_config_takes_the_highest_declared_count(tmp_path: Path) -> None:
     # A workspace whose declarations all sit at zero documents
     # ownership without gating: no codeowner requirement either, or
     # a forge that forbids self-approval deadlocks a solo repo.
-    (root / "livery.toml").write_text(
-        (root / "livery.toml").read_text().replace("approvals = 2", "approvals = 0")
+    (root / "workshop.toml").write_text(
+        (root / "workshop.toml").read_text().replace("approvals = 2", "approvals = 0")
     )
     config = governance_config(root)
     assert config.min_approvals == 0
@@ -153,7 +153,7 @@ def _reconcile_rig(tmp_path: Path) -> tuple[Path, GitOps]:
     _git(tmp_path, "clone", str(origin), "clone")
     _git(clone, "config", "user.email", "t@l")
     _git(clone, "config", "user.name", "T")
-    (clone / "livery.toml").write_text(
+    (clone / "workshop.toml").write_text(
         '[workspace]\n\n[forge]\nkind = "github"\nowner = "acme"\n'
     )
     (clone / "seed.txt").write_text("s\n")
@@ -204,7 +204,7 @@ def test_the_reconcile_runs_when_governance_paths_moved(
     monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: root)
     monkeypatch.chdir(root)
     _git(root, "checkout", "-b", "feat/2-gov")
-    (root / "livery.toml").write_text(
+    (root / "workshop.toml").write_text(
         '[workspace]\n\n[forge]\nkind = "github"\nowner = "acme"\n\n'
         '[owners]\nusers = ["alice"]\n'
     )
@@ -264,7 +264,7 @@ def test_awaiting_approvals_is_a_clean_stop_naming_the_reviewers(
     from livery.workshop._verdict import classify
 
     root, git = _reconcile_rig(tmp_path)
-    (root / "livery.toml").write_text(
+    (root / "workshop.toml").write_text(
         '[workspace]\n\n[forge]\nkind = "github"\nowner = "acme"\n\n'
         '[owners]\nusers = ["alice", "author"]\n'
     )
@@ -277,7 +277,7 @@ def test_awaiting_approvals_is_a_clean_stop_naming_the_reviewers(
     fake.create_repo("acme", "ws", private=True, description="t")
     repo = fake.repository("acme", "ws")
     _git(root, "checkout", "-b", "feat/1-work")
-    (root / "livery.toml").write_text(
+    (root / "workshop.toml").write_text(
         '[workspace]\n\n[forge]\nkind = "github"\nowner = "acme"\n\n'
         '[owners]\nusers = ["alice", "author"]\napprovals = 1\n'
     )

@@ -47,7 +47,7 @@ TEMPLATES_REMOTE = "git@github.com:willemkokke/workshop-templates.git"
 def _root() -> Path:
     root = workspace_root()
     if root is None:
-        fail("no workspace: no livery.toml above the working directory")
+        fail("no workspace: no workshop.toml above the working directory")
     return root
 
 

@@ -86,7 +86,7 @@ def _member(root: Path, name: str, *, floor_on: str = "") -> None:
         else ""
     )
     requirement = f'"livery-{floor_on}>=0.1.0"' if floor_on else ""
-    (directory / "livery.toml").write_text(
+    (directory / "workshop.toml").write_text(
         f'type = "python"\nname = "livery-{name}"\n{depends}'
     )
     (directory / "pyproject.toml").write_text(
@@ -109,7 +109,7 @@ def workspace(tmp_path: Path) -> tuple[FakeForge, GitOps, Path]:
     _git(tmp_path, "clone", str(origin), "ws")
     _git(root, "config", "user.email", "t@livery.local")
     _git(root, "config", "user.name", "T")
-    (root / "livery.toml").write_text("[workspace]\n")
+    (root / "workshop.toml").write_text("[workspace]\n")
     _member(root, "core")
     _member(root, "tool", floor_on="core")
     _git(root, "add", "-A")
@@ -187,9 +187,9 @@ def test_floors_rise_within_the_set_in_both_homes(
     changed = bump_set_floors(root, plans)
     tool = root / "packages" / "tool"
     assert '"livery-core>=0.3.0"' in (tool / "pyproject.toml").read_text()
-    assert 'floor = "0.3.0"' in (tool / "livery.toml").read_text()
+    assert 'floor = "0.3.0"' in (tool / "workshop.toml").read_text()
     assert sorted(changed) == [
-        "packages/tool/livery.toml",
+        "packages/tool/workshop.toml",
         "packages/tool/pyproject.toml",
     ]
 
@@ -205,7 +205,7 @@ def test_rollback_restores_exactly_what_prepare_writes(
         for path in [
             member.directory / "CHANGELOG.md",
             member.directory / "pyproject.toml",
-            member.directory / "livery.toml",
+            member.directory / "workshop.toml",
         ]
     }
     from livery.workshop._release import prepare_release

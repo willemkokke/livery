@@ -1,6 +1,6 @@
 """The quality verbs: the gate and its parts, dispatched by contract.
 
-Each verb discovers the packages by their ``livery.toml``, refuses
+Each verb discovers the packages by their ``workshop.toml``, refuses
 any type without a backend, and hands the work to the type's backend
 module. ``check`` is the whole local gate; CI runs the same command.
 """
@@ -21,7 +21,7 @@ def _packages() -> tuple[Package, ...]:
     """The workspace's packages, backends verified before anything runs."""
     root = workspace_root()
     if root is None:
-        raise ValueError("no workspace: no livery.toml above the working directory")
+        raise ValueError("no workspace: no workshop.toml above the working directory")
     packages = discover_packages(root)
     require_backends(packages)
     return packages
@@ -73,7 +73,7 @@ def _affected() -> tuple[Package, ...] | None:
 
     root = workspace_root()
     if root is None:
-        raise ValueError("no workspace: no livery.toml above the working directory")
+        raise ValueError("no workspace: no workshop.toml above the working directory")
     git = GitOps(root)
     git.fetch()
     return affected_packages(root, git)
@@ -171,7 +171,7 @@ def coverage_enforce() -> None:
     """
     root = workspace_root()
     if root is None:
-        raise ValueError("no workspace: no livery.toml above the working directory")
+        raise ValueError("no workspace: no workshop.toml above the working directory")
     _python.enforce_coverage(root, _packages())
 
 

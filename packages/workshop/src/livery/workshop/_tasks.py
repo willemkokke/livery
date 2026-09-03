@@ -48,7 +48,7 @@ def layers() -> None:
     """
     names = layer_names()
     if not names:
-        print("  no workspace: no livery.toml above the working directory")
+        print("  no workspace: no workshop.toml above the working directory")
         return
     for name in names:
         marker = " (this package)" if name == SELF else ""

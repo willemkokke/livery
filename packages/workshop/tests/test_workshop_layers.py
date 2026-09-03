@@ -27,5 +27,5 @@ def test_the_workshop_never_mounts_itself() -> None:
 
 
 def test_a_contract_without_layers_names_none(tmp_path: Path) -> None:
-    (tmp_path / "livery.toml").write_text('[forge]\nkind = "github"\n')
+    (tmp_path / "workshop.toml").write_text('[forge]\nkind = "github"\n')
     assert layer_names(tmp_path) == ()

@@ -39,7 +39,7 @@ def _instance(tmp_path: Path) -> Path:
     _git(tmp_path, "clone", str(origin), "ws")
     _git(root, "config", "user.email", "t@livery.local")
     _git(root, "config", "user.name", "T")
-    (root / "livery.toml").write_text("[workspace]\n")
+    (root / "workshop.toml").write_text("[workspace]\n")
     (root / "seed.txt").write_text("s\n")
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "chore: seed")
@@ -78,9 +78,9 @@ def test_ref_parsing_and_branch_grammar() -> None:
 
 def test_the_assignee_limit_is_workspace_policy(tmp_path: Path) -> None:
     assert assignee_limit(tmp_path) == 1  # no contract: the default
-    (tmp_path / "livery.toml").write_text("[issues]\nassignees = 3\n")
+    (tmp_path / "workshop.toml").write_text("[issues]\nassignees = 3\n")
     assert assignee_limit(tmp_path) == 3
-    (tmp_path / "livery.toml").write_text("[workspace]\n")
+    (tmp_path / "workshop.toml").write_text("[workspace]\n")
     assert assignee_limit(tmp_path) == 1
 
 
@@ -108,7 +108,7 @@ def test_start_at_the_limit_warns_and_continues(
     issue_start(str(created.number), worktree=False)
     out = capsys.readouterr().out
     assert "Warning" in out and "colleague" in out
-    assert "[issues] assignees" in out and "livery.toml" in out
+    assert "[issues] assignees" in out and "workshop.toml" in out
     assert git.current_branch().startswith(f"feat/{created.number}-")
     live = repo.issue.get(created.number)
     assert live is not None and live.assignees == ("colleague",)

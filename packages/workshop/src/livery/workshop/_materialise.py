@@ -43,7 +43,7 @@ from pathlib import Path
 
 import footman
 
-_MANIFEST = ".livery-materialised"
+_MANIFEST = ".workshop-materialised"
 """What this module *copied* into a directory: ``<hash> <name>`` lines.
 
 A manifest rather than a marker inside each entry, because the copy

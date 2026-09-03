@@ -160,7 +160,7 @@ class _Stamper:
 
 def coverage_floor(package: Package) -> float | None:
     """The committed coverage floor from the package's contract, or None."""
-    contract = tomllib.loads((package.directory / "livery.toml").read_text("utf-8"))
+    contract = tomllib.loads((package.directory / "workshop.toml").read_text("utf-8"))
     value = (contract.get("qa") or {}).get("coverage_floor")
     return float(value) if value is not None else None
 
@@ -242,7 +242,7 @@ def enforce_coverage(root: Path, packages: tuple[Package, ...]) -> None:
         fail(
             "coverage fell below the high-water marks:\n  "
             + "\n  ".join(problems)
-            + "\n  raise the code, or lower a floor deliberately in livery.toml"
+            + "\n  raise the code, or lower a floor deliberately in workshop.toml"
         )
 
 

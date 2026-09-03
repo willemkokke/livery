@@ -661,14 +661,14 @@ def test_the_interactive_picker_asks_and_silence_stops(
 def test_contract_config_reads_the_required_context(tmp_path: Path) -> None:
     from livery.workshop._workflow_tasks import contract_config
 
-    (tmp_path / "livery.toml").write_text(
+    (tmp_path / "workshop.toml").write_text(
         '[workspace]\n\n[ci]\nrequired_context = "the-gate"\n'
     )
     config = contract_config(tmp_path)
     assert config.required_contexts == ("the-gate",)
     assert config.squash_only is True
     assert config.min_approvals is None  # no owners: no requirement
-    (tmp_path / "livery.toml").write_text("[workspace]\n")
+    (tmp_path / "workshop.toml").write_text("[workspace]\n")
     assert contract_config(tmp_path).required_contexts == ("gate",)
 
 

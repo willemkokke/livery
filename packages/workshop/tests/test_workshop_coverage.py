@@ -16,7 +16,7 @@ _FAILURES = (SystemExit, Failed)
 def _package(tmp_path: Path, name: str, extra: str = "") -> Package:
     directory = tmp_path / "packages" / name
     directory.mkdir(parents=True)
-    (directory / "livery.toml").write_text(
+    (directory / "workshop.toml").write_text(
         f'type = "python"\nname = "livery-{name}"\n{extra}'
     )
     return Package(

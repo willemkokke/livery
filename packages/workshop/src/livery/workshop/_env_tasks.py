@@ -50,7 +50,7 @@ def _workspace() -> tuple[Path, Path]:
 
     root = workspace_root()
     if root is None:
-        fail("no workspace: no livery.toml above the working directory")
+        fail("no workspace: no workshop.toml above the working directory")
     return root, Path.cwd()
 
 

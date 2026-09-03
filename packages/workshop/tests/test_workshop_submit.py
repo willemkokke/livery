@@ -642,7 +642,7 @@ def test_the_lease_refuses_an_advance_this_clone_never_saw(
 
 
 def _contract(clone: Path, context: str) -> None:
-    (clone / "livery.toml").write_text(
+    (clone / "workshop.toml").write_text(
         '[workspace]\n\n[forge]\nkind = "github"\nowner = "acme"\n\n'
         f'[ci]\nrequired_context = "{context}"\n'
     )

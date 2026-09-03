@@ -1,6 +1,6 @@
 """Repository governance from the contracts: owners, the file, the config.
 
-Each package's ``livery.toml`` names who reviews it (``[owners]``
+Each package's ``workshop.toml`` names who reviews it (``[owners]``
 with ``users``, ``teams``, and ``approvals``); the root contract's
 own ``[owners]`` guard the governance declarations themselves, so
 raising a reviewer count is a reviewed merge like any change. This
@@ -50,7 +50,7 @@ def offline_forge(root: Path) -> Forge:
     """
     from livery.forge import GiteaForge, GithubForge, GitlabForge
 
-    contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
+    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
     table = contract.get("forge") or {}
     kind = str(table.get("kind", ""))
     url = str(table.get("url", ""))
@@ -66,7 +66,7 @@ def offline_forge(root: Path) -> Forge:
 def governance_entries(root: Path) -> tuple[CodeownersEntry, ...]:
     """The neutral ownership declarations, root guard first.
 
-    The root contract's owners guard the root ``livery.toml`` and
+    The root contract's owners guard the root ``workshop.toml`` and
     the rendered codeowners file itself (config-as-code guarded by
     itself); each package's owners guard its directory. A workspace
     with no owner declarations anywhere answers empty, and no file
@@ -74,7 +74,7 @@ def governance_entries(root: Path) -> tuple[CodeownersEntry, ...]:
     """
     from livery.workshop._packages import discover_packages
 
-    contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
+    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
     forge_table = contract.get("forge") or {}
     owner = str(forge_table.get("owner", ""))
     if not str(forge_table.get("kind", "")):
@@ -92,7 +92,7 @@ def governance_entries(root: Path) -> tuple[CodeownersEntry, ...]:
         guard = _qualified(root_users, root_teams)
         entries.append(
             CodeownersEntry(
-                path="/livery.toml", owners=guard, min_approvals=root_approvals
+                path="/workshop.toml", owners=guard, min_approvals=root_approvals
             )
         )
         entries.append(
@@ -102,7 +102,7 @@ def governance_entries(root: Path) -> tuple[CodeownersEntry, ...]:
         )
     if (root / "packages").is_dir():
         for package in discover_packages(root):
-            contract_file = package.directory / "livery.toml"
+            contract_file = package.directory / "workshop.toml"
             users, teams, approvals = owners_of(
                 tomllib.loads(contract_file.read_text("utf-8"))
             )
@@ -128,7 +128,7 @@ def codeowners_file(root: Path) -> Codeowners | None:
 
 def governance_paths(root: Path) -> tuple[str, ...]:
     """The paths whose change means governance may need re-applying."""
-    paths = ["livery.toml", "packages/*/livery.toml"]
+    paths = ["workshop.toml", "packages/*/workshop.toml"]
     rendered = codeowners_file(root)
     if rendered is not None:
         paths.append(rendered.path)

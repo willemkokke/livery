@@ -281,7 +281,7 @@ def sync() -> None:
 
     root = workspace_root()
     if root is None:
-        fail("no workspace: no livery.toml above the working directory")
+        fail("no workspace: no workshop.toml above the working directory")
     bring_current(root, GitOps(root), interactive=sys.stdin.isatty())
     for line in sync_workspace(root):
         print(line)
@@ -301,7 +301,7 @@ def integrate() -> None:
 
     root = workspace_root()
     if root is None:
-        fail("no workspace: no livery.toml above the working directory")
+        fail("no workspace: no workshop.toml above the working directory")
     git = GitOps(root)
     branch = git.current_branch()
     if not branch or branch == "main" or branch.startswith("workflow/"):

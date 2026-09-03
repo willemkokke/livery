@@ -23,7 +23,7 @@ def _template_instance(tmp_path: Path) -> Path:
     """A scratch workspace carrying the real template source and answers."""
     shutil.copytree(ROOT / "templates", tmp_path / "templates")
     shutil.copy(ROOT / ".copier-answers.yml", tmp_path / ".copier-answers.yml")
-    (tmp_path / "livery.toml").write_text('[workspace]\ntemplates = "templates"\n')
+    (tmp_path / "workshop.toml").write_text('[workspace]\ntemplates = "templates"\n')
     return tmp_path
 
 
@@ -34,16 +34,16 @@ def test_the_template_source_is_the_contracts_call(tmp_path: Path) -> None:
         template_source,
     )
 
-    (tmp_path / "livery.toml").write_text("[workspace]\n")
+    (tmp_path / "workshop.toml").write_text("[workspace]\n")
     assert template_source(tmp_path) == DEFAULT_TEMPLATE_SOURCE
     assert local_template_dir(tmp_path) is None  # remote: no local dir
-    (tmp_path / "livery.toml").write_text(
+    (tmp_path / "workshop.toml").write_text(
         '[workspace]\ntemplates = "my-fork-checkout"\n'
     )
     assert local_template_dir(tmp_path) is None  # declared but absent
     (tmp_path / "my-fork-checkout").mkdir()
     assert local_template_dir(tmp_path) == tmp_path / "my-fork-checkout"
-    (tmp_path / "livery.toml").write_text(
+    (tmp_path / "workshop.toml").write_text(
         '[workspace]\ntemplates = "git@example.com:me/fork.git"\n'
     )
     assert local_template_dir(tmp_path) is None
@@ -88,13 +88,13 @@ def test_package_drift_judges_only_the_managed_files(tmp_path: Path) -> None:
 def test_apply_settles_and_drift_names_the_file(tmp_path: Path) -> None:
     root = _template_instance(tmp_path)
     changed = apply_project(root)
-    assert "livery.toml" in changed and "pyproject.toml" in changed
+    assert "workshop.toml" in changed and "pyproject.toml" in changed
     assert project_drift(root) == []
     assert apply_project(root) == []  # idempotent: a clean tree changes nothing
     # The drift stays valid TOML: the drift walker itself reads the
     # contract for the template source.
-    (root / "livery.toml").write_text('[workspace]\ntemplates = "templates"\n')
-    assert project_drift(root) == ["livery.toml: differs from its render"]
+    (root / "workshop.toml").write_text('[workspace]\ntemplates = "templates"\n')
+    assert project_drift(root) == ["workshop.toml: differs from its render"]
 
 
 def _render_kind(tmp_path: Path, forge_kind: str, **extra: object) -> Path:
@@ -149,11 +149,11 @@ def test_each_forge_kind_generates_a_ci_definition_that_lints(
     assert pipeline["workflow"]["rules"]
 
     gitea = _render_kind(tmp_path, "gitea", forge_url="https://forge.example.com")
-    contract = (gitea / "livery.toml").read_text()
+    contract = (gitea / "workshop.toml").read_text()
     assert 'url = "https://forge.example.com"' in contract
     gitlab = _render_kind(tmp_path, "gitlab")
     for rendered in (github, gitea, gitlab):
-        assert 'required_context = "gate"' in (rendered / "livery.toml").read_text()
+        assert 'required_context = "gate"' in (rendered / "workshop.toml").read_text()
 
 
 def test_a_package_renders_namespace_clean(tmp_path: Path) -> None:
@@ -320,13 +320,13 @@ def test_the_remote_update_arm_brands_and_reemits(
 
     repo, instance = _instance_from_git_template(tmp_path)
     assert "uv run fm <task>" in (instance / "tasks.py").read_text()
-    contract = (instance / "livery.toml").read_text()
+    contract = (instance / "workshop.toml").read_text()
     lines = [
         f'templates = "{repo}"' if line.startswith("templates = ") else line
         for line in contract.splitlines()
     ]
     assert any(line.startswith("templates = ") for line in lines)
-    (instance / "livery.toml").write_text("\n".join(lines) + "\n")
+    (instance / "workshop.toml").write_text("\n".join(lines) + "\n")
     import subprocess
 
     subprocess.run(["git", "add", "-A"], cwd=instance, check=True)

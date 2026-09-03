@@ -175,7 +175,7 @@ def test_the_clean_heal_reships_and_lands(
 
 def test_release_verify_refuses_each_malformed_shape(tmp_path: Path) -> None:
     root = tmp_path
-    (root / "livery.toml").write_text("[workspace]\n")
+    (root / "workshop.toml").write_text("[workspace]\n")
     (root / "packages").mkdir()
     subprocess.run(["git", "init"], cwd=root, capture_output=True, check=True)
     with pytest.raises(_FAILURES) as caught:
@@ -189,7 +189,7 @@ def test_release_verify_refuses_each_malformed_shape(tmp_path: Path) -> None:
     assert "not a workspace package" in str(caught.value)
     thing = root / "packages" / "thing"
     thing.mkdir()
-    (thing / "livery.toml").write_text('type = "python"\nname = "livery-thing"\n')
+    (thing / "workshop.toml").write_text('type = "python"\nname = "livery-thing"\n')
     (thing / "pyproject.toml").write_text(
         '[project]\nname = "livery-thing"\nversion = "0.1.0"\ndependencies = []\n'
     )
@@ -203,7 +203,7 @@ def test_the_enforcement_reads_real_coverage_data(tmp_path: Path) -> None:
     # coverage data file recorded here, not a monkeypatch.
     package_dir = tmp_path / "packages" / "thing"
     (package_dir / "src").mkdir(parents=True)
-    (package_dir / "livery.toml").write_text(
+    (package_dir / "workshop.toml").write_text(
         'type = "python"\nname = "livery-thing"\n[qa]\ncoverage_floor = 50\n'
     )
     module = package_dir / "src" / "mod.py"
@@ -224,7 +224,7 @@ def test_the_enforcement_reads_real_coverage_data(tmp_path: Path) -> None:
     measured = _python.measured_coverage(tmp_path, (package,))
     assert measured["packages/thing"] > 0
     _python.enforce_coverage(tmp_path, (package,))  # above its floor
-    (package_dir / "livery.toml").write_text(
+    (package_dir / "workshop.toml").write_text(
         'type = "python"\nname = "livery-thing"\n[qa]\ncoverage_floor = 101\n'
     )
     with pytest.raises(_FAILURES):
@@ -233,7 +233,7 @@ def test_the_enforcement_reads_real_coverage_data(tmp_path: Path) -> None:
 
 def _cliff_workspace(tmp_path: Path, kind: str) -> tuple[Path, Package]:
     """A workspace whose contract names *kind*, with one package."""
-    (tmp_path / "livery.toml").write_text(f'[workspace]\n\n[forge]\nkind = "{kind}"\n')
+    (tmp_path / "workshop.toml").write_text(f'[workspace]\n\n[forge]\nkind = "{kind}"\n')
     directory = tmp_path / "packages" / "thing"
     directory.mkdir(parents=True)
     (directory / "cliff.toml").write_text("[changelog]\n")

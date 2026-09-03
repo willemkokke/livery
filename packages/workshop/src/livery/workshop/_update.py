@@ -42,7 +42,7 @@ def bump_floors(root: Path, git: GitOps, *, only: tuple[str, ...] = ()) -> list[
 
     A floor names the oldest version a dependant accepts; this raises
     it to the newest release so instances move together. Both homes
-    move in step: the ``[[depends]]`` edge in ``livery.toml`` and the
+    move in step: the ``[[depends]]`` edge in ``workshop.toml`` and the
     ``>=`` constraint in ``pyproject.toml``. *only* scopes the move
     to floors on the named distributions (``livery-forge``); empty
     moves every floor.
@@ -58,7 +58,7 @@ def bump_floors(root: Path, git: GitOps, *, only: tuple[str, ...] = ()) -> list[
             newest = released.get(edge.path, "")
             if not edge.floor or not newest or newest == edge.floor:
                 continue
-            contract = package.directory / "livery.toml"
+            contract = package.directory / "workshop.toml"
             text = contract.read_text("utf-8")
             scoped = _bump_edge_floor(text, edge.path, edge.floor, newest)
             contract.write_text(scoped, encoding="utf-8")

@@ -22,7 +22,7 @@ note.
   `livery/__init__.py`.
 - The local forge containers: `fm forge.dev.up` (Gitea and GitLab,
   seeded), shipped by livery-forge and mounted through the layers
-  list in `livery.toml`; their credentials are written to
+  list in `workshop.toml`; their credentials are written to
   `.repo.shared.env` in the runner's config directory, which the
   env cascade reads everywhere. The e2e accounts and their runbook
   are `notes/20260831-e2e-accounts-runbook.md`.

@@ -35,7 +35,7 @@ TOKEN_VARIABLE = {
 
 def _forge_kind(root: Path) -> str:
     """The workspace contract's forge kind, or empty when unstated."""
-    contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
+    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
     forge = contract.get("forge") or {}
     return str(forge.get("kind", ""))
 

@@ -19,7 +19,7 @@ owner = "{{ forge_owner }}"
 {% if owner_users or owner_teams %}# Who reviews the workspace's own governance. These owners guard
 # this contract and the rendered codeowners file, so raising a
 # reviewer count is itself a reviewed merge; each package's own
-# livery.toml declares its owners the same way.
+# workshop.toml declares its owners the same way.
 [owners]
 users = [{% for user in owner_users %}"{{ user }}"{% if not loop.last %}, {% endif %}{% endfor %}]
 teams = [{% for team in owner_teams %}"{{ team }}"{% if not loop.last %}, {% endif %}{% endfor %}]

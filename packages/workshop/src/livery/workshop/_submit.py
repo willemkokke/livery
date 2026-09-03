@@ -75,7 +75,7 @@ _MERGE_NOW_ATTEMPTS = 5
 def _root() -> Path:
     root = workspace_root()
     if root is None:
-        fail("no workspace: no livery.toml above the working directory")
+        fail("no workspace: no workshop.toml above the working directory")
     return root
 
 
@@ -84,7 +84,7 @@ def ci_automerge() -> bool:
     root = workspace_root()
     if root is None:
         return False
-    contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
+    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
     return bool((contract.get("ci") or {}).get("automerge", False))
 
 
@@ -96,9 +96,9 @@ def arming_reason(*, armed: bool, flag_given: bool) -> str:
         return "WORKSHOP_AUTOMERGE (per-user standing preference)"
     root = workspace_root()
     if root is not None:
-        contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
+        contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
         if "automerge" in (contract.get("ci") or {}):
-            return "[ci] automerge in livery.toml (committed repo policy)"
+            return "[ci] automerge in workshop.toml (committed repo policy)"
     return "the default (auto-merge is opt-in; nothing configured)"
 
 
@@ -336,7 +336,7 @@ def _push(git: GitOps, branch: str, *, force: bool) -> None:
 def _required_context_at(git: GitOps, ref: str) -> str:
     """The contract's required context at *ref*; "" when unreadable."""
     try:
-        text = git._run("show", f"{ref}:livery.toml")
+        text = git._run("show", f"{ref}:workshop.toml")
     except GitError:
         return ""
     data = tomllib.loads(text)
@@ -372,7 +372,7 @@ def _heal_context_rename(
         if root is None:
             fail(
                 "the context rename needs the workspace contract and no"
-                " livery.toml is above the working directory; run"
+                " workshop.toml is above the working directory; run"
                 f" `{footman.prog()} submit --fix` from inside the workspace"
             )
         admin_repo, admin_var = admin_repository(root)

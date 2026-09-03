@@ -18,7 +18,7 @@ owner = "willemkokke"
 # Who reviews the workspace's own governance. These owners guard
 # this contract and the rendered codeowners file, so raising a
 # reviewer count is itself a reviewed merge; each package's own
-# livery.toml declares its owners the same way.
+# workshop.toml declares its owners the same way.
 [owners]
 users = ["willemkokke"]
 teams = []

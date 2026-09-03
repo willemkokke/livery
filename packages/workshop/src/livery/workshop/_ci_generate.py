@@ -362,8 +362,8 @@ on:
   push:
     branches: [main]
     paths:
-      - livery.toml
-      - packages/*/livery.toml
+      - workshop.toml
+      - packages/*/workshop.toml
       - {_CODEOWNERS_PATH["github"]}
 jobs:
   apply:
@@ -391,8 +391,8 @@ on:
   push:
     branches: [main]
     paths:
-      - livery.toml
-      - packages/*/livery.toml
+      - workshop.toml
+      - packages/*/workshop.toml
       - {_CODEOWNERS_PATH["gitea"]}
 jobs:
   apply:
@@ -419,8 +419,8 @@ governance-apply:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       changes:
-        - livery.toml
-        - packages/*/livery.toml
+        - workshop.toml
+        - packages/*/workshop.toml
         - {_CODEOWNERS_PATH["gitlab"]}
   script:
     - uv sync --locked

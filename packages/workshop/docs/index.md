@@ -6,7 +6,7 @@ verb below arrives through that line.
 
 ## The layer model
 
-The workspace contract (`livery.toml` at the root) names the layers
+The workspace contract (`workshop.toml` at the root) names the layers
 in precedence order, and that list is the whole of discovery: a
 package installed by accident never changes a repository.
 
@@ -54,7 +54,7 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
 
 ## Coverage floors
 
-Each package's `livery.toml` may declare `[qa] coverage_floor`, the
+Each package's `workshop.toml` may declare `[qa] coverage_floor`, the
 high-water mark the gate enforces. The number that is judged is the
 CI union: every leg runs measured (each `fm` child included) and the
 aggregating job combines all platforms before enforcing, so the

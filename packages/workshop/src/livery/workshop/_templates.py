@@ -44,14 +44,14 @@ DEFAULT_TEMPLATE_SOURCE = "https://github.com/willemkokke/workshop-templates"
 def template_source(root: Path) -> str:
     """The workspace's declared template source.
 
-    ``[workspace] templates`` in ``livery.toml``: a directory relative
+    ``[workspace] templates`` in ``workshop.toml``: a directory relative
     to the root (the monorepo says ``templates``), or a git URL (a
     fork, at its own risk). Silent means the published artifact
     repository.
     """
     import tomllib
 
-    contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
+    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
     workspace = contract.get("workspace") or {}
     return str(workspace.get("templates", "")) or DEFAULT_TEMPLATE_SOURCE
 
@@ -69,7 +69,7 @@ def _root() -> Path:
     """The workspace root, or fail."""
     root = workspace_root()
     if root is None:
-        fail("no workspace: no livery.toml above the working directory")
+        fail("no workspace: no workshop.toml above the working directory")
     return root
 
 

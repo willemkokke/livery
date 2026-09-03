@@ -19,7 +19,7 @@ def _package(
 ) -> None:
     directory = root / "packages" / name
     directory.mkdir(parents=True)
-    (directory / "livery.toml").write_text(
+    (directory / "workshop.toml").write_text(
         f'type = "python"\nname = "livery-{name}"\n{contract_extra}'
     )
     deps = ", ".join(f'"{d}"' for d in dependencies)
@@ -33,7 +33,7 @@ def _forge_stub(root: Path) -> None:
     src = root / "packages" / "forge" / "src"
     src.mkdir(parents=True)
     (src / "ok.py").write_text("import json\n")
-    (root / "packages" / "forge" / "livery.toml").write_text(
+    (root / "packages" / "forge" / "workshop.toml").write_text(
         'type = "python"\nname = "livery-forge"\n'
     )
     (root / "packages" / "forge" / "pyproject.toml").write_text(
@@ -43,7 +43,7 @@ def _forge_stub(root: Path) -> None:
 
 def test_a_contractless_package_is_refused(tmp_path: Path) -> None:
     (tmp_path / "packages" / "stray").mkdir(parents=True)
-    with pytest.raises(ValueError, match=re.escape("stray: no livery.toml")):
+    with pytest.raises(ValueError, match=re.escape("stray: no workshop.toml")):
         discover_packages(tmp_path)
 
 

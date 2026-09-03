@@ -1,6 +1,6 @@
 """The layer walk: one list in the workspace contract, every channel.
 
-The root ``livery.toml`` names the layers in precedence order, the
+The root ``workshop.toml`` names the layers in precedence order, the
 workshop first and the instance implicitly last. Mounting reads that
 list and grafts each further layer's footman plugin in order, so a
 package installed by accident never changes a repository: discovery
@@ -18,14 +18,14 @@ SELF = "livery.workshop"
 
 
 def workspace_root(start: Path | None = None) -> Path | None:
-    """The nearest ancestor carrying a ``livery.toml``, or None.
+    """The nearest ancestor carrying a ``workshop.toml``, or None.
 
     The workspace contract is the marker; a checkout without one is
     not a workspace and gets no layers.
     """
     origin = (start or Path.cwd()).resolve()
     for candidate in (origin, *origin.parents):
-        if (candidate / "livery.toml").is_file():
+        if (candidate / "workshop.toml").is_file():
             return candidate
     return None
 
@@ -39,7 +39,7 @@ def layer_names(start: Path | None = None) -> tuple[str, ...]:
     root = workspace_root(start)
     if root is None:
         return ()
-    contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
+    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
     workspace = contract.get("workspace") or {}
     layers = workspace.get("layers") or []
     return tuple(str(layer) for layer in layers)

@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 def _workspace(tmp_path: Path) -> Path:
-    (tmp_path / "livery.toml").write_text('[workspace]\nlayers = ["livery.workshop"]\n')
+    (tmp_path / "workshop.toml").write_text('[workspace]\nlayers = ["livery.workshop"]\n')
     return tmp_path
 
 
