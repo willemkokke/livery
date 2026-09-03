@@ -76,9 +76,18 @@ def mount_layers(start: Path | None = None) -> tuple[str, ...]:
     from footman import plugin
 
     mounted = []
-    for layer in layer_names(start):
+    for layer, dist in layer_entries(start):
         if layer == SELF:
             continue
-        plugin(layer)
+        try:
+            plugin(layer)
+        except Exception as error:
+            message = (
+                f"layer {layer!r} did not mount: {error}\n"
+                f"  the contract lists it in [workspace] layers, so its"
+                f" distribution ({dist}) belongs in the dev group;"
+                " `uv sync` installs it"
+            )
+            raise RuntimeError(message) from error
         mounted.append(layer)
     return tuple(mounted)

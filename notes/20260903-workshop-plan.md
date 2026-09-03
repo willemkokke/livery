@@ -7,8 +7,8 @@ Subsumes
 `notes/20260901-workshop-plan.md`, whose phases 1 to 9 shipped and
 whose shipped record, movement analysis, and options registry stay
 there; its contracts are carried forward here, and its unshipped tail
-(phases 10 to 13) is carried forward renumbered 17 to 20. On approval
-the 0901 note gains its pointer line.
+(phases 10 to 13) is carried forward renumbered 17 to 20. The 0901
+note carries its pointer line.
 
 The re-plan's reason (Willem, 2026-09-03): the previous plan was
 right in content but feature-first in order. Features were landing in
