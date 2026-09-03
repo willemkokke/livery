@@ -71,16 +71,21 @@ def derive_plans(root: Path, members: tuple[Package, ...]) -> tuple[MemberPlan, 
     """Each member's next version, every member refused when unchanged.
 
     Runs before the branch is cut, from read-only state: a refusal
-    here has nothing to undo. A member whose bump equals its current
-    version has nothing unreleased, and minting a number the index
-    already has is refused with the options.
+    here has nothing to undo. A member whose bump equals its newest
+    released tag has nothing unreleased, and minting a number the
+    index already has is refused with the options. The tag is the
+    judge, never the stamped version: a stamp can land without its
+    release cutting, and judging by it would strand that release
+    (the same rule livery.workshop._release.prepare_release keeps).
     """
+    from livery.workshop._release import _last_released
+
     plans: list[MemberPlan] = []
     unchanged: list[str] = []
     for package in members:
-        current = _python.current_version(package)
+        released = _last_released(root, package)
         derived = _cliff.bumped_version(root, package)
-        if not derived or derived == current:
+        if not derived or derived == released:
             unchanged.append(package.directory.name)
             continue
         plans.append(MemberPlan(package=package, version=derived))

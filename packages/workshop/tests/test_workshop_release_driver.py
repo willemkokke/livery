@@ -513,3 +513,18 @@ def test_an_unresolvable_floor_fails_the_floor_leg_by_name(
     with pytest.raises(_FAILURES) as caught:
         _python.run_isolated_test(packages["tool"], root, resolution="lowest-direct")
     assert "isolated install" in str(caught.value)
+
+
+def test_derive_plans_judges_by_tags_not_the_stamp(
+    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The stranded shape: stamped and written, never tagged. The set
+    # must still release; only the tag is the receipt.
+    _fake, _git, root = workspace
+    packages = {p.directory.name: p for p in discover_packages(root)}
+    monkeypatch.setattr(
+        "livery.workshop._cliff.bumped_version",
+        lambda root, package: "0.9.0",
+    )
+    plans = derive_plans(root, (packages["core"],))
+    assert plans and plans[0].version == "0.9.0"
