@@ -1,15 +1,17 @@
 """{{ import_path }}'s task surface, mounted through the layers list.
 
-Register the layer's own verbs here; the workspace contract's
-``[workspace] layers`` entry is the whole of discovery. A layer that
-registers nothing contributes content only, which is legal: delete
-the example below or replace it with real verbs.
+The workspace contract's ``[workspace] layers`` entry is the whole
+of discovery, and the branded App mounts the same module. The group
+below is this layer's namespace: hang the layer's own verbs on it,
+or leave it empty while the layer ships content alone.
 """
 
-# from footman import group
-#
-# {{ project_slug }} = group("{{ project_slug }}", help="this layer's verbs")
-#
+from footman import group
+
+{{ project_slug }} = group(
+    "{{ project_slug }}", help="the {{ project_slug }} layer's verbs"
+)
+
 # @{{ project_slug }}.task(name="hello")
 # def hello() -> None:
 #     """Say which layer answered."""

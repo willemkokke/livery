@@ -619,3 +619,19 @@ def test_a_credentialled_source_never_reaches_a_rendered_byte(
         # machinery wrote must be clean.
         if path.is_file() and path.name != "workshop.toml":
             assert "sekrit" not in path.read_text(errors="ignore"), path
+
+
+def test_the_rewrite_keeps_copiers_commit_receipt(tmp_path: Path) -> None:
+    from livery.workshop._templates import _write_root_answers
+
+    root = tmp_path
+    (root / "workshop.toml").write_text(
+        '[workspace]\nlayers = ["livery.workshop"]\ntemplates = "templates"\n'
+    )
+    (root / ".copier-answers.yml").write_text(
+        "_commit: v0.0.2\n_src_path: whatever\nproject_name: x\n"
+    )
+    _write_root_answers(root, {"project_name": "x"})
+    text = (root / ".copier-answers.yml").read_text()
+    # An update cannot know the old template references without it.
+    assert "_commit: v0.0.2" in text

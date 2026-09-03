@@ -84,9 +84,10 @@ convention = "google"
 # Test bodies explain themselves by name and assertion.
 "tests/**" = ["D1"]
 "**/tests/**" = ["D1"]
-# The provenance header names the template source verbatim, and a
+# The provenance headers name the template source verbatim, and a
 # source URL or path may be long.
 "tasks.py" = ["E501"]
+"tests/test_workspace_contracts.py" = ["E501"]
 # The CI emitters carry workflow YAML as string content; its lines
 # are the generated files' lines, not prose to wrap.
 "**/_ci_generate.py" = ["E501"]
