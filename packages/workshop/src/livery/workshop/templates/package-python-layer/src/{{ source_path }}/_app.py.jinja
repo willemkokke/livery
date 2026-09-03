@@ -1,0 +1,23 @@
+"""The {{ project_slug }} App: the workshop, branded.
+
+Installing this layer's wheel puts ``{{ project_slug }}`` on PATH:
+the whole workshop surface plus this layer's own verbs, under this
+layer's name. The birth verb it carries creates children whose
+default layer stack is this App's own, which is how a home begets.
+"""
+
+from __future__ import annotations
+
+import sys
+
+from footman.app import App
+
+
+def main() -> int:
+    """Run the branded App; the exit code is the verdict."""
+    return App(
+        name="{{ project_slug }}",
+        prog="{{ project_slug }}",
+        dist="{{ package_name }}",
+        builtin=["livery.workshop", "{{ import_path }}"],
+    ).run(sys.argv[1:])

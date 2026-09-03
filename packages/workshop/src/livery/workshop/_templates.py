@@ -723,13 +723,27 @@ def _redact_answers_source(path: Path) -> None:
 
 
 def _write_root_answers(root: Path, answers: dict[str, Any]) -> None:
-    """Rewrite the root answers file, header and bookkeeping kept."""
+    """Rewrite the root answers file, header and bookkeeping kept.
+
+    copier's own receipts survive the rewrite: ``_src_path`` follows
+    the contract (display-safe), and ``_commit`` rides along
+    verbatim, because an update cannot know the old template
+    references without it.
+    """
+    path = root / _ANSWERS
+    commit = ""
+    if path.is_file():
+        raw = yaml.safe_load(path.read_text("utf-8")) or {}
+        if isinstance(raw, dict):
+            commit = str(raw.get("_commit", ""))
+    commit_line = f"_commit: {commit}\n" if commit else ""
     body = (
         "# Managed by copier: this instance's identity and template\n"
         f"# provenance. `{footman.prog()} new.package` appends to `packages`;"
         " edit other\n"
         "# values only when the workspace itself changes.\n"
+        f"{commit_line}"
         f"_src_path: {redacted_source(template_source(root))}\n"
         + yaml.safe_dump(answers, sort_keys=False, allow_unicode=True)
     )
-    write_lf(root / _ANSWERS, body)
+    write_lf(path, body)

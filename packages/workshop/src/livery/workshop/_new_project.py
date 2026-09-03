@@ -133,17 +133,34 @@ def new_project(
     if forge == "gitea" and not local and not url:
         fail("gitea has no public default server: pass --url")
 
-    root = footman.cwd() / name
+    # The process cwd on purpose, not the task context's directory:
+    # a global verb runs above any project, its context directory is
+    # wherever its tasks file lives, and "./<name>" means where the
+    # caller stands.
+    root = Path.cwd() / name
     root.mkdir(exist_ok=True)
 
-    # The contract: a birth-time seed the render never touches.
+    # The contract: a birth-time seed the render never touches. The
+    # default stack is the running App's own layers (contract 19):
+    # its builtin entry points minus footman's, the base first, so a
+    # branded App's children carry its stack and stock fm's carry
+    # the base alone.
+    # footman.BUILTIN is an import-time snapshot of the stock brand;
+    # the running App's own list lives in _paths.builtin() (a public
+    # runtime accessor is footman#536's family).
+    from footman import _paths
+
+    stack = [
+        entry for entry in _paths.builtin() if not entry.startswith("footman.")
+    ] or ["livery.workshop"]
     contract = root / "workshop.toml"
     if contract.is_file():
         print("  workshop.toml: already seeded")
     else:
+        spelled = ", ".join(f'"{entry}"' for entry in stack)
         lines = [
             "[workspace]",
-            'layers = ["livery.workshop"]',
+            f"layers = [{spelled}]",
         ]
         if templates:
             lines.append(f'templates = "{templates}"')
@@ -281,9 +298,27 @@ def new_project(
         # branch, so the birth history replaces that init commit; the
         # repository is seconds old and this checkout is its author.
         _git(root, "push", "-q", "--force", "-u", "origin", "main")
+        print("  pushed: main")
     else:
-        _git(root, "push", "-q", "-u", "origin", "main")
-    print("  pushed: main")
+        pushed = footman.run(
+            ["git", "push", "-q", "-u", "origin", "main"],
+            cwd=root,
+            nofail=True,
+            recorded=False,
+        )
+        if pushed.code == 0:
+            print("  pushed: main")
+        elif "protected branch" in f"{pushed.stdout}{pushed.stderr}":
+            # The resumed repository already governs itself: main
+            # moves through pull requests now, so local aftercare
+            # stays here and rides the next submitted branch.
+            print(
+                "  main is protected (the birth already configured it):"
+                " the local commits stay here; submit them as a pull"
+                f" request with `{footman.prog()} submit`"
+            )
+        else:
+            fail(f"git push exited {pushed.code}:\n{pushed.stdout}{pushed.stderr}")
 
     from livery.workshop._workflow_tasks import assert_configuration
 
@@ -314,13 +349,14 @@ def _add_layer(root: Path, layer: str) -> None:
     contract = root / "workshop.toml"
     text = contract.read_text("utf-8")
     if f'"{import_path}"' not in text:
-        needle = 'layers = ["livery.workshop"]'
-        if needle not in text:
+        match = re.search(r"^layers = \[(.*)\]$", text, flags=re.M)
+        if match is None:
             fail(
-                f"cannot self-host {import_path}: the contract's layers"
-                " line is not the birth seed's; add it by hand, last"
+                f"cannot self-host {import_path}: the contract has no"
+                " layers line; add it by hand, last"
             )
-        text = text.replace(needle, f'layers = ["livery.workshop", "{import_path}"]', 1)
+        appended = f'layers = [{match.group(1)}, "{import_path}"]'
+        text = text[: match.start()] + appended + text[match.end() :]
         contract.write_text(text, encoding="utf-8")
         print(f"  layers: {import_path} self-hosted, last in the stack")
     # The stack changed: re-deliver content and re-render through the

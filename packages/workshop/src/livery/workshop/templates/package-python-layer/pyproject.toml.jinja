@@ -1,8 +1,12 @@
-# Seeded from the template channel ({{ template_source_label }}, package-python kind) at
+# Seeded from the template channel ({{ template_source_label }}, package-python-layer kind) at
 # birth; this file is the workspace's own. Edit it directly:
 # the template never rewrites it.
 [project.entry-points."footman.tasks"]
 "{{ import_path }}" = "{{ import_path }}._tasks"
+
+# The branded App: the workshop surface under this layer's name.
+[project.scripts]
+{{ project_slug }} = "{{ import_path }}._app:main"
 
 [build-system]
 requires = ["uv_build>=0.11,<0.13"]
@@ -23,6 +27,9 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
     "Typing :: Typed",
 ]
+# A layer is the workshop, extended: its plugin and its App stand on
+# the base layer's wheel, which brings footman with it.
+dependencies = ["livery-workshop"]
 
 [project.urls]
 {%- set public_host = {'github': 'https://github.com', 'gitea': 'https://gitea.com', 'gitlab': 'https://gitlab.com'} %}

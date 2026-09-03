@@ -2,7 +2,7 @@
 {%- set web_root = forge_url.rstrip('/') if forge_url else public_host[forge_kind] -%}
 {%- set repo_url = web_root ~ '/' ~ forge_owner ~ '/' ~ project_name -%}
 {%- set pr_path = 'pull' if forge_kind == 'github' else ('pulls' if forge_kind == 'gitea' else '-/merge_requests') -%}
-# Rendered by the template channel ({{ template_source_label }}, package-python kind);
+# Rendered by the template channel ({{ template_source_label }}, package-python-layer kind);
 # the gate keeps it matching its render. Edit the source and
 # run `{{ runner_prog }} template.apply`; an edit here is drift.
 # How {{ package_name }}'s changelog is written.

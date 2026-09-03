@@ -52,7 +52,7 @@ def _birth_rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeForge:
         return out
 
     monkeypatch.setattr("livery.workshop._new_project._git", informed)
-    monkeypatch.setattr("footman.cwd", lambda: tmp_path)
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("livery.workshop._uv.run_uv", lambda *args, root: None)
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "gitconfig"))
     (tmp_path / "gitconfig").write_text(

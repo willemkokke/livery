@@ -5,8 +5,11 @@ Phase 10 shipped 2026-09-03 (issue #109, PR #110); phase 11
 shipped 2026-09-03 (issue #111, PR #113); phase 12 shipped
 2026-09-03 (issue #114, PR #115); phase 13 shipped 2026-09-03
 (issue #116, PR #117); phase 14 shipped 2026-09-03 (issue #118,
-PR #119); phase 15 shipped 2026-09-03 (issue #120); cut rulings and
-deviations are in the decision record.
+PR #119); phase 15 shipped 2026-09-03 (issue #120, PR #121); phase 16
+shipped 2026-09-03 (issue #122); cut rulings and deviations are in
+the decision record. Phases 10 to 16 have all landed: the 0.1.0
+gate's phase work is complete, and the release itself is the next
+act.
 Subsumes
 `notes/20260901-workshop-plan.md`, whose phases 1 to 9 shipped and
 whose shipped record, movement analysis, and options registry stay
@@ -587,6 +590,10 @@ Acceptance:
 
 ## Phase 16: the dummy descendant, the proof chain
 
+Shipped 2026-09-03 (issue #122); the chain is
+`tests/test_descendant_chain.py`, armed with the conformance
+drive's variable, green on the local Gitea on both passes.
+
 Willem's ruling (2026-09-03): create a dummy hse-derived project and
 prove the whole story on it before features return. The dummy is a
 stand-in with a throwaway brand (name at open item 1); the real hse
@@ -958,13 +965,40 @@ green so each feature ships through the proven seams:
   rendered a member from the composed artifact at the brand's tag,
   all forced in the suite.
 
+- 2026-09-03, phase 16 cut rulings and what the chain forced. The
+  branded App is real: the layer kind seeds `_app.py` (a footman
+  App with the base layer and itself as builtins) and a console
+  script, so installing a brand wheel puts the brand on PATH and
+  `<brand> new.project` begets; the default stack is the running
+  App's builtin list minus footman's own (contract 19's discovery,
+  read from footman's runtime paths because the public `BUILTIN`
+  constant is an import-time snapshot, an upstream gap in
+  footman#536's family). A layer's wheel depends on the base
+  layer's; its `_tasks` stub registers one adoptable empty group,
+  since footman refuses a task-less mount and the App needs the
+  entry point live from birth. Two receipts the chain caught:
+  the answers rewrite now carries copier's `_commit` forward,
+  because an update cannot know its old template references
+  without it; and a resumed birth against its own configured
+  repository parks the aftercare push with a teaching when main is
+  protected, which is the birth's own governance holding. The
+  artifact repository is public, livery's own stance: an instance
+  clones it with no credential, and a private one is git
+  credential machinery's business, never a contract byte's. The
+  chain runs hermetically (each workspace's own venv on PATH,
+  wheels standing in for the index) after the runner's venv leaked
+  into a child's gate; the local main checkout was six merges
+  behind with Willem's uncommitted README rewrite parked on it,
+  and `bring_current` misread that dirty-tree fast-forward refusal
+  as local commits (filed as its own issue).
+
 ## Open
 
-1. The dummy brand's name, and whether its repositories live only
-   inside the e2e suite (created and destroyed on the local
-   containers) or as standing repositories. Owner: Willem, at the
-   phase 16 cut. The suite-only shape is recommended: standing
-   repositories rot, the suite re-proves on every run.
+1. Resolved 2026-09-03 at the phase 16 cut, per the standing
+   recommendation: suite-only, created and destroyed on every run.
+   The throwaway name is `dummy` with the `brandx` layer, chosen at
+   the cut as a disposable placeholder; the real hse layer home
+   replaces the whole fixture.
 2. Resolved 2026-09-03: `new.*`; the `create.*` spelling leaves
    the workflows note in phase 10.
 3. Resolved 2026-09-03 at the phase 14 cut: the overlay is a
