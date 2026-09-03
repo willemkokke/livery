@@ -189,8 +189,8 @@ def test_floors_rise_within_the_set_in_both_homes(
     assert '"livery-core>=0.3.0"' in (tool / "pyproject.toml").read_text()
     assert 'floor = "0.3.0"' in (tool / "workshop.toml").read_text()
     assert sorted(changed) == [
-        "packages/tool/workshop.toml",
         "packages/tool/pyproject.toml",
+        "packages/tool/workshop.toml",
     ]
 
 

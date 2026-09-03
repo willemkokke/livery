@@ -3,8 +3,8 @@ on:
   push:
     branches: [main]
     paths:
-      - livery.toml
-      - packages/*/livery.toml
+      - workshop.toml
+      - packages/*/workshop.toml
       - .github/CODEOWNERS
 jobs:
   apply:

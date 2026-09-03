@@ -6,6 +6,9 @@ import os
 import subprocess
 from pathlib import Path
 
+import footman
+import pytest
+
 from livery.workshop._materialise import materialise
 from livery.workshop._sync import sync_workspace
 
@@ -13,7 +16,9 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 def _workspace(tmp_path: Path) -> Path:
-    (tmp_path / "workshop.toml").write_text('[workspace]\nlayers = ["livery.workshop"]\n')
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nlayers = ["livery.workshop"]\n'
+    )
     return tmp_path
 
 
@@ -34,6 +39,15 @@ def test_the_stub_imports_guidance_first_then_the_instance(tmp_path: Path) -> No
     assert imports[-1] == "@CLAUDE.project.md"
     for line in imports[:-1]:
         assert (root / line[1:]).is_file()
+
+
+def test_the_stub_header_names_the_running_brand(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(footman, "prog", lambda: "hse")
+    root = _workspace(tmp_path)
+    sync_workspace(root)
+    assert "`hse sync`" in (root / "CLAUDE.md").read_text()
 
 
 def test_skills_and_hooks_are_materialised(tmp_path: Path) -> None:

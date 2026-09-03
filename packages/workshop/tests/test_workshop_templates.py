@@ -238,7 +238,6 @@ def test_the_rendered_answers_never_store_the_brand(tmp_path: Path) -> None:
     assert "runner_prog" not in stored
     # The meter comment rides the brand too.
     assert "Every hse child" in (destination / "pyproject.toml").read_text()
-    assert "`hse sync`" in (destination / "CLAUDE.md").read_text()
 
 
 def test_the_shell_and_completion_lines_run_the_brand() -> None:

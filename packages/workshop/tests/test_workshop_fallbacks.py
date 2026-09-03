@@ -233,7 +233,9 @@ def test_the_enforcement_reads_real_coverage_data(tmp_path: Path) -> None:
 
 def _cliff_workspace(tmp_path: Path, kind: str) -> tuple[Path, Package]:
     """A workspace whose contract names *kind*, with one package."""
-    (tmp_path / "workshop.toml").write_text(f'[workspace]\n\n[forge]\nkind = "{kind}"\n')
+    (tmp_path / "workshop.toml").write_text(
+        f'[workspace]\n\n[forge]\nkind = "{kind}"\n'
+    )
     directory = tmp_path / "packages" / "thing"
     directory.mkdir(parents=True)
     (directory / "cliff.toml").write_text("[changelog]\n")
