@@ -130,6 +130,42 @@ def resolve_source(root: Path) -> tuple[str, str | None]:
     return source, template_ref(root)
 
 
+def render_source(root: Path) -> tuple[str, str | None, dict[str, str]]:
+    """The render's source, its ref, and each file's owning layer.
+
+    A self-hosting layer home composes: a workspace layer above the
+    base that ships a template tree turns the source into the stack,
+    composed bottom to top into ``.workshop/composed-templates``,
+    regenerated on every call so the home's gate judges the local
+    overlay at HEAD, never the released artifact. Everything else is
+    livery.workshop._templates.resolve_source unchanged with no
+    owners: a child consumes its parent's composed artifact and
+    never composes at update time (the answers anchor exactly one
+    source).
+    """
+    import shutil
+
+    from livery.workshop._compose import compose_source, layer_template_tree
+    from livery.workshop._layers import layer_entries
+
+    def _member_overlay() -> bool:
+        for layer, _dist in layer_entries(root)[1:]:
+            tree = layer_template_tree(root, layer)
+            if tree is not None and tree.is_relative_to(root):
+                return True
+        return False
+
+    if _member_overlay():
+        destination = root / ".workshop" / "composed-templates"
+        if destination.exists():
+            shutil.rmtree(destination)
+        destination.mkdir(parents=True)
+        composed = compose_source(root, destination)
+        return str(composed.path), None, composed.owners
+    source, ref = resolve_source(root)
+    return source, ref, {}
+
+
 def _root() -> Path:
     """The workspace root, or fail."""
     root = workspace_root()
@@ -365,9 +401,9 @@ def project_drift(root: Path) -> list[str]:
     """
     answers = read_answers(root / _ANSWERS)
     data = {**answers, **render_injections(root, answers)}
-    source = local_template_dir(root)
-    if source is None:
+    if local_template_dir(root) is None:
         fail("no local template source: the render gate needs one")
+    source, _ref, owners = render_source(root)
     drift = []
     with tempfile.TemporaryDirectory() as scratch:
         render(source, Path(scratch), data)
@@ -376,10 +412,18 @@ def project_drift(root: Path) -> list[str]:
             if relative.as_posix() in PROJECT_SEEDS:
                 continue
             committed = root / relative
+            # The owners map keys the composed tree: kind-prefixed,
+            # usually with the template suffix.
+            owner = owners.get(f"project/{relative}.jinja") or owners.get(
+                f"project/{relative}"
+            )
+            named = f" (the {owner} layer owns it)" if owner else ""
             if not committed.is_file():
-                drift.append(f"{relative}: rendered, but missing from the repository")
+                drift.append(
+                    f"{relative}: rendered, but missing from the repository{named}"
+                )
             elif _lf(committed.read_bytes()) != _lf(rendered.read_bytes()):
-                drift.append(f"{relative}: differs from its render")
+                drift.append(f"{relative}: differs from its render{named}")
     from livery.workshop._ci_generate import generated_files
     from livery.workshop._governance import codeowners_file
 
@@ -423,9 +467,9 @@ def package_drift(root: Path) -> list[str]:
     named, which is what a package rendered before the file existed
     looks like.
     """
-    source = local_template_dir(root)
-    if source is None:
+    if local_template_dir(root) is None:
         fail("no local template source: the render gate needs one")
+    source, _ref, _owners = render_source(root)
     drift = []
     packages = root / "packages"
     for answers_path in sorted(packages.glob("*/.copier-answers.yml")):
@@ -452,7 +496,7 @@ def apply_project(root: Path) -> list[str]:
     """Write the ``project`` render over *root*; the files that changed."""
     answers = read_answers(root / _ANSWERS)
     data = {**answers, **render_injections(root, answers)}
-    source, ref = resolve_source(root)
+    source, ref, _owners = render_source(root)
     changed = []
     with tempfile.TemporaryDirectory() as scratch:
         render(source, Path(scratch), data, ref=ref)
@@ -506,7 +550,7 @@ def apply_packages(root: Path) -> list[str]:
     was born, and rewriting those would replace a living package's
     README, changelog, and sources with the template's stubs.
     """
-    source, ref = resolve_source(root)
+    source, ref, _owners = render_source(root)
     changed = []
     for answers_path in sorted((root / "packages").glob("*/.copier-answers.yml")):
         directory = answers_path.parent
@@ -576,8 +620,18 @@ def new_package(
     re-applies the ``project`` render so every per-package list picks
     it up, and re-locks the environment.
     """
-    root = _root()
-    template_dir, ref = resolve_source(root)
+    wire_package(_root(), name)
+
+
+def wire_package(root: Path, name: str, *, kind: str = "package-python") -> str:
+    """Render one *kind* package into *root* and wire it; the import path.
+
+    The shared core of ``new.package`` and the birth verb's layer
+    arm: render, receipt, roster, project re-apply, lock and sync.
+    Idempotent by refusal: an existing directory is named, never
+    overwritten.
+    """
+    template_dir, ref, _owners = render_source(root)
     if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
         fail(f"package name {name!r}: use lowercase letters, digits, hyphens")
     destination = root / "packages" / name
@@ -589,11 +643,12 @@ def new_package(
     prefix = namespace.replace(".", "-")
     package_name = f"{prefix}-{name}" if prefix else name
     project = str(answers.get("project_name", ""))
+    slug = name.replace("-", "_")
     render(
         template_dir,
         destination,
         {
-            "kind": "package-python",
+            "kind": kind,
             "package_dir": name,
             "package_name": package_name,
             "package_description": f"{package_name}: a {project} workspace package.",
@@ -621,6 +676,7 @@ def new_package(
     run_uv("lock", root=root)
     run_uv("sync", root=root)
     print(f"  packages/{name}: rendered, wired, and installed")
+    return f"{namespace}.{slug}" if namespace else slug
 
 
 def _redact_answers_source(path: Path) -> None:

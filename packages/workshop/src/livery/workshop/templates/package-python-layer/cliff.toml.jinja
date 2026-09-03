@@ -1,0 +1,86 @@
+{%- set public_host = {'github': 'https://github.com', 'gitea': 'https://gitea.com', 'gitlab': 'https://gitlab.com'} -%}
+{%- set web_root = forge_url.rstrip('/') if forge_url else public_host[forge_kind] -%}
+{%- set repo_url = web_root ~ '/' ~ forge_owner ~ '/' ~ project_name -%}
+{%- set pr_path = 'pull' if forge_kind == 'github' else ('pulls' if forge_kind == 'gitea' else '-/merge_requests') -%}
+# Rendered by the template channel ({{ template_source_label }}, package-python kind);
+# the gate keeps it matching its render. Edit the source and
+# run `{{ runner_prog }} template.apply`; an edit here is drift.
+# How {{ package_name }}'s changelog is written.
+#
+# git-cliff reads the conventional commits under this package's paths
+# and writes the entry the release train stamps. The workshop calls
+# it; nothing here is typed by hand.
+
+[bump]
+# The version rules, as footman practises them: before 1.0 a feature
+# bumps the minor and a break rides along in it, after 1.0 a break
+# bumps the major, a feature the minor, everything else the patch.
+features_always_bump_minor = true
+breaking_always_bump_major = false
+initial_tag = "packages/{{ package_dir }}/v0.0.0"
+
+[git]
+# One package, one tag line: only this package's paths are read, and
+# only its own tags say where the last release ended. A sibling's
+# release moves nothing here.
+tag_pattern = "^packages/{{ package_dir }}/v?(.+)$"
+include_paths = ["packages/{{ package_dir }}/**"]
+conventional_commits = true
+# An unparsed subject is kept rather than dropped. Main is
+# squash-only and every title is validated, so one that appears
+# predates the rule, and a reader still needs to see it.
+filter_unconventional = false
+protect_breaking_commits = true
+sort_commits = "oldest"
+# The pull request a squash names becomes a link. The number stays
+# visible when nothing resolves it.
+commit_preprocessors = [
+  { pattern = '\(#([0-9]+)\)', replace = "([#${1}]({{ repo_url }}/{{ pr_path }}/${1}))" },
+]
+# Keep a Changelog's sections. The comment prefix only orders the
+# groups, and the template strips it before printing.
+commit_parsers = [
+  { message = "^chore\\(release\\)", skip = true },
+  { message = "^feat", group = "<!-- 0 -->Added" },
+  { message = "^fix", group = "<!-- 1 -->Fixed" },
+  { message = ".*", group = "<!-- 2 -->Changed" },
+]
+
+# Who wrote each change, asked of the forge. The server root, not an
+# API path: git-cliff appends the API prefix itself, and a root that
+# already carries one becomes a doubled path the server answers 404
+# to. A repository the caller cannot read stops git-cliff outright,
+# so the workshop runs it offline when no token is in reach and says
+# so; the entry is then written without its authors.
+[remote.{{ forge_kind }}]
+owner = "{{ forge_owner }}"
+repo = "{{ project_name }}"
+{% if forge_url %}api_url = "{{ web_root }}"
+{% endif %}
+[changelog]
+header = """
+# Changelog
+
+All notable changes to {{ package_name }} are documented here. The
+format follows [Keep a Changelog](https://keepachangelog.com/), the
+project adheres to [Semantic Versioning](https://semver.org/), and
+while it is pre-1.0 a minor version may include breaking changes.
+"""
+
+{% raw -%}
+body = """
+{% if version %}\
+## [{{ version | split(pat="/") | last | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}\
+{% else %}\
+## [Unreleased]\
+{% endif %}
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim }}
+{% for commit in commits %}
+- {{ commit.message | upper_first }}\
+{% if commit.remote.username %} by @{{ commit.remote.username }}{% endif %}\
+{% endfor %}
+{% endfor %}
+"""
+{%- endraw %}
+trim = true

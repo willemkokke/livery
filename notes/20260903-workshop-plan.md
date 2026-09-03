@@ -4,8 +4,8 @@ Status: approved 2026-09-03 after Willem's review; executing.
 Phase 10 shipped 2026-09-03 (issue #109, PR #110); phase 11
 shipped 2026-09-03 (issue #111, PR #113); phase 12 shipped
 2026-09-03 (issue #114, PR #115); phase 13 shipped 2026-09-03
-(issue #116); cut rulings and deviations are in the decision
-record.
+(issue #116, PR #117); phase 14 shipped 2026-09-03 (issue #118);
+cut rulings and deviations are in the decision record.
 Subsumes
 `notes/20260901-workshop-plan.md`, whose phases 1 to 9 shipped and
 whose shipped record, movement analysis, and options registry stay
@@ -499,6 +499,9 @@ Acceptance:
 
 ## Phase 14: the layer axis built
 
+Shipped 2026-09-03 (issue #118); open items 3, 5, and 10 resolved
+at this cut, recorded below.
+
 Overlays and the layer scaffold; contract 19's `--layer` arm.
 
 Deliverables:
@@ -903,6 +906,32 @@ green so each feature ships through the proven seams:
   after. Every interruption boundary is forced in the committed
   suite on the fake.
 
+- 2026-09-03, phase 14 cut rulings. The base template tree moved
+  into the base layer's own package module
+  (`packages/workshop/src/livery/workshop/templates`), because a
+  layer home's gate composes base plus overlay on the merge path,
+  which waits on nothing outside the repository: the base tree
+  must ship in the wheel at exactly the installed version, and
+  uv_build includes a module's own data and nothing outside it.
+  The same shape serves every layer, which is open item 3's
+  ruling. Composition triggers only when a layer above the base
+  ships a template tree from inside this workspace (a self-hosting
+  home at HEAD); a child never composes, contract 21, because its
+  brand layer arrives installed and its source is the parent's
+  composed artifact. The composed tree lands in
+  `.workshop/composed-templates`, regenerated per render, and the
+  drift gate names the owning layer of a drifted composed file. A
+  layer whose plugin registers no tasks mounts as a content-only
+  note, never a failure: a young layer legitimately ships only
+  content, and the scaffold's `_tasks` stub registers nothing
+  until its author does. The `package-python-layer` kind is the
+  python kind plus the layer surfaces: the `footman.tasks` entry
+  point wired, a starter guidance fragment with its provenance
+  header, the overlay manifest seeded with commented examples.
+  tasks.py is exempt from the line-length rule: its provenance
+  header names the template source verbatim, and a source path or
+  URL may be long.
+
 ## Open
 
 1. The dummy brand's name, and whether its repositories live only
@@ -912,17 +941,23 @@ green so each feature ships through the proven seams:
    repositories rot, the suite re-proves on every run.
 2. Resolved 2026-09-03: `new.*`; the `create.*` spelling leaves
    the workflows note in phase 10.
-3. Where a layer's template overlay lives inside the layer package
-   (beside `content/`, or a sibling `templates/` tree), and the
-   declaration shape for a wholesale replace. Owner: the phase 14
-   cut.
+3. Resolved 2026-09-03 at the phase 14 cut: the overlay is a
+   `templates/` tree inside the layer's package module, beside
+   `content/`, so it ships in the wheel and any home composes
+   offline at exactly the installed versions. A wholesale replace
+   is declared in the tree's `overlay.toml` as `[[replace]]` with
+   `path` and `reason`; an undeclared same-path file and a stale
+   declaration both refuse.
 4. Resolved 2026-09-03 (Willem): README and LICENSE seed at
    birth; `docs/` waits for phase 19's docs toolchain to decide its
    shape. `tests/` already carries its phase 10 seed.
-5. What an overlay may parameterise: its own copier questions and
-   their recording in the answers file. Owner: the phase 14 cut,
-   with the guard that overlay questions follow the same
-   defaulted-or-derived lint as the base's.
+5. Resolved 2026-09-03 at the phase 14 cut: an overlay
+   contributes questions as `[questions.<name>]` tables in its
+   `overlay.toml`, appended to the composed `copier.yml` under a
+   comment naming the layer; each carries a default or
+   `when = false`, refused otherwise, so an instance updates
+   without a prompt. copier records the answers in the instance's
+   answers file like any question's.
 6. Carried from 0901: the base-CI nudge automation (its open item
    7) and recording GitLab's licensed arms live (its open item 8),
    both unchanged, owners as stated there.
@@ -945,10 +980,10 @@ green so each feature ships through the proven seams:
    (`livery.workshop._pythons.NEWEST_SUPPORTED`), one entry when
    they meet. A new Python reaches every instance through a wheel
    bump.
-10. How `copier.yml` composes in the composed artifact: generated
-    from data at compose time (contract 17, recommended), or the
-    one ruled exception to add-or-replace-wholesale. Owner: the
-    phase 14 cut, with item 5.
+10. Resolved 2026-09-03 at the phase 14 cut: generated from data
+    (contract 17). The compose step writes the base questions file
+    and appends each overlay's declared questions; nothing merges
+    by hand and wholesale-only stays unbroken.
 11. Resolved 2026-09-03: neutralise before 0.1.0 (Willem, against
     the keep recommendation). The product is workshop; livery is
     only the monorepo's name. `livery.toml` becomes

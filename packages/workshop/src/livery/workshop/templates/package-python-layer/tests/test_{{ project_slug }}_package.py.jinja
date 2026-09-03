@@ -1,0 +1,17 @@
+# Seeded from the template channel ({{ template_source_label }}, package-python kind) at
+# birth; this file is the workspace's own. Edit it directly:
+# the template never rewrites it.
+"""The package imports, carries its version, and pins its surface."""
+
+from __future__ import annotations
+
+import {{ import_path }} as package
+
+
+def test_imports_and_carries_a_version() -> None:
+    assert package.__version__ == "0.0.1"
+    assert package.hello() == "hello from {{ package_name }}"
+
+
+def test_the_public_surface_is_pinned() -> None:
+    assert set(package.__all__) == {"__version__", "hello"}
