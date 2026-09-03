@@ -220,19 +220,23 @@ def workflow_configure() -> None:
 
     Run at repository birth, as release aftercare, after an abort,
     and by the post-merge governance job. Resolves the admin ladder
-    (the per-kind ``*_ADMIN_TOKEN`` first, the everyday token as the
-    fallback); a refused write teaches the grant and the variable.
-    Declared owners the forge does not know refuse before anything
-    is applied: a review chain pointing at nobody is worse than
-    unapplied settings.
+    (``FORGE_ADMIN_TOKEN``, host-qualified first, the everyday token
+    as the fallback); a refused write teaches the grant and the
+    variable. Declared owners the forge does not know refuse before
+    anything is applied: a review chain pointing at nobody is worse
+    than unapplied settings.
     """
+    assert_configuration(_root())
+
+
+def assert_configuration(root: Path) -> None:
+    """The configure flow, root-taking so birth can call it too."""
     import tomllib
 
     from livery.forge import ForgeError, Unsupported
     from livery.workshop._forge_lane import admin_forge, admin_repository
     from livery.workshop._governance import unknown_owners
 
-    root = _root()
     repo, admin_var = admin_repository(root)
     forge, _ = admin_forge(root)
     contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))

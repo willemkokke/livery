@@ -1,0 +1,13 @@
+<!-- Seeded from the template channel ({{ template_source_label }}, project kind) at
+     birth; this file is the workspace's own. Edit it directly:
+     the template never rewrites it.
+-->
+# {{ project_name }}
+
+{{ project_description }}
+
+## Development
+
+`uv run {{ runner_prog }} check` runs the whole local gate; CI runs
+the same command. `uv run {{ runner_prog }} sync` brings the checkout,
+the delivered content, and the environment current.

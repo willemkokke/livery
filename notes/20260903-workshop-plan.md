@@ -3,8 +3,9 @@
 Status: approved 2026-09-03 after Willem's review; executing.
 Phase 10 shipped 2026-09-03 (issue #109, PR #110); phase 11
 shipped 2026-09-03 (issue #111, PR #113); phase 12 shipped
-2026-09-03 (issue #114); cut rulings and deviations are in the
-decision record.
+2026-09-03 (issue #114, PR #115); phase 13 shipped 2026-09-03
+(issue #116); cut rulings and deviations are in the decision
+record.
 Subsumes
 `notes/20260901-workshop-plan.md`, whose phases 1 to 9 shipped and
 whose shipped record, movement analysis, and options registry stay
@@ -451,6 +452,9 @@ Acceptance:
 
 ## Phase 13: `fm new.project`, birth end to end
 
+Shipped 2026-09-03 (issue #116); the carrier finding and the cut
+rulings are in the decision record.
+
 W1 as one idempotent verb. The carrier is `livery-workshop` itself,
 an `expose="global_only"` task on the builtin surface, so the verb
 exists above any repository and every branded App inherits it; the
@@ -871,6 +875,34 @@ green so each feature ships through the proven seams:
   masked in the job log) rides phase 16's chain, which the plan
   already tasks with exercising this rung live.
 
+- 2026-09-03, phase 13 cut rulings and the carrier finding. The
+  default layer stack is the base layer; a branded App's stack
+  arrives with the layer axis (phase 14), so the stack-discovery
+  detail stays at that cut. The verb declares
+  `expose="global_only"` for the day footman mounts the advertised
+  builtin surface; today `fm self.add livery.workshop` reports ok
+  and records nothing in builtins.json (a footman-side gap,
+  footman#536 territory), so the working carrier is the user-rung
+  tasks file (`plugin("livery.workshop")` in the runner's config
+  directory), the machine owner's call. With that bridge the `new`
+  group takes the address cleanly and footman's builtin `new` task
+  is shadowed: bare `fm new` teaches the group's two verbs. The
+  bridge exposes the whole task tree above projects (the user rung
+  seals nothing), which footman#536's mounting would scope
+  properly. Two shapes the live run forced: the protocol
+  initialises a created repository with a default branch, so birth
+  pushes `--force` over that init commit exactly when this run
+  created the repository (a pre-existing repository keeps the
+  foreign refusal, and a remote main whose sha this checkout knows
+  is a resume); and `--templates` overrides the source at birth,
+  since the default artifact repository carries no tag until the
+  workshop's next release publishes one. Proven live on the local
+  Gitea: one command from nothing to a protected repository (main
+  requires the gate context), the unarmed setup PR open, the
+  second run a no-op at every step; the repository was destroyed
+  after. Every interruption boundary is forced in the committed
+  suite on the fake.
+
 ## Open
 
 1. The dummy brand's name, and whether its repositories live only
@@ -884,9 +916,9 @@ green so each feature ships through the proven seams:
    (beside `content/`, or a sibling `templates/` tree), and the
    declaration shape for a wholesale replace. Owner: the phase 14
    cut.
-4. Whether README, LICENSE, `docs/`, and `tests/` become project
-   seeds (hse ships them; the workshop renders none today). Owner:
-   Willem, before phase 13 builds.
+4. Resolved 2026-09-03 (Willem): README and LICENSE seed at
+   birth; `docs/` waits for phase 19's docs toolchain to decide its
+   shape. `tests/` already carries its phase 10 seed.
 5. What an overlay may parameterise: its own copier questions and
    their recording in the answers file. Owner: the phase 14 cut,
    with the guard that overlay questions follow the same

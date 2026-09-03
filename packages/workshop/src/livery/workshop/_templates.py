@@ -410,7 +410,7 @@ PACKAGE_MANAGED = ("cliff.toml",)
 #: The project render's seeds: born with the workspace, then the
 #: workspace's own. Written only when missing; the drift gate never
 #: judges them.
-PROJECT_SEEDS = ("tests/test_workspace_contracts.py",)
+PROJECT_SEEDS = ("tests/test_workspace_contracts.py", "README.md", "LICENSE")
 
 
 def package_drift(root: Path) -> list[str]:
