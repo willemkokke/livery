@@ -273,3 +273,7 @@ def test_a_stamped_but_unreleased_version_still_releases(
     )
     changed = prepare_release(root, "packages/core")
     assert changed, "the stamped-ahead release must proceed"
+    text = (root / "packages" / "core" / "CHANGELOG.md").read_text()
+    # The stranded entry regenerated to cover everything the receipt
+    # will actually name.
+    assert "- Added things." in text
