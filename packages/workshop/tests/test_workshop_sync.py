@@ -121,3 +121,72 @@ def test_the_monorepo_is_in_sync() -> None:
     sync_workspace(ROOT)
     assert sync_workspace(ROOT) == []
     assert _tracked_state() == before
+
+
+_SHIPPED_SETTINGS = ROOT / "packages/workshop/src/livery/workshop/content/settings.json"
+
+
+def test_settings_json_is_a_copy_even_where_links_work(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    sync_workspace(root)
+    target = root / ".claude" / "settings.json"
+    assert target.is_file() and not target.is_symlink()
+    assert target.read_bytes() == _SHIPPED_SETTINGS.read_bytes()
+    manifest = (root / ".claude" / ".workshop-materialised").read_text()
+    assert "settings.json" in manifest
+    ignore = (root / ".claude" / ".gitignore").read_text()
+    assert "/settings.json\n" in ignore
+    assert sync_workspace(root) == []  # idempotent and quiet
+
+
+def test_an_edited_settings_json_is_kept_and_named(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    sync_workspace(root)
+    target = root / ".claude" / "settings.json"
+    target.write_text('{"hooks": {}}\n')
+    lines = sync_workspace(root)
+    assert any("override kept" in line for line in lines)
+    assert target.read_text() == '{"hooks": {}}\n'
+    # The override commits normally: the self-scoped ignore drops it.
+    ignore = (root / ".claude" / ".gitignore").read_text()
+    assert "/settings.json\n" not in ignore
+
+
+def test_a_stale_settings_copy_refreshes(tmp_path: Path) -> None:
+    import hashlib
+
+    root = _workspace(tmp_path)
+    sync_workspace(root)
+    target = root / ".claude" / "settings.json"
+    # An older ship: the copy and its record agree with each other and
+    # disagree with what the layer ships now.
+    stale = '{"hooks": {"old": true}}\n'
+    target.write_text(stale)
+    digest = hashlib.sha256(stale.encode()).hexdigest()
+    manifest = root / ".claude" / ".workshop-materialised"
+    manifest.write_text(f"{digest} settings.json\n")
+    lines = sync_workspace(root)
+    assert any("refreshed" in line for line in lines)
+    assert target.read_bytes() == _SHIPPED_SETTINGS.read_bytes()
+
+
+def test_a_committed_identical_settings_copy_is_adopted(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    claude = root / ".claude"
+    claude.mkdir()
+    (claude / "settings.json").write_bytes(_SHIPPED_SETTINGS.read_bytes())
+    lines = sync_workspace(root)
+    assert any("adopted" in line for line in lines)
+    assert sync_workspace(root) == []
+
+
+def test_a_settings_link_is_replaced_by_a_copy(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    claude = root / ".claude"
+    claude.mkdir()
+    # A link would take a settings editor's write into the wheel.
+    os.symlink(_SHIPPED_SETTINGS, claude / "settings.json")
+    lines = sync_workspace(root)
+    assert any("in place of a link" in line for line in lines)
+    target = claude / "settings.json"
+    assert target.is_file() and not target.is_symlink()

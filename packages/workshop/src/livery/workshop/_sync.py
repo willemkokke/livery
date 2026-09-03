@@ -8,7 +8,9 @@ file wins and the instance always wins last:
   ``CLAUDE.md`` stub imports.
 - skills and hooks into ``.claude/skills`` and ``.claude/hooks``
   through the materialiser: links where possible, copies where not,
-  local overrides kept and named.
+  local overrides kept and named. A layer's ``settings.json`` lands
+  at ``.claude/settings.json`` the same way, always as a copy:
+  settings editors write the file in place.
 - the managed ``CLAUDE.md`` stub itself: one import line per
   materialised fragment, then ``CLAUDE.project.md``, the repository's
   own file that nobody else writes.
@@ -30,7 +32,7 @@ if TYPE_CHECKING:
     from livery.workshop._git_ops import GitOps
 
 from livery.workshop._layers import layer_names, workspace_root
-from livery.workshop._materialise import materialise, write_lf
+from livery.workshop._materialise import materialise, materialise_file, write_lf
 
 # Formatted at write time: a module-level f-string would freeze the
 # brand at import.
@@ -103,6 +105,9 @@ def sync_workspace(root: Path) -> list[str]:
     for _layer, content in contents:
         lines += materialise(root, content / "skills", "skills")
         lines += materialise(root, content / "hooks", "hooks")
+        settings = content / "settings.json"
+        if settings.is_file():
+            lines += materialise_file(root, settings, ".claude/settings.json")
 
     ordered = [name for name in _GUIDANCE_FIRST if name in fragments]
     ordered += [name for name in sorted(fragments) if name not in _GUIDANCE_FIRST]
