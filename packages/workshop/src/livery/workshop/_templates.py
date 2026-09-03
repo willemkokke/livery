@@ -19,6 +19,7 @@ re-applying the ``project`` render.
 from __future__ import annotations
 
 import re
+import subprocess
 import tempfile
 from pathlib import Path
 from typing import Annotated, Any
@@ -64,6 +65,69 @@ def local_template_dir(root: Path) -> Path | None:
         return None
     directory = root / source
     return directory if directory.is_dir() else None
+
+
+def redacted_source(source: str) -> str:
+    """*source* with URL credentials stripped, for anything displayed.
+
+    A contract may carry a credentialled URL (it should not: tokens
+    are environment facts), and the rendered headers, refusals, and
+    labels must never repeat the secret. The working value the
+    machinery clones with is untouched.
+    """
+    return re.sub(r"^(\w+(?:\+\w+)?://)[^/@]+@", r"\1", source)
+
+
+def template_ref(root: Path) -> str:
+    """The tag a remote template source renders at.
+
+    The publishing layer's installed version: the base layer
+    publishes the one artifact repository today, so the ref is the
+    base distribution's version, ``v`` prefixed. A composed artifact
+    (a layer home's, once one exists) extends this to the layer
+    whose home publishes the contract's source; "topmost layer"
+    would be wrong, because a layer may own no templates at all.
+    """
+    from importlib.metadata import PackageNotFoundError, version
+
+    entries = layer_entries(root)
+    if not entries:
+        fail(
+            "workshop.toml declares no [workspace] layers: the template"
+            " ref is the publishing layer's version and there is none"
+        )
+    _, base_dist = entries[0]
+    try:
+        return "v" + version(base_dist)
+    except PackageNotFoundError:
+        fail(
+            f"the base layer's distribution {base_dist} is not"
+            " installed, so the template ref is unknowable: `uv sync`"
+            " installs the dev group"
+        )
+
+
+def resolve_source(root: Path) -> tuple[str, str | None]:
+    """The render source and ref; every channel verb resolves through this.
+
+    A local directory renders the working tree directly, ref-less:
+    the monorepo edits its templates at HEAD (contract 12). A git
+    URL renders at livery.workshop._templates.template_ref, the
+    artifact tag the installed workshop shipped with. A declared
+    local directory that does not exist is a taught refusal, never
+    a guess.
+    """
+    source = template_source(root)
+    if "://" not in source and not source.startswith("git@"):
+        directory = root / source
+        if directory.is_dir():
+            return str(directory), None
+        fail(
+            f"[workspace] templates names {source!r} and no such"
+            " directory exists here: create the checkout, or point the"
+            " contract at a git URL"
+        )
+    return source, template_ref(root)
 
 
 def _root() -> Path:
@@ -112,7 +176,7 @@ def render_injections(root: Path, answers: dict[str, Any]) -> dict[str, Any]:
     return {
         "runner_prog": footman.prog(),
         "python_floor": python_floor(root),
-        "template_source_label": template_source(root),
+        "template_source_label": redacted_source(template_source(root)),
         "layer_imports": [import_path for import_path, _ in entries],
         "layer_requirements": [
             dist for _, dist in entries if _requirement_name(dist) not in members
@@ -135,7 +199,7 @@ def package_injections(root: Path) -> dict[str, Any]:
     return {
         "runner_prog": footman.prog(),
         "python_floor": python_floor(root),
-        "template_source_label": template_source(root),
+        "template_source_label": redacted_source(template_source(root)),
         "forge_kind": str(forge_table.get("kind", "github")),
         "forge_owner": str(forge_table.get("owner", "")),
         "forge_url": str(forge_table.get("url", "")),
@@ -143,21 +207,32 @@ def package_injections(root: Path) -> dict[str, Any]:
     }
 
 
-def render(template_dir: Path, destination: Path, data: dict[str, Any]) -> None:
+def render(
+    template_dir: Path | str,
+    destination: Path,
+    data: dict[str, Any],
+    *,
+    ref: str | None = None,
+) -> None:
     """Render *template_dir* into *destination* with *data*, no prompts.
 
-    The working tree is the source: uncommitted template edits render
-    too, which is what lets the gate judge a change before its commit.
-    Runs copier in a child process because it chdirs while rendering,
-    which a parallel task must never do to the one real directory.
-    The templates carry their own provenance headers, parameterised
-    by ``template_source_label``: injecting them after the render
-    would make every managed file read as locally modified to
-    ``copier update``, whose merge then drops real template changes.
+    A local directory renders the working tree: uncommitted template
+    edits render too, which is what lets the gate judge a change
+    before its commit. A git source renders at *ref*, the artifact
+    tag. Runs copier in a child process because it chdirs while
+    rendering, which a parallel task must never do to the one real
+    directory. The templates carry their own provenance headers,
+    parameterised by ``template_source_label``: injecting them after
+    the render would make every managed file read as locally
+    modified to ``copier update``, whose merge then drops real
+    template changes.
     """
+    if ref is not None:
+        _probe_ref(str(template_dir), ref)
     with tempfile.NamedTemporaryFile("w", suffix=".yml", delete=False) as handle:
         yaml.safe_dump(data, handle)
         data_file = handle.name
+    pinned = ["--vcs-ref", ref] if ref else []
     try:
         result = toolroom.copier(
             "copy",
@@ -165,6 +240,7 @@ def render(template_dir: Path, destination: Path, data: dict[str, Any]) -> None:
             "--trust",
             "--overwrite",
             "--quiet",
+            *pinned,
             "--data-file",
             data_file,
             str(template_dir),
@@ -173,7 +249,89 @@ def render(template_dir: Path, destination: Path, data: dict[str, Any]) -> None:
     finally:
         Path(data_file).unlink(missing_ok=True)
     if result.code != 0:
-        fail(f"copier exited {result.code}:\n{result.stdout}{result.stderr}")
+        _taught_render_failure(str(template_dir), ref, data, result)
+
+
+def _probe_ref(source: str, ref: str) -> None:
+    """Refuse before cloning when *source* lacks *ref*.
+
+    copier falls back to rendering HEAD when a requested ref does
+    not exist, which would silently hand an instance templates its
+    workshop never shipped; the probe turns the missing tag into a
+    taught refusal instead.
+    """
+    # copier spells an explicit git source with a `git+` prefix; git
+    # itself does not understand it.
+    listing = subprocess.run(
+        ["git", "ls-remote", source.removeprefix("git+"), f"refs/tags/{ref}"],
+        capture_output=True,
+        text=True,
+        check=False,
+        # ls-remote never reads the working directory; the explicit
+        # value satisfies the deliberate-spawn rule and always exists.
+        cwd=tempfile.gettempdir(),
+    )
+    shown = redacted_source(source)
+    if listing.returncode != 0:
+        fail(
+            f"cannot reach the template source {shown} (wanted {ref}):"
+            " check the network, or point [workspace] templates at a"
+            f" local checkout.\n{listing.stderr}"
+        )
+    if not listing.stdout.strip():
+        fail(
+            f"the template source {shown} has no {ref} tag: a workshop"
+            " release publishes it. Update the workspace to a released"
+            " workshop, or point [workspace] templates at a source that"
+            f" carries {ref}."
+        )
+
+
+def _taught_render_failure(
+    source: str, ref: str | None, data: dict[str, Any], result: Any
+) -> None:
+    """Fail with what stopped the render and what to do about it.
+
+    The raw copier output rides along verbatim: a failure reason is
+    never summarised into a boolean.
+    """
+    output = f"{result.stdout}{result.stderr}"
+    lowered = output.lower()
+    kind = str(data.get("kind", "project"))
+    source = redacted_source(source)
+    if (
+        ref
+        and ("revision" in lowered or "reference" in lowered)
+        and (
+            "not found" in lowered or "unknown" in lowered or "did not match" in lowered
+        )
+    ):
+        fail(
+            f"the template source {source} has no {ref} tag: a workshop"
+            " release publishes it. Update the workspace to a released"
+            " workshop, or point [workspace] templates at a source that"
+            f" carries {ref}.\n{output}"
+        )
+    if (
+        "could not resolve host" in lowered
+        or "unable to access" in lowered
+        or "failed to connect" in lowered
+        or "connection refused" in lowered
+        or "operation timed out" in lowered
+    ):
+        wanted = f" (wanted {ref})" if ref else ""
+        fail(
+            f"cannot reach the template source {source}{wanted}: check"
+            " the network, or point [workspace] templates at a local"
+            f" checkout.\n{output}"
+        )
+    if "subdirectory" in lowered or "invalid choice" in lowered or "choice" in lowered:
+        fail(
+            f"the template source {source} does not carry the {kind}"
+            " kind: point [workspace] templates at a source that ships"
+            f" it, or render a kind the source has.\n{output}"
+        )
+    fail(f"copier exited {result.code}:\n{output}")
 
 
 def _lf(data: bytes) -> bytes:
@@ -294,12 +452,10 @@ def apply_project(root: Path) -> list[str]:
     """Write the ``project`` render over *root*; the files that changed."""
     answers = read_answers(root / _ANSWERS)
     data = {**answers, **render_injections(root, answers)}
-    source = local_template_dir(root)
-    if source is None:
-        fail("no local template source: nothing to apply from")
+    source, ref = resolve_source(root)
     changed = []
     with tempfile.TemporaryDirectory() as scratch:
-        render(source, Path(scratch), data)
+        render(source, Path(scratch), data, ref=ref)
         for rendered in rendered_files(Path(scratch)):
             relative = rendered.relative_to(scratch)
             committed = root / relative
@@ -350,15 +506,13 @@ def apply_packages(root: Path) -> list[str]:
     was born, and rewriting those would replace a living package's
     README, changelog, and sources with the template's stubs.
     """
-    source = local_template_dir(root)
-    if source is None:
-        fail("no local template source: nothing to apply from")
+    source, ref = resolve_source(root)
     changed = []
     for answers_path in sorted((root / "packages").glob("*/.copier-answers.yml")):
         directory = answers_path.parent
         data = {**read_answers(answers_path), **package_injections(root)}
         with tempfile.TemporaryDirectory() as scratch:
-            render(source, Path(scratch), data)
+            render(source, Path(scratch), data, ref=ref)
             for name in PACKAGE_MANAGED:
                 rendered = Path(scratch) / name
                 if not rendered.is_file():
@@ -403,8 +557,6 @@ def template_apply() -> None:
     tree changes nothing.
     """
     root = _root()
-    if local_template_dir(root) is None:
-        fail("no local template source here: nothing to apply")
     changed = apply_project(root) + apply_packages(root)
     for name in changed:
         print(f"  rendered: {name}")
@@ -425,13 +577,7 @@ def new_package(
     it up, and re-locks the environment.
     """
     root = _root()
-    template_dir = local_template_dir(root)
-    if template_dir is None:
-        fail(
-            f"the template source is {template_source(root)}, and"
-            " new.package can only render from a local checkout today:"
-            " the global create verb will read the artifact repository"
-        )
+    template_dir, ref = resolve_source(root)
     if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
         fail(f"package name {name!r}: use lowercase letters, digits, hyphens")
     destination = root / "packages" / name
@@ -461,7 +607,9 @@ def new_package(
             # workspace's entries on github.com.
             **package_injections(root),
         },
+        ref=ref,
     )
+    _redact_answers_source(destination / _ANSWERS)
     members = list(answers.get("packages", []))
     members.append({"dir": name, "name": package_name, "dev": package_name})
     answers["packages"] = members
@@ -475,6 +623,26 @@ def new_package(
     print(f"  packages/{name}: rendered, wired, and installed")
 
 
+def _redact_answers_source(path: Path) -> None:
+    """Strip URL credentials from an answers file copier just wrote.
+
+    copier records the clone source verbatim; the committed receipt
+    must never carry a token.
+    """
+    if not path.is_file():
+        return
+    text = path.read_text("utf-8")
+    cleaned = re.sub(
+        r"^(_src_path: )(.+)$",
+        lambda m: m.group(1) + redacted_source(m.group(2)),
+        text,
+        count=1,
+        flags=re.M,
+    )
+    if cleaned != text:
+        write_lf(path, cleaned)
+
+
 def _write_root_answers(root: Path, answers: dict[str, Any]) -> None:
     """Rewrite the root answers file, header and bookkeeping kept."""
     body = (
@@ -482,7 +650,7 @@ def _write_root_answers(root: Path, answers: dict[str, Any]) -> None:
         f"# provenance. `{footman.prog()} new.package` appends to `packages`;"
         " edit other\n"
         "# values only when the workspace itself changes.\n"
-        f"_src_path: {template_source(root)}\n"
+        f"_src_path: {redacted_source(template_source(root))}\n"
         + yaml.safe_dump(answers, sort_keys=False, allow_unicode=True)
     )
     write_lf(root / _ANSWERS, body)
