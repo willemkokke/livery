@@ -2,6 +2,10 @@
 name: execute-plan
 description: Execute one phase of a plan note - worktree, gate-green, plan updated in the same change, acceptance proven by command.
 ---
+<!-- Shipped as livery.workshop layer content, delivered to the workspace
+     by the sync verb. Edit this copy in the layer and release it;
+     an edited delivered copy is a local override, kept and named.
+-->
 
 1. Read the plan's ground-truth contracts and the target phase fully.
    Read the development workflows note for any forge-touching work.

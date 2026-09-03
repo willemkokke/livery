@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Shipped as livery.workshop layer content, delivered to the workspace
+# by the sync verb. Edit this copy in the layer and release it;
+# an edited delivered copy is a local override, kept and named.
 # The one shim between Claude Code's hooks and their fm tasks.
 #
 # Two rules, both learned the hard way:

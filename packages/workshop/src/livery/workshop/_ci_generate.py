@@ -468,29 +468,33 @@ def generate(root: Path) -> dict[str, str]:
     where the template source is a local directory: an instance's
     release has no templates to publish.
     """
+    from livery.workshop._provenance import generated_header
     from livery.workshop._templates import local_template_dir
 
     prog = footman.prog()
     facts = _facts(root)
     kind = str(facts["forge_kind"])
+    header = generated_header("#")
     if kind == "github":
-        return {
+        files = {
             ".github/workflows/ci.yml": _github_gate(facts, prog),
             ".github/workflows/release.yml": _github_release(
                 facts, prog, templates_here=local_template_dir(root) is not None
             ),
             ".github/workflows/governance.yml": _github_governance(facts, prog),
         }
-    if kind == "gitea":
-        return {
+    elif kind == "gitea":
+        files = {
             ".gitea/workflows/ci.yml": _gitea_gate(facts, prog),
             ".gitea/workflows/release.yml": _gitea_release(facts, prog),
             ".gitea/workflows/governance.yml": _gitea_governance(facts, prog),
         }
-    return {
-        ".gitlab-ci.yml": _gitlab_pipeline(facts, prog)
-        + _gitlab_governance(facts, prog)
-    }
+    else:
+        files = {
+            ".gitlab-ci.yml": _gitlab_pipeline(facts, prog)
+            + _gitlab_governance(facts, prog)
+        }
+    return {path: header + content for path, content in files.items()}
 
 
 def generated_files(root: Path) -> dict[Path, str]:

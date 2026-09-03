@@ -2,6 +2,10 @@
 name: create-plan
 description: Write an implementation plan as a dated note in notes/, in the house format with ground-truth contracts and per-phase acceptance.
 ---
+<!-- Shipped as livery.workshop layer content, delivered to the workspace
+     by the sync verb. Edit this copy in the layer and release it;
+     an edited delivered copy is a local override, kept and named.
+-->
 
 Plans live at `notes/YYYYMMDD-<slug>.md`. The exemplar is
 `notes/20260830-forge-bootstrap.md`. Workflows come from

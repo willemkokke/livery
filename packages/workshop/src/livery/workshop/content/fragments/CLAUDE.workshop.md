@@ -1,3 +1,7 @@
+<!-- Shipped as livery.workshop layer content, delivered to the workspace
+     by the sync verb. Edit this copy in the layer and release it;
+     an edited delivered copy is a local override, kept and named.
+-->
 # The workshop's rules
 
 The base layer's fragment: only the rules the workshop itself

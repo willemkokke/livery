@@ -82,6 +82,14 @@ layer_requirements:
     the dev-group requirement for each layer that is not already a
     workspace member; injected at render time from workshop.toml
 
+template_source_label:
+  type: str
+  default: "the template source"
+  when: false
+  help: >-
+    what the provenance headers call the template source; injected at
+    render time from the contract's templates value
+
 packages:
   type: yaml
   help: >-

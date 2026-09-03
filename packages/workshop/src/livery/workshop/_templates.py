@@ -112,6 +112,7 @@ def render_injections(root: Path, answers: dict[str, Any]) -> dict[str, Any]:
     return {
         "runner_prog": footman.prog(),
         "python_floor": python_floor(root),
+        "template_source_label": template_source(root),
         "layer_imports": [import_path for import_path, _ in entries],
         "layer_requirements": [
             dist for _, dist in entries if _requirement_name(dist) not in members
@@ -134,6 +135,7 @@ def package_injections(root: Path) -> dict[str, Any]:
     return {
         "runner_prog": footman.prog(),
         "python_floor": python_floor(root),
+        "template_source_label": template_source(root),
         "forge_kind": str(forge_table.get("kind", "github")),
         "forge_owner": str(forge_table.get("owner", "")),
         "forge_url": str(forge_table.get("url", "")),
@@ -148,6 +150,10 @@ def render(template_dir: Path, destination: Path, data: dict[str, Any]) -> None:
     too, which is what lets the gate judge a change before its commit.
     Runs copier in a child process because it chdirs while rendering,
     which a parallel task must never do to the one real directory.
+    The templates carry their own provenance headers, parameterised
+    by ``template_source_label``: injecting them after the render
+    would make every managed file read as locally modified to
+    ``copier update``, whose merge then drops real template changes.
     """
     with tempfile.NamedTemporaryFile("w", suffix=".yml", delete=False) as handle:
         yaml.safe_dump(data, handle)
@@ -222,7 +228,11 @@ def project_drift(root: Path) -> list[str]:
     generated = dict(generated_files(root))
     rendered_owners = codeowners_file(root)
     if rendered_owners is not None:
-        generated[root / rendered_owners.path] = rendered_owners.content
+        from livery.workshop._provenance import generated_header
+
+        generated[root / rendered_owners.path] = (
+            generated_header("#") + rendered_owners.content
+        )
     for path, content in generated.items():
         relative_generated = path.relative_to(root)
         if not path.is_file():
@@ -318,7 +328,11 @@ def apply_generated(root: Path) -> list[str]:
     generated = dict(generated_files(root))
     rendered_owners = codeowners_file(root)
     if rendered_owners is not None:
-        generated[root / rendered_owners.path] = rendered_owners.content
+        from livery.workshop._provenance import generated_header
+
+        generated[root / rendered_owners.path] = (
+            generated_header("#") + rendered_owners.content
+        )
     for path, content in generated.items():
         body = _lf(content.encode())
         if not path.is_file() or _lf(path.read_bytes()) != body:

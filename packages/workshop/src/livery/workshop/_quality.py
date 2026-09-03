@@ -110,9 +110,12 @@ def check(
             print(f"  affected: {names}")
             _scoped_check(subset, fix=fix)
             return
+    from livery.workshop._provenance import provenance_check
+
     if fix:
         format(fix=True)
         lint(fix=True)
+        provenance_check(fix=True)
         with parallel():
             typecheck()
             typecomplete()
@@ -126,6 +129,7 @@ def check(
         typecomplete()
         test()
         template_check()
+        provenance_check()
 
 
 def _scoped_check(subset: tuple[Package, ...], *, fix: bool = False) -> None:

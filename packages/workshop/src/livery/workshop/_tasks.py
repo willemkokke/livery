@@ -24,6 +24,7 @@ from livery.workshop import (  # noqa: F401
     _graph,
     _hooks,
     _issue_tasks,
+    _provenance,
     _quality,
     _release,
     _release_driver,
