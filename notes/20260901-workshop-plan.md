@@ -1,6 +1,11 @@
 # The workshop: engine, release train, and the road past 0.1.0
 
-Status: approved 2026-09-01 after Willem's review; executing.
+Status: closed 2026-09-03, subsumed by
+`notes/20260903-workshop-plan.md`. Phases 1 to 9 shipped (recorded
+below); the unshipped tail (phases 10 to 13) moved there,
+renumbered 17 to 20. This note keeps the shipped record, the
+movement analysis, and the contract bodies the successor's titles
+point at.
 Phase 1 shipped 2026-09-01 (PR #66); phase 2 shipped 2026-09-01
 (PR #67), its audit clean with the ruled deviations and one new
 banked quirk (GitHub's method-named auto-merge events). Phase 3 shipped

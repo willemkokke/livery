@@ -1,6 +1,8 @@
 # The workshop: instantiation, layers, and inheritance
 
 Status: approved 2026-09-03 after Willem's review; executing.
+Phase 10 shipped 2026-09-03 (issue #109); its cut rulings and one
+deviation are in the decision record.
 Subsumes
 `notes/20260901-workshop-plan.md`, whose phases 1 to 9 shipped and
 whose shipped record, movement analysis, and options registry stay
@@ -203,6 +205,9 @@ Carried forward from the 0901 plan, with the build schedule changed:
   set is the union over present package types and layers.
 
 ## Phase 10: the agnostic core
+
+Shipped 2026-09-03 (issue #109): every deliverable, the rename
+ruling included; acceptance evidence in the issue's change.
 
 Contract 18 made true and kept true. Pure debt; blocks nothing and
 is blocked by nothing, so it lands first.
@@ -778,6 +783,32 @@ green so each feature ships through the proven seams:
   fragment take workshop names in phase 10, while zero external
   instances exist.
 
+- 2026-09-03, phase 10 cut rulings and one deviation (recorded as
+  built): `CLAUDE.md.jinja` is dropped rather than derived, because
+  `fm sync` writes the stub and a template copy was a second
+  mechanism for the same act (contract 14). The project render
+  gains a seed notion (`PROJECT_SEEDS`, written only when missing,
+  never judged by drift) with one member,
+  `tests/test_workspace_contracts.py`, so a newborn's gate has a
+  test to collect; open item 4's content question (README, LICENSE,
+  docs) stays Willem's. The conformance runtime: the offline render
+  and brand scan run in the gate; the full drive (lock, sync, and
+  the stranger's own gate) arms with `WORKSHOP_CONFORMANCE_DRIVE=1`
+  and belongs to the scheduled lane, since the merge path waits on
+  nothing outside the repository. The deviation, against this
+  plan's own wording: rendered files' headers are carried by the
+  templates (parameterised by `template_source_label`), never
+  injected after the render. Injection made every managed file
+  read as locally modified to `copier update`, whose merge then
+  dropped real template changes; the rebrand test forced exactly
+  that loss. The emitters still inject theirs, and the update wave
+  needs no header-refresh pass. Also recorded: the newborn state
+  is legal end to end (zero packages discovers zero members, the
+  checker scopes follow the roster, the test runner passes bare
+  `--cov` so the measured source is the derived namespace), and
+  the template-snapshot release job is emitted only where the
+  template source is a local directory.
+
 ## Open
 
 1. The dummy brand's name, and whether its repositories live only
@@ -806,14 +837,18 @@ green so each feature ships through the proven seams:
    deserves the same qualification), and how the engine learns the
    CI rung file's path (an emitted-step variable, its name bound
    by the no-brand-variables rule). Owner: the phase 12 cut.
-8. How a layers entry (an import path, what `mount_layers`
-   consumes) names its distribution (what the dev group and the
-   uninstalled-distribution teaching need). Derive from installed
-   metadata where the environment answers, declare in the entry
-   where it cannot. Owner: the phase 10 cut.
-9. The `requires-python` bound-to-matrix rule: which minors in
-   the range are tested, and what latest means offline and
-   deterministically. Owner: the phase 10 cut.
+8. Resolved 2026-09-03 at the phase 10 cut: a layers entry stays
+   an import path; the distribution derives by convention, dots to
+   dashes, and a table entry `{import = "...", dist = "..."}`
+   spells both where the convention fails. Installed-metadata
+   derivation was rejected: the dev group renders at birth, before
+   anything is installed.
+9. Resolved 2026-09-03 at the phase 10 cut: the matrix is the
+   `requires-python` lower bound plus the newest minor the
+   installed workshop declares
+   (`livery.workshop._pythons.NEWEST_SUPPORTED`), one entry when
+   they meet. A new Python reaches every instance through a wheel
+   bump.
 10. How `copier.yml` composes in the composed artifact: generated
     from data at compose time (contract 17, recommended), or the
     one ruled exception to add-or-replace-wholesale. Owner: the
