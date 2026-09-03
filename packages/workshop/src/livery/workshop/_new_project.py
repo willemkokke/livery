@@ -103,6 +103,13 @@ def new_project(
     author: Annotated[str, doc("the authors entry's name (default: git config)")] = "",
     email: Annotated[str, doc("the authors entry's email (default: git config)")] = "",
     namespace: Annotated[str, doc("dotted namespace packages live in")] = "",
+    layer: Annotated[
+        str,
+        doc(
+            "also scaffold this named layer package and self-host it:"
+            " the workspace becomes the layer's home"
+        ),
+    ] = "",
     local: Annotated[
         bool, doc("everything that stays on the machine, nothing that leaves it")
     ] = False,
@@ -206,6 +213,9 @@ def new_project(
     for changed in apply_project(root):
         print(f"  rendered: {changed}")
 
+    if layer:
+        _add_layer(root, layer)
+
     if not (root / ".git").is_dir():
         _git(root, "init", "-q", "--initial-branch=main")
         print("  git: initialised")
@@ -284,6 +294,43 @@ def new_project(
         "  done: merge the setup PR to prove the gate; the repository"
         " is protected and live"
     )
+
+
+def _add_layer(root: Path, layer: str) -> None:
+    """Scaffold *layer* and self-host it: contract 19's home shape.
+
+    The layer package renders from the ``package-python-layer``
+    kind; the contract's stack gains its import path last, so the
+    home composes with its own overlay at HEAD from the first
+    commit. Idempotent: an already-listed layer walks past.
+    """
+    from livery.workshop._sync import sync_workspace
+    from livery.workshop._templates import wire_package
+
+    if (root / "packages" / layer).exists():
+        print(f"  layer: packages/{layer} already scaffolded")
+        return
+    import_path = wire_package(root, layer, kind="package-python-layer")
+    contract = root / "workshop.toml"
+    text = contract.read_text("utf-8")
+    if f'"{import_path}"' not in text:
+        needle = 'layers = ["livery.workshop"]'
+        if needle not in text:
+            fail(
+                f"cannot self-host {import_path}: the contract's layers"
+                " line is not the birth seed's; add it by hand, last"
+            )
+        text = text.replace(needle, f'layers = ["livery.workshop", "{import_path}"]', 1)
+        contract.write_text(text, encoding="utf-8")
+        print(f"  layers: {import_path} self-hosted, last in the stack")
+    # The stack changed: re-deliver content and re-render through the
+    # composed source, so the home's files carry its own overlay.
+    from livery.workshop._templates import apply_project as reapply
+
+    for line in sync_workspace(root):
+        print(line)
+    for changed in reapply(root):
+        print(f"  rendered: {changed}")
 
 
 def _pushed_by_us(root: Path, clone_url: str) -> bool:

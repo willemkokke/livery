@@ -13,6 +13,7 @@ from pathlib import Path
 from livery.workshop._provenance import PROJECT_RENDERED, classify
 
 ROOT = Path(__file__).resolve().parents[1]
+TEMPLATES = ROOT / "packages/workshop/src/livery/workshop/templates"
 
 
 def _tracked() -> list[Path]:
@@ -59,7 +60,7 @@ def test_the_rendered_list_matches_the_template_tree() -> None:
     from livery.workshop._templates import PROJECT_SEEDS
 
     names = set()
-    project = ROOT / "templates" / "project"
+    project = TEMPLATES / "project"
     for path in project.rglob("*"):
         if not path.is_file():
             continue

@@ -82,12 +82,22 @@ def mount_layers(start: Path | None = None) -> tuple[str, ...]:
         try:
             plugin(layer)
         except Exception as error:
-            message = (
-                f"layer {layer!r} did not mount: {error}\n"
-                f"  the contract lists it in [workspace] layers, so its"
-                f" distribution ({dist}) belongs in the dev group;"
-                " `uv sync` installs it"
-            )
-            raise RuntimeError(message) from error
-        mounted.append(layer)
+            import importlib
+
+            try:
+                importlib.import_module(layer)
+            except ModuleNotFoundError:
+                message = (
+                    f"layer {layer!r} did not mount: {error}\n"
+                    f"  the contract lists it in [workspace] layers, so"
+                    f" its distribution ({dist}) belongs in the dev"
+                    " group; `uv sync` installs it"
+                )
+                raise RuntimeError(message) from error
+            # Importable, but its plugin offers no tasks (or none are
+            # advertised yet): a young layer legitimately ships only
+            # content, and content needs no mount.
+            print(f"  note: layer {layer} contributes content only (no tasks)")
+        else:
+            mounted.append(layer)
     return tuple(mounted)

@@ -1,4 +1,4 @@
-# Rendered by the template channel (templates, project kind);
+# Rendered by the template channel (packages/workshop/src/livery/workshop/templates, project kind);
 # the gate keeps it matching its render. Edit the source and
 # run `fm template.apply`; an edit here is drift.
 """The dev loop: the workspace's layers, mounted.

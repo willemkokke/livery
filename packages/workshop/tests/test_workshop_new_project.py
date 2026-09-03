@@ -12,6 +12,7 @@ from livery.forge.testing import FakeForge
 from livery.workshop._new_project import new_project
 
 ROOT = Path(__file__).resolve().parents[3]
+TEMPLATES = ROOT / "packages/workshop/src/livery/workshop/templates"
 
 _FAILURES = (BaseException,)
 
@@ -66,7 +67,7 @@ def _birth(**overrides: Any) -> None:
         "forge": "gitea",
         "owner": "acme",
         "url": "https://forge.acme.example",
-        "templates": str(ROOT / "templates"),
+        "templates": str(TEMPLATES),
     }
     arguments.update(overrides)
     new_project(**arguments)
@@ -193,3 +194,32 @@ def test_a_bad_name_refuses() -> None:
     with pytest.raises(_FAILURES) as caught:
         _birth(name="Bad Name")
     assert "lowercase" in str(caught.value)
+
+
+def test_the_layer_arm_scaffolds_a_self_hosting_home(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _birth(local=True, owner="", layer="brand")
+    root = tmp_path / "acme-tools"
+    member = root / "packages" / "brand"
+    assert (member / "src" / "acme_tools" / "brand" / "_tasks.py").is_file()
+    assert (
+        member / "src" / "acme_tools" / "brand" / "templates" / "overlay.toml"
+    ).is_file()
+    fragment = member / "src" / "acme_tools" / "brand" / "content" / "fragments"
+    assert (fragment / "CLAUDE.brand.md").is_file()
+    contract = (root / "workshop.toml").read_text()
+    assert 'layers = ["livery.workshop", "acme_tools.brand"]' in contract
+    pyproject = (member / "pyproject.toml").read_text()
+    assert "footman.tasks" in pyproject
+    assert '"acme_tools.brand" = "acme_tools.brand._tasks"' in pyproject
+    # The roster carries the member; the home's dev group derives it.
+    # The convention folds dots to dashes; the namespace keeps its
+    # own spelling (acme_tools.brand is acme_tools-brand).
+    assert "acme_tools-brand" in (root / ".copier-answers.yml").read_text()
+    out = capsys.readouterr().out
+    assert "self-hosted, last in the stack" in out
+    # The second run walks past the scaffold.
+    _birth(local=True, owner="", layer="brand")
+    out = capsys.readouterr().out
+    assert "already scaffolded" in out

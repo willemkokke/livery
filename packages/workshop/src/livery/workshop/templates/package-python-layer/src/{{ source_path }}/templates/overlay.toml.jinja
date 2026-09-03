@@ -1,0 +1,16 @@
+# {{ import_path }}'s template overlay: what this layer adds to the
+# composed source. A file at a new path is an addition; a file at a
+# path a lower layer ships must be declared here, with its reason,
+# because a wholesale replace ends inheritance for that file.
+#
+# [[replace]]
+# path = "project/README.md.jinja"
+# reason = "the brand's own README seed"
+#
+# A question this overlay contributes rides the composed copier.yml;
+# every question carries a default, so an update never prompts.
+#
+# [questions.brand_motto]
+# type = "str"
+# default = "make good things"
+# help = "the line the README seed quotes"

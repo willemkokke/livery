@@ -375,6 +375,8 @@ def _content_trees(root: Path) -> list[tuple[str, Path]]:
         for content in sorted(src.rglob("content")):
             if not content.is_dir():
                 continue
+            if "templates" in content.relative_to(src).parts:
+                continue  # a template kind's content seeds render later
             layer = ".".join(content.parent.relative_to(src).parts)
             trees.append((layer, content))
     return trees

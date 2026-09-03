@@ -17,11 +17,12 @@ from livery.workshop._templates import (
 )
 
 ROOT = Path(__file__).resolve().parents[3]
+TEMPLATES = ROOT / "packages/workshop/src/livery/workshop/templates"
 
 
 def _template_instance(tmp_path: Path) -> Path:
     """A scratch workspace carrying the real template source and answers."""
-    shutil.copytree(ROOT / "templates", tmp_path / "templates")
+    shutil.copytree(TEMPLATES, tmp_path / "templates")
     shutil.copy(ROOT / ".copier-answers.yml", tmp_path / ".copier-answers.yml")
     (tmp_path / "workshop.toml").write_text(
         "[workspace]\n"
@@ -145,7 +146,7 @@ def _render_kind(tmp_path: Path, forge_kind: str, **extra: object) -> Path:
     answers = read_answers(ROOT / ".copier-answers.yml")
     answers.update({"kind": "project", "forge_kind": forge_kind}, **extra)
     answers.update(extra)
-    render(ROOT / "templates", destination, answers)
+    render(TEMPLATES, destination, answers)
     return destination
 
 
@@ -198,7 +199,7 @@ def test_a_package_renders_namespace_clean(tmp_path: Path) -> None:
     destination = tmp_path / "scratch"
     answers = read_answers(ROOT / ".copier-answers.yml")
     render(
-        ROOT / "templates",
+        TEMPLATES,
         destination,
         {
             "kind": "package-python",
@@ -252,7 +253,7 @@ def test_the_rendered_prose_spells_the_brand(tmp_path: Path) -> None:
     answers = read_answers(ROOT / ".copier-answers.yml")
     destination = tmp_path / "branded"
     render(
-        ROOT / "templates",
+        TEMPLATES,
         destination,
         {**answers, "runner_prog": "hse"},
     )
@@ -266,7 +267,7 @@ def test_the_rendered_answers_never_store_the_brand(tmp_path: Path) -> None:
 
     answers = read_answers(ROOT / ".copier-answers.yml")
     destination = tmp_path / "branded"
-    render(ROOT / "templates", destination, {**answers, "runner_prog": "hse"})
+    render(TEMPLATES, destination, {**answers, "runner_prog": "hse"})
     stored = (destination / ".copier-answers.yml").read_text()
     # The brand belongs to the process; a stored copy would pin the
     # instance to the CLI that happened to render it.
@@ -321,7 +322,7 @@ def _instance_from_git_template(tmp_path: Path) -> tuple[Path, Path]:
     from livery.workshop import __version__
 
     repo = tmp_path / "template-repo"
-    shutil.copytree(ROOT / "templates", repo)
+    shutil.copytree(TEMPLATES, repo)
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
     subprocess.run(["git", "config", "user.email", "t@l"], cwd=repo, check=True)
     subprocess.run(["git", "config", "user.name", "T"], cwd=repo, check=True)
@@ -433,7 +434,7 @@ def _template_repo(tmp_path: Path, *, tagged: bool = True) -> Path:
     from importlib.metadata import version
 
     repo = tmp_path / "artifact-repo"
-    shutil.copytree(ROOT / "templates", repo)
+    shutil.copytree(TEMPLATES, repo)
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
     subprocess.run(["git", "config", "user.email", "t@l"], cwd=repo, check=True)
     subprocess.run(["git", "config", "user.name", "T"], cwd=repo, check=True)
