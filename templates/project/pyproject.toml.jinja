@@ -6,15 +6,12 @@ description = "{{ project_description }}"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-requires-python = ">={{ python_versions[0] }}"
-authors = [{ name = "{{ author_name }}", email = "{{ author_email }}" }]
-classifiers = [
+requires-python = ">={{ python_floor }}"
+{% if author_email %}authors = [{ name = "{{ author_name }}", email = "{{ author_email }}" }]
+{% endif %}classifiers = [
     "Development Status :: 1 - Planning",
     "Programming Language :: Python :: 3",
 ]
-
-[project.urls]
-Repository = "https://github.com/{{ forge_owner }}/{{ project_name }}"
 
 [tool.uv]
 package = false
@@ -36,6 +33,9 @@ dev = [
     # The workspace members, so root tests import them; an entry may
     # carry extras the dev loop needs.
 {% for package in packages %}    "{{ package.dev }}",
+{% endfor %}    # Every contract layer that is not already a member above, so a
+    # rendered tasks.py can always import its plugins.
+{% for requirement in layer_requirements %}    "{{ requirement }}",
 {% endfor %}    "pytest>=8.0",
     # Coverage feeds the per-package floors the gate enforces;
     # `patch = ["subprocess"]` needs coverage 7.10 or newer.
@@ -64,11 +64,11 @@ dev = [
 ]
 
 # Ruff and basedpyright configuration cribbed from footman's pyproject:
-# footman's rules, global. Livery adds pydocstyle in the google
+# footman's rules, global. The workshop adds pydocstyle in the google
 # convention: Google docstrings only, everywhere.
 [tool.ruff]
 line-length = 88
-target-version = "py{{ python_versions[0] | replace('.', '') }}"
+target-version = "py{{ python_floor | replace('.', '') }}"
 src = [{% for package in packages %}"packages/{{ package.dir }}/src", "packages/{{ package.dir }}/tests", {% endfor %}"tests"]
 
 [tool.ruff.lint]
@@ -92,12 +92,12 @@ include = ["packages", "tests", "tasks.py"]
 # there whatever interpreter the editor has selected.
 venvPath = "."
 venv = ".venv"
-pythonVersion = "{{ python_versions[0] }}"
+pythonVersion = "{{ python_floor }}"
 typeCheckingMode = "standard"
 reportMissingModuleSource = false
 
 [tool.mypy]
-# Second gate of the four. livery.* is fully strict; tests and tasks.py
+# Second gate of the four. {{ namespace_package }}.* is fully strict; tests and tasks.py
 # run the usage-checking half (check_untyped_defs, on via strict), so
 # every test body type-checks as consumer code without demanding
 # `-> None` on every def. Narrow suppressions live inline as
@@ -122,7 +122,7 @@ explicit_package_bases = true
 # bare-run default; the typecheck task adds darwin and win32 runs,
 # since mypy has no all-platforms mode.
 platform = "linux"
-python_version = "{{ python_versions[0] }}"
+python_version = "{{ python_floor }}"
 strict = true
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
@@ -133,7 +133,7 @@ disallow_untyped_decorators = false
 implicit_reexport = true
 
 [[tool.mypy.overrides]]
-module = "livery.*"
+module = "{{ namespace_package }}.*"
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
 disallow_untyped_calls = true
@@ -146,9 +146,9 @@ disallow_untyped_decorators = true
 include = [{% for package in packages %}"packages/{{ package.dir }}/src"{% if not loop.last %}, {% endif %}{% endfor %}]
 
 [tool.ty.environment]
-# Every platform at once (ty checks the union), {{ python_versions[0] }} floor.
+# Every platform at once (ty checks the union), {{ python_floor }} floor.
 python-platform = "all"
-python-version = "{{ python_versions[0] }}"
+python-version = "{{ python_floor }}"
 
 [tool.pyrefly]
 # Fourth gate, same scope as ty. Preset `default`, not `strict`:
@@ -163,9 +163,9 @@ project-includes = [{% for package in packages %}"packages/{{ package.dir }}/src
 # changes anything.
 use-ignore-files = false
 disable-project-excludes-heuristics = true
-# Every platform at once, {{ python_versions[0] }} floor.
+# Every platform at once, {{ python_floor }} floor.
 python-platform = "all"
-python-version = "{{ python_versions[0] }}"
+python-version = "{{ python_floor }}"
 
 [tool.pyrefly.errors]
 # Held at error so they cannot silently accumulate; both classes are
@@ -188,7 +188,7 @@ unnecessary-type-conversion = "error"
 patch = ["subprocess"]
 parallel = true
 relative_files = true
-source = ["livery"]
+source = ["{{ namespace_package }}"]
 
 [tool.coverage.paths]
 # One identity for a file whichever separator wrote it, so Windows

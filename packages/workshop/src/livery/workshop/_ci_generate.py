@@ -1,11 +1,12 @@
 """The CI workflow emitters: forge-dependent mechanics, generated.
 
 Workflow files are mechanical forge knowledge, emitted here from the
-workspace's answers and written as managed generated artifacts; the
-templates carry none of it, and the render gate compares the
-committed files against these same pure functions, offline. Change
-an emitter, run ``fm template.apply``, and every kind's files move
-together; a template update is never the vehicle.
+workspace contract (``workshop.toml``) and the derived Python matrix,
+written as managed generated artifacts; the templates carry none of
+it, and the render gate compares the committed files against these
+same pure functions, offline. Change an emitter, run
+``fm template.apply``, and every kind's files move together; a
+template update is never the vehicle.
 
 The release workflows are the merge-triggered train: publishing runs
 where the release PR's squash lands, and the receipt tags are cut by
@@ -15,16 +16,38 @@ member, so a tag is a receipt, never a trigger.
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 from typing import Any
 
 import footman
+
+from livery.workshop._pythons import python_matrix
 
 #: Pinned action shas, one place; version comments ride each use.
 CHECKOUT = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1"
 SETUP_UV = "astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1"
 UPLOAD = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1"
 DOWNLOAD = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1"
+
+
+def _facts(root: Path) -> dict[str, Any]:
+    """What the emitters read: the contract's CI facts, matrix derived.
+
+    Runners, the required context, and the forge kind come from
+    ``workshop.toml``; the Python matrix from the root
+    ``pyproject.toml``'s floor and the workshop's newest supported
+    minor. Nothing here is an answer: the answers hold identity
+    alone.
+    """
+    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+    ci = contract.get("ci") or {}
+    return {
+        "forge_kind": str((contract.get("forge") or {}).get("kind", "github")),
+        "runners": list(ci.get("runners") or ["ubuntu-latest"]),
+        "required_context": str(ci.get("required_context", "gate")),
+        "python_versions": python_matrix(root),
+    }
 
 
 def _csv(values: list[Any], *, quoted: bool = False) -> str:
@@ -125,8 +148,8 @@ jobs:
 """
 
 
-def _github_release(answers: dict[str, Any], prog: str) -> str:
-    return f"""name: release
+def _github_release(answers: dict[str, Any], prog: str, *, templates_here: bool) -> str:
+    workflow = f"""name: release
 
 # The train: a workflow.release PR merges, this publishes its squash,
 # and the receipt tags are cut only after the index confirms each
@@ -169,7 +192,14 @@ jobs:
         run: >-
           uv run --no-sync {prog} workflow.release.publish
           --ref="${{{{ inputs.ref || github.event.pull_request.merge_commit_sha }}}}"
-
+"""
+    if not templates_here:
+        return workflow
+    # Only the workspace that carries the template source publishes
+    # the snapshot; an instance's release has no templates to ship.
+    return (
+        workflow
+        + f"""
   # The workshop release's aftermath: the template snapshot, tagged in
   # lockstep with packages/workshop's receipt.
   templates:
@@ -195,6 +225,7 @@ jobs:
           uv run --no-sync {prog} release.templates
           "$(uv run --no-sync python -c 'import livery.workshop as w; print(w.__version__)')"
 """
+    )
 
 
 def _gitea_gate(answers: dict[str, Any], prog: str) -> str:
@@ -260,7 +291,6 @@ jobs:
 
 def _gitea_release(answers: dict[str, Any], prog: str) -> str:
     first = next(iter(answers.get("runners", ["ubuntu-latest"])))
-    index = answers.get("publish_index", "")
     return f"""name: release
 
 # The merge-triggered train, token publishing (Gitea has no trusted
@@ -285,11 +315,12 @@ jobs:
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
       - name: Sync (locked)
         run: $HOME/.local/bin/uv sync --locked
+      # PYTHON_PUBLISH_INDEX and PYTHON_REGISTRY_URL come from the
+      # committed .repo.env through the env cascade; only the secret
+      # is mounted here.
       - name: Publish the wave
         env:
           UV_PUBLISH_TOKEN: ${{{{ secrets.UV_PUBLISH_TOKEN }}}}
-          PYTHON_PUBLISH_INDEX: "{index}"
-          PYTHON_REGISTRY_URL: "{index and index.replace("/pypi", "/pypi/simple")}"
         run: >-
           $HOME/.local/bin/uv run --no-sync {prog} workflow.release.publish
           --ref="${{{{ github.event.pull_request.merge_commit_sha }}}}"
@@ -299,7 +330,6 @@ jobs:
 def _gitlab_pipeline(answers: dict[str, Any], prog: str) -> str:
     context = answers.get("required_context", "gate")
     python = next(iter(answers.get("python_versions", ["3.11"])))
-    index = answers.get("publish_index", "")
     return f"""# The gate and the train, GitLab-shaped, generated by the workshop.
 # One pipeline definition: workflow rules admit merge requests, main,
 # and FORGE_WORKFLOW-routed manual pipelines.
@@ -337,9 +367,8 @@ release-publish:
     - git remote set-url origin "https://oauth2:${{GITLAB_PUSH_TOKEN}}@${{CI_SERVER_HOST}}/${{CI_PROJECT_PATH}}.git"
     - uv sync --locked
     - uv run --no-sync {prog} workflow.release.publish --ref="$CI_COMMIT_SHA"
-  variables:
-    PYTHON_PUBLISH_INDEX: "{index}"
-    PYTHON_REGISTRY_URL: "{index and index + "/simple"}"
+  # PYTHON_PUBLISH_INDEX and PYTHON_REGISTRY_URL come from the
+  # committed .repo.env through the env cascade.
 """
 
 
@@ -430,33 +459,40 @@ governance-apply:
 """
 
 
-def generate(answers: dict[str, Any]) -> dict[str, str]:
-    """Every generated CI file for *answers*' forge kind, by path.
+def generate(root: Path) -> dict[str, str]:
+    """Every generated CI file for *root*'s forge kind, by path.
 
-    The workflows call the CLI by the name this process runs under
-    (livery.workshop._brand.runner_prog), so a branded runner emits
-    workflows that call itself and needs no configuration.
+    The workflows call the CLI by the name this process runs under,
+    so a branded runner emits workflows that call itself and needs
+    no configuration. The template-snapshot job is emitted only
+    where the template source is a local directory: an instance's
+    release has no templates to publish.
     """
+    from livery.workshop._templates import local_template_dir
+
     prog = footman.prog()
-    kind = str(answers.get("forge_kind", "github"))
+    facts = _facts(root)
+    kind = str(facts["forge_kind"])
     if kind == "github":
         return {
-            ".github/workflows/ci.yml": _github_gate(answers, prog),
-            ".github/workflows/release.yml": _github_release(answers, prog),
-            ".github/workflows/governance.yml": _github_governance(answers, prog),
+            ".github/workflows/ci.yml": _github_gate(facts, prog),
+            ".github/workflows/release.yml": _github_release(
+                facts, prog, templates_here=local_template_dir(root) is not None
+            ),
+            ".github/workflows/governance.yml": _github_governance(facts, prog),
         }
     if kind == "gitea":
         return {
-            ".gitea/workflows/ci.yml": _gitea_gate(answers, prog),
-            ".gitea/workflows/release.yml": _gitea_release(answers, prog),
-            ".gitea/workflows/governance.yml": _gitea_governance(answers, prog),
+            ".gitea/workflows/ci.yml": _gitea_gate(facts, prog),
+            ".gitea/workflows/release.yml": _gitea_release(facts, prog),
+            ".gitea/workflows/governance.yml": _gitea_governance(facts, prog),
         }
     return {
-        ".gitlab-ci.yml": _gitlab_pipeline(answers, prog)
-        + _gitlab_governance(answers, prog)
+        ".gitlab-ci.yml": _gitlab_pipeline(facts, prog)
+        + _gitlab_governance(facts, prog)
     }
 
 
-def generated_files(root: Path, answers: dict[str, Any]) -> dict[Path, str]:
+def generated_files(root: Path) -> dict[Path, str]:
     """The generated artifacts as absolute paths under *root*."""
-    return {root / relative: content for relative, content in generate(answers).items()}
+    return {root / relative: content for relative, content in generate(root).items()}

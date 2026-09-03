@@ -56,7 +56,9 @@ def rig(
     fake.create_repo("willemkokke", "livery", private=True, description="t")
     repo = fake.repository("willemkokke", "livery")
     git = GitOps(root)
-    monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: root)
+    monkeypatch.setattr(
+        "livery.workshop._layers.workspace_root", lambda start=None: root
+    )
     monkeypatch.setattr(
         "livery.workshop._forge_lane.this_repository", lambda _root: repo
     )

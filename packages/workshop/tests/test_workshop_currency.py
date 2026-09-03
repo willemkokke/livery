@@ -184,7 +184,9 @@ def test_integrate_merges_the_base_in_and_teaches_on_conflict(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     clone, origin = _rig(tmp_path)
-    monkeypatch.setattr("livery.workshop._sync.workspace_root", lambda: clone)
+    monkeypatch.setattr(
+        "livery.workshop._sync.workspace_root", lambda start=None: clone
+    )
     monkeypatch.chdir(clone)
     _git(clone, "checkout", "-b", "feat/1-work")
     (clone / "mine.txt").write_text("m\n")

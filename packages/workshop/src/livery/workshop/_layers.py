@@ -30,10 +30,14 @@ def workspace_root(start: Path | None = None) -> Path | None:
     return None
 
 
-def layer_names(start: Path | None = None) -> tuple[str, ...]:
-    """The layers the workspace declares, in precedence order.
+def layer_entries(start: Path | None = None) -> tuple[tuple[str, str], ...]:
+    """Each declared layer as ``(import path, distribution)``.
 
-    Empty outside a workspace, and empty when the contract carries no
+    A string entry derives its distribution by convention: dots
+    become dashes, so ``livery.workshop`` is ``livery-workshop``. A
+    table entry ``{import = "...", dist = "..."}`` spells both, for
+    a layer whose names do not follow the convention. Empty outside
+    a workspace, and empty when the contract carries no
     ``[workspace] layers`` list: no guessing, no defaults.
     """
     root = workspace_root(start)
@@ -41,8 +45,25 @@ def layer_names(start: Path | None = None) -> tuple[str, ...]:
         return ()
     contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
     workspace = contract.get("workspace") or {}
-    layers = workspace.get("layers") or []
-    return tuple(str(layer) for layer in layers)
+    entries: list[tuple[str, str]] = []
+    for layer in workspace.get("layers") or []:
+        if isinstance(layer, dict):
+            import_path = str(layer.get("import", ""))
+            dist = str(layer.get("dist", "")) or import_path.replace(".", "-")
+            entries.append((import_path, dist))
+        else:
+            name = str(layer)
+            entries.append((name, name.replace(".", "-")))
+    return tuple(entries)
+
+
+def layer_names(start: Path | None = None) -> tuple[str, ...]:
+    """The layers the workspace declares, in precedence order.
+
+    The import paths from livery.workshop._layers.layer_entries;
+    empty on the same terms.
+    """
+    return tuple(import_path for import_path, _ in layer_entries(start))
 
 
 def mount_layers(start: Path | None = None) -> tuple[str, ...]:

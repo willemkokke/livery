@@ -13,7 +13,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import footman
 import toolroom
 from footman import fail
 
@@ -108,16 +107,26 @@ def refresh_rendered(root: Path) -> list[str]:
         return apply_project(root)
     notes = _align_answers_source(root, template_source(root))
     from livery.workshop import __version__
+    from livery.workshop._templates import read_answers, render_injections
 
+    # The injected values ride as render data, never answers: the
+    # runner's name belongs to the process, the floor and the layers
+    # to the contract, so rebranding or re-layering an instance is
+    # exactly this run under the new contract.
+    answers = read_answers(root / ".copier-answers.yml")
+    data = []
+    for key, value in render_injections(root, answers).items():
+        if isinstance(value, list):
+            spelled = "[" + ", ".join(str(item) for item in value) + "]"
+        else:
+            spelled = str(value)
+        data += ["--data", f"{key}={spelled}"]
     result = toolroom.copier.opts(cwd=root)(
         "update",
         "--defaults",
         "--trust",
-        "--skip-answered",  # The runner's name rides as render data, never an
-        # answer: rebranding an instance is exactly this run
-        # under the branded CLI.
-        "--data",
-        f"runner_prog={footman.prog()}",
+        "--skip-answered",
+        *data,
         "--vcs-ref",
         f"v{__version__}",
         str(root),

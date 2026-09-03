@@ -270,7 +270,9 @@ def test_the_branch_routes_the_act(
     from livery.workshop._release_driver import workflow_release
 
     root = _workspace(tmp_path)
-    monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: root)
+    monkeypatch.setattr(
+        "livery.workshop._layers.workspace_root", lambda start=None: root
+    )
     routed: list[str] = []
     monkeypatch.setattr(
         "livery.workshop._release_driver.local_release",

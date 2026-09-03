@@ -661,7 +661,9 @@ def test_a_context_rename_refuses_teaching_fix_armed(
     _contract(git.root, "the-new-gate")
     _git(git.root, "add", "-A")
     _git(git.root, "commit", "-m", "feat: rename the required context")
-    monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: git.root)
+    monkeypatch.setattr(
+        "livery.workshop._layers.workspace_root", lambda start=None: git.root
+    )
     with pytest.raises(_FAILURES) as caught:
         _submit(fake, git, follow_to_verdict=False)
     message = str(caught.value)
@@ -687,7 +689,9 @@ def test_fix_applies_the_rename_and_rereruns_quietly(
     _contract(git.root, "the-new-gate")
     _git(git.root, "add", "-A")
     _git(git.root, "commit", "-m", "feat: rename the required context")
-    monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: git.root)
+    monkeypatch.setattr(
+        "livery.workshop._layers.workspace_root", lambda start=None: git.root
+    )
     monkeypatch.setattr(
         "livery.workshop._forge_lane.admin_repository",
         lambda _root: (_repo(fake), "GITHUB_ADMIN_TOKEN"),
@@ -735,7 +739,9 @@ def test_a_refused_admin_write_teaches_instead_of_half_healing(
     _contract(git.root, "the-new-gate")
     _git(git.root, "add", "-A")
     _git(git.root, "commit", "-m", "feat: rename the required context")
-    monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: git.root)
+    monkeypatch.setattr(
+        "livery.workshop._layers.workspace_root", lambda start=None: git.root
+    )
 
     class _Refused:
         def protection(self, branch: str) -> object:
