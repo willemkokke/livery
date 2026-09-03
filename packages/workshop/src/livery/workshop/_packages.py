@@ -65,6 +65,10 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
     problems = []
     packages = []
     packages_dir = root / "packages"
+    # A workspace born a moment ago has no members yet; zero packages
+    # is a legal answer, not a missing directory.
+    if not packages_dir.is_dir():
+        return ()
     for directory in sorted(p for p in packages_dir.iterdir() if p.is_dir()):
         contract_file = directory / "workshop.toml"
         if not contract_file.is_file():

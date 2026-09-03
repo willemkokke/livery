@@ -86,7 +86,7 @@ convention = "google"
 "**/_ci_generate.py" = ["E501"]
 
 [tool.basedpyright]
-include = ["packages", "tests", "tasks.py"]
+include = [{% if packages %}"packages", {% endif %}"tests", "tasks.py"]
 # The IDE and the CLI resolve the same environment: the workspace
 # members are editable installs in .venv, so basedpyright must look
 # there whatever interpreter the editor has selected.
@@ -143,7 +143,7 @@ disallow_untyped_decorators = true
 # Third gate. Scope: the packages themselves; the consumer seam in
 # tests is already double-checked by basedpyright and mypy.
 [tool.ty.src]
-include = [{% for package in packages %}"packages/{{ package.dir }}/src"{% if not loop.last %}, {% endif %}{% endfor %}]
+include = [{% if packages %}{% for package in packages %}"packages/{{ package.dir }}/src"{% if not loop.last %}, {% endif %}{% endfor %}{% else %}"tasks.py"{% endif %}]
 
 [tool.ty.environment]
 # Every platform at once (ty checks the union), {{ python_floor }} floor.
@@ -156,7 +156,7 @@ python-version = "{{ python_floor }}"
 # zero-dependency 3.11 library cannot spell it without a
 # typing_extensions runtime dep. Revisit when 3.11 support ends.
 preset = "default"
-project-includes = [{% for package in packages %}"packages/{{ package.dir }}/src"{% if not loop.last %}, {% endif %}{% endfor %}]
+project-includes = [{% if packages %}{% for package in packages %}"packages/{{ package.dir }}/src"{% if not loop.last %}, {% endif %}{% endfor %}{% else %}"tasks.py"{% endif %}]
 # Both path heuristics off: a checkout under a dot-directory (a
 # `.claude/worktrees/` worktree) silently skips every include and the
 # gate fails on "no files matched". At the repo root neither setting
@@ -196,7 +196,7 @@ source = ["{{ namespace_package }}"]
 packages = ["packages/", "packages\\"]
 
 [tool.pytest.ini_options]
-testpaths = ["packages", "tests"]
+testpaths = [{% if packages %}"packages", {% endif %}"tests"]
 # `-n auto` fans the suite across cores; `worksteal` because durations
 # are uneven (footman measured it; the choice carries until we measure
 # here).

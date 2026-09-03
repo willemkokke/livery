@@ -326,3 +326,11 @@ def test_a_package_without_the_contract_is_named(tmp_path: Path) -> None:
     with pytest.raises(_FAILURES) as caught:
         _cliff.bumped_version(root, package)
     assert "cliff.toml" in str(caught.value)
+
+
+def test_a_newborn_workspace_has_zero_packages(tmp_path: Path) -> None:
+    from livery.workshop._packages import discover_packages
+
+    # No packages/ directory at all: the state every instance is born
+    # in, and a legal one, not an error.
+    assert discover_packages(tmp_path) == ()

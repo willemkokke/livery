@@ -1,0 +1,9 @@
+"""The workspace's layering, checked on every gate run."""
+
+from pathlib import Path
+
+from livery.workshop import verify_workspace
+
+
+def test_the_workspace_keeps_its_layering() -> None:
+    verify_workspace(Path(__file__).resolve().parents[1])

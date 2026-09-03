@@ -278,7 +278,9 @@ def run_test(
         # union, in the aggregating job.
         pytest.opts(in_process=False)(*dirs, *pytest_args)
         return
-    pytest.opts(in_process=False)(*dirs, "--cov=livery", "--cov-report=", *pytest_args)
+    # Bare --cov: the measured source is [tool.coverage.run] source,
+    # the namespace the render derived, never a spelled module.
+    pytest.opts(in_process=False)(*dirs, "--cov", "--cov-report=", *pytest_args)
     report_coverage(root, packages)
 
 

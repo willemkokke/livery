@@ -209,6 +209,8 @@ def project_drift(root: Path) -> list[str]:
         render(source, Path(scratch), data)
         for rendered in rendered_files(Path(scratch)):
             relative = rendered.relative_to(scratch)
+            if relative.as_posix() in PROJECT_SEEDS:
+                continue
             committed = root / relative
             if not committed.is_file():
                 drift.append(f"{relative}: rendered, but missing from the repository")
@@ -236,6 +238,11 @@ def project_drift(root: Path) -> list[str]:
 #: file is a package's seed, which its authors then write: comparing
 #: those would report a living package as drift from its own birth.
 PACKAGE_MANAGED = ("cliff.toml",)
+
+#: The project render's seeds: born with the workspace, then the
+#: workspace's own. Written only when missing; the drift gate never
+#: judges them.
+PROJECT_SEEDS = ("tests/test_workspace_contracts.py",)
 
 
 def package_drift(root: Path) -> list[str]:
@@ -286,6 +293,8 @@ def apply_project(root: Path) -> list[str]:
         for rendered in rendered_files(Path(scratch)):
             relative = rendered.relative_to(scratch)
             committed = root / relative
+            if relative.as_posix() in PROJECT_SEEDS and committed.is_file():
+                continue  # a seed is the workspace's own once it exists
             body = _lf(rendered.read_bytes())
             if not committed.is_file() or _lf(committed.read_bytes()) != body:
                 committed.parent.mkdir(parents=True, exist_ok=True)
