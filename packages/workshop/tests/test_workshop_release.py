@@ -254,3 +254,22 @@ def test_a_scoped_floor_bump_moves_only_the_named_sibling(tmp_path: Path) -> Non
     assert 'floor = "0.1.0"' in contract
     changed = bump_floors(root, git, only=("livery-core",))
     assert changed == ["packages/tool: floor on packages/core 0.1.0 -> 0.2.0"]
+
+
+def test_a_stamped_but_unreleased_version_still_releases(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The tag is the receipt: a pyproject stamped ahead of its release
+    # must not read as released, or that release strands forever. The
+    # fixture's packages carry version 0.2.0 with no tag at all, the
+    # stranded shape exactly.
+    root = _workspace(tmp_path)
+    monkeypatch.setattr(
+        "livery.workshop._cliff.bumped_version", lambda root, package: "0.2.0"
+    )
+    monkeypatch.setattr(
+        "livery.workshop._cliff.unreleased_entry",
+        lambda root, package, version="": "## [0.2.0]\n\n- Added things.",
+    )
+    changed = prepare_release(root, "packages/core")
+    assert changed, "the stamped-ahead release must proceed"
