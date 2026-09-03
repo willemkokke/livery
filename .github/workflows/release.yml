@@ -50,8 +50,8 @@ jobs:
           uv run --no-sync fm workflow.release.publish
           --ref="${{ inputs.ref || github.event.pull_request.merge_commit_sha }}"
 
-  # The workshop release's aftermath: the template snapshot, tagged in
-  # lockstep with packages/workshop's receipt.
+  # The home's release aftermath: the (composed) template artifact,
+  # tagged in lockstep with the publishing layer's receipt.
   templates:
     needs: [publish]
     if: contains(needs.publish.outputs.members, 'livery-workshop')
@@ -66,11 +66,11 @@ jobs:
       - name: Deploy key
         run: |
           mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.WORKSHOP_TEMPLATES_DEPLOY_KEY }}" > ~/.ssh/templates_deploy
+          printf '%s
+' "${{ secrets.WORKSHOP_TEMPLATES_DEPLOY_KEY }}" > ~/.ssh/templates_deploy
           chmod 600 ~/.ssh/templates_deploy
-      - name: Publish the template snapshot
+      - name: Publish the template artifact
         env:
           GIT_SSH_COMMAND: ssh -i ~/.ssh/templates_deploy -o StrictHostKeyChecking=accept-new
-        run: >-
-          uv run --no-sync fm release.templates
-          "$(uv run --no-sync python -c 'import livery.workshop as w; print(w.__version__)')"
+          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
+        run: uv run --no-sync fm release.templates

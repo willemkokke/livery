@@ -10,6 +10,7 @@ layers = ["livery.workshop", "livery.forge"]
 # root, or a git URL (a fork, at your own risk). The update wave
 # follows this value.
 templates = "packages/workshop/src/livery/workshop/templates"
+templates_artifact = "git@github.com:willemkokke/workshop-templates.git"
 
 [forge]
 kind = "github"
