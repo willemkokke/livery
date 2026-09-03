@@ -47,9 +47,9 @@ def template_source(root: Path) -> str:
     """The workspace's declared template source.
 
     ``[workspace] templates`` in ``workshop.toml``: a directory relative
-    to the root (the monorepo says ``templates``), or a git URL (a
-    fork, at its own risk). Silent means the published artifact
-    repository.
+    to the root (the monorepo names the base layer's own tree under
+    ``packages/workshop``), or a git URL (a fork, at its own risk).
+    Silent means the published artifact repository.
     """
     import tomllib
 

@@ -1,7 +1,7 @@
 # Managed by copier: this instance's identity and template
 # provenance. `fm new.package` appends to `packages`; edit other
 # values only when the workspace itself changes.
-_src_path: templates
+_src_path: packages/workshop/src/livery/workshop/templates
 kind: project
 project_name: livery
 project_description: The livery ecosystem monorepo (virtual root).

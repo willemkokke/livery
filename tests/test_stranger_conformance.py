@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+TEMPLATES = ROOT / "packages/workshop/src/livery/workshop/templates"
 
 #: The base layer's own names: the one livery spelling an instance
 #: legitimately carries, and only through its contract's layer list
@@ -46,7 +47,7 @@ def _stranger(destination: Path) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
     (destination / "workshop.toml").write_text(_CONTRACT)
     render(
-        ROOT / "templates",
+        TEMPLATES,
         destination,
         {
             "kind": "project",

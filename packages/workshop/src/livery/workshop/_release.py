@@ -277,13 +277,18 @@ def release_templates(
     """Publish the template snapshot for one workshop release.
 
     Runs from the tagged checkout in the release workflow, with the
-    deploy key in the ssh agent; ``templates/`` becomes the artifact
-    repository's tree, tagged ``v<version>`` in lockstep with
-    ``packages/workshop/v<version>``.
+    deploy key in the ssh agent; the contract's local template tree
+    becomes the artifact repository's tree, tagged ``v<version>`` in
+    lockstep with ``packages/workshop/v<version>``.
     """
+    from livery.workshop._templates import local_template_dir
+
     root = _root()
+    source = local_template_dir(root)
+    if source is None:
+        fail("no local template source here: only the base home publishes")
     outcome = publish_templates(
-        root / "templates",
+        source,
         version,
         remote,
         author="livery release train <mail@willem.net>",

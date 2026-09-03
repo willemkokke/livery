@@ -12,6 +12,7 @@ from livery.forge.testing import FakeForge
 from livery.workshop._new_project import new_project
 
 ROOT = Path(__file__).resolve().parents[3]
+TEMPLATES = ROOT / "packages/workshop/src/livery/workshop/templates"
 
 _FAILURES = (BaseException,)
 
@@ -66,7 +67,7 @@ def _birth(**overrides: Any) -> None:
         "forge": "gitea",
         "owner": "acme",
         "url": "https://forge.acme.example",
-        "templates": str(ROOT / "templates"),
+        "templates": str(TEMPLATES),
     }
     arguments.update(overrides)
     new_project(**arguments)

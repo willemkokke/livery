@@ -24,6 +24,7 @@ _REAL_GATE = run_gate
 _FAILURES = (SystemExit, Failed)
 
 ROOT = Path(__file__).resolve().parents[3]
+TEMPLATES = ROOT / "packages/workshop/src/livery/workshop/templates"
 
 
 def _git(cwd: Path, *args: str) -> None:
@@ -41,7 +42,7 @@ def _instance(tmp_path: Path) -> Path:
     _git(root, "config", "user.name", "T")
     import shutil
 
-    shutil.copytree(ROOT / "templates", root / "templates")
+    shutil.copytree(TEMPLATES, root / "templates")
     shutil.copy(ROOT / ".copier-answers.yml", root / ".copier-answers.yml")
     # The contract is a birth-time seed the render never touches; the
     # tests stand in for the birth verb and write it whole.
