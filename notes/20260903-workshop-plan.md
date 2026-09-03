@@ -4,8 +4,9 @@ Status: approved 2026-09-03 after Willem's review; executing.
 Phase 10 shipped 2026-09-03 (issue #109, PR #110); phase 11
 shipped 2026-09-03 (issue #111, PR #113); phase 12 shipped
 2026-09-03 (issue #114, PR #115); phase 13 shipped 2026-09-03
-(issue #116, PR #117); phase 14 shipped 2026-09-03 (issue #118);
-cut rulings and deviations are in the decision record.
+(issue #116, PR #117); phase 14 shipped 2026-09-03 (issue #118,
+PR #119); phase 15 shipped 2026-09-03 (issue #120); cut rulings and
+deviations are in the decision record.
 Subsumes
 `notes/20260901-workshop-plan.md`, whose phases 1 to 9 shipped and
 whose shipped record, movement analysis, and options registry stay
@@ -547,6 +548,9 @@ Acceptance:
 
 ## Phase 15: the composed artifact release
 
+Shipped 2026-09-03 (issue #120); the ref and publish rulings are
+in the decision record.
+
 Contract 21 built.
 
 Deliverables:
@@ -931,6 +935,28 @@ green so each feature ships through the proven seams:
   tasks.py is exempt from the line-length rule: its provenance
   header names the template source verbatim, and a source path or
   URL may be long.
+
+- 2026-09-03, phase 15 cut rulings. The publish side is a contract
+  fact: `[workspace] templates_artifact` names the git remote a
+  home's release pushes to, empty for every ordinary instance, and
+  the emitters gate the template-artifact job on it plus a member
+  layer shipping a tree; livery's own contract carries the
+  workshop-templates remote, retiring the code constant. The
+  release verb composes through the same seam the gate renders
+  through, stages the tree, and (for a composed home) writes
+  `composition.toml` into the artifact naming the base, its pinned
+  version, the publisher, and the stack; the base home's artifact
+  stays byte-identical to its tree, the degenerate case. The
+  remote ref rule refined once more: the tag a child renders at is
+  the topmost tree-shipping layer's installed version, so a
+  grandchild anchors at its brand's tag and a plain instance at
+  the base's. The gitea release workflow carries the artifact job
+  in host mode, with `FORGE_TOKEN` mounted because a
+  cross-repository push exceeds the ambient token's scope; an http
+  push injects the credential in process only. Same version,
+  different content refused; identical republish quiet; a child
+  rendered a member from the composed artifact at the brand's tag,
+  all forced in the suite.
 
 ## Open
 

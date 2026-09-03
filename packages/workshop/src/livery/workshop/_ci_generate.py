@@ -40,10 +40,18 @@ def _facts(root: Path) -> dict[str, Any]:
     minor. Nothing here is an answer: the answers hold identity
     alone.
     """
+    from livery.workshop._compose import layer_template_tree
     from livery.workshop._envfile import parse_env_file
+    from livery.workshop._layers import layer_entries
+    from livery.workshop._templates import templates_artifact
 
     contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
     ci = contract.get("ci") or {}
+    publisher = ""
+    for layer, dist in layer_entries(root):
+        tree = layer_template_tree(root, layer)
+        if tree is not None and tree.is_relative_to(root):
+            publisher = dist
     return {
         "forge_kind": str((contract.get("forge") or {}).get("kind", "github")),
         "runners": list(ci.get("runners") or ["ubuntu-latest"]),
@@ -52,6 +60,10 @@ def _facts(root: Path) -> dict[str, Any]:
         # The committed .repo.env's keys: the offline, deterministic
         # list of which secrets the rung step may carry into a job.
         "env_keys": sorted(parse_env_file(root / ".repo.env")),
+        # The publish side: where this home ships its template
+        # artifact, and which member layer's release triggers it.
+        "templates_artifact": templates_artifact(root),
+        "templates_publisher": publisher,
     }
 
 
@@ -190,8 +202,9 @@ jobs:
 """
 
 
-def _github_release(answers: dict[str, Any], prog: str, *, templates_here: bool) -> str:
+def _github_release(answers: dict[str, Any], prog: str) -> str:
     rung = _rung_step(answers)
+    publisher = str(answers.get("templates_publisher", ""))
     workflow = f"""name: release
 
 # The train: a workflow.release PR merges, this publishes its squash,
@@ -241,18 +254,18 @@ jobs:
           uv run --no-sync {prog} workflow.release.publish
           --ref="${{{{ inputs.ref || github.event.pull_request.merge_commit_sha }}}}"
 """
-    if not templates_here:
+    if not answers.get("templates_artifact") or not publisher:
         return workflow
-    # Only the workspace that carries the template source publishes
-    # the snapshot; an instance's release has no templates to ship.
+    # Only a home publishes: the contract declares the artifact
+    # repository and a member layer ships the tree.
     return (
         workflow
         + f"""
-  # The workshop release's aftermath: the template snapshot, tagged in
-  # lockstep with packages/workshop's receipt.
+  # The home's release aftermath: the (composed) template artifact,
+  # tagged in lockstep with the publishing layer's receipt.
   templates:
     needs: [publish]
-    if: contains(needs.publish.outputs.members, 'livery-workshop')
+    if: contains(needs.publish.outputs.members, '{publisher}')
     runs-on: ubuntu-latest
     steps:
       - uses: {CHECKOUT}
@@ -264,14 +277,13 @@ jobs:
       - name: Deploy key
         run: |
           mkdir -p ~/.ssh
-          printf '%s\\n' "${{{{ secrets.WORKSHOP_TEMPLATES_DEPLOY_KEY }}}}" > ~/.ssh/templates_deploy
+          printf '%s\n' "${{{{ secrets.WORKSHOP_TEMPLATES_DEPLOY_KEY }}}}" > ~/.ssh/templates_deploy
           chmod 600 ~/.ssh/templates_deploy
-      - name: Publish the template snapshot
+      - name: Publish the template artifact
         env:
           GIT_SSH_COMMAND: ssh -i ~/.ssh/templates_deploy -o StrictHostKeyChecking=accept-new
-        run: >-
-          uv run --no-sync {prog} release.templates
-          "$(uv run --no-sync python -c 'import livery.workshop as w; print(w.__version__)')"
+          FORGE_TOKEN: ${{{{ secrets.FORGE_TOKEN }}}}
+        run: uv run --no-sync {prog} release.templates
 """
     )
 
@@ -341,7 +353,7 @@ jobs:
 def _gitea_release(answers: dict[str, Any], prog: str) -> str:
     first = next(iter(answers.get("runners", ["ubuntu-latest"])))
     rung = _rung_step(answers)
-    return f"""name: release
+    workflow = f"""name: release
 
 # The merge-triggered train, token publishing (Gitea has no trusted
 # publishing): the wave publishes the squash and cuts receipt tags
@@ -377,6 +389,33 @@ jobs:
           $HOME/.local/bin/uv run --no-sync {prog} workflow.release.publish
           --ref="${{{{ github.event.pull_request.merge_commit_sha }}}}"
 """
+    publisher = str(answers.get("templates_publisher", ""))
+    if not answers.get("templates_artifact") or not publisher:
+        return workflow
+    # A cross-repository push needs a real token: the ambient one is
+    # scoped to this repository alone.
+    return (
+        workflow
+        + f"""
+  # The home's release aftermath: the (composed) template artifact,
+  # tagged in lockstep with the publishing layer's receipt.
+  templates:
+    needs: [publish]
+    runs-on: {first}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{{{ github.event.pull_request.merge_commit_sha }}}}
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Sync (locked)
+        run: $HOME/.local/bin/uv sync --locked
+      - name: Publish the template artifact
+        env:
+          FORGE_TOKEN: ${{{{ secrets.FORGE_TOKEN }}}}
+        run: $HOME/.local/bin/uv run --no-sync {prog} release.templates
+"""
+    )
 
 
 def _gitlab_pipeline(answers: dict[str, Any], prog: str) -> str:
@@ -519,12 +558,12 @@ def generate(root: Path) -> dict[str, str]:
 
     The workflows call the CLI by the name this process runs under,
     so a branded runner emits workflows that call itself and needs
-    no configuration. The template-snapshot job is emitted only
-    where the template source is a local directory: an instance's
-    release has no templates to publish.
+    no configuration. The template-artifact job is emitted only for
+    a home: the contract declares where to publish and a member
+    layer ships the tree; an ordinary instance's release has no
+    templates to publish.
     """
     from livery.workshop._provenance import generated_header
-    from livery.workshop._templates import local_template_dir
 
     prog = footman.prog()
     facts = _facts(root)
@@ -533,9 +572,7 @@ def generate(root: Path) -> dict[str, str]:
     if kind == "github":
         files = {
             ".github/workflows/ci.yml": _github_gate(facts, prog),
-            ".github/workflows/release.yml": _github_release(
-                facts, prog, templates_here=local_template_dir(root) is not None
-            ),
+            ".github/workflows/release.yml": _github_release(facts, prog),
             ".github/workflows/governance.yml": _github_governance(facts, prog),
         }
     elif kind == "gitea":

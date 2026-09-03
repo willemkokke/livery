@@ -43,6 +43,22 @@ _ANSWERS = ".copier-answers.yml"
 DEFAULT_TEMPLATE_SOURCE = "https://github.com/willemkokke/workshop-templates"
 
 
+def templates_artifact(root: Path) -> str:
+    """Where this workspace publishes its template artifact, or empty.
+
+    ``[workspace] templates_artifact`` in ``workshop.toml``: the git
+    remote a home's release pushes its (composed) template tree to,
+    tagged with the publishing layer's version. Empty means this
+    workspace publishes no templates, which is every ordinary
+    instance.
+    """
+    import tomllib
+
+    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+    workspace = contract.get("workspace") or {}
+    return str(workspace.get("templates_artifact", ""))
+
+
 def template_source(root: Path) -> str:
     """The workspace's declared template source.
 
@@ -81,14 +97,16 @@ def redacted_source(source: str) -> str:
 def template_ref(root: Path) -> str:
     """The tag a remote template source renders at.
 
-    The publishing layer's installed version: the base layer
-    publishes the one artifact repository today, so the ref is the
-    base distribution's version, ``v`` prefixed. A composed artifact
-    (a layer home's, once one exists) extends this to the layer
-    whose home publishes the contract's source; "topmost layer"
-    would be wrong, because a layer may own no templates at all.
+    The publishing layer's installed version, ``v`` prefixed: the
+    topmost layer in the stack that ships a template tree, because
+    that layer's home published the composed artifact the contract
+    points at. A plain instance's topmost tree-shipper is the base
+    layer; "topmost layer" alone would be wrong, since a layer may
+    own no templates at all.
     """
     from importlib.metadata import PackageNotFoundError, version
+
+    from livery.workshop._compose import layer_template_tree
 
     entries = layer_entries(root)
     if not entries:
@@ -96,12 +114,17 @@ def template_ref(root: Path) -> str:
             "workshop.toml declares no [workspace] layers: the template"
             " ref is the publishing layer's version and there is none"
         )
-    _, base_dist = entries[0]
+    publisher = ""
+    for layer, dist in entries:
+        if layer_template_tree(root, layer) is not None:
+            publisher = dist
+    if not publisher:
+        publisher = entries[0][1]
     try:
-        return "v" + version(base_dist)
+        return "v" + version(publisher)
     except PackageNotFoundError:
         fail(
-            f"the base layer's distribution {base_dist} is not"
+            f"the publishing layer's distribution {publisher} is not"
             " installed, so the template ref is unknowable: `uv sync`"
             " installs the dev group"
         )

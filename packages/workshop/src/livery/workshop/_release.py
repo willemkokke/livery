@@ -41,7 +41,6 @@ _TAG_RE = re.compile(r"^(packages/[^/]+)/v(\d+\.\d+\.\d+)$")
 _SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 #: The artifact repository the workshop's template snapshot lands in.
-TEMPLATES_REMOTE = "git@github.com:willemkokke/workshop-templates.git"
 
 
 def _root() -> Path:
@@ -230,6 +229,7 @@ def publish_templates(
         fail(f"version {version!r} is not <major>.<minor>.<patch>")
     if not templates.is_dir():
         fail(f"{templates} is not a directory")
+    remote = _authenticated_remote(remote)
     with tempfile.TemporaryDirectory() as scratch:
         clone = Path(scratch) / "artifact"
         _git_or_fail(Path(scratch), "clone", remote, "artifact")
@@ -257,6 +257,23 @@ def publish_templates(
         return f"published v{version}"
 
 
+def _authenticated_remote(remote: str) -> str:
+    """*remote* with ``FORGE_TOKEN`` credentials for a bare http URL.
+
+    A CI job pushes the artifact over http with the mounted token; a
+    URL already carrying userinfo, an ssh remote, and a local path
+    pass through untouched. The credentialled spelling lives only in
+    this process: nothing writes it to disk.
+    """
+    import os
+    import re as _re
+
+    token = os.environ.get("FORGE_TOKEN", "")
+    if token and _re.match(r"^https?://[^@/]+(?:/|$)", remote):
+        return _re.sub(r"^(https?://)", rf"\1x-access-token:{token}@", remote, count=1)
+    return remote
+
+
 def _replace_tree(clone: Path, templates: Path) -> None:
     """Make *clone*'s worktree exactly *templates*, deletions included."""
     for entry in sorted(clone.iterdir()):
@@ -271,26 +288,81 @@ def _replace_tree(clone: Path, templates: Path) -> None:
 
 @release.task(name="templates", hidden=True)
 def release_templates(
-    version: Annotated[str, doc("the workshop version being released")],
-    remote: Annotated[str, doc("artifact repository url")] = TEMPLATES_REMOTE,
+    version: Annotated[
+        str, doc("the publishing layer's version (default: its installed one)")
+    ] = "",
+    remote: Annotated[
+        str, doc("artifact repository url (default: the contract's)")
+    ] = "",
 ) -> None:
-    """Publish the template snapshot for one workshop release.
+    """Publish this home's template artifact for one release.
 
-    Runs from the tagged checkout in the release workflow, with the
-    deploy key in the ssh agent; the contract's local template tree
-    becomes the artifact repository's tree, tagged ``v<version>`` in
-    lockstep with ``packages/workshop/v<version>``.
+    Runs from the released checkout in the release workflow. A layer
+    home publishes its composed tree (base at the pinned installed
+    version plus its overlay), with the composition recorded in the
+    artifact; the base home publishes its own tree unchanged, the
+    degenerate case. The tag is ``v<version>``, the publishing
+    layer's version, in lockstep with that layer's release tag.
+    Same version, different content refuses: a released tag is
+    immutable.
     """
-    from livery.workshop._templates import local_template_dir
+    import tempfile as _tempfile
+    from importlib.metadata import version as installed
+
+    from livery.workshop._compose import layer_template_tree
+    from livery.workshop._layers import layer_entries
+    from livery.workshop._templates import render_source, templates_artifact
 
     root = _root()
-    source = local_template_dir(root)
-    if source is None:
-        fail("no local template source here: only the base home publishes")
-    outcome = publish_templates(
-        source,
-        version,
-        remote,
-        author="livery release train <mail@willem.net>",
-    )
+    remote = remote or templates_artifact(root)
+    if not remote:
+        fail(
+            "this workspace declares no [workspace] templates_artifact:"
+            " only a template home publishes; declare the artifact"
+            " repository in workshop.toml"
+        )
+    entries = layer_entries(root)
+    publisher = ""
+    publisher_layer = ""
+    for layer, dist in entries:
+        if layer_template_tree(root, layer) is not None:
+            publisher, publisher_layer = dist, layer
+    if not publisher:
+        fail(
+            "no layer in the stack ships a template tree: nothing to"
+            " publish; `uv sync` installs the base layer's"
+        )
+    version = version or installed(publisher)
+    source, ref, owners = render_source(root)
+    if ref is not None:
+        fail(
+            "the template source resolves to a remote artifact: only a"
+            " home (a workspace whose stack ships its trees locally)"
+            " publishes"
+        )
+    with _tempfile.TemporaryDirectory() as scratch:
+        staged = Path(scratch) / "tree"
+        shutil.copytree(source, staged)
+        if owners:
+            # A composed tree records what it was composed from: the
+            # base and its pinned version, so a reader of the artifact
+            # knows which improvements it already carries.
+            _base_layer, base_dist = entries[0]
+            lines = [
+                "# Generated by the workshop's composed release; the",
+                "# artifact states its own composition.",
+                "[composed]",
+                f'base = "{base_dist}"',
+                f'base_version = "{installed(base_dist)}"',
+                f'publisher = "{publisher}"',
+                "layers = [" + ", ".join(f'"{layer}"' for layer, _ in entries) + "]",
+            ]
+            record = "\n".join(lines) + "\n"
+            (staged / "composition.toml").write_text(record, encoding="utf-8")
+        outcome = publish_templates(
+            staged,
+            version,
+            remote,
+            author=f"{publisher_layer} release train <release@{publisher}.invalid>",
+        )
     print(f"  {outcome}")
