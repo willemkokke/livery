@@ -23,9 +23,10 @@ from livery.workshop._packages import Package
 #: Where a package's changelog contract lives.
 CONFIG_NAME = "cliff.toml"
 
-#: The variable each forge's credential arrives in. git-cliff reads
-#: the same names, so a token already in the environment reaches it
-#: without being handled here.
+#: git-cliff's own environment contract speaks per-kind names; this
+#: is the one mapping site that feeds them, from FORGE_TOKEN. A
+#: per-kind variable already in the environment reaches git-cliff
+#: untouched.
 TOKEN_VARIABLE = {
     "github": "GITHUB_TOKEN",
     "gitea": "GITEA_TOKEN",
@@ -33,11 +34,36 @@ TOKEN_VARIABLE = {
 }
 
 
-def _forge_kind(root: Path) -> str:
-    """The workspace contract's forge kind, or empty when unstated."""
+def _forge_facts(root: Path) -> tuple[str, str]:
+    """The contract's forge kind and url, empty when unstated."""
     contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
     forge = contract.get("forge") or {}
-    return str(forge.get("kind", ""))
+    return str(forge.get("kind", "")), str(forge.get("url", ""))
+
+
+def _forge_kind(root: Path) -> str:
+    """The workspace contract's forge kind, or empty when unstated."""
+    return _forge_facts(root)[0]
+
+
+def _credential(root: Path) -> tuple[str, str]:
+    """(git-cliff variable, value) for this forge, or two empties.
+
+    A per-kind variable already set wins untouched; otherwise
+    ``FORGE_TOKEN`` resolves through livery.workshop._tokens and is
+    handed to git-cliff under the name its own contract reads.
+    """
+    from livery.workshop._tokens import forge_token
+
+    kind, url = _forge_facts(root)
+    variable = TOKEN_VARIABLE.get(kind, "")
+    if not variable:
+        return "", ""
+    ambient = os.environ.get(variable, "")
+    if ambient:
+        return variable, ambient
+    token, _ = forge_token(kind, url)
+    return (variable, token) if token else ("", "")
 
 
 def credit_is_reachable(root: Path) -> bool:
@@ -48,8 +74,7 @@ def credit_is_reachable(root: Path) -> bool:
     the credential git-cliff stops rather than degrading, so the
     caller runs it offline instead.
     """
-    variable = TOKEN_VARIABLE.get(_forge_kind(root), "")
-    return bool(variable and os.environ.get(variable, ""))
+    return bool(_credential(root)[1])
 
 
 def config_path(package: Package) -> Path:
@@ -76,14 +101,20 @@ def _run(root: Path, package: Package, *args: str) -> str:
     reader can act on.
     """
     command = ["--config", str(config_path(package)), *args]
-    if not credit_is_reachable(root):
-        variable = TOKEN_VARIABLE.get(_forge_kind(root), "")
-        named = f" set {variable} to credit them" if variable else ""
-        print(f"  writing the entry without its authors:{named or ' no forge token'}")
+    variable, token = _credential(root)
+    if not token:
+        print("  writing the entry without its authors: set FORGE_TOKEN to credit them")
         command.append("--offline")
+    child_env = {**os.environ}
+    if token:
+        child_env[variable] = token
     try:
-        result = toolroom.git_cliff.opts(cwd=root, nofail=True, recorded=False)(
-            *command
+        result = footman.run(
+            ["git-cliff", *command],
+            cwd=root,
+            env=child_env,
+            nofail=True,
+            recorded=False,
         )
     except (FileNotFoundError, toolroom.ToolError):
         fail(
@@ -96,11 +127,10 @@ def _run(root: Path, package: Package, *args: str) -> str:
             # The forge refused the lookup the credit needs: the token
             # cannot read this repository, or the contract's forge url
             # is not the server git-cliff reached.
-            variable = TOKEN_VARIABLE.get(_forge_kind(root), "a forge token")
             detail += (
-                f"\n  the forge refused the author lookup: check {variable} can"
-                f" read this repository, and that {CONFIG_NAME}'s api_url names"
-                " the server root"
+                "\n  the forge refused the author lookup: check FORGE_TOKEN"
+                f" can read this repository, and that {CONFIG_NAME}'s api_url"
+                " names the server root"
             )
         fail(f"git-cliff exited {result.code}:\n{detail}")
     return result.stdout

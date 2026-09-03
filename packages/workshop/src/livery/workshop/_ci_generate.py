@@ -40,6 +40,8 @@ def _facts(root: Path) -> dict[str, Any]:
     minor. Nothing here is an answer: the answers hold identity
     alone.
     """
+    from livery.workshop._envfile import parse_env_file
+
     contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
     ci = contract.get("ci") or {}
     return {
@@ -47,7 +49,47 @@ def _facts(root: Path) -> dict[str, Any]:
         "runners": list(ci.get("runners") or ["ubuntu-latest"]),
         "required_context": str(ci.get("required_context", "gate")),
         "python_versions": python_matrix(root),
+        # The committed .repo.env's keys: the offline, deterministic
+        # list of which secrets the rung step may carry into a job.
+        "env_keys": sorted(parse_env_file(root / ".repo.env")),
     }
+
+
+def _rung_step(answers: dict[str, Any]) -> str:
+    """The environment-rung step for GitHub- and Gitea-shaped jobs.
+
+    Each key the committed ``.repo.env`` declares may arrive as a CI
+    secret; the matching secrets land in a runner-local file, 0600,
+    that the cascade reads as the shared slot
+    (``WORKSHOP_SHARED_ENV_FILE``). Non-empty values only, so an
+    absent secret cannot mask a committed value, and a fork PR with
+    no secrets behaves exactly like a machine without a shared file.
+    Never the whole secrets store: ``toJSON(secrets)`` would hand
+    every job and every third-party action the lot. Empty when the
+    workspace declares no keys.
+    """
+    keys = [str(key) for key in answers.get("env_keys", [])]
+    if not keys:
+        return ""
+    env_lines = "".join(
+        f"          RUNG_{key}: ${{{{ secrets.{key} }}}}\n" for key in keys
+    )
+    writes = "".join(
+        f'          if [ -n "$RUNG_{key}" ]; then'
+        f' printf \'{key}=%s\\n\' "$RUNG_{key}" >> "$rung"; fi\n'
+        for key in keys
+    )
+    return (
+        "      - name: Environment rung\n"
+        "        env:\n"
+        f"{env_lines}"
+        "        run: |\n"
+        '          rung="${RUNNER_TEMP:-$(mktemp -d)}/repo-shared.env"\n'
+        '          : > "$rung"\n'
+        '          chmod 600 "$rung"\n'
+        f"{writes}"
+        '          echo "WORKSHOP_SHARED_ENV_FILE=$rung" >> "$GITHUB_ENV"\n'
+    )
 
 
 def _csv(values: list[Any], *, quoted: bool = False) -> str:
@@ -149,6 +191,7 @@ jobs:
 
 
 def _github_release(answers: dict[str, Any], prog: str, *, templates_here: bool) -> str:
+    rung = _rung_step(answers)
     workflow = f"""name: release
 
 # The train: a workflow.release PR merges, this publishes its squash,
@@ -187,8 +230,13 @@ jobs:
       - uses: {SETUP_UV}
       - name: Sync (locked)
         run: uv sync --locked
+{rung}      # The ambient job token suffices here: the wave reads the forge
+      # and pushes receipt tags, and a tag is never a trigger, so the
+      # suppressed-workflow-events limit cannot bite by construction.
       - name: Publish the wave
         id: wave
+        env:
+          FORGE_TOKEN: ${{{{ github.token }}}}
         run: >-
           uv run --no-sync {prog} workflow.release.publish
           --ref="${{{{ inputs.ref || github.event.pull_request.merge_commit_sha }}}}"
@@ -233,6 +281,7 @@ def _gitea_gate(answers: dict[str, Any], prog: str) -> str:
     runners = _csv(list(answers.get("runners", ["ubuntu-latest"])))
     pythons = _csv(list(answers.get("python_versions", ["3.11"])), quoted=True)
     first = next(iter(answers.get("runners", ["ubuntu-latest"])))
+    rung = _rung_step(answers)
     return f"""name: ci
 
 on:
@@ -256,7 +305,7 @@ jobs:
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
       - name: Sync (locked)
         run: $HOME/.local/bin/uv sync --locked --python ${{{{ matrix.python }}}}
-      - name: Gate
+{rung}      - name: Gate
         run: $HOME/.local/bin/uv run --no-sync {prog} check
 
   # The one required context. Branch protection points here, so the
@@ -291,6 +340,7 @@ jobs:
 
 def _gitea_release(answers: dict[str, Any], prog: str) -> str:
     first = next(iter(answers.get("runners", ["ubuntu-latest"])))
+    rung = _rung_step(answers)
     return f"""name: release
 
 # The merge-triggered train, token publishing (Gitea has no trusted
@@ -315,12 +365,14 @@ jobs:
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
       - name: Sync (locked)
         run: $HOME/.local/bin/uv sync --locked
-      # PYTHON_PUBLISH_INDEX and PYTHON_REGISTRY_URL come from the
-      # committed .repo.env through the env cascade; only the secret
-      # is mounted here.
+{rung}      # PYTHON_PUBLISH_INDEX and PYTHON_REGISTRY_URL come from the
+      # committed .repo.env through the env cascade; only the secrets
+      # are mounted here. Gitea's automatic token serves the wave's
+      # forge reads and receipt-tag pushes.
       - name: Publish the wave
         env:
           UV_PUBLISH_TOKEN: ${{{{ secrets.UV_PUBLISH_TOKEN }}}}
+          FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
         run: >-
           $HOME/.local/bin/uv run --no-sync {prog} workflow.release.publish
           --ref="${{{{ github.event.pull_request.merge_commit_sha }}}}"
@@ -367,8 +419,11 @@ release-publish:
     - git remote set-url origin "https://oauth2:${{GITLAB_PUSH_TOKEN}}@${{CI_SERVER_HOST}}/${{CI_PROJECT_PATH}}.git"
     - uv sync --locked
     - uv run --no-sync {prog} workflow.release.publish --ref="$CI_COMMIT_SHA"
-  # PYTHON_PUBLISH_INDEX and PYTHON_REGISTRY_URL come from the
-  # committed .repo.env through the env cascade.
+  # GitLab CI variables arrive as process environment, the cascade's
+  # highest rung already: declare PYTHON_PUBLISH_INDEX,
+  # PYTHON_REGISTRY_URL, and FORGE_TOKEN as CI variables; no rung
+  # step is emitted here. Masking is GitLab's flag-and-constraint
+  # model: mark each variable masked where its value allows it.
 """
 
 
@@ -404,7 +459,7 @@ jobs:
         run: uv sync --locked
       - run: uv run --no-sync {prog} workflow.configure
         env:
-          GITHUB_ADMIN_TOKEN: ${{{{ secrets.FORGE_ADMIN_TOKEN }}}}
+          FORGE_ADMIN_TOKEN: ${{{{ secrets.FORGE_ADMIN_TOKEN }}}}
 """
 
 
@@ -434,7 +489,7 @@ jobs:
         run: $HOME/.local/bin/uv sync --locked
       - run: $HOME/.local/bin/uv run --no-sync {prog} workflow.configure
         env:
-          GITEA_ADMIN_TOKEN: ${{{{ secrets.FORGE_ADMIN_TOKEN }}}}
+          FORGE_ADMIN_TOKEN: ${{{{ secrets.FORGE_ADMIN_TOKEN }}}}
 """
 
 
@@ -455,7 +510,7 @@ governance-apply:
     - uv sync --locked
     - uv run --no-sync {prog} workflow.configure
   variables:
-    GITLAB_ADMIN_TOKEN: $FORGE_ADMIN_TOKEN
+    FORGE_ADMIN_TOKEN: $FORGE_ADMIN_TOKEN
 """
 
 

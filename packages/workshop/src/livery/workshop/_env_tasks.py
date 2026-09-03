@@ -23,6 +23,7 @@ import footman
 import toolroom
 from footman import Arg, Stdout, doc, fail, group, pre_tasks
 
+from livery.forge import RepoConfig
 from livery.workshop._envfile import (
     Source,
     cascade_dirs,
@@ -305,6 +306,8 @@ def env_show(
         for key in sorted(stack.values):
             value = stack.values[key] if full else _mask(key, stack.values[key])
             source = stack.sources[key].name
+            if source == "shared" and environ.get("WORKSHOP_SHARED_ENV_FILE"):
+                source = "ci rung"
             marker = ""
             declared = files_only.values.get(key)
             if (
@@ -327,7 +330,11 @@ def env_set(
     key: Annotated[str, doc("the variable name")],
     value: Annotated[str, doc("the value; empty deletes the key")] = "",
     scope: Annotated[
-        str, doc("local (this machine), shared (this person), repo (committed)")
+        str,
+        doc(
+            "local (this machine), shared (this person), repo"
+            " (committed), ci (the forge's secret store)"
+        ),
     ] = "local",
 ) -> None:
     """Set or delete one variable in the chosen scope's file.
@@ -335,11 +342,18 @@ def env_set(
     ``local`` writes ``.repo.env.local`` at the workspace root,
     ``shared`` the person-wide ``.repo.shared.env`` in the runner's
     config directory,
-    ``repo`` the committed ``.repo.env``. After a write the
-    higher-precedence sources are checked: a shadowed value is named
-    rather than discovered later.
+    ``repo`` the committed ``.repo.env``. ``ci`` writes a CI secret
+    through the forge protocol: under CI the emitted rung step
+    materialises the declared keys' secrets into the shared slot, so
+    a secret overrides the committed value the way the shared file
+    does on a machine. After a write the higher-precedence sources
+    are checked: a shadowed value is named rather than discovered
+    later.
     """
     root, _cwd = _workspace()
+    if scope == "ci":
+        _set_ci_secret(root, key, value)
+        return
     environ = dict(os.environ)
     shared = _shared_dir()
     files = {
@@ -348,7 +362,7 @@ def env_set(
         "repo": root / ".repo.env",
     }
     if scope not in files:
-        fail(f"unknown scope {scope!r}: local, shared, or repo")
+        fail(f"unknown scope {scope!r}: local, shared, repo, or ci")
     path = files[scope]
     if not value:
         existing = parse_env_file(path)
@@ -447,6 +461,41 @@ def tool_profile(root: Path) -> tuple[str, ...]:
     if not types or "python" in types:
         profile += ["ruff", "pytest", "basedpyright", "mypy", "ty", "pyrefly"]
     return tuple(profile)
+
+
+def _set_ci_secret(root: Path, key: str, value: str) -> None:
+    """Store one CI secret through the forge protocol.
+
+    A settings write, so it rides the admin ladder like configure.
+    The protocol's secret store is write-only and carries no delete,
+    so an empty value is a refusal naming the forge's own controls.
+    """
+    from livery.forge import Unsupported
+    from livery.workshop._forge_lane import admin_repository
+
+    if not value:
+        fail(
+            f"the forge protocol stores secrets write-only and cannot"
+            f" delete one: remove {key} in the forge's own settings"
+        )
+    repo, _var = admin_repository(root)
+    try:
+        repo.configure(RepoConfig(secrets={key: value}))
+    except Unsupported as error:
+        fail(
+            f"this forge cannot store CI secrets: {error}\n"
+            "  On GitHub the secret API needs the github-secrets extra:"
+            " install livery-forge[github-secrets]."
+        )
+    print(f"  {key}: stored as a CI secret (write-only; the value never reads back)")
+    committed = parse_env_file(root / ".repo.env")
+    if key not in committed:
+        print(
+            f"  note: {key} is not declared in the committed .repo.env, so"
+            " the emitted rung step will not carry it into CI jobs;"
+            f" declare it with `{footman.prog()} env.set {key}"
+            " --scope=repo` (any value) to give the secret its slot"
+        )
 
 
 @env.task(name="check")

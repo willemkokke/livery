@@ -39,8 +39,13 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - name: Sync (locked)
         run: uv sync --locked
+      # The ambient job token suffices here: the wave reads the forge
+      # and pushes receipt tags, and a tag is never a trigger, so the
+      # suppressed-workflow-events limit cannot bite by construction.
       - name: Publish the wave
         id: wave
+        env:
+          FORGE_TOKEN: ${{ github.token }}
         run: >-
           uv run --no-sync fm workflow.release.publish
           --ref="${{ inputs.ref || github.event.pull_request.merge_commit_sha }}"

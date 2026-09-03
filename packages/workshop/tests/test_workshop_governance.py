@@ -136,13 +136,14 @@ def test_the_admin_ladder_prefers_the_admin_variable(
     from livery.workshop._forge_lane import admin_forge
 
     root = _workspace(tmp_path)
-    monkeypatch.delenv("GITHUB_ADMIN_TOKEN", raising=False)
-    monkeypatch.setenv("GITHUB_TOKEN", "everyday")
+    for name in ("FORGE_ADMIN_TOKEN", "FORGE_ADMIN_TOKEN__GITHUB_COM"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("FORGE_TOKEN", "everyday")
     _forge, var = admin_forge(root)
     assert var == ""  # the fallback: everyday token, nothing extra
-    monkeypatch.setenv("GITHUB_ADMIN_TOKEN", "admin")
+    monkeypatch.setenv("FORGE_ADMIN_TOKEN", "admin")
     _forge, var = admin_forge(root)
-    assert var == "GITHUB_ADMIN_TOKEN"
+    assert var == "FORGE_ADMIN_TOKEN"
 
 
 def _reconcile_rig(tmp_path: Path) -> tuple[Path, GitOps]:
@@ -452,7 +453,7 @@ def test_configure_teaches_the_ladder_on_a_refused_write(
         workflow_configure()
     text = str(caught.value)
     assert "403 admin required" in text  # the server's words, verbatim
-    assert "GITHUB_ADMIN_TOKEN" in text and "GITLAB_ADMIN_TOKEN" in text
+    assert "FORGE_ADMIN_TOKEN" in text
 
 
 def test_configure_names_an_unpredicted_decline_verbatim(
@@ -573,14 +574,14 @@ def test_doctor_prints_the_ladder_and_the_owner_verdicts(
     fake.set_teams("acme", ("reviewers",))
     doctor_flow(fake)
     out = capsys.readouterr().out
-    assert "admin ladder: GITHUB_ADMIN_TOKEN unset" in out
+    assert "admin ladder: FORGE_ADMIN_TOKEN unset" in out
     assert "every declared owner exists" in out
 
-    monkeypatch.setenv("GITHUB_ADMIN_TOKEN", "x")
+    monkeypatch.setenv("FORGE_ADMIN_TOKEN", "x")
     fake.set_members("acme", ("alice",))  # bob becomes unknown
     doctor_flow(fake)
     out = capsys.readouterr().out
-    assert "admin ladder: GITHUB_ADMIN_TOKEN set" in out
+    assert "admin ladder: FORGE_ADMIN_TOKEN set" in out
     assert "unknown user bob" in out
 
     def _broken(owner: str) -> tuple[str, ...]:
@@ -590,3 +591,46 @@ def test_doctor_prints_the_ladder_and_the_owner_verdicts(
     doctor_flow(fake)
     out = capsys.readouterr().out
     assert "owners: not checked (boom)" in out  # the check fails open
+
+
+def test_the_rung_step_carries_declared_keys_only(tmp_path: Path) -> None:
+    from livery.workshop._ci_generate import generate
+
+    root = _contract_root(tmp_path, "gitea", runners=["host-linux"])
+    (root / ".repo.env").write_text(
+        "PYTHON_PUBLISH_INDEX=https://forge/api/packages/o/pypi\n"
+        "PYTHON_REGISTRY_URL=https://forge/api/packages/o/pypi/simple\n"
+    )
+    files = generate(root)
+    release = files[".gitea/workflows/release.yml"]
+    assert "Environment rung" in release
+    assert "RUNG_PYTHON_PUBLISH_INDEX: ${{ secrets.PYTHON_PUBLISH_INDEX }}" in release
+    assert 'if [ -n "$RUNG_PYTHON_REGISTRY_URL" ]' in release
+    assert "WORKSHOP_SHARED_ENV_FILE" in release
+    for content in files.values():
+        # The whole-store dump would hand every job the lot.
+        assert "toJSON(secrets)" not in content
+    # An undeclared secret is invisible to the rung by construction.
+    assert "FORGE_ADMIN_TOKEN" not in release
+
+
+def test_no_rung_step_without_declared_keys(tmp_path: Path) -> None:
+    from livery.workshop._ci_generate import generate
+
+    root = _contract_root(tmp_path, "github")
+    for content in generate(root).values():
+        assert "Environment rung" not in content
+
+
+def test_ambient_tokens_mount_as_forge_token(tmp_path: Path) -> None:
+    from livery.workshop._ci_generate import generate
+
+    github = generate(_contract_root(tmp_path, "github"))
+    assert (
+        "FORGE_TOKEN: ${{ github.token }}" in (github[".github/workflows/release.yml"])
+    )
+    gitea = generate(_contract_root(tmp_path, "gitea"))
+    assert (
+        "FORGE_TOKEN: ${{ secrets.GITHUB_TOKEN }}"
+        in (gitea[".gitea/workflows/release.yml"])
+    )

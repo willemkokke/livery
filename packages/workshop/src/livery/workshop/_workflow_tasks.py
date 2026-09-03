@@ -278,11 +278,12 @@ def workflow_configure() -> None:
         )
     except ForgeError as error:
         used = admin_var or "the everyday token"
-        others = "GITHUB_ADMIN_TOKEN / GITEA_ADMIN_TOKEN / GITLAB_ADMIN_TOKEN"
         fail(
             f"the forge refused the configuration using {used}:\n{error}\n"
-            "  An administrator's token applies it: set the per-kind admin"
-            f" variable ({others}) and re-run `{footman.prog()} workflow.configure`."
+            "  An administrator's token applies it: set FORGE_ADMIN_TOKEN"
+            " (host-qualified FORGE_ADMIN_TOKEN__<HOST> where one machine"
+            f" serves several forges) and re-run"
+            f" `{footman.prog()} workflow.configure`."
         )
     print("  repository configuration asserted from the contract")
 
