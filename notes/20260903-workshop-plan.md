@@ -1,8 +1,9 @@
 # The workshop: instantiation, layers, and inheritance
 
 Status: approved 2026-09-03 after Willem's review; executing.
-Phase 10 shipped 2026-09-03 (issue #109); its cut rulings and one
-deviation are in the decision record.
+Phase 10 shipped 2026-09-03 (issue #109, PR #110); phase 11
+shipped 2026-09-03 (issue #111); cut rulings and deviations are in
+the decision record.
 Subsumes
 `notes/20260901-workshop-plan.md`, whose phases 1 to 9 shipped and
 whose shipped record, movement analysis, and options registry stay
@@ -339,6 +340,9 @@ Acceptance:
 - `uv run fm check` green.
 
 ## Phase 11: the template channel reads the artifact repository
+
+Shipped 2026-09-03 (issue #111); the ref refinement and two
+guards found by the edge tests are in the decision record.
 
 One resolver for template source and ref, used by every render.
 Closes the known gap carried since the 0831 plan: a wheel instance
@@ -808,6 +812,27 @@ green so each feature ships through the proven seams:
   `--cov` so the measured source is the derived namespace), and
   the template-snapshot release job is emitted only where the
   template source is a local directory.
+
+- 2026-09-03, phase 11 cut: the remote ref is the publishing
+  layer's installed version, not the topmost layer's. A layer may
+  own no templates at all (the monorepo's own stack ends in
+  `livery.forge`), so "topmost" mis-resolves; the base layer
+  publishes the one artifact repository today, and the composed
+  case (phase 15) extends `template_ref` to the layer whose home
+  publishes the contract's source. Two guards the edge tests
+  forced: copier silently renders HEAD when a requested ref does
+  not exist, so the missing-tag refusal is the workshop's own
+  ls-remote probe before any clone; and a credentialled source URL
+  must never reach a machinery-written byte, so headers, refusals,
+  and both answers receipts redact URL userinfo (tokens are
+  environment facts; a private artifact repository authenticates
+  through git's credential machinery, never the contract). The
+  wheel-instance e2e ran live against the local Gitea: a private
+  mirror tagged v0.1.0, `fm new.package thing` rendered the member
+  and rewired the roster from it; the committed suite drives the
+  same arm over `git+file://` sources so it holds offline, and an
+  explicit git source spells copier's `git+` prefix, which the
+  probe strips for git itself.
 
 ## Open
 

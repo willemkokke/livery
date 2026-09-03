@@ -92,7 +92,7 @@ def refresh_rendered(root: Path) -> list[str]:
     Where the contract's template source is a local directory the
     render applier is the truth; a remote source (the artifact
     repository by default, a fork if the contract says so) is pulled
-    by ``copier update`` at the installed workshop's own tag, so an
+    by ``copier update`` at the resolved artifact tag, so an
     instance moves to exactly the templates its workshop shipped
     with. The contract's source is written into the answers file
     first, because that is where copier reads it.
@@ -100,14 +100,21 @@ def refresh_rendered(root: Path) -> list[str]:
     from livery.workshop._templates import (
         apply_project,
         local_template_dir,
+        redacted_source,
         template_source,
     )
 
     if local_template_dir(root) is not None:
         return apply_project(root)
-    notes = _align_answers_source(root, template_source(root))
-    from livery.workshop import __version__
-    from livery.workshop._templates import read_answers, render_injections
+    # The stored path is display-safe; a credentialled clone of a
+    # private source is git's credential machinery's job, never a
+    # committed byte's.
+    notes = _align_answers_source(root, redacted_source(template_source(root)))
+    from livery.workshop._templates import (
+        read_answers,
+        render_injections,
+        template_ref,
+    )
 
     # The injected values ride as render data, never answers: the
     # runner's name belongs to the process, the floor and the layers
@@ -128,7 +135,7 @@ def refresh_rendered(root: Path) -> list[str]:
         "--skip-answered",
         *data,
         "--vcs-ref",
-        f"v{__version__}",
+        template_ref(root),
         str(root),
     )
     if result.code != 0:

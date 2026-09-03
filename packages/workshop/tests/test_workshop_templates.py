@@ -424,3 +424,197 @@ def test_no_runtime_string_spells_the_default_brand() -> None:
             if middle is not None and tok.type == middle and "`fm " in tok.string:
                 offenders.append(f"{path.name}:{tok.start[0]}")
     assert offenders == [], offenders
+
+
+def _template_repo(tmp_path: Path, *, tagged: bool = True) -> Path:
+    """The template source as a git repository, the artifact's shape."""
+    import shutil
+    import subprocess
+    from importlib.metadata import version
+
+    repo = tmp_path / "artifact-repo"
+    shutil.copytree(ROOT / "templates", repo)
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.email", "t@l"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "T"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "seed"], cwd=repo, check=True)
+    if tagged:
+        subprocess.run(
+            ["git", "tag", f"v{version('livery-workshop')}"], cwd=repo, check=True
+        )
+    return repo
+
+
+def _wheel_instance(tmp_path: Path, source: str) -> Path:
+    """A workspace with no templates/ whose contract points at *source*."""
+    root = tmp_path / "instance"
+    root.mkdir()
+    (root / "workshop.toml").write_text(
+        "[workspace]\n"
+        'layers = ["livery.workshop"]\n'
+        f'templates = "{source}"\n'
+        '\n[forge]\nkind = "github"\nowner = "owner"\n'
+        '\n[ci]\nrunners = ["ubuntu-latest"]\nrequired_context = "gate"\n'
+    )
+    (root / "pyproject.toml").write_text(
+        '[project]\nname = "instance"\nrequires-python = ">=3.11"\n'
+    )
+    (root / ".copier-answers.yml").write_text(
+        "_src_path: whatever\n"
+        "kind: project\n"
+        "project_name: instance\n"
+        "author_name: A\n"
+        "author_email: a@example.com\n"
+        "copyright_year: '2026'\n"
+        "namespace_package: acme\n"
+        "packages: []\n"
+    )
+    return root
+
+
+def test_new_package_renders_from_the_artifact_repository(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The known gap carried since the 0831 plan closes: a wheel
+    # instance (no templates/ directory) renders a member from the
+    # remote source at the resolved tag.
+    from livery.workshop._templates import new_package
+
+    repo = _template_repo(tmp_path)
+    root = _wheel_instance(tmp_path, f"git+file://{repo}")
+    monkeypatch.setattr(
+        "livery.workshop._templates.workspace_root", lambda start=None: root
+    )
+    synced: list[str] = []
+    monkeypatch.setattr(
+        "livery.workshop._uv.run_uv", lambda *args, root: synced.append(args[0])
+    )
+    new_package("thing")
+    assert (root / "packages" / "thing" / "cliff.toml").is_file()
+    assert (root / "packages" / "thing" / "pyproject.toml").is_file()
+    assert "acme-thing" in (root / ".copier-answers.yml").read_text()
+    assert synced == ["lock", "sync"]
+    # The project render resolved remotely too: the roster reached
+    # the managed pyproject.
+    assert "acme-thing" in (root / "pyproject.toml").read_text()
+
+
+def test_an_unreachable_source_teaches_source_and_ref(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._templates import new_package
+
+    root = _wheel_instance(tmp_path, "https://127.0.0.1:1/acme/templates.git")
+    monkeypatch.setattr(
+        "livery.workshop._templates.workspace_root", lambda start=None: root
+    )
+    with pytest.raises(BaseException) as caught:
+        new_package("thing")
+    text = str(caught.value)
+    assert "https://127.0.0.1:1/acme/templates.git" in text
+    assert "v" in text  # the wanted ref is named
+
+
+def test_a_missing_artifact_tag_names_the_release(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._templates import new_package
+
+    repo = _template_repo(tmp_path, tagged=False)
+    root = _wheel_instance(tmp_path, f"git+file://{repo}")
+    monkeypatch.setattr(
+        "livery.workshop._templates.workspace_root", lambda start=None: root
+    )
+    with pytest.raises(BaseException) as caught:
+        new_package("thing")
+    text = str(caught.value)
+    assert "has no v" in text and "release publishes" in text
+
+
+def test_a_source_without_the_kind_teaches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shutil
+    import subprocess
+
+    from livery.workshop._templates import new_package
+
+    repo = _template_repo(tmp_path)
+    shutil.rmtree(repo / "package-python")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "drop the kind"], cwd=repo, check=True)
+    subprocess.run(["git", "tag", "-f", _ref()], cwd=repo, check=True)
+    root = _wheel_instance(tmp_path, f"git+file://{repo}")
+    monkeypatch.setattr(
+        "livery.workshop._templates.workspace_root", lambda start=None: root
+    )
+    with pytest.raises(BaseException) as caught:
+        new_package("thing")
+    assert "package-python" in str(caught.value)
+
+
+def _ref() -> str:
+    from importlib.metadata import version
+
+    return f"v{version('livery-workshop')}"
+
+
+def test_repeated_render_at_one_tag_is_byte_identical(tmp_path: Path) -> None:
+    import filecmp
+
+    repo = _template_repo(tmp_path)
+    data = {
+        "kind": "project",
+        "project_name": "acme-tools",
+        "namespace_package": "acme",
+        "packages": [],
+        "runner_prog": "fm",
+    }
+    first = tmp_path / "one"
+    second = tmp_path / "two"
+    render(f"git+file://{repo}", first, dict(data), ref=_ref())
+    render(f"git+file://{repo}", second, dict(data), ref=_ref())
+    comparison = filecmp.dircmp(str(first), str(second))
+    assert not comparison.left_only and not comparison.right_only
+    # The answers file is a receipt: it records the destination's own
+    # name, so it is provenance, not rendered content.
+    names = [n for n in comparison.common_files if n != ".copier-answers.yml"]
+    mismatch, errors = filecmp.cmpfiles(str(first), str(second), names, shallow=False)[
+        1:
+    ]
+    assert not mismatch and not errors
+
+
+def test_a_declared_but_absent_local_source_teaches(tmp_path: Path) -> None:
+    from livery.workshop._templates import resolve_source
+
+    root = _wheel_instance(tmp_path, "my-fork-checkout")
+    with pytest.raises(BaseException) as caught:
+        resolve_source(root)
+    text = str(caught.value)
+    assert "my-fork-checkout" in text and "no such" in text
+
+
+def test_a_credentialled_source_never_reaches_a_rendered_byte(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Tokens are environment facts and should never sit in the
+    # contract; when one does anyway, the rendered headers and the
+    # refusals must not repeat it.
+    from livery.workshop._templates import new_package, redacted_source
+
+    assert redacted_source("http://user:secret@host/o/r.git") == "http://host/o/r.git"
+    assert redacted_source("git+file:///tmp/repo") == "git+file:///tmp/repo"
+    repo = _template_repo(tmp_path)
+    root = _wheel_instance(tmp_path, f"git+file://user:sekrit@{repo}")
+    monkeypatch.setattr(
+        "livery.workshop._templates.workspace_root", lambda start=None: root
+    )
+    monkeypatch.setattr("livery.workshop._uv.run_uv", lambda *args, root: None)
+    new_package("thing")
+    for path in sorted(root.rglob("*")):
+        # The contract carries the caller's own value; everything the
+        # machinery wrote must be clean.
+        if path.is_file() and path.name != "workshop.toml":
+            assert "sekrit" not in path.read_text(errors="ignore"), path
