@@ -2,8 +2,9 @@
 
 Status: approved 2026-09-03 after Willem's review; executing.
 Phase 10 shipped 2026-09-03 (issue #109, PR #110); phase 11
-shipped 2026-09-03 (issue #111); cut rulings and deviations are in
-the decision record.
+shipped 2026-09-03 (issue #111, PR #113); phase 12 shipped
+2026-09-03 (issue #114); cut rulings and deviations are in the
+decision record.
 Subsumes
 `notes/20260901-workshop-plan.md`, whose phases 1 to 9 shipped and
 whose shipped record, movement analysis, and options registry stay
@@ -379,6 +380,9 @@ Acceptance:
 - `uv run fm check` green.
 
 ## Phase 12: the environment store and the forge tokens
+
+Shipped 2026-09-03 (issue #114); the cut rulings and the one
+deferral are in the decision record.
 
 Contract 23's CI machinery and contract 24's token surface, landed
 before birth so `new.project` speaks the final names from day one.
@@ -834,6 +838,39 @@ green so each feature ships through the proven seams:
   explicit git source spells copier's `git+` prefix, which the
   probe strips for git itself.
 
+- 2026-09-03, phase 12 cut rulings, evidence, and one deferral.
+  The token surface: `FORGE_TOKEN` and `FORGE_ADMIN_TOKEN`,
+  host-qualified variants per open item 7's spelling; the admin
+  ladder is host-qualified admin, bare admin, then the everyday
+  ladder; backends keep their own dialects and fallbacks, and the
+  two allowed per-kind sites outside them are the git-cliff
+  mapping (its own environment contract, fed from FORGE_TOKEN
+  through an explicit child environment) and the emitters' ambient
+  mounts (GitHub's `github.token` and Gitea's automatic token
+  arrive as FORGE_TOKEN on the publish jobs, where a tag push
+  cannot trip the suppressed-events limit because a tag is never a
+  trigger). The rung step is emitted per fm-running job only when
+  the committed .repo.env declares keys, maps each declared key's
+  secret singly (never the whole store), writes non-empty values
+  only into a 0600 runner-local file, and exports
+  WORKSHOP_SHARED_ENV_FILE; the engine reads that file as the
+  shared slot, so precedence and masking hold unchanged. On GitLab
+  no step is emitted: CI variables arrive as process environment,
+  the cascade's highest rung, and masking is GitLab's
+  flag-and-constraint model, named in the emitted comment.
+  `env.set --scope=ci` writes through the protocol on the admin
+  ladder; the store is write-only with no delete, so an empty
+  value is a taught refusal, and an undeclared key earns the note
+  naming its missing .repo.env slot. Recorded live on all three
+  servers through the verb (scratch repositories on the local
+  Gitea and GitLab and on github.com, secret confirmed by API,
+  repositories destroyed). The origin-remote parser now accepts
+  http, ports, and embedded credentials: the dev rig speaks plain
+  http and the old spelling refused it. The one deferral: the
+  in-job observation (a declared key overridden by a secret,
+  masked in the job log) rides phase 16's chain, which the plan
+  already tasks with exercising this rung live.
+
 ## Open
 
 1. The dummy brand's name, and whether its repositories live only
@@ -857,11 +894,13 @@ green so each feature ships through the proven seams:
 6. Carried from 0901: the base-CI nudge automation (its open item
    7) and recording GitLab's licensed arms live (its open item 8),
    both unchanged, owners as stated there.
-7. The host-qualified spelling for shared-rung tokens (how a forge
-   URL becomes a key suffix, and whether any other environment key
-   deserves the same qualification), and how the engine learns the
-   CI rung file's path (an emitted-step variable, its name bound
-   by the no-brand-variables rule). Owner: the phase 12 cut.
+7. Resolved 2026-09-03 at the phase 12 cut: the suffix is the
+   host and port, uppercased, every other character folded to
+   underscore, joined with a double underscore
+   (`FORGE_TOKEN__FORGE_EXAMPLE_COM_3000`); no other key is
+   qualified until one needs it. The engine learns the CI rung
+   file's path from `WORKSHOP_SHARED_ENV_FILE`, which the emitted
+   rung step exports after materialising the file.
 8. Resolved 2026-09-03 at the phase 10 cut: a layers entry stays
    an import path; the distribution derives by convention, dots to
    dashes, and a table entry `{import = "...", dist = "..."}`

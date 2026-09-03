@@ -256,7 +256,10 @@ def load_cascade(
     committed config at any depth.
 
     *shared_dir* is where ``.repo.shared.env`` lives; None means the
-    runner's own config directory, asked of footman. *environ*
+    runner's own config directory, asked of footman. Under CI the
+    emitted rung step points ``WORKSHOP_SHARED_ENV_FILE`` at a
+    runner-local file, and that file IS the shared slot: same
+    precedence, same masking, gone with the runner. *environ*
     defaults to ``os.environ`` and is injectable for tests.
     """
     env = dict(os.environ) if environ is None else environ
@@ -264,15 +267,10 @@ def load_cascade(
     committed = [d / ".repo.env" for d in dirs]
     local = [d / ".repo.env.local" for d in dirs]
 
-    if shared_dir is None:
-        import footman
-
-        shared_dir = footman.config_dir()
-
     stack = EnvStack()
     for path in committed:
         load_layer(path, Source.repo, stack, env)
-    load_layer(shared_dir / ".repo.shared.env", Source.shared, stack, env)
+    load_layer(shared_file(shared_dir, env), Source.shared, stack, env)
     for path in local:
         load_layer(path, Source.local, stack, env)
     resolve_all(stack, env)
@@ -323,6 +321,24 @@ def set_value(path: Path, key: str, value: str) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def shared_file(shared_dir: Path | None, environ: dict[str, str]) -> Path:
+    """The shared rung's file: the CI rung when the runner set one.
+
+    ``WORKSHOP_SHARED_ENV_FILE`` names a runner-local file the
+    emitted CI step materialised from the repository's secrets; when
+    it is unset the rung is ``.repo.shared.env`` in *shared_dir*
+    (the runner's config directory when None).
+    """
+    override = environ.get("WORKSHOP_SHARED_ENV_FILE", "")
+    if override:
+        return Path(override)
+    if shared_dir is None:
+        import footman
+
+        shared_dir = footman.config_dir()
+    return shared_dir / ".repo.shared.env"
+
+
 def member_keys(repo_root: Path, cwd: Path, shared_dir: Path) -> set[str]:
     """Every key the cascade's files define (membership, no values).
 
@@ -335,5 +351,5 @@ def member_keys(repo_root: Path, cwd: Path, shared_dir: Path) -> set[str]:
     for directory in cascade_dirs(repo_root, cwd):
         keys |= set(parse_env_file(directory / ".repo.env"))
         keys |= set(parse_env_file(directory / ".repo.env.local"))
-    keys |= set(parse_env_file(shared_dir / ".repo.shared.env"))
+    keys |= set(parse_env_file(shared_file(shared_dir, dict(os.environ))))
     return keys

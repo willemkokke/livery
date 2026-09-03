@@ -2,10 +2,10 @@
 
 The workspace contract's ``[forge]`` table names the kind and owner;
 the repository name comes from the ``origin`` remote. Tokens resolve
-the way each backend's ``connect`` documents (``GITHUB_TOKEN`` and
-``gh auth token`` for GitHub, the corresponding variables for Gitea
-and GitLab). Nothing here is inferred from ambient state beyond
-those documented lookups.
+through livery.workshop._tokens: ``FORGE_TOKEN`` (host-qualified
+first), and each backend's own documented fallback when neither is
+set. Nothing here is inferred from ambient state beyond those
+documented lookups.
 """
 
 from __future__ import annotations
@@ -18,9 +18,12 @@ import toolroom
 from footman import fail
 
 from livery.forge import Forge, GiteaForge, GithubForge, GitlabForge, Repository
+from livery.workshop._tokens import admin_token, forge_token
 
+# http and https (ports and embedded credentials included), and the
+# git@host:owner/name form: the dev rig speaks plain http on a port.
 _REMOTE_RE = re.compile(
-    r"(?:https://|git@)(?P<host>[^/:]+)[:/](?P<owner>[^/]+)/(?P<name>[^/]+?)(?:\.git)?$"
+    r"(?:https?://[^/]+/|git@[^:]+:)(?P<owner>[^/]+)/(?P<name>[^/]+?)(?:\.git)?$"
 )
 
 
@@ -37,56 +40,52 @@ def remote_repo_name(root: Path) -> str:
     return match.group("name")
 
 
+def _connect(kind: str, url: str, token: str | None) -> Forge:
+    """One backend, connected; None lets its own resolution decide."""
+    if kind == "github":
+        return GithubForge.connect(url=url, token=token)
+    if kind == "gitea":
+        return GiteaForge.connect(url=url, token=token)
+    if kind == "gitlab":
+        return GitlabForge.connect(url=url, token=token)
+    fail(f"unknown forge kind {kind!r}: use github, gitea, or gitlab")
+
+
 def this_forge(root: Path) -> Forge:
-    """The workspace's forge, per the contract's ``[forge]`` table."""
+    """The workspace's forge, per the contract's ``[forge]`` table.
+
+    The token is ``FORGE_TOKEN`` (host-qualified first); with neither
+    set, the backend's own documented fallback decides.
+    """
     contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
     forge_table = contract.get("forge") or {}
     kind = str(forge_table.get("kind", ""))
     url = str(forge_table.get("url", ""))
     if not kind:
         fail("workshop.toml [forge] must carry kind and owner")
-    if kind == "github":
-        return GithubForge.connect(url=url)
-    if kind == "gitea":
-        return GiteaForge.connect(url=url)
-    if kind == "gitlab":
-        return GitlabForge.connect(url=url)
-    fail(f"unknown forge kind {kind!r}: use github, gitea, or gitlab")
-
-
-_ADMIN_VARS = {
-    "github": "GITHUB_ADMIN_TOKEN",
-    "gitea": "GITEA_ADMIN_TOKEN",
-    "gitlab": "GITLAB_ADMIN_TOKEN",
-}
+    token, _ = forge_token(kind, url)
+    return _connect(kind, url, token or None)
 
 
 def admin_forge(root: Path) -> tuple[Forge, str]:
     """The forge for an admin verb, and the variable that armed it.
 
     Least privilege by split tokens: the everyday verbs never read
-    the admin variable, and the admin verbs (configure, the
-    post-abort reconcile) resolve admin-first with a fallback to the
-    everyday token; the fallback keeps a solo developer whose one
-    token already administers working with nothing extra. The second
-    value names the admin variable used, "" for the fallback, so a
-    refusal can teach the missing grant.
+    the admin name, and the admin verbs (configure, the post-abort
+    reconcile) resolve ``FORGE_ADMIN_TOKEN`` (host-qualified first)
+    with a fallback to the everyday token; the fallback keeps a solo
+    developer whose one token already administers working with
+    nothing extra. The second value names the admin variable used,
+    "" for the fallback, so a refusal can teach the missing grant.
     """
-    import os
-
     contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
     table = contract.get("forge") or {}
     kind = str(table.get("kind", ""))
     url = str(table.get("url", ""))
-    var = _ADMIN_VARS.get(kind, "")
-    token = os.environ.get(var, "") if var else ""
-    if not token:
+    token, var = admin_token(kind, url)
+    if not var.startswith("FORGE_ADMIN_TOKEN"):
         return this_forge(root), ""
-    if kind == "github":
-        return GithubForge.connect(url=url, token=token), var
-    if kind == "gitea":
-        return GiteaForge.connect(url=url, token=token), var
-    return GitlabForge.connect(url=url, token=token), var
+    return _connect(kind, url, token), var
 
 
 def admin_repository(root: Path) -> tuple[Repository, str]:

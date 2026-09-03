@@ -19,4 +19,4 @@ jobs:
         run: uv sync --locked
       - run: uv run --no-sync fm workflow.configure
         env:
-          GITHUB_ADMIN_TOKEN: ${{ secrets.FORGE_ADMIN_TOKEN }}
+          FORGE_ADMIN_TOKEN: ${{ secrets.FORGE_ADMIN_TOKEN }}

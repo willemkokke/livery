@@ -191,21 +191,27 @@ def doctor_flow(forge: Forge) -> None:
 
     root = workspace_root()
     if root is not None:
-        import os
         import tomllib
 
         from livery.workshop._governance import unknown_owners
+        from livery.workshop._tokens import admin_token
 
         contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
         owner = str((contract.get("forge") or {}).get("owner", ""))
         kind = str((contract.get("forge") or {}).get("kind", ""))
-        admin_var = f"{kind.upper()}_ADMIN_TOKEN"
-        armed = (
-            "set"
-            if os.environ.get(admin_var)
-            else "unset (everyday token is the fallback)"
-        )
-        print(f"  admin ladder: {admin_var} {armed}")
+        url = str((contract.get("forge") or {}).get("url", ""))
+        _, admin_var = admin_token(kind, url)
+        if admin_var.startswith("FORGE_ADMIN_TOKEN"):
+            print(f"  admin ladder: {admin_var} set")
+        elif admin_var:
+            print(
+                f"  admin ladder: FORGE_ADMIN_TOKEN unset ({admin_var} is the fallback)"
+            )
+        else:
+            print(
+                "  admin ladder: FORGE_ADMIN_TOKEN unset (everyday"
+                " token is the fallback)"
+            )
         try:
             unknown = unknown_owners(root, forge, owner)
         except Exception as error:

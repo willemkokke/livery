@@ -662,3 +662,81 @@ def test_clean_reports_restore_and_remove_failures(
     out = capsys.readouterr().out
     assert "could not remove stray.txt" in out
     assert (root / "stray.txt").is_file()
+
+
+def test_the_ci_rung_is_the_shared_slot(tmp_path: Path) -> None:
+    from livery.workshop._envfile import Source, load_cascade
+
+    root = tmp_path / "ws"
+    root.mkdir()
+    (root / ".repo.env").write_text("PYTHON_PUBLISH_INDEX=committed\n")
+    rung = tmp_path / "runner" / "repo-shared.env"
+    rung.parent.mkdir()
+    rung.write_text("PYTHON_PUBLISH_INDEX=from-secret\n")
+    stack = load_cascade(
+        root,
+        root,
+        shared_dir=tmp_path / "nowhere",
+        environ={"WORKSHOP_SHARED_ENV_FILE": str(rung)},
+    )
+    assert stack.values["PYTHON_PUBLISH_INDEX"] == "from-secret"
+    assert stack.sources["PYTHON_PUBLISH_INDEX"] is Source.shared
+
+
+def test_an_absent_rung_cannot_mask_the_committed_value(tmp_path: Path) -> None:
+    from livery.workshop._envfile import load_cascade
+
+    root = tmp_path / "ws"
+    root.mkdir()
+    (root / ".repo.env").write_text("PYTHON_PUBLISH_INDEX=committed\n")
+    # The emitted step writes non-empty values only; a job with no
+    # secrets points the slot at an empty file.
+    rung = tmp_path / "runner" / "repo-shared.env"
+    rung.parent.mkdir()
+    rung.write_text("")
+    stack = load_cascade(
+        root,
+        root,
+        shared_dir=tmp_path / "nowhere",
+        environ={"WORKSHOP_SHARED_ENV_FILE": str(rung)},
+    )
+    assert stack.values["PYTHON_PUBLISH_INDEX"] == "committed"
+
+
+def test_env_set_ci_writes_through_the_protocol(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.forge import RepoConfig, Unsupported
+    from livery.workshop._env_tasks import env_set
+
+    stored: dict[str, str] = {}
+
+    class _Repo:
+        def configure(self, config: RepoConfig) -> None:
+            assert config.secrets is not None
+            stored.update(config.secrets)
+
+    root = tmp_path / "ws"
+    root.mkdir()
+    (root / "workshop.toml").write_text('[workspace]\nlayers = ["livery.workshop"]\n')
+    monkeypatch.setattr("livery.workshop._env_tasks._workspace", lambda: (root, root))
+    monkeypatch.setattr(
+        "livery.workshop._forge_lane.admin_repository",
+        lambda _root: (_Repo(), ""),
+    )
+    env_set("PYTHON_PUBLISH_INDEX", "https://index.example/pypi", scope="ci")
+    assert stored == {"PYTHON_PUBLISH_INDEX": "https://index.example/pypi"}
+    # Write-only, no delete: an empty value is a taught refusal.
+    with pytest.raises(BaseException, match="write-only"):
+        env_set("PYTHON_PUBLISH_INDEX", "", scope="ci")
+
+    class _Declines:
+        def configure(self, config: RepoConfig) -> None:
+            raise Unsupported("no secret store (capability: ci_secrets)")
+
+    monkeypatch.setattr(
+        "livery.workshop._forge_lane.admin_repository",
+        lambda _root: (_Declines(), ""),
+    )
+    with pytest.raises(BaseException, match="cannot store CI secrets"):
+        env_set("KEY", "value", scope="ci")
