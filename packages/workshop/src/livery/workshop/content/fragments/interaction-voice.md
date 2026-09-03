@@ -1,3 +1,7 @@
+<!-- Shipped as livery.workshop layer content, delivered to the workspace
+     by the sync verb. Edit this copy in the layer and release it;
+     an edited delivered copy is a local override, kept and named.
+-->
 # Interaction voice
 
 How the agent talks. The reply on screen, and every written artefact of

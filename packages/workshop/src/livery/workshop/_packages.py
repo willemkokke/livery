@@ -1,7 +1,7 @@
 """The package contracts: discovery, the graph, and the layering lint.
 
 A directory under ``packages/`` is a package exactly when it carries a
-``livery.toml``; everything the workshop knows about a package it
+``workshop.toml``; everything the workshop knows about a package it
 learns there. livery.workshop.verify_workspace is the layering lint:
 contracts present, declared edges agreeing with the native manifests
 in both directions, the graph acyclic, and the one package-specific
@@ -65,10 +65,14 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
     problems = []
     packages = []
     packages_dir = root / "packages"
+    # A workspace born a moment ago has no members yet; zero packages
+    # is a legal answer, not a missing directory.
+    if not packages_dir.is_dir():
+        return ()
     for directory in sorted(p for p in packages_dir.iterdir() if p.is_dir()):
-        contract_file = directory / "livery.toml"
+        contract_file = directory / "workshop.toml"
         if not contract_file.is_file():
-            problems.append(f"{directory.name}: no livery.toml")
+            problems.append(f"{directory.name}: no workshop.toml")
             continue
         if not (directory / "pyproject.toml").is_file():
             problems.append(f"{directory.name}: no pyproject.toml")

@@ -8,24 +8,7 @@ project_description: The livery ecosystem monorepo (virtual root).
 author_name: Willem Kokke
 author_email: mail@willem.net
 copyright_year: '2026'
-forge_kind: github
-forge_owner: willemkokke
-runners:
-- ubuntu-latest
-- macos-latest
-- windows-latest
-python_versions:
-- '3.11'
-- '3.14'
-layers:
-- livery.workshop
-- livery.forge
-required_context: gate
-owner_users:
-- willemkokke
-owner_teams: []
-owner_approvals: 0
-templates_source: templates
+namespace_package: livery
 packages:
 - dir: forge
   name: livery-forge

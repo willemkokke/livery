@@ -205,5 +205,5 @@ def clean(
 
     root = workspace_root()
     if root is None:
-        fail("no workspace: no livery.toml above the working directory")
+        fail("no workspace: no workshop.toml above the working directory")
     clean_tree(root, everything=all, assume_yes=yes)

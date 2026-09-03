@@ -2,6 +2,12 @@
 # `kind` and served from the matching subdirectory. Every question
 # carries a default or `when: false`, so an existing instance updates
 # without a prompt.
+#
+# Only identity is asked. Contract facts (layers, forge, owners, CI)
+# live in workshop.toml; environment facts live in the committed
+# .repo.env. The `when: false` entries below are injected at render
+# time from the contract by the workshop, never asked and never
+# stored.
 _min_copier_version: "9.10.0"
 _subdirectory: "{{ kind }}"
 _answers_file: .copier-answers.yml
@@ -28,94 +34,61 @@ project_description:
 
 author_name:
   type: str
-  default: "Willem Kokke"
+  help: "Who the [project] authors entry names"
+  default: "{{ project_name }} authors"
 
 author_email:
   type: str
-  default: "mail@willem.net"
+  help: "The authors entry's email (empty renders no authors entry)"
+  default: ""
 
 copyright_year:
   type: str
   help: "The year in a new package's LICENSE"
   default: "2026"
 
-forge_kind:
+namespace_package:
   type: str
-  choices: [github, gitea, gitlab]
-  default: github
-
-forge_owner:
-  type: str
-  help: "The owner or organisation the repository lives under"
-  default: "willemkokke"
-
-runners:
-  type: yaml
-  help: "CI runner labels, one gate leg per runner and Python version"
-  default: [ubuntu-latest]
-
-python_versions:
-  type: yaml
-  help: "Python versions CI runs; the first is the floor everywhere"
-  default: ["3.11"]
-
-layers:
-  type: yaml
-  help: "The workspace's layers, in precedence order"
-  default: [livery.workshop]
-
-required_context:
-  type: str
-  help: >-
-    The one status name branch protection requires; each forge's CI
-    renders it as the aggregating job, so the matrix can change
-    without touching repository settings
-  default: gate
-
-forge_url:
-  type: str
-  help: "The forge server (empty for github.com and gitlab.com)"
-  default: ""
-
-publish_index:
-  type: str
-  help: >-
-    Where token publishing uploads (gitea and gitlab kinds); empty on
-    github, where trusted publishing to PyPI is the train
-  default: >-
-    {% if forge_kind == 'gitea' and forge_url
-    %}{{ forge_url.rstrip('/') }}/api/packages/{{ forge_owner }}/pypi{% endif %}
-
-owner_users:
-  type: yaml
-  help: >-
-    Who reviews the workspace's own governance (user logins); these
-    owners guard the root contract and the codeowners file, so a
-    reviewer-count change is itself a reviewed merge
-  default: []
-
-owner_teams:
-  type: yaml
-  help: "Owning teams for the workspace's governance (team names)"
-  default: []
-
-owner_approvals:
-  type: int
-  help: "Approvals the governance paths require (0 documents owners without gating)"
-  default: 0
-
-templates_source:
-  type: str
-  help: >-
-    Where this workspace's templates come from: a directory relative
-    to the root, or a git URL (a fork, at your own risk)
-  default: "https://github.com/willemkokke/workshop-templates"
+  help: "Dotted namespace the packages live in (PEP 420, no __init__)"
+  default: "{{ project_name | lower | replace('-', '_') | replace(' ', '_') }}"
 
 runner_prog:
   type: str
   default: fm
   when: false
   help: the CLI name the workshop runs under; injected at render time
+
+python_floor:
+  type: str
+  default: "3.11"
+  when: false
+  help: >-
+    the oldest Python the workspace supports; injected at render time
+    from the root pyproject's requires-python
+
+layer_imports:
+  type: yaml
+  default: [livery.workshop]
+  when: false
+  help: >-
+    the contract's layers as import paths; injected at render time
+    from workshop.toml
+
+layer_requirements:
+  type: yaml
+  default: []
+  when: false
+  help: >-
+    the dev-group requirement for each layer that is not already a
+    workspace member; injected at render time from workshop.toml
+
+template_source_label:
+  type: str
+  default: "the template source"
+  when: false
+  help: >-
+    what the provenance headers call the template source; injected at
+    render time from the contract's templates value
 
 packages:
   type: yaml
@@ -129,12 +102,12 @@ packages:
 
 package_name:
   type: str
-  help: "The distribution name (e.g. livery-scratch)"
-  default: "livery-{{ _copier_conf.dst_path | basename }}"
+  help: "The distribution name (<namespace>-<dir> by convention)"
+  default: "{{ namespace_package | replace('.', '-') }}-{{ _copier_conf.dst_path | basename }}"
 
 package_description:
   type: str
-  default: "{{ package_name }}: a livery workspace package."
+  default: "{{ package_name }}: a {{ project_name }} workspace package."
 
 # The directory under packages/, which is also the package's tag
 # line. Recorded rather than derived from the destination: the render
@@ -145,13 +118,25 @@ package_dir:
   default: "{{ _copier_conf.dst_path | basename }}"
   when: false
 
-namespace_package:
+# The forge facts a package's changelog links through; injected at
+# render time from workshop.toml, never asked and never stored.
+forge_kind:
   type: str
-  help: "Dotted namespace the package lives in (PEP 420, no __init__)"
-  default: "livery"
+  default: github
+  when: false
+
+forge_owner:
+  type: str
+  default: ""
+  when: false
+
+forge_url:
+  type: str
+  default: ""
+  when: false
 
 # The module name inside the namespace, derived from the distribution
-# name minus the namespace prefix: livery-forge in livery -> forge.
+# name minus the namespace prefix: acme-tools in acme -> tools.
 project_slug:
   type: str
   default: >-
@@ -170,7 +155,7 @@ source_path:
     }}{% endif %}
   when: false
 
-# The dotted import path (livery.forge).
+# The dotted import path (acme.tools).
 import_path:
   type: str
   default: >-

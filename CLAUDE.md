@@ -3,5 +3,5 @@
      wins. Edit CLAUDE.project.md, never this file. -->
 @.workshop/interaction-voice.md
 @.workshop/documentation-standards.md
-@.workshop/CLAUDE.livery.md
+@.workshop/CLAUDE.workshop.md
 @CLAUDE.project.md

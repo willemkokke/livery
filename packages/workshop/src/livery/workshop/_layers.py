@@ -1,6 +1,6 @@
 """The layer walk: one list in the workspace contract, every channel.
 
-The root ``livery.toml`` names the layers in precedence order, the
+The root ``workshop.toml`` names the layers in precedence order, the
 workshop first and the instance implicitly last. Mounting reads that
 list and grafts each further layer's footman plugin in order, so a
 package installed by accident never changes a repository: discovery
@@ -18,31 +18,52 @@ SELF = "livery.workshop"
 
 
 def workspace_root(start: Path | None = None) -> Path | None:
-    """The nearest ancestor carrying a ``livery.toml``, or None.
+    """The nearest ancestor carrying a ``workshop.toml``, or None.
 
     The workspace contract is the marker; a checkout without one is
     not a workspace and gets no layers.
     """
     origin = (start or Path.cwd()).resolve()
     for candidate in (origin, *origin.parents):
-        if (candidate / "livery.toml").is_file():
+        if (candidate / "workshop.toml").is_file():
             return candidate
     return None
 
 
-def layer_names(start: Path | None = None) -> tuple[str, ...]:
-    """The layers the workspace declares, in precedence order.
+def layer_entries(start: Path | None = None) -> tuple[tuple[str, str], ...]:
+    """Each declared layer as ``(import path, distribution)``.
 
-    Empty outside a workspace, and empty when the contract carries no
+    A string entry derives its distribution by convention: dots
+    become dashes, so ``livery.workshop`` is ``livery-workshop``. A
+    table entry ``{import = "...", dist = "..."}`` spells both, for
+    a layer whose names do not follow the convention. Empty outside
+    a workspace, and empty when the contract carries no
     ``[workspace] layers`` list: no guessing, no defaults.
     """
     root = workspace_root(start)
     if root is None:
         return ()
-    contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
+    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
     workspace = contract.get("workspace") or {}
-    layers = workspace.get("layers") or []
-    return tuple(str(layer) for layer in layers)
+    entries: list[tuple[str, str]] = []
+    for layer in workspace.get("layers") or []:
+        if isinstance(layer, dict):
+            import_path = str(layer.get("import", ""))
+            dist = str(layer.get("dist", "")) or import_path.replace(".", "-")
+            entries.append((import_path, dist))
+        else:
+            name = str(layer)
+            entries.append((name, name.replace(".", "-")))
+    return tuple(entries)
+
+
+def layer_names(start: Path | None = None) -> tuple[str, ...]:
+    """The layers the workspace declares, in precedence order.
+
+    The import paths from livery.workshop._layers.layer_entries;
+    empty on the same terms.
+    """
+    return tuple(import_path for import_path, _ in layer_entries(start))
 
 
 def mount_layers(start: Path | None = None) -> tuple[str, ...]:
@@ -55,9 +76,18 @@ def mount_layers(start: Path | None = None) -> tuple[str, ...]:
     from footman import plugin
 
     mounted = []
-    for layer in layer_names(start):
+    for layer, dist in layer_entries(start):
         if layer == SELF:
             continue
-        plugin(layer)
+        try:
+            plugin(layer)
+        except Exception as error:
+            message = (
+                f"layer {layer!r} did not mount: {error}\n"
+                f"  the contract lists it in [workspace] layers, so its"
+                f" distribution ({dist}) belongs in the dev group;"
+                " `uv sync` installs it"
+            )
+            raise RuntimeError(message) from error
         mounted.append(layer)
     return tuple(mounted)

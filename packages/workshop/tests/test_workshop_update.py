@@ -43,9 +43,15 @@ def _instance(tmp_path: Path) -> Path:
 
     shutil.copytree(ROOT / "templates", root / "templates")
     shutil.copy(ROOT / ".copier-answers.yml", root / ".copier-answers.yml")
-    # The renderer reads the contract for its source, so the seed line
-    # comes first; the render then overwrites the file completely.
-    (root / "livery.toml").write_text('[workspace]\ntemplates = "templates"\n')
+    # The contract is a birth-time seed the render never touches; the
+    # tests stand in for the birth verb and write it whole.
+    (root / "workshop.toml").write_text(
+        "[workspace]\n"
+        'layers = ["livery.workshop"]\n'
+        'templates = "templates"\n'
+        '\n[forge]\nkind = "github"\nowner = "owner"\n'
+        '\n[ci]\nrunners = ["ubuntu-latest"]\nrequired_context = "gate"\n'
+    )
     from livery.workshop._sync import sync_workspace
     from livery.workshop._templates import apply_project
 
@@ -92,7 +98,9 @@ def _wire_drive(
     monkeypatch: pytest.MonkeyPatch, root: Path, repo: object, git: GitOps
 ) -> None:
     """Point ``_drive``'s discovery at the toy instance and its fake."""
-    monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: root)
+    monkeypatch.setattr(
+        "livery.workshop._layers.workspace_root", lambda start=None: root
+    )
     monkeypatch.setattr(
         "livery.workshop._forge_lane.this_repository", lambda _root: repo
     )
@@ -187,7 +195,8 @@ def test_a_changed_instance_submits_through_the_engine(
 ) -> None:
     root = _instance(tmp_path)
     # Drift one rendered file; the update re-renders and submits.
-    (root / "livery.toml").write_text('[workspace]\ntemplates = "templates"\n')
+    pyproject = root / "pyproject.toml"
+    pyproject.write_text(pyproject.read_text() + "# drift\n")
     _git(root, "commit", "-am", "chore: drift")
     _git(root, "push", "origin", "main")
     fake, git = _fake_pair(root)
@@ -206,7 +215,8 @@ def test_a_killed_update_resumes_without_redoing_the_work(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     root = _instance(tmp_path)
-    (root / "livery.toml").write_text('[workspace]\ntemplates = "templates"\n')
+    pyproject = root / "pyproject.toml"
+    pyproject.write_text(pyproject.read_text() + "# drift\n")
     _git(root, "commit", "-am", "chore: drift")
     _git(root, "push", "origin", "main")
     fake, git = _fake_pair(root)
@@ -311,7 +321,8 @@ def test_a_red_gate_stops_before_the_commit_with_the_resume_teaching(
 
     root = _instance(tmp_path)
     _fake, git = _fake_pair(root)
-    (root / "livery.toml").write_text('[workspace]\ntemplates = "templates"\n')
+    pyproject = root / "pyproject.toml"
+    pyproject.write_text(pyproject.read_text() + "# drift\n")
     _git(root, "commit", "-am", "chore: drift")
     _git(root, "push", "origin", "main")
     # The real run_gate over a stub subprocess: exit 1 is the verdict.
@@ -336,7 +347,8 @@ def test_sync_and_the_gate_run_between_the_work_and_the_commit(
 ) -> None:
     root = _instance(tmp_path)
     _fake, git = _fake_pair(root)
-    (root / "livery.toml").write_text('[workspace]\ntemplates = "templates"\n')
+    pyproject = root / "pyproject.toml"
+    pyproject.write_text(pyproject.read_text() + "# drift\n")
     _git(root, "commit", "-am", "chore: drift")
     _git(root, "push", "origin", "main")
     events: list[str] = []
@@ -360,7 +372,8 @@ def test_the_reexec_guard_prevents_a_loop(
 ) -> None:
     root = _instance(tmp_path)
     _fake, git = _fake_pair(root)
-    (root / "livery.toml").write_text('[workspace]\ntemplates = "templates"\n')
+    pyproject = root / "pyproject.toml"
+    pyproject.write_text(pyproject.read_text() + "# drift\n")
     _git(root, "commit", "-am", "chore: drift")
     _git(root, "push", "origin", "main")
     versions = iter(("0.0.1", "0.0.2"))
@@ -387,7 +400,8 @@ def test_an_update_moving_the_workshop_finishes_in_a_fresh_interpreter(
 ) -> None:
     root = _instance(tmp_path)
     _fake, git = _fake_pair(root)
-    (root / "livery.toml").write_text('[workspace]\ntemplates = "templates"\n')
+    pyproject = root / "pyproject.toml"
+    pyproject.write_text(pyproject.read_text() + "# drift\n")
     _git(root, "commit", "-am", "chore: drift")
     _git(root, "push", "origin", "main")
     versions = iter(("0.0.1", "0.0.2"))
@@ -424,7 +438,8 @@ def test_a_non_interactive_drive_parks_at_exit_zero_with_the_prose(
     repo = fake.repository("willemkokke", "livery")
     _wire_drive(monkeypatch, root, repo, git)
     _open_release(fake, git, root)
-    (root / "livery.toml").write_text('[workspace]\ntemplates = "templates"\n')
+    pyproject = root / "pyproject.toml"
+    pyproject.write_text(pyproject.read_text() + "# drift\n")
     _git(root, "commit", "-am", "chore: drift")
     _git(root, "push", "origin", "main")
     _drive("templates", armed=True)  # returns, no SystemExit: exit 0
@@ -447,7 +462,8 @@ def test_one_invocation_parks_waits_refreshes_floors_and_arms_to_merged(
     repo = fake.repository("willemkokke", "livery")
     _wire_drive(monkeypatch, root, repo, git)
     _open_release(fake, git, root)
-    (root / "livery.toml").write_text('[workspace]\ntemplates = "templates"\n')
+    pyproject = root / "pyproject.toml"
+    pyproject.write_text(pyproject.read_text() + "# drift\n")
     _git(root, "commit", "-am", "chore: drift")
     _git(root, "push", "origin", "main")
     released = {"done": False}
@@ -511,7 +527,8 @@ def test_a_rerun_after_the_wait_was_killed_resumes_from_parked(
     repo = fake.repository("willemkokke", "livery")
     _wire_drive(monkeypatch, root, repo, git)
     _open_release(fake, git, root)
-    (root / "livery.toml").write_text('[workspace]\ntemplates = "templates"\n')
+    pyproject = root / "pyproject.toml"
+    pyproject.write_text(pyproject.read_text() + "# drift\n")
     _git(root, "commit", "-am", "chore: drift")
     _git(root, "push", "origin", "main")
     # First invocation parks (bounded wait, then exit 0): the kill.
@@ -544,7 +561,7 @@ def test_the_arming_ladder_names_its_level(
     assert "this invocation" in arming_reason(armed=True, flag_given=True)
     assert "--no-armed" in arming_reason(armed=False, flag_given=True)
     assert "nothing configured" in arming_reason(armed=False, flag_given=False)
-    (tmp_path / "livery.toml").write_text("[ci]\nautomerge = true\n")
+    (tmp_path / "workshop.toml").write_text("[ci]\nautomerge = true\n")
     assert "committed repo policy" in arming_reason(armed=True, flag_given=False)
     assert ci_automerge() is True
     monkeypatch.setenv("WORKSHOP_AUTOMERGE", "1")
@@ -572,7 +589,7 @@ def test_new_package_renders_and_wires(
     with pytest.raises(_FAILURES):
         new_package("Bad Name")
     new_package("scratch")
-    assert (root / "packages" / "scratch" / "livery.toml").is_file()
+    assert (root / "packages" / "scratch" / "workshop.toml").is_file()
     assert "livery-scratch" in (root / "pyproject.toml").read_text()
     assert "dir: scratch" in (root / ".copier-answers.yml").read_text()
     with pytest.raises(_FAILURES):

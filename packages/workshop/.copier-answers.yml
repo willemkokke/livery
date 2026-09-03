@@ -9,9 +9,3 @@ namespace_package: livery
 author_name: Willem Kokke
 author_email: mail@willem.net
 copyright_year: '2026'
-forge_owner: willemkokke
-project_name: livery
-python_versions:
-- '3.11'
-forge_kind: github
-forge_url: ''

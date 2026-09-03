@@ -41,7 +41,7 @@ def _workspace() -> Path:
 
     root = workspace_root()
     if root is None:
-        fail("no workspace: no livery.toml above the working directory")
+        fail("no workspace: no workshop.toml above the working directory")
     return root
 
 
@@ -54,14 +54,14 @@ def _repo(root: Path) -> Repository:
 def assignee_limit(root: Path) -> int:
     """The workspace's assignee limit; policy, not a forge fact.
 
-    ``[issues] assignees`` in the root ``livery.toml``, default 1 so
+    ``[issues] assignees`` in the root ``workshop.toml``, default 1 so
     a free GitLab needs nothing. Enforced by the workshop on every
     forge, including ones whose native limit is higher; whether the
     forge itself can honour it is ``configure``'s check.
     """
     import tomllib
 
-    contract = root / "livery.toml"
+    contract = root / "workshop.toml"
     if not contract.is_file():
         return 1
     data = tomllib.loads(contract.read_text("utf-8"))
@@ -310,7 +310,7 @@ def issue_start(
             f"  Warning: #{work.number} is assigned to {listed} and the"
             f" workspace's assignee limit is {limit}, so you will not be"
             " listed as working on it until something lands. Coordinate"
-            " with them; `[issues] assignees` in livery.toml raises the"
+            " with them; `[issues] assignees` in workshop.toml raises the"
             " limit if this issue takes more people."
         )
     else:

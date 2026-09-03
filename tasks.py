@@ -1,4 +1,7 @@
-"""livery's dev loop: the workshop, mounted as every instance mounts it.
+# Rendered by the template channel (templates, project kind);
+# the gate keeps it matching its render. Edit the source and
+# run `fm template.apply`; an edit here is drift.
+"""The dev loop: the workspace's layers, mounted.
 
 Run with ``uv run fm <task>``. ``fm check`` is the whole local gate;
 CI runs the same command. The tree comes from the mounted layers; the

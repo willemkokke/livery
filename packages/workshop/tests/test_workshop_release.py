@@ -74,7 +74,7 @@ def _cliff_config(name: str) -> str:
 def _workspace(tmp_path: Path) -> Path:
     root = tmp_path / "ws"
     root.mkdir()
-    (root / "livery.toml").write_text("[workspace]\n")
+    (root / "workshop.toml").write_text("[workspace]\n")
     _git(root, "init", "--initial-branch=main")
     _git(root, "config", "user.email", "test@livery.local")
     _git(root, "config", "user.name", "Livery Test")
@@ -88,7 +88,7 @@ def _workspace(tmp_path: Path) -> Path:
     ):
         directory = root / "packages" / name
         (directory / "src" / "livery" / name).mkdir(parents=True)
-        (directory / "livery.toml").write_text(
+        (directory / "workshop.toml").write_text(
             f'type = "python"\nname = "livery-{name}"\n{extra}'
         )
         (directory / "pyproject.toml").write_text(
@@ -123,7 +123,7 @@ def test_verify_lists_every_disagreement(tmp_path: Path) -> None:
 
 def test_verify_refuses_an_unreleased_floor(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
-    contract = root / "packages" / "tool" / "livery.toml"
+    contract = root / "packages" / "tool" / "workshop.toml"
     contract.write_text(contract.read_text().replace("0.1.0", "0.9.9"))
     with pytest.raises(_FAILURES) as caught:
         verify_release(root, "packages/tool/v0.2.0")
@@ -236,7 +236,7 @@ def test_floor_bumps_move_both_homes(tmp_path: Path) -> None:
     assert latest_released(git.tags())["packages/core"] == "0.2.0"
     changed = bump_floors(root, git)
     assert changed == ["packages/tool: floor on packages/core 0.1.0 -> 0.2.0"]
-    contract = (root / "packages" / "tool" / "livery.toml").read_text()
+    contract = (root / "packages" / "tool" / "workshop.toml").read_text()
     assert 'floor = "0.2.0"' in contract
     pyproject = (root / "packages" / "tool" / "pyproject.toml").read_text()
     assert "livery-core>=0.2.0" in pyproject
@@ -250,7 +250,7 @@ def test_a_scoped_floor_bump_moves_only_the_named_sibling(tmp_path: Path) -> Non
     # A name outside the scope moves nothing, so a dependencies run
     # naming only externals cannot drag every floor along.
     assert bump_floors(root, git, only=("livery-other",)) == []
-    contract = (root / "packages" / "tool" / "livery.toml").read_text()
+    contract = (root / "packages" / "tool" / "workshop.toml").read_text()
     assert 'floor = "0.1.0"' in contract
     changed = bump_floors(root, git, only=("livery-core",))
     assert changed == ["packages/tool: floor on packages/core 0.1.0 -> 0.2.0"]

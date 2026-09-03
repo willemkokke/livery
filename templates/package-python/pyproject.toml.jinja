@@ -1,3 +1,6 @@
+# Seeded from the template channel ({{ template_source_label }}, package-python kind) at
+# birth; this file is the workspace's own. Edit it directly:
+# the template never rewrites it.
 [build-system]
 requires = ["uv_build>=0.11,<0.13"]
 build-backend = "uv_build"
@@ -9,7 +12,7 @@ description = "{{ package_description }}"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
-requires-python = ">={{ python_versions[0] }}"
+requires-python = ">={{ python_floor }}"
 authors = [{ name = "{{ author_name }}", email = "{{ author_email }}" }]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -19,7 +22,9 @@ classifiers = [
 ]
 
 [project.urls]
-Repository = "https://github.com/{{ forge_owner }}/{{ project_name }}"
+{%- set public_host = {'github': 'https://github.com', 'gitea': 'https://gitea.com', 'gitlab': 'https://gitlab.com'} %}
+{%- set web_root = forge_url.rstrip('/') if forge_url else public_host[forge_kind] %}
+Repository = "{{ web_root }}/{{ forge_owner }}/{{ project_name }}"
 
 [tool.uv.build-backend]
 # PEP 420 namespace: the importable package is {{ import_path }} and

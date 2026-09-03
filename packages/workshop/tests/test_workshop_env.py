@@ -359,7 +359,9 @@ def test_env_check_red_prints_the_breakdown_and_the_remedy(
 ) -> None:
     from livery.workshop import _env_tasks
 
-    monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        "livery.workshop._layers.workspace_root", lambda start=None: tmp_path
+    )
     monkeypatch.setattr("livery.workshop._env_tasks.shutil.which", lambda _tool: None)
     assert _env_tasks.env_check() == 1
     out = capsys.readouterr().out
@@ -378,7 +380,9 @@ def test_apply_cascade_defaults_absent_keys_and_never_overrides(
     from livery.workshop import _env_tasks
 
     (tmp_path / ".repo.env").write_text("CASCADE_FLAG=file\nPRESET=file\n")
-    monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        "livery.workshop._layers.workspace_root", lambda start=None: tmp_path
+    )
     monkeypatch.setattr(_env_tasks, "_APPLIED", {})
     monkeypatch.setenv("PRESET", "shell")
     monkeypatch.delenv("CASCADE_FLAG", raising=False)
@@ -503,7 +507,9 @@ def test_env_set_shadow_warnings_are_honest(
 ) -> None:
     from livery.workshop import _env_tasks
 
-    monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        "livery.workshop._layers.workspace_root", lambda start=None: tmp_path
+    )
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".repo.env").write_text("CASCADE_KEY=from-file\n")
     # The hook exported the cascade: that is not the shell's own
@@ -531,7 +537,9 @@ def test_env_set_delete_is_confirmed(
 ) -> None:
     from livery.workshop import _env_tasks
 
-    monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        "livery.workshop._layers.workspace_root", lambda start=None: tmp_path
+    )
     monkeypatch.chdir(tmp_path)
     local = tmp_path / ".repo.env.local"
     local.write_text("DOOMED_KEY=x\n")
@@ -555,7 +563,9 @@ def test_env_show_keeps_file_provenance_and_flags_stale(
 ) -> None:
     from livery.workshop import _env_tasks
 
-    monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        "livery.workshop._layers.workspace_root", lambda start=None: tmp_path
+    )
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".repo.env").write_text("SHOWN_KEY=file-value\nOLD_KEY=new-value\n")
     # SHOWN_KEY was exported by the hook: it must still read (repo).
@@ -594,7 +604,9 @@ def test_emit_appends_the_dialects_own_completion_hook(
 ) -> None:
     from livery.workshop import _env_tasks
 
-    monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        "livery.workshop._layers.workspace_root", lambda start=None: tmp_path
+    )
     monkeypatch.chdir(tmp_path)
     posix = _env_tasks.env_emit("")
     assert "case $-" in posix  # the interactive guard

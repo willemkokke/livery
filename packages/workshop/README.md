@@ -5,7 +5,7 @@ repository's whole `tasks.py` is `plugin("livery.workshop")`.
 
 - The quality family (`fm check`: format, lint, four type checkers,
   type-completeness, tests, the render gate), dispatched by each
-  package's `livery.toml` contract.
+  package's `workshop.toml` contract.
 - Layers: the workspace contract names them, `fm sync` delivers their
   content (guidance fragments, skills, hooks, the managed CLAUDE.md
   stub), and the instance's own files always win.

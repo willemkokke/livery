@@ -28,8 +28,9 @@ import toolroom
 import yaml
 from footman import doc, fail, group
 
-from livery.workshop._layers import workspace_root
+from livery.workshop._layers import layer_entries, workspace_root
 from livery.workshop._materialise import write_lf
+from livery.workshop._pythons import python_floor
 
 template = group("template", help="The template source and its render gate")
 new = group("new", help="Render new pieces from the template source")
@@ -44,14 +45,14 @@ DEFAULT_TEMPLATE_SOURCE = "https://github.com/willemkokke/workshop-templates"
 def template_source(root: Path) -> str:
     """The workspace's declared template source.
 
-    ``[workspace] templates`` in ``livery.toml``: a directory relative
+    ``[workspace] templates`` in ``workshop.toml``: a directory relative
     to the root (the monorepo says ``templates``), or a git URL (a
     fork, at its own risk). Silent means the published artifact
     repository.
     """
     import tomllib
 
-    contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
+    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
     workspace = contract.get("workspace") or {}
     return str(workspace.get("templates", "")) or DEFAULT_TEMPLATE_SOURCE
 
@@ -69,7 +70,7 @@ def _root() -> Path:
     """The workspace root, or fail."""
     root = workspace_root()
     if root is None:
-        fail("no workspace: no livery.toml above the working directory")
+        fail("no workspace: no workshop.toml above the working directory")
     return root
 
 
@@ -83,6 +84,65 @@ def read_answers(path: Path) -> dict[str, Any]:
     return {key: value for key, value in answers.items() if not key.startswith("_")}
 
 
+def _requirement_name(spec: str) -> str:
+    """The distribution a requirement spec names, extras and floors cut."""
+    return re.split(r"[\[<>=!~; ]", spec.strip(), maxsplit=1)[0]
+
+
+def render_injections(root: Path, answers: dict[str, Any]) -> dict[str, Any]:
+    """The render-time values no answer stores.
+
+    Identity is answered, configuration is declared: the runner's
+    name belongs to the process, the Python floor to the root
+    ``pyproject.toml``, and the layers to ``workshop.toml``. Every
+    project render mixes these in, so the answers hold identity and
+    the ``packages`` roster alone.
+    """
+    entries = layer_entries(root)
+    if not entries:
+        fail(
+            "workshop.toml declares no [workspace] layers: the render"
+            " needs the stack (the base layer is livery.workshop)"
+        )
+    members = {
+        _requirement_name(str(entry.get("dev", "")))
+        for entry in answers.get("packages", [])
+        if isinstance(entry, dict)
+    }
+    return {
+        "runner_prog": footman.prog(),
+        "python_floor": python_floor(root),
+        "template_source_label": template_source(root),
+        "layer_imports": [import_path for import_path, _ in entries],
+        "layer_requirements": [
+            dist for _, dist in entries if _requirement_name(dist) not in members
+        ],
+    }
+
+
+def package_injections(root: Path) -> dict[str, Any]:
+    """The render-time values a package render takes from the contract.
+
+    The forge facts feed the changelog's link bases; asking them per
+    package would let one workspace's packages disagree about where
+    they live.
+    """
+    import tomllib
+
+    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+    forge_table = contract.get("forge") or {}
+    root_answers = read_answers(root / _ANSWERS)
+    return {
+        "runner_prog": footman.prog(),
+        "python_floor": python_floor(root),
+        "template_source_label": template_source(root),
+        "forge_kind": str(forge_table.get("kind", "github")),
+        "forge_owner": str(forge_table.get("owner", "")),
+        "forge_url": str(forge_table.get("url", "")),
+        "project_name": str(root_answers.get("project_name", "")),
+    }
+
+
 def render(template_dir: Path, destination: Path, data: dict[str, Any]) -> None:
     """Render *template_dir* into *destination* with *data*, no prompts.
 
@@ -90,6 +150,10 @@ def render(template_dir: Path, destination: Path, data: dict[str, Any]) -> None:
     too, which is what lets the gate judge a change before its commit.
     Runs copier in a child process because it chdirs while rendering,
     which a parallel task must never do to the one real directory.
+    The templates carry their own provenance headers, parameterised
+    by ``template_source_label``: injecting them after the render
+    would make every managed file read as locally modified to
+    ``copier update``, whose merge then drops real template changes.
     """
     with tempfile.NamedTemporaryFile("w", suffix=".yml", delete=False) as handle:
         yaml.safe_dump(data, handle)
@@ -141,12 +205,8 @@ def project_drift(root: Path) -> list[str]:
     Empty when every rendered file matches the repository byte for
     byte.
     """
-    data = read_answers(root / _ANSWERS)
-
-    # Injected at render time, never stored in the answers: the
-    # runner's name belongs to the process, so a branded CLI's
-    # drift gate demands branded files and apply re-emits them.
-    data = {**data, "runner_prog": footman.prog()}
+    answers = read_answers(root / _ANSWERS)
+    data = {**answers, **render_injections(root, answers)}
     source = local_template_dir(root)
     if source is None:
         fail("no local template source: the render gate needs one")
@@ -155,6 +215,8 @@ def project_drift(root: Path) -> list[str]:
         render(source, Path(scratch), data)
         for rendered in rendered_files(Path(scratch)):
             relative = rendered.relative_to(scratch)
+            if relative.as_posix() in PROJECT_SEEDS:
+                continue
             committed = root / relative
             if not committed.is_file():
                 drift.append(f"{relative}: rendered, but missing from the repository")
@@ -163,10 +225,14 @@ def project_drift(root: Path) -> list[str]:
     from livery.workshop._ci_generate import generated_files
     from livery.workshop._governance import codeowners_file
 
-    generated = dict(generated_files(root, data))
+    generated = dict(generated_files(root))
     rendered_owners = codeowners_file(root)
     if rendered_owners is not None:
-        generated[root / rendered_owners.path] = rendered_owners.content
+        from livery.workshop._provenance import generated_header
+
+        generated[root / rendered_owners.path] = (
+            generated_header("#") + rendered_owners.content
+        )
     for path, content in generated.items():
         relative_generated = path.relative_to(root)
         if not path.is_file():
@@ -182,6 +248,11 @@ def project_drift(root: Path) -> list[str]:
 #: file is a package's seed, which its authors then write: comparing
 #: those would report a living package as drift from its own birth.
 PACKAGE_MANAGED = ("cliff.toml",)
+
+#: The project render's seeds: born with the workspace, then the
+#: workspace's own. Written only when missing; the drift gate never
+#: judges them.
+PROJECT_SEEDS = ("tests/test_workspace_contracts.py",)
 
 
 def package_drift(root: Path) -> list[str]:
@@ -201,9 +272,7 @@ def package_drift(root: Path) -> list[str]:
     packages = root / "packages"
     for answers_path in sorted(packages.glob("*/.copier-answers.yml")):
         directory = answers_path.parent
-        data = read_answers(answers_path)
-
-        data = {**data, "runner_prog": footman.prog()}
+        data = {**read_answers(answers_path), **package_injections(root)}
         with tempfile.TemporaryDirectory() as scratch:
             render(source, Path(scratch), data)
             for name in PACKAGE_MANAGED:
@@ -223,12 +292,8 @@ def package_drift(root: Path) -> list[str]:
 
 def apply_project(root: Path) -> list[str]:
     """Write the ``project`` render over *root*; the files that changed."""
-    data = read_answers(root / _ANSWERS)
-
-    # Injected at render time, never stored in the answers: the
-    # runner's name belongs to the process, so a branded CLI's
-    # drift gate demands branded files and apply re-emits them.
-    data = {**data, "runner_prog": footman.prog()}
+    answers = read_answers(root / _ANSWERS)
+    data = {**answers, **render_injections(root, answers)}
     source = local_template_dir(root)
     if source is None:
         fail("no local template source: nothing to apply from")
@@ -238,32 +303,36 @@ def apply_project(root: Path) -> list[str]:
         for rendered in rendered_files(Path(scratch)):
             relative = rendered.relative_to(scratch)
             committed = root / relative
+            if relative.as_posix() in PROJECT_SEEDS and committed.is_file():
+                continue  # a seed is the workspace's own once it exists
             body = _lf(rendered.read_bytes())
             if not committed.is_file() or _lf(committed.read_bytes()) != body:
                 committed.parent.mkdir(parents=True, exist_ok=True)
                 committed.write_bytes(body)
                 changed.append(str(relative))
-    changed.extend(apply_generated(root, data))
+    changed.extend(apply_generated(root))
     return changed
 
 
-def apply_generated(root: Path, data: dict[str, Any] | None = None) -> list[str]:
+def apply_generated(root: Path) -> list[str]:
     """Write the emitted artifacts (CI files, codeowners); what changed.
 
     The render half and this half together are apply_project; the
     remote-source update runs copier itself and then this, so an
     instance's generated workflows move with its workshop too.
     """
-    if data is None:
-        data = read_answers(root / _ANSWERS)
     changed: list[str] = []
     from livery.workshop._ci_generate import generated_files
     from livery.workshop._governance import codeowners_file
 
-    generated = dict(generated_files(root, data))
+    generated = dict(generated_files(root))
     rendered_owners = codeowners_file(root)
     if rendered_owners is not None:
-        generated[root / rendered_owners.path] = rendered_owners.content
+        from livery.workshop._provenance import generated_header
+
+        generated[root / rendered_owners.path] = (
+            generated_header("#") + rendered_owners.content
+        )
     for path, content in generated.items():
         body = _lf(content.encode())
         if not path.is_file() or _lf(path.read_bytes()) != body:
@@ -287,9 +356,7 @@ def apply_packages(root: Path) -> list[str]:
     changed = []
     for answers_path in sorted((root / "packages").glob("*/.copier-answers.yml")):
         directory = answers_path.parent
-        data = read_answers(answers_path)
-
-        data = {**data, "runner_prog": footman.prog()}
+        data = {**read_answers(answers_path), **package_injections(root)}
         with tempfile.TemporaryDirectory() as scratch:
             render(source, Path(scratch), data)
             for name in PACKAGE_MANAGED:
@@ -372,7 +439,10 @@ def new_package(
         fail(f"{destination} already exists")
     answers = read_answers(root / _ANSWERS)
 
-    package_name = f"livery-{name}"
+    namespace = str(answers.get("namespace_package", ""))
+    prefix = namespace.replace(".", "-")
+    package_name = f"{prefix}-{name}" if prefix else name
+    project = str(answers.get("project_name", ""))
     render(
         template_dir,
         destination,
@@ -380,21 +450,16 @@ def new_package(
             "kind": "package-python",
             "package_dir": name,
             "package_name": package_name,
-            "package_description": f"{package_name}: a livery workspace package.",
-            "namespace_package": "livery",
+            "package_description": f"{package_name}: a {project} workspace package.",
+            "namespace_package": namespace,
             "author_name": answers.get("author_name", ""),
             "author_email": answers.get("author_email", ""),
             "copyright_year": answers.get("copyright_year", ""),
-            "forge_owner": answers.get("forge_owner", ""),
-            # The forge the workspace is on, carried down: a package's
-            # changelog links its own pull requests, and a default
-            # taken from the template would put a Gitea workspace's
-            # entries on github.com.
-            "forge_kind": answers.get("forge_kind", ""),
-            "forge_url": answers.get("forge_url", ""),
-            "project_name": answers.get("project_name", ""),
-            "python_versions": answers.get("python_versions", []),
-            "runner_prog": footman.prog(),
+            # The forge facts ride the contract, not the answers: a
+            # package's changelog links its own pull requests, and a
+            # default taken from the template would put a Gitea
+            # workspace's entries on github.com.
+            **package_injections(root),
         },
     )
     members = list(answers.get("packages", []))
@@ -417,7 +482,7 @@ def _write_root_answers(root: Path, answers: dict[str, Any]) -> None:
         f"# provenance. `{footman.prog()} new.package` appends to `packages`;"
         " edit other\n"
         "# values only when the workspace itself changes.\n"
-        "_src_path: templates\n"
+        f"_src_path: {template_source(root)}\n"
         + yaml.safe_dump(answers, sort_keys=False, allow_unicode=True)
     )
     write_lf(root / _ANSWERS, body)

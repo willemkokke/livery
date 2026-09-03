@@ -50,7 +50,7 @@ In the diagrams: rectangles are local, rounded are git, double-walled (subroutin
 
 | Family | Workflows | Workshop owner |
 | --- | --- | --- |
-| Birth | W1 project birth · W2 package birth | `fm create.project` / `create.package` / `create.repo` |
+| Birth | W1 project birth · W2 package birth | `fm new.project` / `fm new.package` |
 | The inner loop | W3 ship · W4 CI triage | `fm ship` · `fm ci.*` |
 | The release train | W5 package release · W6 template snapshot | `fm workflow.release` · workshop publication |
 | The update wave | W7 instance update · W8 floor bumps | `fm update` · release aftermath |
@@ -91,7 +91,7 @@ the forge only stores the token secret where tokens are the mechanism
 
 ### W2 — package birth inside a monorepo
 
-`fm create.package`: render the package template into `packages/`,
+`fm new.package`: render the package template into `packages/`,
 wire the workspace member, floors, and layering lint. **Zero forge
 touches.** It appears in this note precisely to prove the lane
 discipline — a workflow the protocol must not grow a verb for. The

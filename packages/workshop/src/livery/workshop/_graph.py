@@ -79,7 +79,7 @@ def graph_affected(base: str = "main") -> None:
 
     root = workspace_root()
     if root is None:
-        print("  no workspace: no livery.toml above the working directory")
+        print("  no workspace: no workshop.toml above the working directory")
         return
     git = GitOps(root)
     git.fetch()

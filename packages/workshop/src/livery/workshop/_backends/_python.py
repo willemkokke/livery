@@ -160,7 +160,7 @@ class _Stamper:
 
 def coverage_floor(package: Package) -> float | None:
     """The committed coverage floor from the package's contract, or None."""
-    contract = tomllib.loads((package.directory / "livery.toml").read_text("utf-8"))
+    contract = tomllib.loads((package.directory / "workshop.toml").read_text("utf-8"))
     value = (contract.get("qa") or {}).get("coverage_floor")
     return float(value) if value is not None else None
 
@@ -242,7 +242,7 @@ def enforce_coverage(root: Path, packages: tuple[Package, ...]) -> None:
         fail(
             "coverage fell below the high-water marks:\n  "
             + "\n  ".join(problems)
-            + "\n  raise the code, or lower a floor deliberately in livery.toml"
+            + "\n  raise the code, or lower a floor deliberately in workshop.toml"
         )
 
 
@@ -278,7 +278,9 @@ def run_test(
         # union, in the aggregating job.
         pytest.opts(in_process=False)(*dirs, *pytest_args)
         return
-    pytest.opts(in_process=False)(*dirs, "--cov=livery", "--cov-report=", *pytest_args)
+    # Bare --cov: the measured source is [tool.coverage.run] source,
+    # the namespace the render derived, never a spelled module.
+    pytest.opts(in_process=False)(*dirs, "--cov", "--cov-report=", *pytest_args)
     report_coverage(root, packages)
 
 

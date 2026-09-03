@@ -12,7 +12,7 @@ parallel. CI runs the same command. Nothing on the merge path waits on
 anything outside the repository.
 
 Layout: one package per `packages/<name>/`, discovered by its
-`livery.toml`. Dependencies point only downward, enforced by the
+`workshop.toml`. Dependencies point only downward, enforced by the
 workspace contracts test.
 
 | Package | Docs |

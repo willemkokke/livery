@@ -120,16 +120,16 @@ def _compose_file() -> Path:
 
 
 def _workspace_root() -> Path:
-    """The nearest ancestor carrying a ``livery.toml``, or fail.
+    """The nearest ancestor carrying a ``workshop.toml``, or fail.
 
     The dev credentials are workspace state, not package state, so
     they live beside the workspace contract.
     """
     origin = Path.cwd().resolve()
     for candidate in (origin, *origin.parents):
-        if (candidate / "livery.toml").is_file():
+        if (candidate / "workshop.toml").is_file():
             return candidate
-    fail("no workspace: no livery.toml above the working directory")
+    fail("no workspace: no workshop.toml above the working directory")
 
 
 def _dev_env_path() -> Path:

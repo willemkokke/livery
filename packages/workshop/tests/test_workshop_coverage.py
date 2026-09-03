@@ -16,7 +16,7 @@ _FAILURES = (SystemExit, Failed)
 def _package(tmp_path: Path, name: str, extra: str = "") -> Package:
     directory = tmp_path / "packages" / name
     directory.mkdir(parents=True)
-    (directory / "livery.toml").write_text(
+    (directory / "workshop.toml").write_text(
         f'type = "python"\nname = "livery-{name}"\n{extra}'
     )
     return Package(
@@ -92,6 +92,6 @@ def test_without_a_parent_the_meter_and_the_preview_run(
     )
     monkeypatch.delenv("COVERAGE_PROCESS_START", raising=False)
     _python.run_test(packages=(package,), root=tmp_path, scoped=True)
-    assert any("--cov=livery" in arg for arg in seen[0])
+    assert any(arg == "--cov" for arg in seen[0])
     assert "packages/thing/tests" not in seen[0]  # no tests dir exists
     assert enforced == [tmp_path]

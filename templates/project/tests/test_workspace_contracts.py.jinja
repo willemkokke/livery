@@ -1,0 +1,12 @@
+# Seeded from the template channel ({{ template_source_label }}, project kind) at
+# birth; this file is the workspace's own. Edit it directly:
+# the template never rewrites it.
+"""The workspace's layering, checked on every gate run."""
+
+from pathlib import Path
+
+from livery.workshop import verify_workspace
+
+
+def test_the_workspace_keeps_its_layering() -> None:
+    verify_workspace(Path(__file__).resolve().parents[1])

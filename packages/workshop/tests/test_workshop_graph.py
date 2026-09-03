@@ -22,7 +22,7 @@ def _workspace(tmp_path: Path) -> Path:
     _git(tmp_path, "clone", str(origin), "ws")
     _git(root, "config", "user.email", "t@livery.local")
     _git(root, "config", "user.name", "T")
-    (root / "livery.toml").write_text("[workspace]\n")
+    (root / "workshop.toml").write_text("[workspace]\n")
     for name, extra in (
         ("core", ""),
         ("mid", '[[depends]]\npath = "packages/core"\nkind = "build"\n'),
@@ -31,7 +31,7 @@ def _workspace(tmp_path: Path) -> Path:
     ):
         directory = root / "packages" / name
         directory.mkdir(parents=True)
-        (directory / "livery.toml").write_text(
+        (directory / "workshop.toml").write_text(
             f'type = "python"\nname = "livery-{name}"\n{extra}'
         )
         (directory / "pyproject.toml").write_text(
@@ -69,7 +69,7 @@ def test_a_leaf_change_affects_only_its_closure(tmp_path: Path) -> None:
 
 def test_a_root_change_affects_everything(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
-    (root / "livery.toml").write_text("[workspace]\n# touched\n")
+    (root / "workshop.toml").write_text("[workspace]\n# touched\n")
     assert affected_packages(root, GitOps(root)) is None
 
 

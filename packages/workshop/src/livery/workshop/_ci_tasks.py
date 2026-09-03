@@ -35,7 +35,7 @@ _CAPABILITIES: tuple[Capability, ...] = (
 def _resolved() -> tuple[Repository, GitOps]:
     root = workspace_root()
     if root is None:
-        fail("no workspace: no livery.toml above the working directory")
+        fail("no workspace: no workshop.toml above the working directory")
     from livery.workshop._forge_lane import this_repository
 
     return this_repository(root), GitOps(root)
@@ -196,7 +196,7 @@ def doctor_flow(forge: Forge) -> None:
 
         from livery.workshop._governance import unknown_owners
 
-        contract = tomllib.loads((root / "livery.toml").read_text("utf-8"))
+        contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
         owner = str((contract.get("forge") or {}).get("owner", ""))
         kind = str((contract.get("forge") or {}).get("kind", ""))
         admin_var = f"{kind.upper()}_ADMIN_TOKEN"
@@ -233,7 +233,7 @@ def doctor() -> None:
     """Say who you are, which server this is, and what it grants."""
     root = workspace_root()
     if root is None:
-        fail("no workspace: no livery.toml above the working directory")
+        fail("no workspace: no workshop.toml above the working directory")
     from livery.workshop._forge_lane import this_forge
 
     doctor_flow(this_forge(root))

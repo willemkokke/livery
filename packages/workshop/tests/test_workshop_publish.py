@@ -58,7 +58,7 @@ def _member(root: Path, name: str, *, floors_on: tuple[str, ...] = ()) -> None:
         for dep in floors_on
     )
     requirements = ", ".join(f'"livery-{dep}>=0.3.0"' for dep in floors_on)
-    (directory / "livery.toml").write_text(
+    (directory / "workshop.toml").write_text(
         f'type = "python"\nname = "livery-{name}"\n{depends}'
     )
     (directory / "pyproject.toml").write_text(
@@ -111,7 +111,7 @@ def train(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     _git(tmp_path, "clone", str(origin), "ws")
     _git(root, "config", "user.email", "t@livery.local")
     _git(root, "config", "user.name", "T")
-    (root / "livery.toml").write_text("[workspace]\n")
+    (root / "workshop.toml").write_text("[workspace]\n")
     _member(root, "base")
     _member(root, "left", floors_on=("base",))
     _member(root, "right", floors_on=("base",))

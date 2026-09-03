@@ -37,7 +37,7 @@ def _workspace(tmp_path: Path) -> Path:
     _git(tmp_path, "clone", str(origin), "ws")
     _git(root, "config", "user.email", "t@livery.local")
     _git(root, "config", "user.name", "T")
-    (root / "livery.toml").write_text("[workspace]\n")
+    (root / "workshop.toml").write_text("[workspace]\n")
     _member(root, "core")
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "chore: seed")
@@ -199,7 +199,7 @@ def test_the_version_grammar_and_its_pep440_form(tmp_path: Path) -> None:
     assert version == f"0.3.0-dev.feat.9-widget.1+{sha}.20260901"
     assert semver_to_pep440(version) == f"0.3.0.dev1+feat.9-widget.{sha}.20260901"
     # A dirty tree marks the wheel no commit describes.
-    (root / "packages" / "core" / "livery.toml").write_text(
+    (root / "packages" / "core" / "workshop.toml").write_text(
         'type = "python"\nname = "livery-core"\n# dirt\n'
     )
     assert dev_version(root, git, packages[0], stamp="20260901").endswith(".dirty")
@@ -270,7 +270,9 @@ def test_the_branch_routes_the_act(
     from livery.workshop._release_driver import workflow_release
 
     root = _workspace(tmp_path)
-    monkeypatch.setattr("livery.workshop._layers.workspace_root", lambda: root)
+    monkeypatch.setattr(
+        "livery.workshop._layers.workspace_root", lambda start=None: root
+    )
     routed: list[str] = []
     monkeypatch.setattr(
         "livery.workshop._release_driver.local_release",

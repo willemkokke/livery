@@ -1,3 +1,6 @@
+# Rendered by the template channel (templates, project kind);
+# the gate keeps it matching its render. Edit the source and
+# run `fm template.apply`; an edit here is drift.
 # The workspace's virtual root: never built, never published.
 [project]
 name = "livery"
@@ -12,9 +15,6 @@ classifiers = [
     "Development Status :: 1 - Planning",
     "Programming Language :: Python :: 3",
 ]
-
-[project.urls]
-Repository = "https://github.com/willemkokke/livery"
 
 [tool.uv]
 package = false
@@ -38,6 +38,8 @@ dev = [
     # carry extras the dev loop needs.
     "livery-forge[github-secrets]",
     "livery-workshop",
+    # Every contract layer that is not already a member above, so a
+    # rendered tasks.py can always import its plugins.
     "pytest>=8.0",
     # Coverage feeds the per-package floors the gate enforces;
     # `patch = ["subprocess"]` needs coverage 7.10 or newer.
@@ -66,7 +68,7 @@ dev = [
 ]
 
 # Ruff and basedpyright configuration cribbed from footman's pyproject:
-# footman's rules, global. Livery adds pydocstyle in the google
+# footman's rules, global. The workshop adds pydocstyle in the google
 # convention: Google docstrings only, everywhere.
 [tool.ruff]
 line-length = 88

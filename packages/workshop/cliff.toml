@@ -1,12 +1,11 @@
+# Rendered by the template channel (templates, package-python kind);
+# the gate keeps it matching its render. Edit the source and
+# run `fm template.apply`; an edit here is drift.
 # How livery-workshop's changelog is written.
 #
 # git-cliff reads the conventional commits under this package's paths
 # and writes the entry the release train stamps. The workshop calls
 # it; nothing here is typed by hand.
-#
-# Rendered from the workshop's template, so the render gate compares
-# this file with the template on every run. Change the template, or
-# your layer's override of it, rather than this copy.
 
 [bump]
 # The version rules, as footman practises them: before 1.0 a feature

@@ -43,7 +43,7 @@ from pathlib import Path
 
 import footman
 
-_MANIFEST = ".livery-materialised"
+_MANIFEST = ".workshop-materialised"
 """What this module *copied* into a directory: ``<hash> <name>`` lines.
 
 A manifest rather than a marker inside each entry, because the copy
@@ -456,4 +456,61 @@ def materialise(repo_root: Path, source: Path, subdir: str) -> list[str]:
             f"  {subdir}: local override kept, shadowing the shipped copy;"
             f" commit it like any repo file ({names})"
         )
+    return lines
+
+
+def materialise_file(repo_root: Path, source: Path, relative: str) -> list[str]:
+    """Deliver one shipped file into the repository by copy.
+
+    Always a copy, never a link, whatever the platform offers: the
+    target is a file its editors rewrite in place, and a write
+    through a link would land inside the installed wheel. The
+    manifest beside the target records the copy-time digest, so a
+    current copy is quiet, a stale one refreshes, and an edited one
+    is an override, kept and named. Returns summary lines; errors
+    are reported, never raised.
+    """
+    target = repo_root / relative
+    home = target.parent
+    lines: list[str] = []
+    try:
+        home.mkdir(parents=True, exist_ok=True)
+        previous = _read_manifest(home)
+        copies = {
+            name: digest for name, digest in previous.items() if name != target.name
+        }
+        recorded = previous.get(target.name)
+        ours = True
+        if _is_link(target):
+            # An editor's write through a link would land in the wheel.
+            _remove(target)
+            shutil.copy2(source, target)
+            lines.append(f"  {relative}: copied in place of a link")
+        elif not target.exists():
+            shutil.copy2(source, target)
+            lines.append(f"  {relative}: materialised")
+        elif recorded is not None:
+            if _same_content(target, source):
+                pass  # our copy, current: nothing to do or say
+            elif recorded and _digest(target) != recorded:
+                ours = False
+            else:
+                _remove(target)
+                shutil.copy2(source, target)
+                lines.append(f"  {relative}: refreshed")
+        elif _same_content(target, source):
+            lines.append(f"  {relative}: adopted; it matches the shipped copy")
+        else:
+            ours = False
+        if ours:
+            copies[target.name] = _digest(target)
+        else:
+            lines.append(
+                f"  {relative}: local override kept, shadowing the shipped"
+                " copy; commit it like any repo file"
+            )
+        _write_manifest(home, copies)
+        _write_gitignore(home, [target.name] if ours else [])
+    except OSError as exc:
+        lines.append(f"  Note: could not materialise {relative} ({exc})")
     return lines
