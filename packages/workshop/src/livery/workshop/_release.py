@@ -133,6 +133,18 @@ def release_verify(
             handle.write(f"package={plan.package.name}\n")
 
 
+def _last_released(root: Path, package: Package) -> str:
+    """The newest released version *package*'s tags carry, or empty.
+
+    Tags are the release identity and its receipt; a stamped version
+    without its tag is an unfinished release, not a finished one.
+    """
+    from livery.workshop._git_ops import GitOps
+    from livery.workshop._update import latest_released
+
+    return latest_released(GitOps(root).tags()).get(package.path, "")
+
+
 def prepare_release(root: Path, path: str, version: str = "") -> list[str]:
     """Stamp a release into *path*'s places; what changed.
 
@@ -149,24 +161,29 @@ def prepare_release(root: Path, path: str, version: str = "") -> list[str]:
         fail(f"{path} is not a workspace package")
     entry_body = ""
     if not version:
-        current = _python.current_version(package)
         derived = _cliff.bumped_version(root, package)
-        if not derived or derived == current:
-            # git-cliff answers with the current version when nothing
-            # unreleased touches the package. Releasing it again would
+        released = _last_released(root, package)
+        if not derived or derived == released:
+            # git-cliff answers with the last tag's version when
+            # nothing unreleased touches the package. The tag is the
+            # receipt (never the stamped pyproject: a stamp can land
+            # without its release cutting, and judging by it would
+            # strand that release forever). Releasing again would
             # republish the same code under a version the index
             # already has.
             print(f"  nothing to release: no unreleased commits touch {path}")
             return []
         version = derived
         entry_body = _cliff.unreleased_entry(root, package, version)
-        print(f"  derived {version} from the commits since {current}")
+        since = released or "the beginning"
+        print(f"  derived {version} from the commits since {since}")
     if not _SEMVER_RE.fullmatch(version):
         fail(f"version {version!r} is not <major>.<minor>.<patch>")
     changed = _python.stamp_version(package).stamp(version)
     changelog = package.directory / "CHANGELOG.md"
     text = changelog.read_text("utf-8") if changelog.is_file() else "# Changelog\n"
-    if f"## {version}" not in text and f"## [{version}]" not in text:
+    heading_present = f"## {version}" in text or f"## [{version}]" in text
+    if not heading_present:
         # A blank line on each side, so the new entry and the one it
         # sits above stay separate blocks.
         insert = "\n" + (entry_body or f"## [{version}]\n\n-").strip() + "\n"
@@ -177,7 +194,29 @@ def prepare_release(root: Path, path: str, version: str = "") -> list[str]:
             text = text[:first_entry] + insert + text[first_entry:]
         changelog.write_text(text, encoding="utf-8")
         changed.append("CHANGELOG.md (review the entry before tagging)")
+    elif entry_body:
+        # The stranded shape: the heading exists but the tag never
+        # cut, and this derived entry covers everything since the
+        # last receipt, so the stale entry regenerates rather than
+        # under-documenting what actually ships.
+        rewritten = _replace_entry(text, version, entry_body)
+        if rewritten != text:
+            changelog.write_text(rewritten, encoding="utf-8")
+            changed.append("CHANGELOG.md (the stranded entry regenerated; review it)")
     return changed
+
+
+def _replace_entry(text: str, version: str, entry_body: str) -> str:
+    """*text* with *version*'s entry block replaced by *entry_body*."""
+    import re as _re
+
+    pattern = _re.compile(
+        rf"^## \[?{_re.escape(version)}\]?[^\n]*\n.*?(?=^## |\Z)",
+        flags=_re.M | _re.S,
+    )
+    replacement = entry_body.strip() + "\n\n"
+    rewritten, count = pattern.subn(lambda _m: replacement, text, count=1)
+    return rewritten if count else text
 
 
 @release.task(name="prepare", hidden=True)
