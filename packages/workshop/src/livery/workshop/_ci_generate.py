@@ -159,17 +159,34 @@ jobs:
           include-hidden-files: true
           if-no-files-found: error
 
+  # The strict site build: broken links and orphan pages go red
+  # here, required through the gate context below, never inside the
+  # local check.
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: {CHECKOUT}
+      - uses: {SETUP_UV}
+        with:
+          cache-suffix: docs
+      - name: Sync (locked)
+        run: uv sync --locked
+      - name: Build the site, strict
+        run: uv run --no-sync {prog} docs.build
+
   # The one required context. Branch protection points here, so the
   # matrix can grow or shrink without touching repository settings.
   # It also owns the one coverage enforcement: every leg's data,
   # combined across platforms, judged against the committed floors.
   {context}:
     if: always()
-    needs: [check]
+    needs: [check, docs]
     runs-on: ubuntu-latest
     steps:
       - name: Verdict
-        run: test "${{{{ needs.check.result }}}}" = "success"
+        run: |
+          test "${{{{ needs.check.result }}}}" = "success"
+          test "${{{{ needs.docs.result }}}}" = "success"
       - uses: {CHECKOUT}
       - uses: {SETUP_UV}
       - name: Sync (locked)
@@ -320,15 +337,29 @@ jobs:
 {rung}      - name: Gate
         run: $HOME/.local/bin/uv run --no-sync {prog} check
 
+  # The strict site build, required through the gate context below.
+  docs:
+    runs-on: {first}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Sync (locked)
+        run: $HOME/.local/bin/uv sync --locked
+      - name: Build the site, strict
+        run: $HOME/.local/bin/uv run --no-sync {prog} docs.build
+
   # The one required context. Branch protection points here, so the
   # matrix can grow or shrink without touching repository settings.
   {context}:
     if: always()
-    needs: [check]
+    needs: [check, docs]
     runs-on: {first}
     steps:
       - name: Verdict
-        run: test "${{{{ needs.check.result }}}}" = "success"
+        run: |
+          test "${{{{ needs.check.result }}}}" = "success"
+          test "${{{{ needs.docs.result }}}}" = "success"
   release-title:
     if: startsWith(github.head_ref, 'workflow/release/')
     runs-on: {first}
@@ -443,8 +474,21 @@ stages: [check, release]
     - uv sync --locked
     - uv run --no-sync {prog} check
 
+# The strict site build: a merge waits on the pipeline, so a broken
+# link blocks it here without any aggregation job.
+docs:
+  stage: check
+  image: ghcr.io/astral-sh/uv:python{python}-bookworm
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - when: on_success
+  script:
+    - uv sync --locked
+    - uv run --no-sync {prog} docs.build
+
 # The merge-triggered train: the squash of a workflow.release PR
-# lands on main carrying the release manifest in its title, and the
+# lands on main, its changed changelogs stating the release, and the
 # wave publishes it, cutting receipt tags after the index confirms
 # each member. Token publishing; pushing tags needs GITLAB_PUSH_TOKEN
 # (a project access token with write_repository).

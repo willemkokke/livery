@@ -48,17 +48,34 @@ jobs:
           include-hidden-files: true
           if-no-files-found: error
 
+  # The strict site build: broken links and orphan pages go red
+  # here, required through the gate context below, never inside the
+  # local check.
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          cache-suffix: docs
+      - name: Sync (locked)
+        run: uv sync --locked
+      - name: Build the site, strict
+        run: uv run --no-sync fm docs.build
+
   # The one required context. Branch protection points here, so the
   # matrix can grow or shrink without touching repository settings.
   # It also owns the one coverage enforcement: every leg's data,
   # combined across platforms, judged against the committed floors.
   gate:
     if: always()
-    needs: [check]
+    needs: [check, docs]
     runs-on: ubuntu-latest
     steps:
       - name: Verdict
-        run: test "${{ needs.check.result }}" = "success"
+        run: |
+          test "${{ needs.check.result }}" = "success"
+          test "${{ needs.docs.result }}" = "success"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - name: Sync (locked)
