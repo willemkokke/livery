@@ -7,7 +7,12 @@ import livery.workshop as workshop_module
 
 
 def test_imports_and_carries_a_version() -> None:
-    assert workshop_module.__version__ == "0.1.0"
+    from importlib.metadata import version
+
+    # Against the installed metadata, never a literal: the release
+    # train stamps the version, and a spelled copy here would need a
+    # hand edit every release.
+    assert workshop_module.__version__ == version("livery-workshop")
 
 
 def test_the_namespace_is_shared_and_stays_pep420() -> None:

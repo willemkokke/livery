@@ -6,7 +6,12 @@ import livery.forge
 
 
 def test_imports_and_carries_a_version() -> None:
-    assert livery.forge.__version__ == "0.1.0"
+    from importlib.metadata import version
+
+    # Against the installed metadata, never a literal: the release
+    # train stamps the version, and a spelled copy here would need a
+    # hand edit every release.
+    assert livery.forge.__version__ == version("livery-forge")
 
 
 def test_unsupported_is_an_exception() -> None:

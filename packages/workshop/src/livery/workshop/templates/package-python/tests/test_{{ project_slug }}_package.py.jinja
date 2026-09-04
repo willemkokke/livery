@@ -9,7 +9,12 @@ import {{ import_path }} as package
 
 
 def test_imports_and_carries_a_version() -> None:
-    assert package.__version__ == "0.0.1"
+    from importlib.metadata import version
+
+    # Against the installed metadata, never a literal: the release
+    # train stamps the version, and a spelled copy here would need a
+    # hand edit every release.
+    assert package.__version__ == version("{{ package_name }}")
     assert package.hello() == "hello from {{ package_name }}"
 
 
