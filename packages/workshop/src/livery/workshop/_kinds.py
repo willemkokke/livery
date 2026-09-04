@@ -244,7 +244,7 @@ def record_for_template(template_kind: str) -> KindRecord | None:
 
 
 def _register_builtin() -> None:
-    from livery.workshop._backends import _cpp_conan, _python
+    from livery.workshop._backends import _cpp_conan, _python, _python_nanobind
 
     # Two contract kinds exist today. The layer package template
     # (package-python-layer) is a template variant of python, not
@@ -255,6 +255,21 @@ def _register_builtin() -> None:
             backend=_python,
             template="package-python",
             managed=("cliff.toml",),
+        )
+    )
+    # The binary extension: a python distribution in every checker's
+    # eyes (the chain says so), built through cibuildwheel so the
+    # wheel carries its platform tag. cmake and ninja join the
+    # profile; nanobind and scikit-build-core arrive through the
+    # package's own build-system requires, never the machine.
+    register_kind(
+        KindRecord(
+            name="python-nanobind",
+            backend=_python_nanobind,
+            template="package-python-nanobind",
+            parent="python",
+            tools=("cmake", "ninja"),
+            host_tools=("cc", "c++"),
         )
     )
     # The C/C++ library: cmake configures and builds, ctest is the

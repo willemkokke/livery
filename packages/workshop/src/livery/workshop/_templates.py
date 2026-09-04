@@ -529,7 +529,14 @@ def package_drift(root: Path) -> list[str]:
             "package_dir": directory.name,
         }
         with tempfile.TemporaryDirectory() as scratch:
-            render(source, Path(scratch), data)
+            # The full chain, parent first, exactly as the package
+            # was born: a chained member's managed files come from
+            # its parent's template, and the leaf render alone would
+            # skip them as missing.
+            from livery.workshop._kinds import template_chain
+
+            for chained_kind in template_chain(str(data.get("kind", ""))):
+                render(source, Path(scratch), {**data, "kind": chained_kind})
             for name in _managed_for(directory):
                 rendered = Path(scratch) / name
                 if not rendered.is_file():
@@ -615,7 +622,11 @@ def apply_packages(root: Path) -> list[str]:
             "package_dir": directory.name,
         }
         with tempfile.TemporaryDirectory() as scratch:
-            render(source, Path(scratch), data, ref=ref)
+            # The full chain, parent first, as in package_drift.
+            from livery.workshop._kinds import template_chain
+
+            for chained_kind in template_chain(str(data.get("kind", ""))):
+                render(source, Path(scratch), {**data, "kind": chained_kind}, ref=ref)
             for name in _managed_for(directory):
                 rendered = Path(scratch) / name
                 if not rendered.is_file():

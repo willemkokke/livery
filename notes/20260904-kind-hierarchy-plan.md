@@ -4,12 +4,14 @@ Status: executing; Willem's go 2026-09-04. Phase 1 shipped
 2026-09-04 (issue #202): the registry abstraction with the
 resolution ladder and folder targets, both existing users ported,
 and the kind registry opened to layers with the chain, the managed
-union, and every guard forced. Phase 2 built 2026-09-04 (issue
-#209): the cpp-conan kind end to end, conformance-proven; see the
-decision record. One acceptance line ships deferred
-and stays open here: the chain's render proof with a real child
-template lands with phase 3, where the first real child kind
-exists.
+union, and every guard forced. Phase 2 shipped 2026-09-04 (issue
+#209, PR #210): the cpp-conan kind end to end, conformance-proven;
+see the decision record. Phase 3 built 2026-09-04 (issue #211):
+the python-nanobind kind, and with it phase 1's deferred
+acceptance closes: the chain render proof runs against a real
+child template (test_the_chain_renders_parent_files_under_the_leaf
+and test_the_drift_loop_renders_the_chain). No acceptance line is
+deferred.
 This is phase 17 of `notes/20260903-workshop-plan.md`, promoted to
 its own plan. Willem's scope ruling (2026-09-04): a CMake C/C++
 library kind on conan 2 and a python binary-extension kind that
@@ -331,6 +333,24 @@ Acceptance:
   drift and apply loops re-rendered a member under a temp directory
   name whenever the receipt lacked package_dir. Both loops now pass
   package_dir from the directory they judge; pinned by test.
+- 2026-09-04 (phase 3 shape): python-nanobind is a full python
+  kind through the chain (every checker verb whole, pyproject
+  required, the uv workspace and dev group keep it); the leaf
+  template renders scikit-build-core and nanobind over the
+  parent's files, with a typed stub for the compiled module so
+  mypy strict and typecomplete hold. The backend inherits check
+  from the python backend and overrides build: cibuildwheel
+  through `uv tool run` (floor and cap, no lockfile reaches a tool
+  run), CIBW_BUILD pinned to the running interpreter locally, the
+  sdist still from `uv build`, and the identity guard's first half
+  refusing a none-any wheel by name. cmake and ninja join the
+  profile through the kind; nanobind and scikit-build-core arrive
+  through the package's own build-system requires.
+- 2026-09-04 (found in phase 3): the drift and apply loops
+  rendered only the leaf template, so a chained member's
+  parent-managed cliff.toml would have been skipped as missing;
+  both loops now render the full template chain, parent first,
+  exactly as the package was born. Pinned by test.
 - Carried forward from the 0901/0902 records: the kind chain
   renders parent then child with the managed union; the backend
   seam mirrors it; types contribute tool profiles by discovery;
@@ -370,3 +390,14 @@ and ctest on machines that have them, and forces the red-ctest and
 missing-conan refusals; the pure-python profile and gate are
 pinned unchanged. The livery gate itself is green with the
 kindcheck step quiet.
+
+Phase 3 evidence (2026-09-04): the armed suite rendered the chain
+fixture, built it through cibuildwheel (macOS leg), and the wheel
+carried a platform tag with the sdist beside it; the isolated leg
+installed the wheel into a fresh venv and the rendered tests
+imported and called the compiled module. The guard tests force the
+none-any refusal and the empty-dist refusal; the chain render
+tests prove parent files beneath leaf files with the leaf kind
+recorded. The armed leg self-limits: it skips naming the gap on a
+host missing compilers, on linux without docker, and on win32
+until MSVC arming on the runner is verified.

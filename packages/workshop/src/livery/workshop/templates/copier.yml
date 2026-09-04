@@ -19,7 +19,7 @@ _envops:
 kind:
   type: str
   help: "What to render: a workspace root, or one Python package"
-  choices: [project, package-python, package-python-layer, package-cpp-conan]
+  choices: [project, package-python, package-python-layer, package-cpp-conan, package-python-nanobind]
   default: project
 
 project_name:

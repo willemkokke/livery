@@ -1,0 +1,34 @@
+# Seeded from the template channel ({{ template_source_label }}, package-python-nanobind kind) at
+# birth; this file is the workspace's own. Edit it directly:
+# the template never rewrites it.
+[build-system]
+requires = ["scikit-build-core>=0.11", "nanobind>=2.7"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "{{ package_name }}"
+version = "0.0.1"
+description = "{{ package_description }}"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">={{ python_floor }}"
+authors = [{ name = "{{ author_name }}", email = "{{ author_email }}" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Typing :: Typed",
+]
+
+[project.urls]
+{%- set public_host = {'github': 'https://github.com', 'gitea': 'https://gitea.com', 'gitlab': 'https://gitlab.com'} %}
+{%- set web_root = forge_url.rstrip('/') if forge_url else public_host[forge_kind] %}
+Repository = "{{ web_root }}/{{ forge_owner }}/{{ project_name }}"
+
+[tool.scikit-build]
+# The compiled module builds through CMake and lands inside the
+# package; the pure-python sources ride from src/ unchanged.
+minimum-version = "build-system.requires"
+build-dir = "build/{wheel_tag}"
+wheel.packages = ["src/{{ namespace_package.split('.')[0] }}"]
