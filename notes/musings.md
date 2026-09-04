@@ -188,3 +188,27 @@ a branch (correctness already comes from fast-forward compare-and-swap
 and the loser was already cheap). The guarding line: the lock advises,
 the ref decides. The moment a lock is load-bearing for correctness it
 has become POSIX byte-range locking and the refused DFS returns.
+
+## 2026-09-04: customising the docs render, after 17
+
+Discussed the day the docs toolchain shipped, parked until phase 17
+settles the layer-registry question.
+
+- **Hierarchical properties**: knobs like whether the API reference
+  includes private members, read package over workspace over
+  built-in: a `[docs]` key in the workspace's `workshop.toml` sets
+  the default, the same key in a package's own `workshop.toml`
+  overrides it there. The two-level contract read already exists for
+  layering and floors; the emitter just joins it.
+- **Layered styling**: layers ship `content/docs/` beside their
+  fragments. `theme.toml` fragments merge key-by-key in layer order
+  into the rendered config; `assets/` composes same-name-topmost-
+  wins with `extra_css` listed in layer order, so the CSS cascade
+  agrees with layer precedence by construction; `overrides/` the
+  same for theme templates, wholesale replacement carrying the
+  overlay's declared-reason discipline. The workspace's own
+  committed tree composes last. A brand restyle is one layer
+  release through the gradient.
+- The line neither crosses: replacing the generators themselves (a
+  different release view, a different API page shape) wants 17's
+  registry opened to layers, not a docs-only extension mechanism.
