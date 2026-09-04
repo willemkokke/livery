@@ -275,6 +275,12 @@ def doctor() -> None:
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
+    from livery.workshop._env_tasks import missing_host_tools
     from livery.workshop._forge_lane import this_forge
 
+    for tool in missing_host_tools(root):
+        print(
+            f"  host: {tool} MISSING (a compiler the present package"
+            " kinds need; install the platform toolchain)"
+        )
     doctor_flow(this_forge(root))

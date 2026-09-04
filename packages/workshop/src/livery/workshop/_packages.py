@@ -59,9 +59,13 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
     """Every package the workspace carries, by its contract, sorted by path.
 
     Raises ValueError, with every finding listed, when a directory
-    under ``packages/`` lacks its contract or its ``pyproject.toml``:
-    a half-present package is a wrong state, not a lesser one.
+    under ``packages/`` lacks its contract, or lacks the
+    ``pyproject.toml`` its declared kind requires: a half-present
+    package is a wrong state, not a lesser one. An unknown type
+    passes discovery so the backend refusal can name the vocabulary.
     """
+    from livery.workshop._kinds import requires_pyproject
+
     problems = []
     packages = []
     packages_dir = root / "packages"
@@ -74,10 +78,14 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
         if not contract_file.is_file():
             problems.append(f"{directory.name}: no workshop.toml")
             continue
-        if not (directory / "pyproject.toml").is_file():
+        contract = tomllib.loads(contract_file.read_text("utf-8"))
+        type_name = str(contract.get("type", ""))
+        if (
+            requires_pyproject(type_name)
+            and not (directory / "pyproject.toml").is_file()
+        ):
             problems.append(f"{directory.name}: no pyproject.toml")
             continue
-        contract = tomllib.loads(contract_file.read_text("utf-8"))
         depends = tuple(
             Edge(
                 path=str(edge.get("path", "")),
@@ -91,7 +99,7 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
                 directory=directory,
                 path=f"packages/{directory.name}",
                 name=str(contract.get("name", "")),
-                type=str(contract.get("type", "")),
+                type=type_name,
                 depends=depends,
             )
         )
@@ -121,13 +129,22 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
       ``plugin()``, and only a workshop workspace mounts layers, so
       both are present whenever it loads.
     """
+    from livery.workshop._kinds import requires_pyproject
+
     packages = discover_packages(root)
     by_path = {package.path: package for package in packages}
     names_by_path = {package.path: package.name for package in packages}
     problems: list[str] = []
 
     for package in packages:
-        native = _native_dependencies(package.directory / "pyproject.toml")
+        # Only a python-kind package has a native manifest to agree
+        # with; a cpp-conan package's edge agreement (the conanfile's
+        # requires) is the cross-kind dependency check's work.
+        native = (
+            _native_dependencies(package.directory / "pyproject.toml")
+            if requires_pyproject(package.type)
+            else {}
+        )
         declared = {edge.path: edge for edge in package.depends}
         for edge in package.depends:
             if edge.path not in by_path:

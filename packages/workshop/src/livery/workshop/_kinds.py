@@ -40,6 +40,16 @@ class Backend(Protocol):
         """Build the package's artifacts into its dist; the dist dir."""
         ...
 
+    def check(self, package: Package, root: Path) -> None:
+        """Run the kind's own per-package gate; a refusal is the verdict.
+
+        The gate calls it only for a kind whose contract names
+        ``kind_verbs``: a kind whose verbs run at workspace scope
+        (python's checkers cover every python package in one
+        invocation) declares none and is never called here.
+        """
+        ...
+
 
 @dataclass(frozen=True)
 class CiContract:
@@ -47,7 +57,11 @@ class CiContract:
 
     The default is the widest answer (everything applies), so an
     unregistered override can only widen the gate, never quietly
-    narrow it. A verb absent here skips by name in the gate output.
+    narrow it. A verb absent from ``check_verbs`` skips by name in
+    the gate output. ``kind_verbs`` names the kind's own per-package
+    checks: a non-empty tuple makes the gate call the backend's
+    ``check`` for each package of the kind and print these names as
+    what ran.
     """
 
     check_verbs: tuple[str, ...] = (
@@ -57,6 +71,7 @@ class CiContract:
         "typecomplete",
         "test",
     )
+    kind_verbs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -73,6 +88,10 @@ class KindRecord:
             set is the union along the chain.
         tools: What the kind contributes to the derived tool
             profile by existing in a workspace.
+        host_tools: What the host must already provide and no cache
+            will ever install (a C compiler); ``fm doctor`` and
+            ``fm env.check`` name an absence instead of letting a
+            build fail midway.
         managed: The rendered files the template keeps matching in
             a package of this kind; the chain's union is what the
             drift gate judges.
@@ -84,6 +103,7 @@ class KindRecord:
     template: str = ""
     parent: str = ""
     tools: tuple[str, ...] = ()
+    host_tools: tuple[str, ...] = ()
     managed: tuple[str, ...] = ()
     ci: CiContract = field(default_factory=CiContract)
 
@@ -179,11 +199,55 @@ def kind_tools(present_types: set[str]) -> tuple[str, ...]:
     return tuple(sorted(tools))
 
 
-def _register_builtin() -> None:
-    from livery.workshop._backends import _python
+def kind_host_tools(present_types: set[str]) -> tuple[str, ...]:
+    """The union of host requirements the present kinds name, sorted."""
+    tools: set[str] = set()
+    for type_name in present_types:
+        for record in kind_chain(type_name):
+            tools.update(record.host_tools)
+    return tuple(sorted(tools))
 
-    # One contract kind exists today. The layer package template
-    # (package-python-layer) is a template variant of this kind, not
+
+def is_python_kind(type_name: str) -> bool:
+    """Whether the kind is a Python distribution, by its chain.
+
+    True when ``python`` sits anywhere in the chain: a child kind (a
+    binary extension) is still a wheel with a ``pyproject.toml``,
+    while a kind outside the chain (``cpp-conan``) is not and never
+    joins the uv workspace.
+    """
+    return any(record.name == "python" for record in kind_chain(type_name))
+
+
+def requires_pyproject(type_name: str) -> bool:
+    """Whether a package of this declared type must carry a pyproject.
+
+    An unregistered type answers False so discovery can finish and
+    the backend refusal can name the vocabulary; a missing file
+    would otherwise mask the real problem, the typo.
+    """
+    if type_name not in _KINDS:
+        return False
+    return is_python_kind(type_name)
+
+
+def record_for_template(template_kind: str) -> KindRecord | None:
+    """The record whose template is *template_kind*; None when unmapped.
+
+    A template variant (``package-python-layer``) maps to no record
+    and the caller falls back to the python wiring.
+    """
+    for record in _KINDS.values():
+        if record.template == template_kind:
+            return record
+    return None
+
+
+def _register_builtin() -> None:
+    from livery.workshop._backends import _cpp_conan, _python
+
+    # Two contract kinds exist today. The layer package template
+    # (package-python-layer) is a template variant of python, not
     # a contract type of its own: every member declares "python".
     register_kind(
         KindRecord(
@@ -191,6 +255,25 @@ def _register_builtin() -> None:
             backend=_python,
             template="package-python",
             managed=("cliff.toml",),
+        )
+    )
+    # The C/C++ library: cmake configures and builds, ctest is the
+    # test verb, conan packages the result. The python checkers do
+    # not gate it (there is no dist to verify types on), but ruff
+    # still formats and lints its conanfile.py, so those two verbs
+    # stay in the contract.
+    register_kind(
+        KindRecord(
+            name="cpp-conan",
+            backend=_cpp_conan,
+            template="package-cpp-conan",
+            tools=("cmake", "conan", "ninja"),
+            host_tools=("cc", "c++"),
+            managed=("cliff.toml",),
+            ci=CiContract(
+                check_verbs=("format", "lint"),
+                kind_verbs=("configure", "build", "ctest"),
+            ),
         )
     )
 

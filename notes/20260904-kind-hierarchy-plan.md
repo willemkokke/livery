@@ -4,7 +4,9 @@ Status: executing; Willem's go 2026-09-04. Phase 1 shipped
 2026-09-04 (issue #202): the registry abstraction with the
 resolution ladder and folder targets, both existing users ported,
 and the kind registry opened to layers with the chain, the managed
-union, and every guard forced. One acceptance line ships deferred
+union, and every guard forced. Phase 2 built 2026-09-04 (issue
+#209): the cpp-conan kind end to end, conformance-proven; see the
+decision record. One acceptance line ships deferred
 and stays open here: the chain's render proof with a real child
 template lands with phase 3, where the first real child kind
 exists.
@@ -303,6 +305,32 @@ Acceptance:
 - 2026-09-04: unknown kinds refuse rather than fail soft to
   python, a named deviation from hse: a typo that silently builds
   the wrong kind is worse than a stop.
+- 2026-09-04 (Willem): the rendered root pyproject lists the uv
+  workspace members explicitly instead of a glob with excludes: the
+  roster lives in the answers and the file is rendered from it, so
+  the glob only re-derived the same list while letting a stray
+  directory join unnoticed.
+- 2026-09-04 (phase 2 shape): the cpp-conan CI contract keeps
+  format and lint (the conanfile is python and ruff gates it) and
+  skips typecheck, typecomplete, and test by name; its own verbs
+  are configure, build, and ctest, run per package by the gate's
+  kindcheck step through the toolroom cmake handle (ctest rides the
+  Ninja generator's test target). The gate needs no conan: the
+  dependency-free library configures against the host toolchain,
+  and conan enters at packaging (`conan create`, a deliberate
+  footman.run) and later at publish.
+- 2026-09-04 (phase 2 shape): compilers are host_tools on the kind
+  record, probed by `fm doctor` and `fm env.check`, never
+  provisioned; a package of a non-python kind has no
+  pyproject.toml, joins the roster with a `kind` entry instead of a
+  dev requirement, and discovery, the layering lint, and the python
+  verbs all read the kind's contract before touching it.
+- 2026-09-04 (found by the phase 2 conformance run): copier omits
+  an answer that equals its default from the receipt, and
+  package_dir defaults to the render destination's basename, so the
+  drift and apply loops re-rendered a member under a temp directory
+  name whenever the receipt lacked package_dir. Both loops now pass
+  package_dir from the directory they judge; pinned by test.
 - Carried forward from the 0901/0902 records: the kind chain
   renders parent then child with the managed union; the backend
   seam mirrors it; types contribute tool profiles by discovery;
@@ -328,3 +356,17 @@ Acceptance:
    adoption one.
 
 All four ruled. Willem's go, 2026-09-04: phase 1 is in build.
+
+Phase 2 evidence (2026-09-04): `fm check` exit 0 in a conformance
+workspace carrying one cpp-conan member (rendered from the
+template, gated by its own venv), with the gate output showing
+`typecomplete: packages/native skips (cpp-conan kind)`,
+`test: packages/native skips (cpp-conan kind)`, and
+`packages/native (cpp-conan): configure, build, ctest run;
+typecheck, typecomplete, test skip`, and the kindcheck step
+building and testing the library through cmake and ninja. The
+armed suite renders the template and runs the real cmake, ninja,
+and ctest on machines that have them, and forces the red-ctest and
+missing-conan refusals; the pure-python profile and gate are
+pinned unchanged. The livery gate itself is green with the
+kindcheck step quiet.

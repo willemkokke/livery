@@ -1,0 +1,10 @@
+// Seeded from the template channel ({{ template_source_label }}, package-cpp-conan kind) at
+// birth; this file is the workspace's own. Edit it directly:
+// the template never rewrites it.
+#include "{{ package_dir | replace("-", "_") }}.hpp"
+
+namespace {{ package_dir | replace("-", "_") }} {
+
+const char* version() { return "0.0.1"; }
+
+}  // namespace {{ package_dir | replace("-", "_") }}
