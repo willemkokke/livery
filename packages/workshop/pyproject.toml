@@ -19,7 +19,13 @@ classifiers = [
 ]
 dependencies = [
     "livery-forge>=0.1.0",
-    "footman>=0.49",
+    # The floors on deps the dev toolchain also carries align with
+    # the lock: the release train's floor leg shares one venv with
+    # the locked toolchain, so a floor below the toolchain's pin is
+    # a claim the leg cannot test (its movement guard refuses the
+    # silent un-starving). footman 0.50 is a real requirement
+    # besides: the expose axis and the runtime brand paths are its.
+    "footman>=0.50",
     "toolroom>=0.6.1",
     # The template engine behind `fm template.check` and `fm
     # new.package`; pyyaml reads the adopted answers files. The
@@ -27,7 +33,7 @@ dependencies = [
     # Python this package supports: the release train's floor leg
     # installs the floor itself, and 6.0.0's sdist no longer builds
     # under a current Cython.
-    "copier>=9.10",
+    "copier>=9.17.2",
     "pyyaml>=6.0.3",
 ]
 
