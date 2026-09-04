@@ -38,8 +38,15 @@ services:
       retries: 90
 
   act_runner:
-    # Pinned by digest beside the server, for the same reason.
-    image: docker.gitea.com/act_runner@sha256:2f54d4df2a1e1b69c4b44db53c70dbd57043594b7f48bcf2e685c3b5bdb738e0
+    # Built on the digest runner.Dockerfile pins (the same reason the
+    # server is pinned): the base image ships without node, git, bash,
+    # or curl, and host-mode jobs need all four from the first
+    # actions/checkout step.
+    build:
+      context: .
+      dockerfile: runner.Dockerfile
+    image: livery-forge-dev-act-runner:pinned
+    pull_policy: never
     profiles: [gitea-runner]
     depends_on:
       gitea:
