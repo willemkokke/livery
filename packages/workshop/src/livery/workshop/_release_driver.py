@@ -149,7 +149,7 @@ def rollback_prepare(root: Path, members: tuple[Package, ...]) -> None:
     version files return to HEAD, and so does the workspace lock the
     stamp refreshed.
     """
-    paths: list[str] = ["uv.lock"]
+    paths: list[str] = []
     for package in members:
         base = package.directory.relative_to(root)
         paths.extend(
@@ -160,6 +160,12 @@ def rollback_prepare(root: Path, members: tuple[Package, ...]) -> None:
         if src.is_dir():
             paths.extend(str(p.relative_to(root)) for p in src.rglob("__init__.py"))
     toolroom.git.opts(cwd=root, nofail=True, recorded=False)("checkout", "--", *paths)
+    # The lock the stamp refreshed, restored alone: an untracked lock
+    # in the same pathspec would refuse the whole checkout, taking
+    # every other restore down with it.
+    toolroom.git.opts(cwd=root, nofail=True, recorded=False)(
+        "checkout", "--", "uv.lock"
+    )
 
 
 def validate_member(
