@@ -649,7 +649,7 @@ requires-dist = [
     { name = "copier", specifier = ">=9.10" },
     { name = "footman", specifier = ">=0.49" },
     { name = "livery-forge", editable = "packages/forge" },
-    { name = "pyyaml", specifier = ">=6" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "toolroom", specifier = ">=0.6.1" },
 ]
 
