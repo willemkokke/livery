@@ -209,6 +209,22 @@ def prepare_release(root: Path, path: str, version: str = "") -> list[str]:
         if rewritten != text:
             changelog.write_text(rewritten, encoding="utf-8")
             changed.append("CHANGELOG.md (the stranded entry regenerated; review it)")
+    lock = root / "uv.lock"
+    if changed and lock.is_file():
+        # The lock records every member's version, so a stamp without
+        # a refresh leaves the lock claiming the old one: the first
+        # sync after the release rewrites it, and the dirty tree then
+        # blocks the train's own re-run. Refreshing here puts the lock
+        # line inside the commit that stamps the version.
+        before_lock = lock.read_bytes()
+        result = toolroom.uv.opts(cwd=root, nofail=True, recorded=False)("lock")
+        if result.code != 0:
+            fail(
+                f"uv lock after stamping {version} failed:"
+                f"\n{result.stdout}{result.stderr}"
+            )
+        if lock.read_bytes() != before_lock:
+            changed.append("uv.lock")
     return changed
 
 

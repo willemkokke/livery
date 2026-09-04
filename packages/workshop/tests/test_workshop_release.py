@@ -294,3 +294,37 @@ def test_an_explicit_version_regenerates_a_stranded_entry(
     assert changed
     text = (root / "packages" / "core" / "CHANGELOG.md").read_text()
     assert "- Everything since." in text
+
+
+def _lockable(root: Path) -> None:
+    """Give the fixture workspace a root project and a real lock."""
+    (root / "pyproject.toml").write_text(
+        '[project]\nname = "ws"\nversion = "0.0.0"\nrequires-python = ">=3.11"\n'
+        '\n[tool.uv.workspace]\nmembers = ["packages/*"]\n'
+        "\n[tool.uv.sources]\n"
+        "livery-core = { workspace = true }\n"
+        "livery-tool = { workspace = true }\n"
+    )
+    subprocess.run(["uv", "lock"], cwd=root, capture_output=True, text=True, check=True)
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "chore: lock")
+
+
+def test_prepare_refreshes_the_lock_with_the_stamp(tmp_path: Path) -> None:
+    # Finding 10: a stamp without a lock refresh leaves uv.lock
+    # claiming the old version, and the first sync after the release
+    # dirties the tree, which the train's own re-run then refuses.
+    root = _workspace(tmp_path)
+    _lockable(root)
+    changed = prepare_release(root, "packages/core", "0.3.0")
+    assert "uv.lock" in changed
+    assert 'version = "0.3.0"' in (root / "uv.lock").read_text()
+    # Idempotent: a second prepare changes nothing, the lock included.
+    assert "uv.lock" not in prepare_release(root, "packages/core", "0.3.0")
+
+
+def test_prepare_leaves_a_lockless_workspace_alone(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    changed = prepare_release(root, "packages/core", "0.3.0")
+    assert not (root / "uv.lock").exists()
+    assert "uv.lock" not in changed
