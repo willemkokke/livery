@@ -202,3 +202,125 @@ def test_the_config_wires_mkdocstrings_only_when_modules_exist(
     core = next(entry for entry in parsed["project"]["nav"] if "core" in entry)
     api = next(part for part in core["core"] if "API" in part)
     assert api["API"][0] == {"acme.core": "_generated/api/core/index.md"}
+
+
+# Phase 3: changelogs and the release view. Fallbacks first.
+
+
+def _tagged_workspace(tmp_path: Path) -> Path:
+    import subprocess
+
+    root = _workspace(tmp_path)
+    (root / "packages" / "core" / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## [0.2.0] - 2026-01-10\n\n- newer\n"
+        "\n## [0.1.0] - 2025-03-01\n\n- older\n"
+    )
+
+    def _git(*args: str, date: str = "2026-01-10T12:00:00") -> None:
+        subprocess.run(
+            ["git", *args],
+            cwd=root,
+            capture_output=True,
+            check=True,
+            env={
+                **__import__("os").environ,
+                "GIT_AUTHOR_NAME": "T",
+                "GIT_AUTHOR_EMAIL": "t@livery.local",
+                "GIT_COMMITTER_NAME": "T",
+                "GIT_COMMITTER_EMAIL": "t@livery.local",
+                "GIT_COMMITTER_DATE": date,
+                "GIT_AUTHOR_DATE": date,
+                "HOME": str(tmp_path),
+            },
+        )
+
+    _git("init", "--initial-branch=main")
+    _git("add", "-A")
+    _git("commit", "-m", "chore: seed", date="2025-03-01T12:00:00")
+    _git(
+        "tag",
+        "-a",
+        "packages/core/v0.1.0",
+        "-m",
+        "packages/core/v0.1.0",
+        date="2025-03-01T12:00:00",
+    )
+    _git(
+        "tag",
+        "-a",
+        "packages/core/v0.2.0",
+        "-m",
+        "packages/core/v0.2.0",
+        date="2026-01-10T12:00:00",
+    )
+    return root
+
+
+def test_no_tags_still_serves_the_page_the_nav_points_at(tmp_path: Path) -> None:
+    # A shallow clone has no tags, but the nav derives from committed
+    # state alone, so the landing page must exist and say so.
+    from livery.workshop._docs import RELEASES, generate_release_pages
+
+    root = _workspace(tmp_path)
+    (root / "packages" / "core" / "CHANGELOG.md").write_text("# Changelog\n")
+    assert generate_release_pages(root) == ["index.md"]
+    assert "No release tags" in (root / RELEASES / "index.md").read_text()
+    assert '{ "Releases" = "_generated/releases/index.md" }' in zensical_config(root)
+
+
+def test_no_changelogs_means_no_release_view(tmp_path: Path) -> None:
+    from livery.workshop._docs import generate_release_pages
+
+    root = _workspace(tmp_path)
+    assert generate_release_pages(root) == []
+    assert "Releases" not in zensical_config(root)
+
+
+def test_a_missing_entry_falls_back_to_the_receipt_line(tmp_path: Path) -> None:
+    from livery.workshop._docs import _entry_body, _release_block
+
+    root = _tagged_workspace(tmp_path)
+    changelog = root / "packages" / "core" / "CHANGELOG.md"
+    assert _entry_body(changelog, "9.9.9") == ""
+    block = _release_block(root, ("2026-01-10", "core", "acme-core", "9.9.9"))
+    assert "Released as `packages/core/v9.9.9`." in block
+
+
+def test_a_changelog_page_survives_a_cliffless_package(tmp_path: Path) -> None:
+    # The fallback: no cliff.toml, so the unreleased section cannot
+    # derive; the page is the committed file alone, reason printed.
+    from livery.workshop._docs import changelog_page
+
+    root = _tagged_workspace(tmp_path)
+    core = next(p for p in discover_packages(root) if p.directory.name == "core")
+    page = changelog_page(root, core)
+    assert page is not None and "## [0.2.0]" in page
+
+
+def test_the_release_view_paginates_by_year(tmp_path: Path) -> None:
+    from livery.workshop._docs import RELEASES, generate_release_pages, release_years
+
+    root = _tagged_workspace(tmp_path)
+    assert release_years(root) == ["2025"]
+    written = generate_release_pages(root)
+    assert written == ["index.md", "2025.md"]
+    landing = (root / RELEASES / "index.md").read_text()
+    archive = (root / RELEASES / "2025.md").read_text()
+    assert "acme-core v0.2.0 (2026-01-10)" in landing
+    assert "v0.1.0" not in landing.replace("[2025](2025.md)", "")
+    assert "[2025](2025.md)" in landing
+    assert "acme-core v0.1.0 (2025-03-01)" in archive
+    assert "- older" in archive and "- newer" in landing
+
+
+def test_the_nav_carries_releases_and_changelogs(tmp_path: Path) -> None:
+    root = _tagged_workspace(tmp_path)
+    config = zensical_config(root)
+    parsed = tomllib.loads(config)
+    nav = parsed["project"]["nav"]
+    releases = next(entry for entry in nav if "Releases" in entry)
+    # One nav entry from committed state; the landing links the
+    # year archives itself, so a tagless checkout renders the same.
+    assert releases["Releases"] == "_generated/releases/index.md"
+    core = next(entry for entry in nav if "core" in entry)
+    assert {"Changelog": "_generated/packages/core/changelog.md"} in core["core"]

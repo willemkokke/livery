@@ -5,9 +5,11 @@ open items ruled the same day (the decision record carries them).
 Phase 1 shipped 2026-09-04 (issue #179, PR #180): the rendered
 config, the build and serve verbs, the docs dependency group, and
 the wheel-side `_docs` materialised at build. Phase 2 shipped
-2026-09-04 (issue #181): the API reference, every module public
-first, mkdocstrings wired with the pinned inventories, objects.inv
-published.
+2026-09-04 (issue #181, PR #182): the API reference, every module
+public first, mkdocstrings wired with the pinned inventories,
+objects.inv published. Phase 3 shipped 2026-09-04 (issue #183):
+per-package changelog pages with the in-memory unreleased section,
+and the paginated release view derived from the receipt tags.
 This is phase 19 of `notes/20260903-workshop-plan.md`, promoted to
 its own plan on Willem's ruling (2026-09-04): docs come before the
 kind hierarchy, because nothing ships well undocumented, and the
