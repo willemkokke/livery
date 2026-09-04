@@ -12,6 +12,10 @@ layers = ["livery.workshop", "livery.forge"]
 templates = "packages/workshop/src/livery/workshop/templates"
 templates_artifact = "git@github.com:willemkokke/workshop-templates.git"
 
+[docs]
+# The site's home; the account-level domain serves every project.
+site_url = "https://docs.willem.net/livery/"
+
 [forge]
 kind = "github"
 owner = "willemkokke"

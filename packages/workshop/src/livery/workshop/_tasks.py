@@ -20,6 +20,7 @@ from footman import task
 from livery.workshop import (  # noqa: F401
     _ci_tasks,
     _clean,
+    _docs,
     _env_tasks,
     _graph,
     _hooks,

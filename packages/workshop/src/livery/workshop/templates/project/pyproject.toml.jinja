@@ -18,6 +18,7 @@ requires-python = ">={{ python_floor }}"
 
 [tool.uv]
 package = false
+default-groups = ["dev", "docs"]
 
 [tool.uv.workspace]
 members = ["packages/*"]
@@ -26,6 +27,12 @@ members = ["packages/*"]
 {% for package in packages %}{{ package.name }} = { workspace = true }
 {% endfor %}
 [dependency-groups]
+# The docs toolchain, workshop-rendered so one layer release moves
+# every project's generator together.
+docs = [
+    "zensical>=0.0.50",
+    "mkdocstrings-python>=1.11",
+]
 dev = [
     # uv itself, unconstrained so it tracks latest; the lockfile still
     # resolves it to one exact version (footman's lockfile-churn lesson).

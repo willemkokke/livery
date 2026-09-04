@@ -234,7 +234,12 @@ def test_the_emitters_call_the_running_brand(
     monkeypatch.setattr(footman, "prog", lambda: "hse")
     for kind in ("github", "gitea", "gitlab"):
         for path, content in generate(_contract_root(tmp_path, kind)).items():
-            assert "hse check" in content or "hse workflow" in content, path
+            spoken = (
+                "hse check" in content
+                or "hse workflow" in content
+                or "hse template.apply" in content
+            )
+            assert spoken, path
             # No emitted word spells fm under a brand: the meter is
             # env-armed, so not even a module spelling remains.
             assert re.search(r"\bfm\b", content) is None, path

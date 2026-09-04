@@ -1,8 +1,10 @@
 # The docs toolchain: one rendered site per workspace
 
-Status: draft 2026-09-04; all five open items ruled the same day
-(the decision record carries them); awaiting Willem's explicit go
-before any phase starts. Nothing built.
+Status: approved and executing; Willem's go 2026-09-04. All five
+open items ruled the same day (the decision record carries them).
+Phase 1 shipped 2026-09-04 (issue #179): the rendered config, the
+build and serve verbs, the docs dependency group, and the
+wheel-side `_docs` materialised at build.
 This is phase 19 of `notes/20260903-workshop-plan.md`, promoted to
 its own plan on Willem's ruling (2026-09-04): docs come before the
 kind hierarchy, because nothing ships well undocumented, and the
@@ -142,13 +144,17 @@ zensical (Willem, 2026-09-04).
   enables Pages with the workflow build type) so the `pages` seam
   works on a repository nobody has touched in the forge UI.
 - **Docs ride the wheel**: each package's `docs/` tree is embedded
-  in its wheel as `<import_pkg>/_docs` (hse's force-include
-  mechanism, template-rendered so every package gets it). This plan
-  ships the bytes only; the consumption side, a descendant's site
-  surfacing a wheel-only layer's docs, waits for the migration or
-  the sparse-checkout phase, when a real consumer exists. Shipping
-  now means a brand can later pin a docs-carrying floor instead of
-  waiting for a retrofit release.
+  in its wheel as `<import_pkg>/_docs`. The mechanism is uv_build's
+  own rule (a module's data ships, nothing outside it, the phase 14
+  precedent): the build verb refreshes `_docs` as real files from
+  the package's `docs/` immediately before every wheel build, so
+  the wheel can never carry docs older than the tree it was built
+  from. `_docs` is machine territory, gitignored, never edited by a
+  person: authors write `packages/<name>/docs/` and nothing else
+  (underscore folders mean keep out, ruled 2026-09-04). This plan
+  ships the bytes only; the consumption side waits for the
+  migration or the sparse-checkout phase, when a real consumer
+  exists.
 - **Seeds**: the project template seeds `docs/index.md`; the
   package template seeds `packages/<name>/docs/index.md`. This
   closes open item 4's residue in the 0903 plan.
@@ -161,14 +167,16 @@ The `[docs]` contract table, the `zensical.toml` emitter with
 header and nav markers, `fm docs.build` and `fm docs.serve` through
 `toolroom.zensical`, the `docs` dependency group, the drift check
 that refuses a hand-edited rendered config, and the wheel
-embedding: the package template renders the force-include that maps
-`docs/` to `<import_pkg>/_docs`. Livery's site builds strict from
+embedding: the build verb materialises `_docs` inside the module
+from `packages/<name>/docs/` before every wheel build, and the
+materialised tree is gitignored. Livery's site builds strict from
 the markdown that exists today, no API pages yet.
 
 Acceptance:
 - `uv run fm docs.build` exits 0 and `site/index.html` exists.
-- A built member wheel contains its `_docs` tree; proven by
-  building one and listing the archive.
+- A built member wheel contains its `_docs` tree, and editing a
+  docs page then rebuilding refreshes it; proven by building and
+  listing the archive twice.
 - `uv run fm template.apply && git diff --exit-code zensical.toml`
   proves the rendered config is stable.
 - Editing `zensical.toml` by hand and running the drift check
@@ -288,9 +296,25 @@ Acceptance:
   `docs.willem.net/livery/packages/<name>/`). The
   strict docs build is a required CI job on every forge, never part
   of `fm check`.
-- 2026-09-04 (Willem): docs ride the wheel from phase 1, hse's
-  `_docs` force-include ported; the consumption side waits for a
-  real consumer.
+- 2026-09-04 (Willem): docs ride the wheel from phase 1; the
+  consumption side waits for a real consumer. The mechanism is
+  ruled the same day: not hatchling's force-include (the members
+  build with uv_build, which ships a module's own data and nothing
+  outside it, and refuses symlinked directories, both probed) but
+  the phase 14 precedent applied again: the build verb materialises
+  `_docs` inside the module as real files from `packages/<name>/docs/`
+  before every wheel build. Underscore folders are machine
+  territory: a person writes `packages/<name>/docs/`, never `_docs`.
+- 2026-09-04, phase 1 cut: the config's default title is the root
+  project's name, never the checkout directory's, because a
+  worktree's directory name would make the same contract render
+  differently per checkout and turn the drift gate against itself.
+- 2026-09-04 (Willem): zensical is young, so every knob must roll
+  out fleet-wide from one workshop release: the site config is
+  rendered by the emitters, and the zensical and mkdocstrings
+  versions ride the workshop-rendered dependency group. Replacing
+  the generator, if it ever comes to that, is one emitter module
+  and one dependency line, never a per-project edit.
 - 2026-09-04 (Willem): after docs lands, toolroom and footman
   migrate into this repository as workspace members. Their zensical
   sites become sections of the one workspace site and the pinned

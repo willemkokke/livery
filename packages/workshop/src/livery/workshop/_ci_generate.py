@@ -563,12 +563,14 @@ def generate(root: Path) -> dict[str, str]:
     layer ships the tree; an ordinary instance's release has no
     templates to publish.
     """
+    from livery.workshop._docs import zensical_config
     from livery.workshop._provenance import generated_header
 
     prog = footman.prog()
     facts = _facts(root)
     kind = str(facts["forge_kind"])
     header = generated_header("#")
+    site = {"zensical.toml": zensical_config(root)}
     if kind == "github":
         files = {
             ".github/workflows/ci.yml": _github_gate(facts, prog),
@@ -586,6 +588,7 @@ def generate(root: Path) -> dict[str, str]:
             ".gitlab-ci.yml": _gitlab_pipeline(facts, prog)
             + _gitlab_governance(facts, prog)
         }
+    files.update(site)
     return {path: header + content for path, content in files.items()}
 
 

@@ -295,6 +295,12 @@ def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
     """
     import shutil
 
+    from livery.workshop._docs import materialise_module_docs
+
+    # The wheel-embedded _docs refresh whole from packages/<name>/docs
+    # here, so the wheel can never carry docs older than the tree it
+    # was built from. Machine territory: gitignored, never hand-edited.
+    materialise_module_docs(package)
     dist = package.directory / "dist"
     shutil.rmtree(dist, ignore_errors=True)
     env = dict(os.environ)
