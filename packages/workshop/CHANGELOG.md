@@ -64,6 +64,9 @@
 - Pyyaml floors at the oldest current-Python release
 - Floors on toolchain-shared deps align with the lock
 - The dogfood sync test skips outside its checkout
+- The deploy-key printf keeps its backslash-n
+- The member-keys test clears the rung override
+- The merged-PR guard allows a fresh cycle of a reused branch
 
 ### Changed
 
