@@ -7,9 +7,12 @@ shipped 2026-09-03 (issue #111, PR #113); phase 12 shipped
 (issue #116, PR #117); phase 14 shipped 2026-09-03 (issue #118,
 PR #119); phase 15 shipped 2026-09-03 (issue #120, PR #121); phase 16
 shipped 2026-09-03 (issue #122); cut rulings and deviations are in
-the decision record. Phases 10 to 16 have all landed: the 0.1.0
-gate's phase work is complete, and the release itself is the next
-act.
+the decision record. Phases 10 to 16 have all landed, and the 0.1.0
+release landed 2026-09-04: livery-forge 0.2.0 and livery-workshop
+0.1.0 on pypi.org, receipt tags cut, the template artifact v0.1.0
+published. Fifteen findings met on the way are recorded in
+`notes/20260904-release-train-postmortem.md`, which also carries the
+full-train rehearsal on the local Gitea rig.
 Subsumes
 `notes/20260901-workshop-plan.md`, whose phases 1 to 9 shipped and
 whose shipped record, movement analysis, and options registry stay
