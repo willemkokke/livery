@@ -12,3 +12,6 @@ __pycache__/
 .forge.dev.env
 .workshop/
 .repo.env.local
+site/
+docs/_generated/
+packages/*/src/**/_docs/

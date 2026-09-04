@@ -236,5 +236,7 @@ def test_every_generated_workflow_parses_as_yaml(
     )
     (root / "workshop.toml").write_text(contract)
     for path, content in generate(root).items():
+        if not path.endswith((".yml", ".yaml")):
+            continue  # the docs config is TOML; only workflows are YAML
         parsed = yaml.safe_load(content)
         assert isinstance(parsed, dict), path

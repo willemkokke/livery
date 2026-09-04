@@ -17,4 +17,4 @@ workspace contracts test.
 
 | Package | Docs |
 | --- | --- |
-| `packages/forge` | [index](../packages/forge/docs/index.md) |
+| `packages/forge` | [index](_generated/packages/forge/index.md) |
