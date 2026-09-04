@@ -15,10 +15,92 @@ nav = [
         { "gitlab" = "_generated/packages/forge/gitlab.md" },
         { "protocol" = "_generated/packages/forge/protocol.md" },
         { "quirks" = "_generated/packages/forge/quirks.md" },
+        { "API" = [
+            { "livery.forge" = "_generated/api/forge/index.md" },
+            { "livery.forge.testing" = "_generated/api/forge/testing/index.md" },
+            { "livery.forge.testing._cassette" = "_generated/api/forge/testing/_cassette.md" },
+            { "livery.forge.testing._conformance" = "_generated/api/forge/testing/_conformance.md" },
+            { "livery.forge.testing._fake" = "_generated/api/forge/testing/_fake.md" },
+            { "livery.forge._dev" = "_generated/api/forge/_dev/index.md" },
+            { "livery.forge._errors" = "_generated/api/forge/_errors.md" },
+            { "livery.forge._gitea" = "_generated/api/forge/_gitea.md" },
+            { "livery.forge._github" = "_generated/api/forge/_github.md" },
+            { "livery.forge._gitlab" = "_generated/api/forge/_gitlab.md" },
+            { "livery.forge._http" = "_generated/api/forge/_http.md" },
+            { "livery.forge._protocol" = "_generated/api/forge/_protocol.md" },
+            { "livery.forge._registry" = "_generated/api/forge/_registry.md" },
+            { "livery.forge._types" = "_generated/api/forge/_types.md" },
+        ] },
     ] },
     { "workshop" = [
         { "Index" = "_generated/packages/workshop/index.md" },
         { "releases" = "_generated/packages/workshop/releases.md" },
+        { "API" = [
+            { "livery.workshop" = "_generated/api/workshop/index.md" },
+            { "livery.workshop._backends" = "_generated/api/workshop/_backends/index.md" },
+            { "livery.workshop._backends._python" = "_generated/api/workshop/_backends/_python.md" },
+            { "livery.workshop._ci_generate" = "_generated/api/workshop/_ci_generate.md" },
+            { "livery.workshop._ci_tasks" = "_generated/api/workshop/_ci_tasks.md" },
+            { "livery.workshop._clean" = "_generated/api/workshop/_clean.md" },
+            { "livery.workshop._cliff" = "_generated/api/workshop/_cliff.md" },
+            { "livery.workshop._compose" = "_generated/api/workshop/_compose.md" },
+            { "livery.workshop._conventional" = "_generated/api/workshop/_conventional.md" },
+            { "livery.workshop._dev_release" = "_generated/api/workshop/_dev_release.md" },
+            { "livery.workshop._diagnostics" = "_generated/api/workshop/_diagnostics.md" },
+            { "livery.workshop._docs" = "_generated/api/workshop/_docs.md" },
+            { "livery.workshop._env_tasks" = "_generated/api/workshop/_env_tasks.md" },
+            { "livery.workshop._envfile" = "_generated/api/workshop/_envfile.md" },
+            { "livery.workshop._forge_lane" = "_generated/api/workshop/_forge_lane.md" },
+            { "livery.workshop._git_ops" = "_generated/api/workshop/_git_ops.md" },
+            { "livery.workshop._governance" = "_generated/api/workshop/_governance.md" },
+            { "livery.workshop._graph" = "_generated/api/workshop/_graph.md" },
+            { "livery.workshop._hooks" = "_generated/api/workshop/_hooks.md" },
+            { "livery.workshop._issue_tasks" = "_generated/api/workshop/_issue_tasks.md" },
+            { "livery.workshop._layers" = "_generated/api/workshop/_layers.md" },
+            { "livery.workshop._materialise" = "_generated/api/workshop/_materialise.md" },
+            { "livery.workshop._new_project" = "_generated/api/workshop/_new_project.md" },
+            { "livery.workshop._packages" = "_generated/api/workshop/_packages.md" },
+            { "livery.workshop._provenance" = "_generated/api/workshop/_provenance.md" },
+            { "livery.workshop._publish" = "_generated/api/workshop/_publish.md" },
+            { "livery.workshop._pythons" = "_generated/api/workshop/_pythons.md" },
+            { "livery.workshop._quality" = "_generated/api/workshop/_quality.md" },
+            { "livery.workshop._release" = "_generated/api/workshop/_release.md" },
+            { "livery.workshop._release_driver" = "_generated/api/workshop/_release_driver.md" },
+            { "livery.workshop._shell" = "_generated/api/workshop/_shell.md" },
+            { "livery.workshop._submit" = "_generated/api/workshop/_submit.md" },
+            { "livery.workshop._sync" = "_generated/api/workshop/_sync.md" },
+            { "livery.workshop._tasks" = "_generated/api/workshop/_tasks.md" },
+            { "livery.workshop._templates" = "_generated/api/workshop/_templates.md" },
+            { "livery.workshop._tokens" = "_generated/api/workshop/_tokens.md" },
+            { "livery.workshop._tree" = "_generated/api/workshop/_tree.md" },
+            { "livery.workshop._update" = "_generated/api/workshop/_update.md" },
+            { "livery.workshop._update_driver" = "_generated/api/workshop/_update_driver.md" },
+            { "livery.workshop._uv" = "_generated/api/workshop/_uv.md" },
+            { "livery.workshop._verdict" = "_generated/api/workshop/_verdict.md" },
+            { "livery.workshop._workflow_decision" = "_generated/api/workshop/_workflow_decision.md" },
+            { "livery.workshop._workflow_engine" = "_generated/api/workshop/_workflow_engine.md" },
+            { "livery.workshop._workflow_state" = "_generated/api/workshop/_workflow_state.md" },
+            { "livery.workshop._workflow_tasks" = "_generated/api/workshop/_workflow_tasks.md" },
+        ] },
     ] },
     # docs-nav:end
 ]
+
+[project.plugins.mkdocstrings.handlers.python]
+paths = ["packages/forge/src", "packages/workshop/src"]
+inventories = ["https://docs.python.org/3/objects.inv", "https://willemkokke.github.io/footman/objects.inv", "https://willemkokke.github.io/toolroom/objects.inv"]
+
+[project.plugins.mkdocstrings.handlers.python.options]
+# Google style is the house convention; a docstring is
+# published the moment it is written, empty ones included.
+docstring_style = "google"
+show_if_no_docstring = true
+show_root_heading = true
+show_root_full_path = true
+separate_signature = true
+show_signature_annotations = true
+signature_crossrefs = true
+members_order = "source"
+merge_init_into_class = true
+summary = true
+heading_level = 2

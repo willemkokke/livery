@@ -2,9 +2,12 @@
 
 Status: approved and executing; Willem's go 2026-09-04. All five
 open items ruled the same day (the decision record carries them).
-Phase 1 shipped 2026-09-04 (issue #179): the rendered config, the
-build and serve verbs, the docs dependency group, and the
-wheel-side `_docs` materialised at build.
+Phase 1 shipped 2026-09-04 (issue #179, PR #180): the rendered
+config, the build and serve verbs, the docs dependency group, and
+the wheel-side `_docs` materialised at build. Phase 2 shipped
+2026-09-04 (issue #181): the API reference, every module public
+first, mkdocstrings wired with the pinned inventories, objects.inv
+published.
 This is phase 19 of `notes/20260903-workshop-plan.md`, promoted to
 its own plan on Willem's ruling (2026-09-04): docs come before the
 kind hierarchy, because nothing ships well undocumented, and the
@@ -305,6 +308,11 @@ Acceptance:
   `_docs` inside the module as real files from `packages/<name>/docs/`
   before every wheel build. Underscore folders are machine
   territory: a person writes `packages/<name>/docs/`, never `_docs`.
+- 2026-09-04, phase 2 cut: a cross-reference in prose must be
+  wrapped, `[livery.forge.Forge][]`; a bare dotted path renders as
+  plain text and links nothing (probed against the built site).
+  Both guidance fragments now teach the wrapped form, so the rule
+  rolls to every workspace with the next workshop release.
 - 2026-09-04, phase 1 cut: the config's default title is the root
   project's name, never the checkout directory's, because a
   worktree's directory name would make the same contract render

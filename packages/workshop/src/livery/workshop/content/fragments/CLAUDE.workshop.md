@@ -110,9 +110,10 @@ This is the final form; there are no typing clean-up passes later.
 - No RST anywhere. Not in docstrings, not in comments.
 - The voice and word rules of the imported guidance fragments apply to
   docstrings the same as to every other published sentence.
-- Refer to other objects by their full public import path,
-  `livery.forge.Forge`, so generated API docs can cross-link them
-  across packages.
+- Refer to other objects by their full public import path, wrapped
+  as a reference (`[livery.forge.Forge][]`), so generated API docs
+  cross-link them across packages; a bare dotted path stays plain
+  text.
 
 ## Workspace shape
 
