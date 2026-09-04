@@ -30,6 +30,7 @@ def test_the_surface_is_declared() -> None:
         "PullRequest",
         "PullRequests",
         "Registry",
+        "RegistryKind",
         "Release",
         "Releases",
         "RepoConfig",

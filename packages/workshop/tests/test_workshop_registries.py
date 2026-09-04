@@ -126,10 +126,15 @@ def test_the_forge_rung_serves_when_nothing_is_declared(
 
 
 def test_an_unreachable_forge_is_a_silent_rung_not_a_failure(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # The forge rung not answering continues the ladder with the
-    # reason printed; python still resolves through the default.
+    # reason printed; python still resolves through the default. The
+    # machine's own rig credentials must not answer for the fixture.
+    for name in ("GITEA_URL", "GITEA_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
     root = _workspace(
         tmp_path, '[workspace]\n[forge]\nkind = "gitea"\nowner = "acme"\n'
     )

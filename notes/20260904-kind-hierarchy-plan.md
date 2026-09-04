@@ -1,6 +1,13 @@
 # The kind hierarchy: native kinds through one registry
 
-Status: draft 2026-09-04, awaiting Willem's review. Nothing built.
+Status: executing; Willem's go 2026-09-04. Phase 1 shipped
+2026-09-04 (issue #202): the registry abstraction with the
+resolution ladder and folder targets, both existing users ported,
+and the kind registry opened to layers with the chain, the managed
+union, and every guard forced. One acceptance line ships deferred
+and stays open here: the chain's render proof with a real child
+template lands with phase 3, where the first real child kind
+exists.
 This is phase 17 of `notes/20260903-workshop-plan.md`, promoted to
 its own plan. Willem's scope ruling (2026-09-04): a CMake C/C++
 library kind on conan 2 and a python binary-extension kind that
