@@ -56,6 +56,9 @@ def this_forge(root: Path) -> Forge:
 
     The token is ``FORGE_TOKEN`` (host-qualified first); with neither
     set, the backend's own documented fallback decides.
+
+    Returns:
+        The connected [livery.forge.Forge][].
     """
     contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
     forge_table = contract.get("forge") or {}

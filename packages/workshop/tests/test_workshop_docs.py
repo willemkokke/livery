@@ -51,9 +51,10 @@ def test_the_config_defaults_without_a_docs_table(tmp_path: Path) -> None:
     assert "site_url" not in parsed["project"]
 
 
-def test_a_package_without_docs_stays_out_of_nav_and_mount(tmp_path: Path) -> None:
+def test_a_package_without_docs_mounts_nothing(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
-    assert '"bare"' not in zensical_config(root)
+    # bare still appears in nav for its API, but mounts no docs pages.
+    assert "_generated/packages/bare" not in zensical_config(root)
     assert mount_package_docs(root) == ["core"]
     assert not (root / "docs/_generated/packages/bare").exists()
 
@@ -126,3 +127,78 @@ def test_the_rendered_config_joins_the_generated_set(tmp_path: Path) -> None:
         files = generate(root)
         assert "zensical.toml" in files
         assert files["zensical.toml"].startswith("# Generated")
+
+
+# Phase 2: the API reference. Fallbacks first.
+
+
+def test_a_srcless_package_has_no_api(tmp_path: Path) -> None:
+    import shutil
+
+    from livery.workshop._docs import api_modules
+
+    root = _workspace(tmp_path)
+    bare = next(p for p in discover_packages(root) if p.directory.name == "bare")
+    shutil.rmtree(bare.directory / "src")
+    assert api_modules(bare) == []
+    assert "_generated/api/bare" not in zensical_config(root)
+
+
+def test_api_modules_sort_public_first_and_skip_the_machinery(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._docs import api_modules
+
+    root = _workspace(tmp_path)
+    core = next(p for p in discover_packages(root) if p.directory.name == "core")
+    module = core.directory / "src" / "acme" / "core"
+    (module / "_private.py").write_text('"""Private."""\n')
+    (module / "public.py").write_text('"""Public."""\n')
+    (module / "__main__.py").write_text("")
+    (module / "_docs").mkdir()
+    (module / "_docs" / "index.md").write_text("# stale\n")
+    (module / "sub").mkdir()
+    (module / "sub" / "__init__.py").write_text('"""Sub."""\n')
+    (module / "sub" / "_inner.py").write_text('"""Inner."""\n')
+    modules = api_modules(core)
+    pages = [page for page, _dotted in modules]
+    dotted = [d for _page, d in modules]
+    # The package index first, then public before private per level;
+    # __main__ and the machine _docs never appear.
+    assert pages[0] == "index.md" and dotted[0] == "acme.core"
+    assert pages.index("public.md") < pages.index("_private.md")
+    assert pages.index("sub/index.md") < pages.index("_private.md")
+    assert "__main__.md" not in pages
+    assert all("_docs" not in page for page in pages)
+    assert ("sub/_inner.md", "acme.core.sub._inner") in modules
+
+
+def test_api_pages_rebuild_whole_with_one_directive_each(tmp_path: Path) -> None:
+    from livery.workshop._docs import API, generate_api_pages
+
+    root = _workspace(tmp_path)
+    stale = root / API / "core" / "gone.md"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("stale\n")
+    assert generate_api_pages(root) == ["bare", "core"]
+    assert not stale.exists()
+    index = (root / API / "core" / "index.md").read_text()
+    assert "::: acme.core" in index
+
+
+def test_the_config_wires_mkdocstrings_only_when_modules_exist(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._docs import INVENTORIES
+
+    root = _workspace(tmp_path)
+    config = zensical_config(root)
+    parsed = tomllib.loads(config)
+    handler = parsed["project"]["plugins"]["mkdocstrings"]["handlers"]["python"]
+    assert handler["paths"] == ["packages/bare/src", "packages/core/src"]
+    assert list(handler["inventories"]) == list(INVENTORIES)
+    assert handler["options"]["docstring_style"] == "google"
+    assert handler["options"]["show_if_no_docstring"] is True
+    core = next(entry for entry in parsed["project"]["nav"] if "core" in entry)
+    api = next(part for part in core["core"] if "API" in part)
+    assert api["API"][0] == {"acme.core": "_generated/api/core/index.md"}

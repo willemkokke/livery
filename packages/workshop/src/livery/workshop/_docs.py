@@ -27,6 +27,20 @@ NAV_END = "# docs-nav:end"
 #: directory name. Gitignored; rebuilt on every docs verb.
 MOUNT = "docs/_generated/packages"
 
+#: Where the generated API pages live, per package directory name.
+#: Gitignored; rebuilt on every docs verb.
+API = "docs/_generated/api"
+
+#: The inventories cross-ecosystem references resolve against.
+#: Pinned here so one workshop release moves every project; the
+#: footman and toolroom pins retire when those repositories migrate
+#: into the workspace.
+INVENTORIES = (
+    "https://docs.python.org/3/objects.inv",
+    "https://willemkokke.github.io/footman/objects.inv",
+    "https://willemkokke.github.io/toolroom/objects.inv",
+)
+
 
 def docs_table(root: Path) -> dict[str, object]:
     """The contract's ``[docs]`` table; empty when undeclared."""
@@ -87,9 +101,11 @@ def zensical_config(root: Path) -> str:
             continue
         label = "Home" if page == "index.md" else _label(page)
         lines.append(f'    {{ "{label}" = "{page}" }},')
+    handler_paths: list[str] = []
     for package in discover_packages(root):
         pages = _pages(package.directory / "docs")
-        if not pages:
+        modules = api_modules(package)
+        if not pages and not modules:
             continue
         name = package.directory.name
         lines.append(f'    {{ "{name}" = [')
@@ -97,9 +113,41 @@ def zensical_config(root: Path) -> str:
             lines.append(
                 f'        {{ "{_label(page)}" = "_generated/packages/{name}/{page}" }},'
             )
+        if modules:
+            handler_paths.append(f"packages/{name}/src")
+            lines.append('        { "API" = [')
+            for page, dotted in modules:
+                lines.append(
+                    f'            {{ "{dotted}" = "_generated/api/{name}/{page}" }},'
+                )
+            lines.append("        ] },")
         lines.append("    ] },")
     lines.append(f"    {NAV_END}")
     lines.append("]")
+    if handler_paths:
+        listed = ", ".join(f'"{path}"' for path in handler_paths)
+        inventories = ", ".join(f'"{url}"' for url in INVENTORIES)
+        lines += [
+            "",
+            "[project.plugins.mkdocstrings.handlers.python]",
+            f"paths = [{listed}]",
+            f"inventories = [{inventories}]",
+            "",
+            "[project.plugins.mkdocstrings.handlers.python.options]",
+            "# Google style is the house convention; a docstring is",
+            "# published the moment it is written, empty ones included.",
+            'docstring_style = "google"',
+            "show_if_no_docstring = true",
+            "show_root_heading = true",
+            "show_root_full_path = true",
+            "separate_signature = true",
+            "show_signature_annotations = true",
+            "signature_crossrefs = true",
+            'members_order = "source"',
+            "merge_init_into_class = true",
+            "summary = true",
+            "heading_level = 2",
+        ]
     return "\n".join(lines) + "\n"
 
 
@@ -121,19 +169,79 @@ def mount_package_docs(root: Path) -> list[str]:
     return mounted
 
 
+def _module_root(package: Package) -> Path | None:
+    """The importable module's root: the shallowest ``__init__.py``."""
+    src = package.directory / "src"
+    if not src.is_dir():
+        return None
+    inits = sorted(src.rglob("__init__.py"), key=lambda p: len(p.parts))
+    return inits[0].parent if inits else None
+
+
+def api_modules(package: Package) -> list[tuple[str, str]]:
+    """(page path, dotted import path) per module, public first.
+
+    Every module gets a page, underscore-private included: the
+    standards fragment publishes a docstring the moment it is
+    written. Public sorts before private at every level of the
+    tree, and a package's ``__init__`` is its index page.
+    """
+    module_root = _module_root(package)
+    if module_root is None:
+        return []
+    src = package.directory / "src"
+    entries: list[tuple[tuple[tuple[bool, str], ...], str, str]] = []
+    for path in module_root.rglob("*.py"):
+        if path.name == "__main__.py" or "_docs" in path.parts:
+            continue
+        relative = path.relative_to(module_root).with_suffix("")
+        parts = relative.parts
+        if parts and parts[-1] == "__init__":
+            parts = (*parts[:-1], "")
+        key = tuple((part.startswith("_"), part) for part in parts)
+        page = (
+            "index.md"
+            if relative.as_posix() == "__init__"
+            else relative.with_suffix(".md")
+            .as_posix()
+            .replace("/__init__.md", "/index.md")
+        )
+        dotted = ".".join(path.relative_to(src).with_suffix("").parts)
+        dotted = dotted.removesuffix(".__init__")
+        entries.append((key, page, dotted))
+    entries.sort()
+    return [(page, dotted) for _key, page, dotted in entries]
+
+
+def generate_api_pages(root: Path) -> list[str]:
+    """Write the API pages into the site tree; the package names.
+
+    One page per module, each a single directive: mkdocstrings walks
+    the members. The tree is rebuilt whole, machine territory.
+    """
+    base = root / API
+    shutil.rmtree(base, ignore_errors=True)
+    generated: list[str] = []
+    for package in discover_packages(root):
+        modules = api_modules(package)
+        if not modules:
+            continue
+        for page, dotted in modules:
+            target = base / package.directory.name / page
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(f"# `{dotted}`\n\n::: {dotted}\n", encoding="utf-8")
+        generated.append(package.directory.name)
+    return generated
+
+
 def module_docs_dir(package: Package) -> Path | None:
     """Where *package*'s wheel-embedded ``_docs`` lives; None without src.
 
     The module root is the shallowest ``__init__.py`` under ``src``,
     which is the importable package uv_build ships.
     """
-    src = package.directory / "src"
-    if not src.is_dir():
-        return None
-    inits = sorted(src.rglob("__init__.py"), key=lambda p: len(p.parts))
-    if not inits:
-        return None
-    return inits[0].parent / "_docs"
+    module_root = _module_root(package)
+    return None if module_root is None else module_root / "_docs"
 
 
 def materialise_module_docs(package: Package) -> Path | None:
@@ -179,6 +287,9 @@ def docs_build() -> None:
     mounted = mount_package_docs(root)
     if mounted:
         print(f"  mounted docs for {', '.join(mounted)}")
+    documented = generate_api_pages(root)
+    if documented:
+        print(f"  API pages for {', '.join(documented)}")
     result = toolroom.zensical.opts(cwd=root, nofail=True).build(
         clean=True, strict=True
     )
@@ -192,4 +303,5 @@ def docs_serve() -> None:
     """Mount every package's docs and serve the site live."""
     root = _root()
     mount_package_docs(root)
+    generate_api_pages(root)
     toolroom.zensical.opts(cwd=root).serve()
