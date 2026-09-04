@@ -26,6 +26,23 @@ if TYPE_CHECKING:
 
 check = _python.check
 
+
+def declared_requirements(package: Package) -> dict[str, str]:
+    """Both ecosystems' declarations: pyproject plus conanfile.
+
+    The extension consumes python distributions at runtime and conan
+    recipes at build time, so the lint judges its edges against the
+    union. The contract names are disjoint homes for one dependency:
+    an internal name appears in exactly one of the two.
+    """
+    from livery.workshop._backends import _cpp_conan
+
+    return {
+        **_python.declared_requirements(package),
+        **_cpp_conan.declared_requirements(package),
+    }
+
+
 #: What ``uv tool run`` resolves for the build. A floor and a cap,
 #: not an exact pin: the run has no lockfile to consult, and a major
 #: bump changes cibuildwheel's defaults deliberately. The release

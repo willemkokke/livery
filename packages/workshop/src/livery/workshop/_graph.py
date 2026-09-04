@@ -56,7 +56,20 @@ def affected_packages(
     gate, so no narrowing is honest. An empty tuple means the branch
     changes nothing at all.
     """
+    from livery.workshop._kinds import kind_names
+
     packages = discover_packages(root)
+    # The fail-open guard: a package of an unregistered kind has an
+    # edge story the registry cannot vouch for, so no narrowing is
+    # honest. Everything runs, and the reason is printed rather than
+    # silently widening the gate.
+    for package in packages:
+        if package.type not in kind_names():
+            print(
+                f"  {package.path}: type {package.type!r} is not a"
+                " registered kind; failing open to everything"
+            )
+            return None
     seeds: set[str] = set()
     for path in git.changed_paths(base):
         for package in packages:

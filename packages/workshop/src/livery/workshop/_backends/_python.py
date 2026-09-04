@@ -285,6 +285,27 @@ def run_test(
     report_coverage(root, packages)
 
 
+def declared_requirements(package: Package) -> dict[str, str]:
+    """The package's declared dependencies, name to constraint text.
+
+    Read from ``[project.dependencies]``; the layering lint compares
+    these against the contract's ``[[depends]]`` edges.
+    """
+    entries: dict[str, str] = {}
+    pyproject = package.directory / "pyproject.toml"
+    if not pyproject.is_file():
+        return entries
+    data = tomllib.loads(pyproject.read_text("utf-8"))
+    for requirement in data.get("project", {}).get("dependencies", []):
+        text = str(requirement)
+        name = text
+        for cut in "[>=<!~; ":
+            head, _, _ = name.partition(cut)
+            name = head
+        entries[name] = text[len(name) :].split(";")[0].replace("]", "")
+    return entries
+
+
 def check(package: Package, root: Path) -> None:
     """Nothing: python's gate verbs run at workspace scope.
 
