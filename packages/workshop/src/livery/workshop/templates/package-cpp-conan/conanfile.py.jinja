@@ -9,7 +9,7 @@ from conan import ConanFile
 from conan.tools.cmake import CMake, CMakeToolchain, cmake_layout
 
 
-class {{ package_dir | replace("-", "_") | capitalize }}Conan(ConanFile):
+class {{ project_slug | capitalize }}Conan(ConanFile):
     """Build, test, and package the library through CMake."""
 
     name = "{{ package_name }}"

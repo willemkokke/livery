@@ -2,18 +2,18 @@
 # birth; this file is the workspace's own. Edit it directly:
 # the template never rewrites it.
 cmake_minimum_required(VERSION 3.24)
-project({{ package_dir | replace("-", "_") }} CXX)
+project({{ project_slug }} CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_library({{ package_dir | replace("-", "_") }} src/{{ package_dir | replace("-", "_") }}.cpp)
-target_include_directories({{ package_dir | replace("-", "_") }} PUBLIC src)
+add_library({{ project_slug }} src/{{ project_slug }}.cpp)
+target_include_directories({{ project_slug }} PUBLIC src)
 
-install(TARGETS {{ package_dir | replace("-", "_") }})
-install(FILES src/{{ package_dir | replace("-", "_") }}.hpp DESTINATION include)
+install(TARGETS {{ project_slug }})
+install(FILES src/{{ project_slug }}.hpp DESTINATION include)
 
 enable_testing()
-add_executable(test_{{ package_dir | replace("-", "_") }} tests/test_{{ package_dir | replace("-", "_") }}.cpp)
-target_link_libraries(test_{{ package_dir | replace("-", "_") }} PRIVATE {{ package_dir | replace("-", "_") }})
-add_test(NAME test_{{ package_dir | replace("-", "_") }} COMMAND test_{{ package_dir | replace("-", "_") }})
+add_executable(test_{{ project_slug }} tests/test_{{ project_slug }}.cpp)
+target_link_libraries(test_{{ project_slug }} PRIVATE {{ project_slug }})
+add_test(NAME test_{{ project_slug }} COMMAND test_{{ project_slug }})

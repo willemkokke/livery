@@ -5,9 +5,9 @@
 #include <cassert>
 #include <cstring>
 
-#include "{{ package_dir | replace("-", "_") }}.hpp"
+#include "{{ project_slug }}.hpp"
 
 int main() {
-    assert(std::strlen({{ package_dir | replace("-", "_") }}::version()) > 0);
+    assert(std::strlen({{ project_slug }}::version()) > 0);
     return 0;
 }
