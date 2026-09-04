@@ -128,6 +128,30 @@ def test_package_drift_judges_only_the_managed_files(tmp_path: Path) -> None:
     assert package_drift(root) == ["packages/thing/cliff.toml: differs from its render"]
 
 
+def test_a_receipt_without_package_dir_renders_the_right_paths(
+    tmp_path: Path,
+) -> None:
+    # copier omits an answer equal to its default from the receipt,
+    # and package_dir defaults to the destination basename, so a
+    # receipt may not carry it. The re-render happens in a temp
+    # directory: without the explicit override the managed files
+    # would carry the temp name.
+    root = _template_instance(tmp_path)
+    apply_project(root)
+    package = root / "packages" / "thing"
+    package.mkdir(parents=True)
+    answers = read_answers(ROOT / "packages" / "workshop" / ".copier-answers.yml")
+    answers["package_name"] = "livery-thing"
+    answers.pop("package_dir", None)
+    (package / ".copier-answers.yml").write_text(
+        "\n".join(f"{key}: {value!r}" for key, value in answers.items()) + "\n"
+    )
+    assert "packages/thing/cliff.toml" in apply_packages(root)
+    body = (package / "cliff.toml").read_text()
+    assert 'include_paths = ["packages/thing/**"]' in body
+    assert package_drift(root) == []
+
+
 def test_apply_settles_and_drift_names_the_file(tmp_path: Path) -> None:
     root = _template_instance(tmp_path)
     changed = apply_project(root)

@@ -466,6 +466,24 @@ def tool_profile(root: Path) -> tuple[str, ...]:
     return tuple(profile)
 
 
+def missing_host_tools(root: Path) -> tuple[str, ...]:
+    """The host requirements the present kinds name that do not resolve.
+
+    Host tools (a C compiler) are never cache-installed: the machine
+    provides them or the build cannot run, so ``fm doctor`` and
+    ``fm env.check`` name an absence before a build fails midway.
+    """
+    from livery.workshop._kinds import kind_host_tools
+    from livery.workshop._packages import discover_packages
+
+    types = (
+        {package.type for package in discover_packages(root)}
+        if (root / "packages").is_dir()
+        else set()
+    )
+    return tuple(tool for tool in kind_host_tools(types) if shutil.which(tool) is None)
+
+
 def _set_ci_secret(root: Path, key: str, value: str) -> None:
     """Store one CI secret through the forge protocol.
 
@@ -520,6 +538,12 @@ def env_check() -> int:
             drift = _uv_drift(root)
             if drift:
                 problems.append(drift)
+    for tool in missing_host_tools(root):
+        problems.append(
+            f"{tool}: MISSING (a host compiler; install the platform"
+            " toolchain: xcode-select --install on macOS,"
+            " build-essential on Debian)"
+        )
     if not problems:
         print("  environment ok: every profile tool resolves")
         return 0

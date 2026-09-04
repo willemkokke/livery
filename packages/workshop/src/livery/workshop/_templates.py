@@ -520,7 +520,14 @@ def package_drift(root: Path) -> list[str]:
     packages = root / "packages"
     for answers_path in sorted(packages.glob("*/.copier-answers.yml")):
         directory = answers_path.parent
-        data = {**read_answers(answers_path), **package_injections(root)}
+        # package_dir rides explicitly: copier omits an answer that
+        # equals its default from the receipt, and the default here
+        # is the render destination's basename, a temp directory.
+        data = {
+            **read_answers(answers_path),
+            **package_injections(root),
+            "package_dir": directory.name,
+        }
         with tempfile.TemporaryDirectory() as scratch:
             render(source, Path(scratch), data)
             for name in _managed_for(directory):
@@ -600,7 +607,13 @@ def apply_packages(root: Path) -> list[str]:
     changed = []
     for answers_path in sorted((root / "packages").glob("*/.copier-answers.yml")):
         directory = answers_path.parent
-        data = {**read_answers(answers_path), **package_injections(root)}
+        # package_dir explicitly, as in package_drift: the receipt
+        # may not carry it, and the destination here is a temp dir.
+        data = {
+            **read_answers(answers_path),
+            **package_injections(root),
+            "package_dir": directory.name,
+        }
         with tempfile.TemporaryDirectory() as scratch:
             render(source, Path(scratch), data, ref=ref)
             for name in _managed_for(directory):
@@ -657,16 +670,20 @@ def template_apply() -> None:
 @new.task(name="package")
 def new_package(
     name: Annotated[str, doc("directory name under packages/ (e.g. scratch)")],
+    kind: Annotated[
+        str, doc("template kind (package-python, package-cpp-conan, ...)")
+    ] = "package-python",
 ) -> None:
-    """Render a new Python package and wire it into the workspace.
+    """Render a new package of *kind* and wire it into the workspace.
 
-    Renders ``package-python`` into ``packages/<name>`` with the
-    distribution named after the workspace convention
+    Renders the kind's template chain into ``packages/<name>`` with
+    the distribution named after the workspace convention
     (``livery-<name>``), appends the member to the root answers file,
     re-applies the ``project`` render so every per-package list picks
-    it up, and re-locks the environment.
+    it up, and re-locks the environment. A non-python kind joins the
+    roster without a dev-group entry: there is no dist to install.
     """
-    wire_package(_root(), name)
+    wire_package(_root(), name, kind=kind)
 
 
 def _render_kind(
@@ -742,8 +759,20 @@ def wire_package(root: Path, name: str, *, kind: str = "package-python") -> str:
             ref=ref,
         )
     _redact_answers_source(destination / _ANSWERS)
+    from livery.workshop._kinds import is_python_kind, record_for_template
+
+    record = record_for_template(kind)
     members = list(answers.get("packages", []))
-    members.append({"dir": name, "name": package_name, "dev": package_name})
+    if record is None or is_python_kind(record.name):
+        # A python member joins the uv workspace and the dev group.
+        # An unmapped template (package-python-layer) is a python
+        # variant, so it takes the same wiring.
+        members.append({"dir": name, "name": package_name, "dev": package_name})
+    else:
+        # A non-python member carries its kind so the project render
+        # can exclude it from the uv workspace and the python
+        # checker scopes; there is no dist to depend on.
+        members.append({"dir": name, "name": package_name, "kind": record.name})
     answers["packages"] = members
     _write_root_answers(root, answers)
     for changed in apply_project(root):

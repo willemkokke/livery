@@ -1,0 +1,13 @@
+// Seeded from the template channel ({{ template_source_label }}, package-cpp-conan kind) at
+// birth; this file is the workspace's own. Edit it directly:
+// the template never rewrites it.
+// The ctest suite: plain asserts, zero dependencies.
+#include <cassert>
+#include <cstring>
+
+#include "{{ project_slug }}.hpp"
+
+int main() {
+    assert(std::strlen({{ project_slug }}::version()) > 0);
+    return 0;
+}

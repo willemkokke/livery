@@ -1,0 +1,38 @@
+# Seeded from the template channel ({{ template_source_label }}, package-cpp-conan kind) at
+# birth; this file is the workspace's own. Edit it directly:
+# the template never rewrites it.
+"""The conan recipe for {{ package_name }}."""
+
+from typing import ClassVar
+
+from conan import ConanFile
+from conan.tools.cmake import CMake, CMakeToolchain, cmake_layout
+
+
+class {{ project_slug | capitalize }}Conan(ConanFile):
+    """Build, test, and package the library through CMake."""
+
+    name = "{{ package_name }}"
+    package_type = "library"
+    settings = "os", "compiler", "build_type", "arch"
+    options: ClassVar = {"shared": [True, False]}
+    default_options: ClassVar = {"shared": False}
+    exports_sources = "CMakeLists.txt", "src/*", "tests/*"
+
+    def layout(self):
+        """Use conan's standard cmake layout under build/."""
+        cmake_layout(self)
+
+    def generate(self):
+        """Write the CMake toolchain file for the active profile."""
+        CMakeToolchain(self).generate()
+
+    def build(self):
+        """Configure and build with CMake."""
+        cmake = CMake(self)
+        cmake.configure()
+        cmake.build()
+
+    def package(self):
+        """Install the built targets into the conan package."""
+        CMake(self).install()

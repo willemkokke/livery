@@ -21,7 +21,11 @@ package = false
 default-groups = ["dev", "docs"]
 
 [tool.uv.workspace]
-members = ["packages/*"]
+# The members, explicitly: the roster lives in the answers and this
+# file is rendered from it, so a glob would only re-derive the same
+# list while letting a stray directory join unnoticed. A non-python
+# member (a cpp-conan package) is no uv project and never appears.
+members = ["packages/forge", "packages/workshop"]
 
 [tool.uv.sources]
 livery-forge = { workspace = true }

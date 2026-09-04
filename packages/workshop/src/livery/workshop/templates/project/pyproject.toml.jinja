@@ -1,3 +1,4 @@
+{% set py = [] %}{% set native = [] %}{% for member in packages %}{% if member.kind is defined and member.kind and member.kind != 'python' %}{% set _ = native.append(member) %}{% else %}{% set _ = py.append(member) %}{% endif %}{% endfor -%}
 # Rendered by the template channel ({{ template_source_label }}, project kind);
 # the gate keeps it matching its render. Edit the source and
 # run `{{ runner_prog }} template.apply`; an edit here is drift.
@@ -21,10 +22,14 @@ package = false
 default-groups = ["dev", "docs"]
 
 [tool.uv.workspace]
-members = ["packages/*"]
+# The members, explicitly: the roster lives in the answers and this
+# file is rendered from it, so a glob would only re-derive the same
+# list while letting a stray directory join unnoticed. A non-python
+# member (a cpp-conan package) is no uv project and never appears.
+members = [{% for package in py %}"packages/{{ package.dir }}"{% if not loop.last %}, {% endif %}{% endfor %}]
 
 [tool.uv.sources]
-{% for package in packages %}{{ package.name }} = { workspace = true }
+{% for package in py %}{{ package.name }} = { workspace = true }
 {% endfor %}
 [dependency-groups]
 # The docs toolchain, workshop-rendered so one layer release moves
@@ -42,7 +47,7 @@ dev = [
     "toolroom>=0.6.1",
     # The workspace members, so root tests import them; an entry may
     # carry extras the dev loop needs.
-{% for package in packages %}    "{{ package.dev }}",
+{% for package in py %}    "{{ package.dev }}",
 {% endfor %}    # Every contract layer that is not already a member above, so a
     # rendered tasks.py can always import its plugins.
 {% for requirement in layer_requirements %}    "{{ requirement }}",
@@ -79,7 +84,7 @@ dev = [
 [tool.ruff]
 line-length = 88
 target-version = "py{{ python_floor | replace('.', '') }}"
-src = [{% for package in packages %}"packages/{{ package.dir }}/src", "packages/{{ package.dir }}/tests", {% endfor %}"tests"]
+src = [{% for package in py %}"packages/{{ package.dir }}/src", "packages/{{ package.dir }}/tests", {% endfor %}"tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF", "D"]
@@ -102,7 +107,8 @@ convention = "google"
 
 [tool.basedpyright]
 include = [{% if packages %}"packages", {% endif %}"tests", "tasks.py"]
-# The IDE and the CLI resolve the same environment: the workspace
+{% if native %}exclude = [{% for package in native %}"packages/{{ package.dir }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+{% endif %}# The IDE and the CLI resolve the same environment: the workspace
 # members are editable installs in .venv, so basedpyright must look
 # there whatever interpreter the editor has selected.
 venvPath = "."
@@ -120,13 +126,13 @@ reportMissingModuleSource = false
 # `# pyright: ignore` so warn_unused_ignores keeps this checker's set
 # honest.
 files = [
-{% for package in packages %}    "packages/{{ package.dir }}/src",
+{% for package in py %}    "packages/{{ package.dir }}/src",
     "packages/{{ package.dir }}/tests",
 {% endfor %}    "tests",
     "tasks.py",
 ]
 mypy_path = [
-{% for package in packages %}    "packages/{{ package.dir }}/src",
+{% for package in py %}    "packages/{{ package.dir }}/src",
     "packages/{{ package.dir }}/tests",
 {% endfor %}]
 # PEP 420 namespace in a src layout: mypy needs both to derive module
@@ -158,7 +164,7 @@ disallow_untyped_decorators = true
 # Third gate. Scope: the packages themselves; the consumer seam in
 # tests is already double-checked by basedpyright and mypy.
 [tool.ty.src]
-include = [{% if packages %}{% for package in packages %}"packages/{{ package.dir }}/src"{% if not loop.last %}, {% endif %}{% endfor %}{% else %}"tasks.py"{% endif %}]
+include = [{% if py %}{% for package in py %}"packages/{{ package.dir }}/src"{% if not loop.last %}, {% endif %}{% endfor %}{% else %}"tasks.py"{% endif %}]
 
 [tool.ty.environment]
 # Every platform at once (ty checks the union), {{ python_floor }} floor.
@@ -171,7 +177,7 @@ python-version = "{{ python_floor }}"
 # zero-dependency 3.11 library cannot spell it without a
 # typing_extensions runtime dep. Revisit when 3.11 support ends.
 preset = "default"
-project-includes = [{% if packages %}{% for package in packages %}"packages/{{ package.dir }}/src"{% if not loop.last %}, {% endif %}{% endfor %}{% else %}"tasks.py"{% endif %}]
+project-includes = [{% if py %}{% for package in py %}"packages/{{ package.dir }}/src"{% if not loop.last %}, {% endif %}{% endfor %}{% else %}"tasks.py"{% endif %}]
 # Both path heuristics off: a checkout under a dot-directory (a
 # `.claude/worktrees/` worktree) silently skips every include and the
 # gate fails on "no files matched". At the repo root neither setting

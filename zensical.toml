@@ -41,6 +41,7 @@ nav = [
         { "API" = [
             { "livery.workshop" = "_generated/api/workshop/index.md" },
             { "livery.workshop._backends" = "_generated/api/workshop/_backends/index.md" },
+            { "livery.workshop._backends._cpp_conan" = "_generated/api/workshop/_backends/_cpp_conan.md" },
             { "livery.workshop._backends._python" = "_generated/api/workshop/_backends/_python.md" },
             { "livery.workshop._ci_generate" = "_generated/api/workshop/_ci_generate.md" },
             { "livery.workshop._ci_tasks" = "_generated/api/workshop/_ci_tasks.md" },

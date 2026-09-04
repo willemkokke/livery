@@ -41,6 +41,9 @@ class _FakeBackend:
         self.built.append(package.name)
         return package.directory / "dist"
 
+    def check(self, package: Package, root: Path) -> None:
+        return None
+
 
 def _package(tmp_path: Path, type_name: str) -> Package:
     directory = tmp_path / "packages" / "thing"

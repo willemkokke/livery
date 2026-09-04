@@ -284,6 +284,17 @@ def run_test(
     report_coverage(root, packages)
 
 
+def check(package: Package, root: Path) -> None:
+    """Nothing: python's gate verbs run at workspace scope.
+
+    ruff, the four checkers, and pytest each cover every python
+    package in one invocation from the quality verbs; the kind
+    declares no ``kind_verbs``, so the gate never calls this. It
+    exists to satisfy livery.workshop._kinds.Backend.
+    """
+    del package, root
+
+
 def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
     """Build *package*'s wheel and sdist into its ``dist/``; the dist dir.
 

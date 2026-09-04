@@ -7,7 +7,10 @@ module. ``check`` is the whole local gate; CI runs the same command.
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from footman import Forward, doc, group, parallel, task
 
@@ -25,6 +28,48 @@ def _packages() -> tuple[Package, ...]:
     packages = discover_packages(root)
     require_backends(packages)
     return packages
+
+
+def gated(packages: tuple[Package, ...], verb: str) -> tuple[Package, ...]:
+    """The subset whose kind's CI contract carries *verb*.
+
+    Every excluded package prints a skip naming itself, its kind,
+    and the verb, so a narrowed gate is visible in the output and
+    never passes silently.
+    """
+    from livery.workshop._kinds import kind_for
+
+    kept = []
+    for package in packages:
+        record = kind_for(package.type)
+        if verb in record.ci.check_verbs:
+            kept.append(package)
+        else:
+            print(f"  {verb}: {package.path} skips ({record.name} kind)")
+    return tuple(kept)
+
+
+def run_kind_checks(packages: tuple[Package, ...], root: Path) -> None:
+    """Run each kind's own per-package gate, in package order.
+
+    Only kinds whose contract names ``kind_verbs`` take part; the
+    announcement carries the package and the verbs, so the gate
+    output says what ran beside what skipped.
+    """
+    from livery.workshop._kinds import CiContract, kind_for
+
+    default_verbs = CiContract().check_verbs
+    for package in packages:
+        record = kind_for(package.type)
+        if not record.ci.kind_verbs:
+            continue
+        skipped = [v for v in default_verbs if v not in record.ci.check_verbs]
+        print(
+            f"  {package.path} ({record.name}):"
+            f" {', '.join(record.ci.kind_verbs)} run;"
+            f" {', '.join(skipped)} skip"
+        )
+        record.backend.check(package, root)
 
 
 @task
@@ -51,7 +96,7 @@ def typecheck() -> None:
 @task
 def typecomplete() -> None:
     """Verify every package's public API is 100% type-complete."""
-    _python.run_typecomplete(_packages())
+    _python.run_typecomplete(gated(_packages(), "typecomplete"))
 
 
 @task
@@ -61,9 +106,22 @@ def test(*pytest_args: str) -> None:
     Args:
         pytest_args: forwarded to pytest verbatim
     """
-    packages = _packages()
+    packages = gated(_packages(), "test")
     root = workspace_root()
     _python.run_test(*pytest_args, packages=packages, root=root)
+
+
+@task
+def kindcheck() -> None:
+    """Run each non-python kind's own gate over its packages.
+
+    Quiet in a pure-python workspace: no kind declares its own
+    verbs, so nothing runs and nothing prints.
+    """
+    packages = _packages()
+    root = workspace_root()
+    assert root is not None
+    run_kind_checks(packages, root)
 
 
 def _affected() -> tuple[Package, ...] | None:
@@ -120,6 +178,7 @@ def check(
             typecheck()
             typecomplete()
             test()
+            kindcheck()
             template_check()
         return
     with parallel():
@@ -128,6 +187,7 @@ def check(
         typecheck()
         typecomplete()
         test()
+        kindcheck()
         template_check()
         provenance_check()
 
@@ -146,6 +206,14 @@ def _scoped_check(subset: tuple[Package, ...], *, fix: bool = False) -> None:
     root = workspace_root()
     assert root is not None
     paths = _python.package_paths(subset)
+    # The python checkers take only the packages whose kind gates on
+    # them: mypy refuses a directory holding no python files, and a
+    # skipped package says so through gated(). An all-skipped verb
+    # falls back to its configured whole, which the rendered configs
+    # already scope to the python members: conservative, never wrong.
+    type_paths = _python.package_paths(gated(subset, "typecheck"))
+    complete = gated(subset, "typecomplete")
+    tested = gated(subset, "test")
     if fix:
         step(lambda: _python.run_format(check=False, paths=paths), title="format")()
         step(lambda: _python.run_lint(fix=True, paths=paths), title="lint")()
@@ -153,12 +221,13 @@ def _scoped_check(subset: tuple[Package, ...], *, fix: bool = False) -> None:
         if not fix:
             step(lambda: _python.run_format(check=True, paths=paths), title="format")()
             step(lambda: _python.run_lint(paths=paths), title="lint")()
-        step(lambda: _python.run_typecheck(paths=paths), title="typecheck")()
-        step(lambda: _python.run_typecomplete(subset), title="typecomplete")()
+        step(lambda: _python.run_typecheck(paths=type_paths), title="typecheck")()
+        step(lambda: _python.run_typecomplete(complete), title="typecomplete")()
         step(
-            lambda: _python.run_test(packages=subset, root=root, scoped=True),
+            lambda: _python.run_test(packages=tested, root=root, scoped=True),
             title="test",
         )()
+        run_kind_checks(subset, root)
 
 
 coverage = group("coverage", help="The measured union and its floors")
