@@ -79,7 +79,7 @@ def test_the_ci_group_reports_the_empty_head(
     _ci_tasks.ci_rerun()
     _ci_tasks.ci_cancel()
     out = capsys.readouterr().out
-    assert "no runs for" in out
+    assert "nothing failed on this branch" in out
     assert "nothing running for" in out
 
 
