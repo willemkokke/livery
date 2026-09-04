@@ -88,20 +88,67 @@ way it ships fragments.
   open to everything, naming the missing kind, exactly hse's guard,
   forced with an injected fake kind.
 
+## The registry abstraction
+
+Ruled 2026-09-04 (Willem), reshaping phase 5 and adding phase 1's
+first half: artifact registries get one abstraction before conan
+becomes a third bespoke story beside the python env vars and the
+docs seam's inline docker host.
+
+- **The handles are protocol-generic, never forge-owned.**
+  `livery.forge.SimpleRegistry` is the precedent: it speaks the
+  simple protocol to any index. A container handle speaks the OCI
+  registry protocol to any host; a conan handle wraps remote
+  configuration and upload against any conan remote. Any
+  conceivable registry host works if it speaks the protocol.
+- **The forge contributes one thing**: the URL of its own hosted
+  registry per kind, where it has one. Gitea hosts python, conan,
+  and container registries; GitHub hosts container (ghcr) and
+  declines conan; GitLab hosts its own. The forge is the default
+  provider, never the owner.
+- **The resolution ladder**, per artifact kind: the contract's
+  `[registries]` declaration wins (any URL); else the forge's own
+  registry of that kind; else the ecosystem default where one
+  exists (pypi.org for python); else an honest decline, named.
+- **Auth stays where it lives**: tool-native credential stores
+  (docker login, conan's) with refusals teaching what to set, and
+  host-qualified tokens for what the workshop drives itself.
+  Addresses in the contract or the committed env; tokens as
+  environment facts.
+- **The existing users port onto it**: the wave's receipt probe and
+  floor probe, publish_wheels' env-var pair, and the docs container
+  seam's inline host derivation all become ladder lookups, so
+  every artifact kind resolves its registry the same way.
+
 ## Phases
 
-### Phase 1: the registry, opened to layers
+### Phase 1: the registries and the kind registry, opened to layers
 
-The kind vocabulary in the package contract, the backend registry
-with the three-callable contract and the documented add-a-kind
-procedure, per-kind CI contract defaults, the edge-extractor table,
-the template kind chain (child renders parent then itself, managed
-set unioned), and layer registration: a mounted layer's plugin can
-add kinds. Every guard forced first: unknown kind refuses, missing
-extractor fails affected open by name, the fake future kind
-registers through a test layer and dispatches.
+First the registry abstraction: the `RegistryKind` vocabulary
+(python, conan, container), the protocol-generic handles, the
+forge surface answering its hosted registry URL per kind across
+all three backends and the fake, the resolution ladder reading the
+`[registries]` table, and the two existing users ported (the
+wave's probes and the docs container seam). Then the kind
+registry: the kind vocabulary in the package contract, the backend
+registry with the three-callable contract and the documented
+add-a-kind procedure, per-kind CI contract defaults, the
+edge-extractor table, the template kind chain (child renders
+parent then itself, managed set unioned), and layer registration:
+a mounted layer's plugin can add kinds. Every guard forced first:
+unknown kind refuses, missing extractor fails affected open by
+name, the fake future kind registers through a test layer and
+dispatches, and an undeclared kind on a forge without it resolves
+to the named decline.
 
 Acceptance:
+- The ladder's four rungs are each forced by test: a declared URL
+  wins over the forge's; the forge's serves when undeclared;
+  python falls through to pypi.org; conan on a github-kind
+  workspace declines naming the kind.
+- The docs container seam and the wave's probes read their targets
+  through the ladder; proven by the existing suites staying green
+  with the env-var pair now feeding the ladder, not the callers.
 - `uv run pytest packages/workshop/tests/test_workshop_kinds.py`
   proves: refusal names the vocabulary; the fake kind dispatches
   build/test/publish through the registry; the extractor pin equals
@@ -165,13 +212,14 @@ Acceptance:
 
 ### Phase 5: publish and the identity guard
 
-The conan publish seam: the library publishes to the forge's own
-conan registry where the forge has one (gitea does; proven on the
-rig: upload, then a clean `conan install` back from it). The wave
-gains the identity guard both ways: a native kind's pure-tagged
-wheel refuses, a pure kind's platform-tagged wheel refuses, each
-naming the kind and the tag. The armed release rehearsal runs the
-extended graph.
+The conan publish seam through the ladder: the library publishes
+to whatever the ladder resolves, the rig proof using gitea's own
+conan registry (upload, then a clean `conan install` back), and a
+declared external remote proven by pointing the fixture at a
+second local registry. The wave gains the identity guard both
+ways: a native kind's pure-tagged wheel refuses, a pure kind's
+platform-tagged wheel refuses, each naming the kind and the tag.
+The armed release rehearsal runs the extended graph.
 
 Acceptance:
 - On the rig, the fixture library uploads to gitea's conan
@@ -209,6 +257,11 @@ Acceptance:
   waits. The cross-kind dependency is the hierarchy's proof.
 - 2026-09-04 (Willem, confirming the survey): hse has no native
   implementation to port, only the seams; the seams are the port.
+- 2026-09-04 (Willem): registries get one abstraction before conan
+  arrives: protocol-generic handles after SimpleRegistry's
+  precedent, pushable to any conceivable host; the forge is the
+  default provider through a per-kind URL surface, never the owner;
+  resolution is a four-rung ladder ending in an honest decline.
 - 2026-09-04: unknown kinds refuse rather than fail soft to
   python, a named deviation from hse: a typo that silently builds
   the wrong kind is worse than a stop.
@@ -219,10 +272,11 @@ Acceptance:
 
 ## Open
 
-1. **The conan remote per forge kind.** Gitea's conan registry is
-   the rig-provable default. GitHub has no conan registry: decline
-   honestly (publish target `none` for the library kind there)
-   until a remote exists, or name one now. Owner: Willem.
+1. Resolved 2026-09-04 (Willem): dissolved into the registry
+   abstraction. Any conceivable container or conan registry is
+   declarable in the contract; the forge's own is only the default;
+   GitHub plus conan resolves to the named decline by derivation,
+   not by ruling.
 2. **The platform matrix for native wheels.** The gate builds and
    tests on linux, macos, and windows already; the wave publishes
    from one runner, so the extension's published wheel is
