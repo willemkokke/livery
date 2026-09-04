@@ -155,7 +155,10 @@ def test_every_export_carries_a_docstring() -> None:
     # hole a reader falls into. The __all__ pins already force the
     # surface; this forces its words.
     missing: list[str] = []
-    for member in sorted((ROOT / "packages").iterdir()):
+    packages = ROOT / "packages"
+    if not packages.is_dir():
+        return  # a memberless workspace has no exports to document
+    for member in sorted(packages.iterdir()):
         contract = member / "workshop.toml"
         src = member / "src"
         if not contract.is_file() or not src.is_dir():

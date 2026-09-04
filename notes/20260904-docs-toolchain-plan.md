@@ -12,10 +12,15 @@ per-package changelog pages with the in-memory unreleased section,
 and the paginated release view derived from the receipt tags.
 Phase 4 shipped 2026-09-04 (issue #185, PR #186): the docs drift
 tests and the required CI docs job on all three forge kinds. Phase
-5 shipped 2026-09-04 (issue #187): the publish seams on all three
-kinds, the Pages assertion in workflow.configure (proven live:
-livery's Pages went from absent to the workflow build type in one
-run), and the container seam proven against the rig registry.
+5 shipped 2026-09-04 (issue #187, PR #188): the publish seams on
+all three kinds, the Pages assertion in workflow.configure (proven
+live: livery's Pages went from absent to the workflow build type in
+one run), the container seam proven against the rig registry, and
+the site live at https://docs.willem.net/livery/. Phase 6 shipped
+2026-09-04 (issue #189): the docs seeds and the gradient add-back,
+proven in the armed chain: the child's site builds through the
+layer at its installed version, no template re-render, speaking the
+child's own name. The plan is complete.
 This is phase 19 of `notes/20260903-workshop-plan.md`, promoted to
 its own plan on Willem's ruling (2026-09-04): docs come before the
 kind hierarchy, because nothing ships well undocumented, and the
@@ -316,6 +321,13 @@ Acceptance:
   `_docs` inside the module as real files from `packages/<name>/docs/`
   before every wheel build. Underscore folders are machine
   territory: a person writes `packages/<name>/docs/`, never `_docs`.
+- 2026-09-04, phase 6 cut: the chain's newborn gate found two seed
+  defects before any human did: the export drift test assumed a
+  packages directory a memberless newborn does not have, and the
+  seed's rendered header trips the line-length lint whenever the
+  template source label is long, which the rendered pyproject
+  already accommodates for the contracts seed and now does for the
+  docs seed the same way.
 - 2026-09-04, phase 5 cut: the container seam's image build lives
   in `fm docs.publish`, which the emitted gitea job calls; the
   rig's act_runner ships no docker socket by design, so the job

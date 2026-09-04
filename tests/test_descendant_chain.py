@@ -175,6 +175,10 @@ def _chain(
         assert "workshop.toml: already seeded" in birth.stdout
     contract = (home / "workshop.toml").read_text()
     assert 'layers = ["livery.workshop", "dummy.brandx"]' in contract
+    # The docs seeds arrived at birth: the workspace's and the
+    # member package's.
+    assert (home / "docs" / "index.md").is_file()
+    assert (home / "packages" / BRAND / "docs" / "index.md").is_file()
 
     # -- 2. populate: overlay replace, fragment line, a skill --------
     member = home / "packages" / BRAND
@@ -319,6 +323,17 @@ def _chain(
     rendered_gate = (child / ".gitea" / "workflows" / "ci.yml").read_text()
     assert "Environment rung" in rendered_gate
     assert "RUNG_PYTHON_PUBLISH_INDEX" in rendered_gate
+
+    # -- 5b. the docs toolchain, through the gradient -----------------
+    # The layer at its installed version renders the child's site
+    # config and builds the site; no template re-render happens, and
+    # the site speaks the child's name, never the base's.
+    child_config = (child / "zensical.toml").read_text()
+    assert 'site_name = "child"' in child_config
+    docs_build = _run([str(brand_cli), "docs.build"], child, _hermetic(env, tool))
+    assert "site built" in docs_build.stdout
+    assert (child / "site" / "index.html").is_file()
+    assert "child" in (child / "site" / "index.html").read_text()
 
     # -- 6. the inheritance proof -------------------------------------
     if resumed:
