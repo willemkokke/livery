@@ -97,10 +97,19 @@ docs seam's inline docker host.
 
 - **The handles are protocol-generic, never forge-owned.**
   `livery.forge.SimpleRegistry` is the precedent: it speaks the
-  simple protocol to any index. A container handle speaks the OCI
-  registry protocol to any host; a conan handle wraps remote
-  configuration and upload against any conan remote. Any
-  conceivable registry host works if it speaks the protocol.
+  simple protocol to any index. The container handle speaks the OCI
+  distribution protocol, so any OCI registry works (Willem,
+  2026-09-04: OCI is the definition, not an example); the conan
+  handle wraps remote configuration and upload against any conan
+  remote.
+- **A folder or share is a first-class target for every kind**
+  (Willem, 2026-09-04). The declaration rung accepts a path as well
+  as a URL: python publishes a dists directory with a simple-layout
+  index any `file://` or find-links consumer reads; container
+  writes the OCI image layout, which is a directory by
+  specification; conan uses `conan cache save`/`restore` with the
+  local-recipes-index form for consumption. A workspace can publish
+  everything to a share and need no registry server at all.
 - **The forge contributes one thing**: the URL of its own hosted
   registry per kind, where it has one. Gitea hosts python, conan,
   and container registries; GitHub hosts container (ghcr) and
@@ -149,6 +158,12 @@ Acceptance:
 - The docs container seam and the wave's probes read their targets
   through the ladder; proven by the existing suites staying green
   with the env-var pair now feeding the ladder, not the callers.
+- A declared folder target round-trips for each kind: python dists
+  land in a simple-layout directory a scratch venv installs from;
+  the container image writes an OCI layout a local runtime loads;
+  the conan package saves into the folder and restores clean; each
+  proven by command in the kind's own phase, the ladder's path
+  acceptance forced here with the python case.
 - `uv run pytest packages/workshop/tests/test_workshop_kinds.py`
   proves: refusal names the vocabulary; the fake kind dispatches
   build/test/publish through the registry; the extractor pin equals
@@ -259,9 +274,12 @@ Acceptance:
   implementation to port, only the seams; the seams are the port.
 - 2026-09-04 (Willem): registries get one abstraction before conan
   arrives: protocol-generic handles after SimpleRegistry's
-  precedent, pushable to any conceivable host; the forge is the
-  default provider through a per-kind URL surface, never the owner;
-  resolution is a four-rung ladder ending in an honest decline.
+  precedent (the container handle's protocol is OCI by definition);
+  the forge is the default provider through a per-kind URL surface,
+  never the owner; resolution is a four-rung ladder ending in an
+  honest decline; and a folder or share is a first-class publish
+  target for every kind, so a workspace can publish with no
+  registry server at all.
 - 2026-09-04: unknown kinds refuse rather than fail soft to
   python, a named deviation from hse: a typo that silently builds
   the wrong kind is worse than a stop.
@@ -273,10 +291,10 @@ Acceptance:
 ## Open
 
 1. Resolved 2026-09-04 (Willem): dissolved into the registry
-   abstraction. Any conceivable container or conan registry is
-   declarable in the contract; the forge's own is only the default;
-   GitHub plus conan resolves to the named decline by derivation,
-   not by ruling.
+   abstraction. Any OCI registry and any conan remote is declarable
+   in the contract, a local folder or share included; the forge's
+   own is only the default; GitHub plus conan resolves to the named
+   decline by derivation, not by ruling.
 2. **The platform matrix for native wheels.** The gate builds and
    tests on linux, macos, and windows already; the wave publishes
    from one runner, so the extension's published wheel is
