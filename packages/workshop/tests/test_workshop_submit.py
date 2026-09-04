@@ -63,14 +63,19 @@ class SubmitGit(GitOps):
 
     def push(self, branch: str) -> None:
         super().push(branch)
-        sha = self.fake.push(OWNER, NAME, branch, outcome=self.outcome)
-        # The fake mints its own shas; the local head is not consulted.
+        # The fake records the real head sha, so sha-based reasoning
+        # (the merged-PR guard's ancestor test) sees what a forge would.
+        sha = self.fake.push(
+            OWNER, NAME, branch, sha=self.head_sha(), outcome=self.outcome
+        )
         if self.auto_settle:
             self.fake.settle(OWNER, NAME, sha)
 
     def push_force(self, branch: str) -> None:
         super().push_force(branch)
-        sha = self.fake.push(OWNER, NAME, branch, outcome=self.outcome)
+        sha = self.fake.push(
+            OWNER, NAME, branch, sha=self.head_sha(), outcome=self.outcome
+        )
         if self.auto_settle:
             self.fake.settle(OWNER, NAME, sha)
 
@@ -294,6 +299,29 @@ def test_disarm_before_push_and_the_merged_refusal(
     with pytest.raises(_FAILURES) as caught:
         _submit(fake, git, armed=False, follow_to_verdict=False)
     assert "already merged" in str(caught.value)
+
+
+def test_a_fresh_cycle_of_a_reused_branch_name_proceeds(
+    rig: tuple[FakeForge, SubmitGit],
+) -> None:
+    # The release train reuses its reserved branch name every cycle,
+    # so a merged past release must not block the next one: a branch
+    # cut fresh off the merged base carries none of the merged head.
+    fake, git = rig
+    _submit(fake, git, armed=False, follow_to_verdict=False)
+    repo = _repo(fake)
+    repo.pr.arm(1, title="feat: the first change")  # green: merges now
+    merged_pr = repo.pr.get(1)
+    assert merged_pr is not None and merged_pr.merged
+    _git(git.root, "push", "origin", "--delete", "feat/1-first")
+    _git(git.root, "fetch", "origin")
+    _git(git.root, "checkout", "-B", "feat/1-first", "origin/main")
+    (git.root / "next.txt").write_text("the next cycle\n")
+    _git(git.root, "add", ".")
+    _git(git.root, "commit", "-m", "feat: the next cycle")
+    _submit(fake, git, armed=False, follow_to_verdict=False)
+    fresh = repo.pr.find_by_head("feat/1-first")
+    assert fresh is not None and fresh.number != 1 and not fresh.merged
 
 
 def test_closes_resolution_guards(rig: tuple[FakeForge, SubmitGit]) -> None:
