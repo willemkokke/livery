@@ -18,9 +18,9 @@ from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._publish import (
     Receipt,
+    discover_release,
     floor_probe,
     movement_check,
-    parse_manifest,
     probe_until_served,
     publish_release,
 )
@@ -65,7 +65,7 @@ def _member(root: Path, name: str, *, floors_on: tuple[str, ...] = ()) -> None:
         f'[project]\nname = "livery-{name}"\nversion = "0.3.0"\n'
         f"dependencies = [{requirements}]\n"
     )
-    (directory / "CHANGELOG.md").write_text("# Changelog\n\n## [0.3.0]\n\n- x\n")
+    (directory / "CHANGELOG.md").write_text("# Changelog\n")
     (directory / "src" / "livery" / name / "__init__.py").write_text(
         '__version__ = "0.3.0"\n'
     )
@@ -73,7 +73,10 @@ def _member(root: Path, name: str, *, floors_on: tuple[str, ...] = ()) -> None:
 
 def _squash(root: Path, members: tuple[str, ...], *, mined_at: str = "") -> str:
     listed = ", ".join(f"livery-{m} v0.3.0" for m in members)
-    (root / "release-marker.txt").write_text(listed + "\n")
+    for member in members:
+        (root / "packages" / member / "CHANGELOG.md").write_text(
+            "# Changelog\n\n## [0.3.0]\n\n- x\n"
+        )
     _git(root, "add", "-A")
     point = mined_at or (
         subprocess.run(
@@ -141,19 +144,53 @@ def train(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     return root, git, registry, spans
 
 
-def test_manifest_parse_refuses_what_is_not_a_release(tmp_path: Path) -> None:
+def test_discovery_refuses_what_is_not_a_release(train) -> None:
+    # The fallback first: a commit touching no member changelog is
+    # not a release squash, whatever its title says.
+    root, git, _registry, _spans = train
+    (root / "notes.txt").write_text("just notes\n")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "chore(release): released livery-base v0.3.0")
     with pytest.raises(_FAILURES) as caught:
-        parse_manifest("feat: an ordinary commit")
+        discover_release(root, git, git.head_sha())
     assert "not a release squash" in str(caught.value)
-    with pytest.raises(_FAILURES):
-        parse_manifest("chore(release): released garbage-without-version")
-    pairs = parse_manifest(
-        "chore(release): released livery-forge v0.2.0, livery-workshop v0.1.0"
+
+
+def test_discovery_reads_members_from_the_squash_content(train) -> None:
+    root, git, _registry, _spans = train
+    sha = _squash(root, ("base", "left"))
+    discovered = discover_release(root, git, sha)
+    assert [(p.directory.name, v) for p, v in discovered] == [
+        ("base", "0.3.0"),
+        ("left", "0.3.0"),
+    ]
+
+
+def test_discovery_ignores_rider_files_and_survives_a_wrong_title(train) -> None:
+    # hse's shape: the title is presentation. A rider file in the
+    # squash and a hand-mangled title change nothing about what the
+    # changed changelogs state.
+    root, git, _registry, _spans = train
+    (root / "packages" / "base" / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## [0.3.0]\n\n- hand-edited entry\n"
     )
-    assert pairs == (
-        ("livery-forge", "0.2.0"),
-        ("livery-workshop", "0.1.0"),
+    (root / "rider.txt").write_text("a rider\n")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "chore(release): the lock records something")
+    discovered = discover_release(root, git, git.head_sha())
+    assert [(p.directory.name, v) for p, v in discovered] == [("base", "0.3.0")]
+
+
+def test_discovery_refuses_an_unreadable_heading(train) -> None:
+    root, git, _registry, _spans = train
+    (root / "packages" / "base" / "CHANGELOG.md").write_text(
+        "# Changelog\n\n## [Unreleased]\n\n- pending\n"
     )
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "chore: mangle")
+    with pytest.raises(_FAILURES) as caught:
+        discover_release(root, git, git.head_sha())
+    assert "no" in str(caught.value) and "heading" in str(caught.value)
 
 
 def test_the_wave_runs_independent_legs_abreast_and_the_apex_waits(

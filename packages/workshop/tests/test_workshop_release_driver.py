@@ -371,6 +371,43 @@ def test_recovery_reads_the_branch_and_rebuilds_nothing(
     assert rebuilt == []  # recovery derives nothing
 
 
+def test_recovery_survives_a_rider_and_a_hand_edited_entry(
+    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Finding 12's scenario, on the fixed shape: the title rebuilds
+    # from the branch's changelogs, so a rider commit (even with the
+    # reserved prefix) never enters it, and hand-editing an entry on
+    # the prepared branch is a supported flow.
+    fake, _git_seam, root = workspace
+    _grow(root, "core", "feat: core grows (#1)")
+    _git(root, "push", "origin", "main")
+    rig = _RigGit(root, fake)
+    sha = rig.remote_head("main")
+    fake.push(OWNER, NAME, "main", sha=sha)
+    fake.settle(OWNER, NAME, sha)
+    monkeypatch.setattr(
+        "livery.workshop._release_driver.validate_member",
+        lambda _root, plan, dirs: None,
+    )
+    members = resolve_set(root, ("core",))
+    driver = ReleaseDriver(
+        root, fake.repository(OWNER, NAME), rig, members, armed=False
+    )
+    first = driver.prepare()
+    assert first is not None
+    changelog = root / "packages" / "core" / "CHANGELOG.md"
+    edited = changelog.read_text().replace("- Core grows", "- The 0.3.0 story, told")
+    changelog.write_text(edited)
+    (root / "uv.lock.marker").write_text("a rider\n")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "chore(release): the lock records something")
+    again = ReleaseDriver(root, fake.repository(OWNER, NAME), rig, members, armed=False)
+    recovered = again.prepare()
+    assert recovered is not None
+    assert recovered.title == first.title
+    assert "the lock records" not in recovered.title
+
+
 def test_release_name_sorts_its_members() -> None:
     assert release_name(("workshop", "forge")) == "release/forge+workshop"
 
