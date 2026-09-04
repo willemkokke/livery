@@ -223,3 +223,33 @@ def test_merge_subjects_never_default_the_title_or_count(
     _git(clone, "merge", "--no-edit", "origin/main")
     plan = prepare(GitOps(clone))
     assert plan.title == "feat: the real intent"
+
+
+def test_a_dirty_behind_main_names_the_refusal_not_local_commits(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Issue #123: behind-plus-dirty was read as "local commits". The
+    # two states need different acts, so each gets its own words and
+    # the fast-forward refusal carries git's reason verbatim.
+    clone, origin = _rig(tmp_path)
+    other = _other(tmp_path, origin, email="ci@livery.local")
+    (other / "seed.txt").write_text("moved\n")
+    _git(other, "commit", "-am", "feat: main moves")
+    _git(other, "push", "origin", "main")
+    (clone / "seed.txt").write_text("dirty local edit\n")
+    bring_current(clone, GitOps(clone), interactive=False)
+    out = capsys.readouterr().out
+    assert "local commits" not in out
+    assert "fast-forward was refused" in out
+
+
+def test_local_commits_on_main_still_teach_the_branch_move(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    clone, _origin = _rig(tmp_path)
+    (clone / "extra.txt").write_text("x\n")
+    _git(clone, "add", ".")
+    _git(clone, "commit", "-m", "feat: committed straight to main")
+    bring_current(clone, GitOps(clone), interactive=False)
+    out = capsys.readouterr().out
+    assert "local commits" in out and "Move them to a branch" in out

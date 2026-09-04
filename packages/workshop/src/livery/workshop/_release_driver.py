@@ -346,6 +346,7 @@ class ReleaseDriver:
                 else:
                     git.switch(self.branch)
             print(f"  recovering the prepared {self.name} from its branch")
+            self._require_fresh_base()
             return self._submission_from_ref()
 
         require_verified_base(self._repo, git, self.base, force=self._force)
@@ -381,6 +382,29 @@ class ReleaseDriver:
             + f"\n\nMined-At: {mined_at}"
         )
         return Submission(title=title, body=body)
+
+    def _require_fresh_base(self) -> None:
+        """Refuse a prepared branch whose base moved under it.
+
+        hse merges the default branch into a stale release branch and
+        re-verifies; livery's entries carry a mining point instead,
+        and commits merged in beneath it would ship under-documented,
+        so the stale branch is refused outright: abandon and re-run,
+        and the fresh prepare mines everything. Deviation from hse
+        ruled 2026-09-04 with issue #161.
+        """
+        git = self._git
+        git.fetch()
+        base_sha = git._run("rev-parse", f"origin/{self.base}").strip()
+        if git.is_ancestor(base_sha, "HEAD"):
+            return
+        fail(
+            f"{self.base} has moved past this prepared release: commits"
+            " it gained are not mined into the branch's entries, and"
+            " releasing them under-documented is worse than re-preparing."
+            f"\n  Run `{footman.prog()} abandon` on the branch, then"
+            f" `{footman.prog()} workflow.release` again."
+        )
 
     def _submission_from_ref(self) -> Submission:
         """The title and body the branch's changelogs state.

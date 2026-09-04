@@ -668,6 +668,25 @@ def teardown_branch(
     if repo.branch_exists(branch):
         repo.delete_branch(branch)
         print(f"  deleted origin/{branch}")
+    git_dir = git._run("rev-parse", "--git-dir").strip()
+    common_dir = git._run("rev-parse", "--git-common-dir").strip()
+    if git.current_branch() == branch and git_dir != common_dir:
+        # A linked worktree cannot switch to *base*: the main
+        # checkout holds it. The worktree itself is the leftover, so
+        # it is removed from the main checkout, branch and all. The
+        # shell that ran this stands in a deleted directory afterwards
+        # and is told where to go.
+        import os
+
+        main_root = Path(common_dir).resolve().parent
+        os.chdir(main_root)
+        main_git = GitOps(main_root)
+        main_git._run("worktree", "remove", "--force", str(git.root))
+        if main_git.local_branch_exists(branch):
+            main_git.delete_local_branch(branch)
+        print(f"  removed the worktree {git.root} and deleted {branch}")
+        print(f"  this shell's directory is gone: cd {main_root}")
+        return
     if git.current_branch() == branch:
         git.switch(base)
         git.integrate(base)

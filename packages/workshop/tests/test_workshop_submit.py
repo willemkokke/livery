@@ -325,6 +325,34 @@ def test_a_fresh_cycle_of_a_reused_branch_name_proceeds(
     assert fresh is not None and fresh.number != 1 and not fresh.merged
 
 
+def test_abandon_in_a_linked_worktree_removes_the_worktree(
+    rig: tuple[FakeForge, SubmitGit],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Issue #161: a linked worktree cannot switch to main (the main
+    # checkout holds it), so abandoning from one removes the worktree
+    # itself instead of parking it on main or dying on the switch.
+    fake, git = rig
+    _submit(fake, git, armed=False, follow_to_verdict=False)
+    wt = tmp_path / "wt-abandon"
+    _git(git.root, "worktree", "add", str(wt), "-b", "feat/9-linked", "main")
+    (wt / "linked.txt").write_text("w\n")
+    _git(wt, "add", ".")
+    _git(wt, "commit", "-m", "feat: linked work")
+    monkeypatch.chdir(wt)
+    repo = _repo(fake)
+    abandon_flow(repo, GitOps(wt), "feat/9-linked", "main")
+    out = capsys.readouterr().out
+    assert "removed the worktree" in out and "cd " in out
+    assert not wt.exists()
+    listing = _git(git.root, "branch", "--list", "feat/9-linked")
+    assert listing.strip() == ""
+    # The main clone kept its own checkout untouched.
+    assert _git(git.root, "rev-parse", "--abbrev-ref", "HEAD").strip() == "feat/1-first"
+
+
 def test_closes_resolution_guards(rig: tuple[FakeForge, SubmitGit]) -> None:
     fake, _ = rig
     repo = _repo(fake)
