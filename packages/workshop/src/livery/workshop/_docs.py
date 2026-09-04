@@ -101,11 +101,18 @@ def zensical_config(root: Path) -> str:
             continue
         label = "Home" if page == "index.md" else _label(page)
         lines.append(f'    {{ "{label}" = "{page}" }},')
+    if _receipt_tags(root):
+        lines.append('    { "Releases" = [')
+        lines.append('        { "Latest" = "_generated/releases/index.md" },')
+        for year in release_years(root):
+            lines.append(f'        {{ "{year}" = "_generated/releases/{year}.md" }},')
+        lines.append("    ] },")
     handler_paths: list[str] = []
     for package in discover_packages(root):
         pages = _pages(package.directory / "docs")
         modules = api_modules(package)
-        if not pages and not modules:
+        changelog = (package.directory / "CHANGELOG.md").is_file()
+        if not pages and not modules and not changelog:
             continue
         name = package.directory.name
         lines.append(f'    {{ "{name}" = [')
@@ -113,6 +120,9 @@ def zensical_config(root: Path) -> str:
             lines.append(
                 f'        {{ "{_label(page)}" = "_generated/packages/{name}/{page}" }},'
             )
+        if (package.directory / "CHANGELOG.md").is_file():
+            mount = f"_generated/packages/{name}/changelog.md"
+            lines.append(f'        {{ "Changelog" = "{mount}" }},')
         if modules:
             handler_paths.append(f"packages/{name}/src")
             lines.append('        { "API" = [')
@@ -149,6 +159,165 @@ def zensical_config(root: Path) -> str:
             "heading_level = 2",
         ]
     return "\n".join(lines) + "\n"
+
+
+RELEASES = "docs/_generated/releases"
+
+
+def _insert_after_title(text: str, block: str) -> str:
+    """Insert *block* before the first entry heading, after the title."""
+    first = text.find("\n## ")
+    if first == -1:
+        return text.rstrip("\n") + "\n\n" + block + "\n"
+    return text[:first] + "\n" + block + "\n" + text[first:]
+
+
+def changelog_page(root: Path, package: Package) -> str | None:
+    """The package's changelog page; None without a changelog.
+
+    The committed file, with what is unreleased prepended in memory
+    (the file on disk never changes). When git-cliff cannot answer,
+    an offline checkout or a package without its config, the page is
+    the file alone and the reason is printed, never swallowed into a
+    broken page.
+    """
+    changelog = package.directory / "CHANGELOG.md"
+    if not changelog.is_file():
+        return None
+    text = changelog.read_text("utf-8")
+    try:
+        from livery.workshop import _cliff
+
+        unreleased = _cliff.unreleased_entry(root, package)
+    except BaseException as error:
+        print(f"  {package.name}: unreleased section skipped: {error}")
+        unreleased = ""
+    if unreleased:
+        text = _insert_after_title(text, unreleased)
+    return text
+
+
+def generate_changelog_pages(root: Path) -> list[str]:
+    """Write each package's changelog page into its mount; the names.
+
+    Runs after the mount rebuild, so the pages land in the same tree
+    the nav points at.
+    """
+    generated: list[str] = []
+    for package in discover_packages(root):
+        page = changelog_page(root, package)
+        if page is None:
+            continue
+        target = root / MOUNT / package.directory.name / "changelog.md"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(page, encoding="utf-8")
+        generated.append(package.directory.name)
+    return generated
+
+
+def _receipt_tags(root: Path) -> list[tuple[str, str, str, str]]:
+    """(date, package dir, dist name, version) per release tag, newest first.
+
+    The receipt tags are the release identity (the train cuts them
+    after the index confirms), so the view derives from them and the
+    changelogs alone; nothing new is committed.
+    """
+    import re
+
+    result = toolroom.git.opts(cwd=root, nofail=True, recorded=False)(
+        "for-each-ref",
+        "refs/tags/packages",
+        "--format=%(refname:short) %(creatordate:short)",
+    )
+    if result.code != 0:
+        return []
+    names = {p.directory.name: p.name for p in discover_packages(root)}
+    tags: list[tuple[str, str, str, str]] = []
+    for line in result.stdout.splitlines():
+        match = re.fullmatch(
+            r"packages/([^/]+)/v(\d+\.\d+\.\d+) (\d{4}-\d{2}-\d{2})", line.strip()
+        )
+        if match is None:
+            continue
+        directory, version, date = match.groups()
+        tags.append((date, directory, names.get(directory, directory), version))
+    tags.sort(key=lambda tag: (tag[0], tag[3]), reverse=True)
+    return tags
+
+
+def _entry_body(changelog: Path, version: str) -> str:
+    """The ``## [version]`` section's body from *changelog*; empty when absent."""
+    if not changelog.is_file():
+        return ""
+    text = changelog.read_text("utf-8")
+    import re
+
+    pattern = re.compile(
+        rf"^## \[?{re.escape(version)}\]?[^\n]*\n(.*?)(?=^## |\Z)",
+        re.M | re.S,
+    )
+    match = pattern.search(text)
+    return match.group(1).strip() if match else ""
+
+
+def _release_block(root: Path, tag: tuple[str, str, str, str]) -> str:
+    date, directory, dist, version = tag
+    body = _entry_body(root / "packages" / directory / "CHANGELOG.md", version)
+    lines = [f"## {dist} v{version} ({date})", ""]
+    if body:
+        lines.append(body)
+    else:
+        lines.append(f"Released as `packages/{directory}/v{version}`.")
+    return "\n".join(lines) + "\n"
+
+
+def release_years(root: Path) -> list[str]:
+    """The archive years the view paginates into, newest first.
+
+    Every year with a release except the newest, which lives on the
+    landing page.
+    """
+    years = sorted({tag[0][:4] for tag in _receipt_tags(root)}, reverse=True)
+    return years[1:]
+
+
+def generate_release_pages(root: Path) -> list[str]:
+    """Write the site-wide release view; the page paths written.
+
+    Derived from the receipt tags joined with the changelog entries
+    they point at, newest first across members. Paginated: the
+    newest year's releases on the landing page, each earlier year on
+    its own archive page linked from it.
+    """
+    base = root / RELEASES
+    shutil.rmtree(base, ignore_errors=True)
+    tags = _receipt_tags(root)
+    if not tags:
+        return []
+    base.mkdir(parents=True)
+    years = sorted({tag[0][:4] for tag in tags}, reverse=True)
+    newest, archived = years[0], years[1:]
+    written: list[str] = []
+
+    def _page(title: str, year: str, links: list[str]) -> str:
+        blocks = [f"# {title}", ""]
+        blocks += [_release_block(root, tag) for tag in tags if tag[0][:4] == year]
+        blocks += links
+        return "\n".join(blocks).rstrip("\n") + "\n"
+
+    links = (
+        ["", "Older releases: " + ", ".join(f"[{y}]({y}.md)" for y in archived), ""]
+        if archived
+        else []
+    )
+    (base / "index.md").write_text(_page("Releases", newest, links), encoding="utf-8")
+    written.append("index.md")
+    for year in archived:
+        (base / f"{year}.md").write_text(
+            _page(f"Releases in {year}", year, []), encoding="utf-8"
+        )
+        written.append(f"{year}.md")
+    return written
 
 
 def mount_package_docs(root: Path) -> list[str]:
@@ -287,9 +456,15 @@ def docs_build() -> None:
     mounted = mount_package_docs(root)
     if mounted:
         print(f"  mounted docs for {', '.join(mounted)}")
+    logged = generate_changelog_pages(root)
+    if logged:
+        print(f"  changelogs for {', '.join(logged)}")
     documented = generate_api_pages(root)
     if documented:
         print(f"  API pages for {', '.join(documented)}")
+    releases = generate_release_pages(root)
+    if releases:
+        print(f"  release view: {', '.join(releases)}")
     result = toolroom.zensical.opts(cwd=root, nofail=True).build(
         clean=True, strict=True
     )
@@ -303,5 +478,7 @@ def docs_serve() -> None:
     """Mount every package's docs and serve the site live."""
     root = _root()
     mount_package_docs(root)
+    generate_changelog_pages(root)
     generate_api_pages(root)
+    generate_release_pages(root)
     toolroom.zensical.opts(cwd=root).serve()
