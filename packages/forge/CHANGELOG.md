@@ -38,6 +38,7 @@
 - Livery is only the workspace name
 - Ban every misuse note and speak toolroom
 - Version tests assert the installed metadata, never a literal
+- The simple-index probe reads PEP 503 HTML indexes
 
 ### Changed
 
