@@ -18,7 +18,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "livery-forge>=0.1.0",
+    "livery-forge>=0.2.0",
     # The floors on deps the dev toolchain also carries align with
     # the lock: the release train's floor leg shares one venv with
     # the locked toolchain, so a floor below the toolchain's pin is

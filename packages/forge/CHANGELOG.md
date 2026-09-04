@@ -1,5 +1,50 @@
 # Changelog
 
+## [0.2.0] - 2026-09-04
+
+### Added
+
+- Split the task surface between the layers and the instance ([#18](https://github.com/willemkokke/livery/pull/18))
+- The template channel, and the monorepo as its own instance ([#20](https://github.com/willemkokke/livery/pull/20))
+- The other forges' CI variants, and the release legs
+- Affected, coverage floors, and the 0.1.0 stamp
+- Abandon, submit.merge, submit --fix, and sync matches the lock
+- The forge protocol builds its own addresses
+- Git-cliff writes the changelogs, per package, from the template
+- The workflow engine: state, decision, abort, diagnostics
+- The release train's driver, base gate, and two-leg validation
+- The wave publishes, the receipts say when each member is done
+- The isolated leg installs the gate's toolchain, aimed starvation
+- The entered shell and the issue family
+- No livery home, one shared env file, issues as the way of work
+- Governance in forge - listings, codeowners, approvals, admins bound
+- Governance in the workshop - owners, the applied contract, the heals
+- Implement gitlab's licence-gated governance
+- Identity-free core on workshop.toml
+- The layer axis built
+
+### Fixed
+
+- The held-run release works off-machine, and the legs' lessons
+- The legs' second round of lessons
+- Evidence survives failure, and live names go unique
+- Pinned gitea digests, surviving evidence, and gentler sweeps
+- Decisive gitea evidence, and a poll budget for slow runners
+- Recording scratch goes to the e2e organisation
+- The changelog works on a private forge
+- Close the phase 7b audit gaps; assignment is documentation
+- Close the phase 8a audit gaps
+- No livery-named environment variables, no fallbacks
+- Livery is only the workspace name
+- Ban every misuse note and speak toolroom
+- Version tests assert the installed metadata, never a literal
+
+### Changed
+
+- The error arms a green conformance run never reaches ([#11](https://github.com/willemkokke/livery/pull/11))
+- The cassette recorder moves into forge's dev plugin ([#19](https://github.com/willemkokke/livery/pull/19))
+- Plan labels and jargon out of the published text
+
 ## 0.1.0 — 2026-08-31
 
 - The protocol, frozen: all three backends and the verified fake pass
