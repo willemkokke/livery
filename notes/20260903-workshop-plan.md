@@ -654,10 +654,11 @@ green so each feature ships through the proven seams:
   plan's open item 5 residue: conan 2 and the module packaging)
   is ruled at this cut.
 - Phase 18: shared tool cache over the type-derived profile. Was 11.
-- Phase 19: docs toolchain, including the derived monorepo release
-  view. Was 12. Named by Willem as the model add-back: it must
-  reach the dummy descendant through the gradient, not through a
-  template update.
+- Phase 19: shipped 2026-09-04 through its own plan,
+  `notes/20260904-docs-toolchain-plan.md`, all six phases including
+  the gradient add-back proof in the armed chain and the site live
+  at https://docs.willem.net/livery/. Was 12; taken before 17 on
+  Willem's ruling.
 - Phase 20: sparse checkouts as partial workspaces, and `fm clone`.
   Was 13; its pre-project verb rides the phase 13 carrier instead
   of waiting here.
