@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-forge"
-version = "0.1.0"
+version = "0.2.0"
 description = "One interface to GitHub, Gitea, and GitLab — the livery ecosystem's forge."
 readme = "README.md"
 license = "MIT"
