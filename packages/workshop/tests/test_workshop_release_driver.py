@@ -573,3 +573,17 @@ def test_the_driver_builds_the_whole_set_before_any_leg(
     first_leg = next(i for i, e in enumerate(events) if e.startswith("leg:"))
     builds_before = {e for e in events[:first_leg] if e.startswith("build:")}
     assert builds_before == {"build:livery-core", "build:livery-tool"}
+
+
+def test_the_toolchain_pins_carry_no_workspace_member(tmp_path: Path) -> None:
+    # Members export as workspace-relative paths a scratch venv
+    # cannot resolve, and reinstalling them would clobber the starved
+    # resolution; the released wheel and its floors are already in.
+    from livery.workshop._backends._python import _dev_pins
+
+    pins = _dev_pins(ROOT, tmp_path)
+    assert pins is not None
+    text = pins.read_text()
+    assert "pytest" in text  # the toolchain itself is pinned
+    assert "packages/forge" not in text
+    assert "packages/workshop" not in text

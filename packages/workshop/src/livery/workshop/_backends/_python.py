@@ -342,9 +342,13 @@ def _dev_pins(root: Path, scratch: Path) -> Path | None:
 
     ``uv export`` reads the workspace lock offline, so the isolated
     venv's toolchain arrives at the versions the gate itself tested
-    with. A workspace without a lock or a dev group (a bare rig, a
-    consumer checkout) answers None and the leg falls back to a bare
-    pytest install.
+    with. Workspace members are excluded: the leg already installed
+    the released wheel and its floors, the members export as
+    workspace-relative paths a scratch venv cannot resolve, and
+    reinstalling them would clobber the starved resolution the
+    movement guard protects. A workspace without a lock or a dev
+    group (a bare rig, a consumer checkout) answers None and the leg
+    falls back to a bare pytest install.
     """
     pins = scratch / "dev-pins.txt"
     result = toolroom.uv.opts(cwd=root, nofail=True, recorded=False)(
@@ -354,6 +358,7 @@ def _dev_pins(root: Path, scratch: Path) -> Path | None:
         "--only-group",
         "dev",
         "--no-emit-project",
+        "--no-emit-workspace",
         "--no-hashes",
         "-o",
         str(pins),
