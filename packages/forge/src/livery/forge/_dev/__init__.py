@@ -27,7 +27,6 @@ import json
 import os
 import platform
 import secrets
-import subprocess
 import time
 import urllib.error
 import urllib.request
@@ -161,43 +160,40 @@ def _compose_env() -> dict[str, str]:
 
 
 def _compose_cmd(*args: str) -> list[str]:
-    """A docker compose command line against the packaged file.
+    """The docker arguments addressing the packaged compose file.
 
     The compose file pins its own project name, so where it lives on
     disk never changes which containers it addresses.
     """
-    return ["docker", "compose", "-f", str(_compose_file()), *args]
+    return ["compose", "-f", str(_compose_file()), *args]
+
+
+def _docker(*args: str, env: dict[str, str] | None = None) -> toolroom.Result:
+    """Run docker through toolroom with the compose environment.
+
+    The environment is the deliberate compose set (never ambient), and
+    the exit code stays the caller's to judge.
+    """
+    merged = _compose_env()
+    if env:
+        merged.update(env)
+    return toolroom.docker.opts(env=merged, nofail=True, recorded=False)(*args)
 
 
 def _compose(*args: str, env: dict[str, str] | None = None) -> str:
     """Run docker compose, returning stdout; a failure is fatal, verbatim."""
-    merged = _compose_env()
-    if env:
-        merged.update(env)
-    result = subprocess.run(
-        _compose_cmd(*args),
-        capture_output=True,
-        text=True,
-        env=merged,
-        check=False,
-    )
-    if result.returncode != 0:
+    result = _docker(*_compose_cmd(*args), env=env)
+    if result.code != 0:
         fail(
             f"docker compose {' '.join(args)} exited "
-            f"{result.returncode}:\n{result.stdout}{result.stderr}"
+            f"{result.code}:\n{result.stdout}{result.stderr}"
         )
     return result.stdout
 
 
-def _gitea_cli(*args: str) -> subprocess.CompletedProcess[str]:
+def _gitea_cli(*args: str) -> toolroom.Result:
     """Run the gitea CLI inside the container, as the git user."""
-    return subprocess.run(
-        _compose_cmd("exec", "-T", "-u", "git", "gitea", "gitea", *args),
-        capture_output=True,
-        text=True,
-        env=_compose_env(),
-        check=False,
-    )
+    return _docker(*_compose_cmd("exec", "-T", "-u", "git", "gitea", "gitea", *args))
 
 
 def _gitea_api(
@@ -352,7 +348,7 @@ def _seed_gitea() -> None:
             "--must-change-password=false",
         )
         output = created.stdout + created.stderr
-        if created.returncode != 0 and "already exists" not in output:
+        if created.code != 0 and "already exists" not in output:
             fail(f"admin user creation failed:\n{output}")
         minted = _gitea_cli(
             "admin",
@@ -366,7 +362,7 @@ def _seed_gitea() -> None:
             "all",
             "--raw",
         )
-        if minted.returncode != 0:
+        if minted.code != 0:
             fail(f"token mint failed:\n{minted.stdout}{minted.stderr}")
         token = minted.stdout.strip().split()[-1]
     if _gitea_api("/orgs/livery", token) != 200:
@@ -374,7 +370,7 @@ def _seed_gitea() -> None:
         if status not in (201, 422):
             fail(f"org creation answered HTTP {status}")
     runner = _gitea_cli("actions", "generate-runner-token")
-    if runner.returncode != 0:
+    if runner.code != 0:
         fail(f"runner token mint failed:\n{runner.stdout}{runner.stderr}")
     _update_dev_env(
         {
@@ -409,10 +405,10 @@ def _gitlab_api(
         return (0, "")
 
 
-def _docker_exec(service: str, *args: str) -> subprocess.CompletedProcess[str]:
+def _docker_exec(service: str, *args: str) -> toolroom.Result:
     """Run a command inside a compose service, every profile enabled."""
-    return subprocess.run(
-        _compose_cmd(
+    return _docker(
+        *_compose_cmd(
             "--profile",
             "gitlab",
             "--profile",
@@ -421,11 +417,7 @@ def _docker_exec(service: str, *args: str) -> subprocess.CompletedProcess[str]:
             "-T",
             service,
             *args,
-        ),
-        capture_output=True,
-        text=True,
-        env=_compose_env(),
-        check=False,
+        )
     )
 
 
@@ -450,7 +442,7 @@ def _seed_gitlab() -> None:
             f"t.set_token('{token}'); t.save!"
         )
         minted = _docker_exec("gitlab", "gitlab-rails", "runner", script)
-        if minted.returncode != 0:
+        if minted.code != 0:
             fail(f"gitlab PAT mint failed:\n{minted.stdout}{minted.stderr}")
     if _gitlab_api("/groups/livery", token)[0] != 200:
         status, body = _gitlab_api(
@@ -508,7 +500,7 @@ def _register_gitlab_runner() -> None:
         "--clone-url",
         "http://gitlab:8929",
     )
-    if registered.returncode != 0:
+    if registered.code != 0:
         fail(
             "gitlab runner registration failed:\n"
             f"{registered.stdout}{registered.stderr}"
@@ -522,7 +514,7 @@ def _register_gitlab_runner() -> None:
         "-c",
         "sed -i 's/^concurrent = .*/concurrent = 8/' /etc/gitlab-runner/config.toml",
     )
-    if raised.returncode != 0:
+    if raised.code != 0:
         fail(f"runner concurrency update failed:\n{raised.stdout}{raised.stderr}")
     print("  seed: gitlab runner registered (concurrency 8)")
 
