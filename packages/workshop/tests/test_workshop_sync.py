@@ -117,6 +117,14 @@ def test_the_monorepo_is_in_sync() -> None:
     # materialised links (both gitignored), so the first sync may
     # speak; after it, a second run says nothing and no tracked file
     # changed, so the committed state and the shipped content agree.
+    import livery.workshop
+
+    if not Path(livery.workshop.__file__).resolve().is_relative_to(ROOT):
+        # The release train's isolated leg runs this suite against the
+        # installed wheel; syncing the monorepo from there would
+        # re-point the repository's real links at the scratch venv.
+        # The dogfood check means the editable checkout syncing itself.
+        pytest.skip("dogfood: only the editable checkout syncs itself")
     before = _tracked_state()
     sync_workspace(ROOT)
     assert sync_workspace(ROOT) == []
