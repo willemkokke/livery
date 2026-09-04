@@ -480,6 +480,7 @@ PACKAGE_MANAGED = ("cliff.toml",)
 PROJECT_SEEDS = (
     "tests/test_workspace_contracts.py",
     "tests/test_docs_drift.py",
+    "docs/index.md",
     "README.md",
     "LICENSE",
 )
