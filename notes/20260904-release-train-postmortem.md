@@ -29,9 +29,9 @@ found the next one. Fifteen findings, in the order met:
 | 7 | `pyyaml>=6` floors at a release whose sdist no longer builds | 2026-08-31 `4821332` | PR #20 | PR #138 |
 | 8 | floors below the toolchain's pins are untestable claims | 2026-09-01/02 | PRs #68/#75 | PR #140 |
 | 9 | the dogfood sync test mutates the real repo from the isolated leg | 2026-08-31 `f35b8c2` | PR #17 | PR #142 |
-| 10 | the release commit stamps pyproject but not the workspace lock | 2026-09-01 `9a9cc14` | PR #68 | rode PR #145; durable fix #153 |
+| 10 | the release commit stamps pyproject but not the workspace lock | 2026-09-01 `9a9cc14` | PR #68 | rode PR #145; durable fix PR #166 |
 | 11 | the emitted release.yml is invalid YAML, so every run died at startup | 2026-09-01 `994d77f` | PR #69 | PR #147 |
-| 12 | a rider commit with the reserved `chore(release):` prefix enters the manifest, which the publisher then refuses | 2026-09-01 `994d77f` | PR #69 | durable fix #154 |
+| 12 | a rider commit with the reserved `chore(release):` prefix enters the manifest, which the publisher then refuses | 2026-09-01 `994d77f` | PR #69 | PR #173 |
 | 13 | the receipt probe reads only PEP 691 JSON; Gitea's index serves PEP 503 HTML | 2026-09-01 `994d77f` | PR #69 | PR #152 |
 | 14 | the member-keys test is shadowed by the CI rung's shared-file override | rung emission | — | PR #151 |
 | 15 | the merged-PR guard walls off every later release of a member set | 2026-09-01 | PR #69 | PR #159 |
@@ -57,7 +57,7 @@ stamp the member's pyproject and `__init__`, but the workspace
 stamping rewrites the lock, and the train's own dirty-tree refusal
 then blocks its re-run. For this release the lock line rode the
 release PR as a hand commit; the durable fix (prepare refreshes the
-lock before the release commit sweeps the tree) is issue #153.
+lock inside the commit that stamps the version) is PR #166.
 
 Finding 11 is cause 2 made flesh. The emitter that writes
 release.yml shipped in PR #69, the phase whose live round-trip
