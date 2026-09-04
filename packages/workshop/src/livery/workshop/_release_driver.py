@@ -146,9 +146,10 @@ def rollback_prepare(root: Path, members: tuple[Package, ...]) -> None:
 
     The error being unwound is the one worth seeing, so this cleans
     quietly: each member's changelog, pyproject, contract, and
-    version files return to HEAD.
+    version files return to HEAD, and so does the workspace lock the
+    stamp refreshed.
     """
-    paths: list[str] = []
+    paths: list[str] = ["uv.lock"]
     for package in members:
         base = package.directory.relative_to(root)
         paths.extend(
