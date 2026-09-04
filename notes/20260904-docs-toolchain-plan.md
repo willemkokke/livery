@@ -10,8 +10,12 @@ public first, mkdocstrings wired with the pinned inventories,
 objects.inv published. Phase 3 shipped 2026-09-04 (issue #183, PR #184):
 per-package changelog pages with the in-memory unreleased section,
 and the paginated release view derived from the receipt tags.
-Phase 4 shipped 2026-09-04 (issue #185): the docs drift tests and
-the required CI docs job on all three forge kinds.
+Phase 4 shipped 2026-09-04 (issue #185, PR #186): the docs drift
+tests and the required CI docs job on all three forge kinds. Phase
+5 shipped 2026-09-04 (issue #187): the publish seams on all three
+kinds, the Pages assertion in workflow.configure (proven live:
+livery's Pages went from absent to the workflow build type in one
+run), and the container seam proven against the rig registry.
 This is phase 19 of `notes/20260903-workshop-plan.md`, promoted to
 its own plan on Willem's ruling (2026-09-04): docs come before the
 kind hierarchy, because nothing ships well undocumented, and the
@@ -312,6 +316,13 @@ Acceptance:
   `_docs` inside the module as real files from `packages/<name>/docs/`
   before every wheel build. Underscore folders are machine
   territory: a person writes `packages/<name>/docs/`, never `_docs`.
+- 2026-09-04, phase 5 cut: the container seam's image build lives
+  in `fm docs.publish`, which the emitted gitea job calls; the
+  rig's act_runner ships no docker socket by design, so the job
+  needs a docker-capable runner and the rig acceptance ran the verb
+  locally against the rig registry (pushed, pulled, served,
+  curled). The pages seam skips inside the verb: the forge's own
+  workflow deploys.
 - 2026-09-04, phase 4 cut: nav reachability needs no test of its
   own, because the nav is emitted from the tree and the template
   drift gate refuses a stale render; an orphan page is drift before

@@ -425,6 +425,16 @@ class Repository(Protocol):
         """The release operations."""
         ...
 
+    def ensure_pages(self, *, build_type: str = "workflow") -> None:
+        """Enable the forge's static-site hosting for this repository.
+
+        Idempotent: hosting already enabled with *build_type* is left
+        alone, and a different build type is moved to it. Raises
+        livery.forge.Unsupported where the forge has no Pages API to
+        configure (capability ``pages_config``).
+        """
+        ...
+
     def configure(self, config: RepoConfig) -> None:
         """Assert the repository settings *config* states.
 

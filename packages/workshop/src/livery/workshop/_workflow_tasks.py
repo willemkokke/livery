@@ -289,6 +289,11 @@ def assert_configuration(root: Path) -> None:
             f" serves several forges) and re-run"
             f" `{footman.prog()} workflow.configure`."
         )
+    from livery.workshop._docs import publish_seam
+
+    if publish_seam(root) == "pages" and forge.supports("pages_config"):
+        repo.ensure_pages(build_type="workflow")
+        print("  pages hosting asserted (workflow build type)")
     print("  repository configuration asserted from the contract")
 
 

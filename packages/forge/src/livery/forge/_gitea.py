@@ -347,6 +347,16 @@ class _GiteaRepository:
         """The repository name the view is bound to."""
         return self._name
 
+    def ensure_pages(self, *, build_type: str = "workflow") -> None:
+        """Decline: Gitea ships no Pages to configure.
+
+        The capability is ``pages_config``.
+        """
+        raise Unsupported(
+            "gitea cannot enable pages hosting through the API"
+            " (capability: pages_config)"
+        )
+
     def configure(self, config: RepoConfig) -> None:
         """Assert the stated settings; every step probes before acting."""
         patch: dict[str, Any] = {}

@@ -52,6 +52,7 @@ _ALL_CAPABILITIES: tuple[Capability, ...] = (
     "ci_secrets",
     "schedule_events",
     "min_approvals",
+    "pages_config",
 )
 
 
@@ -140,6 +141,7 @@ class _RepoState:
     delete_branch_on_merge: bool = False
     allow_auto_merge: bool = False
     required_contexts: tuple[str, ...] = ()
+    pages_build_type: str = ""
     secrets: dict[str, str] = field(default_factory=dict)
     variables: dict[str, str] = field(default_factory=dict)
     labels: dict[str, Label] = field(default_factory=dict)
@@ -510,6 +512,11 @@ class _FakeRepository:
     def name(self) -> str:
         """The repository name the view is bound to."""
         return self._name
+
+    def ensure_pages(self, *, build_type: str = "workflow") -> None:
+        """Record the Pages state the way the forge would."""
+        state = self._fake._require_repo(self._owner, self._name)
+        state.pages_build_type = build_type
 
     def configure(self, config: RepoConfig) -> None:
         """Apply the stated fields; leave None fields untouched."""

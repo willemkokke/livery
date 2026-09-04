@@ -324,3 +324,91 @@ def test_the_nav_carries_releases_and_changelogs(tmp_path: Path) -> None:
     assert releases["Releases"] == "_generated/releases/index.md"
     core = next(entry for entry in nav if "core" in entry)
     assert {"Changelog": "_generated/packages/core/changelog.md"} in core["core"]
+
+
+# Phase 5: the publish seams. Fallbacks first.
+
+
+def test_the_seam_defaults_by_forge_kind(tmp_path: Path) -> None:
+    from livery.workshop._docs import publish_seam
+
+    root = _workspace(tmp_path)
+    # No [forge] table at all: nothing to publish to.
+    assert publish_seam(root) == "none"
+    for kind, seam in (
+        ("github", "pages"),
+        ("gitlab", "pages"),
+        ("gitea", "container"),
+    ):
+        (root / "workshop.toml").write_text(
+            f'[workspace]\n[forge]\nkind = "{kind}"\nowner = "acme"\n'
+        )
+        assert publish_seam(root) == seam
+
+
+def test_a_declared_seam_wins_and_garbage_refuses(tmp_path: Path) -> None:
+    import pytest
+
+    from livery.workshop._docs import publish_seam
+
+    root = _workspace(tmp_path, docs_table='[docs]\npublish = "ssh"\n')
+    assert publish_seam(root) == "ssh"
+    (root / "workshop.toml").write_text(
+        '[workspace]\n[docs]\npublish = "carrier-pigeon"\n'
+    )
+    with pytest.raises(BaseException, match="not a seam"):
+        publish_seam(root)
+
+
+def test_the_ssh_seam_skips_unconfigured(
+    tmp_path: Path,
+    capsys: object,
+    monkeypatch: object,
+) -> None:
+    from livery.workshop._docs import _publish_ssh
+
+    for name in ("DOCS_HOST", "DOCS_USER", "DOCS_ROOT"):
+        monkeypatch.delenv(name, raising=False)  # type: ignore[attr-defined]
+    root = _workspace(tmp_path)
+    _publish_ssh(root)  # no raise is the contract
+    out = capsys.readouterr().out  # type: ignore[attr-defined]
+    assert "unconfigured" in out and "skipping" in out
+
+
+def test_the_deploy_emitters_follow_the_seam(tmp_path: Path) -> None:
+    from livery.workshop._ci_generate import generate
+
+    root = _workspace(tmp_path)
+    (root / "workshop.toml").write_text(
+        '[workspace]\n[forge]\nkind = "github"\nowner = "acme"\n'
+    )
+    files = generate(root)
+    assert ".github/workflows/docs.yml" in files
+    assert "deploy-pages" in files[".github/workflows/docs.yml"]
+    (root / "workshop.toml").write_text(
+        '[workspace]\n[docs]\npublish = "none"\n'
+        '[forge]\nkind = "github"\nowner = "acme"\n'
+    )
+    assert ".github/workflows/docs.yml" not in generate(root)
+    (root / "workshop.toml").write_text(
+        '[workspace]\n[forge]\nkind = "gitea"\nowner = "acme"\n'
+    )
+    files = generate(root)
+    assert ".gitea/workflows/docs.yml" in files
+    assert "docs.publish" in files[".gitea/workflows/docs.yml"]
+    (root / "workshop.toml").write_text(
+        '[workspace]\n[forge]\nkind = "gitlab"\nowner = "acme"\n'
+    )
+    pipeline = generate(root)[".gitlab-ci.yml"]
+    assert "pages:" in pipeline and "mv site public" in pipeline
+
+
+def test_configure_asserts_pages_for_the_pages_seam(tmp_path: Path) -> None:
+    from livery.forge.testing import FakeForge
+
+    fake = FakeForge()
+    fake.create_repo("acme", "home", private=False, description="t")
+    repo = fake.repository("acme", "home")
+    repo.ensure_pages(build_type="workflow")
+    state = fake._repos[("acme", "home")]
+    assert state.pages_build_type == "workflow"
