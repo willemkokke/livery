@@ -172,9 +172,11 @@ def validate_member(
 
     The floor leg first (a floor lying about compatibility fails
     before anything else is spent), then the latest leg. The report
-    names what each leg resolved per co-member and sibling.
+    names what each leg resolved per co-member and sibling. The
+    caller builds every set member's wheel first: the legs'
+    find-links name each sibling's ``dist/``, so a later member's
+    wheel must exist before an earlier member's floor leg resolves.
     """
-    _python.build(plan.package, root)
     for leg in legs:
         resolved = _python.run_isolated_test(
             plan.package, root, release_dirs=release_dirs, resolution=leg
@@ -357,10 +359,14 @@ class ReleaseDriver:
                 print(f"  floors raised within the set: {', '.join(floor_changes)}")
             release_dirs = tuple(plan.package.directory / "dist" for plan in plans)
             for plan in plans:
-                changed = prepare_release(self._root, plan.package.path, plan.version)
-                _ = changed
-                validate_member(self._root, plan, release_dirs)
+                prepare_release(self._root, plan.package.path, plan.version)
+                _python.build(plan.package, self._root)
                 git.commit_all(f"chore(release): {plan.package.name} v{plan.version}")
+            # Every member's wheel exists before any leg runs; a
+            # failed leg still tears the whole branch down, commits
+            # included, so nothing unvalidated survives.
+            for plan in plans:
+                validate_member(self._root, plan, release_dirs)
             prepared = True
         finally:
             if not prepared:
@@ -423,6 +429,8 @@ def local_release(root: Path, members: tuple[Package, ...]) -> None:
         release_dirs = tuple(plan.package.directory / "dist" for plan in plans)
         for plan in plans:
             prepare_release(root, plan.package.path, plan.version)
+            _python.build(plan.package, root)
+        for plan in plans:
             validate_member(root, plan, release_dirs)
         listed = ", ".join(f"{plan.package.name} v{plan.version}" for plan in plans)
         print(f"  would release: {listed}")

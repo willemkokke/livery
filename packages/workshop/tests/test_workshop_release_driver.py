@@ -16,7 +16,7 @@ from footman import Failed
 from livery.forge.testing import FakeForge
 from livery.workshop._git_ops import GitOps
 from livery.workshop._graph import order_topologically
-from livery.workshop._packages import discover_packages
+from livery.workshop._packages import Package, discover_packages
 from livery.workshop._release_driver import (
     MemberPlan,
     ReleaseDriver,
@@ -263,6 +263,10 @@ def test_local_release_reports_builds_and_restores(
         "livery.workshop._release_driver.validate_member",
         lambda _root, plan, dirs: validated.append(plan.package.name),
     )
+    monkeypatch.setattr(
+        "livery.workshop._release_driver._python.build",
+        lambda package, root, **kw: None,
+    )
     members = resolve_set(root, ("core", "tool"))
     local_release(root, members)
     out = capsys.readouterr().out
@@ -431,8 +435,10 @@ def test_the_isolated_legs_run_for_real_on_a_dependency_free_member(
     )
     packages = {p.directory.name: p for p in discover_packages(root)}
     plan = MemberPlan(packages["core"], "0.2.0")
+    from livery.workshop._backends import _python as _backend
     from livery.workshop._release_driver import validate_member
 
+    _backend.build(plan.package, root)
     validate_member(root, plan, (member / "dist",))
     assert list((member / "dist").glob("*.whl"))
 
@@ -528,3 +534,42 @@ def test_derive_plans_judges_by_tags_not_the_stamp(
     )
     plans = derive_plans(root, (packages["core"],))
     assert plans and plans[0].version == "0.9.0"
+
+
+def test_the_driver_builds_the_whole_set_before_any_leg(
+    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The legs' find-links name each sibling's dist, so a two-member
+    # set must build both wheels before either member's legs run.
+    fake, _git_seam, root = workspace
+    _grow(root, "core", "feat: core grows (#1)")
+    _grow(root, "tool", "feat: tool grows (#2)")
+    _git(root, "push", "origin", "main")
+    rig = _RigGit(root, fake)
+    sha = rig.remote_head("main")
+    fake.push(OWNER, NAME, "main", sha=sha)
+    fake.settle(OWNER, NAME, sha)
+    events: list[str] = []
+    monkeypatch.setattr(
+        "livery.workshop._release_driver._python.build",
+        lambda package, root, **kw: events.append(f"build:{package.name}"),
+    )
+
+    def _leg(package: Package, root: Path, **kw: object) -> dict[str, str]:
+        events.append(f"leg:{package.name}")
+        return {}
+
+    monkeypatch.setattr(
+        "livery.workshop._release_driver._python.run_isolated_test", _leg
+    )
+    driver = ReleaseDriver(
+        root,
+        fake.repository(OWNER, NAME),
+        rig,
+        resolve_set(root, ("core", "tool")),
+        armed=False,
+    )
+    assert driver.prepare() is not None
+    first_leg = next(i for i, e in enumerate(events) if e.startswith("leg:"))
+    builds_before = {e for e in events[:first_leg] if e.startswith("build:")}
+    assert builds_before == {"build:livery-core", "build:livery-tool"}
