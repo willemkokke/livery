@@ -1,0 +1,13 @@
+# Seeded from the template channel ({{ template_source_label }}, package-python-nanobind kind) at
+# birth; this file is the workspace's own. Edit it directly:
+# the template never rewrites it.
+# The package contract: everything the workshop knows about this
+# package it learns here. Declare dependencies on other workspace
+# members as [[depends]] edges with a kind and a floor.
+type = "python-nanobind"
+name = "{{ package_name }}"
+
+[qa]
+# The coverage high-water mark the gate enforces; raise it as the
+# suite grows, lower it only deliberately.
+coverage_floor = 100

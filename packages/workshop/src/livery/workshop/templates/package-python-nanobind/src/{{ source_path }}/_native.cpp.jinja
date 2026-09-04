@@ -1,0 +1,11 @@
+// Seeded from the template channel ({{ template_source_label }}, package-python-nanobind kind) at
+// birth; this file is the workspace's own. Edit it directly:
+// the template never rewrites it.
+#include <nanobind/nanobind.h>
+
+namespace nb = nanobind;
+
+NB_MODULE(_native, m) {
+    m.def("native_hello",
+          []() { return "native hello from {{ package_name }}"; });
+}

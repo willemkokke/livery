@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import tempfile
 import tomllib
 from pathlib import Path
@@ -455,7 +456,10 @@ def run_isolated_test(
     import json
     import tempfile
 
-    wheels = list((package.directory / "dist").glob("*.whl"))
+    # Sorted for determinism: with several wheels in dist a glob's
+    # filesystem order once handed the leg a musllinux wheel the
+    # venv could not install.
+    wheels = sorted((package.directory / "dist").glob("*.whl"))
     if not wheels:
         fail(f"{package.name}: no wheel in dist/ to validate; build first")
     with tempfile.TemporaryDirectory() as scratch:
@@ -480,7 +484,16 @@ def run_isolated_test(
                     versions[str(row.get("name", ""))] = str(row.get("version", ""))
             return versions
 
-        _run_install("venv", str(venv))
+        # The leg's own interpreter version, explicitly: bare `uv
+        # venv` takes uv's default python, and a platform wheel
+        # built for the running interpreter (cp311) cannot install
+        # into a venv of another (cp314). Pure wheels never noticed.
+        _run_install(
+            "venv",
+            "--python",
+            f"{sys.version_info.major}.{sys.version_info.minor}",
+            str(venv),
+        )
         _run_install(
             "pip",
             "install",

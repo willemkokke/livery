@@ -1,0 +1,26 @@
+# Seeded from the template channel ({{ template_source_label }}, package-python-nanobind kind) at
+# birth; this file is the workspace's own. Edit it directly:
+# the template never rewrites it.
+"""The package imports, carries its version, and answers natively."""
+
+from __future__ import annotations
+
+import {{ import_path }} as package
+
+
+def test_imports_and_carries_a_version() -> None:
+    from importlib.metadata import version
+
+    # Against the installed metadata, never a literal: the release
+    # train stamps the version, and a spelled copy here would need a
+    # hand edit every release.
+    assert package.__version__ == version("{{ package_name }}")
+    assert package.hello() == "hello from {{ package_name }}"
+
+
+def test_the_compiled_module_answers() -> None:
+    assert package.native_hello() == "native hello from {{ package_name }}"
+
+
+def test_the_public_surface_is_pinned() -> None:
+    assert set(package.__all__) == {"__version__", "hello", "native_hello"}

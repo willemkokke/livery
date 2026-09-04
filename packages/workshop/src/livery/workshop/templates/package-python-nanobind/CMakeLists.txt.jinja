@@ -1,0 +1,17 @@
+# Seeded from the template channel ({{ template_source_label }}, package-python-nanobind kind) at
+# birth; this file is the workspace's own. Edit it directly:
+# the template never rewrites it.
+cmake_minimum_required(VERSION 3.24)
+project({{ project_slug }}_native LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+find_package(Python {{ python_floor }} COMPONENTS Interpreter Development.Module REQUIRED)
+execute_process(
+  COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
+  OUTPUT_VARIABLE nanobind_ROOT OUTPUT_STRIP_TRAILING_WHITESPACE)
+find_package(nanobind CONFIG REQUIRED)
+
+nanobind_add_module(_native src/{{ source_path }}/_native.cpp)
+install(TARGETS _native LIBRARY DESTINATION {{ source_path }})
