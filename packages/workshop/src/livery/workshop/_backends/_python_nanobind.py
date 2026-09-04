@@ -76,6 +76,11 @@ def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
         "CIBW_BUILD",
         f"cp{sys.version_info.major}{sys.version_info.minor}-*",
     )
+    # One wheel for this machine: without the skip, the linux run
+    # also builds a musllinux wheel the host cannot install, and the
+    # isolated leg would have two candidates for one venv. The
+    # release matrix sets its own build set explicitly.
+    env.setdefault("CIBW_SKIP", "*-musllinux_*")
     result = toolroom.uv.opts(
         cwd=package.directory, env=env, nofail=True, recorded=False
     )("tool", "run", "--from", CIBUILDWHEEL, "cibuildwheel", "--output-dir", str(dist))

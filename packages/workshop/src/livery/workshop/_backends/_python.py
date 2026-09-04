@@ -455,7 +455,10 @@ def run_isolated_test(
     import json
     import tempfile
 
-    wheels = list((package.directory / "dist").glob("*.whl"))
+    # Sorted for determinism: with several wheels in dist a glob's
+    # filesystem order once handed the leg a musllinux wheel the
+    # venv could not install.
+    wheels = sorted((package.directory / "dist").glob("*.whl"))
     if not wheels:
         fail(f"{package.name}: no wheel in dist/ to validate; build first")
     with tempfile.TemporaryDirectory() as scratch:
