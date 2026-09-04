@@ -124,7 +124,13 @@ def test_quote_value_round_trips_and_refuses_line_breaks(tmp_path: Path) -> None
     assert path.read_text().count("PLAIN=") == 1
 
 
-def test_member_keys_enumerates_every_layer(tmp_path: Path) -> None:
+def test_member_keys_enumerates_every_layer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Under CI the rung points WORKSHOP_SHARED_ENV_FILE at its own
+    # materialised file, which shadows the fake shared directory the
+    # moment the workspace declares any .repo.env key.
+    monkeypatch.delenv("WORKSHOP_SHARED_ENV_FILE", raising=False)
     root = tmp_path / "repo"
     root.mkdir()
     shared = tmp_path / "home"
