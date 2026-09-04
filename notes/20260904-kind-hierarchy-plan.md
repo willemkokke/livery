@@ -10,8 +10,12 @@ see the decision record. Phase 3 built 2026-09-04 (issue #211):
 the python-nanobind kind, and with it phase 1's deferred
 acceptance closes: the chain render proof runs against a real
 child template (test_the_chain_renders_parent_files_under_the_leaf
-and test_the_drift_loop_renders_the_chain). No acceptance line is
-deferred.
+and test_the_drift_loop_renders_the_chain). Phase 3 merged as PR
+#213. Phase 4 built 2026-09-04 (issue #215): the cross-kind
+dependency; see the decision record. One open line: version
+stamping still dispatches straight to the python backend, so a
+cpp-conan member cannot ride a release wave until phase 5 gives
+stamping a kind dispatch (Open 5).
 This is phase 17 of `notes/20260903-workshop-plan.md`, promoted to
 its own plan. Willem's scope ruling (2026-09-04): a CMake C/C++
 library kind on conan 2 and a python binary-extension kind that
@@ -360,6 +364,21 @@ Acceptance:
   noticed and a cp311 wheel refused. The leg's venv now pins the
   running interpreter's version. Both fixes pinned by the armed
   suite across the CI matrix.
+- 2026-09-04 (phase 4 shape): the edge extractor seam is a
+  callable per backend, `declared_requirements(package)`, a named
+  deviation from hse's separate table: the registry is livery's one
+  add-a-kind point, so the extractor rides the backend and a pin
+  test holds `set(kinds)` to the callables. python reads
+  [project.dependencies], cpp-conan parses the conanfile's
+  `requires` (attribute and `self.requires(...)` forms, as source,
+  never importing conan), and the extension unions both. The
+  layering lint judges every build edge in the dependency's own
+  ecosystem and its refusal teaches the conan range form
+  (`"name/[>=floor]"`); `graph.affected` fails open to everything
+  naming an unregistered kind; `bump_set_floors` moves a conan
+  range with the pyproject floor and the contract floor, and the
+  rollback restores only files a member actually has (one absent
+  pathspec refuses a whole `git checkout`).
 - Carried forward from the 0901/0902 records: the kind chain
   renders parent then child with the managed union; the backend
   seam mirrors it; types contribute tool profiles by discovery;
@@ -386,6 +405,12 @@ Acceptance:
 
 All four ruled. Willem's go, 2026-09-04: phase 1 is in build.
 
+5. Open (2026-09-04, found in phase 4): `prepare_release` and the
+   dev release stamp versions through `_python.stamp_version` for
+   every member, so a cpp-conan member in a release set would
+   crash on its missing pyproject. Phase 5 gives stamping a kind
+   dispatch when it builds the publish path. Owner: phase 5.
+
 Phase 2 evidence (2026-09-04): `fm check` exit 0 in a conformance
 workspace carrying one cpp-conan member (rendered from the
 template, gated by its own venv), with the gate output showing
@@ -399,6 +424,17 @@ and ctest on machines that have them, and forces the red-ctest and
 missing-conan refusals; the pure-python profile and gate are
 pinned unchanged. The livery gate itself is green with the
 kindcheck step quiet.
+
+Phase 4 evidence (2026-09-04): with a cpp-conan library and a
+python-nanobind extension fixture, editing the library's source
+marks the extension affected (test_touching_the_library_marks_the
+_extension drives the graph.affected engine); a contract floor and
+conan requirement that disagree refuse naming both, a missing
+conan requirement refuses teaching the range form, and an
+undeclared internal conan require refuses as a missing edge;
+order_topologically and the driver's member resolution put the
+library first; bump_set_floors moves the conan range beside the
+other two homes and the lint stays green on the result.
 
 Phase 3 evidence (2026-09-04): the armed suite rendered the chain
 fixture, built it through cibuildwheel (macOS leg), and the wheel

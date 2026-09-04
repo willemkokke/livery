@@ -129,7 +129,7 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
       ``plugin()``, and only a workshop workspace mounts layers, so
       both are present whenever it loads.
     """
-    from livery.workshop._kinds import requires_pyproject
+    from livery.workshop._kinds import is_python_kind, kind_for, kind_names
 
     packages = discover_packages(root)
     by_path = {package.path: package for package in packages}
@@ -137,14 +137,27 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
     problems: list[str] = []
 
     for package in packages:
-        # Only a python-kind package has a native manifest to agree
-        # with; a cpp-conan package's edge agreement (the conanfile's
-        # requires) is the cross-kind dependency check's work.
-        native = (
-            _native_dependencies(package.directory / "pyproject.toml")
-            if requires_pyproject(package.type)
-            else {}
-        )
+        # The kind's own extractor answers what the package declares
+        # natively: pyproject dependencies for a python kind, conan
+        # references for a conan one, the union for the extension.
+        if package.type not in kind_names():
+            known = ", ".join(kind_names())
+            problems.append(
+                f"{package.path}: type {package.type!r} is not a"
+                f" registered kind (kinds: {known}); its edges cannot"
+                " be checked"
+            )
+            continue
+        record = kind_for(package.type)
+        extractor = getattr(record.backend, "declared_requirements", None)
+        if extractor is None:
+            problems.append(
+                f"{package.path}: kind {record.name!r} registers no"
+                " declared_requirements extractor, so the lint cannot"
+                " compare its edges; add the callable to the backend"
+            )
+            continue
+        native = extractor(package)
         declared = {edge.path: edge for edge in package.depends}
         for edge in package.depends:
             if edge.path not in by_path:
@@ -155,18 +168,23 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
                 continue
             if edge.kind != "build":
                 continue  # test and tool edges have no native home yet
-            dep_name = names_by_path[edge.path]
-            constraint = native.get(dep_name)
+            dep = by_path[edge.path]
+            home = (
+                "[project.dependencies]"
+                if is_python_kind(dep.type)
+                else f'conanfile.py (requires "{dep.name}/[>={edge.floor}]")'
+            )
+            constraint = native.get(dep.name)
             if constraint is None:
                 problems.append(
-                    f"{package.path}: the build edge on {edge.path} is not in"
-                    f" [project.dependencies] ({dep_name} missing)"
+                    f"{package.path}: the build edge on {edge.path} is not"
+                    f" declared in {home} ({dep.name} missing)"
                 )
             elif edge.floor and f">={edge.floor}" not in constraint:
                 problems.append(
                     f"{package.path}: the edge on {edge.path} floors at"
-                    f" {edge.floor}, and [project.dependencies] says"
-                    f" {dep_name}{constraint or ''}"
+                    f" {edge.floor}, and the declared requirement says"
+                    f" {dep.name}{constraint or ''}"
                 )
         internal_names = set(names_by_path.values())
         for name in native:
@@ -185,20 +203,6 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
             "the workspace breaks its layering:\n  " + "\n  ".join(problems)
         )
     return packages
-
-
-def _native_dependencies(pyproject: Path) -> dict[str, str]:
-    """The [project.dependencies] entries, name to constraint text."""
-    data = tomllib.loads(pyproject.read_text("utf-8"))
-    entries = {}
-    for requirement in data.get("project", {}).get("dependencies", []):
-        text = str(requirement)
-        name = text
-        for cut in "[>=<!~; ":
-            head, _, _ = name.partition(cut)
-            name = head
-        entries[name] = text[len(name) :].split(";")[0].replace("]", "")
-    return entries
 
 
 def _cycles(packages: tuple[Package, ...]) -> list[str]:

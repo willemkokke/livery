@@ -29,6 +29,58 @@ if TYPE_CHECKING:
 GATE_BUILD_DIR = "build/gate"
 
 
+def conan_requirements(conanfile: Path) -> dict[str, str]:
+    """The conan references a recipe declares, name to version text.
+
+    Reads the ``requires`` class attribute (a string or a tuple) and
+    ``self.requires("...")`` calls, without importing conan: the
+    recipe is parsed as source. ``"acme-native/[>=0.1.0]"`` answers
+    ``{"acme-native": "[>=0.1.0]"}``.
+    """
+    import ast
+
+    refs: list[str] = []
+    tree = ast.parse(conanfile.read_text("utf-8"))
+
+    def _constants(node: ast.AST) -> list[str]:
+        found = []
+        for inner in ast.walk(node):
+            if isinstance(inner, ast.Constant) and isinstance(inner.value, str):
+                found.append(inner.value)
+        return found
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "requires":
+                    refs.extend(_constants(node.value))
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "requires"
+        ):
+            refs.extend(_constants(node.args[0]) if node.args else [])
+    entries: dict[str, str] = {}
+    for ref in refs:
+        name, _, version = ref.partition("/")
+        if name and version:
+            entries[name] = version
+    return entries
+
+
+def declared_requirements(package: Package) -> dict[str, str]:
+    """The conan references the package's recipe declares.
+
+    The layering lint compares these against the contract's
+    ``[[depends]]`` edges; a package without a conanfile declares
+    nothing.
+    """
+    conanfile = package.directory / "conanfile.py"
+    if not conanfile.is_file():
+        return {}
+    return conan_requirements(conanfile)
+
+
 def check(package: Package, root: Path) -> None:
     """Configure, build, and ctest *package*; a refusal is the verdict.
 

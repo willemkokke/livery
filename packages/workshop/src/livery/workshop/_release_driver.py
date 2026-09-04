@@ -105,8 +105,9 @@ def bump_set_floors(root: Path, plans: tuple[MemberPlan, ...]) -> list[str]:
 
     Within the set only (contract: a solo release never moves a
     floor): a member depending on a co-member gets the co-released
-    version, in both homes, the pyproject requirement and the
-    ``[[depends]]`` floor.
+    version, in every home it is declared, the pyproject
+    requirement, the ``[[depends]]`` floor, and a conan reference's
+    version range.
     """
     import re
 
@@ -114,7 +115,7 @@ def bump_set_floors(root: Path, plans: tuple[MemberPlan, ...]) -> list[str]:
     dirs = {plan.package.name: plan.package.directory for plan in plans}
     changed: list[str] = []
     for plan in plans:
-        for home in ("pyproject.toml", "workshop.toml"):
+        for home in ("pyproject.toml", "workshop.toml", "conanfile.py"):
             path = plan.package.directory / home
             if not path.is_file():
                 continue
@@ -124,6 +125,13 @@ def bump_set_floors(root: Path, plans: tuple[MemberPlan, ...]) -> list[str]:
                     continue
                 text = re.sub(
                     rf'("{re.escape(name)}\s*>=\s*)[0-9][^"]*(")',
+                    rf"\g<1>{version}\g<2>",
+                    text,
+                )
+                # The conan range form the lint teaches:
+                # "name/[>=version]".
+                text = re.sub(
+                    rf'("{re.escape(name)}/\[>=)[^\]"]+(\]")',
                     rf"\g<1>{version}\g<2>",
                     text,
                 )
@@ -152,9 +160,20 @@ def rollback_prepare(root: Path, members: tuple[Package, ...]) -> None:
     paths: list[str] = []
     for package in members:
         base = package.directory.relative_to(root)
+        # Only files the member actually has: one pathspec absent
+        # from HEAD refuses the whole checkout, taking every other
+        # restore down with it (the same trap the lock note below
+        # names). prepare edits existing files, so presence on disk
+        # is the right filter.
         paths.extend(
             str(base / name)
-            for name in ("CHANGELOG.md", "pyproject.toml", "workshop.toml")
+            for name in (
+                "CHANGELOG.md",
+                "pyproject.toml",
+                "workshop.toml",
+                "conanfile.py",
+            )
+            if (package.directory / name).is_file()
         )
         src = package.directory / "src"
         if src.is_dir():

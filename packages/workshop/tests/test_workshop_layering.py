@@ -63,7 +63,7 @@ def test_a_declared_edge_missing_natively_is_refused(tmp_path: Path) -> None:
             '[[depends]]\npath = "packages/forge"\nkind = "build"\nfloor = "0.1.0"\n'
         ),
     )
-    with pytest.raises(ValueError, match="is not in"):
+    with pytest.raises(ValueError, match="is not declared in"):
         verify_workspace(tmp_path)
 
 
