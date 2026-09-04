@@ -12,9 +12,12 @@ acceptance closes: the chain render proof runs against a real
 child template (test_the_chain_renders_parent_files_under_the_leaf
 and test_the_drift_loop_renders_the_chain). Phase 3 merged as PR
 #213. Phase 4 shipped 2026-09-04 (issue #215, PR #216): the
-cross-kind dependency; see the decision record. Phase 5 built
-2026-09-05 (issue #217): publish and the identity guard; Open 5
-(stamping dispatch) closed with it. Phase 6 remains.
+cross-kind dependency; see the decision record. Phase 5 shipped
+2026-09-05 (issue #217, PR #219): publish and the identity guard;
+Open 5 (stamping dispatch) closed with it. Phase 6 built
+2026-09-05 (issue #220): the chain add-back; every phase of this
+plan is now built. Open 6 (the newborn first-derive version,
+issue #218) and Open 7 (compile-time conan consumption) remain.
 This is phase 17 of `notes/20260903-workshop-plan.md`, promoted to
 its own plan. Willem's scope ruling (2026-09-04): a CMake C/C++
 library kind on conan 2 and a python binary-extension kind that
@@ -401,6 +404,19 @@ Acceptance:
   drive isolates XDG config and the uv cache, because the
   operator's shared env leaked tokens into the fictional forge's
   lookups and a stale cached path wheel resurfaced mid-drive.
+- 2026-09-05 (phase 6 shape): the descendant chain gains stage
+  5c: the brand child creates the C/C++ library and the extension
+  through the brand's own verbs, declares the cross-kind edge with
+  the agreeing conan range, gates green with the honest skips and
+  the real cmake and ctest, and the derived tool profile carries
+  cmake and conan only in that workspace; the resumed pass hits
+  the wiring's idempotent refusal. No template re-render.
+- 2026-09-05 (found by the chain): the seed headers named the
+  template channel on line 1, and a channel URL long enough
+  (git+http://... in the chain's child) pushed every linted seed
+  past the line width. The label left the seed headers; the
+  receipt's ``_src_path`` records the channel exactly. Existing
+  seeds keep their old headers: a seed is never re-rendered.
 - Carried forward from the 0901/0902 records: the kind chain
   renders parent then child with the managed union; the backend
   seam mirrors it; types contribute tool profiles by discovery;
@@ -436,6 +452,13 @@ All four ruled. Willem's go, 2026-09-04: phase 1 is in build.
    first derive answers v0.0.0 and nothing refuses minting it; the
    armed rehearsal asserts only the member list until this is
    ruled. Owner: Willem to rule the intended first version.
+7. Open (2026-09-05): the extension's dependency on the library is
+   declared and lint-agreed, and the release train orders it, but
+   the extension's own CMake does not yet consume the conan
+   package at compile time (toolchain generation into the
+   scikit-build configure, profiles per matrix leg). Its own cut,
+   to be planned when the first extension needs a symbol from the
+   library. Owner: Willem to sequence.
 
 Phase 2 evidence (2026-09-04): `fm check` exit 0 in a conformance
 workspace carrying one cpp-conan member (rendered from the
@@ -450,6 +473,15 @@ and ctest on machines that have them, and forces the red-ctest and
 missing-conan refusals; the pure-python profile and gate are
 pinned unchanged. The livery gate itself is green with the
 kindcheck step quiet.
+
+Phase 6 evidence (2026-09-05): the armed chain
+(WORKSHOP_CONFORMANCE_DRIVE=1, tests/test_descendant_chain.py)
+carries stage 5c and passed twice, fresh and resumed, on the local
+Gitea: both kinds wired by the brand CLI, the child's gate green
+with `packages/geometry (cpp-conan): configure, build, ctest run`
+in its output, ext coverage at its floor, the profile grown only
+in the child, and the resumed pass answering `already exists` from
+the wiring refusal.
 
 Phase 5 evidence (2026-09-05): on the rig, the rendered fixture
 library uploaded to gitea's conan registry
