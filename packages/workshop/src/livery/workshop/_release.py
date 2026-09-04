@@ -179,6 +179,12 @@ def prepare_release(root: Path, path: str, version: str = "") -> list[str]:
         print(f"  derived {version} from the commits since {since}")
     if not _SEMVER_RE.fullmatch(version):
         fail(f"version {version!r} is not <major>.<minor>.<patch>")
+    if not entry_body and version != _last_released(root, package):
+        # An explicitly passed version regenerates a stranded entry
+        # too: the driver hands prepare the derived version, and a
+        # heading without its tag under-documents what actually
+        # ships either way.
+        entry_body = _cliff.unreleased_entry(root, package, version)
     changed = _python.stamp_version(package).stamp(version)
     changelog = package.directory / "CHANGELOG.md"
     text = changelog.read_text("utf-8") if changelog.is_file() else "# Changelog\n"
