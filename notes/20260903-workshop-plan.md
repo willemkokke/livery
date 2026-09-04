@@ -1073,11 +1073,13 @@ the set, the movement guard over the true graph) never ran under
 test until the train ran it in production.
 
 The task: make the topological `graph.affected` release path
-properly tested with real legs. The candidate shape is a
-`workflow.release --local` rehearsal in the armed suite (the
-conformance drive's variable): it builds every member, runs both
-legs and the movement guard over the true member graph, and
-restores the tree, publishing nothing. It would also stop the
-train's path aging between releases, which is how all five seams
-accumulated. Owner: Willem picks the cut; recorded here so the
-investigation cannot slip.
+properly tested with real legs. Ruled adopt (Willem, 2026-09-04,
+issue #164) and shipped: `tests/test_release_rehearsal.py` runs
+`workflow.release --local` over the true member graph inside the
+armed suite (`WORKSHOP_CONFORMANCE_DRIVE=1`), in a clone with a
+probe commit so derivation always has work, building every member,
+running both isolated legs and the movement guard, publishing
+nothing, and asserting the tree comes back clean. Its first run
+caught a live defect the same day: prepare's lock refresh had no
+matching restore in `rollback_prepare`, so "the tree is restored"
+had already gone false.
