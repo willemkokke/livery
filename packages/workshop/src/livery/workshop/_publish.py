@@ -33,7 +33,6 @@ import footman
 import toolroom
 from footman import fail
 
-from livery.workshop._backends import _python
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package, discover_packages
 
@@ -173,6 +172,38 @@ def ensure_git_identity(git: GitOps) -> None:
         )
 
 
+def assert_wheel_identity(package: Package) -> None:
+    """Refuse a wheel whose tag contradicts its kind, naming both.
+
+    A native kind's ``none-any`` wheel was built without its
+    extension; a pure kind's platform-tagged wheel smuggled native
+    code past every leg that never compiled it. A kind with no
+    wheel identity (conan) skips.
+    """
+    from livery.workshop._kinds import kind_for
+
+    identity = kind_for(package.type).wheel_identity
+    if not identity:
+        return
+    wheels = sorted((package.directory / "dist").glob("*.whl"))
+    if not wheels:
+        fail(f"{package.name}: no wheel in dist/ to publish")
+    for wheel in wheels:
+        pure = "none-any" in wheel.name
+        if identity == "platform" and pure:
+            fail(
+                f"{package.name} is a {package.type} package and"
+                f" {wheel.name} is pure-tagged: the extension did not"
+                " compile into the wheel"
+            )
+        if identity == "pure" and not pure:
+            fail(
+                f"{package.name} is a {package.type} package and"
+                f" {wheel.name} carries a platform tag: a pure kind"
+                " must ship none-any, or its declared kind is wrong"
+            )
+
+
 def publish_wheels(package: Package, *, index_url: str = "", token: str = "") -> bool:
     """Upload ``dist/*``; False when everything was already published.
 
@@ -231,7 +262,7 @@ def probe_until_served(
 def floor_probe(
     package: Package,
     by_path: dict[str, Package],
-    registry: Registry,
+    registry_for: Callable[[Package], Registry],
     *,
     coreleased: frozenset[str] = frozenset(),
 ) -> None:
@@ -248,7 +279,10 @@ def floor_probe(
             continue
         if f"{edge.path}/v{floor}" in coreleased:
             continue  # the wave itself serves this floor, receipts first
-        served = registry.versions(dependency.name)
+        # The dependency's own registry: a cross-kind floor (the
+        # extension on the library) lives in the conan target, not
+        # the python index.
+        served = registry_for(dependency).versions(dependency.name)
         floor_key = tuple(int(x) for x in floor.split("."))
         satisfied = any(
             tuple(int(x) for x in v.split(".")) >= floor_key
@@ -282,12 +316,19 @@ def publish_release(
     token: str = "",
     probe_timeout: float = PROBE_TIMEOUT,
     probe_poll: float = PROBE_POLL,
+    prebuilt: bool = False,
 ) -> tuple[Receipt, ...]:
     """The wave: verify, then publish, probe, tag per member.
 
     Eligibility is dependency tags: a member starts when every in-set
     dependency's receipt exists, independent members run abreast, a
     failure stops only its dependents. Every read is *ref*-scoped.
+    Each member builds through its kind's backend and publishes to
+    its kind's artifact target; the wheel identity guard runs both
+    ways before anything uploads. *prebuilt* trusts a ``dist/``
+    already collected (the per-OS wheels matrix) for members whose
+    kind builds platform wheels, and refuses an empty one naming
+    the collection.
     """
     from livery.workshop._release import verify_release
 
@@ -300,11 +341,21 @@ def publish_release(
 
     by_path = {p.path: p for p in discover_packages(root)}
     coreleased = frozenset(f"{p.path}/v{manifest[p.name]}" for p in ordered)
+    from livery.workshop._kinds import kind_for as _kind_for
+
+    conan_target = None
+    if any(_kind_for(p.type).artifact == "conan" for p in ordered):
+        # Resolved once, before anything uploads: a ladder refusal
+        # (no conan target anywhere) must stop the wave while there
+        # is still nothing to undo.
+        from livery.workshop._registries import resolve_registry
+
+        conan_target = resolve_registry(root, "conan")
     for package in ordered:
         tag = f"{package.path}/v{manifest[package.name]}"
         verify_release(root, tag, coreleased=coreleased)
         movement_check(root, git, package, resolved_ref)
-        floor_probe(package, by_path, registry_for(package), coreleased=coreleased)
+        floor_probe(package, by_path, registry_for, coreleased=coreleased)
 
     chosen = {p.path for p in ordered}
     done: dict[str, threading.Event] = {p.path: threading.Event() for p in ordered}
@@ -332,8 +383,34 @@ def publish_release(
                         package, version, tag, published=False
                     )
                 return
-            _python.build(package, root, epoch=epoch)
-            published = publish_wheels(package, index_url=index_url, token=token)
+            from livery.workshop._kinds import backend_for, kind_for
+
+            record = kind_for(package.type)
+            if prebuilt and record.wheel_identity == "platform":
+                # The matrix already built and collected this
+                # member's wheels; a rebuild here would clobber them
+                # with one platform's.
+                if not list((package.directory / "dist").glob("*.whl")):
+                    fail(
+                        f"{package.name}: --prebuilt, and dist/ holds"
+                        " no collected wheels; the wheels matrix did"
+                        " not feed this wave"
+                    )
+            else:
+                backend_for(package).build(package, root, epoch=epoch)
+            assert_wheel_identity(package)
+            if record.artifact == "conan":
+                from livery.workshop._backends import _cpp_conan
+
+                assert conan_target is not None
+                published = _cpp_conan.publish(
+                    package,
+                    conan_target.url,
+                    version=version,
+                    local=conan_target.local,
+                )
+            else:
+                published = publish_wheels(package, index_url=index_url, token=token)
             probe_until_served(
                 registry_for(package),
                 package.name,

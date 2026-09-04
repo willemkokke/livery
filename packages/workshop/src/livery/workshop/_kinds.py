@@ -29,8 +29,16 @@ if TYPE_CHECKING:
     from livery.workshop._packages import Package
 
 
+class Stamper(Protocol):
+    """What a backend's ``stamp_version`` answers with."""
+
+    def stamp(self, version: str) -> list[str]:
+        """Write *version* into the kind's homes; the files changed."""
+        ...
+
+
 class Backend(Protocol):
-    """The three callables every kind's backend module exposes.
+    """The callables every kind's backend module exposes.
 
     The dispatch layer absorbs a new kind automatically: call sites
     ask the registry, never a module by name.
@@ -38,6 +46,18 @@ class Backend(Protocol):
 
     def build(self, package: Package, root: Path, *, epoch: int = 0) -> Path:
         """Build the package's artifacts into its dist; the dist dir."""
+        ...
+
+    def current_version(self, package: Package) -> str:
+        """The version the package's own manifest declares."""
+        ...
+
+    def stamp_version(self, package: Package) -> Stamper:
+        """Where the kind keeps its version, ready to stamp."""
+        ...
+
+    def declared_requirements(self, package: Package) -> dict[str, str]:
+        """What the package declares natively, name to constraint."""
         ...
 
     def check(self, package: Package, root: Path) -> None:
@@ -96,6 +116,12 @@ class KindRecord:
             a package of this kind; the chain's union is what the
             drift gate judges.
         ci: The gate verbs that apply.
+        artifact: Which registry kind the release wave publishes
+            through (``python`` or ``conan``); empty for a kind
+            that publishes nothing.
+        wheel_identity: What a built wheel's tag must say:
+            ``pure`` refuses a platform tag, ``platform`` refuses
+            ``none-any``, empty skips the guard (no wheels).
     """
 
     name: str
@@ -106,6 +132,8 @@ class KindRecord:
     host_tools: tuple[str, ...] = ()
     managed: tuple[str, ...] = ()
     ci: CiContract = field(default_factory=CiContract)
+    artifact: str = "python"
+    wheel_identity: str = "pure"
 
 
 _KINDS: dict[str, KindRecord] = {}
@@ -270,6 +298,7 @@ def _register_builtin() -> None:
             parent="python",
             tools=("cmake", "ninja"),
             host_tools=("cc", "c++"),
+            wheel_identity="platform",
         )
     )
     # The C/C++ library: cmake configures and builds, ctest is the
@@ -289,6 +318,8 @@ def _register_builtin() -> None:
                 check_verbs=("format", "lint"),
                 kind_verbs=("configure", "build", "ctest"),
             ),
+            artifact="conan",
+            wheel_identity="",
         )
     )
 

@@ -1,4 +1,4 @@
-{% set py = [] %}{% set native = [] %}{% for member in packages %}{% if member.kind is defined and member.kind and member.kind != 'python' %}{% set _ = native.append(member) %}{% else %}{% set _ = py.append(member) %}{% endif %}{% endfor -%}
+{% set py = [] %}{% set native = [] %}{% for member in packages %}{% if member.dev is defined and member.dev %}{% set _ = py.append(member) %}{% else %}{% set _ = native.append(member) %}{% endif %}{% endfor -%}
 # Rendered by the template channel ({{ template_source_label }}, project kind);
 # the gate keeps it matching its render. Edit the source and
 # run `{{ runner_prog }} template.apply`; an edit here is drift.

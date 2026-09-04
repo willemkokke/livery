@@ -11,11 +11,10 @@ the python-nanobind kind, and with it phase 1's deferred
 acceptance closes: the chain render proof runs against a real
 child template (test_the_chain_renders_parent_files_under_the_leaf
 and test_the_drift_loop_renders_the_chain). Phase 3 merged as PR
-#213. Phase 4 built 2026-09-04 (issue #215): the cross-kind
-dependency; see the decision record. One open line: version
-stamping still dispatches straight to the python backend, so a
-cpp-conan member cannot ride a release wave until phase 5 gives
-stamping a kind dispatch (Open 5).
+#213. Phase 4 shipped 2026-09-04 (issue #215, PR #216): the
+cross-kind dependency; see the decision record. Phase 5 built
+2026-09-05 (issue #217): publish and the identity guard; Open 5
+(stamping dispatch) closed with it. Phase 6 remains.
 This is phase 17 of `notes/20260903-workshop-plan.md`, promoted to
 its own plan. Willem's scope ruling (2026-09-04): a CMake C/C++
 library kind on conan 2 and a python binary-extension kind that
@@ -284,7 +283,7 @@ Acceptance:
 | No toolroom conan handle; conan runs through a deliberate `footman.run` with stated env | a typed handle when toolroom grows one, or when toolroom migrates into this repository |
 | Compilers required on the host, named by `fm doctor` | phase 18's tool cache over the type-derived profile |
 | Validator packages living in conformance fixtures and the chain | real native members when the first production consumer arrives |
-| The extension publishes single-platform wheels from the wave's runner | a per-platform build matrix with artifact collection, its own cut when needed |
+| The armed cibuildwheel leg skips on win32 until MSVC arming on the runner is verified | a verified win32 leg |
 
 ## Decision record
 
@@ -379,6 +378,29 @@ Acceptance:
   range with the pyproject floor and the contract floor, and the
   rollback restores only files a member actually has (one absent
   pathspec refuses a whole `git checkout`).
+- 2026-09-05 (phase 5 shape): the wave dispatches per kind. The
+  KindRecord carries ``artifact`` (python or conan) and
+  ``wheel_identity`` (pure, platform, or none); the identity guard
+  refuses both mismatches naming kind and tag before anything
+  uploads; floor probes ask each dependency's own registry; the
+  conan target resolves once per wave through the ladder, and the
+  cpp backend uploads through a re-pointed ``workshop`` remote or
+  ``conan cache save`` into a folder target, with
+  ``ConanRegistry`` answering the probe from ``conan list`` or the
+  saved archive names. The emitted release workflow gains a per-OS
+  cibuildwheel matrix (artifact collection feeding the wave's
+  ``--prebuilt``) only where a platform-wheel kind lives, decided
+  from the roster's kind entries; `fm release.wheels` is the
+  matrix job's verb.
+- 2026-09-05 (found in phase 5): three seams the first cross-kind
+  rehearsal exposed. The isolated leg's dev pins carried
+  path-sourced entries a scratch venv cannot parse, so local
+  references are dropped from the export; find-links dirs now come
+  only from members whose kind builds wheels (a conan member's
+  missing dist/ failed the sibling legs); and the conformance
+  drive isolates XDG config and the uv cache, because the
+  operator's shared env leaked tokens into the fictional forge's
+  lookups and a stale cached path wheel resurfaced mid-drive.
 - Carried forward from the 0901/0902 records: the kind chain
   renders parent then child with the managed union; the backend
   seam mirrors it; types contribute tool profiles by discovery;
@@ -405,11 +427,15 @@ Acceptance:
 
 All four ruled. Willem's go, 2026-09-04: phase 1 is in build.
 
-5. Open (2026-09-04, found in phase 4): `prepare_release` and the
-   dev release stamp versions through `_python.stamp_version` for
-   every member, so a cpp-conan member in a release set would
-   crash on its missing pyproject. Phase 5 gives stamping a kind
-   dispatch when it builds the publish path. Owner: phase 5.
+5. Resolved 2026-09-05 (phase 5): stamping, the current-version
+   read, and the release build all dispatch through the backend
+   protocol; the conan recipe's ``version`` attribute is the
+   cpp-conan home, and verify_release judges each kind's own
+   homes.
+6. Open (2026-09-05, filed as issue #218): a newborn member's
+   first derive answers v0.0.0 and nothing refuses minting it; the
+   armed rehearsal asserts only the member list until this is
+   ruled. Owner: Willem to rule the intended first version.
 
 Phase 2 evidence (2026-09-04): `fm check` exit 0 in a conformance
 workspace carrying one cpp-conan member (rendered from the
@@ -424,6 +450,20 @@ and ctest on machines that have them, and forces the red-ctest and
 missing-conan refusals; the pure-python profile and gate are
 pinned unchanged. The livery gate itself is green with the
 kindcheck step quiet.
+
+Phase 5 evidence (2026-09-05): on the rig, the rendered fixture
+library uploaded to gitea's conan registry
+(http://localhost:3000/api/packages/livery-admin/conan) and a
+clean CONAN_HOME installed it back
+(test_the_rig_conan_registry_round_trips, armed, green live); the
+folder target round-tripped through ``conan cache save`` and
+``restore`` (test_the_folder_target_round_trips, green live); the
+identity guard's refusals are forced both ways in
+test_workshop_kind_publish; and the armed
+WORKSHOP_CONFORMANCE_DRIVE rehearsal wired both kinds through the
+real verbs, gated green with the honest skips, and
+`fm workflow.release --local` derived, stamped, built (conan
+create and cibuildwheel), validated, and restored the tree.
 
 Phase 4 evidence (2026-09-04): with a cpp-conan library and a
 python-nanobind extension fixture, editing the library's source

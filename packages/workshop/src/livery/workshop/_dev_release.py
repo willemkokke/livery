@@ -22,7 +22,7 @@ import footman
 from footman import fail
 
 from livery.workshop import _cliff
-from livery.workshop._backends import _python
+from livery.workshop._backends import backend_for
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package
 from livery.workshop._publish import publish_wheels
@@ -160,7 +160,9 @@ def build_dev(root: Path, plan: DevPlan) -> Path:
         touched.append(readme)
     snapshots = {path: path.read_bytes() for path in touched}
     try:
-        _python.stamp_version(package).stamp(semver_to_pep440(plan.version))
+        backend_for(package).stamp_version(package).stamp(
+            semver_to_pep440(plan.version)
+        )
         excerpt = _cliff.unreleased_entry(root, package)
         if excerpt and readme.is_file():
             original = readme.read_text("utf-8")
@@ -168,7 +170,7 @@ def build_dev(root: Path, plan: DevPlan) -> Path:
                 f"## What's New\n\n{excerpt}\n\n---\n\n{original}",
                 encoding="utf-8",
             )
-        return _python.build(package, root)
+        return backend_for(package).build(package, root)
     finally:
         for path, content in snapshots.items():
             path.write_bytes(content)

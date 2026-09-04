@@ -21,7 +21,6 @@ import os
 import re
 import shutil
 import tempfile
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
@@ -30,7 +29,7 @@ import toolroom
 from footman import doc, fail, group
 
 from livery.workshop import _cliff
-from livery.workshop._backends import _python
+from livery.workshop._backends import backend_for
 from livery.workshop._git_ops import GitOps
 from livery.workshop._layers import workspace_root
 from livery.workshop._packages import Package, discover_packages
@@ -69,12 +68,14 @@ def verify_release(
     """Check *tag* against the tree; every finding fails verbatim.
 
     The agreements checked: the tag names an existing package; the
-    package's ``pyproject.toml`` version, one ``__version__`` under
-    ``src/``, and a ``## <version>`` changelog entry all carry the
-    tag's version; and every ``[[depends]]`` floor names a version
-    whose release tag exists, so nothing ships depending on an
-    unreleased floor.
+    kind's own version homes (pyproject and one ``__version__`` for
+    a python kind, the recipe's ``version`` for conan) carry the
+    tag's version; a ``## <version>`` changelog entry exists; and
+    every ``[[depends]]`` floor names a version whose release tag
+    exists, so nothing ships depending on an unreleased floor.
     """
+    from livery.workshop._kinds import requires_pyproject
+
     match = _TAG_RE.fullmatch(tag)
     if match is None:
         fail(f"tag {tag!r} does not match packages/<pkg>/v<semver>")
@@ -84,18 +85,18 @@ def verify_release(
     if package is None:
         fail(f"tag names {path}, which is not a workspace package")
     problems = []
-    pyproject = tomllib.loads((package.directory / "pyproject.toml").read_text("utf-8"))
-    declared = str(pyproject.get("project", {}).get("version", ""))
+    declared = backend_for(package).current_version(package)
     if declared != version:
-        problems.append(f"tag says {version}, pyproject.toml says {declared}")
+        problems.append(f"tag says {version}, the package declares {declared}")
     changelog = package.directory / "CHANGELOG.md"
     body = changelog.read_text("utf-8") if changelog.is_file() else ""
     if f"## {version}" not in body and f"## [{version}]" not in body:
         problems.append(f"CHANGELOG.md has no '## {version}' entry")
-    inits = list((package.directory / "src").rglob("__init__.py"))
-    stamp = f'__version__ = "{version}"'
-    if not any(stamp in init.read_text("utf-8") for init in inits):
-        problems.append(f"no __init__.py under src/ declares {stamp}")
+    if requires_pyproject(package.type):
+        inits = list((package.directory / "src").rglob("__init__.py"))
+        stamp = f'__version__ = "{version}"'
+        if not any(stamp in init.read_text("utf-8") for init in inits):
+            problems.append(f"no __init__.py under src/ declares {stamp}")
     released = set(GitOps(root).tags())
     for edge in package.depends:
         if not edge.floor:
@@ -185,7 +186,7 @@ def prepare_release(root: Path, path: str, version: str = "") -> list[str]:
         # heading without its tag under-documents what actually
         # ships either way.
         entry_body = _cliff.unreleased_entry(root, package, version)
-    changed = _python.stamp_version(package).stamp(version)
+    changed = backend_for(package).stamp_version(package).stamp(version)
     changelog = package.directory / "CHANGELOG.md"
     text = changelog.read_text("utf-8") if changelog.is_file() else "# Changelog\n"
     heading_present = f"## {version}" in text or f"## [{version}]" in text
@@ -345,6 +346,49 @@ def _replace_tree(clone: Path, templates: Path) -> None:
         else:
             entry.unlink()
     shutil.copytree(templates, clone, dirs_exist_ok=True)
+
+
+@release.task(name="wheels", hidden=True)
+def release_wheels(
+    ref: Annotated[str, doc("the release squash; empty means HEAD")] = "",
+) -> None:
+    """Build this platform's wheels for the squash's native members.
+
+    One per-OS matrix job runs this before the wave: cibuildwheel
+    builds every supported CPython for this platform (CIBW_BUILD
+    widened past the local one-interpreter narrowing, musllinux
+    kept), the artifact upload collects each ``dist/``, and the
+    wave publishes the union with ``--prebuilt``. A squash with no
+    platform-wheel member prints so and builds nothing, so the
+    matrix job stays green on a pure release.
+    """
+    import os
+
+    from livery.workshop._backends import backend_for
+    from livery.workshop._kinds import kind_for
+    from livery.workshop._publish import discover_release
+
+    root = _root()
+    git = GitOps(root)
+    resolved_ref = ref or git.head_sha()
+    epoch = int(git._run("log", "-1", "--format=%ct", resolved_ref).strip() or "0")
+    native = [
+        package
+        for package, _version in discover_release(root, git, resolved_ref)
+        if kind_for(package.type).wheel_identity == "platform"
+    ]
+    if not native:
+        print("  no platform-wheel members in this release; nothing to build")
+        return
+    # The full set for this platform: every supported CPython, and
+    # musllinux kept (an empty CIBW_SKIP reads as no skip, and its
+    # presence stops the local narrowing's setdefault).
+    os.environ.setdefault("CIBW_BUILD", "cp3*-*")
+    os.environ.setdefault("CIBW_SKIP", "")
+    for package in native:
+        dist = backend_for(package).build(package, root, epoch=epoch)
+        wheels = ", ".join(sorted(w.name for w in dist.glob("*.whl")))
+        print(f"  {package.name}: {wheels}")
 
 
 @release.task(name="templates", hidden=True)
