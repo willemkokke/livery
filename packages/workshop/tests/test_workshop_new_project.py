@@ -81,7 +81,7 @@ def test_birth_end_to_end_and_the_second_run_resumes(
     assert (root / "workshop.toml").is_file()
     assert (root / "pyproject.toml").is_file()
     assert (root / "README.md").is_file() and (root / "LICENSE").is_file()
-    assert not (root / "docs").exists()  # docs seeds wait for the toolchain
+    assert (root / "docs" / "index.md").is_file()  # the docs seed, at birth
     assert (root / ".gitea" / "workflows" / "ci.yml").is_file()
     assert (root / "CLAUDE.project.md").is_file()
     out = capsys.readouterr().out
