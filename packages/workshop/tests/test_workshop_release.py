@@ -277,3 +277,20 @@ def test_a_stamped_but_unreleased_version_still_releases(
     # The stranded entry regenerated to cover everything the receipt
     # will actually name.
     assert "- Added things." in text
+
+
+def test_an_explicit_version_regenerates_a_stranded_entry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The driver hands prepare the derived version explicitly; a
+    # stranded heading must still regenerate on that path, or the
+    # member's release commit is empty and the train derails.
+    root = _workspace(tmp_path)
+    monkeypatch.setattr(
+        "livery.workshop._cliff.unreleased_entry",
+        lambda root, package, version="": "## [0.2.0]\n\n- Everything since.",
+    )
+    changed = prepare_release(root, "packages/core", "0.2.0")
+    assert changed
+    text = (root / "packages" / "core" / "CHANGELOG.md").read_text()
+    assert "- Everything since." in text
