@@ -101,12 +101,15 @@ def zensical_config(root: Path) -> str:
             continue
         label = "Home" if page == "index.md" else _label(page)
         lines.append(f'    {{ "{label}" = "{page}" }},')
-    if _receipt_tags(root):
-        lines.append('    { "Releases" = [')
-        lines.append('        { "Latest" = "_generated/releases/index.md" },')
-        for year in release_years(root):
-            lines.append(f'        {{ "{year}" = "_generated/releases/{year}.md" }},')
-        lines.append("    ] },")
+    if any(
+        (package.directory / "CHANGELOG.md").is_file()
+        for package in discover_packages(root)
+    ):
+        # Committed state only: the tags are absent in a shallow CI
+        # clone, and a nav derived from them would make the same
+        # contract render differently per checkout. The landing page
+        # links its own year archives at build time instead.
+        lines.append('    { "Releases" = "_generated/releases/index.md" },')
     handler_paths: list[str] = []
     for package in discover_packages(root):
         pages = _pages(package.directory / "docs")
@@ -293,6 +296,19 @@ def generate_release_pages(root: Path) -> list[str]:
     shutil.rmtree(base, ignore_errors=True)
     tags = _receipt_tags(root)
     if not tags:
+        if any(
+            (package.directory / "CHANGELOG.md").is_file()
+            for package in discover_packages(root)
+        ):
+            # The nav points here whenever a changelog exists, so the
+            # page must too: a checkout without the tags (a shallow CI
+            # clone) states that plainly instead of serving a 404.
+            base.mkdir(parents=True)
+            (base / "index.md").write_text(
+                "# Releases\n\nNo release tags in this checkout.\n",
+                encoding="utf-8",
+            )
+            return ["index.md"]
         return []
     base.mkdir(parents=True)
     years = sorted({tag[0][:4] for tag in tags}, reverse=True)

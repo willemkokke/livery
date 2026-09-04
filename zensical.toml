@@ -7,9 +7,7 @@ site_url = "https://docs.willem.net/livery/"
 nav = [
     # docs-nav:begin (generated; the emitter owns this block)
     { "Home" = "index.md" },
-    { "Releases" = [
-        { "Latest" = "_generated/releases/index.md" },
-    ] },
+    { "Releases" = "_generated/releases/index.md" },
     { "forge" = [
         { "Index" = "_generated/packages/forge/index.md" },
         { "fixtures" = "_generated/packages/forge/fixtures.md" },

@@ -223,7 +223,7 @@ def _tagged_workspace(tmp_path: Path) -> Path:
             capture_output=True,
             check=True,
             env={
-                "PATH": "/usr/bin:/bin",
+                **__import__("os").environ,
                 "GIT_AUTHOR_NAME": "T",
                 "GIT_AUTHOR_EMAIL": "t@livery.local",
                 "GIT_COMMITTER_NAME": "T",
@@ -256,7 +256,19 @@ def _tagged_workspace(tmp_path: Path) -> Path:
     return root
 
 
-def test_no_tags_means_no_release_view(tmp_path: Path) -> None:
+def test_no_tags_still_serves_the_page_the_nav_points_at(tmp_path: Path) -> None:
+    # A shallow clone has no tags, but the nav derives from committed
+    # state alone, so the landing page must exist and say so.
+    from livery.workshop._docs import RELEASES, generate_release_pages
+
+    root = _workspace(tmp_path)
+    (root / "packages" / "core" / "CHANGELOG.md").write_text("# Changelog\n")
+    assert generate_release_pages(root) == ["index.md"]
+    assert "No release tags" in (root / RELEASES / "index.md").read_text()
+    assert '{ "Releases" = "_generated/releases/index.md" }' in zensical_config(root)
+
+
+def test_no_changelogs_means_no_release_view(tmp_path: Path) -> None:
     from livery.workshop._docs import generate_release_pages
 
     root = _workspace(tmp_path)
@@ -307,7 +319,8 @@ def test_the_nav_carries_releases_and_changelogs(tmp_path: Path) -> None:
     parsed = tomllib.loads(config)
     nav = parsed["project"]["nav"]
     releases = next(entry for entry in nav if "Releases" in entry)
-    assert releases["Releases"][0] == {"Latest": "_generated/releases/index.md"}
-    assert releases["Releases"][1] == {"2025": "_generated/releases/2025.md"}
+    # One nav entry from committed state; the landing links the
+    # year archives itself, so a tagless checkout renders the same.
+    assert releases["Releases"] == "_generated/releases/index.md"
     core = next(entry for entry in nav if "core" in entry)
     assert {"Changelog": "_generated/packages/core/changelog.md"} in core["core"]
