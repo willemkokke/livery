@@ -212,14 +212,19 @@ def abort_if_merged(repo: Repository, git: GitOps, branch: str) -> None:
     """Stop before pushing into a pull request that already merged.
 
     The merge took the pre-push head, so pushing on would open a
-    second pull request carrying the follow-up. Refusing leaves the
-    commit unpushed and the situation legible. Detection is
-    best-effort: a merged pull request whose head branch is already
-    deleted is found by head sha instead, and one invisible both ways
-    surfaces later as the stray-PR symptom the message names.
+    second pull request carrying the follow-up. That is only true
+    when the local branch still carries the merged head: a branch
+    with the same name cut fresh off the merged base is a new cycle
+    (the release train reuses its reserved branch name every
+    release), and it proceeds. Detection is best-effort: a merged
+    pull request whose head branch is already deleted is found by
+    head sha instead, and one invisible both ways surfaces later as
+    the stray-PR symptom the message names.
     """
     pr = repo.pr.find_by_head(branch, state="all")
     if pr is None or not pr.merged:
+        return
+    if pr.head_sha and not git.is_ancestor(pr.head_sha, "HEAD"):
         return
     fail(
         f"PR #{pr.number} for {branch} has already merged.\n"

@@ -58,6 +58,17 @@ class GitOps:
         """Freshen ``origin/*``."""
         self._run("fetch", "origin")
 
+    def is_ancestor(self, ancestor: str, descendant: str) -> bool:
+        """Whether *ancestor* reaches *descendant* in this clone.
+
+        A commit this clone does not know cannot be an ancestor, so
+        an unknown *ancestor* answers False rather than raising.
+        """
+        result = toolroom.git.opts(cwd=self.root, nofail=True, recorded=False)(
+            "merge-base", "--is-ancestor", ancestor, descendant
+        )
+        return result.code == 0
+
     def push(self, branch: str) -> None:
         """Push *branch* to origin, setting upstream."""
         self._run("push", "-u", "origin", branch)
