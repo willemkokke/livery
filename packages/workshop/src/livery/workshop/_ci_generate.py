@@ -277,7 +277,7 @@ jobs:
       - name: Deploy key
         run: |
           mkdir -p ~/.ssh
-          printf '%s\n' "${{{{ secrets.WORKSHOP_TEMPLATES_DEPLOY_KEY }}}}" > ~/.ssh/templates_deploy
+          printf '%s\\n' "${{{{ secrets.WORKSHOP_TEMPLATES_DEPLOY_KEY }}}}" > ~/.ssh/templates_deploy
           chmod 600 ~/.ssh/templates_deploy
       - name: Publish the template artifact
         env:

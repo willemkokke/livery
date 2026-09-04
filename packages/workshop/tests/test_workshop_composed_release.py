@@ -212,3 +212,29 @@ def test_a_child_renders_from_the_composed_artifact(
     # The anchor was the brand's tag, never the base's.
     out = capsys.readouterr().out
     assert "rendered, wired, and installed" in out
+
+
+@pytest.mark.parametrize("kind", ["github", "gitea", "gitlab"])
+@pytest.mark.parametrize("artifact", ["", "https://forge.acme.example/acme/t.git"])
+def test_every_generated_workflow_parses_as_yaml(
+    tmp_path: Path, kind: str, artifact: str
+) -> None:
+    # The drift gate compares the committed files to the emitters byte
+    # for byte, so an emitter that writes invalid YAML passes the gate
+    # and every triggered run dies at startup, reported by the forge
+    # as a zero-second failure no required check surfaces. Parsing is
+    # the only guard that catches the emitted text being unusable.
+    import yaml
+
+    from livery.workshop._ci_generate import generate
+
+    root = _home(tmp_path)
+    contract = (root / "workshop.toml").read_text()
+    contract = contract.replace('kind = "gitea"', f'kind = "{kind}"')
+    contract = contract.replace(
+        'templates_artifact = ""', f'templates_artifact = "{artifact}"'
+    )
+    (root / "workshop.toml").write_text(contract)
+    for path, content in generate(root).items():
+        parsed = yaml.safe_load(content)
+        assert isinstance(parsed, dict), path
