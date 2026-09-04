@@ -47,6 +47,7 @@ from livery.forge._types import (
     Job,
     Protection,
     PullRequest,
+    RegistryKind,
     Release,
     RepoConfig,
     RepoInfo,
@@ -537,6 +538,21 @@ class Forge(Protocol):
         Backends with a version floor check it here and raise
         livery.forge.Unsupported naming the version when the server
         predates an operation.
+        """
+        ...
+
+    def registry_url(self, kind: RegistryKind, owner: str) -> str:
+        """The root of this forge's own hosted registry of *kind*.
+
+        For ``python`` the returned root is the registry base whose
+        ``/simple`` child is the read index and which itself accepts
+        uploads (the forge-registry shape); ``conan`` answers the
+        remote URL a conan client configures; ``container`` answers
+        the reference prefix an image tag starts with. Raises
+        livery.forge.Unsupported, naming the kind, where this forge
+        hosts no such registry. The forge is the default provider,
+        never the owner: resolution and external declarations are
+        the caller's business.
         """
         ...
 

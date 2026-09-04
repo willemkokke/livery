@@ -457,9 +457,12 @@ def tool_profile(root: Path) -> tuple[str, ...]:
         if (root / "packages").is_dir()
         else set()
     )
+    from livery.workshop._kinds import kind_tools
+
     profile: list[str] = ["uv"]
     if not types or "python" in types:
         profile += ["ruff", "pytest", "basedpyright", "mypy", "ty", "pyrefly"]
+    profile += [tool for tool in kind_tools(types) if tool not in profile]
     return tuple(profile)
 
 

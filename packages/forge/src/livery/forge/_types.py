@@ -51,6 +51,16 @@ Capability: TypeAlias = Literal[
   Pages exists implicitly through pipeline artifacts.
 """
 
+RegistryKind: TypeAlias = Literal["python", "conan", "container"]
+"""The artifact registries the ecosystem speaks, by protocol.
+
+``python`` is the simple index and its upload endpoint; ``conan``
+is a conan 2 remote; ``container`` is an OCI distribution registry.
+The handles that speak these protocols are host-generic: any server
+or folder speaking the protocol works. A forge answers which of
+them it hosts through livery.forge.Forge.registry_url.
+"""
+
 CheckState: TypeAlias = Literal["none", "pending", "success", "failure"]
 """The combined verdict for one commit.
 

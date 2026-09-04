@@ -45,6 +45,7 @@ from livery.forge._types import (
     Label,
     Protection,
     PullRequest,
+    RegistryKind,
     Release,
     RepoConfig,
     RepoInfo,
@@ -171,6 +172,21 @@ class GitlabForge:
         """The server's version string (``GET /version``)."""
         data = self._client.request("/version")
         return str(data.get("version", ""))
+
+    def registry_url(self, kind: RegistryKind, owner: str) -> str:
+        """Decline every kind, each naming its reason.
+
+        GitLab's python and conan registries are addressed by project
+        id, not by owner and name, and its container registry lives
+        on a per-install host the API base does not reveal; the
+        contract's declaration is the path on GitLab until a
+        project-resolved surface earns its keep.
+        """
+        raise Unsupported(
+            f"gitlab's {kind} registry is not derivable from the API base"
+            " (project-id or per-install-host addressed); declare it in"
+            " the contract"
+        )
 
     def supports(self, capability: Capability) -> bool:
         """Honest per instance: approvals depend on the licence.
