@@ -7,9 +7,11 @@ config, the build and serve verbs, the docs dependency group, and
 the wheel-side `_docs` materialised at build. Phase 2 shipped
 2026-09-04 (issue #181, PR #182): the API reference, every module
 public first, mkdocstrings wired with the pinned inventories,
-objects.inv published. Phase 3 shipped 2026-09-04 (issue #183):
+objects.inv published. Phase 3 shipped 2026-09-04 (issue #183, PR #184):
 per-package changelog pages with the in-memory unreleased section,
 and the paginated release view derived from the receipt tags.
+Phase 4 shipped 2026-09-04 (issue #185): the docs drift tests and
+the required CI docs job on all three forge kinds.
 This is phase 19 of `notes/20260903-workshop-plan.md`, promoted to
 its own plan on Willem's ruling (2026-09-04): docs come before the
 kind hierarchy, because nothing ships well undocumented, and the
@@ -310,6 +312,18 @@ Acceptance:
   `_docs` inside the module as real files from `packages/<name>/docs/`
   before every wheel build. Underscore folders are machine
   territory: a person writes `packages/<name>/docs/`, never `_docs`.
+- 2026-09-04, phase 4 cut: nav reachability needs no test of its
+  own, because the nav is emitted from the tree and the template
+  drift gate refuses a stale render; an orphan page is drift before
+  it is anything else. The drift tests cover what the emitter
+  cannot know: link and anchor resolution, and exports carrying
+  docstrings (source-level assignment docstrings included, which is
+  how a TypeAlias documents itself). Both ship as a project seed.
+- 2026-09-04, phase 3 cut: the release nav derives from committed
+  state alone; a shallow CI clone has no tags, and the drift
+  dogfood proved a tag-derived nav renders differently per
+  checkout. The landing page links its own year archives at build
+  time, and a tagless checkout serves a page saying so.
 - 2026-09-04, phase 2 cut: a cross-reference in prose must be
   wrapped, `[livery.forge.Forge][]`; a bare dotted path renders as
   plain text and links nothing (probed against the built site).
