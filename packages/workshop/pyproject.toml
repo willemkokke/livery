@@ -33,7 +33,7 @@ dependencies = [
     # Python this package supports: the release train's floor leg
     # installs the floor itself, and 6.0.0's sdist no longer builds
     # under a current Cython.
-    "copier>=9.17.2",
+    "copier>=9.18.1",
     "pyyaml>=6.0.3",
 ]
 
