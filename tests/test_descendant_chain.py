@@ -335,6 +335,82 @@ def _chain(
     assert (child / "site" / "index.html").is_file()
     assert "child" in (child / "site" / "index.html").read_text()
 
+    # -- 5c. both kinds arrive through the gradient -------------------
+    # The child creates a C/C++ library and an extension depending
+    # on it with the brand's own verbs: no template re-render, the
+    # honest skips in the gate, and the tool profile grown only
+    # here. The dependency is declared (the edge and the agreeing
+    # conan requirement); compile-time consumption of the conan
+    # package from the extension's build is its own future cut.
+    # ty refuses an empty-but-set VIRTUAL_ENV, so the child's gate
+    # runs with the variable naming the child's own venv.
+    child_env = {
+        **_hermetic(env, child / ".venv"),
+        "VIRTUAL_ENV": str(child / ".venv"),
+    }
+    if not resumed:
+        for member_name, kind in (
+            ("geometry", "package-cpp-conan"),
+            ("ext", "package-python-nanobind"),
+        ):
+            _run(
+                [str(brand_cli), "new.package", member_name, f"--kind={kind}"],
+                child,
+                _hermetic(env, tool),
+            )
+        ext_contract = child / "packages" / "ext" / "workshop.toml"
+        with ext_contract.open("a") as handle:
+            handle.write(
+                "\n[[depends]]\n"
+                'path = "packages/geometry"\n'
+                'kind = "build"\n'
+                'floor = "0.0.1"\n'
+            )
+        (child / "packages" / "ext" / "conanfile.py").write_text(
+            '"""The extension\'s conan requirements."""\n\n'
+            'requires = "kid-geometry/[>=0.0.1]"\n'
+        )
+        _run(["git", "add", "-A"], child, env)
+        _run(
+            ["git", "commit", "-qm", "feat: the native library and the extension"],
+            child,
+            env,
+        )
+    else:
+        # The wiring is idempotent by refusal: the resumed pass
+        # names the existing directory and changes nothing.
+        again = _run(
+            [str(brand_cli), "new.package", "geometry", "--kind=package-cpp-conan"],
+            child,
+            _hermetic(env, tool),
+            check=False,
+        )
+        assert "already exists" in (again.stdout + again.stderr)
+    child_fm = child / ".venv" / "bin" / "fm"
+    child_gate = _run([str(child_fm), "check"], child, child_env)
+    assert (
+        "packages/geometry (cpp-conan): configure, build, ctest run"
+        in child_gate.stdout
+    )
+    assert "typecomplete: packages/geometry skips (cpp-conan kind)" in child_gate.stdout
+    # The profile grows by discovery, and only here: the home stays
+    # pure python.
+    probe = (
+        "from pathlib import Path\n"
+        "from livery.workshop._env_tasks import tool_profile\n"
+        "print(','.join(tool_profile(Path.cwd())))\n"
+    )
+    child_profile = _run(
+        [str(child / ".venv" / "bin" / "python"), "-c", probe], child, child_env
+    ).stdout
+    assert "cmake" in child_profile and "conan" in child_profile
+    home_profile = _run(
+        [str(home / ".venv" / "bin" / "python"), "-c", probe],
+        home,
+        _hermetic(env, home / ".venv"),
+    ).stdout
+    assert "cmake" not in home_profile and "conan" not in home_profile
+
     # -- 6. the inheritance proof -------------------------------------
     if resumed:
         return
