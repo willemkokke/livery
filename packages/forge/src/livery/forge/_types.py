@@ -21,6 +21,7 @@ Capability: TypeAlias = Literal[
     "ci_secrets",
     "schedule_events",
     "min_approvals",
+    "pages_config",
 ]
 """What livery.forge.Forge.supports answers for, by name.
 
@@ -44,6 +45,10 @@ Capability: TypeAlias = Literal[
   can be read back (livery.forge.PullRequests.schedule_events).
   GitLab's backend declines: its system notes carry no reliable
   scheduling record.
+- ``pages_config``: the forge's static-site hosting can be enabled
+  through the API (livery.forge.Repository.ensure_pages). Only
+  GitHub has one to configure: Gitea ships no Pages, and GitLab
+  Pages exists implicitly through pipeline artifacts.
 """
 
 CheckState: TypeAlias = Literal["none", "pending", "success", "failure"]

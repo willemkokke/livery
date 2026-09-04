@@ -449,6 +449,109 @@ def materialise_module_docs(package: Package) -> Path | None:
     return target
 
 
+#: The publish seam each forge kind defaults to.
+DEFAULT_SEAMS = {"github": "pages", "gitlab": "pages", "gitea": "container"}
+
+
+def publish_seam(root: Path) -> str:
+    """The declared publish seam: pages, container, ssh, or none.
+
+    The contract's ``[docs] publish`` wins; without it the forge kind
+    picks its default. An unknown declaration fails naming the four.
+    """
+    table = docs_table(root)
+    declared = str(table.get("publish", ""))
+    if declared:
+        if declared not in ("pages", "container", "ssh", "none"):
+            fail(
+                f"[docs] publish = {declared!r} is not a seam: use"
+                " pages, container, ssh, or none"
+            )
+        return declared
+    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+    kind = str((contract.get("forge") or {}).get("kind", ""))
+    return DEFAULT_SEAMS.get(kind, "none")
+
+
+def _publish_container(root: Path) -> None:
+    """Build the site image and push it to the forge's registry.
+
+    The image is the site: a pinned nginx serving ``site/`` on port
+    80, tagged ``<registry>/<owner>/<repo>-docs:latest``, deployable
+    anywhere. The push rides the ambient docker credential; a denied
+    push teaches ``docker login`` rather than handling the token
+    here.
+    """
+    import tempfile
+
+    from livery.workshop._forge_lane import remote_repo_name
+
+    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+    forge = contract.get("forge") or {}
+    url = str(forge.get("url", ""))
+    owner = str(forge.get("owner", ""))
+    host = url.split("://", 1)[-1] if url else "ghcr.io"
+    repo = remote_repo_name(root)
+    image = f"{host}/{owner}/{repo}-docs:latest".lower()
+    dockerfile = "FROM nginx:1.27-alpine\nCOPY site /usr/share/nginx/html\n"
+    with tempfile.NamedTemporaryFile("w", suffix=".Dockerfile", delete=False) as handle:
+        handle.write(dockerfile)
+        spec = handle.name
+    docker = toolroom.docker.opts(cwd=root, nofail=True, recorded=False)
+    built = docker("build", "-f", spec, "-t", image, ".")
+    if built.code != 0:
+        fail(f"docker build exited {built.code}:\n{built.stdout}{built.stderr}")
+    pushed = docker("push", image)
+    if pushed.code != 0:
+        fail(
+            f"docker push {image} exited {pushed.code}:\n"
+            f"{pushed.stdout}{pushed.stderr}"
+            f"  A denied push wants `docker login {host}` first."
+        )
+    print(f"  pushed {image}")
+
+
+def _publish_ssh(root: Path) -> None:
+    """Tar the site over ssh to the configured docs host, or skip.
+
+    Unconfigured is a skip with exit 0, never a refusal: docs must
+    not deploy where they can never be removed, and CI runs this
+    unconditionally.
+    """
+    import os
+
+    import footman
+
+    host = os.environ.get("DOCS_HOST", "")
+    user = os.environ.get("DOCS_USER", "")
+    docs_root = os.environ.get("DOCS_ROOT", "")
+    if not (host and user and docs_root):
+        print("  ssh seam unconfigured (DOCS_HOST/DOCS_USER/DOCS_ROOT): skipping")
+        return
+    from livery.workshop._forge_lane import remote_repo_name
+
+    target = f"{docs_root}/{remote_repo_name(root)}"
+    destination = f"{user}@{host}"
+    prepare = footman.run(
+        ["ssh", destination, f"rm -rf {target} && mkdir -p {target}"],
+        cwd=root,
+        nofail=True,
+        recorded=False,
+    )
+    if prepare != 0:
+        fail(f"preparing {destination}:{target} exited {int(prepare)}")
+    shipped = footman.run(
+        f'tar -cf - -C site . | ssh {destination} "tar -xf - -C {target}"',
+        shell=True,
+        cwd=root,
+        nofail=True,
+        recorded=False,
+    )
+    if shipped != 0:
+        fail(f"shipping the site exited {int(shipped)}")
+    print(f"  deployed to {destination}:{target}")
+
+
 docs_group = group("docs", help="The workspace's documentation site")
 
 
@@ -487,6 +590,29 @@ def docs_build() -> None:
     if result.code != 0:
         fail(f"zensical build exited {result.code}:\n{result.stdout}{result.stderr}")
     print(f"  site built at {root / 'site'}")
+
+
+@docs_group.task(name="publish")
+def docs_publish() -> None:
+    """Publish the built site through the contract's seam.
+
+    ``pages`` is the forge workflow's own act and skips here;
+    ``container`` pushes the site image to the forge registry;
+    ``ssh`` tars the site to the configured host, skipping when
+    unconfigured; ``none`` skips by declaration.
+    """
+    root = _root()
+    if not (root / "site" / "index.html").is_file():
+        fail(f"no built site at {root / 'site'}: run `docs.build` first")
+    seam = publish_seam(root)
+    if seam == "container":
+        _publish_container(root)
+    elif seam == "ssh":
+        _publish_ssh(root)
+    elif seam == "pages":
+        print("  pages seam: the forge's own workflow deploys; nothing to do here")
+    else:
+        print("  publish seam is none: skipping by declaration")
 
 
 @docs_group.task(name="serve", infinite=True)

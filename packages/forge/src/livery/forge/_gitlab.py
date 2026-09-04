@@ -401,6 +401,16 @@ class _GitlabRepository:
         """The project name the view is bound to."""
         return self._name
 
+    def ensure_pages(self, *, build_type: str = "workflow") -> None:
+        """Decline: GitLab Pages rides pipeline artifacts, not a config API.
+
+        The capability is ``pages_config``.
+        """
+        raise Unsupported(
+            "gitlab cannot enable pages hosting through the API"
+            " (capability: pages_config)"
+        )
+
     def configure(self, config: RepoConfig) -> None:
         """Assert the stated settings; every step probes before acting."""
         if config.min_approvals is not None or (

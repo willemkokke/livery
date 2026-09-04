@@ -474,6 +474,20 @@ stages: [check, release]
     - uv sync --locked
     - uv run --no-sync {prog} check
 
+# The pages seam: GitLab Pages serves the artifact of a job named
+# ``pages`` publishing ``public/``; main only, after the checks.
+pages:
+  stage: release
+  image: ghcr.io/astral-sh/uv:python{python}-bookworm
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  script:
+    - uv sync --locked
+    - uv run --no-sync {prog} docs.build
+    - mv site public
+  artifacts:
+    paths: [public]
+
 # The strict site build: a merge waits on the pipeline, so a broken
 # link blocks it here without any aggregation job.
 docs:
@@ -597,6 +611,75 @@ governance-apply:
 """
 
 
+def _github_docs_deploy(prog: str) -> str:
+    return f"""name: docs
+
+# The pages seam: build on main, upload, deploy. What ships is the
+# same strict build the required CI job verified.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{{{ steps.deployment.outputs.page_url }}}}
+    steps:
+      - uses: {CHECKOUT}
+      - uses: {SETUP_UV}
+      - name: Sync (locked)
+        run: uv sync --locked
+      - name: Build the site, strict
+        run: uv run --no-sync {prog} docs.build
+      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
+"""
+
+
+def _gitea_docs_deploy(answers: dict[str, Any], prog: str) -> str:
+    first = next(iter(answers.get("runners", ["ubuntu-latest"])))
+    return f"""name: docs
+
+# The container seam: the built site pushed as an image to the
+# forge's own registry. The job needs a runner with docker; the
+# publish verb resolves the seam and the registry from the contract.
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: {first}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Sync (locked)
+        run: $HOME/.local/bin/uv sync --locked
+      - name: Build the site, strict
+        run: $HOME/.local/bin/uv run --no-sync {prog} docs.build
+      - name: Publish the site image
+        env:
+          FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
+        run: $HOME/.local/bin/uv run --no-sync {prog} docs.publish
+"""
+
+
 def generate(root: Path) -> dict[str, str]:
     """Every generated CI file for *root*'s forge kind, by path.
 
@@ -607,7 +690,7 @@ def generate(root: Path) -> dict[str, str]:
     layer ships the tree; an ordinary instance's release has no
     templates to publish.
     """
-    from livery.workshop._docs import zensical_config
+    from livery.workshop._docs import publish_seam, zensical_config
     from livery.workshop._provenance import generated_header
 
     prog = footman.prog()
@@ -615,18 +698,23 @@ def generate(root: Path) -> dict[str, str]:
     kind = str(facts["forge_kind"])
     header = generated_header("#")
     site = {"zensical.toml": zensical_config(root)}
+    seam = publish_seam(root)
     if kind == "github":
         files = {
             ".github/workflows/ci.yml": _github_gate(facts, prog),
             ".github/workflows/release.yml": _github_release(facts, prog),
             ".github/workflows/governance.yml": _github_governance(facts, prog),
         }
+        if seam == "pages":
+            files[".github/workflows/docs.yml"] = _github_docs_deploy(prog)
     elif kind == "gitea":
         files = {
             ".gitea/workflows/ci.yml": _gitea_gate(facts, prog),
             ".gitea/workflows/release.yml": _gitea_release(facts, prog),
             ".gitea/workflows/governance.yml": _gitea_governance(facts, prog),
         }
+        if seam == "container":
+            files[".gitea/workflows/docs.yml"] = _gitea_docs_deploy(facts, prog)
     else:
         files = {
             ".gitlab-ci.yml": _gitlab_pipeline(facts, prog)

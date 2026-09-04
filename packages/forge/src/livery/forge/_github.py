@@ -195,6 +195,7 @@ class GithubForge:
             "required_contexts",
             "schedule_events",
             "min_approvals",
+            "pages_config",
         )
 
     def repository(self, owner: str, name: str) -> Repository:
@@ -357,6 +358,23 @@ class _GithubRepository:
     def name(self) -> str:
         """The repository name the view is bound to."""
         return self._name
+
+    def ensure_pages(self, *, build_type: str = "workflow") -> None:
+        """Enable Pages with *build_type*; idempotent drift repair."""
+        current = self._client.request(f"{self._base}/pages", none_on=(404,))
+        if current is None:
+            self._client.request(
+                f"{self._base}/pages",
+                method="POST",
+                data={"build_type": build_type},
+            )
+            return
+        if str(current.get("build_type", "")) != build_type:
+            self._client.request(
+                f"{self._base}/pages",
+                method="PUT",
+                data={"build_type": build_type},
+            )
 
     def configure(self, config: RepoConfig) -> None:
         """Assert the stated settings; every step probes before acting."""
