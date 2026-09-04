@@ -16,7 +16,7 @@ from typing import Annotated
 
 from footman import doc, fail, group, task
 
-from livery.forge import Capability, Forge, ForgeError, Repository
+from livery.forge import Capability, Forge, ForgeError, Repository, Run
 from livery.workshop._git_ops import GitOps
 from livery.workshop._layers import workspace_root
 from livery.workshop._verdict import classify, follow
@@ -92,15 +92,50 @@ def _head_sha(repo: Repository, git: GitOps) -> str:
 
 
 def rerun_flow(repo: Repository, git: GitOps, *, failed_only: bool = True) -> None:
-    """Re-run the head commit's runs (failed jobs only by default)."""
+    """Re-run the failed runs that hold this branch's verdict.
+
+    The verdict is each workflow's newest run on a commit this branch
+    contains. The head commit's runs are the common case, but a
+    workflow triggered on an earlier commit (a merged release squash,
+    a path-filtered job) keeps its verdict until it re-runs, so
+    scoping to the head sha alone would miss it. Each rerun is read
+    back: a forge that quietly ignores the request is named, never
+    reported as re-running.
+    """
     sha = _head_sha(repo, git)
-    runs = repo.checks.runs(head_sha=sha)
-    if not runs:
-        print(f"  no runs for {sha[:10]}")
+    newest: dict[str, Run] = {}
+    # Newest first; the scan is capped so a repository with a long
+    # run history stays cheap. A run on a sha this clone does not
+    # contain belongs to another branch and is skipped.
+    for run in repo.checks.runs()[:100]:
+        if run.workflow in newest:
+            continue
+        if run.head_sha == sha or git.is_ancestor(run.head_sha, "HEAD"):
+            newest[run.workflow] = run
+    failed = [
+        run
+        for run in newest.values()
+        if run.status == "completed" and run.conclusion != "success"
+    ]
+    if not failed:
+        print(f"  nothing failed on this branch as of {sha[:10]}")
         return
-    for run in runs:
-        if run.status == "completed" and run.conclusion != "success":
-            repo.checks.rerun(run.id, failed_only=failed_only)
+    for run in failed:
+        repo.checks.rerun(run.id, failed_only=failed_only)
+        after = next(
+            (
+                candidate
+                for candidate in repo.checks.runs(head_sha=run.head_sha)
+                if candidate.id == run.id
+            ),
+            None,
+        )
+        if after is not None and after.status == "completed":
+            print(
+                f"  {run.workflow} (run {run.id}): the forge did not"
+                f" restart it; still {after.conclusion}"
+            )
+        else:
             print(f"  re-running {run.workflow} (run {run.id})")
 
 

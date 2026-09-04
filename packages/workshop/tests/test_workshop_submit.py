@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 from footman import Failed
@@ -479,6 +480,53 @@ def test_status_and_rerun_and_doctor(rig: tuple[FakeForge, SubmitGit]) -> None:
     # The fake's shas are its own; classify by branch still answers.
     doctor_flow(fake)
     assert fake.whoami()
+
+
+def test_rerun_reaches_a_failed_run_on_an_earlier_commit(
+    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The branch's verdict includes a workflow whose newest run sits
+    # on an earlier commit (a merged release squash, a path-filtered
+    # job); scoping to the head sha alone misses it, and that is how
+    # a red governance run survived a rerun that reported success.
+    fake, git = rig
+    _git(git.root, "checkout", "main")
+    old_sha = _git(git.root, "rev-parse", "HEAD").strip()
+    fake.push(OWNER, NAME, "main", sha=old_sha)
+    fake.settle(OWNER, NAME, old_sha)
+    repo = _repo(fake)
+    # The outcome knob is the fake's testing surface, beyond the
+    # protocol's signature, so the call goes through the fake's type.
+    cast(Any, repo.checks).dispatch("governance.yml", ref="main", outcome="failure")
+    fake.settle(OWNER, NAME, old_sha)
+    (git.root / "later.txt").write_text("later\n")
+    _git(git.root, "add", ".")
+    _git(git.root, "commit", "-m", "chore: a later commit")
+    new_sha = _git(git.root, "rev-parse", "HEAD").strip()
+    fake.push(OWNER, NAME, "main", sha=new_sha)
+    fake.settle(OWNER, NAME, new_sha)
+    rerun_flow(repo, git)
+    out = capsys.readouterr().out
+    assert "re-running governance.yml" in out
+    governance = [run for run in repo.checks.runs() if run.workflow == "governance.yml"]
+    assert governance and governance[0].status != "completed"
+
+
+def test_rerun_names_a_forge_that_ignored_the_request(
+    rig: tuple[FakeForge, SubmitGit],
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The read-back: a rerun the forge quietly ignores is reported as
+    # such, never as re-running.
+    fake, git = rig
+    git.outcome = "failure"
+    _submit(fake, git, armed=False, follow_to_verdict=False)
+    repo = _repo(fake)
+    monkeypatch.setattr(repo.checks, "rerun", lambda run, failed_only=True: None)
+    rerun_flow(repo, git)
+    out = capsys.readouterr().out
+    assert "did not restart it" in out and "re-running" not in out
 
 
 def test_the_stalled_and_behind_verdicts_discriminate(
