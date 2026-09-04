@@ -13,6 +13,7 @@ class {{ project_slug | capitalize }}Conan(ConanFile):
     """Build, test, and package the library through CMake."""
 
     name = "{{ package_name }}"
+    version = "0.0.1"
     package_type = "library"
     settings = "os", "compiler", "build_type", "arch"
     options: ClassVar = {"shared": [True, False]}

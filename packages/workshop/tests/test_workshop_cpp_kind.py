@@ -24,6 +24,14 @@ from livery.workshop._templates import read_answers, render
 
 _FAILURES = (BaseException,)
 
+
+class _FakeStamper:
+    """A stamper that changes nothing; the fakes' version home."""
+
+    def stamp(self, version: str) -> list[str]:
+        return []
+
+
 ROOT = Path(__file__).resolve().parents[3]
 TEMPLATES = ROOT / "packages/workshop/src/livery/workshop/templates"
 
@@ -157,6 +165,15 @@ def test_kind_checks_announce_and_dispatch(
         def check(self, package: Package, root: Path) -> None:
             checked.append(package.name)
 
+        def current_version(self, package: Package) -> str:
+            return "0.0.1"
+
+        def stamp_version(self, package: Package) -> _FakeStamper:
+            return _FakeStamper()
+
+        def declared_requirements(self, package: Package) -> dict[str, str]:
+            return {}
+
     record = kind_for("cpp-conan")
     register_kind(
         KindRecord(
@@ -195,6 +212,15 @@ def test_host_tools_are_named_when_missing(restored_registry, tmp_path: Path) ->
 
         def check(self, package: Package, root: Path) -> None:
             return None
+
+        def current_version(self, package: Package) -> str:
+            return "0.0.1"
+
+        def stamp_version(self, package: Package) -> _FakeStamper:
+            return _FakeStamper()
+
+        def declared_requirements(self, package: Package) -> dict[str, str]:
+            return {}
 
     register_kind(
         KindRecord(

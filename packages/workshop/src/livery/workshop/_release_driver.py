@@ -24,7 +24,7 @@ from footman import doc, fail
 
 from livery.forge import ForgeError, Repository
 from livery.workshop import _cliff
-from livery.workshop._backends import _python
+from livery.workshop._backends import _python, backend_for
 from livery.workshop._git_ops import GitOps
 from livery.workshop._graph import order_topologically
 from livery.workshop._packages import Package, discover_packages
@@ -187,6 +187,21 @@ def rollback_prepare(root: Path, members: tuple[Package, ...]) -> None:
     )
 
 
+def _wheel_dists(plans: tuple[MemberPlan, ...]) -> tuple[Path, ...]:
+    """The find-links dirs: only members whose kind builds wheels.
+
+    A conan member's build leaves nothing in ``dist/``, and a
+    nonexistent find-links path fails the sibling legs outright.
+    """
+    from livery.workshop._kinds import kind_for
+
+    return tuple(
+        plan.package.directory / "dist"
+        for plan in plans
+        if kind_for(plan.package.type).wheel_identity
+    )
+
+
 def validate_member(
     root: Path,
     plan: MemberPlan,
@@ -202,7 +217,20 @@ def validate_member(
     caller builds every set member's wheel first: the legs'
     find-links name each sibling's ``dist/``, so a later member's
     wheel must exist before an earlier member's floor leg resolves.
+
+    A member whose kind publishes no wheels (conan) has no venv to
+    isolate: its own gate already built and ran ctest, so the legs
+    skip saying why.
     """
+    from livery.workshop._kinds import kind_for
+
+    if not kind_for(plan.package.type).wheel_identity:
+        print(
+            f"  {plan.package.name}: isolated legs skip"
+            f" ({plan.package.type} kind publishes no wheels; its own"
+            " gate builds and tests)"
+        )
+        return
     for leg in legs:
         resolved = _python.run_isolated_test(
             plan.package, root, release_dirs=release_dirs, resolution=leg
@@ -384,10 +412,10 @@ class ReleaseDriver:
             floor_changes = bump_set_floors(self._root, plans)
             if floor_changes:
                 print(f"  floors raised within the set: {', '.join(floor_changes)}")
-            release_dirs = tuple(plan.package.directory / "dist" for plan in plans)
+            release_dirs = _wheel_dists(plans)
             for plan in plans:
                 prepare_release(self._root, plan.package.path, plan.version)
-                _python.build(plan.package, self._root)
+                backend_for(plan.package).build(plan.package, self._root)
                 git.commit_all(f"chore(release): {plan.package.name} v{plan.version}")
             # Every member's wheel exists before any leg runs; a
             # failed leg still tears the whole branch down, commits
@@ -490,10 +518,10 @@ def local_release(root: Path, members: tuple[Package, ...]) -> None:
     plans = derive_plans(root, members)
     try:
         bump_set_floors(root, plans)
-        release_dirs = tuple(plan.package.directory / "dist" for plan in plans)
+        release_dirs = _wheel_dists(plans)
         for plan in plans:
             prepare_release(root, plan.package.path, plan.version)
-            _python.build(plan.package, root)
+            backend_for(plan.package).build(plan.package, root)
         for plan in plans:
             validate_member(root, plan, release_dirs)
         listed = ", ".join(f"{plan.package.name} v{plan.version}" for plan in plans)
@@ -619,19 +647,28 @@ def workflow_release_check_title(
 @release_group.task(name="publish", hidden=True)
 def workflow_release_publish(
     ref: Annotated[str, doc("the release squash; empty means HEAD")] = "",
+    prebuilt: Annotated[
+        bool, doc("trust the collected dist/ for platform-wheel members")
+    ] = False,
 ) -> None:
     """Publish the squash at --ref: the wave, receipts cut per member.
 
     The CI entry point after a release PR merges, and the recovery
     entry when a publish died mid-wave: everything already tagged is
     walked past. ``--ref`` exists because HEAD usually moves past the
-    squash before a recovery runs.
+    squash before a recovery runs. Each member probes and publishes
+    through its kind's artifact target: python members through the
+    resolved index, conan members through the resolved conan target.
+    ``--prebuilt`` is the wheels matrix handing over: a
+    platform-wheel member's dist/ was collected by the per-OS jobs,
+    and the wave publishes it instead of rebuilding one platform's.
     """
     import os
 
     from livery.forge import SimpleRegistry
+    from livery.workshop._kinds import kind_for
     from livery.workshop._layers import workspace_root
-    from livery.workshop._publish import publish_release
+    from livery.workshop._publish import Registry, publish_release
     from livery.workshop._registries import resolve_registry
 
     root = workspace_root()
@@ -640,13 +677,34 @@ def workflow_release_publish(
     git = GitOps(root)
     target = resolve_registry(root, "python")
     registry = SimpleRegistry(target.url)
+    registries: dict[str, Registry] = {"python": registry}
+
+    def registry_for(package: Package) -> Registry:
+        artifact = kind_for(package.type).artifact
+        cached = registries.get(artifact)
+        if cached is None:
+            if artifact != "conan":
+                fail(
+                    f"{package.name}: kind {package.type!r} publishes"
+                    f" to {artifact!r}, and the wave has no probe for"
+                    " that artifact kind"
+                )
+            from livery.workshop._backends import _cpp_conan
+
+            assert root is not None  # narrowed before the closure
+            conan = resolve_registry(root, "conan")
+            cached = _cpp_conan.ConanRegistry(conan.url, local=conan.local, cwd=root)
+            registries[artifact] = cached
+        return cached
+
     receipts = publish_release(
         root,
         git,
-        lambda _package: registry,
+        registry_for,
         ref=ref,
         index_url=target.publish_url,
         token=os.environ.get("UV_PUBLISH_TOKEN", ""),
+        prebuilt=prebuilt,
     )
     output = os.environ.get("GITHUB_OUTPUT", "")
     if output:

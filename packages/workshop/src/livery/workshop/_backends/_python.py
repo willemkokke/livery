@@ -404,6 +404,16 @@ def _dev_pins(root: Path, scratch: Path) -> Path | None:
     )
     if result.code != 0 or not pins.is_file():
         return None
+    # A path-sourced dev entry (a checkout standing in for a wheel)
+    # exports as a local reference the scratch venv can neither
+    # reach nor parse; the toolchain pins we want are the
+    # index-resolvable lines, so the local ones are dropped.
+    lines = [
+        line
+        for line in pins.read_text("utf-8").splitlines()
+        if "file://" not in line and not line.startswith(("-e ", "./", "/"))
+    ]
+    pins.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return pins
 
 

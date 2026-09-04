@@ -777,8 +777,13 @@ def wire_package(root: Path, name: str, *, kind: str = "package-python") -> str:
     if record is None or is_python_kind(record.name):
         # A python member joins the uv workspace and the dev group.
         # An unmapped template (package-python-layer) is a python
-        # variant, so it takes the same wiring.
-        members.append({"dir": name, "name": package_name, "dev": package_name})
+        # variant, so it takes the same wiring. A chained kind rides
+        # along by name so the CI emitters can see it (the wheels
+        # matrix exists only where a platform-wheel kind lives).
+        entry = {"dir": name, "name": package_name, "dev": package_name}
+        if record is not None and record.name != "python":
+            entry["kind"] = record.name
+        members.append(entry)
     else:
         # A non-python member carries its kind so the project render
         # can exclude it from the uv workspace and the python

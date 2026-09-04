@@ -258,7 +258,7 @@ def test_a_failing_build_restores_the_dirty_tree_from_snapshots(
     def _boom(*_args: object, **_kwargs: object) -> Path:
         raise Failed("uv build exploded")
 
-    monkeypatch.setattr("livery.workshop._dev_release._python.build", _boom)
+    monkeypatch.setattr("livery.workshop._backends._python.build", _boom)
     with pytest.raises(_FAILURES):
         build_dev(root, DevPlan(discover_packages(root)[0], version))
     assert pyproject.read_text() == dirty

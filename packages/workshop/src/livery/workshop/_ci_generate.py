@@ -219,9 +219,76 @@ jobs:
 """
 
 
+def _wants_wheel_matrix(answers: dict[str, Any]) -> bool:
+    """Whether a member's kind publishes platform wheels.
+
+    The per-OS wheels matrix is emitted only then: a pure workspace
+    releases from one runner, and its workflow says so by shape.
+    """
+    from livery.workshop._kinds import kind_for, kind_names
+
+    for entry in answers.get("packages", []) or []:
+        if not isinstance(entry, dict):
+            continue
+        kind = str(entry.get("kind", "") or "")
+        if kind in kind_names() and kind_for(kind).wheel_identity == "platform":
+            return True
+    return False
+
+
 def _github_release(answers: dict[str, Any], prog: str) -> str:
     rung = _rung_step(answers)
     publisher = str(answers.get("templates_publisher", ""))
+    wheels = _wants_wheel_matrix(answers)
+    train_if = """>-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       startsWith(github.event.pull_request.head.ref, 'workflow/release/'))"""
+    wheels_job = (
+        f"""  # Every platform's wheels, built before the wave: the matrix
+  # feeds the publish job through artifacts, so one release ships
+  # the complete set. linux arm waits on a docker-capable arm
+  # runner, the container seam's known constraint.
+  wheels:
+    if: {train_if}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{{{ matrix.os }}}}
+    steps:
+      - uses: {CHECKOUT}
+        with:
+          ref: ${{{{ inputs.ref || github.event.pull_request.merge_commit_sha }}}}
+          fetch-depth: 0
+      - uses: {SETUP_UV}
+      - name: Sync (locked)
+        run: uv sync --locked
+      - name: Build this platform's wheels
+        run: >-
+          uv run --no-sync {prog} release.wheels
+          --ref="${{{{ inputs.ref || github.event.pull_request.merge_commit_sha }}}}"
+      - uses: {UPLOAD}
+        with:
+          name: wheels-${{{{ matrix.os }}}}
+          path: packages/*/dist/*
+          if-no-files-found: ignore
+"""
+        if wheels
+        else ""
+    )
+    needs_wheels = "    needs: [wheels]\n" if wheels else ""
+    collect_step = (
+        f"""      - uses: {DOWNLOAD}
+        with:
+          pattern: wheels-*
+          path: packages
+          merge-multiple: true
+"""
+        if wheels
+        else ""
+    )
+    prebuilt_flag = " --prebuilt" if wheels else ""
     workflow = f"""name: release
 
 # The train: a workflow.release PR merges, this publishes its squash,
@@ -240,12 +307,9 @@ on:
         default: ""
 
 jobs:
-  publish:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.pull_request.merged == true &&
-       startsWith(github.event.pull_request.head.ref, 'workflow/release/'))
-    runs-on: ubuntu-latest
+{wheels_job}  publish:
+    if: {train_if}
+{needs_wheels}    runs-on: ubuntu-latest
     environment: pypi
     permissions:
       id-token: write
@@ -260,7 +324,7 @@ jobs:
       - uses: {SETUP_UV}
       - name: Sync (locked)
         run: uv sync --locked
-{rung}      # The ambient job token suffices here: the wave reads the forge
+{collect_step}{rung}      # The ambient job token suffices here: the wave reads the forge
       # and pushes receipt tags, and a tag is never a trigger, so the
       # suppressed-workflow-events limit cannot bite by construction.
       - name: Publish the wave
@@ -268,7 +332,7 @@ jobs:
         env:
           FORGE_TOKEN: ${{{{ github.token }}}}
         run: >-
-          uv run --no-sync {prog} workflow.release.publish
+          uv run --no-sync {prog} workflow.release.publish{prebuilt_flag}
           --ref="${{{{ inputs.ref || github.event.pull_request.merge_commit_sha }}}}"
 """
     if not answers.get("templates_artifact") or not publisher:
@@ -384,6 +448,56 @@ jobs:
 def _gitea_release(answers: dict[str, Any], prog: str) -> str:
     first = next(iter(answers.get("runners", ["ubuntu-latest"])))
     rung = _rung_step(answers)
+    wheels = _wants_wheel_matrix(answers)
+    runners = _csv(list(answers.get("runners", ["ubuntu-latest"])))
+    train_if = """>-
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'workflow/release/')"""
+    wheels_job = (
+        f"""  # Every declared runner's wheels, built before the wave and
+  # collected as artifacts. linux arm waits on a docker-capable
+  # runner, the container seam's known constraint.
+  wheels:
+    if: {train_if}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [{runners}]
+    runs-on: ${{{{ matrix.runner }}}}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{{{ github.event.pull_request.merge_commit_sha }}}}
+          fetch-depth: 0
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Sync (locked)
+        run: $HOME/.local/bin/uv sync --locked
+      - name: Build this platform's wheels
+        run: >-
+          $HOME/.local/bin/uv run --no-sync {prog} release.wheels
+          --ref="${{{{ github.event.pull_request.merge_commit_sha }}}}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{{{ matrix.runner }}}}
+          path: packages/*/dist/*
+          if-no-files-found: ignore
+"""
+        if wheels
+        else ""
+    )
+    needs_wheels = "    needs: [wheels]\n" if wheels else ""
+    collect_step = (
+        """      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          path: packages
+          merge-multiple: true
+"""
+        if wheels
+        else ""
+    )
+    prebuilt_flag = " --prebuilt" if wheels else ""
     workflow = f"""name: release
 
 # The merge-triggered train, token publishing (Gitea has no trusted
@@ -394,11 +508,9 @@ on:
     types: [closed]
 
 jobs:
-  publish:
-    if: >-
-      github.event.pull_request.merged == true &&
-      startsWith(github.event.pull_request.head.ref, 'workflow/release/')
-    runs-on: {first}
+{wheels_job}  publish:
+    if: {train_if}
+{needs_wheels}    runs-on: {first}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -408,7 +520,7 @@ jobs:
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
       - name: Sync (locked)
         run: $HOME/.local/bin/uv sync --locked
-{rung}      # PYTHON_PUBLISH_INDEX and PYTHON_REGISTRY_URL come from the
+{collect_step}{rung}      # PYTHON_PUBLISH_INDEX and PYTHON_REGISTRY_URL come from the
       # committed .repo.env through the env cascade; only the secrets
       # are mounted here. Gitea's automatic token serves the wave's
       # forge reads and receipt-tag pushes.
@@ -417,7 +529,7 @@ jobs:
           UV_PUBLISH_TOKEN: ${{{{ secrets.UV_PUBLISH_TOKEN }}}}
           FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
         run: >-
-          $HOME/.local/bin/uv run --no-sync {prog} workflow.release.publish
+          $HOME/.local/bin/uv run --no-sync {prog} workflow.release.publish{prebuilt_flag}
           --ref="${{{{ github.event.pull_request.merge_commit_sha }}}}"
 """
     publisher = str(answers.get("templates_publisher", ""))

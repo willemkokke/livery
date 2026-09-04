@@ -92,12 +92,79 @@ def test_the_render_carries_no_identity_but_the_answers(tmp_path: Path) -> None:
     assert "acme" in (root / "pyproject.toml").read_text()
 
 
-def test_the_stranger_drives_the_whole_loop(tmp_path: Path) -> None:
+def _drive_guard() -> None:
     if not os.environ.get("WORKSHOP_CONFORMANCE_DRIVE"):
         pytest.skip(
             "set WORKSHOP_CONFORMANCE_DRIVE=1 to run the full drive:"
             " it locks and syncs a scratch venv over the network"
         )
+
+
+def _driven_root(tmp_path: Path) -> tuple[Path, dict[str, str]]:
+    """A stranger workspace, sourced locally, locked, synced, fm-synced."""
+    origin = tmp_path / "origin.git"
+    origin.mkdir()
+    subprocess.run(
+        ["git", "init", "--bare", "-q", "--initial-branch=main"],
+        cwd=origin,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "clone", "-q", str(origin), "acme-tools"], cwd=tmp_path, check=True
+    )
+    root = _stranger(tmp_path / "acme-tools")
+    subprocess.run(
+        ["git", "config", "user.email", "d@acme.example"], cwd=root, check=True
+    )
+    subprocess.run(["git", "config", "user.name", "Acme"], cwd=root, check=True)
+    subprocess.run(["git", "config", "commit.gpgsign", "false"], cwd=root, check=True)
+    pyproject = root / "pyproject.toml"
+    text = pyproject.read_text()
+    text = text.replace(
+        "[tool.uv.sources]\n",
+        "[tool.uv.sources]\n"
+        f'livery-workshop = {{ path = "{ROOT / "packages/workshop"}" }}\n'
+        f'livery-forge = {{ path = "{ROOT / "packages/forge"}" }}\n',
+        1,
+    )
+    pyproject.write_text(text)
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    subprocess.run(["git", "commit", "-qm", "chore: birth"], cwd=root, check=True)
+    subprocess.run(["git", "push", "-q", "-u", "origin", "main"], cwd=root, check=True)
+    # A drive-local uv cache: the shared cache keys a path
+    # dependency's built wheel on its pyproject alone, so a stale
+    # build from an earlier drive would resurface on every sync the
+    # verbs run mid-test. Cold once per drive, correct throughout.
+    env = {
+        **os.environ,
+        "VIRTUAL_ENV": "",
+        "UV_CACHE_DIR": str(tmp_path / "uv-cache"),
+        # The drive is a stranger's machine: the operator's own
+        # shared env (tokens, rig addresses) must not leak in
+        # through the runner-config cascade.
+        "XDG_CONFIG_HOME": str(tmp_path / "xdg"),
+    }
+    for step in (
+        ["uv", "lock"],
+        [
+            "uv",
+            "sync",
+            "--reinstall-package",
+            "livery-workshop",
+            "--reinstall-package",
+            "livery-forge",
+        ],
+        ["uv", "run", "fm", "sync"],
+    ):
+        done = subprocess.run(step, cwd=root, env=env, capture_output=True, text=True)
+        assert done.returncode == 0, (
+            f"{' '.join(step)} exited {done.returncode}:\n{done.stdout}\n{done.stderr}"
+        )
+    return root, env
+
+
+def test_the_stranger_drives_the_whole_loop(tmp_path: Path) -> None:
+    _drive_guard()
     origin = tmp_path / "origin.git"
     origin.mkdir()
     subprocess.run(
@@ -157,3 +224,100 @@ def test_the_stranger_drives_the_whole_loop(tmp_path: Path) -> None:
         ["uv", "run", "fm", "sync"], cwd=root, env=env, capture_output=True, text=True
     )
     assert again.returncode == 0
+
+
+def test_the_rehearsal_runs_a_graph_of_both_kinds(tmp_path: Path) -> None:
+    """The armed release rehearsal over a native library and an extension.
+
+    Both kinds are wired through the real verbs, the gate runs with
+    the honest skips, and `fm workflow.release --local` derives,
+    stamps, builds (conan create for the library, cibuildwheel for
+    the extension), validates, and rolls the tree back.
+    """
+    _drive_guard()
+    for tool in ("conan", "cmake", "ninja", "cc"):
+        import shutil as _shutil
+
+        if _shutil.which(tool) is None:
+            pytest.skip(f"{tool} must resolve for the native rehearsal")
+    root, env = _driven_root(tmp_path)
+    # No forge token reaches the rehearsal: the stranger's forge is
+    # fictional, and a real token in the caller's shell would make
+    # git-cliff attempt the author lookup instead of its offline arm.
+    for variable in ("FORGE_TOKEN", "GITEA_TOKEN", "GITHUB_TOKEN", "GITLAB_TOKEN"):
+        env.pop(variable, None)
+    # The new kinds live at the monorepo's HEAD; the published
+    # template channel trails it, so the rehearsal carries the local
+    # source as its own channel.
+    import shutil as _sh
+
+    _sh.copytree(TEMPLATES, root / "templates")
+    # The scratch channel pins the layer distributions to this
+    # checkout inside the template itself, so every re-render the
+    # wiring verbs run keeps the override instead of resolving the
+    # published (older) wheels.
+    seed = root / "templates" / "project" / "pyproject.toml.jinja"
+    seed.write_text(
+        seed.read_text().replace(
+            "[tool.uv.sources]\n",
+            "[tool.uv.sources]\n"
+            f'livery-workshop = {{ path = "{ROOT / "packages/workshop"}" }}\n'
+            f'livery-forge = {{ path = "{ROOT / "packages/forge"}" }}\n',
+            1,
+        )
+    )
+    contract = root / "workshop.toml"
+    contract.write_text(
+        contract.read_text().replace(
+            "[workspace]\n",
+            '[workspace]\ntemplates = "templates"\n',
+            1,
+        )
+    )
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    subprocess.run(
+        ["git", "commit", "-qm", "chore: carry the template source"],
+        cwd=root,
+        check=True,
+    )
+    for name, kind in (
+        ("geometry", "package-cpp-conan"),
+        ("ext", "package-python-nanobind"),
+    ):
+        made = subprocess.run(
+            ["uv", "run", "fm", "new.package", name, f"--kind={kind}"],
+            cwd=root,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        assert made.returncode == 0, f"{made.stdout}\n{made.stderr}"
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    subprocess.run(
+        ["git", "commit", "-qm", "feat: the native library and the extension"],
+        cwd=root,
+        check=True,
+    )
+    gate = subprocess.run(
+        ["uv", "run", "fm", "check"], cwd=root, env=env, capture_output=True, text=True
+    )
+    assert gate.returncode == 0, f"{gate.stdout}\n{gate.stderr}"
+    assert "packages/geometry (cpp-conan): configure, build, ctest run" in gate.stdout
+    rehearsed = subprocess.run(
+        ["uv", "run", "fm", "workflow.release", "geometry", "ext", "--local"],
+        cwd=root,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert rehearsed.returncode == 0, f"{rehearsed.stdout}\n{rehearsed.stderr}"
+    # The member list is the assertion; the newborn first-derive
+    # version is its own open question (issue #218) and not this
+    # rehearsal's to pin.
+    assert "would release: acme-geometry v" in rehearsed.stdout
+    assert "acme-ext v" in rehearsed.stdout
+    assert "isolated legs skip" in rehearsed.stdout
+    clean = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=root, capture_output=True, text=True
+    )
+    assert clean.stdout.strip() == "", clean.stdout

@@ -21,6 +21,13 @@ from livery.workshop._packages import Package
 _FAILURES = (BaseException,)
 
 
+class _FakeStamper:
+    """A stamper that changes nothing; the fakes' version home."""
+
+    def stamp(self, version: str) -> list[str]:
+        return []
+
+
 @pytest.fixture
 def restored_registry():
     from livery.workshop import _kinds
@@ -43,6 +50,15 @@ class _FakeBackend:
 
     def check(self, package: Package, root: Path) -> None:
         return None
+
+    def current_version(self, package: Package) -> str:
+        return "0.0.1"
+
+    def stamp_version(self, package: Package) -> _FakeStamper:
+        return _FakeStamper()
+
+    def declared_requirements(self, package: Package) -> dict[str, str]:
+        return {}
 
 
 def _package(tmp_path: Path, type_name: str) -> Package:

@@ -130,7 +130,13 @@ def train(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     def _fake_build(package: Package, _root: Path, *, epoch: int = 0) -> Path:
         starts[package.directory.name] = time.monotonic()
         time.sleep(0.05)
-        return package.directory / "dist"
+        dist = package.directory / "dist"
+        dist.mkdir(exist_ok=True)
+        # The identity guard reads real filenames, so the stub
+        # leaves a pure-tagged wheel where a python build would.
+        wheel = package.name.replace("-", "_")
+        (dist / f"{wheel}-0.3.0-py3-none-any.whl").touch()
+        return dist
 
     def _fake_publish(package: Package, **kwargs: object) -> bool:
         name = package.directory.name
@@ -138,7 +144,7 @@ def train(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         spans[name] = (starts[name], time.monotonic())
         return True
 
-    monkeypatch.setattr("livery.workshop._publish._python.build", _fake_build)
+    monkeypatch.setattr("livery.workshop._backends._python.build", _fake_build)
     monkeypatch.setattr("livery.workshop._publish.publish_wheels", _fake_publish)
     monkeypatch.setattr("livery.workshop._publish.PROBE_POLL", 0.01, raising=False)
     return root, git, registry, spans
@@ -306,10 +312,10 @@ def test_the_floor_probe_refuses_an_unservable_floor(train) -> None:
     packages = {p.path: p for p in discover_packages(root)}
     registry.serve("livery-base", "0.1.0")  # below the 0.3.0 floor
     with pytest.raises(_FAILURES) as caught:
-        floor_probe(packages["packages/left"], packages, registry)
+        floor_probe(packages["packages/left"], packages, lambda _p: registry)
     assert "strands every consumer" in str(caught.value)
     registry.serve("livery-base", "0.3.0")
-    floor_probe(packages["packages/left"], packages, registry)
+    floor_probe(packages["packages/left"], packages, lambda _p: registry)
 
 
 def test_the_probe_times_out_teaching_the_rerun() -> None:
