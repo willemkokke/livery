@@ -1,8 +1,11 @@
-# Post-mortem: the first real release met fourteen findings
+# Post-mortem: the first real release met fifteen findings
 
-Status: 2026-09-04. The findings and causes are settled; the
-release has landed end to end on the local rig, and the GitHub
-release waits on the two asks at the end. Requested by Willem: "the
+Status: 2026-09-04. Closed: the release landed on GitHub the same
+day. Receipt tags packages/forge/v0.2.0 and packages/workshop/v0.1.0,
+livery-forge 0.2.0 and livery-workshop 0.1.0 on pypi.org through
+trusted publishing, the template artifact v0.1.0 on
+workshop-templates. The publish wave's first successful GitHub run
+took 38 seconds, on PR #160's squash. Requested by Willem: "the
 basic release machinery was supposed to be done and tested" — this
 note establishes, with commits and dates, in what sense that was
 true and in what sense it was not.
@@ -13,7 +16,7 @@ On 2026-09-04 the first real release since 2026-08-31 was attempted:
 a two-member set, livery-forge 0.2.0 and livery-workshop 0.1.0. The
 train refused or derailed repeatedly; each failure was a real defect,
 fixed through the normal flow (issue, gate, PR), and the next attempt
-found the next one. Fourteen findings, in the order met:
+found the next one. Fifteen findings, in the order met:
 
 | # | finding | born | in | fixed |
 | --- | --- | --- | --- | --- |
@@ -31,6 +34,7 @@ found the next one. Fourteen findings, in the order met:
 | 12 | a rider commit with the reserved `chore(release):` prefix enters the manifest, which the publisher then refuses | 2026-09-01 `994d77f` | PR #69 | durable fix #154 |
 | 13 | the receipt probe reads only PEP 691 JSON; Gitea's index serves PEP 503 HTML | 2026-09-01 `994d77f` | PR #69 | PR #152 |
 | 14 | the member-keys test is shadowed by the CI rung's shared-file override | rung emission | — | PR #151 |
+| 15 | the merged-PR guard walls off every later release of a member set | 2026-09-01 | PR #69 | PR #159 |
 
 Finding 4 is this session's own: an incomplete fix, caught by the
 next attempt. Findings 7 and 8 are the floor and movement guards
@@ -165,6 +169,16 @@ died (findings 13 and the address fact below), the local
 `fm workflow.release.publish --ref` re-run walked past the
 already-published wheel and finished the wave.
 
+Finding 15 stopped the GitHub retry after the rehearsal: the
+merged-PR guard refused any branch name that had ever had a merged
+pull request, and the train derives its reserved branch name from
+the member set, so merged PR #145 blocked every later
+forge+workshop release. The guard now refuses only when the merged
+head is an ancestor of the local branch; a branch cut fresh off the
+merged base is a new cycle and proceeds. The failed run also left
+the checkout on the reserved branch with stale prepared commits;
+recovery semantics for that state are issue #161.
+
 The rehearsal found findings 13 and 14, plus two environment facts
 that are not code defects: the committed .repo.env must name the
 index by the runner-reachable host (`gitea:3000`), with
@@ -179,21 +193,17 @@ The nine fixes (PRs #126 to #142), each with the forcing test or
 guard its defect lacked, and the plan's appended section recording
 the real-leg coverage gap with the rehearsal proposal.
 
-## The GitHub release: two asks
+## The GitHub release: how it closed
 
-The GitHub retry is a fresh `fm workflow.release` run from main (the
-stamped-but-unreleased guard covers the already-stamped versions, and
-a fresh squash leaves finding 12's polluted title behind). It is
-blocked on two things only Willem can do:
-
-1. **Set the `FORGE_ADMIN_TOKEN` repository secret.** The governance
-   apply job runs `fm workflow.configure` with that secret empty and
-   fails, which keeps main's own CI red, and the train refuses to
-   release a red main.
-2. **Confirm PyPI trusted publishing.** The publish job runs in the
-   `pypi` environment with `id-token: write`; the two project names
-   on PyPI must have this repository registered as a trusted
-   publisher, or the wave's upload will be refused.
+Both asks were met on 2026-09-04: the FORGE_ADMIN_TOKEN secret was
+set (the local gh token, one token everywhere) and the PyPI trusted
+publishers were confirmed to match the workflow and environment.
+The retry was then a fresh `fm workflow.release` run from main: the
+stamped-but-unreleased guard covered the already-stamped versions, a
+fresh squash left finding 12's polluted title behind, and finding
+15's fix let the reserved branch cycle again. PR #160 merged and the
+wave published, probed, and tagged both members in one 38-second
+run, with the template artifact behind it.
 
 ## Corrective candidates, for Willem to rule
 
