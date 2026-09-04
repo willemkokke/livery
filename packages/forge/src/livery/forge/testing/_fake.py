@@ -907,9 +907,19 @@ class _FakeChecks:
         self._fake._settle(state)
 
     def dispatch(
-        self, workflow: str, *, ref: str, inputs: Mapping[str, str] | None = None
+        self,
+        workflow: str,
+        *,
+        ref: str,
+        inputs: Mapping[str, str] | None = None,
+        outcome: Outcome = "success",
     ) -> None:
-        """Queue a run of *workflow* at *ref*."""
+        """Queue a run of *workflow* at *ref*.
+
+        ``outcome`` is the fake's test knob, as on
+        livery.forge.testing.FakeForge.push: the run reaches it when
+        the sha settles.
+        """
         state = self._state()
         sha = state.branches.get(ref) or state.tags.get(ref)
         if sha is None:
@@ -917,7 +927,9 @@ class _FakeChecks:
                 f"ref {ref} does not exist in {self._owner}/{self._name}",
                 status=404,
             )
-        self._fake._start_run(state, sha, workflow=workflow, event="workflow_dispatch")
+        self._fake._start_run(
+            state, sha, workflow=workflow, event="workflow_dispatch", outcome=outcome
+        )
 
 
 class _FakeIssues:
