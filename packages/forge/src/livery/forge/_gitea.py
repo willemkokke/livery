@@ -39,6 +39,7 @@ from livery.forge._types import (
     Label,
     Protection,
     PullRequest,
+    RegistryKind,
     Release,
     RepoConfig,
     RepoInfo,
@@ -185,6 +186,22 @@ class GiteaForge:
             data = self._client.request("/version")
             self._version = str(data.get("version", ""))
         return self._version
+
+    def registry_url(self, kind: RegistryKind, owner: str) -> str:
+        """Gitea hosts all three: its package registry serves them.
+
+        ``python`` answers the pypi registry base (its ``/simple``
+        child is the read index, the base itself takes uploads);
+        ``conan`` the conan remote; ``container`` the image
+        reference prefix, which on Gitea is the web host itself.
+        """
+        host = self._web_root
+        if kind == "python":
+            return f"{host}/api/packages/{owner}/pypi"
+        if kind == "conan":
+            return f"{host}/api/packages/{owner}/conan"
+        bare = host.split("://", 1)[-1]
+        return f"{bare}/{owner}"
 
     def supports(self, capability: Capability) -> bool:
         """Gitea offers every named capability."""

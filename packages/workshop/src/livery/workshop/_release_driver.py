@@ -613,20 +613,20 @@ def workflow_release_publish(
     from livery.forge import SimpleRegistry
     from livery.workshop._layers import workspace_root
     from livery.workshop._publish import publish_release
+    from livery.workshop._registries import resolve_registry
 
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
     git = GitOps(root)
-    registry = SimpleRegistry(
-        os.environ.get("PYTHON_REGISTRY_URL", "https://pypi.org/simple")
-    )
+    target = resolve_registry(root, "python")
+    registry = SimpleRegistry(target.url)
     receipts = publish_release(
         root,
         git,
         lambda _package: registry,
         ref=ref,
-        index_url=os.environ.get("PYTHON_PUBLISH_INDEX", ""),
+        index_url=target.publish_url,
         token=os.environ.get("UV_PUBLISH_TOKEN", ""),
     )
     output = os.environ.get("GITHUB_OUTPUT", "")

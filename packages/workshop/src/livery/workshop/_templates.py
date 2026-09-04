@@ -472,7 +472,24 @@ def project_drift(root: Path) -> list[str]:
 #: What a package's own render owns for good. Every other rendered
 #: file is a package's seed, which its authors then write: comparing
 #: those would report a living package as drift from its own birth.
+#: The python kind's set; a package's actual set is its kind
+#: chain's union, livery.workshop._kinds.managed_files, and a pin
+#: keeps this legacy name agreeing with the registry.
 PACKAGE_MANAGED = ("cliff.toml",)
+
+
+def _managed_for(directory: Path) -> tuple[str, ...]:
+    """The drift-judged files for the package at *directory*."""
+    import tomllib
+
+    from livery.workshop._kinds import managed_files
+
+    contract = directory / "workshop.toml"
+    if not contract.is_file():
+        return PACKAGE_MANAGED
+    declared = str(tomllib.loads(contract.read_text("utf-8")).get("type", "python"))
+    return managed_files(declared)
+
 
 #: The project render's seeds: born with the workspace, then the
 #: workspace's own. Written only when missing; the drift gate never
@@ -506,7 +523,7 @@ def package_drift(root: Path) -> list[str]:
         data = {**read_answers(answers_path), **package_injections(root)}
         with tempfile.TemporaryDirectory() as scratch:
             render(source, Path(scratch), data)
-            for name in PACKAGE_MANAGED:
+            for name in _managed_for(directory):
                 rendered = Path(scratch) / name
                 if not rendered.is_file():
                     continue
@@ -586,7 +603,7 @@ def apply_packages(root: Path) -> list[str]:
         data = {**read_answers(answers_path), **package_injections(root)}
         with tempfile.TemporaryDirectory() as scratch:
             render(source, Path(scratch), data, ref=ref)
-            for name in PACKAGE_MANAGED:
+            for name in _managed_for(directory):
                 rendered = Path(scratch) / name
                 if not rendered.is_file():
                     continue
@@ -652,6 +669,42 @@ def new_package(
     wire_package(_root(), name)
 
 
+def _render_kind(
+    template_dir: str,
+    destination: Path,
+    kind: str,
+    *,
+    name: str,
+    package_name: str,
+    project: str,
+    namespace: str,
+    answers: dict[str, object],
+    root: Path,
+    ref: str | None,
+) -> None:
+    """One chain link's render into *destination*; child over parent."""
+    render(
+        template_dir,
+        destination,
+        {
+            "kind": kind,
+            "package_dir": name,
+            "package_name": package_name,
+            "package_description": f"{package_name}: a {project} workspace package.",
+            "namespace_package": namespace,
+            "author_name": answers.get("author_name", ""),
+            "author_email": answers.get("author_email", ""),
+            "copyright_year": answers.get("copyright_year", ""),
+            # The forge facts ride the contract, not the answers: a
+            # package's changelog links its own pull requests, and a
+            # default taken from the template would put a Gitea
+            # workspace's entries on github.com.
+            **package_injections(root),
+        },
+        ref=ref,
+    )
+
+
 def wire_package(root: Path, name: str, *, kind: str = "package-python") -> str:
     """Render one *kind* package into *root* and wire it; the import path.
 
@@ -673,26 +726,21 @@ def wire_package(root: Path, name: str, *, kind: str = "package-python") -> str:
     package_name = f"{prefix}-{name}" if prefix else name
     project = str(answers.get("project_name", ""))
     slug = name.replace("-", "_")
-    render(
-        template_dir,
-        destination,
-        {
-            "kind": kind,
-            "package_dir": name,
-            "package_name": package_name,
-            "package_description": f"{package_name}: a {project} workspace package.",
-            "namespace_package": namespace,
-            "author_name": answers.get("author_name", ""),
-            "author_email": answers.get("author_email", ""),
-            "copyright_year": answers.get("copyright_year", ""),
-            # The forge facts ride the contract, not the answers: a
-            # package's changelog links its own pull requests, and a
-            # default taken from the template would put a Gitea
-            # workspace's entries on github.com.
-            **package_injections(root),
-        },
-        ref=ref,
-    )
+    from livery.workshop._kinds import template_chain
+
+    for chained_kind in template_chain(kind):
+        _render_kind(
+            template_dir,
+            destination,
+            chained_kind,
+            name=name,
+            package_name=package_name,
+            project=project,
+            namespace=namespace,
+            answers=answers,
+            root=root,
+            ref=ref,
+        )
     _redact_answers_source(destination / _ANSWERS)
     members = list(answers.get("packages", []))
     members.append({"dir": name, "name": package_name, "dev": package_name})

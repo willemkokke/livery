@@ -48,6 +48,7 @@ from livery.forge._types import (
     Label,
     Protection,
     PullRequest,
+    RegistryKind,
     Release,
     RepoConfig,
     RepoInfo,
@@ -184,6 +185,29 @@ class GithubForge:
         """
         data = self._client.request("/meta")
         return str(data.get("installed_version") or "github.com")
+
+    def registry_url(self, kind: RegistryKind, owner: str) -> str:
+        """GitHub hosts a container registry; the others decline.
+
+        ``container`` answers the ghcr prefix on github.com (an
+        enterprise install's registry host is not derivable from the
+        API base, so it declines there too, and the contract's own
+        declaration is the path). ``python`` declines: GitHub hosts
+        no python index, and pypi.org is the resolution ladder's
+        ecosystem default, not this forge's registry. ``conan``
+        declines: GitHub has no conan registry at all.
+        """
+        if kind == "container" and self._web_root == "https://github.com":
+            return f"ghcr.io/{owner}"
+        raise Unsupported(
+            f"github hosts no {kind} registry"
+            + (
+                " (an enterprise install's registry host is not derivable;"
+                " declare it in the contract)"
+                if kind == "container"
+                else ""
+            )
+        )
 
     def supports(self, capability: Capability) -> bool:
         """Honest per-install: ``ci_secrets`` needs the extra installed."""

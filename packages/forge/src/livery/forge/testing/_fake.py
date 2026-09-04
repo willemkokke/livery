@@ -34,6 +34,7 @@ from livery.forge._types import (
     Label,
     Protection,
     PullRequest,
+    RegistryKind,
     Release,
     RepoConfig,
     RepoInfo,
@@ -204,6 +205,12 @@ class FakeForge:
     def server_version(self) -> str:
         """The configured version string."""
         return self._version
+
+    def registry_url(self, kind: RegistryKind, owner: str) -> str:
+        """A deterministic registry root per kind, for tests."""
+        if kind == "container":
+            return f"registry.fake.example/{owner}"
+        return f"https://fake.example/api/packages/{owner}/{kind}"
 
     def supports(self, capability: Capability) -> bool:
         """Whether *capability* was granted at construction."""

@@ -485,14 +485,11 @@ def _publish_container(root: Path) -> None:
     import tempfile
 
     from livery.workshop._forge_lane import remote_repo_name
+    from livery.workshop._registries import resolve_registry
 
-    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
-    forge = contract.get("forge") or {}
-    url = str(forge.get("url", ""))
-    owner = str(forge.get("owner", ""))
-    host = url.split("://", 1)[-1] if url else "ghcr.io"
+    target = resolve_registry(root, "container")
     repo = remote_repo_name(root)
-    image = f"{host}/{owner}/{repo}-docs:latest".lower()
+    image = f"{target.url}/{repo}-docs:latest".lower()
     dockerfile = "FROM nginx:1.27-alpine\nCOPY site /usr/share/nginx/html\n"
     with tempfile.NamedTemporaryFile("w", suffix=".Dockerfile", delete=False) as handle:
         handle.write(dockerfile)
@@ -503,10 +500,11 @@ def _publish_container(root: Path) -> None:
         fail(f"docker build exited {built.code}:\n{built.stdout}{built.stderr}")
     pushed = docker("push", image)
     if pushed.code != 0:
+        registry_host = target.url.split("/", 1)[0]
         fail(
             f"docker push {image} exited {pushed.code}:\n"
             f"{pushed.stdout}{pushed.stderr}"
-            f"  A denied push wants `docker login {host}` first."
+            f"  A denied push wants `docker login {registry_host}` first."
         )
     print(f"  pushed {image}")
 
