@@ -43,6 +43,22 @@ with `origin/main`.
 - Every workflow verb is idempotent: re-running it is the recovery
   procedure.
 - Phases land daily, gate-green, mergeable alone.
+- A phase acceptance that ships deferred keeps an open line in the
+  plan note until the evidence lands. "Shipped" with a silent
+  deferral hides the gap exactly where the next reader trusts the
+  record.
+- A contract clause that code enforces gets a pinning test before
+  its implementation is replaced: name the properties the old code
+  enforced, pin them, then replace it. A property living only in the
+  contract's prose does not survive a refactor.
+- A warning or anomaly found live during other work gets an issue
+  the same day, with a body an outsider can read. A patch where it
+  was noticed leaves every other arm carrying the same fault.
+- The release train owns versions, tags, and receipts. No hand
+  stamps, no hand tags; an out-of-band claim (name-squatting on an
+  index included) is recorded as debt in the plan the day it is
+  made, and the gate refuses a release tag that is not an annotated
+  train receipt.
 - Notes in `notes/` describe current state; decisions carry dates in
   each note's decision record. A note is updated in the same change
   as the code it describes, or it is wrong.
