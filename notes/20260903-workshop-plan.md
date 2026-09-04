@@ -1054,3 +1054,27 @@ green so each feature ships through the proven seams:
     are distribution and import names: `livery-workshop`,
     `livery.workshop`, and any layer it lists, `livery.forge`
     alike. Folded into phase 10.
+
+## Appended 2026-09-04: the release path's real-leg coverage
+
+The first multi-member release met five latent seams in the train
+(the decision record above carries them). The one that worries
+(Willem): the set build-order defect slipped past coverage he
+believed existed. It half did: the driver suite releases a
+two-member set end to end and pins the topological PR title, but it
+stubs the isolated legs, and the only test that runs the legs for
+real is single-member and dependency-free. The orchestration was
+tested; the legs' cross-member contract (each member's find-links
+naming every sibling's dist, the floors starving honestly across
+the set, the movement guard over the true graph) never ran under
+test until the train ran it in production.
+
+The task: make the topological `graph.affected` release path
+properly tested with real legs. The candidate shape is a
+`workflow.release --local` rehearsal in the armed suite (the
+conformance drive's variable): it builds every member, runs both
+legs and the movement guard over the true member graph, and
+restores the tree, publishing nothing. It would also stop the
+train's path aging between releases, which is how all five seams
+accumulated. Owner: Willem picks the cut; recorded here so the
+investigation cannot slip.
