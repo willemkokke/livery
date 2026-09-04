@@ -193,7 +193,9 @@ Acceptance:
 
 `package-python-nanobind`: a child of `package-python` through the
 kind chain (nanobind and scikit-build-core over the parent's
-files), the platform-tagged wheel, the python verbs kept whole
+files, ruled 2026-09-04), the wheel built through cibuildwheel from
+day one so even a single leg's wheels are manylinux-compliant, the
+python verbs kept whole
 (typecheck, typecomplete, the isolated legs now installing a
 compiled wheel, the 0901 promise), and the identity guard's first
 half: the built wheel's tag must be platform-specific for this
@@ -230,11 +232,15 @@ Acceptance:
 The conan publish seam through the ladder: the library publishes
 to whatever the ladder resolves, the rig proof using gitea's own
 conan registry (upload, then a clean `conan install` back), and a
-declared external remote proven by pointing the fixture at a
-second local registry. The wave gains the identity guard both
-ways: a native kind's pure-tagged wheel refuses, a pure kind's
-platform-tagged wheel refuses, each naming the kind and the tag.
-The armed release rehearsal runs the extended graph.
+declared folder target round-tripping. The native wheel matrix
+(ruled 2026-09-04): per-OS cibuildwheel jobs in the emitted release
+workflow, artifact collection feeding the wave, so every platform's
+wheels publish together from the first release; cibuildwheel's
+linux arm needs a docker-capable runner, the container seam's known
+constraint. The wave gains the identity guard both ways: a native
+kind's pure-tagged wheel refuses, a pure kind's platform-tagged
+wheel refuses, each naming the kind and the tag. The armed release
+rehearsal runs the extended graph.
 
 Acceptance:
 - On the rig, the fixture library uploads to gitea's conan
@@ -267,6 +273,13 @@ Acceptance:
 
 ## Decision record
 
+- 2026-09-04 (Willem): the three remaining open items ruled:
+  cibuildwheel with the full per-OS matrix in phase 5, nanobind
+  with scikit-build-core, compilers host-required until phase 18.
+  And the standing frame, stated the same day: livery is the
+  development environment for every future project; capability is
+  never deferred on absent consumers, only on sequencing or named
+  risk.
 - 2026-09-04 (Willem): the scope is a CMake C/C++ library kind on
   conan 2 and a python binary-extension kind depending on it; Maya
   waits. The cross-kind dependency is the hierarchy's proof.
@@ -295,15 +308,16 @@ Acceptance:
    in the contract, a local folder or share included; the forge's
    own is only the default; GitHub plus conan resolves to the named
    decline by derivation, not by ruling.
-2. **The platform matrix for native wheels.** The gate builds and
-   tests on linux, macos, and windows already; the wave publishes
-   from one runner, so the extension's published wheel is
-   single-platform at first. Accept for now (the temporary table
-   row), or pull the matrix build into phase 5. Owner: Willem.
-3. **nanobind confirmed.** The 0901 record names nanobind and this
-   plan assumes it with scikit-build-core, keeping one CMake
-   ecosystem across both kinds. Confirm or name another binding
-   layer. Owner: Willem.
-4. **The compiler doctor policy.** Phase 2 requires a host
-   toolchain and names its absence; nothing installs compilers
-   until phase 18. Confirm. Owner: Willem.
+2. Resolved 2026-09-04 (Willem): cibuildwheel is the native wheel
+   builder from day one, and the full per-OS matrix with artifact
+   collection lands in phase 5: complete wheels from the first
+   release. This is the foundation for every future project;
+   capability is not deferred on absent consumers.
+3. Resolved 2026-09-04 (Willem): nanobind with scikit-build-core.
+4. Resolved 2026-09-04 (Willem): compilers are host-required with
+   `fm doctor` naming the missing toolchain per platform; cmake,
+   ninja, and conan join the derived profile; compiler provisioning
+   waits for phase 18's machinery, a sequencing deferral, not an
+   adoption one.
+
+All four ruled. Willem's go, 2026-09-04: phase 1 is in build.
