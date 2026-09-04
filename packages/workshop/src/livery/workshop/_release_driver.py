@@ -346,6 +346,7 @@ class ReleaseDriver:
                 else:
                     git.switch(self.branch)
             print(f"  recovering the prepared {self.name} from its branch")
+            self._require_fresh_base()
             return self._submission_from_ref()
 
         require_verified_base(self._repo, git, self.base, force=self._force)
@@ -382,27 +383,64 @@ class ReleaseDriver:
         )
         return Submission(title=title, body=body)
 
-    def _submission_from_ref(self) -> Submission:
-        """The title and body the branch's own commits state.
+    def _require_fresh_base(self) -> None:
+        """Refuse a prepared branch whose base moved under it.
 
-        Recovery reads the ref, never the working tree: a checkout
-        standing elsewhere holds a different tree, and the member
-        commits are the record of what was prepared.
+        hse merges the default branch into a stale release branch and
+        re-verifies; livery's entries carry a mining point instead,
+        and commits merged in beneath it would ship under-documented,
+        so the stale branch is refused outright: abandon and re-run,
+        and the fresh prepare mines everything. Deviation from hse
+        ruled 2026-09-04 with issue #161.
         """
-        stamped: list[str] = []
-        for subject in reversed(self._git.subjects_ahead(self.base)):
-            _, _, rest = subject.partition("chore(release): ")
-            if rest:
-                stamped.append(rest)
-        listed = ", ".join(stamped)
-        mined_at = self._git._run("merge-base", "HEAD", f"origin/{self.base}").strip()
+        git = self._git
+        git.fetch()
+        base_sha = git._run("rev-parse", f"origin/{self.base}").strip()
+        if git.is_ancestor(base_sha, "HEAD"):
+            return
+        fail(
+            f"{self.base} has moved past this prepared release: commits"
+            " it gained are not mined into the branch's entries, and"
+            " releasing them under-documented is worse than re-preparing."
+            f"\n  Run `{footman.prog()} abandon` on the branch, then"
+            f" `{footman.prog()} workflow.release` again."
+        )
+
+    def _submission_from_ref(self) -> Submission:
+        """The title and body the branch's changelogs state.
+
+        Recovery reads the branch's committed changelogs, never the
+        working tree and never commit subjects: a checkout standing
+        elsewhere holds a different tree, a rider commit is not part
+        of what was prepared, and a hand-edited entry keeps its
+        member's heading, so the rebuilt title stays consistent with
+        the content the squash will carry.
+        """
+        from livery.workshop._publish import changelog_version
+
+        git = self._git
+        mined_at = git._run("merge-base", "HEAD", f"origin/{self.base}").strip()
+        pairs: list[tuple[str, str]] = []
+        for path in git._run("diff", "--name-only", mined_at, "HEAD").splitlines():
+            parts = path.split("/")
+            if (
+                len(parts) == 3
+                and parts[0] == "packages"
+                and parts[2] == "CHANGELOG.md"
+            ):
+                version = changelog_version(git.file_at("HEAD", path))
+                contract = git.file_at("HEAD", f"packages/{parts[1]}/workshop.toml")
+                name = ""
+                for line in contract.splitlines():
+                    if line.startswith("name = "):
+                        name = line.split("=", 1)[1].strip().strip('"')
+                        break
+                if name and version:
+                    pairs.append((name, version))
+        listed = ", ".join(f"{name} v{version}" for name, version in pairs)
         body = (
             "## Release summary\n"
-            + "\n".join(
-                f"- **{entry.split(' v')[0]}** v{entry.split(' v')[1]}"
-                for entry in stamped
-                if " v" in entry
-            )
+            + "\n".join(f"- **{name}** v{version}" for name, version in pairs)
             + f"\n\nMined-At: {mined_at}"
         )
         return Submission(title=f"chore(release): released {listed}", body=body)
@@ -509,34 +547,45 @@ def workflow_release_check_title(
 ) -> None:
     """Verify a release PR's title against the members' changelogs.
 
-    The squash subject becomes the merge commit and the manifest the
-    publish wave parses, so a hand-edited title that no longer names
-    what the changelogs prepared is refused here, in a non-required
-    CI job, before it can mislead. Not a required context: a red
-    here wants a human look, never a parked merge.
+    The publish wave discovers a release from the squash's changed
+    changelogs; the title is presentation. This job keeps the two
+    consistent, so a title that no longer names what the changelogs
+    prepared is refused here, in a non-required CI job, before it
+    can mislead a reader. Not a required context: a red here wants a
+    human look, never a parked merge.
     """
     from livery.workshop._layers import workspace_root
 
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
+    from livery.workshop._publish import changelog_version
+
     git = GitOps(root)
     branch = git.current_branch()
-    stamped: list[str] = []
-    for subject in reversed(git.subjects_ahead("main")):
-        _, _, rest = subject.partition("chore(release): ")
-        if rest:
-            stamped.append(rest)
-    expected = "chore(release): released " + ", ".join(stamped)
-    if not stamped:
-        print(f"  {branch}: no release commits; nothing to check")
+    base = git._run("merge-base", "HEAD", "origin/main").strip()
+    pairs: list[str] = []
+    for path in git._run("diff", "--name-only", base, "HEAD").splitlines():
+        parts = path.split("/")
+        if len(parts) == 3 and parts[0] == "packages" and parts[2] == "CHANGELOG.md":
+            version = changelog_version(git.file_at("HEAD", path))
+            contract = git.file_at("HEAD", f"packages/{parts[1]}/workshop.toml")
+            for line in contract.splitlines():
+                if line.startswith("name = "):
+                    name = line.split("=", 1)[1].strip().strip('"')
+                    if name and version:
+                        pairs.append(f"{name} v{version}")
+                    break
+    if not pairs:
+        print(f"  {branch}: no changelog changes; nothing to check")
         return
+    expected = "chore(release): released " + ", ".join(pairs)
     if title and title != expected:
         fail(
-            f"the PR title does not match what the branch prepared:\n"
+            f"the PR title does not match what the changelogs prepared:\n"
             f"    title:    {title}\n    prepared: {expected}\n"
-            "  The squash subject is the publish manifest; restore the"
-            " title or re-prepare."
+            "  The title is presentation rebuilt from the branch's"
+            " changelogs; restore it or re-run workflow.release."
         )
     print(f"  title matches the prepared release: {expected}")
 

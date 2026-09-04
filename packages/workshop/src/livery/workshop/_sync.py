@@ -227,13 +227,24 @@ def bring_current(root: Path, git: GitOps, *, interactive: bool) -> None:
         return
     git.fetch()
     if branch == "main":
-        try:
-            git._run("merge", "--ff-only", "origin/main")
-        except Exception:
+        ahead = git._run("rev-list", "--count", "origin/main..main").strip()
+        if ahead != "0":
             print(
                 "  main has local commits origin does not: never rebased,"
                 " never merged here. Move them to a branch."
             )
+            return
+        behind = git._run("rev-list", "--count", "main..origin/main").strip()
+        if behind == "0":
+            return
+        try:
+            git._run("merge", "--ff-only", "origin/main")
+        except Exception as error:
+            # The two states need different acts, so the refusal is
+            # named with git's own reason, never read as "local
+            # commits" (usually it is uncommitted changes in the way).
+            print(f"  main is {behind} behind and the fast-forward was refused:")
+            print(f"  {error}")
         return
     if branch.startswith("workflow/"):
         return  # the engine owns a workflow branch's staleness

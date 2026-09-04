@@ -223,6 +223,18 @@ class GitOps:
         out = self._run("log", "--format=%s", span, "--", *paths)
         return tuple(line for line in out.splitlines() if line.strip())
 
+    def files_in_commit(self, ref: str) -> list[str]:
+        """The paths the commit at *ref* changed."""
+        listed = self._run("show", "--pretty=", "--name-only", ref)
+        return [line for line in listed.splitlines() if line]
+
+    def file_at(self, ref: str, path: str) -> str:
+        """The contents of *path* as committed at *ref*; empty when absent."""
+        result = toolroom.git.opts(cwd=self.root, nofail=True, recorded=False)(
+            "show", f"{ref}:{path}"
+        )
+        return result.stdout if result.code == 0 else ""
+
     def commit_message(self, ref: str) -> str:
         """*ref*'s full commit message, subject and body."""
         return self._run("log", "-1", "--format=%B", ref)

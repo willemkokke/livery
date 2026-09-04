@@ -371,6 +371,78 @@ def test_recovery_reads_the_branch_and_rebuilds_nothing(
     assert rebuilt == []  # recovery derives nothing
 
 
+def test_recovery_survives_a_rider_and_a_hand_edited_entry(
+    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Finding 12's scenario, on the fixed shape: the title rebuilds
+    # from the branch's changelogs, so a rider commit (even with the
+    # reserved prefix) never enters it, and hand-editing an entry on
+    # the prepared branch is a supported flow.
+    fake, _git_seam, root = workspace
+    _grow(root, "core", "feat: core grows (#1)")
+    _git(root, "push", "origin", "main")
+    rig = _RigGit(root, fake)
+    sha = rig.remote_head("main")
+    fake.push(OWNER, NAME, "main", sha=sha)
+    fake.settle(OWNER, NAME, sha)
+    monkeypatch.setattr(
+        "livery.workshop._release_driver.validate_member",
+        lambda _root, plan, dirs: None,
+    )
+    members = resolve_set(root, ("core",))
+    driver = ReleaseDriver(
+        root, fake.repository(OWNER, NAME), rig, members, armed=False
+    )
+    first = driver.prepare()
+    assert first is not None
+    changelog = root / "packages" / "core" / "CHANGELOG.md"
+    edited = changelog.read_text().replace("- Core grows", "- The 0.3.0 story, told")
+    changelog.write_text(edited)
+    (root / "uv.lock.marker").write_text("a rider\n")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "chore(release): the lock records something")
+    again = ReleaseDriver(root, fake.repository(OWNER, NAME), rig, members, armed=False)
+    recovered = again.prepare()
+    assert recovered is not None
+    assert recovered.title == first.title
+    assert "the lock records" not in recovered.title
+
+
+def test_recovery_refuses_a_prepared_branch_whose_base_moved(
+    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Issue #161: reusing prepared commits after main advanced would
+    # release code the entries never mined; the recovery refuses and
+    # teaches the abandon-and-rerun path instead.
+    fake, _git_seam, root = workspace
+    _grow(root, "core", "feat: core grows (#1)")
+    _git(root, "push", "origin", "main")
+    rig = _RigGit(root, fake)
+    sha = rig.remote_head("main")
+    fake.push(OWNER, NAME, "main", sha=sha)
+    fake.settle(OWNER, NAME, sha)
+    monkeypatch.setattr(
+        "livery.workshop._release_driver.validate_member",
+        lambda _root, plan, dirs: None,
+    )
+    members = resolve_set(root, ("core",))
+    driver = ReleaseDriver(
+        root, fake.repository(OWNER, NAME), rig, members, armed=False
+    )
+    assert driver.prepare() is not None
+    _git(root, "checkout", "main")
+    moved = root / "packages" / "core" / "src" / "livery" / "core" / "moved.py"
+    moved.write_text("y = 2\n")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "feat: main moves on (#9)")
+    _git(root, "push", "origin", "main")
+    _git(root, "checkout", driver.branch)
+    again = ReleaseDriver(root, fake.repository(OWNER, NAME), rig, members, armed=False)
+    with pytest.raises(_FAILURES) as caught:
+        again.prepare()
+    assert "moved past this prepared release" in str(caught.value)
+
+
 def test_release_name_sorts_its_members() -> None:
     assert release_name(("workshop", "forge")) == "release/forge+workshop"
 

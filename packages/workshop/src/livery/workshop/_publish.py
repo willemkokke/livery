@@ -1,10 +1,14 @@
 """Publish, probe, tag: the release train's receipt-cutting half.
 
 Runs where the release PR's squash landed, discovery reads the ref
-and nothing else: the squash title is the manifest
-(``chore(release): released livery-forge v0.2.0, ...``), versions
-verified against the tree at that ref, and HEAD having moved on is
-exactly why ``--ref`` exists.
+and nothing else: the members are the ``packages/*/CHANGELOG.md``
+paths the squash touched, each version the top heading of that
+changelog as committed at the ref. Names and versions come from the
+same place on purpose: reading names from the commit and versions
+from the working tree would pair this release's members with
+whatever a later release left in the tree, and the ``--ref``
+recovery runs from exactly such a checkout. The squash title is
+presentation, rebuilt from the same changelogs, never parsed.
 
 The wave: a member becomes eligible when every in-set dependency it
 floors on has its receipt tag cut, and every eligible member runs
@@ -33,8 +37,8 @@ from livery.workshop._backends import _python
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package, discover_packages
 
-_MANIFEST_RE = re.compile(r"^chore\(release\): released (.+)$")
-_MEMBER_RE = re.compile(r"^(\S+) v(\d+\.\d+\.\d+)$")
+_CHANGELOG_RE = re.compile(r"^packages/([^/]+)/CHANGELOG\.md$")
+_HEADING_RE = re.compile(r"^## \[?(\d+\.\d+\.\d+)\]?", re.M)
 
 #: How long a member waits for the index to serve its version.
 PROBE_TIMEOUT = 300.0
@@ -59,32 +63,59 @@ class Receipt:
     published: bool  # False when the duplicate tolerance skipped it
 
 
-def parse_manifest(title: str) -> tuple[tuple[str, str], ...]:
-    """(distribution, version) pairs from a squash title, or fail teaching.
+def changelog_version(text: str) -> str:
+    """The top version heading of a changelog body; empty when none."""
+    match = _HEADING_RE.search(text)
+    return match.group(1) if match else ""
 
-    The title is the manifest by convention, and the convention is
-    CI-asserted on release PRs, so an unparsable title here means the
-    checkout is not at a release squash at all.
+
+def discover_release(
+    root: Path, git: GitOps, ref: str
+) -> tuple[tuple[Package, str], ...]:
+    """What the squash at *ref* releases, in topological order.
+
+    Members are the ``packages/*/CHANGELOG.md`` paths the commit
+    touched; each version is the top heading of that changelog as
+    committed at the ref. A commit touching no member changelog is
+    not a release squash and fails teaching the recovery flag. A
+    rider file in the squash changes nothing here, which is what
+    makes hand-editing an entry on the release branch safe.
     """
-    match = _MANIFEST_RE.match(title.strip().splitlines()[0] if title else "")
-    if match is None:
+    from livery.workshop._graph import order_topologically
+
+    names: list[str] = []
+    for path in git.files_in_commit(ref):
+        match = _CHANGELOG_RE.match(path)
+        if match:
+            names.append(match.group(1))
+    if not names:
         fail(
-            "this commit is not a release squash: its title does not read"
-            " `chore(release): released <name> v<version>, ...`. Publish"
-            " runs on the merge commit of a workflow.release PR; pass"
-            " --ref=<squash sha> when HEAD has moved past it."
+            "this commit is not a release squash: it touches no"
+            " packages/*/CHANGELOG.md. Publish runs on the merge commit"
+            " of a workflow.release PR; pass --ref=<squash sha> when"
+            " HEAD has moved past it."
         )
-    pairs: list[tuple[str, str]] = []
-    for part in match.group(1).split(", "):
-        member = _MEMBER_RE.match(part.strip())
-        if member is None:
+    by_dir = {p.directory.name: p for p in discover_packages(root)}
+    members: list[Package] = []
+    versions: dict[str, str] = {}
+    for name in names:
+        package = by_dir.get(name)
+        if package is None:
             fail(
-                f"the release manifest carries {part.strip()!r}, which does"
-                " not read `<name> v<version>`; the title job should have"
-                " refused this squash"
+                f"the squash touches packages/{name}/CHANGELOG.md, but"
+                f" packages/{name} is not a workspace package"
             )
-        pairs.append((member.group(1), member.group(2)))
-    return tuple(pairs)
+        version = changelog_version(git.file_at(ref, f"packages/{name}/CHANGELOG.md"))
+        if not version:
+            fail(
+                f"packages/{name}/CHANGELOG.md at {ref[:10]} has no"
+                " `## <version>` heading, so the release it states is"
+                " unreadable"
+            )
+        members.append(package)
+        versions[package.path] = version
+    ordered = order_topologically(tuple(members))
+    return tuple((package, versions[package.path]) for package in ordered)
 
 
 _MINED_AT_RE = re.compile(r"^Mined-At: ([0-9a-f]{7,40})$", re.M)
@@ -258,21 +289,13 @@ def publish_release(
     dependency's receipt exists, independent members run abreast, a
     failure stops only its dependents. Every read is *ref*-scoped.
     """
-    from livery.workshop._graph import order_topologically
     from livery.workshop._release import verify_release
 
     ensure_git_identity(git)
     resolved_ref = ref or git.head_sha()
-    title = git.commit_message(resolved_ref).splitlines()[0]
-    manifest = dict(parse_manifest(title))
-    by_name = {p.name: p for p in discover_packages(root)}
-    members: list[Package] = []
-    for name in manifest:
-        package = by_name.get(name)
-        if package is None:
-            fail(f"the manifest names {name}, which is not a workspace package")
-        members.append(package)
-    ordered = order_topologically(tuple(members))
+    discovered = discover_release(root, git, resolved_ref)
+    ordered = tuple(package for package, _version in discovered)
+    manifest = {package.name: version for package, version in discovered}
     epoch = int(git._run("log", "-1", "--format=%ct", resolved_ref).strip() or "0")
 
     by_path = {p.path: p for p in discover_packages(root)}

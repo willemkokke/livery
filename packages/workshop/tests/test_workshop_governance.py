@@ -254,6 +254,12 @@ def test_the_check_title_task_refuses_a_drifted_title(
     )
     monkeypatch.chdir(root)
     _git(root, "checkout", "-b", "workflow/release/core")
+    member = root / "packages" / "core"
+    member.mkdir(parents=True, exist_ok=True)
+    (member / "workshop.toml").write_text('type = "python"\nname = "livery-core"\n')
+    (member / "CHANGELOG.md").write_text("# Changelog\n\n## [0.2.0]\n\n- x\n")
+    # A rider file rides too: the title rebuilds from the changelogs,
+    # so it changes nothing.
     (root / "r.txt").write_text("r\n")
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "chore(release): livery-core v0.2.0")
