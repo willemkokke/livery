@@ -16,6 +16,8 @@ description: Execute one phase of a plan note - worktree, gate-green, plan updat
 4. `uv run fm check` green before calling anything done. Run each
    acceptance item's command and keep the output as evidence.
 5. Update the plan in the same change: the Status line, checkboxes if
-   present, and a dated decision-record line for any deviation.
+   present, and a dated decision-record line for any deviation. An
+   acceptance item shipped deferred stays an open line in the note
+   until its evidence lands; never record it as met.
 6. Report what landed, the acceptance evidence, and what is next.
    Never commit or push unless asked. Never add attribution trailers.
