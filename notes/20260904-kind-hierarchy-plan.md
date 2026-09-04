@@ -351,6 +351,15 @@ Acceptance:
   parent-managed cliff.toml would have been skipped as missing;
   both loops now render the full template chain, parent first,
   exactly as the package was born. Pinned by test.
+- 2026-09-04 (found by phase 3's CI): two isolated-leg faults the
+  first platform wheel exposed. cibuildwheel's linux run also
+  builds a musllinux wheel the host cannot install, so the local
+  build verb skips musllinux and the leg sorts its wheel
+  candidates; and bare `uv venv` takes uv's default python, so a
+  3.11 leg validated inside a 3.14 venv, which a pure wheel never
+  noticed and a cp311 wheel refused. The leg's venv now pins the
+  running interpreter's version. Both fixes pinned by the armed
+  suite across the CI matrix.
 - Carried forward from the 0901/0902 records: the kind chain
   renders parent then child with the managed union; the backend
   seam mirrors it; types contribute tool profiles by discovery;
