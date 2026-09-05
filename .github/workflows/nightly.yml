@@ -60,8 +60,14 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          # Pinned by hand to the lock's uv; the emitted workflows
+          # derive the same pin from uv.lock.
+          version: "0.12.7"
+      - name: Enter the workspace
+        run: bash setup.sh github
       - name: File or extend the drift issue, through the forge itself
         env:
           GITHUB_TOKEN: ${{ github.token }}
           NIGHTLY_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: uv run python .github/scripts/nightly_issue.py
+        run: python .github/scripts/nightly_issue.py

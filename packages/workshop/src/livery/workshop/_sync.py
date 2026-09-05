@@ -302,6 +302,11 @@ def sync() -> None:
     for line in sync_workspace(root):
         print(line)
     run_uv("sync", root=root)
+    # The receipt records this sync, so the next command's reconcile
+    # compares instead of syncing again.
+    from livery.workshop._reconcile import record_receipt
+
+    record_receipt(root)
 
 
 @task

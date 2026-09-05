@@ -7,7 +7,7 @@ scratch.
 The working record lives in `notes/`: plans, the development
 workflows, and their decision records.
 
-The gate is `uv run fm check`: format, lint, typecheck, and tests in
+The gate is `fm check`: format, lint, typecheck, and tests in
 parallel. CI runs the same command. Nothing on the merge path waits on
 anything outside the repository.
 

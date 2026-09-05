@@ -13,4 +13,7 @@ The workshop's template snapshots publish to
 tagged in lockstep with `livery-workshop` releases; edits happen here,
 behind the render gate.
 
-The gate: `uv run fm check`. CI runs the same command on three OSes.
+The gate: `fm check`. CI runs the same command on three OSes.
+A fresh machine enters with `source setup.sh`, which installs the
+pinned uv, syncs the venv against the lock, and leaves bare `fm`
+working.

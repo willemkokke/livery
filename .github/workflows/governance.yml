@@ -15,8 +15,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-      - name: Sync (locked)
-        run: uv sync --locked
-      - run: uv run --no-sync fm workflow.configure
+        with:
+          version: "0.12.7"
+      - name: Enter the workspace
+        run: bash setup.sh github
+      - run: fm workflow.configure
         env:
           FORGE_ADMIN_TOKEN: ${{ secrets.FORGE_ADMIN_TOKEN }}

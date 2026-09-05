@@ -525,7 +525,9 @@ def test_the_release_title_job_receives_the_actual_title(tmp_path: Path) -> None
         assert "${ github" not in gate
         # check-title diffs against origin/main: full history needed.
         assert "fetch-depth: 0" in job
-        assert "sync" in job and "--no-sync" in job  # locked toolchain
+        # The entry step provisions; the verb then runs bare.
+        assert "setup.sh github" in job
+        assert "uv run" not in job
 
 
 def test_governance_jobs_are_runnable_where_they_land(tmp_path: Path) -> None:
@@ -533,8 +535,10 @@ def test_governance_jobs_are_runnable_where_they_land(tmp_path: Path) -> None:
 
     github = generate(_contract_root(tmp_path, "github"))
     gov = github[".github/workflows/governance.yml"]
-    assert "uv sync --locked" in gov
-    assert "uv run --no-sync fm workflow.configure" in gov
+    # The entry step provisions and persists; the verb runs bare.
+    assert "setup.sh github" in gov
+    assert "fm workflow.configure" in gov
+    assert "uv run" not in gov
     # The admin secret is mounted in the governance job and nowhere
     # else.
     for path, content in github.items():
@@ -544,22 +548,24 @@ def test_governance_jobs_are_runnable_where_they_land(tmp_path: Path) -> None:
 
     gitea = generate(_contract_root(tmp_path, "gitea", runners=["host-linux"]))
     gov = gitea[".gitea/workflows/governance.yml"]
-    # act_runner host mode: uv from its installer, on the configured
-    # runner label, no setup actions.
-    assert "astral.sh/uv/install.sh" in gov
+    # act_runner host mode: no setup actions, on the configured
+    # runner label; the entry script installs uv itself where the
+    # host has none.
+    assert "setup.sh github" in gov
     assert "runs-on: host-linux" in gov
     assert "setup-uv" not in gov
     title_job = gitea[".gitea/workflows/ci.yml"].split("release-title:")[1]
     assert "runs-on: host-linux" in title_job
-    assert "astral.sh/uv/install.sh" in title_job
+    assert "setup.sh github" in title_job
 
     gitlab = generate(_contract_root(tmp_path, "gitlab", floor="3.12"))
     section = gitlab[".gitlab-ci.yml"].split("governance-apply:")[1]
     # Without an image the job lands on the runner default, where uv
     # does not exist.
     assert "image: ghcr.io/astral-sh/uv:python3.12-bookworm" in section
-    assert "uv sync --locked" in section
-    assert "uv run --no-sync fm workflow.configure" in section
+    assert "source setup.sh" in section
+    assert "fm workflow.configure" in section
+    assert "uv run" not in section
 
 
 def test_doctor_prints_the_ladder_and_the_owner_verdicts(

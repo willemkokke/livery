@@ -11,7 +11,7 @@ loads last and wins.
 
 ## The gate
 
-`uv run fm check` runs format, lint, the four type checkers, the
+`fm check` runs format, lint, the four type checkers, the
 type-completeness verdict, and tests in parallel. Run it before every
 commit; CI runs the same command. Nothing on the merge path may wait
 on anything outside the repository. The gate's verdict is its exit

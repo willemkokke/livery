@@ -87,6 +87,20 @@ def apply_cascade(inv: footman.Invocation) -> None:
         if not os.environ.get(key):
             os.environ[key] = value
             _APPLIED[key] = value
+    # Belt and braces around the whole self-healing step: this hook
+    # is the last thing standing between a surprise in the reconcile
+    # and every command failing, so nothing short of a deliberate
+    # SystemExit (the re-run handoff, which derives from
+    # BaseException) may escape it.
+    try:
+        from livery.workshop import _reconcile
+
+        if _reconcile.is_cli_process():
+            _reconcile.apply(root)
+    except Exception as error:
+        import sys
+
+        sys.stderr.write(f"environment reconcile skipped ({error})\n")
 
 
 @dataclass(frozen=True)
@@ -95,6 +109,18 @@ class EnvDelta:
 
     values: dict[str, str] = field(default_factory=dict)
     paths: tuple[str, ...] = ()
+
+
+def venv_bin(root: Path) -> Path:
+    """The venv's executables directory: ``Scripts`` on Windows, ``bin`` elsewhere.
+
+    The emission runs on the machine it enters, so the running
+    platform is the right answer.
+    """
+    import sys
+
+    name = "Scripts" if sys.platform == "win32" else "bin"
+    return root / ".venv" / name
 
 
 def workspace_delta(root: Path, cwd: Path) -> EnvDelta:
@@ -109,7 +135,7 @@ def workspace_delta(root: Path, cwd: Path) -> EnvDelta:
     for key, value in _APPLIED.items():
         values.setdefault(key, os.environ.get(key, value))
     values["VIRTUAL_ENV"] = str(root / ".venv")
-    return EnvDelta(values=values, paths=(str(root / ".venv" / "bin"),))
+    return EnvDelta(values=values, paths=(str(venv_bin(root)),))
 
 
 def _posix_quote(value: str) -> str:
@@ -199,7 +225,7 @@ def agent_delta(root: Path, cwd: Path, environ: dict[str, str]) -> EnvDelta:
         if key not in NEVER_AGENT and (environ.get(key) or _APPLIED.get(key))
     }
     values["VIRTUAL_ENV"] = str(root / ".venv")
-    return EnvDelta(values=values, paths=(str(root / ".venv" / "bin"),))
+    return EnvDelta(values=values, paths=(str(venv_bin(root)),))
 
 
 def github_persist(delta: EnvDelta, environ: dict[str, str]) -> list[str]:
@@ -420,18 +446,9 @@ def _uv_drift(root: Path) -> str:
     from the machine and can drift. A workspace without a lock has
     no pin to judge against and answers "".
     """
-    lock = root / "uv.lock"
-    if not lock.is_file():
-        return ""
-    text = lock.read_text("utf-8")
-    anchor = text.find('name = "uv"')
-    if anchor == -1:
-        return ""
-    pinned = ""
-    for line in text[anchor : anchor + 200].splitlines():
-        if line.startswith("version = "):
-            pinned = line.split('"')[1]
-            break
+    from livery.workshop._entry import locked_uv_version
+
+    pinned = locked_uv_version(root)
     if not pinned:
         return ""
     probe = toolroom.uv.opts(nofail=True, recorded=False)("--version")
@@ -529,9 +546,9 @@ def env_check() -> int:
     """
     root, _cwd = _workspace()
     problems: list[str] = []
-    venv_bin = root / ".venv" / "bin"
+    bin_dir = venv_bin(root)
     for tool in tool_profile(root):
-        if not (shutil.which(tool) or (venv_bin / tool).is_file()):
+        if not (shutil.which(tool) or (bin_dir / tool).is_file()):
             problems.append(f"{tool}: MISSING")
             continue
         if tool == "uv":

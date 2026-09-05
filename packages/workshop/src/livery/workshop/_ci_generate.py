@@ -8,6 +8,11 @@ same pure functions, offline. Change an emitter, run
 ``fm template.apply``, and every kind's files move together; a
 template update is never the vehicle.
 
+Every job enters through the emitted ``setup.sh`` (the entry
+contract: uv at the lock's pin, the venv synced against the lock,
+the emission persisted) and then calls the runner bare: no ``uv run``
+anywhere in a rendered workflow.
+
 The release workflows are the merge-triggered train: publishing runs
 where the release PR's squash lands, and the receipt tags are cut by
 ``fm workflow.release.publish`` after the index confirms each
@@ -37,10 +42,11 @@ def _facts(root: Path) -> dict[str, Any]:
     Runners, the required context, and the forge kind come from
     ``workshop.toml``; the Python matrix from the root
     ``pyproject.toml``'s floor and the workshop's newest supported
-    minor. Nothing here is an answer: the answers hold identity
-    alone.
+    minor; the uv pin from the lock. Nothing here is an answer: the
+    answers hold identity alone.
     """
     from livery.workshop._compose import layer_template_tree
+    from livery.workshop._entry import locked_uv_version
     from livery.workshop._envfile import parse_env_file
     from livery.workshop._layers import layer_entries
     from livery.workshop._templates import templates_artifact
@@ -57,6 +63,12 @@ def _facts(root: Path) -> dict[str, Any]:
         "runners": list(ci.get("runners") or ["ubuntu-latest"]),
         "required_context": str(ci.get("required_context", "gate")),
         "python_versions": python_matrix(root),
+        # The outer uv, the one tool that runs before the lock can
+        # speak: pinned to the lock's own uv, so the bootstrap is not
+        # the one unpinned link. Empty without a lock, and the
+        # bootstrap then stays unpinned rather than inventing a
+        # version.
+        "uv_pin": locked_uv_version(root),
         # The committed .repo.env's keys: the offline, deterministic
         # list of which secrets the rung step may carry into a job.
         "env_keys": sorted(parse_env_file(root / ".repo.env")),
@@ -79,6 +91,11 @@ def _rung_step(answers: dict[str, Any]) -> str:
     Never the whole secrets store: ``toJSON(secrets)`` would hand
     every job and every third-party action the lot. Empty when the
     workspace declares no keys.
+
+    Rung before entry, always: the entry step persists the cascade's
+    values into the runner's environment, and a real environment
+    variable outranks the shared slot, so an emission taken before
+    the rung would bake the committed values in over the secrets.
     """
     keys = [str(key) for key in answers.get("env_keys", [])]
     if not keys:
@@ -104,6 +121,43 @@ def _rung_step(answers: dict[str, Any]) -> str:
     )
 
 
+def _setup_uv_step(answers: dict[str, Any], *, cache_suffix: str = "") -> str:
+    """The setup-uv step, uv pinned to the lock's own version."""
+    pin = str(answers.get("uv_pin", ""))
+    lines = [f"      - uses: {SETUP_UV}"]
+    if pin or cache_suffix:
+        lines.append("        with:")
+    if pin:
+        lines.append(f'          version: "{pin}"')
+    if cache_suffix:
+        lines += [
+            "          # One cache identity per leg: a shared key makes",
+            "          # every leg but the first fail its save with a",
+            "          # reservation warning.",
+            f"          cache-suffix: {cache_suffix}",
+        ]
+    return "\n".join(lines) + "\n"
+
+
+def _enter_step(*, matrix_python: bool = False) -> str:
+    """The entry step: ``setup.sh github`` persists the emission.
+
+    Every step after it calls the runner and the venv tools bare,
+    from the persisted PATH. ``UV_PYTHON`` selects the matrix leg's
+    interpreter for the entry sync where a matrix exists.
+    """
+    env = (
+        "        env:\n          UV_PYTHON: ${{ matrix.python }}\n"
+        if matrix_python
+        else ""
+    )
+    return (
+        "      - name: Enter the workspace\n"
+        + env
+        + "        run: bash setup.sh github\n"
+    )
+
+
 def _csv(values: list[Any], *, quoted: bool = False) -> str:
     return ", ".join(f'"{v}"' if quoted else str(v) for v in values)
 
@@ -112,6 +166,13 @@ def _github_gate(answers: dict[str, Any], prog: str) -> str:
     context = answers.get("required_context", "gate")
     runners = _csv(list(answers.get("runners", ["ubuntu-latest"])))
     pythons = _csv(list(answers.get("python_versions", ["3.11"])), quoted=True)
+    setup_uv = _setup_uv_step(answers)
+    setup_uv_leg = _setup_uv_step(
+        answers, cache_suffix="${{ matrix.os }}-${{ matrix.python }}"
+    )
+    setup_uv_docs = _setup_uv_step(answers, cache_suffix="docs")
+    enter = _enter_step()
+    enter_leg = _enter_step(matrix_python=True)
     return f"""name: ci
 
 on:
@@ -129,15 +190,7 @@ jobs:
     runs-on: ${{{{ matrix.os }}}}
     steps:
       - uses: {CHECKOUT}
-      - uses: {SETUP_UV}
-        with:
-          # One cache identity per matrix leg: a shared key makes
-          # every leg but the first fail its save with a reservation
-          # warning.
-          cache-suffix: ${{{{ matrix.os }}}}-${{{{ matrix.python }}}}
-      - name: Sync (locked)
-        run: uv sync --locked --python ${{{{ matrix.python }}}}
-      - name: Gate, measured
+{setup_uv_leg}{enter_leg}      - name: Gate, measured
         env:
           # Coverage's own subprocess contract: the .pth the
           # coverage-enable-subprocess dev dependency installs calls
@@ -149,8 +202,8 @@ jobs:
           # once, on the merged union, in the gate job below.
           COVERAGE_PROCESS_START: pyproject.toml
         run: |
-          uv run --no-sync {prog} check
-          uv run --no-sync coverage combine
+          {prog} check
+          coverage combine
       - name: Leg coverage data
         uses: {UPLOAD}
         with:
@@ -166,13 +219,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: {CHECKOUT}
-      - uses: {SETUP_UV}
-        with:
-          cache-suffix: docs
-      - name: Sync (locked)
-        run: uv sync --locked
-      - name: Build the site, strict
-        run: uv run --no-sync {prog} docs.build
+{setup_uv_docs}{enter}      - name: Build the site, strict
+        run: {prog} docs.build
 
   # The one required context. Branch protection points here, so the
   # matrix can grow or shrink without touching repository settings.
@@ -188,19 +236,16 @@ jobs:
           test "${{{{ needs.check.result }}}}" = "success"
           test "${{{{ needs.docs.result }}}}" = "success"
       - uses: {CHECKOUT}
-      - uses: {SETUP_UV}
-      - name: Sync (locked)
-        run: uv sync --locked
-      - name: Combine every leg
+{setup_uv}{enter}      - name: Combine every leg
         uses: {DOWNLOAD}
         with:
           pattern: coverage-*
           path: coverage-data
       - name: Enforce the floors on the union
         run: |
-          uv run --no-sync coverage combine coverage-data/*/.coverage
-          uv run --no-sync coverage report --sort=cover
-          uv run --no-sync {prog} coverage.enforce
+          coverage combine coverage-data/*/.coverage
+          coverage report --sort=cover
+          {prog} coverage.enforce
   release-title:
     if: startsWith(github.head_ref, 'workflow/release/')
     runs-on: ubuntu-latest
@@ -210,10 +255,7 @@ jobs:
           # check-title compares against origin/main, which a shallow
           # checkout does not have.
           fetch-depth: 0
-      - uses: {SETUP_UV}
-      - name: Sync (locked)
-        run: uv sync --locked
-      - run: uv run --no-sync {prog} workflow.release.check-title --title "$TITLE"
+{setup_uv}{enter}      - run: {prog} workflow.release.check-title --title "$TITLE"
         env:
           TITLE: ${{{{ github.event.pull_request.title }}}}
 """
@@ -238,6 +280,8 @@ def _wants_wheel_matrix(answers: dict[str, Any]) -> bool:
 
 def _github_release(answers: dict[str, Any], prog: str) -> str:
     rung = _rung_step(answers)
+    setup_uv = _setup_uv_step(answers)
+    enter = _enter_step()
     publisher = str(answers.get("templates_publisher", ""))
     wheels = _wants_wheel_matrix(answers)
     train_if = """>-
@@ -261,12 +305,9 @@ def _github_release(answers: dict[str, Any], prog: str) -> str:
         with:
           ref: ${{{{ inputs.ref || github.event.pull_request.merge_commit_sha }}}}
           fetch-depth: 0
-      - uses: {SETUP_UV}
-      - name: Sync (locked)
-        run: uv sync --locked
-      - name: Build this platform's wheels
+{setup_uv}{enter}      - name: Build this platform's wheels
         run: >-
-          uv run --no-sync {prog} release.wheels
+          {prog} release.wheels
           --ref="${{{{ inputs.ref || github.event.pull_request.merge_commit_sha }}}}"
       - uses: {UPLOAD}
         with:
@@ -321,10 +362,7 @@ jobs:
         with:
           ref: ${{{{ inputs.ref || github.event.pull_request.merge_commit_sha }}}}
           fetch-depth: 0
-      - uses: {SETUP_UV}
-      - name: Sync (locked)
-        run: uv sync --locked
-{collect_step}{rung}      # The ambient job token suffices here: the wave reads the forge
+{setup_uv}{collect_step}{rung}{enter}      # The ambient job token suffices here: the wave reads the forge
       # and pushes receipt tags, and a tag is never a trigger, so the
       # suppressed-workflow-events limit cannot bite by construction.
       - name: Publish the wave
@@ -332,7 +370,7 @@ jobs:
         env:
           FORGE_TOKEN: ${{{{ github.token }}}}
         run: >-
-          uv run --no-sync {prog} workflow.release.publish{prebuilt_flag}
+          {prog} workflow.release.publish{prebuilt_flag}
           --ref="${{{{ inputs.ref || github.event.pull_request.merge_commit_sha }}}}"
 """
     if not answers.get("templates_artifact") or not publisher:
@@ -352,10 +390,7 @@ jobs:
       - uses: {CHECKOUT}
         with:
           ref: ${{{{ inputs.ref || github.event.pull_request.merge_commit_sha }}}}
-      - uses: {SETUP_UV}
-      - name: Sync (locked)
-        run: uv sync --locked
-      - name: Deploy key
+{setup_uv}{enter}      - name: Deploy key
         run: |
           mkdir -p ~/.ssh
           printf '%s\\n' "${{{{ secrets.WORKSHOP_TEMPLATES_DEPLOY_KEY }}}}" > ~/.ssh/templates_deploy
@@ -364,7 +399,7 @@ jobs:
         env:
           GIT_SSH_COMMAND: ssh -i ~/.ssh/templates_deploy -o StrictHostKeyChecking=accept-new
           FORGE_TOKEN: ${{{{ secrets.FORGE_TOKEN }}}}
-        run: uv run --no-sync {prog} release.templates
+        run: {prog} release.templates
 """
     )
 
@@ -375,6 +410,8 @@ def _gitea_gate(answers: dict[str, Any], prog: str) -> str:
     pythons = _csv(list(answers.get("python_versions", ["3.11"])), quoted=True)
     first = next(iter(answers.get("runners", ["ubuntu-latest"])))
     rung = _rung_step(answers)
+    enter = _enter_step()
+    enter_leg = _enter_step(matrix_python=True)
     return f"""name: ci
 
 on:
@@ -392,26 +429,18 @@ jobs:
     runs-on: ${{{{ matrix.os }}}}
     steps:
       - uses: actions/checkout@v4
-      # act_runner host mode: no setup actions, POSIX sh, uv from its
-      # installer.
-      - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
-      - name: Sync (locked)
-        run: $HOME/.local/bin/uv sync --locked --python ${{{{ matrix.python }}}}
-{rung}      - name: Gate
-        run: $HOME/.local/bin/uv run --no-sync {prog} check
+      # act_runner host mode: no setup actions. The entry script
+      # installs the lock's pinned uv itself where the host has none.
+{rung}{enter_leg}      - name: Gate
+        run: {prog} check
 
   # The strict site build, required through the gate context below.
   docs:
     runs-on: {first}
     steps:
       - uses: actions/checkout@v4
-      - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
-      - name: Sync (locked)
-        run: $HOME/.local/bin/uv sync --locked
-      - name: Build the site, strict
-        run: $HOME/.local/bin/uv run --no-sync {prog} docs.build
+{enter}      - name: Build the site, strict
+        run: {prog} docs.build
 
   # The one required context. Branch protection points here, so the
   # matrix can grow or shrink without touching repository settings.
@@ -433,13 +462,7 @@ jobs:
           # check-title compares against origin/main, which a shallow
           # checkout does not have.
           fetch-depth: 0
-      - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
-      - name: Sync (locked)
-        run: $HOME/.local/bin/uv sync --locked
-      - run: >-
-          $HOME/.local/bin/uv run --no-sync
-          {prog} workflow.release.check-title --title "$TITLE"
+{enter}      - run: {prog} workflow.release.check-title --title "$TITLE"
         env:
           TITLE: ${{{{ github.event.pull_request.title }}}}
 """
@@ -448,6 +471,7 @@ jobs:
 def _gitea_release(answers: dict[str, Any], prog: str) -> str:
     first = next(iter(answers.get("runners", ["ubuntu-latest"])))
     rung = _rung_step(answers)
+    enter = _enter_step()
     wheels = _wants_wheel_matrix(answers)
     runners = _csv(list(answers.get("runners", ["ubuntu-latest"])))
     train_if = """>-
@@ -469,13 +493,9 @@ def _gitea_release(answers: dict[str, Any], prog: str) -> str:
         with:
           ref: ${{{{ github.event.pull_request.merge_commit_sha }}}}
           fetch-depth: 0
-      - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
-      - name: Sync (locked)
-        run: $HOME/.local/bin/uv sync --locked
-      - name: Build this platform's wheels
+{enter}      - name: Build this platform's wheels
         run: >-
-          $HOME/.local/bin/uv run --no-sync {prog} release.wheels
+          {prog} release.wheels
           --ref="${{{{ github.event.pull_request.merge_commit_sha }}}}"
       - uses: actions/upload-artifact@v4
         with:
@@ -516,11 +536,7 @@ jobs:
         with:
           ref: ${{{{ github.event.pull_request.merge_commit_sha }}}}
           fetch-depth: 0
-      - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
-      - name: Sync (locked)
-        run: $HOME/.local/bin/uv sync --locked
-{collect_step}{rung}      # PYTHON_PUBLISH_INDEX and PYTHON_REGISTRY_URL come from the
+{collect_step}{rung}{enter}      # PYTHON_PUBLISH_INDEX and PYTHON_REGISTRY_URL come from the
       # committed .repo.env through the env cascade; only the secrets
       # are mounted here. Gitea's automatic token serves the wave's
       # forge reads and receipt-tag pushes.
@@ -529,7 +545,7 @@ jobs:
           UV_PUBLISH_TOKEN: ${{{{ secrets.UV_PUBLISH_TOKEN }}}}
           FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
         run: >-
-          $HOME/.local/bin/uv run --no-sync {prog} workflow.release.publish{prebuilt_flag}
+          {prog} workflow.release.publish{prebuilt_flag}
           --ref="${{{{ github.event.pull_request.merge_commit_sha }}}}"
 """
     publisher = str(answers.get("templates_publisher", ""))
@@ -549,24 +565,34 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{{{ github.event.pull_request.merge_commit_sha }}}}
-      - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
-      - name: Sync (locked)
-        run: $HOME/.local/bin/uv sync --locked
-      - name: Publish the template artifact
+{enter}      - name: Publish the template artifact
         env:
           FORGE_TOKEN: ${{{{ secrets.FORGE_TOKEN }}}}
-        run: $HOME/.local/bin/uv run --no-sync {prog} release.templates
+        run: {prog} release.templates
 """
     )
+
+
+def _gitlab_image(answers: dict[str, Any], python: str) -> str:
+    """The pinned uv image for a GitLab job.
+
+    With a lock the tag carries the pin
+    (``<pin>-python<minor>-bookworm``), so the job's uv is the lock's
+    uv; without one the unversioned tag is the honest fallback.
+    """
+    pin = str(answers.get("uv_pin", ""))
+    prefix = f"{pin}-" if pin else ""
+    return f"ghcr.io/astral-sh/uv:{prefix}python{python}-bookworm"
 
 
 def _gitlab_pipeline(answers: dict[str, Any], prog: str) -> str:
     context = answers.get("required_context", "gate")
     python = next(iter(answers.get("python_versions", ["3.11"])))
+    image = _gitlab_image(answers, python)
     return f"""# The gate and the train, GitLab-shaped, generated by the workshop.
 # One pipeline definition: workflow rules admit merge requests, main,
-# and FORGE_WORKFLOW-routed manual pipelines.
+# and FORGE_WORKFLOW-routed manual pipelines. Every job sources the
+# entry script in its own shell, then calls the runner bare.
 workflow:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -577,25 +603,25 @@ stages: [check, release]
 
 {context}:
   stage: check
-  image: ghcr.io/astral-sh/uv:python{python}-bookworm
+  image: {image}
   rules:
     - if: $CI_COMMIT_TAG
       when: never
     - when: on_success
   script:
-    - uv sync --locked
-    - uv run --no-sync {prog} check
+    - source setup.sh
+    - {prog} check
 
 # The pages seam: GitLab Pages serves the artifact of a job named
 # ``pages`` publishing ``public/``; main only, after the checks.
 pages:
   stage: release
-  image: ghcr.io/astral-sh/uv:python{python}-bookworm
+  image: {image}
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
   script:
-    - uv sync --locked
-    - uv run --no-sync {prog} docs.build
+    - source setup.sh
+    - {prog} docs.build
     - mv site public
   artifacts:
     paths: [public]
@@ -604,14 +630,14 @@ pages:
 # link blocks it here without any aggregation job.
 docs:
   stage: check
-  image: ghcr.io/astral-sh/uv:python{python}-bookworm
+  image: {image}
   rules:
     - if: $CI_COMMIT_TAG
       when: never
     - when: on_success
   script:
-    - uv sync --locked
-    - uv run --no-sync {prog} docs.build
+    - source setup.sh
+    - {prog} docs.build
 
 # The merge-triggered train: the squash of a workflow.release PR
 # lands on main, its changed changelogs stating the release, and the
@@ -620,14 +646,14 @@ docs:
 # (a project access token with write_repository).
 release-publish:
   stage: release
-  image: ghcr.io/astral-sh/uv:python{python}-bookworm
+  image: {image}
   rules:
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_TITLE =~ /^chore\\(release\\): released /'
   script:
     - git fetch --tags
     - git remote set-url origin "https://oauth2:${{GITLAB_PUSH_TOKEN}}@${{CI_SERVER_HOST}}/${{CI_PROJECT_PATH}}.git"
-    - uv sync --locked
-    - uv run --no-sync {prog} workflow.release.publish --ref="$CI_COMMIT_SHA"
+    - source setup.sh
+    - {prog} workflow.release.publish --ref="$CI_COMMIT_SHA"
   # GitLab CI variables arrive as process environment, the cascade's
   # highest rung already: declare PYTHON_PUBLISH_INDEX,
   # PYTHON_REGISTRY_URL, and FORGE_TOKEN as CI variables; no rung
@@ -649,7 +675,8 @@ def _github_governance(answers: dict[str, Any], prog: str) -> str:
     The admin secret is mounted here and nowhere else; a failed
     apply is a visible red job on main.
     """
-    del answers
+    setup_uv = _setup_uv_step(answers)
+    enter = _enter_step()
     return f"""name: governance
 on:
   push:
@@ -663,10 +690,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: {CHECKOUT}
-      - uses: {SETUP_UV}
-      - name: Sync (locked)
-        run: uv sync --locked
-      - run: uv run --no-sync {prog} workflow.configure
+{setup_uv}{enter}      - run: {prog} workflow.configure
         env:
           FORGE_ADMIN_TOKEN: ${{{{ secrets.FORGE_ADMIN_TOKEN }}}}
 """
@@ -676,9 +700,11 @@ def _gitea_governance(answers: dict[str, Any], prog: str) -> str:
     """Gitea's spelling of the same path-filtered apply job.
 
     act_runner host mode, like the gate: no setup actions, uv from
-    its installer, on the configured runner label.
+    the entry script's pinned installer, on the configured runner
+    label.
     """
     first = next(iter(answers.get("runners", ["ubuntu-latest"])))
+    enter = _enter_step()
     return f"""name: governance
 on:
   push:
@@ -692,11 +718,7 @@ jobs:
     runs-on: {first}
     steps:
       - uses: actions/checkout@v4
-      - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
-      - name: Sync (locked)
-        run: $HOME/.local/bin/uv sync --locked
-      - run: $HOME/.local/bin/uv run --no-sync {prog} workflow.configure
+{enter}      - run: {prog} workflow.configure
         env:
           FORGE_ADMIN_TOKEN: ${{{{ secrets.FORGE_ADMIN_TOKEN }}}}
 """
@@ -705,10 +727,11 @@ jobs:
 def _gitlab_governance(answers: dict[str, Any], prog: str) -> str:
     """GitLab's spelling: a pipeline job on the same pinned image."""
     python = next(iter(answers.get("python_versions", ["3.11"])))
+    image = _gitlab_image(answers, python)
     return f"""
 governance-apply:
   stage: release
-  image: ghcr.io/astral-sh/uv:python{python}-bookworm
+  image: {image}
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
       changes:
@@ -716,14 +739,16 @@ governance-apply:
         - packages/*/workshop.toml
         - {_CODEOWNERS_PATH["gitlab"]}
   script:
-    - uv sync --locked
-    - uv run --no-sync {prog} workflow.configure
+    - source setup.sh
+    - {prog} workflow.configure
   variables:
     FORGE_ADMIN_TOKEN: $FORGE_ADMIN_TOKEN
 """
 
 
-def _github_docs_deploy(prog: str) -> str:
+def _github_docs_deploy(answers: dict[str, Any], prog: str) -> str:
+    setup_uv = _setup_uv_step(answers)
+    enter = _enter_step()
     return f"""name: docs
 
 # The pages seam: build on main, upload, deploy. What ships is the
@@ -750,11 +775,8 @@ jobs:
       url: ${{{{ steps.deployment.outputs.page_url }}}}
     steps:
       - uses: {CHECKOUT}
-      - uses: {SETUP_UV}
-      - name: Sync (locked)
-        run: uv sync --locked
-      - name: Build the site, strict
-        run: uv run --no-sync {prog} docs.build
+{setup_uv}{enter}      - name: Build the site, strict
+        run: {prog} docs.build
       - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
         with:
           path: site
@@ -765,6 +787,7 @@ jobs:
 
 def _gitea_docs_deploy(answers: dict[str, Any], prog: str) -> str:
     first = next(iter(answers.get("runners", ["ubuntu-latest"])))
+    enter = _enter_step()
     return f"""name: docs
 
 # The container seam: the built site pushed as an image to the
@@ -779,16 +802,12 @@ jobs:
     runs-on: {first}
     steps:
       - uses: actions/checkout@v4
-      - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
-      - name: Sync (locked)
-        run: $HOME/.local/bin/uv sync --locked
-      - name: Build the site, strict
-        run: $HOME/.local/bin/uv run --no-sync {prog} docs.build
+{enter}      - name: Build the site, strict
+        run: {prog} docs.build
       - name: Publish the site image
         env:
           FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
-        run: $HOME/.local/bin/uv run --no-sync {prog} docs.publish
+        run: {prog} docs.publish
 """
 
 
@@ -797,12 +816,14 @@ def generate(root: Path) -> dict[str, str]:
 
     The workflows call the CLI by the name this process runs under,
     so a branded runner emits workflows that call itself and needs
-    no configuration. The template-artifact job is emitted only for
-    a home: the contract declares where to publish and a member
-    layer ships the tree; an ordinary instance's release has no
-    templates to publish.
+    no configuration. The emitted ``setup.sh`` at the root is the
+    entry every workflow's jobs share. The template-artifact job is
+    emitted only for a home: the contract declares where to publish
+    and a member layer ships the tree; an ordinary instance's
+    release has no templates to publish.
     """
     from livery.workshop._docs import publish_seam, zensical_config
+    from livery.workshop._entry import entry_script
     from livery.workshop._provenance import generated_header
 
     prog = footman.prog()
@@ -818,7 +839,7 @@ def generate(root: Path) -> dict[str, str]:
             ".github/workflows/governance.yml": _github_governance(facts, prog),
         }
         if seam == "pages":
-            files[".github/workflows/docs.yml"] = _github_docs_deploy(prog)
+            files[".github/workflows/docs.yml"] = _github_docs_deploy(facts, prog)
     elif kind == "gitea":
         files = {
             ".gitea/workflows/ci.yml": _gitea_gate(facts, prog),
@@ -832,6 +853,7 @@ def generate(root: Path) -> dict[str, str]:
             ".gitlab-ci.yml": _gitlab_pipeline(facts, prog)
             + _gitlab_governance(facts, prog)
         }
+    files["setup.sh"] = entry_script(root)
     files.update(site)
     return {path: header + content for path, content in files.items()}
 

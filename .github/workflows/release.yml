@@ -37,8 +37,10 @@ jobs:
           ref: ${{ inputs.ref || github.event.pull_request.merge_commit_sha }}
           fetch-depth: 0
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-      - name: Sync (locked)
-        run: uv sync --locked
+        with:
+          version: "0.12.7"
+      - name: Enter the workspace
+        run: bash setup.sh github
       # The ambient job token suffices here: the wave reads the forge
       # and pushes receipt tags, and a tag is never a trigger, so the
       # suppressed-workflow-events limit cannot bite by construction.
@@ -47,7 +49,7 @@ jobs:
         env:
           FORGE_TOKEN: ${{ github.token }}
         run: >-
-          uv run --no-sync fm workflow.release.publish
+          fm workflow.release.publish
           --ref="${{ inputs.ref || github.event.pull_request.merge_commit_sha }}"
 
   # The home's release aftermath: the (composed) template artifact,
@@ -61,8 +63,10 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.event.pull_request.merge_commit_sha }}
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-      - name: Sync (locked)
-        run: uv sync --locked
+        with:
+          version: "0.12.7"
+      - name: Enter the workspace
+        run: bash setup.sh github
       - name: Deploy key
         run: |
           mkdir -p ~/.ssh
@@ -72,4 +76,4 @@ jobs:
         env:
           GIT_SSH_COMMAND: ssh -i ~/.ssh/templates_deploy -o StrictHostKeyChecking=accept-new
           FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
-        run: uv run --no-sync fm release.templates
+        run: fm release.templates
