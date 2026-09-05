@@ -235,7 +235,7 @@ def _chain(
         home,
         _hermetic(env, home / ".venv"),
     )
-    assert ("published v0.0.1" in release.stdout) or (
+    assert ("published v0.0.0" in release.stdout) or (
         "already published with this content" in release.stdout
     )
     if resumed:
@@ -444,7 +444,7 @@ def _chain(
     # own metadata included), then recompose and re-release.
     brand_pyproject = member / "pyproject.toml"
     brand_pyproject.write_text(
-        brand_pyproject.read_text().replace('version = "0.0.1"', 'version = "0.0.2"')
+        brand_pyproject.read_text().replace('version = "0.0.0"', 'version = "0.0.1"')
     )
     _run(
         ["uv", "lock", "--upgrade-package", "livery-workshop"],
@@ -469,7 +469,7 @@ def _chain(
         home,
         _hermetic({**env, "FORGE_TOKEN": token}, home / ".venv"),
     )
-    assert "published v0.0.2" in rerelease.stdout
+    assert "published v0.0.1" in rerelease.stdout
 
     # The child updates: new brand and base wheels arrive, then the
     # rendered files move to the recomposed artifact's tag.
