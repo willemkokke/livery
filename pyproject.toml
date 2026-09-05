@@ -81,6 +81,12 @@ dev = [
 # Ruff and basedpyright configuration cribbed from footman's pyproject:
 # footman's rules, global. The workshop adds pydocstyle in the google
 # convention: Google docstrings only, everywhere.
+[tool.footman]
+# Task names in --list/--tree/--help (and --json rows) link into the
+# published task reference; the alias tree there redirects each task
+# to its page in the owning package's section.
+docs_url = "https://docs.willem.net/livery/_generated/tasks/{slug}/"
+
 [tool.ruff]
 line-length = 88
 target-version = "py311"

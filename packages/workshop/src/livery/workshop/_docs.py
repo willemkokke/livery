@@ -228,6 +228,8 @@ def run_generators(root: Path) -> list[str]:
     runner = ""
     for package in discover_packages(root):
         for verb, _requires in package_generators(package):
+            if verb in ran:
+                continue  # two declarations of one shared verb run it once
             if not runner:
                 runner = _shutil.which(footman.prog()) or ""
                 if not runner:
@@ -1484,6 +1486,26 @@ def docs_python_coverage() -> None:
         print(f"  htmlcov for {', '.join(rendered)}")
     else:
         print("  no measured data: declared reports will state the absence")
+
+
+@docs_group.task(name="task-reference")
+def docs_task_reference() -> None:
+    """Render every providing package's task reference.
+
+    The generator verb a task-providing package declares: an index
+    per group and a page per public task into the owner's generated
+    tree, the owner's ``tasks`` nav block rewritten, and the alias
+    tree the runner's ``docs_url`` links through refreshed.
+    Idempotent: re-rendering the same tree rewrites the same pages.
+    """
+    from livery.workshop._taskref import generate_task_reference
+
+    root = _root()
+    rendered = generate_task_reference(root)
+    if rendered:
+        print(f"  task reference for {', '.join(rendered)}")
+    else:
+        print("  no workspace package provides tasks")
 
 
 @docs_group.task(name="serve", infinite=True)
