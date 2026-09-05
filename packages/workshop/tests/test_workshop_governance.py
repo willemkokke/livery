@@ -688,3 +688,46 @@ def test_a_lagging_pr_head_stays_in_flight(
     _git(root, "checkout", "main")
     verdict = classify(repo, "feat/1-work", git, grace_spent=True)
     assert verdict.state == "disarmed"
+
+
+def test_a_disarmed_behind_pr_teaches_integrate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Without the behind arm, the parked answer said "merge it" while
+    # the merge verb refused behindness, and the two pointed at each
+    # other with no exit.
+    from livery.workshop._verdict import classify
+
+    root, git = _reconcile_rig(tmp_path)
+    monkeypatch.setattr(
+        "livery.workshop._layers.workspace_root", lambda start=None: root
+    )
+    monkeypatch.chdir(root)
+    fake = FakeForge()
+    fake.create_repo("acme", "ws", private=True, description="t")
+    repo = fake.repository("acme", "ws")
+    _git(root, "checkout", "-b", "feat/1-work")
+    (root / "work.txt").write_text("w\n")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "feat: work")
+    _git(root, "push", "-u", "origin", "feat/1-work")
+    sha = git.head_sha()
+    fake.push("acme", "ws", "feat/1-work", sha=sha)
+    fake.settle("acme", "ws", sha)
+    repo.pr.open("feat/1-work", "main", "feat: work")
+    verdict = classify(repo, "feat/1-work", git, grace_spent=True)
+    assert verdict.state == "disarmed"
+    assert "submit --armed" in verdict.detail
+    # Main advances; the parked answer now teaches the way out.
+    other = tmp_path / "advance"
+    _git(tmp_path, "clone", str(tmp_path / "origin.git"), "advance")
+    _git(other, "config", "user.email", "t@l")
+    _git(other, "config", "user.name", "T")
+    (other / "ahead.txt").write_text("a\n")
+    _git(other, "add", "-A")
+    _git(other, "commit", "-m", "feat: main moves")
+    _git(other, "push", "origin", "main")
+    verdict = classify(repo, "feat/1-work", git, grace_spent=True)
+    assert verdict.state == "disarmed"
+    assert "behind" in verdict.detail
+    assert "integrate" in verdict.detail

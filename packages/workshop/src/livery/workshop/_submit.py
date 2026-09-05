@@ -759,8 +759,9 @@ def merge_flow(repo: Repository, git: GitOps, branch: str, *, title: str = "") -
     git.fetch()
     if git.behind_base(pr.base_branch):
         fail(
-            f"PR #{pr.number} is behind {pr.base_branch}: `{footman.prog()} submit` to"
-            " integrate and re-verify first"
+            f"PR #{pr.number} is behind {pr.base_branch}:"
+            f" `{footman.prog()} integrate`, then `{footman.prog()} submit`,"
+            " and merge again"
         )
     subject = title or pr.title
     for attempt in range(1, _MERGE_NOW_ATTEMPTS + 1):
