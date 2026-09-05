@@ -179,11 +179,18 @@ def test_template_chain_orders_parent_first(restored_registry) -> None:
         )
     )
     assert template_chain("package-python-fake") == (
+        "package-base",
         "package-python",
         "package-python-fake",
     )
-    # A template variant the registry does not map renders alone.
-    assert template_chain("package-python-layer") == ("package-python-layer",)
+    # A template variant the registry does not map still renders
+    # over the shared base, so its package ships the docs seeds.
+    assert template_chain("package-python-layer") == (
+        "package-base",
+        "package-python-layer",
+    )
+    # The base itself renders alone: no recursion, no doubling.
+    assert template_chain("package-base") == ("package-base",)
 
 
 def test_managed_files_union_along_the_chain(restored_registry) -> None:
