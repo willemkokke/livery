@@ -129,7 +129,7 @@ def test_the_chain_renders_parent_files_under_the_leaf(tmp_path: Path) -> None:
     assert (directory / "src" / "acme" / "ext" / "_native.pyi").is_file()
     pyproject = (directory / "pyproject.toml").read_text()
     assert 'build-backend = "scikit_build_core.build"' in pyproject
-    assert 'version = "0.0.1"' in pyproject
+    assert 'version = "0.0.0"' in pyproject
     # The contract and the receipt record the leaf kind.
     assert 'type = "python-nanobind"' in (directory / "workshop.toml").read_text()
     assert "package-python-nanobind" in (directory / ".copier-answers.yml").read_text()

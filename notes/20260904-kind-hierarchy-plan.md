@@ -448,10 +448,10 @@ All four ruled. Willem's go, 2026-09-04: phase 1 is in build.
    protocol; the conan recipe's ``version`` attribute is the
    cpp-conan home, and verify_release judges each kind's own
    homes.
-6. Open (2026-09-05, filed as issue #218): a newborn member's
-   first derive answers v0.0.0 and nothing refuses minting it; the
-   armed rehearsal asserts only the member list until this is
-   ruled. Owner: Willem to rule the intended first version.
+6. Resolved 2026-09-05 (Willem): v0.0.0 is the newborn's first
+   release, hse's own practice (its sdk and devkit both released
+   at v0.0.0); the seeds now say 0.0.0 in every version home and
+   the born changelog entry, and the rehearsal pins the derive.
 7. Open (2026-09-05): the extension's dependency on the library is
    declared and lint-agreed, and the release train orders it, but
    the extension's own CMake does not yet consume the conan
