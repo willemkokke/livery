@@ -380,9 +380,9 @@ def test_the_folder_target_round_trips(
 ) -> None:
     package = _render_library(tmp_path, monkeypatch)
     share = tmp_path / "share"
-    assert _cpp_conan.publish(package, str(share), version="0.0.1", local=True)
+    assert _cpp_conan.publish(package, str(share), version="0.0.0", local=True)
     registry = _cpp_conan.ConanRegistry(str(share), local=True, cwd=tmp_path)
-    assert registry.versions("acme-geometry") == ("0.0.1",)
+    assert registry.versions("acme-geometry") == ("0.0.0",)
     # A clean home restores the package from the saved archive alone.
     monkeypatch.setenv("CONAN_HOME", str(tmp_path / "clean-home"))
     restored = subprocess.run(
@@ -390,7 +390,7 @@ def test_the_folder_target_round_trips(
             "conan",
             "cache",
             "restore",
-            str(share / "acme-geometry-0.0.1.tgz"),
+            str(share / "acme-geometry-0.0.0.tgz"),
         ],
         capture_output=True,
         text=True,
@@ -399,7 +399,7 @@ def test_the_folder_target_round_trips(
     listed = subprocess.run(
         ["conan", "list", "acme-geometry/*"], capture_output=True, text=True
     )
-    assert "0.0.1" in listed.stdout
+    assert "0.0.0" in listed.stdout
 
 
 @needs_conan
@@ -433,12 +433,12 @@ def test_the_rig_conan_registry_round_trips(
         text=True,
     )
     assert auth.returncode == 0, auth.stderr
-    assert _cpp_conan.publish(package, remote, version="0.0.1", local=False) in (
+    assert _cpp_conan.publish(package, remote, version="0.0.0", local=False) in (
         True,
         False,  # a re-run walks past the earlier upload
     )
     registry = _cpp_conan.ConanRegistry(remote, local=False, cwd=tmp_path)
-    assert "0.0.1" in registry.versions("acme-geometry")
+    assert "0.0.0" in registry.versions("acme-geometry")
     # The consumer proof: a clean home installs it back from the rig.
     monkeypatch.setenv("CONAN_HOME", str(tmp_path / "clean-home"))
     subprocess.run(["conan", "profile", "detect", "--exist-ok"], capture_output=True)
@@ -455,7 +455,7 @@ def test_the_rig_conan_registry_round_trips(
         [
             "conan",
             "install",
-            "--requires=acme-geometry/0.0.1",
+            "--requires=acme-geometry/0.0.0",
             "-r",
             _cpp_conan.CONAN_REMOTE,
             "--build=missing",

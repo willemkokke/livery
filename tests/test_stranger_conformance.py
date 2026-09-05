@@ -311,11 +311,10 @@ def test_the_rehearsal_runs_a_graph_of_both_kinds(tmp_path: Path) -> None:
         text=True,
     )
     assert rehearsed.returncode == 0, f"{rehearsed.stdout}\n{rehearsed.stderr}"
-    # The member list is the assertion; the newborn first-derive
-    # version is its own open question (issue #218) and not this
-    # rehearsal's to pin.
-    assert "would release: acme-geometry v" in rehearsed.stdout
-    assert "acme-ext v" in rehearsed.stdout
+    # The newborn's first release is v0.0.0, the baseline receipt
+    # (ruled 2026-09-05, hse's own practice); feature counting
+    # starts after it.
+    assert "would release: acme-geometry v0.0.0, acme-ext v0.0.0" in rehearsed.stdout
     assert "isolated legs skip" in rehearsed.stdout
     clean = subprocess.run(
         ["git", "status", "--porcelain"], cwd=root, capture_output=True, text=True
