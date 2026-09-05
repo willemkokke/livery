@@ -18,17 +18,21 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-      - name: Sync (locked)
-        run: uv sync --locked
+        with:
+          # Pinned by hand to the lock's uv; the emitted workflows
+          # derive the same pin from uv.lock.
+          version: "0.12.7"
+      - name: Enter the workspace
+        run: bash setup.sh github
       - name: Start and seed the compose Gitea
-        run: uv run --no-sync coverage run -m footman forge.dev.up --profile=gitea
+        run: coverage run -m footman forge.dev.up --profile=gitea
       - name: Conformance, live
         env:
           LIVERY_FORGE_LIVE: "1"
           # CI runners are slower than a laptop; the budget separates
           # broken from slow.
           LIVERY_FORGE_POLL_TIMEOUT: "360"
-        run: uv run --no-sync coverage run -m pytest packages/forge/tests/test_gitea_conformance.py -n 4
+        run: coverage run -m pytest packages/forge/tests/test_gitea_conformance.py -n 4
       - name: Evidence from the scratch repositories
         if: failure()
         run: |
@@ -37,10 +41,10 @@ jobs:
             --profile gitea --profile gitea-runner logs act_runner | tail -80
       - name: Down
         if: always()
-        run: uv run --no-sync fm forge.dev.down --wipe
+        run: fm forge.dev.down --wipe
       - name: Leg coverage data
         if: always()
-        run: uv run --no-sync coverage combine || true
+        run: coverage combine || true
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -55,25 +59,29 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-      - name: Sync (locked)
-        run: uv sync --locked
+        with:
+          # Pinned by hand to the lock's uv; the emitted workflows
+          # derive the same pin from uv.lock.
+          version: "0.12.7"
+      - name: Enter the workspace
+        run: bash setup.sh github
       - name: Start and seed the compose GitLab (first boot takes minutes)
-        run: uv run --no-sync coverage run -m footman forge.dev.up --profile=gitlab
+        run: coverage run -m footman forge.dev.up --profile=gitlab
       - name: Conformance, live
         env:
           LIVERY_FORGE_LIVE: "1"
         # One single-node GitLab absorbs about four concurrent
         # writers; beyond that Gitaly times out.
-        run: uv run --no-sync coverage run -m pytest packages/forge/tests/test_gitlab_conformance.py -n 4
+        run: coverage run -m pytest packages/forge/tests/test_gitlab_conformance.py -n 4
       - name: Evidence from the scratch repositories
         if: failure()
         run: python3 .github/scripts/e2e_diagnose.py gitlab
       - name: Down
         if: always()
-        run: uv run --no-sync fm forge.dev.down --wipe
+        run: fm forge.dev.down --wipe
       - name: Leg coverage data
         if: always()
-        run: uv run --no-sync coverage combine || true
+        run: coverage combine || true
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -100,17 +108,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.guard.outputs.present == 'true'
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          # Pinned by hand to the lock's uv; the emitted workflows
+          # derive the same pin from uv.lock.
+          version: "0.12.7"
         if: steps.guard.outputs.present == 'true'
-      - name: Sync (locked)
+      - name: Enter the workspace
         if: steps.guard.outputs.present == 'true'
-        run: uv sync --locked
+        run: bash setup.sh github
       - name: Conformance, live against the e2e organisation
         if: steps.guard.outputs.present == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.LIVERY_E2E_GITHUB_TOKEN }}
           LIVERY_FORGE_E2E_OWNER: ${{ vars.LIVERY_E2E_GITHUB_OWNER }}
           LIVERY_FORGE_LIVE: "1"
-        run: uv run --no-sync coverage run -m pytest packages/forge/tests/test_github_conformance.py -n 4
+        run: coverage run -m pytest packages/forge/tests/test_github_conformance.py -n 4
       - name: Clean the scratch
         if: always() && steps.guard.outputs.present == 'true'
         env:
@@ -120,7 +132,7 @@ jobs:
         run: python3 .github/scripts/e2e_cleanup.py
       - name: Leg coverage data
         if: always() && steps.guard.outputs.present == 'true'
-        run: uv run --no-sync coverage combine || true
+        run: coverage combine || true
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always() && steps.guard.outputs.present == 'true'
         with:
@@ -147,10 +159,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.guard.outputs.present == 'true'
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          # Pinned by hand to the lock's uv; the emitted workflows
+          # derive the same pin from uv.lock.
+          version: "0.12.7"
         if: steps.guard.outputs.present == 'true'
-      - name: Sync (locked)
+      - name: Enter the workspace
         if: steps.guard.outputs.present == 'true'
-        run: uv sync --locked
+        run: bash setup.sh github
       - name: Point the harness at gitlab.com
         if: steps.guard.outputs.present == 'true'
         run: |
@@ -160,7 +176,7 @@ jobs:
         env:
           LIVERY_FORGE_E2E_OWNER: ${{ vars.LIVERY_E2E_GITLAB_GROUP }}
           LIVERY_FORGE_LIVE: "1"
-        run: uv run --no-sync coverage run -m pytest packages/forge/tests/test_gitlab_conformance.py -n 4
+        run: coverage run -m pytest packages/forge/tests/test_gitlab_conformance.py -n 4
       - name: Clean the scratch
         if: always() && steps.guard.outputs.present == 'true'
         env:
@@ -171,7 +187,7 @@ jobs:
         run: python3 .github/scripts/e2e_cleanup.py
       - name: Leg coverage data
         if: always() && steps.guard.outputs.present == 'true'
-        run: uv run --no-sync coverage combine || true
+        run: coverage combine || true
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always() && steps.guard.outputs.present == 'true'
         with:
@@ -199,10 +215,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.guard.outputs.present == 'true'
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          # Pinned by hand to the lock's uv; the emitted workflows
+          # derive the same pin from uv.lock.
+          version: "0.12.7"
         if: steps.guard.outputs.present == 'true'
-      - name: Sync (locked)
+      - name: Enter the workspace
         if: steps.guard.outputs.present == 'true'
-        run: uv sync --locked
+        run: bash setup.sh github
       - name: Disposable act_runner (gitea.com grants no shared runners)
         if: steps.guard.outputs.present == 'true'
         env:
@@ -231,7 +251,7 @@ jobs:
         env:
           LIVERY_FORGE_E2E_OWNER: ${{ vars.LIVERY_E2E_GITEA_OWNER }}
           LIVERY_FORGE_LIVE: "1"
-        run: uv run --no-sync coverage run -m pytest packages/forge/tests/test_gitea_conformance.py -n 4
+        run: coverage run -m pytest packages/forge/tests/test_gitea_conformance.py -n 4
       - name: Remove the runner
         if: always() && steps.guard.outputs.present == 'true'
         env:
@@ -251,7 +271,7 @@ jobs:
         run: python3 .github/scripts/e2e_cleanup.py
       - name: Leg coverage data
         if: always() && steps.guard.outputs.present == 'true'
-        run: uv run --no-sync coverage combine || true
+        run: coverage combine || true
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always() && steps.guard.outputs.present == 'true'
         with:
@@ -270,8 +290,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-      - name: Sync (locked)
-        run: uv sync --locked
+        with:
+          # Pinned by hand to the lock's uv; the emitted workflows
+          # derive the same pin from uv.lock.
+          version: "0.12.7"
+      - name: Enter the workspace
+        run: bash setup.sh github
       - name: Merge every leg
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -285,8 +309,8 @@ jobs:
             echo "no coverage data reached the report" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          uv run --no-sync coverage combine "${files[@]}"
+          coverage combine "${files[@]}"
           echo '## Live coverage union' >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          uv run --no-sync coverage report --sort=cover >> "$GITHUB_STEP_SUMMARY"
+          coverage report --sort=cover >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"

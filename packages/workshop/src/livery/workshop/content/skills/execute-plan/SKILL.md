@@ -13,7 +13,7 @@ description: Execute one phase of a plan note - worktree, gate-green, plan updat
    always do.
 3. One phase at a time. If a contract and the phase conflict, stop
    and surface it. Never resolve the conflict silently.
-4. `uv run fm check` green before calling anything done. Run each
+4. `fm check` green before calling anything done. Run each
    acceptance item's command and keep the output as evidence.
 5. Update the plan in the same change: the Status line, checkboxes if
    present, and a dated decision-record line for any deviation. An

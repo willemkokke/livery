@@ -8,6 +8,7 @@
 
 ## Development
 
-`uv run {{ runner_prog }} check` runs the whole local gate; CI runs
-the same command. `uv run {{ runner_prog }} sync` brings the checkout,
-the delivered content, and the environment current.
+`{{ runner_prog }} check` runs the whole local gate; CI runs the
+same command. `{{ runner_prog }} sync` brings the checkout, the
+delivered content, and the environment current. A fresh machine
+enters with `source setup.sh`.

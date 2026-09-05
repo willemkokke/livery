@@ -28,10 +28,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-      - name: Sync (locked)
-        run: uv sync --locked
+        with:
+          version: "0.12.7"
+      - name: Enter the workspace
+        run: bash setup.sh github
       - name: Build the site, strict
-        run: uv run --no-sync fm docs.build
+        run: fm docs.build
       - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
         with:
           path: site

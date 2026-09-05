@@ -287,7 +287,7 @@ def test_the_rendered_prose_spells_the_brand(tmp_path: Path) -> None:
         {**answers, "runner_prog": "hse"},
     )
     tasks = (destination / "tasks.py").read_text()
-    assert "uv run hse <task>" in tasks
+    assert "Run with ``hse <task>``" in tasks
     assert "``hse check``" in tasks
 
 
@@ -392,7 +392,7 @@ def test_the_remote_update_arm_brands_and_reemits(
     from livery.workshop._update import refresh_rendered
 
     repo, instance = _instance_from_git_template(tmp_path)
-    assert "uv run fm <task>" in (instance / "tasks.py").read_text()
+    assert "Run with ``fm <task>``" in (instance / "tasks.py").read_text()
     contract = (instance / "workshop.toml").read_text()
     lines = [
         f'templates = "{repo}"' if line.startswith("templates = ") else line
@@ -411,7 +411,7 @@ def test_the_remote_update_arm_brands_and_reemits(
     changed = refresh_rendered(instance)
     assert changed  # the update reported work
     tasks = (instance / "tasks.py").read_text()
-    assert "uv run hse <task>" in tasks and "uv run fm <task>" not in tasks
+    assert "Run with ``hse <task>``" in tasks and "``fm <task>``" not in tasks
     gate = (instance / ".github/workflows/ci.yml").read_text()
     assert "hse coverage.enforce" in gate  # the workflows re-emitted branded
 

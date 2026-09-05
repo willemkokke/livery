@@ -20,12 +20,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          # One cache identity per matrix leg: a shared key makes
-          # every leg but the first fail its save with a reservation
-          # warning.
+          version: "0.12.7"
+          # One cache identity per leg: a shared key makes
+          # every leg but the first fail its save with a
+          # reservation warning.
           cache-suffix: ${{ matrix.os }}-${{ matrix.python }}
-      - name: Sync (locked)
-        run: uv sync --locked --python ${{ matrix.python }}
+      - name: Enter the workspace
+        env:
+          UV_PYTHON: ${{ matrix.python }}
+        run: bash setup.sh github
       - name: Gate, measured
         env:
           # Coverage's own subprocess contract: the .pth the
@@ -38,8 +41,8 @@ jobs:
           # once, on the merged union, in the gate job below.
           COVERAGE_PROCESS_START: pyproject.toml
         run: |
-          uv run --no-sync fm check
-          uv run --no-sync coverage combine
+          fm check
+          coverage combine
       - name: Leg coverage data
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -57,11 +60,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
+          version: "0.12.7"
+          # One cache identity per leg: a shared key makes
+          # every leg but the first fail its save with a
+          # reservation warning.
           cache-suffix: docs
-      - name: Sync (locked)
-        run: uv sync --locked
+      - name: Enter the workspace
+        run: bash setup.sh github
       - name: Build the site, strict
-        run: uv run --no-sync fm docs.build
+        run: fm docs.build
 
   # The one required context. Branch protection points here, so the
   # matrix can grow or shrink without touching repository settings.
@@ -78,8 +85,10 @@ jobs:
           test "${{ needs.docs.result }}" = "success"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-      - name: Sync (locked)
-        run: uv sync --locked
+        with:
+          version: "0.12.7"
+      - name: Enter the workspace
+        run: bash setup.sh github
       - name: Combine every leg
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -87,9 +96,9 @@ jobs:
           path: coverage-data
       - name: Enforce the floors on the union
         run: |
-          uv run --no-sync coverage combine coverage-data/*/.coverage
-          uv run --no-sync coverage report --sort=cover
-          uv run --no-sync fm coverage.enforce
+          coverage combine coverage-data/*/.coverage
+          coverage report --sort=cover
+          fm coverage.enforce
   release-title:
     if: startsWith(github.head_ref, 'workflow/release/')
     runs-on: ubuntu-latest
@@ -100,8 +109,10 @@ jobs:
           # checkout does not have.
           fetch-depth: 0
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-      - name: Sync (locked)
-        run: uv sync --locked
-      - run: uv run --no-sync fm workflow.release.check-title --title "$TITLE"
+        with:
+          version: "0.12.7"
+      - name: Enter the workspace
+        run: bash setup.sh github
+      - run: fm workflow.release.check-title --title "$TITLE"
         env:
           TITLE: ${{ github.event.pull_request.title }}
