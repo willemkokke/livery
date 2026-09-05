@@ -1,8 +1,8 @@
 # The docs prepass: package-owned docs in the workshop toolchain
 
 Status: approved 2026-09-05 (Willem); phases 1 (issue #231), 2
-(issue #234), 3 (issue #238), and 4 (issue #241) landed 2026-09-05,
-phases 5 and 6 not started. Between phases 2 and 3 the docs seeds
+(issue #234), 3 (issue #238), 4 (issue #241), and 5 (issue #243)
+landed 2026-09-05, phase 6 not started. Between phases 2 and 3 the docs seeds
 moved to the shared package-base template (issue #235). Written 2026-09-05 from
 side-by-side inventories of footman's and toolroom's docs
 machinery. This plan blocks phase 1 of
@@ -316,6 +316,23 @@ Acceptance:
 - 2026-09-05, phase 2: a generator that rewrites its nav block
   changes the rendered config's input, so the order is generator,
   then render, then commit; the drift gate holds that order honest.
+- 2026-09-05, phase 5 replaces footman's gh-CLI artifact fetch with
+  contract-5-compliant plumbing: the gate's docs job waits on the
+  check matrix and downloads its legs' data with the forge-native
+  action, and when coverage is declared the deploy workflow triggers
+  on the ci run's completion, downloading exactly that run's
+  artifacts by run id. A dispatch still deploys, its coverage pages
+  stating the absence. Emitted for GitHub; the seam itself
+  (declared trees, the copy, the placeholder) is forge-neutral, and
+  the gitea/gitlab plumbing lands when an instance on those forges
+  declares a report.
+- 2026-09-05, phase 5: the python packages' report producer is
+  `fm docs.python-coverage`, a workshop-shipped generator any python
+  package declares beside an htmlcov report; it renders each
+  declaring package's tree from the CI union or the local gate's
+  data, scoped to that package's files. The workshop package is the
+  real consumer, with the committed fixture tree beside it standing
+  in for C++.
 - 2026-09-05, phase 4 deviates from its own text on footman#549
   (flagged by Willem): llms-full.txt is assembled from the authored
   nav entries only, never "the merged nav" whole. The

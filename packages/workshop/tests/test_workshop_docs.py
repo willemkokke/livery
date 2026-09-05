@@ -968,3 +968,128 @@ def test_the_scoped_preview_carries_the_surface_two_levels_up(
     assert '"../../packages/core/_generated",' in config
     assert '"../../packages/core/docs/includes/abbreviations.md",' in config
     assert "[project.theme]" in config
+
+
+# The coverage seam. Refusals and the absent fallback first.
+
+
+def test_broken_coverage_declarations_refuse(tmp_path: Path) -> None:
+    from livery.workshop._docs import package_coverage_reports
+
+    root = _workspace(tmp_path)
+    _declare_generators(root, "core", 'coverage = "not-a-list"\n')
+    with pytest.raises(BaseException, match="must be a list"):
+        package_coverage_reports(_package(root, "core"))
+    _declare_generators(root, "core", 'coverage = [{ label = "x" }]\n')
+    with pytest.raises(BaseException, match="label"):
+        package_coverage_reports(_package(root, "core"))
+    _declare_generators(
+        root, "core", 'coverage = [{ label = "x", path = "../../etc" }]\n'
+    )
+    with pytest.raises(BaseException, match="inside the package"):
+        package_coverage_reports(_package(root, "core"))
+
+
+def test_a_missing_report_states_the_absence_and_stays_green(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._docs import generate_coverage_pages
+
+    root = _workspace(tmp_path)
+    _declare_generators(
+        root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
+    )
+    assert generate_coverage_pages(root) == ["core"]
+    page = (root / "docs/_generated/packages/core/coverage.md").read_text()
+    assert "was not produced in this build" in page
+    assert "iframe" not in page
+
+
+def test_a_present_report_copies_whole_and_iframes(tmp_path: Path) -> None:
+    from livery.workshop._docs import generate_coverage_pages, mount_package_docs
+
+    root = _workspace(tmp_path)
+    _declare_generators(
+        root,
+        "core",
+        'coverage = [\n    { label = "Python", path = "htmlcov" },\n'
+        '    { label = "Native (fixture)", path = "fixtures/native" },\n]\n',
+    )
+    for tree in ("htmlcov", "fixtures/native"):
+        report = root / "packages" / "core" / tree
+        report.mkdir(parents=True)
+        (report / "index.html").write_text("<h1>report</h1>\n")
+        (report / "style.css").write_text("body {}\n")
+    mount_package_docs(root)
+    assert generate_coverage_pages(root) == ["core"]
+    mount = root / "docs/_generated/packages/core"
+    page = (mount / "coverage.md").read_text()
+    assert 'src="coverage/python/index.html"' in page
+    assert 'src="coverage/native-fixture/index.html"' in page
+    assert (mount / "coverage/python/style.css").is_file()
+    # The copy rebuilds whole: a stale file never lingers.
+    stale = mount / "coverage/python/gone.html"
+    stale.write_text("stale\n")
+    generate_coverage_pages(root)
+    assert not stale.exists()
+
+
+def test_the_coverage_nav_entry_appends_like_the_changelog(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._docs import zensical_config
+
+    root = _workspace(tmp_path)
+    _declare_generators(
+        root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
+    )
+    config = zensical_config(root)
+    assert '{ "Coverage" = "_generated/packages/core/coverage.md" },' in config
+
+
+def test_the_coverage_page_stays_out_of_the_context_file(tmp_path: Path) -> None:
+    from livery.workshop._llms import _machine_page
+
+    assert _machine_page("_generated/packages/core/coverage.md")
+    assert not _machine_page("_generated/packages/core/guide.md")
+
+
+def test_the_emitted_plumbing_follows_the_declaration(tmp_path: Path) -> None:
+    from livery.workshop._ci_generate import generate
+
+    root = _workspace(tmp_path)
+    (root / "docs" / "index.md").write_text("# Home\n")
+    (root / "workshop.toml").write_text(
+        '[workspace]\n[forge]\nkind = "github"\nowner = "acme"\n'
+        '[docs]\npublish = "pages"\n'
+    )
+    # The fallback first: nothing declared, nothing plumbed, the
+    # deploy still triggers on push.
+    files = generate(root)
+    # The gate job's floors union always downloads; the DOCS job only
+    # plumbs when a package declares a report.
+    bare_docs_job = (
+        files[".github/workflows/ci.yml"].split("  docs:")[1].split("  gate:")[0]
+    )
+    assert "coverage-data" not in bare_docs_job
+    assert "needs:" not in bare_docs_job
+    assert "workflow_run" not in files[".github/workflows/docs.yml"]
+    _declare_generators(
+        root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
+    )
+    (root / "workshop.toml").write_text(
+        '[workspace]\n[forge]\nkind = "github"\nowner = "acme"\n'
+        '[docs]\npublish = "pages"\n'
+    )
+    files = generate(root)
+    gate = files[".github/workflows/ci.yml"]
+    docs_job = gate.split("  docs:")[1].split("  gate:")[0]
+    # The docs job waits on the matrix and downloads its legs' data.
+    assert "needs: [check]" in docs_job
+    assert "pattern: coverage-*" in docs_job
+    deploy = files[".github/workflows/docs.yml"]
+    # The deploy runs after its commit's ci and downloads that run's
+    # artifacts natively; a dispatch still deploys.
+    assert "workflow_run" in deploy
+    assert "run-id: ${{ github.event.workflow_run.id }}" in deploy
+    assert "workflow_dispatch" in deploy

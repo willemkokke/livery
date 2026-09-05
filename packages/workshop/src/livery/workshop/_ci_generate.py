@@ -46,7 +46,7 @@ def _facts(root: Path) -> dict[str, Any]:
     answers hold identity alone.
     """
     from livery.workshop._compose import layer_template_tree
-    from livery.workshop._docs import docs_requirements
+    from livery.workshop._docs import docs_coverage_declared, docs_requirements
     from livery.workshop._entry import locked_uv_version
     from livery.workshop._envfile import parse_env_file
     from livery.workshop._layers import layer_entries
@@ -75,6 +75,10 @@ def _facts(root: Path) -> dict[str, Any]:
         "docs_requirements": (
             list(docs_requirements(root)) if (root / "packages").is_dir() else []
         ),
+        # Whether any package declares coverage reports: the docs jobs
+        # then consume the check legs' coverage artifacts, so the
+        # declaring packages' generators can render their trees.
+        "docs_coverage": docs_coverage_declared(root),
         # The committed .repo.env's keys: the offline, deterministic
         # list of which secrets the rung step may carry into a job.
         "env_keys": sorted(parse_env_file(root / ".repo.env")),
@@ -196,6 +200,18 @@ def _github_gate(answers: dict[str, Any], prog: str) -> str:
     )
     setup_uv_docs = _setup_uv_step(answers, cache_suffix="docs")
     requirements = _docs_requirements_step(answers)
+    coverage_declared = bool(answers.get("docs_coverage"))
+    docs_needs = "    needs: [check]\n" if coverage_declared else ""
+    coverage_step = (
+        f"""      - name: Coverage artifacts for the site
+        uses: {DOWNLOAD}
+        with:
+          pattern: coverage-*
+          path: coverage-data
+"""
+        if coverage_declared
+        else ""
+    )
     enter = _enter_step()
     enter_leg = _enter_step(matrix_python=True)
     return f"""name: ci
@@ -241,10 +257,10 @@ jobs:
   # here, required through the gate context below, never inside the
   # local check.
   docs:
-    runs-on: ubuntu-latest
+{docs_needs}    runs-on: ubuntu-latest
     steps:
       - uses: {CHECKOUT}
-{setup_uv_docs}{requirements}{enter}      - name: Build the site, strict
+{setup_uv_docs}{requirements}{coverage_step}{enter}      - name: Build the site, strict
         run: {prog} docs.build
 
   # The one required context. Branch protection points here, so the
@@ -780,15 +796,49 @@ def _github_docs_deploy(answers: dict[str, Any], prog: str) -> str:
     setup_uv = _setup_uv_step(answers)
     requirements = _docs_requirements_step(answers)
     enter = _enter_step()
+    coverage_declared = bool(answers.get("docs_coverage"))
+    if coverage_declared:
+        # The deploy consumes exactly its commit's merged coverage, so
+        # it runs after that commit's ci completes instead of on the
+        # push itself; a dispatch still deploys (its build states the
+        # absence on the coverage pages).
+        trigger = """on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+"""
+        deploy_if = (
+            "    if: github.event_name == 'workflow_dispatch' ||"
+            " github.event.workflow_run.conclusion == 'success'\n"
+        )
+        checkout_ref = """        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+"""
+        coverage_step = f"""      - name: Coverage artifacts for the site
+        if: github.event_name == 'workflow_run'
+        uses: {DOWNLOAD}
+        with:
+          pattern: coverage-*
+          path: coverage-data
+          run-id: ${{{{ github.event.workflow_run.id }}}}
+          github-token: ${{{{ github.token }}}}
+"""
+    else:
+        trigger = """on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+"""
+        deploy_if = ""
+        checkout_ref = ""
+        coverage_step = ""
     return f"""name: docs
 
 # The pages seam: build on main, upload, deploy. What ships is the
 # same strict build the required CI job verified.
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
-
+{trigger}
 permissions:
   contents: read
   pages: write
@@ -800,13 +850,13 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+{deploy_if}    runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{{{ steps.deployment.outputs.page_url }}}}
     steps:
       - uses: {CHECKOUT}
-{setup_uv}{requirements}{enter}      - name: Build the site, strict
+{checkout_ref}{setup_uv}{requirements}{coverage_step}{enter}      - name: Build the site, strict
         run: {prog} docs.build
       - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
         with:
