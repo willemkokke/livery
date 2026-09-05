@@ -1,7 +1,9 @@
 # The docs prepass: package-owned docs in the workshop toolchain
 
-Status: approved 2026-09-05 (Willem); phases 1 (issue #231) and 2
-(issue #234) landed 2026-09-05, phases 3 to 6 not started. Written 2026-09-05 from
+Status: approved 2026-09-05 (Willem); phases 1 (issue #231), 2
+(issue #234), and 3 (issue #238) landed 2026-09-05, phases 4 to 6
+not started. Between phases 2 and 3 the docs seeds moved to the
+shared package-base template (issue #235). Written 2026-09-05 from
 side-by-side inventories of footman's and toolroom's docs
 machinery. This plan blocks phase 1 of
 `notes/20260905-footman-toolroom-migration.md`: when its phases
@@ -314,6 +316,22 @@ Acceptance:
 - 2026-09-05, phase 2: a generator that rewrites its nav block
   changes the rendered config's input, so the order is generator,
   then render, then commit; the drift gate holds that order honest.
+- 2026-09-05, phase 3: footman's whole validated extension block is
+  the adopted standard, not only the subset the phase named; one
+  fewer delta at the migration.
+- 2026-09-05, phase 3: the theme block (fonts, features, the
+  three-palette toggle) is emitted as workshop defaults, and the
+  palette and type css are instance-owned seeds the emitter lists
+  while they exist, so deleting one is the opt-out and editing it is
+  the override.
+- 2026-09-05, phase 3: the link-preview override renders as a
+  generated artifact with a jinja-comment header (a # header would
+  render into every page); the image tags are emitted only while
+  the committed card exists, and the card seed is a solid
+  placeholder awaiting an instance-authored image.
+- 2026-09-05, phase 3: the workshop package declares its own
+  extra_css, the phase's real in-repo consumer, proving contract to
+  rendered config to mounted asset to linked page.
 - 2026-09-05, phase 2's chain consumer surfaced a latent mount
   fault: a branded App mounts its builtin layers as the cascade's
   base rung, and `mount_layers` (running inside that very mount)

@@ -72,7 +72,8 @@ def test_the_render_carries_no_identity_but_the_answers(tmp_path: Path) -> None:
     root = _stranger(tmp_path / "acme-tools")
     offenders = []
     for path in sorted(root.rglob("*")):
-        if not path.is_file():
+        if not path.is_file() or path.suffix == ".png":
+            # The card seed is a raster; identity lives in text.
             continue
         text = path.read_text(encoding="utf-8")
         # _src_path is a machine-managed receipt: it records where

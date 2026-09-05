@@ -314,21 +314,321 @@ def _authored_nav_lines(entries: list[object], prefix: str, indent: str) -> list
     return lines
 
 
+#: The workspace css seeds the emitter lists while they exist:
+#: instance-owned files, born from the template, overridable by
+#: editing them and removable by deleting them.
+WORKSPACE_CSS = ("assets/palette.css", "assets/type.css")
+
+#: The link-preview card image's committed home; the image tags are
+#: emitted only while it exists.
+CARD_IMAGE = "docs/assets/og-card.png"
+
+
+def abbreviation_files(root: Path) -> list[str]:
+    """Every package's committed glossary, for the site-wide append.
+
+    ``docs/includes/abbreviations.md`` per package, as paths relative
+    to *root*. Tooltips are site-wide, so a term two packages define
+    differently refuses naming the term and both packages; the same
+    definition twice is allowed.
+    """
+    import re
+
+    definitions: dict[str, tuple[str, str]] = {}
+    files: list[str] = []
+    for package in discover_packages(root):
+        glossary = package.directory / "docs" / "includes" / "abbreviations.md"
+        if not glossary.is_file():
+            continue
+        files.append(glossary.relative_to(root).as_posix())
+        for line in glossary.read_text("utf-8").splitlines():
+            match = re.match(r"\*\[(.+?)\]:\s*(.+)", line)
+            if match is None:
+                continue
+            term, definition = match.group(1), match.group(2).strip()
+            known = definitions.get(term)
+            if known is not None and known[0] != definition:
+                fail(
+                    f"abbreviation {term!r} is defined differently by"
+                    f" {known[1]} and {package.name}; tooltips are"
+                    " site-wide, so one definition must win: agree on"
+                    " one, or rename the terms apart"
+                )
+            definitions.setdefault(term, (definition, package.name))
+    return files
+
+
+def package_docs_extras(package: Package) -> tuple[list[str], list[object]]:
+    """The css and javascript a package's ``[docs]`` table declares.
+
+    ``extra_css`` entries are paths relative to the package's
+    ``docs/`` tree; ``extra_javascript`` entries are the same, or
+    tables carrying ``path`` with ``type``, ``defer``, and ``async``.
+    Anything else refuses naming the file and the entry.
+    """
+    contract_path = package.directory / "workshop.toml"
+    contract = tomllib.loads(contract_path.read_text("utf-8"))
+    table = contract.get("docs") or {}
+    if not isinstance(table, dict):
+        return ([], [])
+    css_declared = table.get("extra_css", [])
+    js_declared = table.get("extra_javascript", [])
+    if not isinstance(css_declared, list) or not all(
+        isinstance(entry, str) for entry in css_declared
+    ):
+        fail(f"{contract_path}: [docs] extra_css must be a list of paths")
+    allowed = {"path", "type", "defer", "async"}
+    for entry in js_declared if isinstance(js_declared, list) else ():
+        if isinstance(entry, str):
+            continue
+        if (
+            isinstance(entry, dict)
+            and isinstance(entry.get("path"), str)
+            and set(entry) <= allowed
+        ):
+            continue
+        fail(
+            f"{contract_path}: [docs] extra_javascript entry {entry!r} is"
+            " not a path or a { path, type, defer, async } table"
+        )
+    if not isinstance(js_declared, list):
+        fail(f"{contract_path}: [docs] extra_javascript must be a list")
+    return (list(css_declared), list(js_declared))
+
+
+def _js_line(entry: object, prefix: str) -> str:
+    """One rendered ``extra_javascript`` entry, path prefixed."""
+    if isinstance(entry, str):
+        return f'    "{prefix}{entry}",'
+    assert isinstance(entry, dict)
+    parts = [f'path = "{prefix}{entry["path"]}"']
+    for key in ("type",):
+        if key in entry:
+            parts.append(f'{key} = "{entry[key]}"')
+    for key in ("defer", "async"):
+        if key in entry:
+            parts.append(f"{key} = {'true' if entry[key] else 'false'}")
+    return "    { " + ", ".join(parts) + " },"
+
+
+def _extra_asset_lines(root: Path) -> list[str]:
+    """``extra_css`` and ``extra_javascript`` for the whole site.
+
+    The workspace's own css seeds while they exist, then each
+    package's declared entries at its mounted paths. Top-level
+    ``[project]`` keys, so they render before any subtable.
+    """
+    css = [name for name in WORKSPACE_CSS if (root / "docs" / name).is_file()]
+    js: list[str] = []
+    for package in discover_packages(root):
+        declared_css, declared_js = package_docs_extras(package)
+        prefix = f"_generated/packages/{package.directory.name}/"
+        css += [prefix + entry for entry in declared_css]
+        js += [_js_line(entry, prefix) for entry in declared_js]
+    lines: list[str] = []
+    if css:
+        lines.append("extra_css = [")
+        lines += [f'    "{entry}",' for entry in css]
+        lines.append("]")
+    if js:
+        lines.append("extra_javascript = [")
+        lines += js
+        lines.append("]")
+    return lines
+
+
+def _theme_lines() -> list[str]:
+    """The theme block: workshop defaults an instance restyles in css.
+
+    The palette follows the OS with a manual light/dark/auto toggle
+    cycle; the override directory carries the rendered link-preview
+    template.
+    """
+    return [
+        "",
+        "[project.theme]",
+        'language = "en"',
+        'font.text = "Inter"',
+        'font.code = "Fira Code"',
+        'custom_dir = "overrides"',
+        "features = [",
+        '    "announce.dismiss",',
+        '    "content.code.annotate",',
+        '    "content.code.copy",',
+        '    "content.tooltips",',
+        '    "navigation.footer",',
+        '    "navigation.indexes",',
+        '    "navigation.instant",',
+        '    "navigation.instant.prefetch",',
+        '    "navigation.sections",',
+        '    "navigation.tabs",',
+        '    "navigation.tabs.sticky",',
+        '    "navigation.top",',
+        '    "navigation.tracking",',
+        '    "search.highlight",',
+        '    "toc.follow",',
+        "]",
+        "",
+        "[[project.theme.palette]]",
+        'media = "(prefers-color-scheme)"',
+        'toggle.icon = "lucide/sun-moon"',
+        'toggle.name = "Switch to light mode"',
+        "",
+        "[[project.theme.palette]]",
+        'media = "(prefers-color-scheme: light)"',
+        'scheme = "default"',
+        'toggle.icon = "lucide/sun"',
+        'toggle.name = "Switch to dark mode"',
+        "",
+        "[[project.theme.palette]]",
+        'media = "(prefers-color-scheme: dark)"',
+        'scheme = "slate"',
+        'toggle.icon = "lucide/moon"',
+        'toggle.name = "Switch to system preference"',
+    ]
+
+
+def _extension_block(root: Path, *, relative_to: str = ".") -> list[str]:
+    """The markdown extension set, the standard every site carries.
+
+    ``relative_to`` prefixes the repo-anchored paths (snippet homes,
+    glossaries) so the scoped preview, whose config lives two levels
+    down, resolves the same committed sources.
+    """
+    anchor = "" if relative_to == "." else relative_to.rstrip("/") + "/"
+    snippet_paths = [relative_to] + [
+        f"{anchor}packages/{package.directory.name}/_generated"
+        for package in discover_packages(root)
+    ]
+    appended = [f"{anchor}{path}" for path in abbreviation_files(root)]
+    lines = [
+        "",
+        "# Markdown extensions: the workshop's standard set.",
+        "[project.markdown_extensions.abbr]",
+        "[project.markdown_extensions.admonition]",
+        "[project.markdown_extensions.attr_list]",
+        "[project.markdown_extensions.def_list]",
+        "[project.markdown_extensions.footnotes]",
+        "[project.markdown_extensions.md_in_html]",
+        "[project.markdown_extensions.toc]",
+        "permalink = true",
+        "[project.markdown_extensions.pymdownx.arithmatex]",
+        "generic = true",
+        "[project.markdown_extensions.pymdownx.betterem]",
+        "[project.markdown_extensions.pymdownx.caret]",
+        "[project.markdown_extensions.pymdownx.details]",
+        "[project.markdown_extensions.pymdownx.emoji]",
+        'emoji_generator = "zensical.extensions.emoji.to_svg"',
+        'emoji_index = "zensical.extensions.emoji.twemoji"',
+        "[project.markdown_extensions.pymdownx.highlight]",
+        "anchor_linenums = true",
+        'line_spans = "__span"',
+        "pygments_lang_class = true",
+        "[project.markdown_extensions.pymdownx.inlinehilite]",
+        "[project.markdown_extensions.pymdownx.keys]",
+        "[project.markdown_extensions.pymdownx.magiclink]",
+        "[project.markdown_extensions.pymdownx.mark]",
+        "[project.markdown_extensions.pymdownx.smartsymbols]",
+        "[project.markdown_extensions.pymdownx.superfences]",
+        "custom_fences = [",
+        '    { name = "mermaid", class = "mermaid",'
+        ' format = "pymdownx.superfences.fence_code_format" },',
+        "]",
+        "[project.markdown_extensions.pymdownx.tabbed]",
+        "alternate_style = true",
+        "combine_header_slug = true",
+        "[project.markdown_extensions.pymdownx.tasklist]",
+        "custom_checkbox = true",
+        "[project.markdown_extensions.pymdownx.tilde]",
+        "[project.markdown_extensions.pymdownx.snippets]",
+        "base_path = [",
+    ]
+    lines += [f'    "{path}",' for path in snippet_paths]
+    lines += ["]", "check_paths = true"]
+    if appended:
+        lines.append("auto_append = [")
+        lines += [f'    "{path}",' for path in appended]
+        lines.append("]")
+    return lines
+
+
+def overrides_template(root: Path) -> str:
+    """The rendered theme override: link-preview tags, instance facts.
+
+    The brand leads on the home page, because that is the URL that
+    gets posted and a feed truncates from the right; elsewhere the
+    page leads. The image tags are emitted only while the committed
+    card exists, and every URL is absolute: a preview is fetched by
+    someone else's server, which has no page to resolve a relative
+    path against.
+    """
+    table = docs_table(root)
+    title = str(table.get("title", "")) or _project_name(root)
+    description = str(table.get("description", ""))
+    card = (root / CARD_IMAGE).is_file()
+    image_block = (
+        """
+  {% set image = config.site_url ~ "assets/og-card.png" %}
+  <meta property="og:image" content="{{ image }}">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="__ALT__">
+  <meta name="twitter:image" content="{{ image }}">"""
+        if card
+        else ""
+    ).replace("__ALT__", description or title)
+    return (
+        (
+            """{% extends "base.html" %}
+
+{% block extrahead %}
+  {% set page_title = page.meta.title
+                      if page.meta and page.meta.title
+                      else (page.title | striptags
+                            if page.title else config.site_name) %}
+  {% set title = (config.site_name ~ " - " ~ page_title)
+                 if page.canonical_url == config.site_url
+                 else (page_title ~ " - " ~ config.site_name) %}
+  {% set description = page.meta.description if page.meta and page.meta.description
+                       else config.site_description %}
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="{{ config.site_name }}">
+  <meta property="og:title" content="{{ title }}">
+  <meta property="og:description" content="{{ description }}">
+  <meta property="og:url" content="{{
+    page.canonical_url if page.canonical_url else config.site_url }}">
+  <meta name="twitter:card" content="__CARD__">
+  <meta name="twitter:title" content="{{ title }}">
+  <meta name="twitter:description" content="{{ description }}">__IMAGE__
+{% endblock %}
+"""
+        )
+        .replace("__IMAGE__", image_block)
+        .replace("__CARD__", "summary_large_image" if card else "summary")
+    )
+
+
 def zensical_config(root: Path) -> str:
     """The rendered ``zensical.toml`` body, generated header excluded.
 
     Site identity comes from the ``[docs]`` table (title defaults to
     the root project's name); the nav enumerates the root
     ``docs/`` pages and every package's ``docs/`` tree at its mount
-    path. The whole file is the emitter's: hand customisation goes
-    through the contract, and the drift gate refuses an edit here.
+    path; the theme, extension set, and asset lists follow. The whole
+    file is the emitter's: hand customisation goes through the
+    contract, and the drift gate refuses an edit here.
     """
     table = docs_table(root)
     title = str(table.get("title", "")) or _project_name(root)
     site_url = str(table.get("site_url", ""))
+    description = str(table.get("description", ""))
     lines = ["[project]", f'site_name = "{title}"']
     if site_url:
         lines.append(f'site_url = "{site_url}"')
+    if description:
+        lines.append(f'site_description = "{description}"')
     lines.append("nav = [")
     lines.append(f"    {NAV_BEGIN}")
     for page in _pages(root / "docs"):
@@ -355,6 +655,9 @@ def zensical_config(root: Path) -> str:
             handler_paths.append(f"packages/{package.directory.name}/src")
     lines.append(f"    {NAV_END}")
     lines.append("]")
+    lines += _extra_asset_lines(root)
+    lines += _theme_lines()
+    lines += _extension_block(root)
     if handler_paths:
         lines += _mkdocstrings_lines(handler_paths, INVENTORIES)
     return "\n".join(lines) + "\n"
@@ -659,6 +962,8 @@ def scoped_config(root: Path, package: Package) -> str:
     section, has_modules = _package_section(package)
     lines += section
     lines.append("]")
+    lines += _theme_lines()
+    lines += _extension_block(root, relative_to="../..")
     if has_modules:
         inventories: list[str] = [*INVENTORIES]
         site_url = str(table.get("site_url", ""))
@@ -698,6 +1003,9 @@ def materialise_preview(root: Path, package: Package) -> Path:
     ):
         if source.is_dir():
             shutil.copytree(source, destination)
+    overrides = root / "overrides"
+    if overrides.is_dir():
+        shutil.copytree(overrides, base / "overrides")
     config = base / "zensical.toml"
     config.write_text(
         generated_header("#") + scoped_config(root, package), encoding="utf-8"
