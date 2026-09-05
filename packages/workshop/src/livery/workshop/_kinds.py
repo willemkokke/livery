@@ -195,19 +195,33 @@ def kind_chain(type_name: str) -> tuple[KindRecord, ...]:
     return tuple(chain)
 
 
+#: The shared seed carrier every package template renders first:
+#: the docs page and its nav live once, here.
+BASE_TEMPLATE = "package-base"
+
+
 def template_chain(template_kind: str) -> tuple[str, ...]:
     """The template kinds to render, parent first, leaf last.
 
-    Derived from the registry: the record whose template is
-    *template_kind* chains through its parents' templates. A
+    Every package template's chain starts at ``package-base``, the
+    shared seed carrier (the docs page and its nav), so a package of
+    any kind ships a docs section without per-template discipline;
+    the child renders after it and wins. Beyond the base the chain
+    derives from the registry: the record whose template is
+    *template_kind* chains through its parents' templates, and a
     template the registry does not map (a variant such as
-    ``package-python-layer``) renders alone, today's behaviour.
+    ``package-python-layer``) renders over the base alone.
     """
+    base = (
+        (BASE_TEMPLATE,)
+        if template_kind.startswith("package-") and template_kind != BASE_TEMPLATE
+        else ()
+    )
     by_template = {r.template: r for r in _KINDS.values() if r.template}
     record = by_template.get(template_kind)
     if record is None:
-        return (template_kind,)
-    return tuple(r.template for r in kind_chain(record.name) if r.template)
+        return (*base, template_kind)
+    return (*base, *(r.template for r in kind_chain(record.name) if r.template))
 
 
 def managed_files(type_name: str) -> tuple[str, ...]:

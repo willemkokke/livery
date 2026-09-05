@@ -92,6 +92,7 @@ def test_a_pure_wheel_from_the_native_kind_refuses(tmp_path: Path) -> None:
 
 def test_the_kind_chains_from_python() -> None:
     assert template_chain("package-python-nanobind") == (
+        "package-base",
         "package-python",
         "package-python-nanobind",
     )

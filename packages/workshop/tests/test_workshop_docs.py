@@ -807,10 +807,13 @@ def test_the_docs_jobs_install_the_declared_requirements(tmp_path: Path) -> None
     assert "sudo" not in pipeline
 
 
-def test_every_package_template_docs_seed_carries_a_nav() -> None:
-    # A template off the kind chain (package-python-layer) renders
-    # alone, so each template must carry its own seed; the chain
-    # caught a layer-born package arriving seedless.
+def test_the_docs_seeds_live_once_in_the_base_template() -> None:
+    # Every package template chains from package-base, the one home
+    # of the docs seeds; a copy in a kind template would shadow the
+    # base's and rot separately. The chain once caught a layer-born
+    # package arriving seedless from exactly that duplication.
+    from livery.workshop._kinds import template_chain
+
     templates = (
         Path(__file__).resolve().parents[1]
         / "src"
@@ -818,5 +821,11 @@ def test_every_package_template_docs_seed_carries_a_nav() -> None:
         / "workshop"
         / "templates"
     )
-    for docs in sorted(templates.glob("package-*/docs")):
-        assert (docs / "nav.toml").is_file(), docs
+    base = templates / "package-base" / "docs"
+    assert (base / "nav.toml").is_file()
+    assert (base / "index.md.jinja").is_file()
+    for template in sorted(templates.glob("package-*")):
+        if template.name == "package-base":
+            continue
+        assert not (template / "docs").exists(), template
+        assert template_chain(template.name)[0] == "package-base"

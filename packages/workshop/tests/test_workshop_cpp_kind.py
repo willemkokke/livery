@@ -240,7 +240,12 @@ def test_host_tools_are_named_when_missing(restored_registry, tmp_path: Path) ->
 
 
 def test_the_kind_registers_alone_in_the_chain() -> None:
-    assert template_chain("package-cpp-conan") == ("package-cpp-conan",)
+    # Alone in the KIND chain (no python parent); the shared base
+    # template still renders first, carrying the docs seeds.
+    assert template_chain("package-cpp-conan") == (
+        "package-base",
+        "package-cpp-conan",
+    )
     assert managed_files("cpp-conan") == ("cliff.toml",)
     assert not is_python_kind("cpp-conan")
     assert is_python_kind("python")
