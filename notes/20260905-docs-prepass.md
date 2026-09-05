@@ -1,9 +1,9 @@
 # The docs prepass: package-owned docs in the workshop toolchain
 
 Status: approved 2026-09-05 (Willem); phases 1 (issue #231), 2
-(issue #234), and 3 (issue #238) landed 2026-09-05, phases 4 to 6
-not started. Between phases 2 and 3 the docs seeds moved to the
-shared package-base template (issue #235). Written 2026-09-05 from
+(issue #234), 3 (issue #238), and 4 (issue #241) landed 2026-09-05,
+phases 5 and 6 not started. Between phases 2 and 3 the docs seeds
+moved to the shared package-base template (issue #235). Written 2026-09-05 from
 side-by-side inventories of footman's and toolroom's docs
 machinery. This plan blocks phase 1 of
 `notes/20260905-footman-toolroom-migration.md`: when its phases
@@ -316,6 +316,21 @@ Acceptance:
 - 2026-09-05, phase 2: a generator that rewrites its nav block
   changes the rendered config's input, so the order is generator,
   then render, then commit; the drift gate holds that order honest.
+- 2026-09-05, phase 4 deviates from its own text on footman#549
+  (flagged by Willem): llms-full.txt is assembled from the authored
+  nav entries only, never "the merged nav" whole. The
+  machine-appended sections (package changelogs, the release view,
+  the API trees) are excluded by construction, because a context
+  file that concatenates history teaches superseded behaviour as
+  current; the hand-authored package navs are the explicit inclusion
+  list that issue asks for. llms.txt still links every page.
+- 2026-09-05, phase 4, found live on the first real build: the
+  index title fell back to the checkout directory's name (the
+  worktree's slug) instead of the project's, the drift class
+  _project_name exists for; and a wrapped list item's continuation
+  line was served as a page description, a mid-sentence fragment
+  joining footman's four audited junk shapes as a fifth, forced in
+  the tests.
 - 2026-09-05, phase 3: footman's whole validated extension block is
   the adopted standard, not only the subset the phase named; one
   fewer delta at the migration.
