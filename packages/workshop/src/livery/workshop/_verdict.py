@@ -119,6 +119,21 @@ def classify(
             " or start over",
             pr.number,
         )
+    # The local head is ground truth for a verdict: right after a
+    # push the forge's pull request read can lag and still report
+    # the previous head, and a verdict on that head judges the
+    # commit the push replaced. In-flight until the forge catches
+    # up; a branch checked out elsewhere (submit.merge from another
+    # tree) matches by construction.
+    local_head = git.head_sha() if git.current_branch() == branch else ""
+    if local_head and pr.head_sha != local_head:
+        return Verdict(
+            "in-flight",
+            0,
+            f"the forge still reports {pr.head_sha[:10]}; the local head"
+            f" is {local_head[:10]}",
+            pr.number,
+        )
     status = repo.checks.status(pr.head_sha)
     if status.state == "failure":
         failing = _failing_job(repo, pr.head_sha)

@@ -68,3 +68,22 @@ def test_slow_status_reads_answer_none_before_the_truth() -> None:
     assert repo.checks.status(sha).state == "none"
     assert repo.checks.status(sha).state == "none"
     assert repo.checks.status(sha).state == "success"
+
+
+def test_a_skipped_run_is_not_a_verdict() -> None:
+    # A workflow whose jobs all skip completes in seconds; counting
+    # it would report a commit green before the real gate starts.
+    from livery.forge.testing import FakeForge
+
+    fake = FakeForge()
+    fake.create_repo("acme", "ws", private=True, description="t")
+    repo = fake.repository("acme", "ws")
+    sha = fake.push("acme", "ws", "main", outcome="skipped")
+    fake.settle("acme", "ws", sha)
+    assert repo.checks.status(sha).state == "none"
+    # A real run beside it decides alone.
+    fake.push("acme", "ws", "main", sha=sha)
+    fake.settle("acme", "ws", sha)
+    status = repo.checks.status(sha)
+    assert status.state == "success"
+    assert status.contexts == 1

@@ -32,7 +32,7 @@ from livery.forge._errors import ForgeError, Unsupported
 from livery.forge._protocol import Forge, Repository
 from livery.forge._types import Capability, Label, RepoConfig
 
-Outcome: TypeAlias = Literal["success", "failure", "hang"]
+Outcome: TypeAlias = Literal["success", "failure", "hang", "skipped"]
 """What CI will do with a pushed commit.
 
 ``success`` and ``failure`` are verdicts the run reaches once settled.

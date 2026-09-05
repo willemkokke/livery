@@ -640,3 +640,51 @@ def test_ambient_tokens_mount_as_forge_token(tmp_path: Path) -> None:
         "FORGE_TOKEN: ${{ secrets.GITHUB_TOKEN }}"
         in (gitea[".gitea/workflows/release.yml"])
     )
+
+
+def test_a_lagging_pr_head_stays_in_flight(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Right after a push the forge's pull request read can still
+    # report the previous head; a verdict on that head judges the
+    # commit the push replaced (it once reported a fresh fix red
+    # from the stale run, and a fresh red green).
+    from livery.workshop._verdict import classify
+
+    root, git = _reconcile_rig(tmp_path)
+    monkeypatch.setattr(
+        "livery.workshop._layers.workspace_root", lambda start=None: root
+    )
+    monkeypatch.chdir(root)
+    fake = FakeForge()
+    fake.create_repo("acme", "ws", private=True, description="t")
+    repo = fake.repository("acme", "ws")
+    _git(root, "checkout", "-b", "feat/1-work")
+    (root / "work.txt").write_text("w\n")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "feat: work")
+    _git(root, "push", "-u", "origin", "feat/1-work")
+    old_sha = git.head_sha()
+    fake.push("acme", "ws", "feat/1-work", sha=old_sha)
+    fake.settle("acme", "ws", old_sha)
+    repo.pr.open("feat/1-work", "main", "feat: work")
+    # The fix lands locally and pushes; the fake (like a lagging
+    # forge) still reports the old head.
+    (root / "work.txt").write_text("w2\n")
+    _git(root, "commit", "-am", "fix: the fix")
+    _git(root, "push", "origin", "feat/1-work")
+    new_sha = git.head_sha()
+    verdict = classify(repo, "feat/1-work", git, grace_spent=True)
+    assert verdict.state == "in-flight"
+    assert old_sha[:10] in verdict.detail
+    assert new_sha[:10] in verdict.detail
+    # The forge catches up green: the verdict moves on.
+    fake.push("acme", "ws", "feat/1-work", sha=new_sha)
+    fake.settle("acme", "ws", new_sha)
+    verdict = classify(repo, "feat/1-work", git, grace_spent=True)
+    assert verdict.state == "disarmed"
+    # From another checkout (a watcher not on the branch) the guard
+    # never engages: the forge's head is the only truth in reach.
+    _git(root, "checkout", "main")
+    verdict = classify(repo, "feat/1-work", git, grace_spent=True)
+    assert verdict.state == "disarmed"
