@@ -1277,6 +1277,10 @@ def docs_build(
     )
     if result.code != 0:
         fail(f"zensical build exited {result.code}:\n{result.stdout}{result.stderr}")
+    from livery.workshop._llms import write_llms_files
+
+    written = write_llms_files(root)
+    print(f"  agent files: {', '.join(written)}")
     print(f"  site built at {root / 'site'}")
 
 
