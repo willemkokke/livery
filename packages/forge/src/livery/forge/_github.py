@@ -890,7 +890,19 @@ class _GithubChecks:
             or {}
         )
         check_runs = runs_data.get("check_runs") or []
-        contexts = len(statuses) + len(check_runs)
+        # A skipped run is not a verdict (the GitLab fold's rule,
+        # held here too): a workflow whose jobs all skip completes in
+        # seconds, and counting it would report a commit green before
+        # the real gate has even started.
+        judged = []
+        for run in check_runs:
+            run_state, conclusion = _run_state(
+                str(run.get("status", "")), str(run.get("conclusion") or "")
+            )
+            if run_state == "completed" and conclusion == "skipped":
+                continue
+            judged.append((run_state, conclusion))
+        contexts = len(statuses) + len(judged)
         if contexts == 0:
             return CombinedStatus(state="none", contexts=0)
         state: CheckState = "success"
@@ -898,14 +910,11 @@ class _GithubChecks:
             state = "failure"
         elif statuses and str(combined.get("state")) == "pending":
             state = "pending"
-        for run in check_runs:
-            run_state, conclusion = _run_state(
-                str(run.get("status", "")), str(run.get("conclusion") or "")
-            )
+        for run_state, conclusion in judged:
             if run_state != "completed":
                 if state != "failure":
                     state = "pending"
-            elif conclusion not in ("success", "skipped"):
+            elif conclusion != "success":
                 state = "failure"
         return CombinedStatus(state=state, contexts=contexts)
 

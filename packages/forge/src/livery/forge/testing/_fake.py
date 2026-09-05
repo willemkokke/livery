@@ -443,12 +443,20 @@ class FakeForge:
         return run_state
 
     def _derived_status(self, state: _RepoState, sha: str) -> CombinedStatus:
-        runs = [run for run in state.runs.values() if run.head_sha == sha]
+        runs = [
+            run
+            for run in state.runs.values()
+            if run.head_sha == sha
+            # A skipped run is not a verdict, exactly as the real
+            # folds hold: it must never turn an unreported commit
+            # green.
+            and not (run.status == "completed" and run.conclusion == "skipped")
+        ]
         if not runs:
             return CombinedStatus(state="none", contexts=0)
         if any(run.status != "completed" for run in runs):
             return CombinedStatus(state="pending", contexts=len(runs))
-        if all(run.conclusion in ("success", "skipped") for run in runs):
+        if all(run.conclusion == "success" for run in runs):
             return CombinedStatus(state="success", contexts=len(runs))
         return CombinedStatus(state="failure", contexts=len(runs))
 
