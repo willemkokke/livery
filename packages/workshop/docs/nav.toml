@@ -1,0 +1,9 @@
+# This package's section of the workspace site, hand-authored.
+# Labels map to pages relative to this docs/ tree, or to nested
+# lists. Every authored page must appear here, and every entry must
+# name a real page; the changelog and API entries are appended by
+# the emitter.
+nav = [
+    { "Index" = "index.md" },
+    { "Releases" = "releases.md" },
+]

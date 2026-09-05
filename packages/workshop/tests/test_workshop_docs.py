@@ -412,3 +412,243 @@ def test_configure_asserts_pages_for_the_pages_seam(tmp_path: Path) -> None:
     repo.ensure_pages(build_type="workflow")
     state = fake._repos[("acme", "home")]
     assert state.pages_build_type == "workflow"
+
+
+# The package-owned nav. Refusals and fallbacks first.
+
+
+def _nav(root: Path, package: str, body: str) -> Path:
+    docs = root / "packages" / package / "docs"
+    docs.mkdir(exist_ok=True)
+    path = docs / "nav.toml"
+    path.write_text(body)
+    return path
+
+
+def test_a_broken_nav_toml_refuses_with_the_file_named(tmp_path: Path) -> None:
+    import pytest
+
+    from livery.workshop._docs import package_nav
+
+    root = _workspace(tmp_path)
+    _nav(root, "core", "nav = [broken\n")
+    core = next(p for p in discover_packages(root) if p.directory.name == "core")
+    with pytest.raises(BaseException, match=r"nav\.toml is not valid TOML"):
+        package_nav(core)
+    _nav(root, "core", 'not_nav = "x"\n')
+    with pytest.raises(BaseException, match="top-level `nav` list"):
+        package_nav(core)
+    _nav(root, "core", 'nav = [{ "A" = "a.md", "B" = "b.md" }]\n')
+    with pytest.raises(BaseException, match="single"):
+        package_nav(core)
+    _nav(root, "core", 'nav = [{ "A" = 3 }]\n')
+    with pytest.raises(BaseException, match="page path or a nested list"):
+        package_nav(core)
+
+
+def test_nav_drift_refuses_both_directions_and_restores(tmp_path: Path) -> None:
+    import pytest
+
+    from livery.workshop._docs import zensical_config
+
+    root = _workspace(tmp_path)
+    # Forced red, direction one: an entry naming a missing page.
+    _nav(
+        root,
+        "core",
+        'nav = [\n    { "Index" = "index.md" },\n'
+        '    { "Guide" = "guide.md" },\n    { "Ghost" = "ghost.md" },\n]\n',
+    )
+    with pytest.raises(BaseException, match=r"ghost\.md"):
+        zensical_config(root)
+    # Forced red, direction two: an authored page absent from the nav.
+    _nav(root, "core", 'nav = [\n    { "Index" = "index.md" },\n]\n')
+    with pytest.raises(BaseException, match=r"guide\.md"):
+        zensical_config(root)
+    # Restored: the full nav renders green.
+    _nav(
+        root,
+        "core",
+        'nav = [\n    { "Index" = "index.md" },\n    { "Guide" = "guide.md" },\n]\n',
+    )
+    assert "guide.md" in zensical_config(root)
+
+
+def test_generated_pages_are_exempt_both_ways(tmp_path: Path) -> None:
+    from livery.workshop._docs import zensical_config
+
+    root = _workspace(tmp_path)
+    # A generator's page may be listed before it exists, and a
+    # generated page on disk is never demanded in the nav.
+    (root / "packages/core/docs/_generated").mkdir()
+    (root / "packages/core/docs/_generated/tool.md").write_text("# tool\n")
+    _nav(
+        root,
+        "core",
+        'nav = [\n    { "Index" = "index.md" },\n'
+        '    { "Guide" = "guide.md" },\n'
+        "    # nav:begin tools\n"
+        '    { "Ghost tool" = "_generated/ghost.md" },\n'
+        "    # nav:end tools\n]\n",
+    )
+    config = zensical_config(root)
+    assert "_generated/packages/core/_generated/ghost.md" in config
+
+
+def test_the_authored_nav_drives_the_section(tmp_path: Path) -> None:
+    import tomllib as toml
+
+    from livery.workshop._docs import zensical_config
+
+    root = _workspace(tmp_path)
+    (root / "packages/core/docs/deep").mkdir()
+    (root / "packages/core/docs/deep/one.md").write_text("# one\n")
+    _nav(
+        root,
+        "core",
+        "nav = [\n"
+        '    { "Guide" = "guide.md" },\n'
+        '    { "Start here" = "index.md" },\n'
+        '    { "Deep" = [\n        { "One" = "deep/one.md" },\n    ] },\n'
+        "]\n",
+    )
+    parsed = toml.loads(zensical_config(root))
+    core = next(e for e in parsed["project"]["nav"] if "core" in e)["core"]
+    # Authored order wins (no index-first re-sort), nesting survives,
+    # and every path lands under the package's mount.
+    assert core[0] == {"Guide": "_generated/packages/core/guide.md"}
+    assert core[1] == {"Start here": "_generated/packages/core/index.md"}
+    assert core[2] == {"Deep": [{"One": "_generated/packages/core/deep/one.md"}]}
+
+
+def test_a_navless_package_keeps_the_enumerated_fallback(tmp_path: Path) -> None:
+    import tomllib as toml
+
+    from livery.workshop._docs import zensical_config
+
+    root = _workspace(tmp_path)
+    parsed = toml.loads(zensical_config(root))
+    core = next(e for e in parsed["project"]["nav"] if "core" in e)["core"]
+    assert core[0] == {"Index": "_generated/packages/core/index.md"}
+    assert core[1] == {"guide": "_generated/packages/core/guide.md"}
+
+
+def test_the_mount_leaves_nav_toml_behind(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    _nav(
+        root,
+        "core",
+        'nav = [\n    { "Index" = "index.md" },\n    { "Guide" = "guide.md" },\n]\n',
+    )
+    mount_package_docs(root)
+    assert (root / "docs/_generated/packages/core/guide.md").is_file()
+    assert not (root / "docs/_generated/packages/core/nav.toml").exists()
+
+
+# The marker rewrite: refusals first.
+
+
+def test_the_block_rewrite_refuses_without_its_markers(tmp_path: Path) -> None:
+    import pytest
+
+    from livery.workshop._docs import rewrite_nav_block
+
+    with pytest.raises(BaseException, match="no home"):
+        rewrite_nav_block(tmp_path / "absent.toml", "tools", [])
+    path = tmp_path / "nav.toml"
+    path.write_text("nav = [\n]\n")
+    with pytest.raises(BaseException, match="tools"):
+        rewrite_nav_block(path, "tools", [])
+
+
+def test_the_block_rewrite_reindents_and_is_idempotent(tmp_path: Path) -> None:
+    from livery.workshop._docs import rewrite_nav_block
+
+    path = tmp_path / "nav.toml"
+    path.write_text(
+        "nav = [\n"
+        '    { "Index" = "index.md" },\n'
+        "    # nav:begin tools\n"
+        "    # nav:end tools\n"
+        "]\n"
+    )
+    entries = ['{ "One" = "_generated/one.md" },', '{ "Two" = "_generated/two.md" },']
+    rewrite_nav_block(path, "tools", entries)
+    first = path.read_text()
+    # The generator hands unindented lines; the block's own
+    # indentation comes from the marker.
+    assert '    { "One" = "_generated/one.md" },\n' in first
+    rewrite_nav_block(path, "tools", entries)
+    assert path.read_text() == first
+    rewrite_nav_block(path, "tools", ['{ "Three" = "_generated/three.md" },'])
+    third = path.read_text()
+    assert "one.md" not in third and "three.md" in third
+    assert '    { "Index" = "index.md" },\n' in third  # the hand tree kept
+
+
+# The scoped preview. Refusal first.
+
+
+def test_an_unknown_preview_package_names_the_known(tmp_path: Path) -> None:
+    import pytest
+
+    from livery.workshop._docs import named_package
+
+    root = _workspace(tmp_path)
+    with pytest.raises(BaseException, match="bare"):
+        named_package(root, "ghost")
+
+
+def test_the_scoped_config_carries_chrome_and_one_section(tmp_path: Path) -> None:
+    import tomllib as toml
+
+    from livery.workshop._docs import named_package, scoped_config
+
+    root = _workspace(
+        tmp_path,
+        docs_table='[docs]\ntitle = "Acme"\nsite_url = "https://docs.acme.example/home/"\n',
+    )
+    config = scoped_config(root, named_package(root, "core"))
+    parsed = toml.loads(config)
+    assert parsed["project"]["site_name"] == "Acme"
+    # A preview is never published: no canonical URL.
+    assert "site_url" not in parsed["project"]
+    nav = parsed["project"]["nav"]
+    assert nav[0] == {"Home": "index.md"}
+    assert any("core" in entry for entry in nav)
+    assert not any("bare" in entry for entry in nav)
+    assert "Releases" not in config
+    handler = parsed["project"]["plugins"]["mkdocstrings"]["handlers"]["python"]
+    # Sources resolve from the preview directory back into the
+    # workspace; cross-package references resolve through the
+    # published site's inventory.
+    assert handler["paths"] == ["../../packages/core/src"]
+    assert "https://docs.acme.example/home/objects.inv" in handler["inventories"]
+
+
+def test_the_preview_tree_rebuilds_whole_and_stays_scoped(tmp_path: Path) -> None:
+    from livery.workshop._docs import (
+        generate_api_pages,
+        generate_changelog_pages,
+        materialise_preview,
+        named_package,
+    )
+
+    root = _workspace(tmp_path)
+    mount_package_docs(root)
+    generate_changelog_pages(root)
+    generate_api_pages(root)
+    core = named_package(root, "core")
+    stale = root / ".docs-preview" / "core" / "stale.md"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("stale\n")
+    config = materialise_preview(root, core)
+    assert not stale.exists()
+    base = config.parent
+    assert config.read_text().startswith("# Generated")
+    assert (base / "docs" / "index.md").is_file()  # the chrome
+    assert (base / "docs" / "_generated" / "packages" / "core" / "guide.md").is_file()
+    assert (base / "docs" / "_generated" / "api" / "core" / "index.md").is_file()
+    # Only the scoped package's generated trees travel.
+    assert not (base / "docs" / "_generated" / "packages" / "bare").exists()
+    assert not (base / "docs" / "_generated" / "api" / "bare").exists()
