@@ -1,8 +1,11 @@
 # The docs prepass: package-owned docs in the workshop toolchain
 
-Status: approved 2026-09-05 (Willem); phases 1 (issue #231), 2
-(issue #234), 3 (issue #238), 4 (issue #241), and 5 (issue #243)
-landed 2026-09-05, phase 6 not started. Between phases 2 and 3 the docs seeds
+Status: COMPLETE. Approved 2026-09-05 (Willem); phases 1 (issue
+#231), 2 (issue #234), 3 (issue #238), 4 (issue #241), 5 (issue
+#243), and 6 (issue #245) all landed 2026-09-05. The docs seeds
+moved to the shared package-base template between phases 2 and 3
+(issue #235). The footman/toolroom migration's phase 1 is
+unblocked. Between phases 2 and 3 the docs seeds
 moved to the shared package-base template (issue #235). Written 2026-09-05 from
 side-by-side inventories of footman's and toolroom's docs
 machinery. This plan blocks phase 1 of
@@ -316,6 +319,19 @@ Acceptance:
 - 2026-09-05, phase 2: a generator that rewrites its nav block
   changes the rendered config's input, so the order is generator,
   then render, then commit; the drift gate holds that order honest.
+- 2026-09-05, phase 6: ownership is the task's defining source
+  file, so a task defined outside the workspace (a runner builtin)
+  is not documented and arrives with its package at the migration.
+  Full command spellings need footman's merged tree, which the
+  Tasks view does not spell publicly; the cascade hook walks it
+  once behind footman#561, filed for the public property.
+- 2026-09-05, phase 6: the nav entries live in each owner's
+  committed nav.toml through the phase 1 marker blocks, generator
+  before render before commit, so the drift gate stays offline; and
+  footman's docs_url being one URL template is resolved with a
+  generated alias tree at _generated/tasks/<slug>/ that redirects
+  into the owning package's section. A per-owner placeholder in the
+  template would remove the aliases; that rides footman's migration.
 - 2026-09-05, phase 5 replaces footman's gh-CLI artifact fetch with
   contract-5-compliant plumbing: the gate's docs job waits on the
   check matrix and downloads its legs' data with the forge-native

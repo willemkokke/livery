@@ -11,4 +11,16 @@ nav = [
     { "GitLab" = "gitlab.md" },
     { "Fixtures" = "fixtures.md" },
     { "Quirks" = "quirks.md" },
+    # nav:begin tasks
+    { "Tasks" = [
+        { "Overview" = "_generated/tasks/index.md" },
+        { "forge" = [
+            { "Overview" = "_generated/tasks/forge/index.md" },
+            { "dev.down" = "_generated/tasks/forge/dev/down.md" },
+            { "dev.seed" = "_generated/tasks/forge/dev/seed.md" },
+            { "dev.up" = "_generated/tasks/forge/dev/up.md" },
+            { "fixtures.record" = "_generated/tasks/forge/fixtures/record.md" },
+        ] },
+    ] },
+    # nav:end tasks
 ]

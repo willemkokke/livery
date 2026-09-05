@@ -232,9 +232,12 @@ def render_injections(root: Path, answers: dict[str, Any]) -> dict[str, Any]:
         for entry in answers.get("packages", [])
         if isinstance(entry, dict)
     }
+    from livery.workshop._docs import docs_table
+
     return {
         "runner_prog": footman.prog(),
         "python_floor": python_floor(root),
+        "docs_site_url": str(docs_table(root).get("site_url", "")),
         "template_source_label": redacted_source(template_source(root)),
         "layer_imports": [import_path for import_path, _ in entries],
         "layer_requirements": [
@@ -255,9 +258,12 @@ def package_injections(root: Path) -> dict[str, Any]:
     contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
     forge_table = contract.get("forge") or {}
     root_answers = read_answers(root / _ANSWERS)
+    from livery.workshop._docs import docs_table
+
     return {
         "runner_prog": footman.prog(),
         "python_floor": python_floor(root),
+        "docs_site_url": str(docs_table(root).get("site_url", "")),
         "template_source_label": redacted_source(template_source(root)),
         "forge_kind": str(forge_table.get("kind", "github")),
         "forge_owner": str(forge_table.get("owner", "")),
