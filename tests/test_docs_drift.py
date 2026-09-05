@@ -1,8 +1,9 @@
 """The docs gate: links resolve and every export carries a docstring.
 
-Nav orphans need no test here: the nav is emitted from the tree and
-the template drift gate refuses a stale render, so a page missing
-from the nav is drift before it is anything else. What remains is
+Nav orphans need no test here: an enumerated section derives from
+the tree, an authored ``nav.toml`` is checked both ways by the
+emitter, and the template drift gate refuses a stale render, so a
+page missing from the nav is drift before it is anything else. What remains is
 what the emitter cannot know: whether the prose's links point at
 real files and anchors, and whether the public surface says what it
 is.

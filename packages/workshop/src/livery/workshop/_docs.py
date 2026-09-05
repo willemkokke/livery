@@ -6,6 +6,16 @@ between markers. Authors write ``packages/<name>/docs/`` and the
 root ``docs/`` tree; every underscore path this module writes is
 machine territory, refreshed by the verbs and never edited by a
 person.
+
+A package owns the shape of its own site section through
+``docs/nav.toml``: a hand-authored tree the emitter merges under
+that package's section of the rendered root config, checked both
+ways (an entry naming a missing page refuses, and so does an
+authored page absent from the nav). A package without one gets its
+pages enumerated, index first. ``fm docs.build --package <name>``
+builds a scoped preview of one section into the gitignored
+``.docs-preview/`` directory; the workspace site stays the only
+deploy artifact.
 """
 
 from __future__ import annotations
@@ -13,9 +23,10 @@ from __future__ import annotations
 import shutil
 import tomllib
 from pathlib import Path
+from typing import Annotated
 
 import toolroom
-from footman import fail, group
+from footman import doc, fail, group
 
 from livery.workshop._packages import Package, discover_packages
 
@@ -79,6 +90,145 @@ def _label(page: str) -> str:
     return "Index" if Path(page).name == "index.md" else Path(page).stem
 
 
+#: The package-owned nav file inside ``docs/``.
+NAV_TOML = "nav.toml"
+
+
+def nav_block_markers(name: str) -> tuple[str, str]:
+    """The begin and end marker lines for a generated block in ``nav.toml``.
+
+    The lines between a pair belong to the generator that owns
+    *name*; the surrounding tree stays hand-authored.
+    """
+    return (f"# nav:begin {name}", f"# nav:end {name}")
+
+
+def rewrite_nav_block(path: Path, name: str, entries: list[str]) -> None:
+    """Replace the *name* block's lines inside the ``nav.toml`` at *path*.
+
+    *entries* arrive unindented; each is re-indented to the begin
+    marker's own indentation, so a generator never bakes indentation
+    into its output and the author stays free to move the block. Both
+    markers must already exist: where the block sits in the tree is
+    the author's decision, and a missing marker refuses naming the
+    file and the block. Idempotent: rewriting the same entries leaves
+    the file byte-identical.
+    """
+    begin, end = nav_block_markers(name)
+    if not path.is_file():
+        fail(f"{path} does not exist: the nav block {name!r} has no home")
+    lines = path.read_text("utf-8").splitlines()
+    starts = [i for i, line in enumerate(lines) if line.strip() == begin]
+    ends = [i for i, line in enumerate(lines) if line.strip() == end]
+    if len(starts) != 1 or len(ends) != 1 or ends[0] < starts[0]:
+        fail(
+            f"{path} does not carry the {name!r} block markers"
+            f" ({begin!r} then {end!r}, once each): add them where the"
+            " block belongs in the tree"
+        )
+    indent = lines[starts[0]][: len(lines[starts[0]]) - len(lines[starts[0]].lstrip())]
+    body = [indent + entry if entry else "" for entry in entries]
+    rewritten = lines[: starts[0] + 1] + body + lines[ends[0] :]
+    path.write_text("\n".join(rewritten) + "\n", encoding="utf-8")
+
+
+def package_nav(package: Package) -> list[object] | None:
+    """The package's authored nav tree, or None without a ``nav.toml``.
+
+    The file's ``nav`` key mirrors the rendered config's shape: a
+    list of one-key tables mapping a label to a page path (relative
+    to the package's ``docs/`` tree) or to a nested list. Anything
+    else refuses naming the file and the entry.
+    """
+    path = package.directory / "docs" / NAV_TOML
+    if not path.is_file():
+        return None
+    try:
+        parsed = tomllib.loads(path.read_text("utf-8"))
+    except tomllib.TOMLDecodeError as error:
+        fail(f"{path} is not valid TOML: {error}")
+    nav = parsed.get("nav")
+    if not isinstance(nav, list):
+        fail(f"{path} must carry a top-level `nav` list")
+    _check_nav_shape(path, nav)
+    return list(nav)
+
+
+def _check_nav_shape(path: Path, entries: list[object]) -> None:
+    for entry in entries:
+        if not (isinstance(entry, dict) and len(entry) == 1):
+            fail(
+                f"{path}: nav entry {entry!r} is not a single"
+                ' `{ "Label" = ... }` table'
+            )
+        value = next(iter(entry.values()))
+        if isinstance(value, list):
+            _check_nav_shape(path, value)
+        elif not isinstance(value, str):
+            fail(
+                f"{path}: nav entry {entry!r} must map its label to a"
+                " page path or a nested list"
+            )
+
+
+def _nav_leaves(entries: list[object]) -> list[str]:
+    """Every page path an authored nav tree names, in order."""
+    leaves: list[str] = []
+    for entry in entries:
+        if isinstance(entry, dict):
+            for value in entry.values():
+                if isinstance(value, str):
+                    leaves.append(value)
+                elif isinstance(value, list):
+                    leaves += _nav_leaves(value)
+    return leaves
+
+
+def check_package_nav(package: Package, entries: list[object]) -> None:
+    """Refuse an authored nav that disagrees with the docs tree.
+
+    Both directions: an entry naming a missing page, and an authored
+    page the nav does not carry. Entries under ``_generated/`` are
+    exempt from the missing check (a generator writes them at build
+    time, and the strict site build owns them); generated pages are
+    likewise not required in the nav.
+    """
+    docs = package.directory / "docs"
+    leaves = _nav_leaves(entries)
+    authored = {page for page in _pages(docs) if not page.startswith("_generated/")}
+    nav_path = docs / NAV_TOML
+    missing = [
+        leaf
+        for leaf in leaves
+        if not leaf.startswith("_generated/") and leaf not in authored
+    ]
+    if missing:
+        fail(f"{nav_path} names pages that do not exist: " + ", ".join(sorted(missing)))
+    orphans = sorted(authored - set(leaves))
+    if orphans:
+        fail(
+            f"{nav_path} does not carry these authored pages: "
+            + ", ".join(orphans)
+            + ". Add them to the nav, or delete them."
+        )
+
+
+def _authored_nav_lines(entries: list[object], prefix: str, indent: str) -> list[str]:
+    """The rendered nav lines for an authored tree, paths prefixed."""
+    lines: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        for label, value in entry.items():
+            if isinstance(value, str):
+                lines.append(f'{indent}{{ "{label}" = "{prefix}{value}" }},')
+            elif isinstance(value, list):
+                lines.append(f'{indent}{{ "{label}" = [')
+                lines += _authored_nav_lines(value, prefix, indent + "    ")
+                lines.append(f"{indent}] }},")
+    return lines
+
+
 def zensical_config(root: Path) -> str:
     """The rendered ``zensical.toml`` body, generated header excluded.
 
@@ -112,56 +262,83 @@ def zensical_config(root: Path) -> str:
         lines.append('    { "Releases" = "_generated/releases/index.md" },')
     handler_paths: list[str] = []
     for package in discover_packages(root):
-        pages = _pages(package.directory / "docs")
-        modules = api_modules(package)
-        changelog = (package.directory / "CHANGELOG.md").is_file()
-        if not pages and not modules and not changelog:
+        section, has_modules = _package_section(package)
+        if not section:
             continue
-        name = package.directory.name
-        lines.append(f'    {{ "{name}" = [')
-        for page in pages:
-            lines.append(
-                f'        {{ "{_label(page)}" = "_generated/packages/{name}/{page}" }},'
-            )
-        if (package.directory / "CHANGELOG.md").is_file():
-            mount = f"_generated/packages/{name}/changelog.md"
-            lines.append(f'        {{ "Changelog" = "{mount}" }},')
-        if modules:
-            handler_paths.append(f"packages/{name}/src")
-            lines.append('        { "API" = [')
-            for page, dotted in modules:
-                lines.append(
-                    f'            {{ "{dotted}" = "_generated/api/{name}/{page}" }},'
-                )
-            lines.append("        ] },")
-        lines.append("    ] },")
+        lines += section
+        if has_modules:
+            handler_paths.append(f"packages/{package.directory.name}/src")
     lines.append(f"    {NAV_END}")
     lines.append("]")
     if handler_paths:
-        listed = ", ".join(f'"{path}"' for path in handler_paths)
-        inventories = ", ".join(f'"{url}"' for url in INVENTORIES)
-        lines += [
-            "",
-            "[project.plugins.mkdocstrings.handlers.python]",
-            f"paths = [{listed}]",
-            f"inventories = [{inventories}]",
-            "",
-            "[project.plugins.mkdocstrings.handlers.python.options]",
-            "# Google style is the house convention; a docstring is",
-            "# published the moment it is written, empty ones included.",
-            'docstring_style = "google"',
-            "show_if_no_docstring = true",
-            "show_root_heading = true",
-            "show_root_full_path = true",
-            "separate_signature = true",
-            "show_signature_annotations = true",
-            "signature_crossrefs = true",
-            'members_order = "source"',
-            "merge_init_into_class = true",
-            "summary = true",
-            "heading_level = 2",
-        ]
+        lines += _mkdocstrings_lines(handler_paths, INVENTORIES)
     return "\n".join(lines) + "\n"
+
+
+def _package_section(package: Package, indent: str = "    ") -> tuple[list[str], bool]:
+    """One package's nav section lines, and whether it has API modules.
+
+    The authored ``nav.toml`` tree when the package ships one
+    (checked both ways first), the enumerated authored pages
+    otherwise; then the changelog and API entries, which are machine
+    territory in either shape. Empty for a package with nothing to
+    show.
+    """
+    docs = package.directory / "docs"
+    pages = [p for p in _pages(docs) if not p.startswith("_generated/")]
+    modules = api_modules(package)
+    changelog = (package.directory / "CHANGELOG.md").is_file()
+    authored = package_nav(package)
+    if authored is None and not pages and not modules and not changelog:
+        return ([], False)
+    name = package.directory.name
+    prefix = f"_generated/packages/{name}/"
+    inner = indent + "    "
+    lines = [f'{indent}{{ "{name}" = [']
+    if authored is not None:
+        check_package_nav(package, authored)
+        lines += _authored_nav_lines(authored, prefix, inner)
+    else:
+        for page in pages:
+            lines.append(f'{inner}{{ "{_label(page)}" = "{prefix}{page}" }},')
+    if changelog:
+        lines.append(f'{inner}{{ "Changelog" = "{prefix}changelog.md" }},')
+    if modules:
+        lines.append(f'{inner}{{ "API" = [')
+        for page, dotted in modules:
+            lines.append(
+                f'{inner}    {{ "{dotted}" = "_generated/api/{name}/{page}" }},'
+            )
+        lines.append(f"{inner}] }},")
+    lines.append(f"{indent}] }},")
+    return (lines, bool(modules))
+
+
+def _mkdocstrings_lines(paths: list[str], inventories: tuple[str, ...]) -> list[str]:
+    """The mkdocstrings handler block for the given source paths."""
+    listed = ", ".join(f'"{path}"' for path in paths)
+    linked = ", ".join(f'"{url}"' for url in inventories)
+    return [
+        "",
+        "[project.plugins.mkdocstrings.handlers.python]",
+        f"paths = [{listed}]",
+        f"inventories = [{linked}]",
+        "",
+        "[project.plugins.mkdocstrings.handlers.python.options]",
+        "# Google style is the house convention; a docstring is",
+        "# published the moment it is written, empty ones included.",
+        'docstring_style = "google"',
+        "show_if_no_docstring = true",
+        "show_root_heading = true",
+        "show_root_full_path = true",
+        "separate_signature = true",
+        "show_signature_annotations = true",
+        "signature_crossrefs = true",
+        'members_order = "source"',
+        "merge_init_into_class = true",
+        "summary = true",
+        "heading_level = 2",
+    ]
 
 
 RELEASES = "docs/_generated/releases"
@@ -340,7 +517,8 @@ def mount_package_docs(root: Path) -> list[str]:
     """Mount every package's ``docs/`` into the site tree; the names.
 
     The mount is rebuilt whole on every call, so a page deleted from
-    a package never lingers in the site.
+    a package never lingers in the site. ``nav.toml`` stays behind:
+    it configures the nav and is not site content.
     """
     base = root / MOUNT
     shutil.rmtree(base, ignore_errors=True)
@@ -349,9 +527,97 @@ def mount_package_docs(root: Path) -> list[str]:
         docs = package.directory / "docs"
         if not docs.is_dir():
             continue
-        shutil.copytree(docs, base / package.directory.name)
+        shutil.copytree(
+            docs,
+            base / package.directory.name,
+            ignore=lambda directory, names, docs=docs: (
+                [NAV_TOML] if Path(directory) == docs else []
+            ),
+        )
         mounted.append(package.directory.name)
     return mounted
+
+
+#: The scoped previews' home, gitignored; one directory per package,
+#: rebuilt whole on every preview build. Never published.
+PREVIEW = ".docs-preview"
+
+
+def named_package(root: Path, name: str) -> Package:
+    """The package whose directory is *name*; refuses naming the known."""
+    packages = discover_packages(root)
+    for package in packages:
+        if package.directory.name == name:
+            return package
+    known = ", ".join(sorted(p.directory.name for p in packages)) or "none"
+    fail(f"no package {name!r} in this workspace (known: {known})")
+
+
+def scoped_config(root: Path, package: Package) -> str:
+    """The scoped preview's config body: chrome plus one section.
+
+    The workspace's site name and authored root pages, then only
+    *package*'s section. No site URL and no release view: the
+    preview is never published, and the release view is site-wide.
+    Cross-package references resolve outward through the published
+    workspace site's own inventory when the contract declares a
+    site URL.
+    """
+    table = docs_table(root)
+    title = str(table.get("title", "")) or _project_name(root)
+    lines = ["[project]", f'site_name = "{title}"', "nav = ["]
+    for page in _pages(root / "docs"):
+        if page.startswith("_generated/"):
+            continue
+        label = "Home" if page == "index.md" else _label(page)
+        lines.append(f'    {{ "{label}" = "{page}" }},')
+    section, has_modules = _package_section(package)
+    lines += section
+    lines.append("]")
+    if has_modules:
+        inventories: list[str] = [*INVENTORIES]
+        site_url = str(table.get("site_url", ""))
+        if site_url:
+            inventories.append(site_url.rstrip("/") + "/objects.inv")
+        lines += _mkdocstrings_lines(
+            [f"../../packages/{package.directory.name}/src"], tuple(inventories)
+        )
+    return "\n".join(lines) + "\n"
+
+
+def materialise_preview(root: Path, package: Package) -> Path:
+    """Materialise one package's preview tree; the scoped config's path.
+
+    Rebuilt whole under ``.docs-preview/<name>/``: the authored root
+    pages, the package's freshly generated mount and API trees, and
+    the scoped config beside them. The rendered root config is never
+    touched. Callers run the mount and generation passes first, so
+    the copied trees are current.
+    """
+    from livery.workshop._provenance import generated_header
+
+    name = package.directory.name
+    base = root / PREVIEW / name
+    shutil.rmtree(base, ignore_errors=True)
+    docs = base / "docs"
+    shutil.copytree(
+        root / "docs",
+        docs,
+        ignore=lambda directory, names: (
+            ["_generated"] if Path(directory) == root / "docs" else []
+        ),
+    )
+    for source, destination in (
+        (root / MOUNT / name, docs / "_generated" / "packages" / name),
+        (root / API / name, docs / "_generated" / "api" / name),
+    ):
+        if source.is_dir():
+            shutil.copytree(source, destination)
+    config = base / "zensical.toml"
+    config.write_text(
+        generated_header("#") + scoped_config(root, package), encoding="utf-8"
+    )
+    return config
 
 
 def _module_root(package: Package) -> Path | None:
@@ -562,14 +828,8 @@ def _root() -> Path:
     return root
 
 
-@docs_group.task(name="build")
-def docs_build() -> None:
-    """Mount every package's docs and build the site, strict.
-
-    Strict is the point: a broken link or an orphan page fails here,
-    on the machine, before CI says the same thing.
-    """
-    root = _root()
+def _generate_all(root: Path) -> None:
+    """Run the mount and generation passes, saying what was made."""
     mounted = mount_package_docs(root)
     if mounted:
         print(f"  mounted docs for {', '.join(mounted)}")
@@ -579,6 +839,36 @@ def docs_build() -> None:
     documented = generate_api_pages(root)
     if documented:
         print(f"  API pages for {', '.join(documented)}")
+
+
+@docs_group.task(name="build")
+def docs_build(
+    package: Annotated[
+        str, doc("build a scoped preview of this package's section only")
+    ] = "",
+) -> None:
+    """Mount every package's docs and build the site, strict.
+
+    Strict is the point: a broken link or an orphan page fails here,
+    on the machine, before CI says the same thing. ``--package``
+    builds a scoped preview of one section instead, into the
+    gitignored ``.docs-preview/`` directory; the preview is not
+    strict, because chrome pages may link into sections it does not
+    carry, and the workspace build owns strictness.
+    """
+    root = _root()
+    _generate_all(root)
+    if package:
+        config = materialise_preview(root, named_package(root, package))
+        result = toolroom.zensical.opts(cwd=config.parent, nofail=True).build(
+            clean=True, config_file=str(config)
+        )
+        if result.code != 0:
+            fail(
+                f"zensical build exited {result.code}:\n{result.stdout}{result.stderr}"
+            )
+        print(f"  preview built at {config.parent / 'site'} (never published)")
+        return
     releases = generate_release_pages(root)
     if releases:
         print(f"  release view: {', '.join(releases)}")
@@ -614,11 +904,23 @@ def docs_publish() -> None:
 
 
 @docs_group.task(name="serve", infinite=True)
-def docs_serve() -> None:
-    """Mount every package's docs and serve the site live."""
+def docs_serve(
+    package: Annotated[
+        str, doc("serve a scoped preview of this package's section only")
+    ] = "",
+) -> None:
+    """Mount every package's docs and serve the site live.
+
+    ``--package`` serves the scoped preview instead, from the
+    gitignored ``.docs-preview/`` directory. Generated pages are
+    copied at materialisation, so an edit to a package page needs a
+    re-run to appear in the preview.
+    """
     root = _root()
-    mount_package_docs(root)
-    generate_changelog_pages(root)
-    generate_api_pages(root)
+    _generate_all(root)
+    if package:
+        config = materialise_preview(root, named_package(root, package))
+        toolroom.zensical.opts(cwd=config.parent).serve(config_file=str(config))
+        return
     generate_release_pages(root)
     toolroom.zensical.opts(cwd=root).serve()
