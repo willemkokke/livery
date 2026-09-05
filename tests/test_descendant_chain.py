@@ -206,10 +206,56 @@ def _chain(
             "     an edited delivered copy is a local override, kept and named.\n"
             "-->\n# hello\n\nSay hello.\n"
         )
-        # The home's own gate settles with the overlay composed.
+        # The generator seam's in-repo consumer: the member declares
+        # a docs generator (a task its layer plugin already ships the
+        # group for) that writes a page and rewrites its nav block.
+        with (member / "src" / "dummy" / BRAND / "_tasks.py").open("a") as handle:
+            handle.write(
+                f'\n\n@{BRAND}.task(name="docsgen")\n'
+                "def docsgen() -> None:\n"
+                '    """Generate the tools page and its nav block."""\n'
+                "    from pathlib import Path\n"
+                "\n"
+                "    from livery.workshop import rewrite_nav_block\n"
+                "\n"
+                f'    docs = Path("packages/{BRAND}/docs")\n'
+                '    out = docs / "_generated"\n'
+                "    out.mkdir(parents=True, exist_ok=True)\n"
+                '    (out / "tools.md").write_text("# Tools\\n\\nGenerated.\\n")\n'
+                "    rewrite_nav_block(\n"
+                '        docs / "nav.toml",\n'
+                '        "tools",\n'
+                '        [\'{ "Tools" = "_generated/tools.md" },\'],\n'
+                "    )\n"
+            )
+        with (member / "workshop.toml").open("a") as handle:
+            handle.write(f'\n[docs]\ngenerators = ["{BRAND}.docsgen"]\n')
+        nav_file = member / "docs" / "nav.toml"
+        nav_text = nav_file.read_text().replace(
+            '    { "Index" = "index.md" },\n]',
+            '    { "Index" = "index.md" },\n'
+            "    # nav:begin tools\n    # nav:end tools\n]",
+        )
+        assert "nav:begin tools" in nav_text
+        nav_file.write_text(nav_text)
+        # The generator fills its nav block first, the render then
+        # carries the filled block into zensical.toml, and the commit
+        # captures both, so later builds are no-ops on a clean tree.
+        _run([fm, f"{BRAND}.docsgen"], home, _hermetic(env, home / ".venv"))
         _run([fm, "template.apply"], home, _hermetic(env, home / ".venv"))
         _run(["git", "add", "-A"], home, env)
         _run(["git", "commit", "-qm", "feat: populate the brand"], home, env)
+
+    # The seam end to end: the declared generator ran, its page is in
+    # the built site, and a (re)build leaves the tree clean.
+    home_build = _run([fm, "docs.build"], home, _hermetic(env, home / ".venv"))
+    assert f"{BRAND}.docsgen" in home_build.stdout
+    generated_page = (
+        home / "site" / "_generated" / "packages" / BRAND / "_generated" / "tools"
+    )
+    assert (generated_page / "index.html").is_file()
+    clean = _run(["git", "status", "--porcelain"], home, env)
+    assert clean.stdout.strip() == ""
 
     # -- 3. the home releases: wheel and composed artifact -----------
     _api(

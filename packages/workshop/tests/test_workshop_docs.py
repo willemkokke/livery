@@ -5,6 +5,8 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
+import pytest
+
 from livery.workshop._docs import (
     NAV_BEGIN,
     NAV_END,
@@ -652,3 +654,169 @@ def test_the_preview_tree_rebuilds_whole_and_stays_scoped(tmp_path: Path) -> Non
     # Only the scoped package's generated trees travel.
     assert not (base / "docs" / "_generated" / "packages" / "bare").exists()
     assert not (base / "docs" / "_generated" / "api" / "bare").exists()
+
+
+# The generator seam. Refusals and fallbacks first.
+
+
+def _declare_generators(root: Path, package: str, table: str) -> None:
+    contract = root / "packages" / package / "workshop.toml"
+    contract.write_text(f'type = "python"\nname = "acme-{package}"\n\n[docs]\n{table}')
+
+
+def _package(root: Path, name: str):
+    return next(p for p in discover_packages(root) if p.directory.name == name)
+
+
+def test_a_broken_generator_declaration_refuses(tmp_path: Path) -> None:
+    import pytest
+
+    from livery.workshop._docs import package_generators
+
+    root = _workspace(tmp_path)
+    _declare_generators(root, "core", 'generators = "not-a-list"\n')
+    with pytest.raises(BaseException, match="must be a list"):
+        package_generators(_package(root, "core"))
+    _declare_generators(root, "core", "generators = [3]\n")
+    with pytest.raises(BaseException, match="verb name"):
+        package_generators(_package(root, "core"))
+    _declare_generators(root, "core", 'generators = [{ requires = ["zsh"] }]\n')
+    with pytest.raises(BaseException, match="verb name"):
+        package_generators(_package(root, "core"))
+
+
+def test_no_declaration_means_no_generators(tmp_path: Path) -> None:
+    from livery.workshop._docs import docs_requirements, package_generators
+
+    root = _workspace(tmp_path)
+    assert package_generators(_package(root, "core")) == []
+    assert docs_requirements(root) == ()
+
+
+def test_declarations_parse_and_requirements_union(tmp_path: Path) -> None:
+    from livery.workshop._docs import docs_requirements, package_generators
+
+    root = _workspace(tmp_path)
+    _declare_generators(
+        root,
+        "core",
+        'generators = [\n    "docsgen.plain",\n'
+        '    { verb = "docsgen.casts", requires = ["zsh", "fish"] },\n]\n',
+    )
+    _declare_generators(
+        root, "bare", 'generators = [{ verb = "docsgen.other", requires = ["zsh"] }]\n'
+    )
+    assert package_generators(_package(root, "core")) == [
+        ("docsgen.plain", ()),
+        ("docsgen.casts", ("zsh", "fish")),
+    ]
+    # The union, sorted, so the rendered workflow is deterministic.
+    assert docs_requirements(root) == ("fish", "zsh")
+
+
+def test_a_failing_generator_names_the_verb_and_package(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shutil as shutil_module
+
+    import footman
+    import pytest
+
+    from livery.workshop._docs import run_generators
+
+    root = _workspace(tmp_path)
+    _declare_generators(root, "core", 'generators = ["docsgen.broken"]\n')
+    monkeypatch.setattr(shutil_module, "which", lambda name: "/stub/fm")
+    monkeypatch.setattr(footman, "run", lambda *a, **k: 3)
+    with pytest.raises(BaseException, match=r"docsgen\.broken.*acme-core.*exited 3"):
+        run_generators(root)
+
+
+def test_a_missing_runner_refuses_with_the_remedy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shutil as shutil_module
+
+    import pytest
+
+    from livery.workshop._docs import run_generators
+
+    root = _workspace(tmp_path)
+    _declare_generators(root, "core", 'generators = ["docsgen.any"]\n')
+    monkeypatch.setattr(shutil_module, "which", lambda name: None)
+    with pytest.raises(BaseException, match=r"setup\.sh"):
+        run_generators(root)
+
+
+def test_generators_run_in_declaration_order_at_the_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shutil as shutil_module
+
+    import footman
+
+    from livery.workshop._docs import run_generators
+
+    root = _workspace(tmp_path)
+    _declare_generators(root, "core", 'generators = ["docsgen.one", "docsgen.two"]\n')
+    monkeypatch.setattr(shutil_module, "which", lambda name: "/stub/fm")
+    calls: list[tuple[list[str], object]] = []
+
+    def _record(argv: list[str], **kwargs: object) -> int:
+        calls.append((list(argv), kwargs.get("cwd")))
+        return 0
+
+    monkeypatch.setattr(footman, "run", _record)
+    assert run_generators(root) == ["docsgen.one", "docsgen.two"]
+    assert [argv[-1] for argv, _cwd in calls] == ["docsgen.one", "docsgen.two"]
+    assert all(cwd == root for _argv, cwd in calls)
+
+
+def test_the_docs_jobs_install_the_declared_requirements(tmp_path: Path) -> None:
+    from livery.workshop._ci_generate import generate
+
+    root = _workspace(tmp_path)
+    (root / "docs" / "index.md").write_text("# Home\n")
+    # The fallback first: no declaration, no install step anywhere.
+    for kind in ("github", "gitea", "gitlab"):
+        (root / "workshop.toml").write_text(
+            f'[workspace]\n[forge]\nkind = "{kind}"\nowner = "acme"\n'
+        )
+        for content in generate(root).values():
+            assert "Docs system requirements" not in content
+            assert "apt-get install" not in content
+    _declare_generators(
+        root, "core", 'generators = [{ verb = "docsgen.casts", requires = ["zsh"] }]\n'
+    )
+    (root / "workshop.toml").write_text(
+        '[workspace]\n[forge]\nkind = "github"\nowner = "acme"\n'
+    )
+    files = generate(root)
+    gate = files[".github/workflows/ci.yml"]
+    docs_job = gate.split("  docs:")[1].split("  gate:")[0]
+    assert "sudo apt-get update -q && sudo apt-get install -y -q zsh" in docs_job
+    # Only the docs-building jobs pay the install.
+    check_job = gate.split("  docs:")[0]
+    assert "apt-get" not in check_job
+    (root / "workshop.toml").write_text(
+        '[workspace]\n[forge]\nkind = "gitlab"\nowner = "acme"\n'
+    )
+    pipeline = generate(root)[".gitlab-ci.yml"]
+    # Root in the container image: no sudo.
+    assert "- apt-get update -q && apt-get install -y -q zsh" in pipeline
+    assert "sudo" not in pipeline
+
+
+def test_every_package_template_docs_seed_carries_a_nav() -> None:
+    # A template off the kind chain (package-python-layer) renders
+    # alone, so each template must carry its own seed; the chain
+    # caught a layer-born package arriving seedless.
+    templates = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "livery"
+        / "workshop"
+        / "templates"
+    )
+    for docs in sorted(templates.glob("package-*/docs")):
+        assert (docs / "nav.toml").is_file(), docs

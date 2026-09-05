@@ -78,3 +78,25 @@ def test_render_injections_deduplicate_member_layers(tmp_path: Path) -> None:
     # A layer that is also a member rides the roster's spelling, once.
     assert injections["layer_requirements"] == ["livery-workshop"]
     assert injections["layer_imports"] == ["livery.workshop", "livery.forge"]
+
+
+def test_a_branded_builtin_layer_is_the_apps_to_mount(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A brand mounts its builtin set as the cascade's base rung, and
+    # mount_layers runs inside that very mount, so re-mounting a
+    # sibling builtin would claim the same tasks twice in one rung.
+    # The layer does not even exist here: skipped means never
+    # imported, which is the proof.
+    from footman import _paths  # pyright: ignore[reportPrivateUsage]
+
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nlayers = ["livery.workshop", "acme.missing"]\n'
+    )
+    monkeypatch.setattr(_paths, "_builtin", ("livery.workshop", "acme.missing"))
+    assert mount_layers(tmp_path) == ()
+    # Off the builtin set, the same absent layer still refuses with
+    # the teaching: the skip is the brand's, never a silent pardon.
+    monkeypatch.setattr(_paths, "_builtin", ())
+    with pytest.raises(RuntimeError, match=r"acme\.missing"):
+        mount_layers(tmp_path)

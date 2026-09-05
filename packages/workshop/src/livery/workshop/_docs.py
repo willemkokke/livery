@@ -60,6 +60,91 @@ def docs_table(root: Path) -> dict[str, object]:
     return dict(table) if isinstance(table, dict) else {}
 
 
+def package_generators(package: Package) -> list[tuple[str, tuple[str, ...]]]:
+    """The docs generators *package* declares: (verb, requirements) each.
+
+    A package's ``workshop.toml`` ``[docs]`` table lists them under
+    ``generators``: a verb name (a footman task the package ships),
+    or a table naming the verb and the system tools the generator
+    needs on a docs machine (``{ verb = "...", requires = [...] }``).
+    Anything else refuses naming the file and the entry. Empty
+    without a declaration.
+    """
+    contract_path = package.directory / "workshop.toml"
+    contract = tomllib.loads(contract_path.read_text("utf-8"))
+    table = contract.get("docs") or {}
+    declared = table.get("generators") if isinstance(table, dict) else None
+    if declared is None:
+        return []
+    if not isinstance(declared, list):
+        fail(f"{contract_path}: [docs] generators must be a list")
+    generators: list[tuple[str, tuple[str, ...]]] = []
+    for entry in declared:
+        if isinstance(entry, str) and entry:
+            generators.append((entry, ()))
+            continue
+        if isinstance(entry, dict) and isinstance(entry.get("verb"), str):
+            requires = entry.get("requires", [])
+            if isinstance(requires, list) and all(
+                isinstance(tool, str) for tool in requires
+            ):
+                generators.append((entry["verb"], tuple(requires)))
+                continue
+        fail(
+            f"{contract_path}: [docs] generators entry {entry!r} is not a"
+            ' verb name or a { verb = "...", requires = [...] } table'
+        )
+    return generators
+
+
+def docs_requirements(root: Path) -> tuple[str, ...]:
+    """The union of every declared generator's system requirements.
+
+    What the emitted docs CI jobs install before building the site;
+    sorted, so the rendered workflow is deterministic.
+    """
+    union: set[str] = set()
+    for package in discover_packages(root):
+        for _verb, requires in package_generators(package):
+            union.update(requires)
+    return tuple(sorted(union))
+
+
+def run_generators(root: Path) -> list[str]:
+    """Run every package's declared docs generators; the verbs run.
+
+    Each verb runs as its own runner invocation at the workspace
+    root, so a generator is exactly the task a person would type. A
+    failing generator turns the build red with the verb and its
+    package named; its own output has already streamed. Generators
+    must be idempotent: a second run on unchanged input is a no-op.
+    """
+    import shutil as _shutil
+
+    import footman
+
+    ran: list[str] = []
+    runner = ""
+    for package in discover_packages(root):
+        for verb, _requires in package_generators(package):
+            if not runner:
+                runner = _shutil.which(footman.prog()) or ""
+                if not runner:
+                    fail(
+                        f"{footman.prog()} is not on PATH, so the declared"
+                        f" docs generators cannot run; enter the"
+                        " environment (source setup.sh) first"
+                    )
+            code = footman.run([runner, verb], cwd=root, nofail=True)
+            if int(code) != 0:
+                fail(
+                    f"docs generator `{footman.prog()} {verb}`"
+                    f" ({package.name}) exited {int(code)}"
+                )
+            ran.append(verb)
+    return ran
+
+
 def _pages(directory: Path) -> list[str]:
     """The markdown pages under *directory*, index first, then sorted."""
     if not directory.is_dir():
@@ -829,7 +914,14 @@ def _root() -> Path:
 
 
 def _generate_all(root: Path) -> None:
-    """Run the mount and generation passes, saying what was made."""
+    """Run the generation passes, saying what was made.
+
+    Declared package generators run first, so the mount copies what
+    they wrote.
+    """
+    generated = run_generators(root)
+    if generated:
+        print(f"  generators: {', '.join(generated)}")
     mounted = mount_package_docs(root)
     if mounted:
         print(f"  mounted docs for {', '.join(mounted)}")

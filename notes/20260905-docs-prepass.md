@@ -1,7 +1,7 @@
 # The docs prepass: package-owned docs in the workshop toolchain
 
-Status: approved 2026-09-05 (Willem); phase 1 landed 2026-09-05
-(issue #231), phases 2 to 6 not started. Written 2026-09-05 from
+Status: approved 2026-09-05 (Willem); phases 1 (issue #231) and 2
+(issue #234) landed 2026-09-05, phases 3 to 6 not started. Written 2026-09-05 from
 side-by-side inventories of footman's and toolroom's docs
 machinery. This plan blocks phase 1 of
 `notes/20260905-footman-toolroom-migration.md`: when its phases
@@ -304,6 +304,35 @@ Acceptance:
   the workshop suite. Entries under `_generated/` are exempt both
   ways, because a generator writes them at build time and the
   strict site build owns them.
+- 2026-09-05, phase 2: a declared generator verb runs as its own
+  runner invocation at the workspace root, so a generator is exactly
+  the task a person would type, and a crashing generator cannot take
+  the build process with it.
+- 2026-09-05, phase 2: `rewrite_nav_block` joins the workshop's
+  public API; a package's generator maintains its nav block through
+  it, and the chain's dummy generator is the first consumer.
+- 2026-09-05, phase 2: a generator that rewrites its nav block
+  changes the rendered config's input, so the order is generator,
+  then render, then commit; the drift gate holds that order honest.
+- 2026-09-05, phase 2's chain consumer surfaced a latent mount
+  fault: a branded App mounts its builtin layers as the cascade's
+  base rung, and `mount_layers` (running inside that very mount)
+  re-mounted a sibling builtin, claiming the same tasks twice in
+  one rung. Harmless while the dummy layer's group was empty; the
+  first real task made footman refuse. `mount_layers` now skips the
+  brand's builtin set, through a footman-private read that retires
+  when footman joins the workspace.
+- 2026-09-05, phase 2 repaired a phase 1 gap the chain caught: the
+  nav.toml seed had landed only in the package-python template, and
+  a layer-born package (which renders alone, off the kind chain)
+  arrived seedless. Every package template's docs seed now carries
+  one, pinned by test.
+- 2026-09-05, phase 2: the requirements install step is emitted only
+  into the docs-building jobs, apt-shaped, sudo except inside
+  container images. The chain's dummy generator declares no
+  requirement, because the compose rig's act_runner is not an
+  apt-plus-sudo host; the emitted step is proven by the emitter
+  tests instead.
 
 - 2026-09-05: the prepass precedes the migration, as its own
   plan, because footman's and toolroom's docs setups are more

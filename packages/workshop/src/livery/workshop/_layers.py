@@ -71,13 +71,24 @@ def mount_layers(start: Path | None = None) -> tuple[str, ...]:
 
     The workshop itself is skipped: importing this package's plugin
     module is how the base layer arrives, and mounting it again from
-    inside itself would recurse.
+    inside itself would recurse. A branded App's builtin layers are
+    skipped the same way: footman mounts the builtin set as the
+    cascade's base rung, this function runs inside that very mount
+    (importing the workshop is how the App mounts it), and claiming a
+    sibling builtin's tasks here puts the same task in one rung twice,
+    which footman refuses the moment the layer has a real task.
     """
-    from footman import plugin
+    # footman does not expose the brand's builtin set publicly yet;
+    # the private read retires when footman joins the workspace.
+    from footman import (
+        _paths,  # pyright: ignore[reportPrivateUsage]
+        plugin,
+    )
 
+    builtin = set(_paths.builtin())
     mounted = []
     for layer, dist in layer_entries(start):
-        if layer == SELF:
+        if layer == SELF or layer in builtin:
             continue
         try:
             plugin(layer)

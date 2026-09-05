@@ -33,6 +33,7 @@ def test_the_surface_is_declared() -> None:
         "discover_packages",
         "layer_names",
         "mount_layers",
+        "rewrite_nav_block",
         "verify_workspace",
         "workspace_root",
     ]
