@@ -15,6 +15,7 @@ templates_artifact = "git@github.com:willemkokke/workshop-templates.git"
 [docs]
 # The site's home; the account-level domain serves every project.
 site_url = "https://docs.willem.net/livery/"
+description = "The livery ecosystem: one forge interface and the workshop that runs every project on it."
 
 [forge]
 kind = "github"

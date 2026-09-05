@@ -887,7 +887,16 @@ def generate(root: Path) -> dict[str, str]:
         }
     files["setup.sh"] = entry_script(root)
     files.update(site)
-    return {path: header + content for path, content in files.items()}
+    rendered = {path: header + content for path, content in files.items()}
+    from livery.workshop._docs import overrides_template
+
+    jinja_header = (
+        "{#\n"
+        + "".join("  " + line.removeprefix("# ") + "\n" for line in header.splitlines())
+        + "#}\n"
+    )
+    rendered["overrides/main.html"] = jinja_header + overrides_template(root)
+    return rendered
 
 
 def generated_files(root: Path) -> dict[Path, str]:

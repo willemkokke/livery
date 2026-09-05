@@ -829,3 +829,142 @@ def test_the_docs_seeds_live_once_in_the_base_template() -> None:
             continue
         assert not (template / "docs").exists(), template
         assert template_chain(template.name)[0] == "package-base"
+
+
+# The config surface and the theme. Refusals first.
+
+
+def test_a_duplicate_abbreviation_refuses_and_restores(tmp_path: Path) -> None:
+    from livery.workshop._docs import abbreviation_files, zensical_config
+
+    root = _workspace(tmp_path)
+    for package, definition in (("core", "One thing."), ("bare", "Another thing.")):
+        includes = root / "packages" / package / "docs" / "includes"
+        includes.mkdir(parents=True)
+        (includes / "abbreviations.md").write_text(f"*[TERM]: {definition}\n")
+    # Forced red: one term, two definitions, both packages named.
+    with pytest.raises(BaseException, match=r"TERM.*acme-"):
+        abbreviation_files(root)
+    with pytest.raises(BaseException, match="TERM"):
+        zensical_config(root)
+    # Restored: agreeing definitions aggregate site-wide.
+    (root / "packages/bare/docs/includes/abbreviations.md").write_text(
+        "*[TERM]: One thing.\n"
+    )
+    files = abbreviation_files(root)
+    assert files == [
+        "packages/bare/docs/includes/abbreviations.md",
+        "packages/core/docs/includes/abbreviations.md",
+    ]
+    config = zensical_config(root)
+    assert "auto_append = [" in config
+    assert "packages/core/docs/includes/abbreviations.md" in config
+
+
+def test_broken_extras_declarations_refuse(tmp_path: Path) -> None:
+    from livery.workshop._docs import package_docs_extras
+
+    root = _workspace(tmp_path)
+    _declare_generators(root, "core", 'extra_css = "not-a-list"\n')
+    with pytest.raises(BaseException, match="extra_css"):
+        package_docs_extras(_package(root, "core"))
+    _declare_generators(root, "core", "extra_javascript = [3]\n")
+    with pytest.raises(BaseException, match="extra_javascript"):
+        package_docs_extras(_package(root, "core"))
+    _declare_generators(
+        root, "core", 'extra_javascript = [{ path = "a.js", rogue = true }]\n'
+    )
+    with pytest.raises(BaseException, match="rogue"):
+        package_docs_extras(_package(root, "core"))
+
+
+def test_declared_extras_render_at_the_mounted_paths(tmp_path: Path) -> None:
+    from livery.workshop._docs import zensical_config
+
+    root = _workspace(tmp_path)
+    _declare_generators(
+        root,
+        "core",
+        'extra_css = ["assets/core.css"]\n'
+        'extra_javascript = [\n    "assets/plain.js",\n'
+        '    { path = "assets/mod.js", type = "module", defer = true },\n]\n',
+    )
+    config = zensical_config(root)
+    assert '"_generated/packages/core/assets/core.css",' in config
+    assert '"_generated/packages/core/assets/plain.js",' in config
+    assert (
+        '{ path = "_generated/packages/core/assets/mod.js",'
+        ' type = "module", defer = true },' in config
+    )
+
+
+def test_the_workspace_css_seeds_are_listed_while_they_exist(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._docs import zensical_config
+
+    root = _workspace(tmp_path)
+    # The fallback first: no seeds, no extra_css at all.
+    assert "extra_css" not in zensical_config(root)
+    assets = root / "docs" / "assets"
+    assets.mkdir(parents=True)
+    (assets / "palette.css").write_text("/* seed */\n")
+    config = zensical_config(root)
+    assert '"assets/palette.css",' in config
+    # Deleting the seed is the opt-out: no stale reference survives.
+    (assets / "palette.css").unlink()
+    assert "palette.css" not in zensical_config(root)
+
+
+def test_the_standard_extension_set_is_emitted(tmp_path: Path) -> None:
+    from livery.workshop._docs import zensical_config
+
+    root = _workspace(tmp_path)
+    config = zensical_config(root)
+    assert "[project.markdown_extensions.pymdownx.snippets]" in config
+    assert "check_paths = true" in config
+    # Every package's snippet-source home joins the search path.
+    assert '"packages/core/_generated",' in config
+    assert 'name = "mermaid"' in config
+    assert "[project.markdown_extensions.pymdownx.tabbed]" in config
+    assert "[project.markdown_extensions.pymdownx.arithmatex]" in config
+    assert "[project.theme]" in config
+    assert 'custom_dir = "overrides"' in config
+
+
+def test_the_override_template_follows_the_committed_card(tmp_path: Path) -> None:
+    from livery.workshop._docs import overrides_template
+
+    root = _workspace(
+        tmp_path,
+        docs_table='[docs]\ntitle = "Acme"\ndescription = "Acme, described."\n',
+    )
+    # The fallback first: no committed card, no image tags, and the
+    # plain summary card instead of the large one.
+    rendered = overrides_template(root)
+    assert "og:image" not in rendered
+    assert 'content="summary"' in rendered
+    assert "og:site_name" in rendered
+    (root / "docs" / "assets").mkdir(parents=True)
+    (root / "docs" / "assets" / "og-card.png").write_bytes(b"\x89PNG")
+    rendered = overrides_template(root)
+    assert 'og:image" content="{{ image }}"' in rendered
+    assert 'content="summary_large_image"' in rendered
+    # The alt line is the instance's own description.
+    assert "Acme, described." in rendered
+
+
+def test_the_scoped_preview_carries_the_surface_two_levels_up(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._docs import named_package, scoped_config
+
+    root = _workspace(tmp_path)
+    includes = root / "packages" / "core" / "docs" / "includes"
+    includes.mkdir(parents=True)
+    (includes / "abbreviations.md").write_text("*[TERM]: One thing.\n")
+    config = scoped_config(root, named_package(root, "core"))
+    # Repo-anchored sources resolve from the preview directory.
+    assert '"../../packages/core/_generated",' in config
+    assert '"../../packages/core/docs/includes/abbreviations.md",' in config
+    assert "[project.theme]" in config
