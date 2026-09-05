@@ -253,3 +253,54 @@ def test_local_commits_on_main_still_teach_the_branch_move(
     bring_current(clone, GitOps(clone), interactive=False)
     out = capsys.readouterr().out
     assert "local commits" in out and "Move them to a branch" in out
+
+
+def test_parked_content_survives_integrate_and_the_squash(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The 0904 incident's shape, forced: an edit parked as a wip
+    # commit, main moving the same file meanwhile, integrate merging
+    # main in, and the squash-merge landing. The parked content must
+    # be in the squash; the incident lost a plan-note edit somewhere
+    # on this path and its drop point was never proven.
+    clone, origin = _rig(tmp_path)
+    note = clone / "notes.md"
+    note.write_text("top line\n\nmiddle\n\nbottom line\n")
+    _git(clone, "add", ".")
+    _git(clone, "commit", "-m", "chore: the note")
+    _git(clone, "push", "origin", "main")
+    # The dirty edit, parked exactly as issue.start --wip parks it.
+    note.write_text("top line\n\nmiddle\n\nbottom line\n\nthe parked ruling\n")
+    _git(clone, "checkout", "-b", "feat/1-work")
+    _git(clone, "add", "-A")
+    _git(clone, "commit", "-m", "chore(wip): parked working tree")
+    # Main moves the same file at the other end.
+    other = _other(tmp_path, origin, email="ci@livery.local")
+    _git(other, "pull", "--ff-only", "origin", "main")
+    (other / "notes.md").write_text("TOP EDITED\n\nmiddle\n\nbottom line\n")
+    _git(other, "add", ".")
+    _git(other, "commit", "-m", "feat: main edits the top")
+    _git(other, "push", "origin", "main")
+    # Integrate, then the squash-merge a landing performs.
+    monkeypatch.setattr(
+        "livery.workshop._sync.workspace_root", lambda start=None: clone
+    )
+    monkeypatch.chdir(clone)
+    integrate()
+    assert "merged origin/main" in capsys.readouterr().out
+    merged = note.read_text()
+    assert "the parked ruling" in merged and "TOP EDITED" in merged
+    lander = _other(tmp_path, origin, email="squash@livery.local")
+    _git(lander, "pull", "--ff-only", "origin", "main")
+    _git(clone, "push", "origin", "feat/1-work")
+    _git(lander, "fetch", "origin", "feat/1-work")
+    _git(lander, "merge", "--squash", "origin/feat/1-work")
+    _git(lander, "commit", "-m", "chore: the squash")
+    landed = (lander / "notes.md").read_text()
+    assert "the parked ruling" in landed
+    assert "TOP EDITED" in landed
+    # And the squash itself carries the parked change as a diff.
+    shown = _git(lander, "show", "HEAD", "--", "notes.md")
+    assert "+the parked ruling" in shown

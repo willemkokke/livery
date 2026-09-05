@@ -164,6 +164,20 @@ def classify(
         current = repo.pr.get(pr.number)
         if current is not None and current.merged:
             return Verdict("merged", 0, f"PR #{pr.number} merged", pr.number)
+        behind = git.behind_base(pr.base_branch)
+        if behind:
+            # Without this, the parked answer says "merge it" while
+            # the merge verb refuses behindness, and the two point at
+            # each other with no exit.
+            return Verdict(
+                "disarmed",
+                EXIT_DISARMED,
+                f"PR #{pr.number} is green, parked unarmed, and {behind}"
+                f" commit(s) behind {pr.base_branch}:"
+                f" `{footman.prog()} integrate`, then"
+                f" `{footman.prog()} submit`, then merge",
+                pr.number,
+            )
         return Verdict(
             "disarmed",
             EXIT_DISARMED,
