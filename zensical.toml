@@ -39,6 +39,7 @@ nav = [
         { "Index" = "_generated/packages/workshop/index.md" },
         { "Releases" = "_generated/packages/workshop/releases.md" },
         { "Changelog" = "_generated/packages/workshop/changelog.md" },
+        { "Coverage" = "_generated/packages/workshop/coverage.md" },
         { "API" = [
             { "livery.workshop" = "_generated/api/workshop/index.md" },
             { "livery.workshop._backends" = "_generated/api/workshop/_backends/index.md" },

@@ -35,7 +35,9 @@ def _machine_page(path: str) -> bool:
     """Whether *path* is machine-appended rather than authored."""
     if path.startswith(MACHINE_PREFIXES):
         return True
-    return bool(re.fullmatch(r"_generated/packages/[^/]+/changelog\.md", path))
+    return bool(
+        re.fullmatch(r"_generated/packages/[^/]+/(changelog|coverage)\.md", path)
+    )
 
 
 def _nav_pages(nav: list[object]) -> list[tuple[str, str]]:

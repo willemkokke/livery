@@ -97,6 +97,107 @@ def package_generators(package: Package) -> list[tuple[str, tuple[str, ...]]]:
     return generators
 
 
+def package_coverage_reports(package: Package) -> list[tuple[str, str]]:
+    """The coverage reports *package* declares: (label, path) each.
+
+    The ``[docs]`` table's ``coverage`` list: a label and the
+    package-relative path where the package's own tooling writes a
+    static HTML tree. The toolchain never learns the producing tool;
+    coverage.py's htmlcov and a gcovr or llvm-cov tree are the same
+    thing to it. A path reaching outside the package refuses.
+    """
+    contract_path = package.directory / "workshop.toml"
+    contract = tomllib.loads(contract_path.read_text("utf-8"))
+    table = contract.get("docs") or {}
+    declared = table.get("coverage") if isinstance(table, dict) else None
+    if declared is None:
+        return []
+    if not isinstance(declared, list):
+        fail(f"{contract_path}: [docs] coverage must be a list")
+    reports: list[tuple[str, str]] = []
+    for entry in declared:
+        if (
+            isinstance(entry, dict)
+            and isinstance(entry.get("label"), str)
+            and entry["label"]
+            and isinstance(entry.get("path"), str)
+            and entry["path"]
+        ):
+            path = Path(entry["path"])
+            if path.is_absolute() or ".." in path.parts:
+                fail(
+                    f"{contract_path}: [docs] coverage path {entry['path']!r}"
+                    " must stay inside the package"
+                )
+            reports.append((entry["label"], entry["path"]))
+            continue
+        fail(
+            f"{contract_path}: [docs] coverage entry {entry!r} is not a"
+            ' { label = "...", path = "..." } table'
+        )
+    return reports
+
+
+def docs_coverage_declared(root: Path) -> bool:
+    """Whether any package declares coverage reports; an emitter fact."""
+    if not (root / "packages").is_dir():
+        return False
+    return any(package_coverage_reports(package) for package in discover_packages(root))
+
+
+def _slug(label: str) -> str:
+    """A filesystem-safe slug for a report label."""
+    import re
+
+    return re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-") or "report"
+
+
+def generate_coverage_pages(root: Path) -> list[str]:
+    """Copy declared coverage trees and write each coverage page.
+
+    One page per declaring package, one iframe per report, into the
+    package's mount. A declared tree that is missing renders its
+    section saying so and the build stays green: on a machine that
+    has not measured, or a deploy without the artifacts, the absence
+    is stated rather than failing the site. Runs after the mount
+    rebuild, like the changelog pages.
+    """
+    written: list[str] = []
+    for package in discover_packages(root):
+        reports = package_coverage_reports(package)
+        if not reports:
+            continue
+        name = package.directory.name
+        mount = root / MOUNT / name
+        lines = ["# Coverage", ""]
+        for label, path in reports:
+            source = package.directory / path
+            slug = _slug(label)
+            lines += [f"## {label}", ""]
+            if (source / "index.html").is_file():
+                target = mount / "coverage" / slug
+                shutil.rmtree(target, ignore_errors=True)
+                shutil.copytree(source, target)
+                lines += [
+                    f'<iframe src="coverage/{slug}/index.html"'
+                    f' title="{label}"'
+                    ' style="width: 100%; height: 80vh; border: none;">'
+                    "</iframe>",
+                    "",
+                ]
+            else:
+                lines += [
+                    f"The declared report (`{path}`) was not produced in this build.",
+                    "",
+                ]
+        mount.mkdir(parents=True, exist_ok=True)
+        (mount / "coverage.md").write_text(
+            "\n".join(lines).rstrip() + "\n", encoding="utf-8"
+        )
+        written.append(name)
+    return written
+
+
 def docs_requirements(root: Path) -> tuple[str, ...]:
     """The union of every declared generator's system requirements.
 
@@ -691,6 +792,8 @@ def _package_section(package: Package, indent: str = "    ") -> tuple[list[str],
             lines.append(f'{inner}{{ "{_label(page)}" = "{prefix}{page}" }},')
     if changelog:
         lines.append(f'{inner}{{ "Changelog" = "{prefix}changelog.md" }},')
+    if package_coverage_reports(package):
+        lines.append(f'{inner}{{ "Coverage" = "{prefix}coverage.md" }},')
     if modules:
         lines.append(f'{inner}{{ "API" = [')
         for page, dotted in modules:
@@ -1209,6 +1312,63 @@ def _publish_ssh(root: Path) -> None:
     print(f"  deployed to {destination}:{target}")
 
 
+def render_python_coverage(root: Path) -> list[str]:
+    """Render per-package htmlcov trees from the measured data.
+
+    The python packages' answer to the coverage seam: every python
+    package declaring an ``htmlcov`` report gets its tree rendered
+    from the workspace's measured data, scoped to its own files. The
+    data is the CI union (``coverage-data/*/.coverage*`` downloaded
+    by the emitted docs job) when present, else the local
+    ``.coverage`` a gate run left; with neither, nothing renders and
+    the coverage page states the absence.
+    """
+    import tempfile
+
+    from livery.workshop._kinds import is_python_kind
+
+    legs = sorted(root.glob("coverage-data/*/.coverage*"))
+    if legs:
+        with tempfile.TemporaryDirectory() as scratch:
+            copies = []
+            for index, leg in enumerate(legs):
+                copy = Path(scratch) / f".coverage.{index}"
+                shutil.copy2(leg, copy)
+                copies.append(str(copy))
+            combined = toolroom.coverage.opts(cwd=root, nofail=True, recorded=False)(
+                "combine", "--keep", *copies
+            )
+            if combined.code != 0:
+                fail(
+                    f"coverage combine exited {combined.code}:\n"
+                    f"{combined.stdout}{combined.stderr}"
+                )
+    if not (root / ".coverage").is_file():
+        return []
+    rendered: list[str] = []
+    for package in discover_packages(root):
+        if not is_python_kind(package.type):
+            continue
+        if not any(
+            path == "htmlcov" for _label_, path in package_coverage_reports(package)
+        ):
+            continue
+        name = package.directory.name
+        result = toolroom.coverage.opts(cwd=root, nofail=True, recorded=False)(
+            "html",
+            f"--include=packages/{name}/*",
+            "-d",
+            f"packages/{name}/htmlcov",
+        )
+        if result.code != 0:
+            fail(
+                f"coverage html for {name} exited {result.code}:\n"
+                f"{result.stdout}{result.stderr}"
+            )
+        rendered.append(name)
+    return rendered
+
+
 docs_group = group("docs", help="The workspace's documentation site")
 
 
@@ -1239,6 +1399,9 @@ def _generate_all(root: Path) -> None:
     documented = generate_api_pages(root)
     if documented:
         print(f"  API pages for {', '.join(documented)}")
+    covered = generate_coverage_pages(root)
+    if covered:
+        print(f"  coverage pages for {', '.join(covered)}")
 
 
 @docs_group.task(name="build")
@@ -1305,6 +1468,22 @@ def docs_publish() -> None:
         print("  pages seam: the forge's own workflow deploys; nothing to do here")
     else:
         print("  publish seam is none: skipping by declaration")
+
+
+@docs_group.task(name="python-coverage")
+def docs_python_coverage() -> None:
+    """Render the python packages' declared htmlcov trees.
+
+    The generator verb a python package declares beside an
+    ``htmlcov`` coverage report. Idempotent: re-rendering from the
+    same data rewrites the same tree.
+    """
+    root = _root()
+    rendered = render_python_coverage(root)
+    if rendered:
+        print(f"  htmlcov for {', '.join(rendered)}")
+    else:
+        print("  no measured data: declared reports will state the absence")
 
 
 @docs_group.task(name="serve", infinite=True)

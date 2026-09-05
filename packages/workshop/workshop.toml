@@ -16,6 +16,11 @@ floor = "0.2.0"
 
 [docs]
 extra_css = ["assets/workshop.css"]
+generators = ["docs.python-coverage"]
+coverage = [
+    { label = "Python", path = "htmlcov" },
+    { label = "Native (fixture)", path = "tests/fixtures/native-htmlcov" },
+]
 
 [qa]
 # The coverage high-water mark the gate enforces; raise it as the
