@@ -686,6 +686,28 @@ def _issue_text_both_ways(driver: ForgeDriver) -> None:
     assert repo.issue.get(issue.number + 999) is None
 
 
+def _issue_update(driver: ForgeDriver) -> None:
+    """Update rewrites only the provided fields; a missing number raises."""
+    repo = driver.fresh_repo()
+    issue = repo.issue.create("first title", body="first body")
+    repo.issue.update(issue.number, body="the corrected work order")
+    got = repo.issue.get(issue.number)
+    assert got is not None
+    assert got.title == "first title"
+    assert got.body == "the corrected work order"
+    repo.issue.update(issue.number, title="second title")
+    got = repo.issue.get(issue.number)
+    assert got is not None
+    assert got.title == "second title"
+    assert got.body == "the corrected work order"
+    try:
+        repo.issue.update(issue.number + 999, body="nowhere")
+    except ForgeError:
+        pass
+    else:
+        raise AssertionError("updating a missing issue must raise")
+
+
 def _issue_list_and_search(driver: ForgeDriver) -> None:
     """List filters by state; search matches body text and labels."""
     repo = driver.fresh_repo()
@@ -857,6 +879,7 @@ SCENARIOS: tuple[Scenario, ...] = (
     Scenario("dispatch", _dispatch),
     Scenario("release-by-tag", _release_by_tag),
     Scenario("issue-text-both-ways", _issue_text_both_ways),
+    Scenario("issue-update", _issue_update),
     Scenario("issue-list-and-search", _issue_list_and_search),
     Scenario("issue-assign", _issue_assign),
     Scenario("issue-comment", _issue_comment),

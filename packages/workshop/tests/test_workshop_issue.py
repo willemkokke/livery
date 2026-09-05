@@ -389,6 +389,41 @@ def test_close_refuses_to_destroy_an_only_copy_without_discard(
     assert "--keep-branch" in message and "--discard" in message
 
 
+def test_create_carries_the_body(
+    rig: tuple[Path, FakeForge, GitOps],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fake = rig[1]
+    issue_create("bodied work", body="the work order, readable by an outsider")
+    out = capsys.readouterr().out
+    assert "filed #" in out
+    repo = fake.repository("willemkokke", "livery")
+    listed = [i for i in repo.issue.list() if i.title == "bodied work"]
+    assert listed and listed[0].body == "the work order, readable by an outsider"
+
+
+def test_update_rewrites_only_the_provided_fields(
+    rig: tuple[Path, FakeForge, GitOps],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from livery.workshop._issue_tasks import issue_update
+
+    fake = rig[1]
+    repo = fake.repository("willemkokke", "livery")
+    issue = repo.issue.create("original", body="first body")
+    # The refusals first: no fields, then a missing number.
+    with pytest.raises(_FAILURES, match="nothing to change"):
+        issue_update(issue.number)
+    with pytest.raises(_FAILURES, match="does not exist"):
+        issue_update(issue.number + 999, body="nowhere")
+    issue_update(issue.number, body="the corrected order")
+    got = repo.issue.get(issue.number)
+    assert got is not None
+    assert got.title == "original"
+    assert got.body == "the corrected order"
+    assert "body updated" in capsys.readouterr().out
+
+
 def test_create_falls_back_when_the_label_is_refused(
     rig: tuple[Path, FakeForge, GitOps],
     capsys: pytest.CaptureFixture[str],

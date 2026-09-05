@@ -1255,6 +1255,17 @@ class _GitlabIssues:
         data = self._client.request(f"{self._base}/issues/{number}", none_on=(404,))
         return None if data is None else _as_issue(data)
 
+    def update(self, number: int, *, title: str = "", body: str = "") -> None:
+        """Rewrite the provided fields of issue *number* (its iid)."""
+        data: dict[str, Any] = {}
+        if title:
+            data["title"] = title
+        if body:
+            data["description"] = body
+        if not data:
+            return
+        self._client.request(f"{self._base}/issues/{number}", method="PUT", data=data)
+
     def list(self, *, state: StateFilter = "open") -> tuple[Issue, ...]:
         """The project's issues in *state*, oldest first."""
         issues = [_as_issue(raw) for raw in self._listing("", state=state)]

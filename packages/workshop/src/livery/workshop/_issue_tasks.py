@@ -215,11 +215,14 @@ def issue_search(text: Arg[str] = "") -> None:
 def issue_create(
     title: Arg[str] = "",
     type: Annotated[str, doc("kind label: feat, fix, chore, docs, refactor")] = "feat",
+    body: Annotated[str, doc("the issue body, readable by an outsider")] = "",
 ) -> None:
     """File a new issue; ``issue.start`` with a title files and starts.
 
     The kind label is best-effort: a forge or token that refuses
-    labels costs the label, never the issue.
+    labels costs the label, never the issue. Every filed issue
+    should carry a body an outsider can read; correct one later
+    with ``issue.update``.
     """
     if not title:
         fail(f'name the issue: `{footman.prog()} issue.create "fix the flaky watch"`')
@@ -228,19 +231,48 @@ def issue_create(
     if type not in _KINDS:
         fail(f"unknown type {type!r}: one of {', '.join(_KINDS)}")
     try:
-        created = repo.issue.create(title, labels=(f"kind/{type}",))
+        created = repo.issue.create(title, body=body, labels=(f"kind/{type}",))
     except ForgeError:
-        created = repo.issue.create(title)
+        created = repo.issue.create(title, body=body)
         print("  Note: the kind label was refused; the issue is filed without it")
     print(f"  filed #{created.number}: {created.title}")
     if created.url:
         print(f"  {created.url}")
 
 
+@issue.task(name="update")
+def issue_update(
+    number: Arg[int] = 0,
+    title: Annotated[str, doc("the corrected title (empty keeps it)")] = "",
+    body: Annotated[str, doc("the corrected body (empty keeps it)")] = "",
+) -> None:
+    """Rewrite an issue's title, body, or both.
+
+    Only the provided fields change; clearing a text to empty is not
+    part of the contract. The issue is read first, so a wrong number
+    refuses by name instead of writing nowhere.
+    """
+    if not number:
+        fail(f"name the issue: `{footman.prog()} issue.update 123 --body=...`")
+    if not title and not body:
+        fail("nothing to change: pass --title, --body, or both")
+    root = _workspace()
+    repo = _repo(root)
+    found = repo.issue.get(number)
+    if found is None:
+        fail(f"issue #{number} does not exist in this repository")
+    repo.issue.update(number, title=title, body=body)
+    changed = ", ".join(
+        name for name, value in (("title", title), ("body", body)) if value
+    )
+    print(f"  #{number}: {changed} updated")
+
+
 @issue.task(name="start", interactive=True)
 def issue_start(
     ref: Annotated[Arg[str], ask(), suggest(_open_numbers, strict=False)] = "",
     type: Annotated[str, doc("kind override: feat, fix, chore, docs, refactor")] = "",
+    body: Annotated[str, doc("the issue body when the title form files one")] = "",
     wip: Annotated[
         bool, doc("park the dirty tree as a commit and reuse this checkout")
     ] = False,
@@ -293,9 +325,11 @@ def issue_start(
         work = found
     else:
         try:
-            work = repo.issue.create(title, labels=(f"kind/{type or 'feat'}",))
+            work = repo.issue.create(
+                title, body=body, labels=(f"kind/{type or 'feat'}",)
+            )
         except ForgeError:
-            work = repo.issue.create(title)
+            work = repo.issue.create(title, body=body)
             print("  Note: the kind label was refused; filed without it")
         print(f"  filed #{work.number}: {work.title}")
 

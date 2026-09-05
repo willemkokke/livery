@@ -373,6 +373,15 @@ class Issues(Protocol):
         """The open issues assigned to the authenticated user."""
         ...
 
+    def update(self, number: int, *, title: str = "", body: str = "") -> None:
+        """Rewrite issue *number*'s title, body, or both.
+
+        Only the provided (non-empty) fields change; clearing a text
+        to empty is not part of the contract. A number that names
+        nothing raises [livery.forge.ForgeError][].
+        """
+        ...
+
     def comment(self, number: int, body: str) -> None:
         """Post *body* as a comment on issue *number*."""
         ...

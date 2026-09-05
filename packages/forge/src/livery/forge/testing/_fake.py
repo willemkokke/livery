@@ -1010,6 +1010,14 @@ class _FakeIssues:
         issue = self._state().issues.get(number)
         return None if issue is None else self._as_issue(issue)
 
+    def update(self, number: int, *, title: str = "", body: str = "") -> None:
+        """Rewrite the provided fields of issue *number*."""
+        issue = self._fake._require_issue(self._state(), number)
+        if title:
+            issue.title = title
+        if body:
+            issue.body = body
+
     def list(self, *, state: StateFilter = "open") -> tuple[Issue, ...]:
         """The issues in *state*, oldest first."""
         return tuple(
