@@ -5,6 +5,22 @@ All notable changes to toolroom are documented here. The format follows
 [SemVer](https://semver.org/) — pre-1.0, minor versions may include
 breaking changes.
 
+## [0.6.2] - 2026-09-06
+
+### Added
+
+- Toolroom joins the workspace
+- Footman joins the workspace
+- The version rules speak as the ecosystem's own
+- The train carries a migrated line's first release
+
+### Fixed
+
+- One release number per distribution line
+- The isolated leg answers for its own environment
+- The leg's click exemplar rides the test extra
+- The leg runs serial, and the history ships in the wheel
+
 ## [Unreleased]
 
 ### Added
