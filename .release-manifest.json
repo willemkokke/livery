@@ -1,0 +1,25 @@
+{
+ "schema": 1,
+ "members": [
+  {
+   "dir": "toolroom",
+   "name": "livery-toolroom",
+   "version": "0.6.2"
+  },
+  {
+   "dir": "footman",
+   "name": "livery-footman",
+   "version": "0.52.2"
+  },
+  {
+   "dir": "toolroom-compat",
+   "name": "toolroom",
+   "version": "0.6.2"
+  },
+  {
+   "dir": "footman-compat",
+   "name": "footman",
+   "version": "0.52.2"
+  }
+ ]
+}
