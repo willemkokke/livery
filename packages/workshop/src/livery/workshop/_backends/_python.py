@@ -447,6 +447,35 @@ def _direct_requirements(package: Package) -> tuple[str, ...]:
     )
 
 
+def _leg_env(root: Path, venv: Path) -> dict[str, str]:
+    """The isolated leg's process environment, scrubbed of the workspace.
+
+    The leg's own venv leads PATH and the workspace venv's entries
+    drop out, so a tool probe answers for what the leg installed
+    rather than what the workspace happens to carry (a click tool
+    found on the workspace PATH but absent from the leg's python
+    extracts a different spec). VIRTUAL_ENV points at the leg, and
+    the ambient coverage variables go the way `measured_coverage`
+    sends them: a metered gate must not re-point the leg's children.
+    """
+    workspace_venv = str(root / ".venv")
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("COVERAGE_", "COV_CORE_"))
+    }
+    kept = [
+        entry
+        for entry in env.get("PATH", "").split(os.pathsep)
+        if entry
+        and entry != workspace_venv
+        and not entry.startswith(workspace_venv + os.sep)
+    ]
+    env["PATH"] = os.pathsep.join([str(venv / "bin"), *kept])
+    env["VIRTUAL_ENV"] = str(venv)
+    return env
+
+
 def _install_target(package: Package, wheel: Path) -> str:
     """The leg's install spelling for the wheel under test.
 
@@ -606,6 +635,7 @@ def run_isolated_test(
                     "no:cacheprovider",
                 ],
                 cwd=scratch,
+                env=_leg_env(root, venv),
                 nofail=True,
                 recorded=False,
             )

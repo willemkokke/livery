@@ -7,6 +7,7 @@ it, the flows' own edges are what they force.
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -551,6 +552,31 @@ def test_the_toolchain_probe_refuses_a_moved_floor(
     message = str(caught.value)
     assert "moved direct dependencies" in message
     assert "packaging 24.0 -> 25.0" in message
+
+
+def test_the_leg_env_leads_with_its_own_venv_and_drops_the_workspaces(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._backends._python import _leg_env
+
+    root = tmp_path / "ws"
+    venv = tmp_path / "leg-venv"
+    monkeypatch.setenv(
+        "PATH",
+        os.pathsep.join(
+            [str(root / ".venv" / "bin"), "/usr/bin", str(root / ".venv2")]
+        ),
+    )
+    monkeypatch.setenv("COVERAGE_PROCESS_START", str(root / "pyproject.toml"))
+    monkeypatch.setenv("VIRTUAL_ENV", str(root / ".venv"))
+    env = _leg_env(root, venv)
+    entries = env["PATH"].split(os.pathsep)
+    assert entries[0] == str(venv / "bin")  # the leg's own tools answer first
+    assert str(root / ".venv" / "bin") not in entries  # the workspace's drop out
+    assert "/usr/bin" in entries  # the system stays
+    assert str(root / ".venv2") in entries  # only the venv prefix is scrubbed
+    assert env["VIRTUAL_ENV"] == str(venv)
+    assert "COVERAGE_PROCESS_START" not in env  # the meter never re-points a leg
 
 
 def test_a_wheel_without_a_test_extra_installs_plain(tmp_path: Path) -> None:
