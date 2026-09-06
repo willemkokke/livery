@@ -15,8 +15,9 @@ generators = ["footman.pages", "docs.task-reference"]
 api = false
 
 [release]
-# The version line continues from the origin repository's last release.
-baseline = "0.52.1"
+# The line continues past the origin's last index release (0.52.1);
+# the shim and this package release identically, under one number.
+baseline = "0.52.2"
 
 [qa]
 # The imported suite's measured mark rides in with the code; raise

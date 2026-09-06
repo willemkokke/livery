@@ -12,12 +12,12 @@ build = "uv build --package livery-workshop"
 [[depends]]
 path = "packages/toolroom"
 kind = "runtime"
-floor = "0.6.1"
+floor = "0.6.2"
 
 [[depends]]
 path = "packages/footman"
 kind = "runtime"
-floor = "0.52.1"
+floor = "0.52.2"
 
 [[depends]]
 path = "packages/forge"

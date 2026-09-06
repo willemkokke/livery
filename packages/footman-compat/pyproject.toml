@@ -27,12 +27,12 @@ classifiers = [
 # scripts (`fm`, `footman`), the pytest plugin, and the task entry
 # points all ship with livery-footman; declaring them here too would
 # register each of them twice in one environment.
-dependencies = ["livery-footman>=0.52.1"]
+dependencies = ["livery-footman>=0.52.2"]
 
 # The real distribution's uv extra, forwarded under the old spelling:
 # `uv tool install "footman[uv]"` keeps working.
 [project.optional-dependencies]
-uv = ["livery-footman[uv]>=0.52.1"]
+uv = ["livery-footman[uv]>=0.52.2"]
 
 [project.urls]
 Repository = "https://github.com/willemkokke/livery"

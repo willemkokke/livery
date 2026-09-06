@@ -16,7 +16,7 @@ breaking_always_bump_major = false
 # A migrated package names the version its line continues from in
 # its contract's [release] baseline; a package born here starts at
 # nothing.
-initial_tag = "packages/toolroom/v0.6.1"
+initial_tag = "packages/toolroom/v0.6.2"
 
 [git]
 # One package, one tag line: only this package's paths are read, and

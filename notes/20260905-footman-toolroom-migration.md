@@ -168,12 +168,13 @@ Deliverables:
 
 - `fm release.prepare packages/toolroom` and
   `fm release.prepare packages/footman`, entries appended to the
-  imported changelogs, versions continuing from 0.6.1 and 0.52.1
-  (the versions the packages moved in at).
+  imported changelogs.
 - The `toolroom` and `footman` shim distributions released by the
-  train the same way, continuing the same lines from 0.6.2 and
-  0.52.2 (one past their index twins, per the decision record), so
-  the old names upgrade onto the shims.
+  train the same way, so the old names upgrade onto the shims.
+- One number per line, both distributions: livery-toolroom and
+  toolroom release as 0.6.2, livery-footman and footman as 0.52.2
+  (Willem, 2026-09-06: they are identical releases and must match).
+  Each line skips the number its index twin burned pre-migration.
 - Tags `packages/toolroom/v*` and `packages/footman/v*` as
   annotated train receipts.
 - Both packages on the workspace site, release view included, at
@@ -341,9 +342,10 @@ Acceptance:
   release is exactly the no-tag state. (3) A migrated package names
   the version its line continues from in its contract's
   `[release] baseline`, rendered into cliff's `initial_tag`; the
-  first release lands at the baseline itself, so the real packages
-  name 0.6.1 and 0.52.1 and the shims name 0.6.2 and 0.52.2, one
-  past their index twins. A package born here keeps v0.0.0.
+  first release lands at the baseline itself. Re-ruled the same day:
+  the shim and its real package are identical releases and share one
+  number, so all four baselines name 0.6.2 and 0.52.2, one past the
+  numbers the index twins burned. A package born here keeps v0.0.0.
 
 ## Open
 

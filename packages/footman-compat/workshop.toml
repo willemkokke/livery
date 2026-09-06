@@ -15,7 +15,7 @@ api = false
 [[depends]]
 path = "packages/footman"
 kind = "runtime"
-floor = "0.52.1"
+floor = "0.52.2"
 
 [release]
 # The first release lands at the baseline itself, so the shim
