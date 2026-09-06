@@ -1,7 +1,13 @@
 # Footman and toolroom join the workspace
 
-Status: phases 1 to 3 landed 2026-09-06 (issues #247, #257, #260);
-phase 4 not started. Approved in intent 2026-09-05 (Willem: "lets move them",
+Status: all four phases landed 2026-09-06 (issues #247, #257,
+#260, #262). livery-toolroom v0.6.2, livery-footman v0.52.2, and
+the toolroom and footman shims at the same numbers are on PyPI
+with annotated receipt tags; the workspace site serves both
+packages. One deliverable stays open: the old Pages sites come
+down when Willem has finished comparing them against the new
+site (open item 4a). The release's own ledger is
+notes/20260906-phase-4-post-mortem.md. Approved in intent 2026-09-05 (Willem: "lets move them",
 both at once); the docs prepass that blocked it completed
 2026-09-05. Strongroom's initial plan
 follows this one; toolroom's store rework over strongroom is out of
@@ -372,7 +378,12 @@ Acceptance:
 
 3. **The origin archives ride gh for now.** The protocol has no
    repo.archive (issue #256 files its seat); Willem granted the gh
-   executable as the exception, 2026-09-06. willemkokke/toolroom:
-   archived read-only after PR #255 merged, confirmed by query.
-   willemkokke/footman: archives the same way after phase 2's
-   merge. Owner: the phase record.
+   executable as the exception, 2026-09-06. willemkokke/toolroom
+   and willemkokke/footman: both archived read-only, confirmed by
+   query. Owner: closed.
+
+4a. **The old Pages sites come down** once Willem has compared
+   them against the workspace site (his call, 2026-09-06). The
+   repos are archived, so the takedown is unarchive, disable
+   Pages, re-archive; the brief unarchive is approved. Owner:
+   Willem says when.
