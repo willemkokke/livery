@@ -38,6 +38,11 @@ test = [
     # (it is the spelling a browser consumer installs), so its probe
     # needs the shim beside the real distribution.
     "footman>=0.52.2",
+    # The driver suite interrogates mkdocs structurally (the click
+    # ladder) and reads its version; without a venv copy the finder
+    # meets whatever the machine carries, which the suite's python
+    # cannot introspect.
+    "mkdocs>=1.6",
 ]
 
 [project.entry-points."footman.tasks"]
