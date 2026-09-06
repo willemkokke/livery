@@ -100,8 +100,7 @@ def test_strict_turns_a_failed_tier_into_a_failed_run(tmp_path, monkeypatch):
     — cspell and markdownlint were skipped for want of the tool that had
     failed two steps earlier.
     """
-    from footman import Failed
-
+    from livery.footman import Failed
     from livery.toolroom._machinery import _tasks as tools
 
     outcomes = [

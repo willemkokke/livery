@@ -1,0 +1,520 @@
+{
+  "examples": [
+    {
+      "id": "basics/gate",
+      "title": "The gate",
+      "category": "Basics",
+      "blurb": "One command that answers \"is this fine?\" — lint and test scheduled by footman, one test wrong on purpose.",
+      "packages": ["pytest"],
+      "files": {
+        "tasks.py": [
+          "from typing import Literal",
+          "from footman import fail, run, task",
+          "from toolroom import pytest, ruff",
+          "",
+          "@task",
+          "def lint(fix: bool = False):",
+          "    \"Lint the source tree.\"",
+          "    # a typed wrapper: keywords become flags, False is omitted",
+          "    ruff.check(\"src\", fix=fix)",
+          "",
+          "@task(serial=True)   # in-process pytest touches the process globals",
+          "def test():",
+          "    \"Run the tests — real pytest, in your browser.\"",
+          "    pytest(\"-q\", \"test_demo.py\")",
+          "",
+          "@task",
+          "def deploy(target: Literal[\"dev\", \"staging\", \"prod\"],",
+          "           regions: list[Literal[\"eu\", \"us\", \"ap\"]] | None = None):",
+          "    \"Ship to an environment.\"",
+          "    run(f\"./rollout.sh {target} --regions={','.join(regions or ['eu'])}\")",
+          "",
+          "@task",
+          "def audit():",
+          "    \"Refuses on purpose — try it with -k.\"",
+          "    fail(\"the gate is red — deliberately\", code=3)",
+          "",
+          "@task(pre=[lint, test])",
+          "def check():",
+          "    \"Lint and test; footman schedules the rest.\""
+        ],
+        "test_demo.py": [
+          "def fizzbuzz(n):",
+          "    if n % 15 == 0:",
+          "        return \"fizzbuzz\"",
+          "    if n % 3 == 0:",
+          "        return \"fizz\"",
+          "    if n % 5 == 0:",
+          "        return \"buzz\"",
+          "    return str(n)",
+          "",
+          "def test_three():",
+          "    assert fizzbuzz(3) == \"fizz\"",
+          "",
+          "def test_fifteen():",
+          "    assert fizzbuzz(15) == \"fizzbuzz\"",
+          "",
+          "def test_wrong():",
+          "    assert fizzbuzz(4) == \"fizz\"   # deliberately failing — fix it and rerun"
+        ]
+      },
+      "commands": [
+        {
+          "line": "check",
+          "note": "the gate — red until you fix fizzbuzz",
+          "exit": 1,
+          "shows": ["1 failed, 2 passed"]
+        },
+        {
+          "line": "--dry-run lint --fix",
+          "note": "the plan, not the work — see the command a flag builds",
+          "exit": 0,
+          "shows": ["$ ruff check src --fix"]
+        },
+        {
+          "line": "-k check audit",
+          "note": "keep going: collect every failure in one run",
+          "exit": 1,
+          "shows": ["FAIL"]
+        },
+        {
+          "line": "--list",
+          "note": "every task, from the docstrings",
+          "exit": 0,
+          "shows": ["Tasks:"]
+        }
+      ]
+    },
+    {
+      "id": "typing/coercion",
+      "title": "Typed signatures",
+      "category": "Typing",
+      "blurb": "Paths, enums, floats, lists, flags — the command line only has strings; the signature says what they become.",
+      "files": {
+        "tasks.py": [
+          "from enum import Enum",
+          "from pathlib import Path",
+          "from footman import task",
+          "",
+          "class Colour(Enum):",
+          "    RED = \"red\"",
+          "    BLUE = \"blue\"",
+          "",
+          "@task",
+          "def paint(",
+          "    out: Path,",
+          "    colour: Colour = Colour.RED,",
+          "    opacity: float = 1.0,",
+          "    tags: list[str] | None = None,",
+          "    force: bool = False,",
+          "):",
+          "    \"Coercion from the command line's strings.\"",
+          "    print(f\"{out=} {colour=} {opacity=} {tags=} {force=}\")"
+        ]
+      },
+      "commands": [
+        {
+          "line": "paint wall.png --colour=blue --tags=a,b,c --force",
+          "note": "an enum by value, a comma-split list, a bare flag",
+          "exit": 0,
+          "shows": ["Colour.BLUE", "tags=['a', 'b', 'c']", "force=True"]
+        },
+        {
+          "line": "paint wall.png --opacity=high",
+          "note": "a wrong type refuses eagerly, in words",
+          "exit": 64,
+          "shows": ["--opacity expects"]
+        }
+      ]
+    },
+    {
+      "id": "validation/deploy",
+      "title": "Belt-and-braces deploy",
+      "category": "Validation",
+      "blurb": "Markers stack — path requirement, custom check, bounds, env fallback — and every refusal is a taught error.",
+      "files": {
+        "tasks.py": [
+          "from pathlib import Path",
+          "from typing import Annotated",
+          "from footman import run, task",
+          "from footman.params import between, check, env, isfile",
+          "",
+          "def semver(value: str) -> None:",
+          "    import re",
+          "    if not re.fullmatch(r\"\\d+\\.\\d+\\.\\d+\", value):",
+          "        raise ValueError(f\"expected MAJOR.MINOR.PATCH, got {value!r}\")",
+          "",
+          "@task",
+          "def deploy(",
+          "    config: Annotated[Path, isfile],",
+          "    version: Annotated[str, check(semver)],",
+          "    workers: Annotated[int, between(1, 32)] = 4,",
+          "    target: Annotated[str, env(\"DEPLOY_ENV\")] = \"staging\",",
+          "):",
+          "    \"Roll out.\"",
+          "    print(f\"deploying {version} from {config} with {workers} workers to {target}\")",
+          "    run(f\"./rollout.sh {version} --config={config} -j{workers} --target={target}\")"
+        ]
+      },
+      "commands": [
+        {
+          "line": "deploy config.toml 1.2.3",
+          "note": "everything validates; target falls back past $DEPLOY_ENV",
+          "exit": 0,
+          "shows": ["with 4 workers to staging"]
+        },
+        {
+          "line": "deploy config.toml 1.2.3 --workers=64",
+          "note": "bounds refuse, eagerly, before anything runs",
+          "exit": 64,
+          "shows": ["between 1 and 32"]
+        },
+        {
+          "line": "deploy config.toml nope",
+          "note": "your own validator teaches in your own words",
+          "exit": 64,
+          "shows": ["MAJOR.MINOR.PATCH"]
+        }
+      ]
+    },
+    {
+      "id": "variadic/bench",
+      "title": "Extra args, passed through",
+      "category": "Variadic",
+      "blurb": "A defaulted option in front, *args behind: bare words and everything after -- land in the variadic tail.",
+      "files": {
+        "tasks.py": [
+          "from footman import task",
+          "",
+          "@task",
+          "def bench(runs: int = 3, *pytest_args):",
+          "    \"Time the suite; anything after -- goes to pytest.\"",
+          "    print(f\"runs={runs} pytest_args={list(pytest_args)}\")"
+        ]
+      },
+      "commands": [
+        {
+          "line": "bench -- -q -x",
+          "note": "passthrough lands in *args, never in --runs",
+          "exit": 0,
+          "shows": ["runs=3 pytest_args=['-q', '-x']"]
+        },
+        {
+          "line": "bench --runs=5 fast slow",
+          "note": "the option binds by name; bare words join the tail",
+          "exit": 0,
+          "shows": ["runs=5 pytest_args=['fast', 'slow']"]
+        }
+      ]
+    },
+    {
+      "id": "scheduling/pipeline",
+      "title": "Prerequisites and chains",
+      "category": "Scheduling",
+      "blurb": "pre=[…] declares what must happen first; independent prerequisites may run in parallel, and a chain runs left to right.",
+      "files": {
+        "tasks.py": [
+          "from footman import task",
+          "",
+          "@task",
+          "def build(target: str = \"app\"):",
+          "    \"Compile.\"",
+          "    print(f\"building {target}\")",
+          "",
+          "@task",
+          "def docs():",
+          "    \"Render the docs.\"",
+          "    print(\"rendering docs\")",
+          "",
+          "@task(pre=[build, docs])",
+          "def ship():",
+          "    \"Build and docs first — independent, so they may run in parallel.\"",
+          "    print(\"shipping\")"
+        ]
+      },
+      "commands": [
+        {
+          "line": "ship",
+          "note": "the prerequisites run first, then the body",
+          "exit": 0,
+          "shows": ["building app", "rendering docs", "shipping"]
+        },
+        {
+          "line": "build --target=cli docs",
+          "note": "a chain: each task with its own flags, left to right",
+          "exit": 0,
+          "shows": ["building cli", "rendering docs"]
+        },
+        {
+          "line": "--dry-run ship",
+          "note": "the schedule as a plan, nothing runs",
+          "exit": 0,
+          "shows": ["ship"]
+        }
+      ]
+    },
+    {
+      "id": "tools/shell",
+      "title": "Commands and pipelines",
+      "category": "Tools",
+      "blurb": "run() executes a command; shell=True buys a real pipeline. In the page every child is simulated — the plumbing is real.",
+      "files": {
+        "tasks.py": [
+          "from footman import run, task",
+          "",
+          "@task",
+          "def sizes():",
+          "    \"A pipeline needs a shell; a plain command does not.\"",
+          "    run(\"du -sh src | sort -h | tail -3\", shell=True)",
+          "",
+          "@task",
+          "def clean(deep: bool = False):",
+          "    \"Remove build litter.\"",
+          "    run(f\"rm -rf build{' dist' if deep else ''}\")"
+        ]
+      },
+      "commands": [
+        {
+          "line": "--dry-run sizes",
+          "note": "the exact line the shell would get",
+          "exit": 0,
+          "shows": ["du -sh src | sort -h | tail -3"]
+        },
+        {
+          "line": "--dry-run clean --deep",
+          "note": "a flag changes the command it builds",
+          "exit": 0,
+          "shows": ["rm -rf build dist"]
+        },
+        {
+          "line": "sizes",
+          "note": "runs for real — the child is simulated in the page",
+          "exit": 0,
+          "shows": ["ok"]
+        }
+      ]
+    },
+    {
+      "id": "results/stdin-json",
+      "title": "Documents in, documents out",
+      "category": "Results",
+      "blurb": "A dataclass binds the piped JSON document — the stdin tab is the pipe here — and Stdout[dict] answers with one.",
+      "files": {
+        "tasks.py": [
+          "from dataclasses import dataclass",
+          "from typing import Annotated",
+          "from footman import task",
+          "from footman.params import Stdout, stdin",
+          "",
+          "@dataclass",
+          "class Order:",
+          "    items: int = 0",
+          "    total: float = 0.0",
+          "",
+          "@task",
+          "def receipt(order: Annotated[Order, stdin]) -> Stdout[dict]:",
+          "    \"Read an order from stdin, answer with a receipt.\"",
+          "    vat = round(order.total * 0.21, 2)",
+          "    return {\"items\": order.items, \"total\": order.total, \"vat\": vat}"
+        ],
+        "stdin": [
+          "{\"items\": 3, \"total\": 42.0}"
+        ]
+      },
+      "commands": [
+        {
+          "line": "receipt",
+          "note": "the stdin tab is piped in; the return prints as JSON",
+          "exit": 0,
+          "shows": ["\"vat\":8.82"]
+        },
+        {
+          "line": "--json receipt",
+          "note": "the whole run as a machine-readable envelope",
+          "exit": 0,
+          "shows": ["\"returned\""]
+        }
+      ]
+    },
+    {
+      "id": "config/cascade",
+      "title": "Configuration that travels",
+      "category": "Config",
+      "blurb": "footman.toml rides with the project; sort=true here re-orders --list. Delete the line and definition order returns.",
+      "files": {
+        "tasks.py": [
+          "from footman import task",
+          "",
+          "@task",
+          "def zulu():",
+          "    \"Defined first.\"",
+          "    print(\"Z!\")",
+          "",
+          "@task",
+          "def mike():",
+          "    \"Defined second.\"",
+          "    print(\"M!\")",
+          "",
+          "@task",
+          "def alpha():",
+          "    \"Defined last.\"",
+          "    print(\"A!\")"
+        ],
+        "footman.toml": [
+          "# the nearest config file wins the cascade",
+          "sort = true"
+        ]
+      },
+      "commands": [
+        {
+          "line": "--list",
+          "note": "alphabetical because footman.toml says sort=true",
+          "exit": 0,
+          "shows": ["Tasks:\n  alpha"]
+        },
+        {
+          "line": "zulu",
+          "note": "config changes the listing, never what runs",
+          "exit": 0,
+          "shows": ["Z!"]
+        }
+      ]
+    },
+    {
+      "id": "compose/include",
+      "title": "Shared tasks, mounted",
+      "category": "Composition",
+      "blurb": "include() grafts another module's tasks into this tree — the shared file stays one file, every project mounts it.",
+      "files": {
+        "tasks.py": [
+          "from footman import include, task",
+          "",
+          "include(\"ci\")",
+          "",
+          "@task",
+          "def dev():",
+          "    \"This project's own task.\"",
+          "    print(\"dev loop\")"
+        ],
+        "ci.py": [
+          "from footman import task",
+          "",
+          "@task",
+          "def lint():",
+          "    \"Shared lint, mounted from ci.py.\"",
+          "    print(\"shared lint\")"
+        ]
+      },
+      "commands": [
+        {
+          "line": "--list",
+          "note": "mounted tasks list beside this file's own",
+          "exit": 0,
+          "shows": ["lint", "dev"]
+        },
+        {
+          "line": "lint",
+          "note": "runs exactly as if it were defined here",
+          "exit": 0,
+          "shows": ["shared lint"]
+        }
+      ]
+    },
+    {
+      "id": "input/ask",
+      "title": "Asked, only when unanswered",
+      "category": "Input",
+      "blurb": "ask() prompts for what nothing supplied — a browser prompt stands in for the terminal. Supply the value and nobody is asked.",
+      "files": {
+        "tasks.py": [
+          "from typing import Annotated",
+          "from footman import task",
+          "from footman.params import ask",
+          "",
+          "@task",
+          "def release(",
+          "    version: Annotated[str, ask(prompt=\"Which version ships? \")],",
+          "    channel: Annotated[str, ask()] = \"stable\",",
+          "):",
+          "    \"Run bare and the page asks; Enter accepts an offered default.\"",
+          "    print(f\"shipping {version} to {channel}\")"
+        ]
+      },
+      "commands": [
+        {
+          "line": "release",
+          "note": "nothing supplied either value — answer, then Enter for stable",
+          "exit": 0,
+          "shows": ["shipping 1.2.3 to stable"],
+          "prompts": ["1.2.3", ""]
+        },
+        {
+          "line": "release --version=2.0.0 --channel=beta",
+          "note": "everything supplied — nobody is asked",
+          "exit": 0,
+          "shows": ["shipping 2.0.0 to beta"]
+        }
+      ]
+    },
+    {
+      "id": "completion/grammar",
+      "title": "Completion knows the grammar",
+      "category": "Completion",
+      "blurb": "Press Tab: choices come from the Literal, a set completes item by item and folds repeats — and switch's completer reads branches.txt live. Edit that tab, Tab again.",
+      "files": {
+        "tasks.py": [
+          "from pathlib import Path",
+          "from typing import Annotated, Literal",
+          "from footman import task",
+          "from footman.params import suggest",
+          "",
+          "@task",
+          "def deploy(target: Literal[\"dev\", \"staging\", \"prod\"],",
+          "           regions: set[Literal[\"eu\", \"us\", \"ap\"]] | None = None):",
+          "    \"Type deploy <Tab>, then --regions=eu,<Tab>.\"",
+          "    print(f\"{target=} regions={sorted(regions or [])}\")",
+          "",
+          "def _branches():",
+          "    return Path(\"branches.txt\").read_text().split()",
+          "",
+          "@task",
+          "def switch(branch: Annotated[str, suggest(_branches)]):",
+          "    \"Type switch <Tab> — the completer reads branches.txt just now.\"",
+          "    print(f\"switching to {branch}\")"
+        ],
+        "branches.txt": [
+          "main",
+          "develop",
+          "feature/gallery",
+          "release/v0.40.0"
+        ]
+      },
+      "commands": [
+        {
+          "line": "deploy staging --regions=eu,ap",
+          "note": "what Tab was steering you toward",
+          "exit": 0,
+          "shows": ["regions=['ap', 'eu']"]
+        },
+        {
+          "line": "deploy prod --regions=eu --regions=ap,eu",
+          "note": "repeats extend the value; the set folds duplicates",
+          "exit": 0,
+          "shows": ["regions=['ap', 'eu']"]
+        },
+        {
+          "line": "switch feature/gallery",
+          "note": "what the dynamic completer was offering",
+          "exit": 0,
+          "shows": ["switching to feature/gallery"]
+        },
+        {
+          "line": "deploy produ",
+          "note": "a near-miss gets the choices, not a stack trace",
+          "exit": 64,
+          "shows": ["dev|staging|prod"]
+        }
+      ]
+    }
+  ]
+}

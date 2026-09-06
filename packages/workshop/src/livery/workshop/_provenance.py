@@ -20,9 +20,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-import footman
-from footman import Arg, ask, doc, fail, suggest, task
-
+import livery.footman as footman
+from livery.footman import Arg, ask, doc, fail, suggest, task
 from livery.workshop._layers import layer_names, workspace_root
 
 #: The project render's managed names, judged by the drift gate. The

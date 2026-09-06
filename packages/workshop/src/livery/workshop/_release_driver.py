@@ -18,10 +18,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-import footman
-from footman import doc, fail
-
+import livery.footman as footman
 from livery import toolroom
+from livery.footman import doc, fail
 from livery.forge import ForgeError, Repository
 from livery.workshop import _cliff
 from livery.workshop._backends import _python, backend_for

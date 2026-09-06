@@ -28,8 +28,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 
-import footman
-
+import livery.footman as footman
 from livery.forge import ForgeError, Repository
 from livery.workshop._git_ops import GitOps
 

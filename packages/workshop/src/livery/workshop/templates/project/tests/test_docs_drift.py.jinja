@@ -30,7 +30,10 @@ def _slug(heading: str) -> str:
     """The anchor python-markdown derives from a heading."""
     text = re.sub(r"`([^`]*)`", r"\1", heading).strip().lower()
     text = re.sub(r"[^\w\- ]", "", text)
-    return re.sub(r"[ ]", "-", text).strip("-")
+    # Runs collapse to one hyphen, as python-markdown's toc does: a
+    # heading like "without a run: --describe" anchors at
+    # ...-run-describe, never ...-run---describe.
+    return re.sub(r"[-\s]+", "-", text).strip("-")
 
 
 def _docs_trees(root: Path) -> list[Path]:

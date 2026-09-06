@@ -17,8 +17,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from footman import fail
-
+from livery.footman import fail
 from livery.forge import Codeowners, CodeownersEntry, Forge, RepoConfig
 
 

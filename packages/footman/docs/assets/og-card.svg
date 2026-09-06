@@ -1,0 +1,72 @@
+<!--
+  The link-preview card. Source of truth for docs/assets/og-card.png, which
+  is what the meta tags point at: every platform that renders a preview wants
+  a raster, and several will not fetch an SVG at all.
+
+  Rendered once, by hand, and committed:
+
+      rsvg-convert -w 1200 -h 630 docs/assets/og-card.svg -o docs/assets/og-card.png
+
+  That needs Inter and Fira Code — the site's own two faces — installed
+  locally. rsvg resolves fonts through the operating system here, not
+  through fontconfig, so pointing it at font files with FONTCONFIG_FILE
+  does nothing: it silently falls through the family list instead, and the
+  render comes out in whatever is installed. Both are free from Google
+  Fonts. If the wordmark ever comes back looking like Helvetica, that is
+  what happened.
+
+  Deliberately not part of the docs build. Rasterising is a dependency the
+  build does not otherwise have, and this image changes about as often as the
+  project is renamed. Re-run the line above if you edit this file.
+
+  The palette is lifted from the recordings themselves (#292929 chrome,
+  #c5c8c6 text, #98a84b prompt, and the three traffic lights), so a reader
+  who clicks through finds the thing they were shown.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img"
+     aria-label="footman — a Python task runner with instant shell completion">
+  <rect width="1200" height="630" fill="#191919"/>
+
+  <!-- The concierge bell, the same lucide glyph as the site logo and favicon. -->
+  <g transform="translate(72, 74) scale(2.4)" fill="none" stroke="#98a84b"
+     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 20a1 1 0 0 1-1-1v-1a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v1a1 1 0 0 1-1 1ZM20 16a8 8 0 1 0-16 0M12 4v4M10 4h4"/>
+  </g>
+
+  <text x="152" y="128" font-family="Inter, Helvetica Neue, Arial, sans-serif"
+        font-size="76" font-weight="700" fill="#f2f3f4" letter-spacing="-1">footman</text>
+
+  <text x="74" y="196" font-family="Inter, Helvetica Neue, Arial, sans-serif"
+        font-size="33" fill="#9aa0a6">A <tspan fill="#c5c8c6" font-weight="600">Python task runner</tspan>: typed functions become a real CLI.</text>
+  <text x="74" y="240" font-family="Inter, Helvetica Neue, Arial, sans-serif"
+        font-size="33" fill="#9aa0a6">Shell completion answers in <tspan fill="#c5c8c6" font-weight="600">~30 ms</tspan>, without importing your code.</text>
+
+  <!-- The terminal, drawn rather than screenshotted: at thumbnail size the
+       window chrome is what still reads, long after the text has gone. -->
+  <g transform="translate(74, 296)">
+    <rect width="1052" height="252" rx="10" fill="#292929"/>
+    <circle cx="30" cy="26" r="8" fill="#ff5f57"/>
+    <circle cx="56" cy="26" r="8" fill="#febc2e"/>
+    <circle cx="82" cy="26" r="8" fill="#28c840"/>
+    <text x="526" y="32" text-anchor="middle" font-family="Inter, Helvetica Neue, Arial, sans-serif"
+          font-size="17" font-weight="600" fill="#8b8f94">fm · completion</text>
+
+    <text x="34" y="106" font-family="Fira Code, Menlo, DejaVu Sans Mono, monospace" font-size="33">
+      <tspan fill="#98a84b">❯</tspan><tspan fill="#c5c8c6" xml:space="preserve">  fm deploy --branch=</tspan>
+    </text>
+
+    <rect x="30" y="132" width="406" height="44" rx="5" fill="#98a84b"/>
+    <text x="46" y="164" font-family="Fira Code, Menlo, DejaVu Sans Mono, monospace" font-size="31"
+          fill="#292929" font-weight="600">fix/completion-cache</text>
+    <text x="470" y="164" font-family="Fira Code, Menlo, DejaVu Sans Mono, monospace" font-size="31"
+          fill="#7c8085">feat/typed-flags</text>
+
+    <text x="46" y="216" font-family="Fira Code, Menlo, DejaVu Sans Mono, monospace" font-size="31"
+          fill="#7c8085">main</text>
+    <text x="470" y="216" font-family="Fira Code, Menlo, DejaVu Sans Mono, monospace" font-size="31"
+          fill="#7c8085">release/v0.40.0</text>
+  </g>
+
+  <text x="74" y="592" font-family="Inter, Helvetica Neue, Arial, sans-serif"
+        font-size="26" fill="#6f7681">Zero runtime dependencies · Python 3.11+ · bash zsh fish PowerShell nushell</text>
+</svg>

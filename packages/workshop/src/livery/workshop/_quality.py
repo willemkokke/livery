@@ -12,8 +12,7 @@ from typing import TYPE_CHECKING, Annotated
 if TYPE_CHECKING:
     from pathlib import Path
 
-from footman import Forward, doc, group, parallel, task
-
+from livery.footman import Forward, doc, group, parallel, task
 from livery.workshop._backends import _python, require_backends
 from livery.workshop._layers import workspace_root
 from livery.workshop._packages import Package, discover_packages
@@ -201,7 +200,7 @@ def _scoped_check(subset: tuple[Package, ...], *, fix: bool = False) -> None:
     runs instead). ``fix`` behaves as in the whole gate: format and
     lint rewrite serially first, then the rest run in parallel.
     """
-    from footman import step
+    from livery.footman import step
 
     root = workspace_root()
     assert root is not None

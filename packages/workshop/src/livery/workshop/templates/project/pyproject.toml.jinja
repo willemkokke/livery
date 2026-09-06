@@ -42,9 +42,9 @@ dev = [
     # uv itself, unconstrained so it tracks latest; the lockfile still
     # resolves it to one exact version (footman's lockfile-churn lesson).
     "uv",
-    "footman>=0.52.1",
     # Typed tool handles tasks.py runs through.
-{% if 'toolroom' not in py | map(attribute='dev') | list %}    "toolroom>=0.6.1",
+{% if 'footman' not in py | map(attribute='dev') | list %}    "footman>=0.52.1",
+{% endif %}{% if 'toolroom' not in py | map(attribute='dev') | list %}    "toolroom>=0.6.1",
 {% endif %}    # The workspace members, so root tests import them; an entry may
     # carry extras the dev loop needs.
 {% for package in py %}    "{{ package.dev }}",
@@ -132,6 +132,13 @@ reportMissingModuleSource = false
 # conformance rides the same tracked content pass as the docstrings.
 [[tool.basedpyright.executionEnvironments]]
 root = "packages/toolroom/tests"
+reportPrivateImportUsage = false
+
+# The imported footman tests drive internals (`_app`, `_paths`,
+# `_complete`) by design: the suite is the framework's own, and its
+# subjects are private modules. Same tracked pass as toolroom's.
+[[tool.basedpyright.executionEnvironments]]
+root = "packages/footman/tests"
 reportPrivateImportUsage = false
 
 [tool.mypy]

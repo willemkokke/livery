@@ -1,0 +1,81 @@
+/*
+  The accent, in two greens.
+
+  The colour comes from the recordings: #98a84b is the prompt glyph in every
+  cast on the site, and the bell on the link-preview card. Using it as the
+  site's accent means a reader meets one colour, whether they arrive through
+  a shared link, a recording, or the docs themselves.
+
+  It cannot be one green, though. Measured as WCAG AA:
+
+      #98a84b on #292929 (dark chrome)   5.57:1  passes
+      #98a84b on white                   2.61:1  fails
+      #5f6f2a on white                   5.54:1  passes
+
+  So dark mode gets the terminal green exactly, and light mode gets it
+  darkened until it is legible. They read as the same colour family, which
+  is all the coherence needs to be. The site follows the visitor's OS by
+  default, so both are load-bearing — the maintainer browsing in dark mode
+  never sees the light-mode value, which is precisely why it is written down
+  here rather than eyeballed.
+*/
+
+:root,
+[data-md-color-scheme="default"] {
+  --fm-accent: #5f6f2a;
+  --md-accent-fg-color: #5f6f2a;
+  --md-accent-fg-color--transparent: rgba(95, 111, 42, 0.1);
+  --md-typeset-a-color: #5f6f2a;
+
+  /*
+    Off-white rather than #fff. A full-white page of long-form technical
+    prose is glare, and this site is mostly long-form technical prose.
+    Measured on this background: body text 15.35:1, the light-mode green
+    link 4.99:1 — both comfortably past AA, so the softening costs no
+    legibility.
+
+    The `--light` variant is a separate value, not derived from the one
+    above, and the theme paints the sticky header with it. Left alone it
+    stays #ffffffb3 and the header is a white bar over a softened page.
+  */
+  --md-default-bg-color: #f4f3ef;
+  --md-default-bg-color--light: rgba(244, 243, 239, 0.72);
+}
+
+[data-md-color-scheme="slate"] {
+  --fm-accent: #98a84b;
+  --md-accent-fg-color: #98a84b;
+  --md-accent-fg-color--transparent: rgba(152, 168, 75, 0.1);
+  --md-typeset-a-color: #98a84b;
+}
+
+/*
+  The header, one step above the page rather than level with it.
+
+  Softening the page alone left header, tabs and content as a single flat
+  slab: the theme's own separator is `#0000000d`, black at 5%, which is
+  invisible against off-white, and it only paints once you scroll. So the
+  edge comes from tone instead — the bar sits a little lighter than the
+  page it floats over, which is the ordinary way light-mode surfaces read
+  as raised, with the hairline firmed up enough to be seen.
+
+  Light mode only. The dark scheme puts its header *below* the page in
+  lightness, which is that theme's own convention and reads fine.
+*/
+[data-md-color-scheme="default"] .md-header {
+  background-color: rgba(251, 250, 248, 0.88);
+  box-shadow: 0 0.05rem 0 rgba(0, 0, 0, 0.09);
+}
+
+/*
+  The header logo, the same lucide concierge-bell the card carries.
+
+  This theme paints the header from the default background rather than from
+  the primary colour, so the bar is light in light mode and dark in dark
+  mode — which means the bell has to change with it. The terminal green
+  measures 2.61:1 against a light bar, so it takes the per-scheme accent
+  instead: darkened in light mode, exact in dark.
+*/
+.md-header__button.md-logo :is(img, svg) {
+  color: var(--fm-accent);
+}

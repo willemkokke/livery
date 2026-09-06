@@ -251,8 +251,7 @@ def test_the_emitters_call_the_running_brand(
 ) -> None:
     import re
 
-    import footman
-
+    import livery.footman as footman
     from livery.workshop._ci_generate import generate
 
     monkeypatch.setattr(footman, "prog", lambda: "hse")
@@ -323,8 +322,7 @@ def test_the_shell_and_completion_lines_run_the_brand() -> None:
 def test_the_pipe_guard_recognises_the_brand(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import footman
-
+    import livery.footman as footman
     from livery.workshop._hooks import _runs_runner
 
     monkeypatch.setattr(footman, "prog", lambda: "hse")
@@ -386,8 +384,7 @@ def test_the_remote_update_arm_brands_and_reemits(
     # The arm every instance takes: no local template directory, the
     # source is a git repository, and rebranding is exactly this run
     # under the branded CLI.
-    import footman
-
+    import livery.footman as footman
     from livery.workshop import _templates
     from livery.workshop._update import refresh_rendered
 

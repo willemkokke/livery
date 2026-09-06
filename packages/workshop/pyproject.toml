@@ -23,9 +23,9 @@ dependencies = [
     # the lock: the release train's floor leg shares one venv with
     # the locked toolchain, so a floor below the toolchain's pin is
     # a claim the leg cannot test (its movement guard refuses the
-    # silent un-starving). footman 0.50 is a real requirement
-    # besides: the expose axis and the runtime brand paths are its.
-    "footman>=0.50",
+    # silent un-starving). 0.52.1 is the first livery-footman: the
+    # workshop imports livery.footman directly, never the shim.
+    "livery-footman>=0.52.1",
     "livery-toolroom>=0.6.1",
     # The template engine behind `fm template.check` and `fm
     # new.package`; pyyaml reads the adopted answers files. The

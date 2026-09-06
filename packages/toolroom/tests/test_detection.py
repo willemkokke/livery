@@ -33,7 +33,7 @@ def test_recording_is_orchestration_and_cannot_be_bypassed():
     detection cannot be sidestepped where the honesty machinery depends
     on it.
     """
-    from footman.testing import recording
+    from livery.footman.testing import recording
 
     with recording() as steps:
         tools.git("definitely-not-run", "for-real")
@@ -48,7 +48,7 @@ def test_a_value_read_executes_truthfully_under_recording():
     case from the consumer sweep: convert the probe with recorded=False and
     it answers truthfully inside every recording block.)
     """
-    from footman.testing import recording
+    from livery.footman.testing import recording
 
     with recording() as steps:
         r = tools.python.opts(recorded=False)("-c", "print('truth')")

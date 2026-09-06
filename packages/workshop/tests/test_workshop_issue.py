@@ -6,8 +6,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from footman import Failed
 
+from livery.footman import Failed
 from livery.forge.testing import FakeForge
 from livery.workshop._git_ops import GitOps
 from livery.workshop._issue_tasks import (
@@ -63,7 +63,7 @@ def rig(
         "livery.workshop._forge_lane.this_repository", lambda _root: repo
     )
     monkeypatch.setattr("livery.workshop._issue_tasks._me", lambda _repo: "fake-user")
-    monkeypatch.setattr("footman.data_dir", lambda: tmp_path / "home")
+    monkeypatch.setattr("livery.footman.data_dir", lambda: tmp_path / "home")
     monkeypatch.chdir(root)
     return root, fake, git
 
@@ -91,7 +91,7 @@ def test_the_worktree_lives_under_the_runners_home(
 ) -> None:
     # The home is the runner's own data directory, asked of footman:
     # a footman plugin owns no home of its own.
-    monkeypatch.setattr("footman.data_dir", lambda: tmp_path / "runner")
+    monkeypatch.setattr("livery.footman.data_dir", lambda: tmp_path / "runner")
     path = worktree_path(tmp_path / "repo", 9, "Fix It Now")
     assert path == tmp_path / "runner" / "worktrees" / "repo" / "9-fix-it-now"
 

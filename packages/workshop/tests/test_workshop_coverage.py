@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from footman import Failed
 
+from livery.footman import Failed
 from livery.workshop._backends import _python
 from livery.workshop._packages import Package
 

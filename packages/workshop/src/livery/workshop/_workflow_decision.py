@@ -18,8 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-import footman
-
+import livery.footman as footman
 from livery.workshop._workflow_state import (
     WORKFLOW_PREFIX,
     WorkflowKind,

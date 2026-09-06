@@ -7,7 +7,7 @@ build-backend = "uv_build"
 
 [project]
 name = "toolroom"
-version = "0.6.1"
+version = "0.6.2"
 description = "The toolroom distribution, now a thin shim over livery-toolroom."
 readme = "README.md"
 license = "MIT"

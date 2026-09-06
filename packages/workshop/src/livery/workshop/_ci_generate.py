@@ -25,8 +25,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-import footman
-
+import livery.footman as footman
 from livery.workshop._pythons import python_matrix
 
 #: Pinned action shas, one place; version comments ride each use.

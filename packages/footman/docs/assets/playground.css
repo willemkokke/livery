@@ -1,0 +1,548 @@
+/* The footman playground, styled with Material's own variables so both
+ * palettes just work. Two panes side by side, stacked on narrow screens. */
+
+/* Fira Code, vendored beside the editor bundle (OFL, see
+ * vendor/codemirror/README.md). The variable font carries every weight
+ * the pane uses; ligatures are its default 'calt' behaviour. */
+@font-face {
+  font-family: "Fira Code";
+  src: url("vendor/FiraCode-VF.woff2") format("woff2-variations");
+  font-weight: 300 700;
+  font-display: swap;
+}
+
+/* One palette for all code on the site. The playground's editor is
+ * themed through the same --md-code-hl-* variables zensical's Pygments
+ * blocks use, so overriding them here re-skins BOTH at once. The values
+ * are VS Code's (Light+ / Dark+), one per zensical role — remove this
+ * block and everything falls back to zensical's own palette, still in
+ * lockstep. */
+
+:root,
+[data-md-color-scheme="default"] {
+  --md-code-hl-keyword-color: #0000ff;
+  --md-code-hl-string-color: #a31515;
+  --md-code-hl-number-color: #098658;
+  --md-code-hl-comment-color: #008000;
+  --md-code-hl-function-color: #795e26;
+  --md-code-hl-name-color: #001080;
+  --md-code-hl-constant-color: #0070c1;
+  --md-code-hl-special-color: #af00db;
+  --md-code-hl-operator-color: #24292f;
+  --md-code-hl-punctuation-color: #24292f;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-code-hl-keyword-color: #569cd6;
+  --md-code-hl-string-color: #ce9178;
+  --md-code-hl-number-color: #b5cea8;
+  --md-code-hl-comment-color: #6a9955;
+  --md-code-hl-function-color: #dcdcaa;
+  --md-code-hl-name-color: #9cdcfe;
+  --md-code-hl-constant-color: #4fc1ff;
+  --md-code-hl-special-color: #c586c0;
+  --md-code-hl-operator-color: #d4d4d4;
+  --md-code-hl-punctuation-color: #d4d4d4;
+}
+
+#fm-playground {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.8rem;
+  margin: 1.6rem 0;
+}
+
+@media screen and (max-width: 59.9844em) {
+  #fm-playground {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+#fm-playground .fmp-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 24rem;
+  /* Grow with content up to a screenful, then the editor and the
+   * transcript scroll inside their pane instead of growing the page —
+   * a run of failing tests stays a scroll, not a wall. */
+  max-height: min(75vh, 44rem);
+  border: 0.05rem solid var(--md-default-fg-color--lightest);
+  border-radius: 0.2rem;
+  background: var(--md-code-bg-color);
+  overflow: hidden;
+}
+
+#fm-playground .fmp-label {
+  display: flex;
+  gap: 0.2rem;
+  padding: 0.25rem 0.5rem 0;
+  border-bottom: 0.05rem solid var(--md-default-fg-color--lightest);
+}
+
+#fm-playground .fmp-tab {
+  padding: 0.25rem 0.6rem;
+  border: 0;
+  border-radius: 0.2rem 0.2rem 0 0;
+  background: transparent;
+  color: var(--md-default-fg-color--light);
+  font-family: "Fira Code", var(--md-code-font-family);
+  font-size: 0.64rem;
+  cursor: pointer;
+}
+
+#fm-playground .fmp-tab-active {
+  background: var(--md-default-fg-color--lightest);
+  color: var(--md-code-fg-color);
+}
+
+#fm-playground textarea {
+  flex: 1;
+  min-height: 0;
+  padding: 0.8rem;
+  border: 0;
+  resize: vertical;
+  background: transparent;
+  color: var(--md-code-fg-color);
+  font-family: "Fira Code", var(--md-code-font-family);
+  font-size: 0.7rem;
+  line-height: 1.5;
+  white-space: pre;
+  tab-size: 4;
+}
+
+#fm-playground textarea:focus {
+  outline: none;
+}
+
+#fm-playground .fmp-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.6rem;
+  border-bottom: 0.05rem solid var(--md-default-fg-color--lightest);
+}
+
+#fm-playground .fmp-prompt {
+  font-family: "Fira Code", var(--md-code-font-family);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--md-accent-fg-color);
+}
+
+#fm-playground input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.2rem 0.4rem;
+  border: 0;
+  background: transparent;
+  color: var(--md-code-fg-color);
+  font-family: "Fira Code", var(--md-code-font-family);
+  font-size: 0.7rem;
+}
+
+#fm-playground input:focus {
+  outline: none;
+}
+
+#fm-playground button {
+  padding: 0.2rem 0.8rem;
+  border: 0;
+  border-radius: 0.2rem;
+  background: var(--md-accent-fg-color);
+  color: var(--md-accent-bg-color);
+  font-size: 0.64rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#fm-playground button[disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+#fm-playground button.fmp-secondary {
+  background: transparent;
+  color: var(--md-default-fg-color--light);
+  font-weight: 400;
+}
+
+#fm-playground button.fmp-secondary:hover {
+  color: var(--md-accent-fg-color);
+}
+
+#fm-playground #fmp-complete {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  padding: 0.3rem 0.6rem;
+  border-bottom: 0.05rem solid var(--md-default-fg-color--lightest);
+}
+
+#fm-playground #fmp-complete[hidden] {
+  display: none;
+}
+
+#fm-playground #fmp-complete button {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.15rem 0.5rem;
+  background: var(--md-default-fg-color--lightest);
+  color: var(--md-code-fg-color);
+  font-family: "Fira Code", var(--md-code-font-family);
+  font-size: 0.64rem;
+  font-weight: 400;
+  /* Buttons centre their text by default — a long line that wraps must
+   * read as a command, not float mid-pill. */
+  text-align: left;
+}
+
+#fm-playground #fmp-complete button span {
+  color: var(--md-default-fg-color--light);
+  font-family: var(--md-text-font-family, inherit);
+}
+
+/* The curated-commands menu: the ▾ beside the prompt drops the whole
+ * list — every command the example ships, never filtered by what is
+ * typed — each row a prompt line with its note on the right. */
+
+#fm-playground .fmp-toolbar {
+  position: relative;
+}
+
+#fm-playground #fmp-cmdmenu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  max-height: 18rem;
+  overflow: auto;
+  background: var(--md-code-bg-color);
+  border: 0.05rem solid var(--md-default-fg-color--lightest);
+  border-top: 0;
+  border-radius: 0 0 0.2rem 0.2rem;
+  box-shadow: 0 0.3rem 0.8rem rgba(0, 0, 0, 0.25);
+}
+
+#fm-playground #fmp-cmdmenu[hidden] {
+  display: none;
+}
+
+#fm-playground #fmp-cmdmenu button {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.35rem 0.6rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--md-code-fg-color);
+  font-family: "Fira Code", var(--md-code-font-family);
+  font-size: 0.64rem;
+  font-weight: 400;
+  text-align: left;
+}
+
+#fm-playground #fmp-cmdmenu button::before {
+  content: "fm";
+  color: var(--md-accent-fg-color);
+  font-weight: 700;
+}
+
+#fm-playground #fmp-cmdmenu button:hover {
+  background: var(--md-default-fg-color--lightest);
+}
+
+#fm-playground #fmp-cmdmenu button span {
+  margin-left: auto;
+  padding-left: 0.8rem;
+  color: var(--md-default-fg-color--light);
+  font-family: var(--md-text-font-family, inherit);
+  text-align: right;
+}
+
+/* The gallery bar: the example menu, its reset, and the blurb — one row
+ * spanning both panes. */
+
+#fm-playground .fmp-gallery {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+#fm-playground .fmp-gallery[hidden] {
+  display: none;
+}
+
+#fm-playground .fmp-gallery select {
+  max-width: 55%;
+  padding: 0.2rem 0.4rem;
+  border: 0.05rem solid var(--md-default-fg-color--lightest);
+  border-radius: 0.2rem;
+  background: var(--md-code-bg-color);
+  color: var(--md-code-fg-color);
+  font-family: "Fira Code", var(--md-code-font-family);
+  font-size: 0.7rem;
+}
+
+#fm-playground #fmp-blurb {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.64rem;
+  color: var(--md-default-fg-color--light);
+}
+
+#fm-playground #fmp-out {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0.8rem;
+  overflow: auto;
+  background: transparent;
+  color: var(--md-code-fg-color);
+  font-family: "Fira Code", var(--md-code-font-family);
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+/* The transcript: one block per run, its prompt line echoed above its
+ * output, the way the terminal it stands in for would show it. */
+
+#fm-playground .fmp-run + .fmp-run {
+  margin-top: 0.8rem;
+}
+
+#fm-playground .fmp-echo {
+  font-weight: 700;
+}
+
+#fm-playground .fmp-echo span {
+  color: var(--md-accent-fg-color);
+}
+
+#fm-playground .fmp-run-out {
+  margin: 0;
+  padding: 0;
+  overflow-x: auto;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+/* footman's own SGR colours, light palette first, the slate palette
+ * below. Bold/dim/italic/underline are palette-free. */
+
+#fm-playground .fmp-a-b { font-weight: 700; }
+#fm-playground .fmp-a-d { opacity: 0.6; }
+#fm-playground .fmp-a-i { font-style: italic; }
+#fm-playground .fmp-a-u { text-decoration: underline; }
+
+#fm-playground .fmp-a-f0 { color: #24292f; }
+#fm-playground .fmp-a-f1 { color: #c0392b; }
+#fm-playground .fmp-a-f2 { color: #1a7f37; }
+#fm-playground .fmp-a-f3 { color: #9a6700; }
+#fm-playground .fmp-a-f4 { color: #0969da; }
+#fm-playground .fmp-a-f5 { color: #8250df; }
+#fm-playground .fmp-a-f6 { color: #1b7c83; }
+#fm-playground .fmp-a-f7 { color: #6e7781; }
+#fm-playground .fmp-a-f8 { color: #57606a; }
+#fm-playground .fmp-a-f9 { color: #e5484d; }
+#fm-playground .fmp-a-f10 { color: #2da44e; }
+#fm-playground .fmp-a-f11 { color: #bf8700; }
+#fm-playground .fmp-a-f12 { color: #218bff; }
+#fm-playground .fmp-a-f13 { color: #a475f9; }
+#fm-playground .fmp-a-f14 { color: #339da4; }
+#fm-playground .fmp-a-f15 { color: #8c959f; }
+
+[data-md-color-scheme="slate"] #fm-playground .fmp-a-f0 { color: #c9d1d9; }
+[data-md-color-scheme="slate"] #fm-playground .fmp-a-f1 { color: #ff7b72; }
+[data-md-color-scheme="slate"] #fm-playground .fmp-a-f2 { color: #3fb950; }
+[data-md-color-scheme="slate"] #fm-playground .fmp-a-f3 { color: #d29922; }
+[data-md-color-scheme="slate"] #fm-playground .fmp-a-f4 { color: #58a6ff; }
+[data-md-color-scheme="slate"] #fm-playground .fmp-a-f5 { color: #bc8cff; }
+[data-md-color-scheme="slate"] #fm-playground .fmp-a-f6 { color: #39c5cf; }
+[data-md-color-scheme="slate"] #fm-playground .fmp-a-f7 { color: #8b949e; }
+[data-md-color-scheme="slate"] #fm-playground .fmp-a-f8 { color: #6e7681; }
+[data-md-color-scheme="slate"] #fm-playground .fmp-a-f9 { color: #ffa198; }
+[data-md-color-scheme="slate"] #fm-playground .fmp-a-f10 { color: #56d364; }
+[data-md-color-scheme="slate"] #fm-playground .fmp-a-f11 { color: #e3b341; }
+[data-md-color-scheme="slate"] #fm-playground .fmp-a-f12 { color: #79c0ff; }
+[data-md-color-scheme="slate"] #fm-playground .fmp-a-f13 { color: #d2a8ff; }
+[data-md-color-scheme="slate"] #fm-playground .fmp-a-f14 { color: #56d4dd; }
+[data-md-color-scheme="slate"] #fm-playground .fmp-a-f15 { color: #b1bac4; }
+
+/* CodeMirror, when its import lands: it replaces the textarea visually
+ * and inherits the pane's type scale. Until then (or if the CDN fails)
+ * the textarea is the editor, exactly as before. */
+
+#fm-playground .fmp-cm {
+  display: none;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#fm-playground.fmp-cm-on .fmp-cm {
+  display: block;
+}
+
+#fm-playground.fmp-cm-on textarea {
+  display: none;
+}
+
+/* Sizing and type only — background and gutter colours belong to the
+ * vscode theme in the bundle, which paints light or dark to match the
+ * site's palette. */
+
+#fm-playground .cm-editor {
+  height: 100%;
+  font-size: 0.7rem;
+}
+
+#fm-playground .cm-editor.cm-focused {
+  outline: none;
+}
+
+#fm-playground .cm-scroller {
+  font-family: "Fira Code", var(--md-code-font-family);
+  line-height: 1.5;
+}
+
+#fm-playground .fmp-status {
+  padding: 0.3rem 0.8rem;
+  font-size: 0.6rem;
+  color: var(--md-default-fg-color--light);
+  border-top: 0.05rem solid var(--md-default-fg-color--lightest);
+}
+
+#fm-playground .fmp-status-failed {
+  color: #e5484d;
+  font-weight: 700;
+}
+
+/* The editor's tooltips — completion menu, info panel, hover
+ * signatures. They are parented to document.body (the reliable escape
+ * from the panes' overflow clipping), so their styling lives here in
+ * global CSS rather than in the editor theme, whose scope ends at the
+ * editor's own DOM. Colours ride the same --md variables as
+ * everything else. The doubled .cm-tooltip class is load-bearing:
+ * CodeMirror's base sheet scopes its light-grey tooltip styling
+ * under the editor's generated theme class (which rides along even
+ * onto body-parented tooltips) and is injected at runtime, so it
+ * wins ties -- these selectors outrank it instead. */
+
+body .cm-tooltip.cm-tooltip {
+  z-index: 10000;
+  background: var(--md-code-bg-color);
+  color: var(--md-code-fg-color);
+  border: 0.05rem solid var(--md-default-fg-color--lightest);
+  border-radius: 0.2rem;
+  box-shadow: 0 0.3rem 0.8rem rgba(0, 0, 0, 0.25);
+}
+
+body .cm-tooltip.cm-tooltip.cm-tooltip-autocomplete > ul {
+  font-family: "Fira Code", var(--md-code-font-family);
+  font-size: 0.64rem;
+  max-height: 14em;
+}
+
+body .cm-tooltip.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background: var(--md-default-fg-color--lightest);
+  color: var(--md-code-fg-color);
+}
+
+body .cm-tooltip.cm-tooltip .cm-completionMatchedText {
+  text-decoration: none;
+  font-weight: 700;
+  color: var(--md-accent-fg-color);
+}
+
+body .cm-tooltip.cm-tooltip.cm-completionInfo {
+  background: var(--md-code-bg-color);
+  border: 0.05rem solid var(--md-default-fg-color--lightest);
+  color: var(--md-default-fg-color--light);
+  font-size: 0.64rem;
+  max-width: 28rem;
+  white-space: pre-wrap;
+}
+
+.fmp-signature {
+  padding: 0.4rem 0.6rem;
+  font-family: "Fira Code", var(--md-code-font-family);
+  font-size: 0.64rem;
+  max-width: min(42rem, 90vw);
+  max-height: min(50vh, 22rem);
+  overflow: auto;
+}
+
+/* One block per signature line: a soft-wrapped long parameter hangs at
+ * its own indent instead of snapping back to column zero. */
+.fmp-sig-line {
+  white-space: pre-wrap;
+  padding-left: 8ch;
+  text-indent: -8ch;
+}
+
+/* Parameter hints: the active parameter's span, highlighted the way the
+ * site highlights a code line (the low-alpha hll background). */
+.fmp-sig-active {
+  background: var(--md-code-hl-color--light);
+  border-radius: 0.1rem;
+}
+
+/* The collapsed one-line signature is the panel's footer: the prose
+ * reads first, the signature is the reference beneath it. */
+.fmp-sig-footer {
+  margin-top: 0.3rem;
+  border-top: 0.05rem solid var(--md-default-fg-color--lightest);
+  padding-top: 0.3rem;
+}
+
+.fmp-signature-doc {
+  margin-top: 0.3rem;
+  color: var(--md-default-fg-color--light);
+  font-family: var(--md-text-font-family, inherit);
+  white-space: pre-wrap;
+}
+
+.fmp-args-head {
+  margin-top: 0.4rem;
+  font-weight: 700;
+  color: var(--md-code-fg-color);
+}
+
+.fmp-arg {
+  margin-top: 0.3rem;
+  white-space: normal;
+}
+
+.fmp-arg strong {
+  font-family: "Fira Code", var(--md-code-font-family);
+  color: var(--md-code-fg-color);
+  font-weight: 700;
+}
+
+/* The "run it there" link under every runnable example. */
+
+.fmp-runlink {
+  margin: -0.8rem 0 1.2rem;
+  text-align: right;
+}
+
+.fmp-runlink a {
+  font-size: 0.64rem;
+  color: var(--md-default-fg-color--light);
+}
+
+.fmp-runlink a:hover {
+  color: var(--md-accent-fg-color);
+}

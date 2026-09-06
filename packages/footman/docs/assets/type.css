@@ -1,0 +1,45 @@
+/*
+  Ligatures in Python blocks, and nowhere else.
+
+  The theme ships `font-variant-ligatures: none` on
+  `.md-typeset code, .md-typeset kbd, .md-typeset pre`, which is the right
+  default nearly everywhere. Two places want the exception undone, and one
+  place that looks like it does, doesn't:
+
+  - Inline code in running prose is a thing the reader is about to type,
+    so it shows the characters on their keyboard rather than a glyph
+    standing in for them. Default kept.
+  - A **terminal transcript is not code**. A `console`, `sh`, `fish` or
+    `powershell` block is a recording of what a shell printed, and a shell
+    does not draw `!=` as `≠`. Substituting glyphs there would make the
+    page disagree with the terminal it is quoting. Default kept.
+  - A Python block is code, read as code, and the ligatures are the reason
+    to choose the face at all. Exception applies here only.
+
+  Worth knowing which spellings this actually moves, since it is easy to
+  assume the wrong ones: Fira Code ligates `->`, `-->`, `!=`, `>=`, `::`,
+  `//` and friends. It does *not* touch `--` before a letter, so every
+  `--flag` on this site renders as plain characters wherever it appears.
+
+  The language class sits on the wrapping div (`.language-python`), not on
+  the `<code>`, which is why the selector reaches down rather than
+  matching the element directly.
+
+  `toml`, `json` and `yaml` blocks are code by any reasonable reading and
+  are deliberately left out: there are twenty of them against four hundred
+  Python blocks, and none contains a spelling Fira Code would ligate. Add
+  them here if that stops being true.
+
+  `font-feature-settings` is set alongside `font-variant-ligatures`, not
+  instead. The theme puts `font-feature-settings: "kern"` on these
+  elements, and that is the low-level OpenType control — where the two
+  disagree it wins, so `calt` (the feature driving the ligatures) has to be
+  named explicitly or it stays suppressed however the high-level property
+  is set.
+*/
+
+.md-typeset .language-python pre,
+.md-typeset .language-python code {
+  font-variant-ligatures: contextual common-ligatures;
+  font-feature-settings: "kern", "calt" 1;
+}

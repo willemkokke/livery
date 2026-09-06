@@ -18,8 +18,8 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from footman import _globals
 
+from livery.footman import _globals
 from livery.toolroom._machinery import _drivers, _stubgen, _toolhelp, _toolspec
 from livery.toolroom._machinery._toolspec import Option, ToolSpec, Verb
 

@@ -29,9 +29,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-import footman
-from footman import doc, fail, group
-
+import livery.footman as footman
+from livery.footman import doc, fail, group
 from livery.forge import ForgeError, Repository
 from livery.workshop._conventional import TITLE_RE, TYPES
 from livery.workshop._git_ops import GitError, GitOps

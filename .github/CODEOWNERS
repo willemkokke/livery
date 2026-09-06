@@ -3,6 +3,8 @@
 # `fm template.apply`; an edit here is drift.
 /workshop.toml @willemkokke
 /.github/CODEOWNERS @willemkokke
+/packages/footman/ @willemkokke
+/packages/footman-compat/ @willemkokke
 /packages/forge/ @willemkokke
 /packages/toolroom/ @willemkokke
 /packages/toolroom-compat/ @willemkokke

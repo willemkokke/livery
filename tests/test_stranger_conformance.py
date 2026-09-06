@@ -20,10 +20,19 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATES = ROOT / "packages/workshop/src/livery/workshop/templates"
 
-#: The base layer's own names: the one livery spelling an instance
-#: legitimately carries, and only through its contract's layer list
-#: and the dev group derived from it.
-ALLOWED = ("livery.workshop", "livery-workshop", "livery.forge", "livery-forge")
+#: The base layer's own names: the livery spellings an instance
+#: legitimately carries, and only through its contract's layer list,
+#: the dev group derived from it, and the runner import the seeded
+#: tasks.py opens with (livery.footman is the runner's real module;
+#: the footman dist the dev group names is its compat shim).
+ALLOWED = (
+    "livery.workshop",
+    "livery-workshop",
+    "livery.forge",
+    "livery-forge",
+    "livery.footman",
+    "livery-footman",
+)
 
 _CONTRACT = (
     "[workspace]\n"
@@ -125,7 +134,11 @@ def _driven_root(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         "[tool.uv.sources]\n",
         "[tool.uv.sources]\n"
         f'livery-workshop = {{ path = "{ROOT / "packages/workshop"}" }}\n'
-        f'livery-forge = {{ path = "{ROOT / "packages/forge"}" }}\n',
+        f'livery-forge = {{ path = "{ROOT / "packages/forge"}" }}\n'
+        f'livery-toolroom = {{ path = "{ROOT / "packages/toolroom"}" }}\n'
+        f'livery-footman = {{ path = "{ROOT / "packages/footman"}" }}\n'
+        f'toolroom = {{ path = "{ROOT / "packages/toolroom-compat"}" }}\n'
+        f'footman = {{ path = "{ROOT / "packages/footman-compat"}" }}\n',
         1,
     )
     pyproject.write_text(text)
@@ -190,7 +203,11 @@ def test_the_stranger_drives_the_whole_loop(tmp_path: Path) -> None:
         "[tool.uv.sources]\n",
         "[tool.uv.sources]\n"
         f'livery-workshop = {{ path = "{ROOT / "packages/workshop"}" }}\n'
-        f'livery-forge = {{ path = "{ROOT / "packages/forge"}" }}\n',
+        f'livery-forge = {{ path = "{ROOT / "packages/forge"}" }}\n'
+        f'livery-toolroom = {{ path = "{ROOT / "packages/toolroom"}" }}\n'
+        f'livery-footman = {{ path = "{ROOT / "packages/footman"}" }}\n'
+        f'toolroom = {{ path = "{ROOT / "packages/toolroom-compat"}" }}\n'
+        f'footman = {{ path = "{ROOT / "packages/footman-compat"}" }}\n',
         1,
     )
     pyproject.write_text(text)
@@ -263,7 +280,11 @@ def test_the_rehearsal_runs_a_graph_of_both_kinds(tmp_path: Path) -> None:
             "[tool.uv.sources]\n",
             "[tool.uv.sources]\n"
             f'livery-workshop = {{ path = "{ROOT / "packages/workshop"}" }}\n'
-            f'livery-forge = {{ path = "{ROOT / "packages/forge"}" }}\n',
+            f'livery-forge = {{ path = "{ROOT / "packages/forge"}" }}\n'
+            f'livery-toolroom = {{ path = "{ROOT / "packages/toolroom"}" }}\n'
+            f'livery-footman = {{ path = "{ROOT / "packages/footman"}" }}\n'
+            f'toolroom = {{ path = "{ROOT / "packages/toolroom-compat"}" }}\n'
+            f'footman = {{ path = "{ROOT / "packages/footman-compat"}" }}\n',
             1,
         )
     )

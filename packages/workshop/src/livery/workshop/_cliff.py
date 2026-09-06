@@ -14,10 +14,9 @@ import os
 import tomllib
 from pathlib import Path
 
-import footman
-from footman import fail
-
+import livery.footman as footman
 from livery import toolroom
+from livery.footman import fail
 from livery.workshop._packages import Package
 
 #: Where a package's changelog contract lives.

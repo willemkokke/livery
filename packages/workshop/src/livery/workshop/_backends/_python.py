@@ -19,10 +19,9 @@ import tempfile
 import tomllib
 from pathlib import Path
 
-import footman
-from footman import fail
-
+import livery.footman as footman
 from livery import toolroom
+from livery.footman import fail
 from livery.toolroom import basedpyright, mypy, pyrefly, pytest, ruff, ruff_format, ty
 from livery.workshop._packages import Package
 
@@ -64,7 +63,7 @@ def run_typecheck(paths: tuple[str, ...] = ()) -> None:
     *paths* narrows basedpyright and mypy to the affected subset; ty
     and pyrefly keep their configured whole either way.
     """
-    from footman import parallel, step
+    from livery.footman import parallel, step
 
     def based() -> None:
         basedpyright(*paths, warnings=True)
@@ -170,7 +169,17 @@ def measured_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, fl
     """Per-package line coverage from the run's ``.coverage`` data."""
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as handle:
         report = handle.name
-    result = toolroom.coverage.opts(cwd=root)("json", "-o", report)
+    # The data read is *root*'s, by contract. Under a metered gate the
+    # ambient COVERAGE_*/COV_CORE_* variables re-point the coverage CLI
+    # at the outer run's live data file, whose parallel parts are still
+    # being written; scrubbing them keeps the read on the file the
+    # caller named.
+    scrubbed = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("COVERAGE_", "COV_CORE_"))
+    }
+    result = toolroom.coverage.opts(cwd=root, env=scrubbed)("json", "-o", report)
     if result.code != 0:
         fail(f"coverage json exited {result.code}:\n{result.stdout}{result.stderr}")
     data = json.loads(Path(report).read_text("utf-8"))

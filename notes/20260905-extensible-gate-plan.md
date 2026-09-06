@@ -104,6 +104,13 @@ conjunction: every applicable check green, the exit code the
 verdict. Kinds gate on roles, never on tools: a C++ kind says
 "format applies", and whether format means ruff or clang-format
 is the check's business, so swapping a tool never touches a kind.
+A role is a set, not a slot: every applicable check of the role
+judges the files it claims, so one package may be formatted by
+two tools at once. `cpp-conan` is the standing example:
+clang-format owns its C++ sources while ruff owns its
+`conanfile.py`, and a `types` check claiming build scripts joins
+the same way, closing the gap where `conanfile.py` today escapes
+the type checkers.
 
 Each check is one registered record, and the record is the single
 place the tool exists:
@@ -425,6 +432,12 @@ the kit cannot drift from the enforcement.
   single sentences. "Gate" stays, bound as "quality gate" at
   first mention, and earns its place in the check/role/gate
   triad.
+- 2026-09-05, a role is a set (Willem's question, answered into
+  the design): multiple checks of one role apply to one package,
+  each claiming its own files, so cpp-conan keeps ruff on
+  conanfile.py beside clang-format on its sources, and a types
+  check over build scripts becomes possible without touching any
+  kind.
 - 2026-09-05, coverage reaches C++ (Willem): the floor is
   already a kind-agnostic contract fact; measurement becomes the
   kind's answer and enforcement stays one implementation.

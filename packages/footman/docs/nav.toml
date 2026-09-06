@@ -1,0 +1,104 @@
+# This package's section of the workspace site, hand-authored.
+# Labels map to pages relative to this docs/ tree, or to nested
+# lists. Every authored page must appear here, and every entry must
+# name a real page; the changelog, coverage, and API entries are
+# appended by the emitter. `fm footman.pages` writes the generated
+# pages named below. A generator may own one block between a
+# `# nav:begin <name>` / `# nav:end <name>` marker pair.
+nav = [
+    { "Home" = "index.md" },
+    { "Getting started" = "getting-started.md" },
+    { "Guide" = [
+        { "Basics" = [
+            { "Typed signatures" = "typing.md" },
+            { "Running tools" = "tools.md" },
+            { "Chaining & parallelism" = "orchestration.md" },
+            { "Asking for input" = "input.md" },
+            { "Progress & timing" = "progress.md" },
+            { "Monorepos & config" = "monorepos.md" },
+            { "Testing your tasks" = "testing.md" },
+            { "Cookbook" = "cookbook.md" },
+        ] },
+        { "In depth" = [
+            { "Working directory & environment" = "working-dir.md" },
+            { "The execution model" = "execution-model.md" },
+            { "Composing tasks" = "composing.md" },
+            { "Hooks & plugin options" = "hooks.md" },
+            { "Notes & levels" = "notes.md" },
+            { "Writing plugins" = "plugins.md" },
+            { "Your tasks, documented" = "taskdocs.md" },
+            { "Type-checking your tasks" = "typechecking.md" },
+            { "Custom CLI" = "custom-cli.md" },
+        ] },
+        { "Completion" = [
+            { "How it works" = "completion.md" },
+            { "bash" = "completion-bash.md" },
+            { "zsh" = "completion-zsh.md" },
+            { "fish" = "completion-fish.md" },
+            { "PowerShell" = "completion-pwsh.md" },
+            { "nushell" = "completion-nushell.md" },
+            { "Shell differences" = "completion-differences.md" },
+        ] },
+    ] },
+    { "Foundations" = [
+        { "Start here" = "foundations.md" },
+        { "One process, many tasks" = "foundations-process.md" },
+        { "The working directory" = "foundations-cwd.md" },
+        { "The environment" = "foundations-env.md" },
+        { "The shell" = "foundations-shell.md" },
+        { "Spawning programs" = "foundations-spawning.md" },
+        { "Threads & the GIL" = "foundations-threads.md" },
+        { "Deadlocks" = "foundations-deadlocks.md" },
+        { "The four globals, two regimes" = "foundations-regimes.md" },
+    ] },
+    { "Machine use" = [
+        { "Pipelines" = "pipelines.md" },
+        { "JSON output" = "json.md" },
+        { "Profiling a run" = "profiling.md" },
+        { "CI" = "ci.md" },
+        { "AI agents" = "agents.md" },
+    ] },
+    { "About" = [
+        { "Comparison" = "comparison.md" },
+        { "Migrating" = "migrating.md" },
+        { "Stability promise" = "stability.md" },
+        { "Roadmap" = "roadmap.md" },
+    ] },
+    { "Reference" = [
+        { "Design" = "design.md" },
+        { "CLI reference" = "reference.md" },
+        { "Configuration" = "configuration.md" },
+        { "API reference" = "_generated/api.md" },
+        { "Troubleshooting" = "troubleshooting.md" },
+        { "Errors & notes" = "_generated/errors.md" },
+    ] },
+    { "Playground" = "playground.md" },
+    # nav:begin tasks
+    { "Tasks" = [
+        { "Overview" = "_generated/tasks/index.md" },
+        { "docs" = [
+            { "Overview" = "_generated/tasks/docs/index.md" },
+            { "cast" = "_generated/tasks/docs/cast.md" },
+            { "config" = "_generated/tasks/docs/config.md" },
+            { "errors" = "_generated/tasks/docs/errors.md" },
+            { "globals" = "_generated/tasks/docs/globals.md" },
+            { "notes" = "_generated/tasks/docs/notes.md" },
+            { "page" = "_generated/tasks/docs/page.md" },
+            { "shots" = "_generated/tasks/docs/shots.md" },
+            { "site" = "_generated/tasks/docs/site.md" },
+        ] },
+        { "self" = [
+            { "Overview" = "_generated/tasks/self/index.md" },
+            { "add" = "_generated/tasks/self/add.md" },
+            { "install" = "_generated/tasks/self/install.md" },
+            { "path" = "_generated/tasks/self/path.md" },
+            { "remove" = "_generated/tasks/self/remove.md" },
+            { "uninstall" = "_generated/tasks/self/uninstall.md" },
+        ] },
+        { "footman" = [
+            { "Overview" = "_generated/tasks/footman/index.md" },
+            { "pages" = "_generated/tasks/footman/pages.md" },
+        ] },
+    ] },
+    # nav:end tasks
+]

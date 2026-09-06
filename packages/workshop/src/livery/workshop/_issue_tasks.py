@@ -22,10 +22,9 @@ import sys
 from pathlib import Path
 from typing import Annotated
 
-import footman
-from footman import Arg, ask, doc, fail, group, suggest
-
+import livery.footman as footman
 from livery import toolroom
+from livery.footman import Arg, ask, doc, fail, group, suggest
 from livery.forge import ForgeError, Repository
 from livery.workshop._git_ops import GitOps
 
@@ -100,7 +99,7 @@ def worktree_path(root: Path, number: int, title: str) -> Path:
     runner's own data directory, asked of footman: a footman plugin
     owns no home of its own.
     """
-    import footman
+    import livery.footman as footman
 
     return footman.data_dir() / "worktrees" / root.name / f"{number}-{_slug(title)}"
 

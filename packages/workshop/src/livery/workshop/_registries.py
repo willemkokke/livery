@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from footman import fail
+from livery.footman import fail
 
 if TYPE_CHECKING:
     from livery.forge import RegistryKind

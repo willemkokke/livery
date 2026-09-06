@@ -662,7 +662,7 @@ def _read_version(name: str) -> tuple[str, str]:
     # behind, the hidden console comes with any captured spawn, and `env=`
     # hands over exactly what `read_env` built — its subtraction survives the
     # trip, which under the old overlay it could not.
-    from footman.context import run as _run
+    from livery.footman.context import run as _run
 
     try:
         done = _run(

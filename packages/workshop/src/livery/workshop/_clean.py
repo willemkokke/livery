@@ -22,10 +22,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-import footman
-from footman import doc, fail
-
+import livery.footman as footman
 from livery import toolroom
+from livery.footman import doc, fail
 
 #: Never removed, at any depth, under any flag. A machine secret is
 #: the one thing here that no checkout can restore.

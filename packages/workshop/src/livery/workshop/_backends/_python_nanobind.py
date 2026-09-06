@@ -14,9 +14,8 @@ import shutil
 import sys
 from typing import TYPE_CHECKING
 
-from footman import fail
-
 from livery import toolroom
+from livery.footman import fail
 from livery.workshop._backends import _python
 
 if TYPE_CHECKING:

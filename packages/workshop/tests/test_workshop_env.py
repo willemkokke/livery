@@ -7,8 +7,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from footman import Failed
 
+from livery.footman import Failed
 from livery.workshop._clean import CleanPlan, clean_tree, plan_clean, render_plan
 from livery.workshop._env_tasks import (
     EnvDelta,
@@ -40,7 +40,7 @@ def _isolated_shared(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """
     home = tmp_path / "shared-home"
     home.mkdir(exist_ok=True)
-    monkeypatch.setattr("footman.config_dir", lambda: home)
+    monkeypatch.setattr("livery.footman.config_dir", lambda: home)
 
 
 # --- the cascade: refusals and edge rows first ---
@@ -104,7 +104,7 @@ def test_the_shared_dir_defaults_to_the_runners_config_dir(
     home = tmp_path / "runner-config"
     home.mkdir()
     (home / ".repo.shared.env").write_text("FROM_SHARED=yes\n")
-    monkeypatch.setattr("footman.config_dir", lambda: home)
+    monkeypatch.setattr("livery.footman.config_dir", lambda: home)
     stack = load_cascade(root, root, environ={})
     assert stack.values["FROM_SHARED"] == "yes"
 
@@ -394,7 +394,7 @@ def test_apply_cascade_defaults_absent_keys_and_never_overrides(
     monkeypatch.delenv("CASCADE_FLAG", raising=False)
     from typing import cast
 
-    import footman
+    import livery.footman as footman
 
     _env_tasks.apply_cascade(cast(footman.Invocation, None))
     try:

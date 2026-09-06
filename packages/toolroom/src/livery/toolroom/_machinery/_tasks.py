@@ -41,11 +41,10 @@ if TYPE_CHECKING:
     from types import ModuleType
 
     from livery.toolroom._machinery import _provision, _toolfetch
-from footman._describe import bold, cyan, wants_color
-from footman.context import current, data_dir
-from footman.params import doc
-from footman.registry import Group
-
+from livery.footman._describe import bold, cyan, wants_color
+from livery.footman.context import current, data_dir
+from livery.footman.params import doc
+from livery.footman.registry import Group
 from livery.toolroom import version_tuple as _version_tuple
 
 tasks: Group = Group("tools", help="Keep the tools.* stubs honest")
@@ -249,7 +248,7 @@ def _overlay(**values: str) -> Generator[None]:
     """
     import os
 
-    from footman import _globals
+    from livery.footman import _globals
 
     target = current().env if _globals.active() else os.environ
     saved = {key: target.get(key) for key in values}
@@ -1320,7 +1319,7 @@ def _report_gather(found: Gathered) -> None:
     on it would teach a weekly job's readers to ignore the exit code. Holes
     in the majority mean the machine, not the tools.
     """
-    from footman import fail
+    from livery.footman import fail
 
     seen = sum(len(v) for v in found.observations.values())
     missed = sum(len(v) for v in found.holes.values())
@@ -1447,7 +1446,7 @@ def _finish(found: Refreshed, changelog: bool) -> Refreshed:
         found = replace(found, wrote_changelog=_write_changelog(entries))
     _report_refresh(found)
     if found.unreachable:
-        from footman import fail
+        from livery.footman import fail
 
         fail(
             f"{len(found.unreachable)} index(es) would not answer: "
@@ -1459,7 +1458,7 @@ def _finish(found: Refreshed, changelog: bool) -> Refreshed:
 
 def _read_document(name: str) -> dict[str, Any]:
     """One observation document, refused rather than guessed at when wrong."""
-    from footman import fail
+    from livery.footman import fail
 
     try:
         payload: dict[str, Any] = json.loads(
@@ -1855,13 +1854,13 @@ def _bounce_bare_call(task: str) -> None:
     is exactly the cross-contamination this engine exists to remove. One
     implementation, and a bouncer — never a degraded twin.
     """
-    from footman import _globals, fail
+    from livery.footman import _globals, fail
 
     if not _globals.active():
         fail(
             f"tools.{task} gathers releases in parallel and needs a run — "
             f"invoke `fm tools.{task}`, or drive it with "
-            "footman.testing.Runner in tests"
+            "livery.footman.testing.Runner in tests"
         )
 
 
@@ -1914,7 +1913,7 @@ def _list_phase(
     tools that could be read still deserve their walk, and the caller
     decides what an unreadable index costs.
     """
-    from footman import parallel, step
+    from livery.footman import parallel, step
 
     listings: dict[str, list[_toolfetch.Release]] = {}
     unreachable: dict[str, str] = {}
@@ -2079,7 +2078,7 @@ def _refuse_a_broken_environment(scratch: Path) -> None:
     """
     import shutil as _shutil
 
-    from footman import fail
+    from livery.footman import fail
 
     try:
         free = _shutil.disk_usage(scratch).free
@@ -2140,8 +2139,8 @@ def _gather(
     reports, which reads as a hole exactly like a release that would not
     install, with the traceback in the wave's output.
     """
-    from footman import parallel, step
-    from footman.context import current
+    from livery.footman import parallel, step
+    from livery.footman.context import current
 
     surfaces: dict[str, dict[str, dict[str, Any] | None]] = {}
     lock = threading.Lock()
@@ -2294,7 +2293,7 @@ def prepare_release(
     `[Unreleased]` becomes `[X.Y.Z]` dated today, with the compare links
     repointed. Refuses rather than guesses when there is nothing to release.
     """
-    from footman import fail
+    from livery.footman import fail
 
     root = _HISTORY.parent
     current = _re.search(
@@ -2423,7 +2422,7 @@ def provision(
     outcomes = _provision.provision(_drivers.DRIVERS, prefix, only=only)
     _print_outcomes(outcomes)
     if strict:
-        from footman import fail
+        from livery.footman import fail
 
         # A person at a terminal reads the table and decides what to do
         # next, so a failed tier is named and the rest carries on. A step

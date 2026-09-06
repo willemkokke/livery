@@ -1,0 +1,25 @@
+# Seeded from the template channel (package-python kind) at
+# birth; this file is the workspace's own. Edit it directly:
+# the template never rewrites it.
+# The package contract: everything the workshop knows about this
+# package it learns here. Declare dependencies on other workspace
+# members as [[depends]] edges with a kind and a floor.
+type = "python"
+name = "livery-footman"
+
+[docs]
+generators = ["footman.pages", "docs.task-reference"]
+# The curated, generated api page is the API reference, exactly as the
+# original site shipped it; the per-module mkdocstrings pages would
+# document the same surface twice.
+api = false
+
+[qa]
+# The imported suite's measured mark rides in with the code; raise
+# it as the suite grows, lower it only deliberately.
+coverage_floor = 92
+
+[owners]
+users = ["willemkokke"]
+teams = []
+approvals = 0

@@ -87,7 +87,7 @@ def mount_layers(start: Path | None = None) -> tuple[str, ...]:
     """
     # footman does not expose the brand's builtin set publicly yet;
     # the private read retires when footman joins the workspace.
-    from footman import (
+    from livery.footman import (
         _paths,  # pyright: ignore[reportPrivateUsage]
         plugin,
     )

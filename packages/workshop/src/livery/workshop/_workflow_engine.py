@@ -15,9 +15,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-import footman
-from footman import fail
-
+import livery.footman as footman
+from livery.footman import fail
 from livery.forge import ForgeError, Repository
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._workflow_decision import (

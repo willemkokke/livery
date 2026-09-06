@@ -7,8 +7,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from footman import Failed
 
+from livery.footman import Failed
 from livery.workshop._backends import _cpp_conan
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package

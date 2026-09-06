@@ -33,7 +33,7 @@ KEEP = 20
 
 def diagnostics_dir() -> Path:
     """Where bundles live: the runner's data directory, never the repo."""
-    import footman
+    import livery.footman as footman
 
     return footman.data_dir() / "diagnostics"
 

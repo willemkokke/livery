@@ -11,7 +11,7 @@ PATH and says exactly what ships.
 
 from __future__ import annotations
 
-from footman import group
+from livery.footman import group
 
 toolroom_group = group("toolroom", help="toolroom's docs generators")
 

@@ -1,0 +1,27 @@
+# Seeded from the template channel (package-python kind) at
+# birth; this file is the workspace's own. Edit it directly:
+# the template never rewrites it.
+# The package contract: everything the workshop knows about this
+# package it learns here. Declare dependencies on other workspace
+# members as [[depends]] edges with a kind and a floor.
+type = "python"
+name = "footman"
+
+[docs]
+# The shim's surface is livery.footman's; documenting the
+# forwarders would document the real thing twice.
+api = false
+
+[[depends]]
+path = "packages/footman"
+kind = "runtime"
+floor = "0.52.1"
+
+[qa]
+# Forwarding lines only; the contract tests are the suite.
+coverage_floor = 100
+
+[owners]
+users = ["willemkokke"]
+teams = []
+approvals = 0
