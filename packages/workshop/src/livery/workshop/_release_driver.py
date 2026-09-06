@@ -415,6 +415,16 @@ class ReleaseDriver:
             for plan in plans:
                 prepare_release(self._root, plan.package.path, plan.version)
                 backend_for(plan.package).build(plan.package, self._root)
+                if git.is_clean():
+                    # Already stamped: a release squash-merged but never
+                    # published leaves main carrying exactly these
+                    # entries and versions, and re-preparing is the
+                    # recovery. A clean tree is that state, not a fault.
+                    print(
+                        f"  {plan.package.name} v{plan.version}:"
+                        " already stamped on the base; nothing to commit"
+                    )
+                    continue
                 git.commit_all(f"chore(release): {plan.package.name} v{plan.version}")
             # Every member's wheel exists before any leg runs; a
             # failed leg still tears the whole branch down, commits

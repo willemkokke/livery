@@ -339,6 +339,46 @@ def test_the_driver_prepares_commits_and_the_engine_lands_it(
     assert '"livery-core>=0.3.0"' in tool_pyproject
 
 
+def test_a_release_already_stamped_on_the_base_reprepares_cleanly(
+    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A release squash-merged but never published leaves main carrying
+    # the stamped versions and entries; re-preparing is the recovery,
+    # and a member whose stamp produces no diff is that state, not a
+    # fault ("nothing to commit" once failed the whole re-run here).
+    fake, _git_seam, root = workspace
+    _grow(root, "core", "feat: core grows (#1)")
+    _git(root, "push", "origin", "main")
+    rig = _RigGit(root, fake)
+    sha = rig.remote_head("main")
+    fake.push(OWNER, NAME, "main", sha=sha)
+    fake.settle(OWNER, NAME, sha)
+    monkeypatch.setattr(
+        "livery.workshop._release_driver.validate_member",
+        lambda _root, plan, dirs: None,
+    )
+    members = resolve_set(root, ("core",))
+    driver = ReleaseDriver(root, fake.repository(OWNER, NAME), rig, members, armed=True)
+    run_workflow(driver, fake.repository(OWNER, NAME), rig, current_user="fake-user")
+    # The squash landed the stamps on main; the publish never ran, so
+    # a second armed run re-prepares the same release. The merged
+    # branch is gone both sides (the forge deletes on merge, and the
+    # taught recovery is fm workflow.abort locally).
+    _git(root, "switch", "main")
+    _git(root, "pull", "origin", "main")
+    _git(root, "branch", "-D", "workflow/release/core")
+    _git(root, "push", "origin", "--delete", "workflow/release/core")
+    fake.repository(OWNER, NAME).delete_branch("workflow/release/core")
+    sha = rig.remote_head("main")
+    fake.settle(OWNER, NAME, sha)
+    members = resolve_set(root, ("core",))
+    driver = ReleaseDriver(root, fake.repository(OWNER, NAME), rig, members, armed=True)
+    run_workflow(driver, fake.repository(OWNER, NAME), rig, current_user="fake-user")
+    pr = fake.repository(OWNER, NAME).pr.get(2)
+    assert pr is not None
+    assert "livery-core v0.3.0" in pr.title
+
+
 def test_recovery_reads_the_branch_and_rebuilds_nothing(
     workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
