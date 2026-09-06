@@ -1,0 +1,575 @@
+{
+ "schema": 1,
+ "tool": "git_cliff",
+ "observed_from": "2.6.0",
+ "base": {
+  "version": "2.13.1",
+  "date": "2026-07-29",
+  "platforms": [
+   "Linux",
+   "Windows",
+   "macOS"
+  ],
+  "extractor": 3,
+  "surface": {
+   "help": "A highly customizable changelog generator ⛰️",
+   "verbs": {
+    "": {
+     "help": "A highly customizable changelog generator ⛰️",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "azure_devops_repo": {
+       "flags": [
+        "--azure-devops-repo"
+       ],
+       "negation": "",
+       "help": "Sets the Azure DevOps repository",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "azure_devops_token": {
+       "flags": [
+        "--azure-devops-token"
+       ],
+       "negation": "",
+       "help": "Sets the Azure DevOps API token",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "bitbucket_repo": {
+       "flags": [
+        "--bitbucket-repo"
+       ],
+       "negation": "",
+       "help": "Sets the Bitbucket repository",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "bitbucket_token": {
+       "flags": [
+        "--bitbucket-token"
+       ],
+       "negation": "",
+       "help": "Sets the Bitbucket API token",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "body": {
+       "flags": [
+        "--body",
+        "-b"
+       ],
+       "negation": "",
+       "help": "Sets the template for the changelog body",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "bump": {
+       "flags": [
+        "--bump"
+       ],
+       "negation": "",
+       "help": "Bumps the version for unreleased changes",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "bumped_version": {
+       "flags": [
+        "--bumped-version"
+       ],
+       "negation": "",
+       "help": "Prints bumped version for unreleased changes",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "config": {
+       "flags": [
+        "--config",
+        "-c"
+       ],
+       "negation": "",
+       "help": "Sets the configuration file",
+       "type": "str",
+       "default": "cliff.toml",
+       "choices": []
+      },
+      "config_url": {
+       "flags": [
+        "--config-url"
+       ],
+       "negation": "",
+       "help": "Sets the URL for the configuration file",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "context": {
+       "flags": [
+        "--context",
+        "-x"
+       ],
+       "negation": "",
+       "help": "Prints changelog context as JSON",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "count_tags": {
+       "flags": [
+        "--count-tags"
+       ],
+       "negation": "",
+       "help": "Sets the tags to count in the changelog",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "current": {
+       "flags": [
+        "--current"
+       ],
+       "negation": "",
+       "help": "Processes the commits that belong to the current tag",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "exclude_path": {
+       "flags": [
+        "--exclude-path"
+       ],
+       "negation": "",
+       "help": "Sets the path to exclude related commits",
+       "type": "list[str]",
+       "default": null,
+       "choices": []
+      },
+      "from_context": {
+       "flags": [
+        "--from-context"
+       ],
+       "negation": "",
+       "help": "Generates changelog from a JSON context",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "gitea_repo": {
+       "flags": [
+        "--gitea-repo"
+       ],
+       "negation": "",
+       "help": "Sets the Gitea repository",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "gitea_token": {
+       "flags": [
+        "--gitea-token"
+       ],
+       "negation": "",
+       "help": "Sets the Gitea API token",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "github_repo": {
+       "flags": [
+        "--github-repo"
+       ],
+       "negation": "",
+       "help": "Sets the GitHub repository",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "github_token": {
+       "flags": [
+        "--github-token"
+       ],
+       "negation": "",
+       "help": "Sets the GitHub API token",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "gitlab_repo": {
+       "flags": [
+        "--gitlab-repo"
+       ],
+       "negation": "",
+       "help": "Sets the GitLab repository",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "gitlab_token": {
+       "flags": [
+        "--gitlab-token"
+       ],
+       "negation": "",
+       "help": "Sets the GitLab API token",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "ignore_tags": {
+       "flags": [
+        "--ignore-tags"
+       ],
+       "negation": "",
+       "help": "Sets the tags to ignore in the changelog",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "include_path": {
+       "flags": [
+        "--include-path"
+       ],
+       "negation": "",
+       "help": "Sets the path to include related commits",
+       "type": "list[str]",
+       "default": null,
+       "choices": []
+      },
+      "init": {
+       "flags": [
+        "--init",
+        "-i"
+       ],
+       "negation": "",
+       "help": "Writes the default configuration file to cliff.toml",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "latest": {
+       "flags": [
+        "--latest",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Processes the commits starting from the latest tag",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_exec": {
+       "flags": [
+        "--no-exec"
+       ],
+       "negation": "",
+       "help": "Disables the external command execution",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "offline": {
+       "flags": [
+        "--offline"
+       ],
+       "negation": "",
+       "help": "Disable network access for remote repositories",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "output": {
+       "flags": [
+        "--output",
+        "-o"
+       ],
+       "negation": "",
+       "help": "Writes output to the given file",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "prepend": {
+       "flags": [
+        "--prepend",
+        "-p"
+       ],
+       "negation": "",
+       "help": "Prepends entries to the given changelog file",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repository": {
+       "flags": [
+        "--repository",
+        "-r"
+       ],
+       "negation": "",
+       "help": "Sets the git repository",
+       "type": "list[str]",
+       "default": null,
+       "choices": []
+      },
+      "skip_commit": {
+       "flags": [
+        "--skip-commit"
+       ],
+       "negation": "",
+       "help": "Sets commits that will be skipped in the changelog",
+       "type": "list[str]",
+       "default": null,
+       "choices": []
+      },
+      "skip_tags": {
+       "flags": [
+        "--skip-tags"
+       ],
+       "negation": "",
+       "help": "Sets the tags to skip in the changelog",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "sort": {
+       "flags": [
+        "--sort"
+       ],
+       "negation": "",
+       "help": "Sets sorting of the commits inside sections",
+       "type": "choice",
+       "default": "oldest",
+       "choices": [
+        "oldest",
+        "newest"
+       ]
+      },
+      "strip": {
+       "flags": [
+        "--strip",
+        "-s"
+       ],
+       "negation": "",
+       "help": "Strips the given parts from the changelog",
+       "type": "choice",
+       "default": null,
+       "choices": [
+        "header",
+        "footer",
+        "all"
+       ]
+      },
+      "tag": {
+       "flags": [
+        "--tag",
+        "-t"
+       ],
+       "negation": "",
+       "help": "Sets the tag for the latest version",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "tag_pattern": {
+       "flags": [
+        "--tag-pattern"
+       ],
+       "negation": "",
+       "help": "Sets the regex for matching git tags",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "topo_order": {
+       "flags": [
+        "--topo-order"
+       ],
+       "negation": "",
+       "help": "Sorts the tags topologically",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "unreleased": {
+       "flags": [
+        "--unreleased",
+        "-u"
+       ],
+       "negation": "",
+       "help": "Processes the commits that do not belong to a tag",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "use_branch_tags": {
+       "flags": [
+        "--use-branch-tags"
+       ],
+       "negation": "",
+       "help": "Include only the tags that belong to the current branch",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "use_native_tls": {
+       "flags": [
+        "--use-native-tls"
+       ],
+       "negation": "",
+       "help": "Load TLS certificates from the native certificate store",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "verbose": {
+       "flags": [
+        "--verbose",
+        "-v"
+       ],
+       "negation": "",
+       "help": "Increases the logging verbosity",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "with_commit": {
+       "flags": [
+        "--with-commit"
+       ],
+       "negation": "",
+       "help": "Sets custom commit messages to include in the changelog",
+       "type": "list[str]",
+       "default": null,
+       "choices": []
+      },
+      "with_tag_message": {
+       "flags": [
+        "--with-tag-message"
+       ],
+       "negation": "",
+       "help": "Sets custom message for the latest release",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "workdir": {
+       "flags": [
+        "--workdir",
+        "-w"
+       ],
+       "negation": "",
+       "help": "Sets the working directory",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    }
+   }
+  }
+ },
+ "deltas": {
+  "2.12.0": {
+   "date": "2026-01-20",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "2.11.0": {
+   "date": "2025-12-14",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3,
+   "drop": [
+    "\toffline",
+    "\tskip_tags"
+   ]
+  },
+  "2.10.1": {
+   "date": "2025-09-21",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3,
+   "drop": [
+    "\tazure_devops_repo",
+    "\tazure_devops_token"
+   ]
+  },
+  "2.10.0": {
+   "date": "2025-07-27",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "2.9.1": {
+   "date": "2025-06-03",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "2.8.0": {
+   "date": "2025-01-24",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3,
+   "drop": [
+    "\tconfig_url"
+   ]
+  },
+  "2.7.0": {
+   "date": "2024-11-20",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3,
+   "drop": [
+    "\tuse_native_tls"
+   ]
+  },
+  "2.6.1": {
+   "date": "2024-09-27",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "2.6.0": {
+   "date": "2024-09-22",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  }
+ }
+}

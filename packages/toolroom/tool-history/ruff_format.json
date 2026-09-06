@@ -1,0 +1,401 @@
+{
+ "schema": 1,
+ "tool": "ruff_format",
+ "observed_from": "0.15.14",
+ "base": {
+  "version": "0.16.4",
+  "date": "2026-08-20",
+  "platforms": [
+   "Linux",
+   "Windows",
+   "macOS"
+  ],
+  "extractor": 3,
+  "surface": {
+   "help": "Run the Ruff formatter on the given files or directories",
+   "verbs": {
+    "": {
+     "help": "Run the Ruff formatter on the given files or directories",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "cache_dir": {
+       "flags": [
+        "--cache-dir"
+       ],
+       "negation": "",
+       "help": "Path to the cache directory",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "check": {
+       "flags": [
+        "--check"
+       ],
+       "negation": "",
+       "help": "Avoid writing any formatted files back; instead, exit with a non-zero status code if any files would have been modified, and zero otherwise",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "color": {
+       "flags": [
+        "--color"
+       ],
+       "negation": "",
+       "help": "Control when colored output is used",
+       "type": "choice",
+       "default": null,
+       "choices": [
+        "auto",
+        "always",
+        "never"
+       ]
+      },
+      "config": {
+       "flags": [
+        "--config"
+       ],
+       "negation": "",
+       "help": "Either a path to a TOML configuration file (`pyproject.toml` or `ruff.toml`), or a TOML `<KEY> = <VALUE>` pair (such as you might find in a `ruff.toml` configuration file) overriding a specific configuration option (e.g., `--config \"lint.line-length = 100\"` or `--config \"format.quote-style = 'single'\"`)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "diff": {
+       "flags": [
+        "--diff"
+       ],
+       "negation": "",
+       "help": "Avoid writing any formatted files back; instead, exit with a non-zero status code and the difference between the current file and how the formatted file would look like",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "exclude": {
+       "flags": [
+        "--exclude"
+       ],
+       "negation": "",
+       "help": "List of paths, used to omit files and/or directories from analysis",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "exit_non_zero_on_format": {
+       "flags": [
+        "--exit-non-zero-on-format"
+       ],
+       "negation": "",
+       "help": "Exit with a non-zero status code if any files were modified via format, even if all files were formatted successfully",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "extend_exclude": {
+       "flags": [
+        "--extend-exclude"
+       ],
+       "negation": "",
+       "help": "Like --exclude, but adds additional files and directories on top of those already excluded",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "extension": {
+       "flags": [
+        "--extension"
+       ],
+       "negation": "",
+       "help": "List of mappings from file extension to language (one of `python`, `ipynb`, `pyi`)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "force_exclude": {
+       "flags": [
+        "--force-exclude"
+       ],
+       "negation": "--no-force-exclude",
+       "help": "Enforce exclusions, even for paths passed to Ruff directly on the command-line",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "isolated": {
+       "flags": [
+        "--isolated"
+       ],
+       "negation": "",
+       "help": "Ignore all configuration files",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "line_length": {
+       "flags": [
+        "--line-length"
+       ],
+       "negation": "",
+       "help": "Set the line-length",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "no_cache": {
+       "flags": [
+        "--no-cache",
+        "-n"
+       ],
+       "negation": "",
+       "help": "Disable cache reads",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "output_format": {
+       "flags": [
+        "--output-format"
+       ],
+       "negation": "",
+       "help": "Output serialization format for violations, when used with `--check`",
+       "type": "choice",
+       "default": null,
+       "choices": [
+        "concise",
+        "full",
+        "json",
+        "json-lines",
+        "junit",
+        "grouped",
+        "github",
+        "gitlab",
+        "pylint",
+        "rdjson",
+        "azure",
+        "sarif"
+       ]
+      },
+      "preview": {
+       "flags": [
+        "--preview"
+       ],
+       "negation": "--no-preview",
+       "help": "Enable preview mode; enables unstable formatting",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "quiet": {
+       "flags": [
+        "--quiet",
+        "-q"
+       ],
+       "negation": "",
+       "help": "Print diagnostics, but nothing else",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "range": {
+       "flags": [
+        "--range"
+       ],
+       "negation": "",
+       "help": "When specified, Ruff will try to only format the code in the given range",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "respect_gitignore": {
+       "flags": [
+        "--respect-gitignore"
+       ],
+       "negation": "--no-respect-gitignore",
+       "help": "Respect file exclusions via `.gitignore` and other standard ignore files",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "silent": {
+       "flags": [
+        "--silent",
+        "-s"
+       ],
+       "negation": "",
+       "help": "Disable all logging (but still exit with status code \"1\" upon detecting diagnostics)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "stdin_filename": {
+       "flags": [
+        "--stdin-filename"
+       ],
+       "negation": "",
+       "help": "The name of the file when passing it through stdin",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "target_version": {
+       "flags": [
+        "--target-version"
+       ],
+       "negation": "",
+       "help": "The minimum Python version that should be supported",
+       "type": "choice",
+       "default": null,
+       "choices": [
+        "py37",
+        "py38",
+        "py39",
+        "py310",
+        "py311",
+        "py312",
+        "py313",
+        "py314",
+        "py315"
+       ]
+      },
+      "verbose": {
+       "flags": [
+        "--verbose",
+        "-v"
+       ],
+       "negation": "",
+       "help": "Enable verbose logging",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    }
+   }
+  }
+ },
+ "deltas": {
+  "0.16.3": {
+   "date": "2026-08-13",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.16.2": {
+   "date": "2026-08-07",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.16.1": {
+   "date": "2026-07-30",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.16.0": {
+   "date": "2026-07-29",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.15.22": {
+   "date": "2026-07-16",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.15.21": {
+   "date": "2026-07-09",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.15.20": {
+   "date": "2026-06-25",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3,
+   "drop": [
+    "\textend_exclude"
+   ]
+  },
+  "0.15.19": {
+   "date": "2026-06-24",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.15.18": {
+   "date": "2026-06-18",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.15.17": {
+   "date": "2026-06-11",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.15.16": {
+   "date": "2026-06-04",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.15.15": {
+   "date": "2026-05-28",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.15.14": {
+   "date": "2026-05-21",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  }
+ }
+}

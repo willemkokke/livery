@@ -44,8 +44,8 @@ dev = [
     "uv",
     "footman>=0.52.1",
     # Typed tool handles tasks.py runs through.
-    "toolroom>=0.6.1",
-    # The workspace members, so root tests import them; an entry may
+{% if 'toolroom' not in py | map(attribute='dev') | list %}    "toolroom>=0.6.1",
+{% endif %}    # The workspace members, so root tests import them; an entry may
     # carry extras the dev loop needs.
 {% for package in py %}    "{{ package.dev }}",
 {% endfor %}    # Every contract layer that is not already a member above, so a
@@ -107,6 +107,10 @@ convention = "google"
 "tasks.py" = ["E501"]
 "tests/test_workspace_contracts.py" = ["E501"]
 "tests/test_docs_drift.py" = ["E501"]
+# Generated tool stubs keep each Args entry on one line so hovers
+# reflow them, and the text is the tool's own; the .pyi is not where
+# prose rules apply. Toolroom's standing ruling, carried over.
+"packages/*/src/**/_stubs/*.pyi" = ["E501", "D"]
 # The CI emitters carry workflow YAML as string content; its lines
 # are the generated files' lines, not prose to wrap.
 "**/_ci_generate.py" = ["E501"]
@@ -122,6 +126,13 @@ venv = ".venv"
 pythonVersion = "{{ python_floor }}"
 typeCheckingMode = "standard"
 reportMissingModuleSource = false
+
+# The imported toolroom tests monkeypatch module internals by
+# attribute, which this checker reads as private-import use; their
+# conformance rides the same tracked content pass as the docstrings.
+[[tool.basedpyright.executionEnvironments]]
+root = "packages/toolroom/tests"
+reportPrivateImportUsage = false
 
 [tool.mypy]
 # Second gate of the four. {{ namespace_package }}.* is fully strict; tests and tasks.py
@@ -165,6 +176,14 @@ disallow_untyped_defs = true
 disallow_incomplete_defs = true
 disallow_untyped_calls = true
 disallow_untyped_decorators = true
+
+[[tool.mypy.overrides]]
+# The generated tool stubs carry the suppressions their generator
+# placed for its own reading of each tool; which of them fire varies
+# with flags this config does not share, and an unused one there is
+# the generator's business, not drift.
+module = "*._stubs.*"
+warn_unused_ignores = false
 
 [tool.ty]
 # Third gate. Scope: the packages themselves; the consumer seam in

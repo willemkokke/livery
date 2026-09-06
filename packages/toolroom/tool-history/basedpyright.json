@@ -1,0 +1,346 @@
+{
+ "schema": 1,
+ "tool": "basedpyright",
+ "observed_from": "1.39.0",
+ "base": {
+  "version": "1.39.10",
+  "date": "2026-08-13",
+  "platforms": [
+   "Linux",
+   "Windows",
+   "macOS"
+  ],
+  "extractor": 3,
+  "surface": {
+   "help": "",
+   "verbs": {
+    "": {
+     "help": "",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "baselinefile": {
+       "flags": [
+        "--baselinefile"
+       ],
+       "negation": "",
+       "help": "Path to the baseline file to be used",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "createstub": {
+       "flags": [
+        "--createstub"
+       ],
+       "negation": "",
+       "help": "Create type stub file(s) for import",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "dependencies": {
+       "flags": [
+        "--dependencies"
+       ],
+       "negation": "",
+       "help": "Emit import dependency information",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "gitlabcodequality": {
+       "flags": [
+        "--gitlabcodequality"
+       ],
+       "negation": "",
+       "help": "Output results to a gitlab code quality report",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "ignoreexternal": {
+       "flags": [
+        "--ignoreexternal"
+       ],
+       "negation": "",
+       "help": "Ignore external imports for --verifytypes",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "level": {
+       "flags": [
+        "--level"
+       ],
+       "negation": "",
+       "help": "Minimum diagnostic level (error or warning)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "outputjson": {
+       "flags": [
+        "--outputjson"
+       ],
+       "negation": "",
+       "help": "Output results in JSON format",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "project": {
+       "flags": [
+        "--project",
+        "-p"
+       ],
+       "negation": "",
+       "help": "Use the configuration file at this location",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "pythonpath": {
+       "flags": [
+        "--pythonpath"
+       ],
+       "negation": "",
+       "help": "Path to the Python interpreter",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "pythonplatform": {
+       "flags": [
+        "--pythonplatform"
+       ],
+       "negation": "",
+       "help": "Analyze for a specific platform (Darwin, Linux, Windows, iOS, Android)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "pythonversion": {
+       "flags": [
+        "--pythonversion"
+       ],
+       "negation": "",
+       "help": "Analyze for a specific version (3.3, 3.4, etc.)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "skipunannotated": {
+       "flags": [
+        "--skipunannotated"
+       ],
+       "negation": "",
+       "help": "Skip analysis of functions with no type annotations",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "stats": {
+       "flags": [
+        "--stats"
+       ],
+       "negation": "",
+       "help": "Print detailed performance stats",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "threads": {
+       "flags": [
+        "--threads"
+       ],
+       "negation": "",
+       "help": "Use separate threads to parallelize type checking",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "typeshedpath": {
+       "flags": [
+        "--typeshedpath",
+        "-t"
+       ],
+       "negation": "",
+       "help": "Use typeshed type stubs at this location",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "venvpath": {
+       "flags": [
+        "--venvpath",
+        "-v"
+       ],
+       "negation": "",
+       "help": "Directory that contains virtual environments",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "verbose": {
+       "flags": [
+        "--verbose"
+       ],
+       "negation": "",
+       "help": "Emit verbose diagnostics",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "verifytypes": {
+       "flags": [
+        "--verifytypes"
+       ],
+       "negation": "",
+       "help": "Verify type completeness of a py.typed package",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "warnings": {
+       "flags": [
+        "--warnings"
+       ],
+       "negation": "",
+       "help": "Use exit code of 1 if warnings are reported",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "watch": {
+       "flags": [
+        "--watch",
+        "-w"
+       ],
+       "negation": "",
+       "help": "Continue to run and watch for changes",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "writebaseline": {
+       "flags": [
+        "--writebaseline"
+       ],
+       "negation": "",
+       "help": "Write new errors to the baseline file",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    }
+   }
+  }
+ },
+ "deltas": {
+  "1.39.9": {
+   "date": "2026-07-29",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "1.39.8": {
+   "date": "2026-06-14",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "1.39.7": {
+   "date": "2026-06-07",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "1.39.6": {
+   "date": "2026-05-24",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "1.39.5": {
+   "date": "2026-05-17",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "1.39.4": {
+   "date": "2026-05-11",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "1.39.3": {
+   "date": "2026-04-20",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "1.39.2": {
+   "date": "2026-04-17",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "1.39.1": {
+   "date": "2026-04-16",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "1.39.0": {
+   "date": "2026-04-01",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3,
+   "revert": {
+    "\tpythonplatform": {
+     "flags": [
+      "--pythonplatform"
+     ],
+     "negation": "",
+     "help": "Analyze for a specific platform (Darwin, Linux, Windows)",
+     "type": "str",
+     "default": null,
+     "choices": []
+    }
+   }
+  }
+ }
+}

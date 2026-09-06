@@ -1,0 +1,176 @@
+/* The footman playground, styled with Material's own variables so both
+ * palettes just work. Two panes side by side, stacked on narrow screens. */
+
+#fm-playground {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.8rem;
+  margin: 1.6rem 0;
+}
+
+@media screen and (max-width: 59.9844em) {
+  #fm-playground {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+#fm-playground .fmp-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 24rem;
+  border: 0.05rem solid var(--md-default-fg-color--lightest);
+  border-radius: 0.2rem;
+  background: var(--md-code-bg-color);
+  overflow: hidden;
+}
+
+#fm-playground .fmp-label {
+  display: flex;
+  gap: 0.2rem;
+  padding: 0.25rem 0.5rem 0;
+  border-bottom: 0.05rem solid var(--md-default-fg-color--lightest);
+}
+
+#fm-playground .fmp-tab {
+  padding: 0.25rem 0.6rem;
+  border: 0;
+  border-radius: 0.2rem 0.2rem 0 0;
+  background: transparent;
+  color: var(--md-default-fg-color--light);
+  font-family: var(--md-code-font-family);
+  font-size: 0.64rem;
+  cursor: pointer;
+}
+
+#fm-playground .fmp-tab-active {
+  background: var(--md-default-fg-color--lightest);
+  color: var(--md-code-fg-color);
+}
+
+#fm-playground textarea {
+  flex: 1;
+  padding: 0.8rem;
+  border: 0;
+  resize: vertical;
+  background: transparent;
+  color: var(--md-code-fg-color);
+  font-family: var(--md-code-font-family);
+  font-size: 0.7rem;
+  line-height: 1.5;
+  white-space: pre;
+  tab-size: 4;
+}
+
+#fm-playground textarea:focus {
+  outline: none;
+}
+
+#fm-playground .fmp-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.6rem;
+  border-bottom: 0.05rem solid var(--md-default-fg-color--lightest);
+}
+
+#fm-playground .fmp-prompt {
+  font-family: var(--md-code-font-family);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--md-accent-fg-color);
+}
+
+#fm-playground input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.2rem 0.4rem;
+  border: 0;
+  background: transparent;
+  color: var(--md-code-fg-color);
+  font-family: var(--md-code-font-family);
+  font-size: 0.7rem;
+}
+
+#fm-playground input:focus {
+  outline: none;
+}
+
+#fm-playground button {
+  padding: 0.2rem 0.8rem;
+  border: 0;
+  border-radius: 0.2rem;
+  background: var(--md-accent-fg-color);
+  color: var(--md-accent-bg-color);
+  font-size: 0.64rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#fm-playground button[disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+#fm-playground #fmp-complete {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  padding: 0.3rem 0.6rem;
+  border-bottom: 0.05rem solid var(--md-default-fg-color--lightest);
+}
+
+#fm-playground #fmp-complete button {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.15rem 0.5rem;
+  background: var(--md-default-fg-color--lightest);
+  color: var(--md-code-fg-color);
+  font-family: var(--md-code-font-family);
+  font-size: 0.64rem;
+  font-weight: 400;
+}
+
+#fm-playground #fmp-complete button span {
+  color: var(--md-default-fg-color--light);
+  font-family: var(--md-text-font-family, inherit);
+}
+
+#fm-playground pre {
+  flex: 1;
+  margin: 0;
+  padding: 0.8rem;
+  overflow: auto;
+  background: transparent;
+  color: var(--md-code-fg-color);
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+#fm-playground .fmp-status {
+  padding: 0.3rem 0.8rem;
+  font-size: 0.6rem;
+  color: var(--md-default-fg-color--light);
+  border-top: 0.05rem solid var(--md-default-fg-color--lightest);
+}
+
+#fm-playground .fmp-status-failed {
+  color: #e5484d;
+  font-weight: 700;
+}
+
+/* The "run it there" link under every runnable example. */
+
+.fmp-runlink {
+  margin: -0.8rem 0 1.2rem;
+  text-align: right;
+}
+
+.fmp-runlink a {
+  font-size: 0.64rem;
+  color: var(--md-default-fg-color--light);
+}
+
+.fmp-runlink a:hover {
+  color: var(--md-accent-fg-color);
+}

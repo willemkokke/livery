@@ -16,3 +16,9 @@ packages:
 - dir: workshop
   name: livery-workshop
   dev: livery-workshop
+- dir: toolroom
+  name: livery-toolroom
+  dev: livery-toolroom
+- dir: toolroom-compat
+  name: toolroom
+  dev: toolroom

@@ -247,8 +247,7 @@ def _venv_site(root: Path, *dists: str) -> Path:
 
 
 def test_cold_states_are_inert(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import toolroom
-
+    from livery import toolroom
     from livery.workshop._reconcile import reconcile
 
     def _explode(*args: object, **kwargs: object) -> object:
@@ -265,8 +264,7 @@ def test_cold_states_are_inert(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
 def test_a_failed_sync_reports_and_never_breaks_the_command(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import toolroom
-
+    from livery import toolroom
     from livery.workshop import _reconcile
 
     (tmp_path / "uv.lock").write_text(LOCK)
@@ -292,8 +290,7 @@ def test_a_failed_sync_reports_and_never_breaks_the_command(
 def test_a_current_receipt_is_a_no_op(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import toolroom
-
+    from livery import toolroom
     from livery.workshop._reconcile import receipt_path, reconcile
 
     (tmp_path / "uv.lock").write_text(LOCK)
@@ -311,8 +308,7 @@ def test_a_current_receipt_is_a_no_op(
 def test_drift_syncs_records_and_names_the_changed_code(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import toolroom
-
+    from livery import toolroom
     from livery.workshop import _reconcile
 
     (tmp_path / "uv.lock").write_text(LOCK)

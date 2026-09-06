@@ -10,6 +10,11 @@ test = "fm test"
 build = "uv build --package livery-workshop"
 
 [[depends]]
+path = "packages/toolroom"
+kind = "runtime"
+floor = "0.6.1"
+
+[[depends]]
 path = "packages/forge"
 kind = "build"
 floor = "0.2.0"

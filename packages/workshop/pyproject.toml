@@ -26,7 +26,7 @@ dependencies = [
     # silent un-starving). footman 0.50 is a real requirement
     # besides: the expose axis and the runtime brand paths are its.
     "footman>=0.50",
-    "toolroom>=0.6.1",
+    "livery-toolroom>=0.6.1",
     # The template engine behind `fm template.check` and `fm
     # new.package`; pyyaml reads the adopted answers files. The
     # pyyaml floor is the oldest release whose wheels cover every

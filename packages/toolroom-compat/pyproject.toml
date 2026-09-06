@@ -1,0 +1,35 @@
+# Seeded from the template channel (package-python kind) at
+# birth; this file is the workspace's own. Edit it directly:
+# the template never rewrites it.
+[build-system]
+requires = ["uv_build>=0.11,<0.13"]
+build-backend = "uv_build"
+
+[project]
+name = "toolroom"
+version = "0.6.1"
+description = "The toolroom distribution, now a thin shim over livery-toolroom."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Willem Kokke", email = "mail@willem.net" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Typing :: Typed",
+]
+
+# Exactly the real distribution and nothing else: the shim is the
+# old index name continuing its line, so an upgrade of `toolroom`
+# resolves onto it and every import keeps working.
+dependencies = ["livery-toolroom>=0.6.1"]
+
+[project.urls]
+Repository = "https://github.com/willemkokke/livery"
+
+[tool.uv.build-backend]
+# The shim keeps the old import name alive: `import toolroom`
+# resolves here and re-exports livery.toolroom whole.
+module-name = "toolroom"

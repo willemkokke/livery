@@ -27,7 +27,7 @@ def _slug(heading: str) -> str:
     """The anchor python-markdown derives from a heading."""
     text = re.sub(r"`([^`]*)`", r"\1", heading).strip().lower()
     text = re.sub(r"[^\w\- ]", "", text)
-    return re.sub(r"[ ]", "-", text)
+    return re.sub(r"[ ]", "-", text).strip("-")
 
 
 def _docs_trees(root: Path) -> list[Path]:
@@ -66,6 +66,11 @@ def _link_problems(root: Path) -> list[str]:
                 resolved = page
             else:
                 resolved = (page.parent / path_part).resolve()
+                if path_part == "changelog.md" and "packages" in page.parts:
+                    # The changelog page is machine-written into the
+                    # mount beside the authored pages; the strict
+                    # build owns it.
+                    continue
                 mounted = re.fullmatch(r"_generated/packages/([^/]+)/(.+)", path_part)
                 if mounted:
                     resolved = (

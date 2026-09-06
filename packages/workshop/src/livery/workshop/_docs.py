@@ -25,9 +25,9 @@ import tomllib
 from pathlib import Path
 from typing import Annotated
 
-import toolroom
 from footman import doc, fail, group
 
+from livery import toolroom
 from livery.workshop._packages import Package, discover_packages
 
 #: The nav block the emitter owns; an edit between these is drift.
@@ -1133,8 +1133,16 @@ def api_modules(package: Package) -> list[tuple[str, str]]:
     Every module gets a page, underscore-private included: the
     standards fragment publishes a docstring the moment it is
     written. Public sorts before private at every level of the
-    tree, and a package's ``__init__`` is its index page.
+    tree, and a package's ``__init__`` is its index page. A package
+    may decline the whole reference with ``[docs] api = false``,
+    the shape a forwarding shim takes: its surface is another
+    package's, and documenting the forwarders would document the
+    real thing twice.
     """
+    contract = tomllib.loads((package.directory / "workshop.toml").read_text("utf-8"))
+    table = contract.get("docs") or {}
+    if isinstance(table, dict) and table.get("api") is False:
+        return []
     module_root = _module_root(package)
     if module_root is None:
         return []

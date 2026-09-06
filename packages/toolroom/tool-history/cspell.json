@@ -1,0 +1,877 @@
+{
+ "schema": 1,
+ "tool": "cspell",
+ "observed_from": "9.4.0",
+ "base": {
+  "version": "10.0.1",
+  "date": "2026-07-29",
+  "platforms": [
+   "Linux",
+   "Windows",
+   "macOS"
+  ],
+  "extractor": 3,
+  "surface": {
+   "help": "Spelling Checker for Code",
+   "verbs": {
+    "": {
+     "help": "Spelling Checker for Code",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {}
+    },
+    "lint": {
+     "help": "",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "cache": {
+       "flags": [
+        "--cache"
+       ],
+       "negation": "--no-cache",
+       "help": "Use cache to only check changed files",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "cache_location": {
+       "flags": [
+        "--cache-location"
+       ],
+       "negation": "",
+       "help": "Path to the cache file or directory",
+       "type": "str",
+       "default": ".cspellcache",
+       "choices": []
+      },
+      "cache_reset": {
+       "flags": [
+        "--cache-reset"
+       ],
+       "negation": "",
+       "help": "Reset the cache file",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "cache_strategy": {
+       "flags": [
+        "--cache-strategy"
+       ],
+       "negation": "",
+       "help": "Strategy to use for detecting changed files",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "color": {
+       "flags": [
+        "--color"
+       ],
+       "negation": "--no-color",
+       "help": "Force color",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "config": {
+       "flags": [
+        "--config",
+        "-c"
+       ],
+       "negation": "",
+       "help": "Configuration file to use",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "continue_on_error": {
+       "flags": [
+        "--continue-on-error"
+       ],
+       "negation": "",
+       "help": "Continue processing files even if there is a configuration error",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "dictionary": {
+       "flags": [
+        "--dictionary"
+       ],
+       "negation": "",
+       "help": "Enable a dictionary by name",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "disable_dictionary": {
+       "flags": [
+        "--disable-dictionary"
+       ],
+       "negation": "",
+       "help": "Disable a dictionary by name",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "dot": {
+       "flags": [
+        "--dot"
+       ],
+       "negation": "",
+       "help": "Include files and directories starting with `.` (period) when matching globs",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "exclude": {
+       "flags": [
+        "--exclude",
+        "-e"
+       ],
+       "negation": "",
+       "help": "Exclude files matching the glob pattern",
+       "type": "list[str]",
+       "default": null,
+       "choices": []
+      },
+      "fail_fast": {
+       "flags": [
+        "--fail-fast"
+       ],
+       "negation": "",
+       "help": "Exit after first file with an issue or error",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "file": {
+       "flags": [
+        "--file"
+       ],
+       "negation": "",
+       "help": "Specify files to spell check",
+       "type": "list[str]",
+       "default": null,
+       "choices": []
+      },
+      "file_list": {
+       "flags": [
+        "--file-list"
+       ],
+       "negation": "",
+       "help": "Specify a list of files to be spell checked",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "gitignore": {
+       "flags": [
+        "--gitignore"
+       ],
+       "negation": "--no-gitignore",
+       "help": "Ignore files matching glob patterns found in .gitignore files",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "gitignore_root": {
+       "flags": [
+        "--gitignore-root"
+       ],
+       "negation": "",
+       "help": "Prevent searching for .gitignore files past root",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "issue_template": {
+       "flags": [
+        "--issue-template"
+       ],
+       "negation": "",
+       "help": "Use a custom issue template",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "language_id": {
+       "flags": [
+        "--language-id"
+       ],
+       "negation": "",
+       "help": "Force programming language for unknown extensions",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "locale": {
+       "flags": [
+        "--locale"
+       ],
+       "negation": "",
+       "help": "Set language locales",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "max_file_size": {
+       "flags": [
+        "--max-file-size"
+       ],
+       "negation": "",
+       "help": "Prevent checking large files",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "no_config_search": {
+       "flags": [
+        "--no-config-search"
+       ],
+       "negation": "",
+       "help": "Disable automatic searching for additional configuration files in parent directories",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_default_configuration": {
+       "flags": [
+        "--no-default-configuration"
+       ],
+       "negation": "",
+       "help": "Do not load the default configuration and dictionaries",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_exit_code": {
+       "flags": [
+        "--no-exit-code"
+       ],
+       "negation": "",
+       "help": "Do not return an exit code if issues are found",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_issues": {
+       "flags": [
+        "--no-issues"
+       ],
+       "negation": "",
+       "help": "Do not show the spelling errors",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_must_find_files": {
+       "flags": [
+        "--no-must-find-files"
+       ],
+       "negation": "",
+       "help": "Do not error if no files are found",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_progress": {
+       "flags": [
+        "--no-progress"
+       ],
+       "negation": "",
+       "help": "Turn off progress messages",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_relative": {
+       "flags": [
+        "--no-relative"
+       ],
+       "negation": "",
+       "help": "Issues are displayed with absolute path instead of relative to the root",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_summary": {
+       "flags": [
+        "--no-summary"
+       ],
+       "negation": "",
+       "help": "Turn off summary message in console",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "quiet": {
+       "flags": [
+        "--quiet"
+       ],
+       "negation": "",
+       "help": "Only show spelling issues or errors",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "report": {
+       "flags": [
+        "--report"
+       ],
+       "negation": "",
+       "help": "Set how unknown words are reported (choices: \"all\", \"simple\", \"typos\", \"flagged\")",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "reporter": {
+       "flags": [
+        "--reporter"
+       ],
+       "negation": "",
+       "help": "Specify one or more reporters to use",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "root": {
+       "flags": [
+        "--root",
+        "-r"
+       ],
+       "negation": "",
+       "help": "Root directory, defaults to current directory",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "show_context": {
+       "flags": [
+        "--show-context"
+       ],
+       "negation": "",
+       "help": "Show the surrounding text around an issue",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "show_suggestions": {
+       "flags": [
+        "--show-suggestions"
+       ],
+       "negation": "--no-show-suggestions",
+       "help": "Show spelling suggestions",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "silent": {
+       "flags": [
+        "--silent",
+        "-s"
+       ],
+       "negation": "",
+       "help": "Silent mode, suppress error messages",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "stop_config_search_at": {
+       "flags": [
+        "--stop-config-search-at"
+       ],
+       "negation": "",
+       "help": "Specify a directory at which to stop searching for configuration files when walking up from the files being checked",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "unique": {
+       "flags": [
+        "--unique",
+        "-u"
+       ],
+       "negation": "",
+       "help": "Only output the first instance of a word not found in the dictionaries",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "validate_directives": {
+       "flags": [
+        "--validate-directives"
+       ],
+       "negation": "",
+       "help": "Validate in-document CSpell directives",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "verbose": {
+       "flags": [
+        "--verbose",
+        "-v"
+       ],
+       "negation": "",
+       "help": "Display more information about the files being checked",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "words_only": {
+       "flags": [
+        "--words-only"
+       ],
+       "negation": "",
+       "help": "Only output the words not found in the dictionaries",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "trace": {
+     "help": "Trace words -- Search for words in the configuration and dictionaries.",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "all": {
+       "flags": [
+        "--all"
+       ],
+       "negation": "",
+       "help": "Show all dictionaries",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "allow_compound_words": {
+       "flags": [
+        "--allow-compound-words"
+       ],
+       "negation": "--no-allow-compound-words",
+       "help": "Turn on allowCompoundWords",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "color": {
+       "flags": [
+        "--color"
+       ],
+       "negation": "--no-color",
+       "help": "Force color",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "config": {
+       "flags": [
+        "--config",
+        "-c"
+       ],
+       "negation": "",
+       "help": "Configuration file to use",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "dictionary": {
+       "flags": [
+        "--dictionary"
+       ],
+       "negation": "",
+       "help": "Enable a dictionary by name",
+       "type": "list[str]",
+       "default": null,
+       "choices": []
+      },
+      "dictionary_path": {
+       "flags": [
+        "--dictionary-path"
+       ],
+       "negation": "",
+       "help": "Configure how to display the dictionary path",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "ignore_case": {
+       "flags": [
+        "--ignore-case"
+       ],
+       "negation": "--no-ignore-case",
+       "help": "Ignore case and accents when searching for words",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "language_id": {
+       "flags": [
+        "--language-id"
+       ],
+       "negation": "",
+       "help": "Use programming language",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "locale": {
+       "flags": [
+        "--locale"
+       ],
+       "negation": "",
+       "help": "Set language locales",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "no_default_configuration": {
+       "flags": [
+        "--no-default-configuration"
+       ],
+       "negation": "",
+       "help": "Do not load the default configuration and dictionaries",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_dictionary": {
+       "flags": [
+        "--no-dictionary"
+       ],
+       "negation": "",
+       "help": "Disable a dictionary by name",
+       "type": "list[str]",
+       "default": null,
+       "choices": []
+      },
+      "only_found": {
+       "flags": [
+        "--only-found"
+       ],
+       "negation": "",
+       "help": "Show only dictionaries that have the words",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "stdin": {
+       "flags": [
+        "--stdin"
+       ],
+       "negation": "",
+       "help": "Read words from stdin",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "check": {
+     "help": "Spell check file(s) and display the result. The full file is displayed in color.",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "color": {
+       "flags": [
+        "--color"
+       ],
+       "negation": "--no-color",
+       "help": "Force color",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "config": {
+       "flags": [
+        "--config",
+        "-c"
+       ],
+       "negation": "",
+       "help": "Configuration file to use",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "no_default_configuration": {
+       "flags": [
+        "--no-default-configuration"
+       ],
+       "negation": "",
+       "help": "Do not load the default configuration and dictionaries",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_exit_code": {
+       "flags": [
+        "--no-exit-code"
+       ],
+       "negation": "",
+       "help": "Do not return an exit code if issues are found",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "validate_directives": {
+       "flags": [
+        "--validate-directives"
+       ],
+       "negation": "--no-validate-directives",
+       "help": "Validate in-document CSpell directives",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "suggest": {
+     "help": "Spelling Suggestions for words.",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "color": {
+       "flags": [
+        "--color"
+       ],
+       "negation": "--no-color",
+       "help": "Force color",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "config": {
+       "flags": [
+        "--config",
+        "-c"
+       ],
+       "negation": "",
+       "help": "Configuration file to use",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "dictionaries": {
+       "flags": [
+        "--dictionaries"
+       ],
+       "negation": "",
+       "help": "Use the dictionaries specified",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "dictionary": {
+       "flags": [
+        "--dictionary",
+        "-d"
+       ],
+       "negation": "",
+       "help": "Use the dictionary specified",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "ignore_case": {
+       "flags": [
+        "--ignore-case"
+       ],
+       "negation": "",
+       "help": "Alias of --no-strict",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "language_id": {
+       "flags": [
+        "--language-id"
+       ],
+       "negation": "",
+       "help": "Use programming language",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "locale": {
+       "flags": [
+        "--locale"
+       ],
+       "negation": "",
+       "help": "Set language locales",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "no_include_ties": {
+       "flags": [
+        "--no-include-ties"
+       ],
+       "negation": "",
+       "help": "Force the number of suggested to be limited, by not including suggestions that have the same edit cost",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_strict": {
+       "flags": [
+        "--no-strict",
+        "-s"
+       ],
+       "negation": "",
+       "help": "Ignore case and accents when searching for words",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "num_changes": {
+       "flags": [
+        "--num-changes"
+       ],
+       "negation": "",
+       "help": "Number of changes allowed to a word",
+       "type": "str",
+       "default": "4",
+       "choices": []
+      },
+      "num_suggestions": {
+       "flags": [
+        "--num-suggestions"
+       ],
+       "negation": "",
+       "help": "Number of suggestions",
+       "type": "str",
+       "default": "8",
+       "choices": []
+      },
+      "repl": {
+       "flags": [
+        "--repl"
+       ],
+       "negation": "",
+       "help": "REPL interface for looking up suggestions",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "stdin": {
+       "flags": [
+        "--stdin"
+       ],
+       "negation": "",
+       "help": "Use stdin for input",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "verbose": {
+       "flags": [
+        "--verbose",
+        "-v"
+       ],
+       "negation": "",
+       "help": "Show detailed output",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    }
+   }
+  }
+ },
+ "deltas": {
+  "10.0.0": {
+   "date": "2026-04-06",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "9.8.0": {
+   "date": "2026-04-05",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "9.7.0": {
+   "date": "2026-02-23",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "9.6.4": {
+   "date": "2026-02-04",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "9.6.3": {
+   "date": "2026-02-02",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3,
+   "drop": [
+    "trace\tno_dictionary"
+   ]
+  },
+  "9.6.2": {
+   "date": "2026-01-26",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "9.6.1": {
+   "date": "2026-01-26",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "9.6.0": {
+   "date": "2026-01-12",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "9.4.0": {
+   "date": "2025-12-01",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  }
+ }
+}

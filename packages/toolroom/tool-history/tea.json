@@ -1,0 +1,2682 @@
+{
+ "schema": 1,
+ "tool": "tea",
+ "observed_from": "0.15.0",
+ "base": {
+  "version": "0.15.1",
+  "date": "2026-08-02",
+  "platforms": [
+   "Linux",
+   "Windows",
+   "macOS"
+  ],
+  "extractor": 3,
+  "surface": {
+   "help": "",
+   "verbs": {
+    "": {
+     "help": "",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "api": {
+     "help": "",
+     "wraps": false,
+     "positional": "required",
+     "lead": "endpoint",
+     "options": {
+      "Field": {
+       "flags": [
+        "--Field",
+        "--Field",
+        "-F",
+        "-F"
+       ],
+       "negation": "",
+       "help": "Add a typed field to the request body (key=value, @file, or @- for stdin)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "data": {
+       "flags": [
+        "--data",
+        "-d"
+       ],
+       "negation": "",
+       "help": "Raw JSON request body (use @file to read from file, @- for stdin)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "field": {
+       "flags": [
+        "--field",
+        "--field",
+        "-f",
+        "-f"
+       ],
+       "negation": "",
+       "help": "Add a string field to the request body (key=value)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "header": {
+       "flags": [
+        "--header",
+        "--header",
+        "-H",
+        "-H"
+       ],
+       "negation": "",
+       "help": "Add a custom header (key:value)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "include": {
+       "flags": [
+        "--include",
+        "-i"
+       ],
+       "negation": "",
+       "help": "Include HTTP status and response headers in output (written to stderr)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "login": {
+       "flags": [
+        "--login",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Use a different Gitea Login",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "method": {
+       "flags": [
+        "--method",
+        "-X"
+       ],
+       "negation": "",
+       "help": "HTTP method (GET, POST, PUT, PATCH, DELETE)",
+       "type": "str",
+       "default": "GET",
+       "choices": []
+      },
+      "output": {
+       "flags": [
+        "--output",
+        "-o"
+       ],
+       "negation": "",
+       "help": "Write response body to file instead of stdout (use '-' for stdout)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "remote": {
+       "flags": [
+        "--remote",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Discover Gitea login from remote",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-r"
+       ],
+       "negation": "",
+       "help": "Override local repository path or gitea repository slug to interact with",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "branches.list": {
+     "help": "",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "fields": {
+       "flags": [
+        "--fields",
+        "-f"
+       ],
+       "negation": "",
+       "help": "Comma-separated list of fields to print",
+       "type": "str",
+       "default": "name,protected,user-can-merge,user-can-push",
+       "choices": []
+      },
+      "limit": {
+       "flags": [
+        "--limit",
+        "--lm"
+       ],
+       "negation": "",
+       "help": "specify limit of items per page",
+       "type": "str",
+       "default": "30",
+       "choices": []
+      },
+      "login": {
+       "flags": [
+        "--login",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Use a different Gitea Login",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "output": {
+       "flags": [
+        "--output",
+        "-o"
+       ],
+       "negation": "",
+       "help": "Output format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "page": {
+       "flags": [
+        "--page",
+        "-p"
+       ],
+       "negation": "",
+       "help": "specify page",
+       "type": "str",
+       "default": "1",
+       "choices": []
+      },
+      "remote": {
+       "flags": [
+        "--remote",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Discover Gitea login from remote",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-r"
+       ],
+       "negation": "",
+       "help": "Override local repository path or gitea repository slug to interact with",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "clone": {
+     "help": "",
+     "wraps": false,
+     "positional": "required",
+     "lead": "repo_slug",
+     "options": {
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "depth": {
+       "flags": [
+        "--depth",
+        "-d"
+       ],
+       "negation": "",
+       "help": "num commits to fetch, defaults to all",
+       "type": "str",
+       "default": "0",
+       "choices": []
+      },
+      "login": {
+       "flags": [
+        "--login",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Use a different Gitea Login",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "comments.add": {
+     "help": "",
+     "wraps": false,
+     "positional": "required",
+     "lead": "issue",
+     "options": {
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "description": {
+       "flags": [
+        "--description",
+        "-d"
+       ],
+       "negation": "",
+       "help": "comment body (alternative to the positional argument)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "login": {
+       "flags": [
+        "--login",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Use a different Gitea Login",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "output": {
+       "flags": [
+        "--output",
+        "-o"
+       ],
+       "negation": "",
+       "help": "Output format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "remote": {
+       "flags": [
+        "--remote",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Discover Gitea login from remote",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-r"
+       ],
+       "negation": "",
+       "help": "Override local repository path or gitea repository slug to interact with",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "comments.list": {
+     "help": "",
+     "wraps": false,
+     "positional": "required",
+     "lead": "issue",
+     "options": {
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "limit": {
+       "flags": [
+        "--limit",
+        "--lm"
+       ],
+       "negation": "",
+       "help": "specify limit of items per page",
+       "type": "str",
+       "default": "30",
+       "choices": []
+      },
+      "login": {
+       "flags": [
+        "--login",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Use a different Gitea Login",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "output": {
+       "flags": [
+        "--output",
+        "-o"
+       ],
+       "negation": "",
+       "help": "Output format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "page": {
+       "flags": [
+        "--page",
+        "-p"
+       ],
+       "negation": "",
+       "help": "specify page",
+       "type": "str",
+       "default": "1",
+       "choices": []
+      },
+      "remote": {
+       "flags": [
+        "--remote",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Discover Gitea login from remote",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-r"
+       ],
+       "negation": "",
+       "help": "Override local repository path or gitea repository slug to interact with",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "issues.close": {
+     "help": "",
+     "wraps": false,
+     "positional": "required",
+     "lead": "issue",
+     "options": {
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "login": {
+       "flags": [
+        "--login",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Use a different Gitea Login",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "output": {
+       "flags": [
+        "--output",
+        "-o"
+       ],
+       "negation": "",
+       "help": "Output format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "remote": {
+       "flags": [
+        "--remote",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Discover Gitea login from remote",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-r"
+       ],
+       "negation": "",
+       "help": "Override local repository path or gitea repository slug to interact with",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "issues.create": {
+     "help": "",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "assignees": {
+       "flags": [
+        "--assignees",
+        "-a"
+       ],
+       "negation": "",
+       "help": "Comma-separated list of usernames to assign",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "deadline": {
+       "flags": [
+        "--deadline",
+        "-D"
+       ],
+       "negation": "",
+       "help": "Deadline timestamp to assign",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "description": {
+       "flags": [
+        "--description",
+        "-d"
+       ],
+       "negation": "",
+       "help": "",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "labels": {
+       "flags": [
+        "--labels",
+        "-L"
+       ],
+       "negation": "",
+       "help": "Comma-separated list of labels to assign",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "login": {
+       "flags": [
+        "--login",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Use a different Gitea Login",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "milestone": {
+       "flags": [
+        "--milestone",
+        "-m"
+       ],
+       "negation": "",
+       "help": "Milestone to assign",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "referenced_version": {
+       "flags": [
+        "--referenced-version",
+        "-v"
+       ],
+       "negation": "",
+       "help": "commit-hash or tag name to assign",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "remote": {
+       "flags": [
+        "--remote",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Discover Gitea login from remote",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-r"
+       ],
+       "negation": "",
+       "help": "Override local repository path or gitea repository slug to interact with",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "title": {
+       "flags": [
+        "--title",
+        "-t"
+       ],
+       "negation": "",
+       "help": "",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "issues.list": {
+     "help": "",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "assignee": {
+       "flags": [
+        "--assignee",
+        "-a"
+       ],
+       "negation": "",
+       "help": "",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "author": {
+       "flags": [
+        "--author",
+        "-A"
+       ],
+       "negation": "",
+       "help": "",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "fields": {
+       "flags": [
+        "--fields",
+        "-f"
+       ],
+       "negation": "",
+       "help": "Comma-separated list of fields to print",
+       "type": "str",
+       "default": "index,title,state,author,milestone,labels,owner,repo",
+       "choices": []
+      },
+      "from": {
+       "flags": [
+        "--from",
+        "-F"
+       ],
+       "negation": "",
+       "help": "Filter by activity after this date",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "keyword": {
+       "flags": [
+        "--keyword",
+        "-k"
+       ],
+       "negation": "",
+       "help": "Filter by search string",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "kind": {
+       "flags": [
+        "--kind",
+        "-K"
+       ],
+       "negation": "",
+       "help": "Whether to return issues, `pulls`, or `all` (you can use this to apply advanced search filters to PRs)",
+       "type": "str",
+       "default": "issues",
+       "choices": []
+      },
+      "labels": {
+       "flags": [
+        "--labels",
+        "-L"
+       ],
+       "negation": "",
+       "help": "Comma-separated list of labels to match issues against",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "limit": {
+       "flags": [
+        "--limit",
+        "--lm"
+       ],
+       "negation": "",
+       "help": "specify limit of items per page",
+       "type": "str",
+       "default": "30",
+       "choices": []
+      },
+      "login": {
+       "flags": [
+        "--login",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Use a different Gitea Login",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "mentions": {
+       "flags": [
+        "--mentions",
+        "-M"
+       ],
+       "negation": "",
+       "help": "",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "milestones": {
+       "flags": [
+        "--milestones",
+        "-m"
+       ],
+       "negation": "",
+       "help": "Comma-separated list of milestones to match issues against",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "output": {
+       "flags": [
+        "--output",
+        "-o"
+       ],
+       "negation": "",
+       "help": "Output format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "owner": {
+       "flags": [
+        "--owner",
+        "--org"
+       ],
+       "negation": "",
+       "help": "",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "page": {
+       "flags": [
+        "--page",
+        "-p"
+       ],
+       "negation": "",
+       "help": "specify page",
+       "type": "str",
+       "default": "1",
+       "choices": []
+      },
+      "remote": {
+       "flags": [
+        "--remote",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Discover Gitea login from remote",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-r"
+       ],
+       "negation": "",
+       "help": "Override local repository path or gitea repository slug to interact with",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "state": {
+       "flags": [
+        "--state"
+       ],
+       "negation": "",
+       "help": "Filter by state (all|open|closed)",
+       "type": "str",
+       "default": "open",
+       "choices": []
+      },
+      "until": {
+       "flags": [
+        "--until",
+        "-u"
+       ],
+       "negation": "",
+       "help": "Filter by activity before this date",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "labels.create": {
+     "help": "",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "color": {
+       "flags": [
+        "--color"
+       ],
+       "negation": "",
+       "help": "label color value",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "description": {
+       "flags": [
+        "--description"
+       ],
+       "negation": "",
+       "help": "label description",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "file": {
+       "flags": [
+        "--file"
+       ],
+       "negation": "",
+       "help": "indicate a label file",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "login": {
+       "flags": [
+        "--login",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Use a different Gitea Login",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "name": {
+       "flags": [
+        "--name"
+       ],
+       "negation": "",
+       "help": "label name",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "output": {
+       "flags": [
+        "--output",
+        "-o"
+       ],
+       "negation": "",
+       "help": "Output format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "remote": {
+       "flags": [
+        "--remote",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Discover Gitea login from remote",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-r"
+       ],
+       "negation": "",
+       "help": "Override local repository path or gitea repository slug to interact with",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "labels.list": {
+     "help": "",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "exclude_org": {
+       "flags": [
+        "--exclude-org"
+       ],
+       "negation": "",
+       "help": "Exclude organization labels from the list",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "limit": {
+       "flags": [
+        "--limit",
+        "--lm"
+       ],
+       "negation": "",
+       "help": "specify limit of items per page",
+       "type": "str",
+       "default": "30",
+       "choices": []
+      },
+      "login": {
+       "flags": [
+        "--login",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Use a different Gitea Login",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "org": {
+       "flags": [
+        "--org"
+       ],
+       "negation": "",
+       "help": "List organization labels",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "output": {
+       "flags": [
+        "--output",
+        "-o"
+       ],
+       "negation": "",
+       "help": "Output format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "page": {
+       "flags": [
+        "--page",
+        "-p"
+       ],
+       "negation": "",
+       "help": "specify page",
+       "type": "str",
+       "default": "1",
+       "choices": []
+      },
+      "remote": {
+       "flags": [
+        "--remote",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Discover Gitea login from remote",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-r"
+       ],
+       "negation": "",
+       "help": "Override local repository path or gitea repository slug to interact with",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "save": {
+       "flags": [
+        "--save",
+        "-s"
+       ],
+       "negation": "",
+       "help": "Save all the labels as a file",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "logins.add": {
+     "help": "",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "client_id": {
+       "flags": [
+        "--client-id"
+       ],
+       "negation": "",
+       "help": "OAuth client ID (for use with --oauth)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "git_credentials": {
+       "flags": [
+        "--git-credentials",
+        "--helper",
+        "-j"
+       ],
+       "negation": "",
+       "help": "Register tea as a git credential helper for this login's URL, so 'git push' and 'git clone' over HTTPS authenticate silently using the stored token",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "insecure": {
+       "flags": [
+        "--insecure",
+        "-i"
+       ],
+       "negation": "",
+       "help": "Disable TLS verification",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "name": {
+       "flags": [
+        "--name",
+        "-n"
+       ],
+       "negation": "",
+       "help": "Login name",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "no_version_check": {
+       "flags": [
+        "--no-version-check",
+        "--nv"
+       ],
+       "negation": "",
+       "help": "Do not check version of Gitea instance",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "oauth": {
+       "flags": [
+        "--oauth",
+        "-o"
+       ],
+       "negation": "",
+       "help": "Use interactive OAuth2 flow for authentication",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "otp": {
+       "flags": [
+        "--otp"
+       ],
+       "negation": "",
+       "help": "OTP token for auth, if necessary [%GITEA_SERVER_OTP%]",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "password": {
+       "flags": [
+        "--password",
+        "--pwd"
+       ],
+       "negation": "",
+       "help": "Password for basic auth (will create token) [%GITEA_SERVER_PASSWORD%]",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "redirect_url": {
+       "flags": [
+        "--redirect-url"
+       ],
+       "negation": "",
+       "help": "OAuth redirect URL (for use with --oauth)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "scopes": {
+       "flags": [
+        "--scopes"
+       ],
+       "negation": "",
+       "help": "Token scopes to add when creating a new token, separated by a comma [%GITEA_SCOPES%]",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "ssh_agent_key": {
+       "flags": [
+        "--ssh-agent-key",
+        "-a"
+       ],
+       "negation": "",
+       "help": "Use SSH public key or SSH fingerprint to login (needs a running ssh-agent with ssh key loaded)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "ssh_agent_principal": {
+       "flags": [
+        "--ssh-agent-principal",
+        "-c"
+       ],
+       "negation": "",
+       "help": "Use SSH certificate with specified principal to login (needs a running ssh-agent with certificate loaded)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "ssh_key": {
+       "flags": [
+        "--ssh-key",
+        "-s"
+       ],
+       "negation": "",
+       "help": "Path to a SSH key/certificate to use, overrides auto-discovery",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "token": {
+       "flags": [
+        "--token",
+        "-t"
+       ],
+       "negation": "",
+       "help": "Access token",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "url": {
+       "flags": [
+        "--url",
+        "-u"
+       ],
+       "negation": "",
+       "help": "Server URL [%GITEA_SERVER_URL%]",
+       "type": "str",
+       "default": "https://gitea.com",
+       "choices": []
+      },
+      "user": {
+       "flags": [
+        "--user"
+       ],
+       "negation": "",
+       "help": "User for basic auth (will create token) [%GITEA_SERVER_USER%]",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "logins.list": {
+     "help": "",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "output": {
+       "flags": [
+        "--output",
+        "-o"
+       ],
+       "negation": "",
+       "help": "Output format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "milestones.create": {
+     "help": "",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "deadline": {
+       "flags": [
+        "--deadline",
+        "--expires",
+        "-x"
+       ],
+       "negation": "",
+       "help": "set milestone deadline",
+       "type": "str",
+       "default": "is no due date",
+       "choices": []
+      },
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "description": {
+       "flags": [
+        "--description",
+        "-d"
+       ],
+       "negation": "",
+       "help": "milestone description to create",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "login": {
+       "flags": [
+        "--login",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Use a different Gitea Login",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "output": {
+       "flags": [
+        "--output",
+        "-o"
+       ],
+       "negation": "",
+       "help": "Output format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "remote": {
+       "flags": [
+        "--remote",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Discover Gitea login from remote",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-r"
+       ],
+       "negation": "",
+       "help": "Override local repository path or gitea repository slug to interact with",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "state": {
+       "flags": [
+        "--state"
+       ],
+       "negation": "",
+       "help": "set milestone state",
+       "type": "str",
+       "default": "is open",
+       "choices": []
+      },
+      "title": {
+       "flags": [
+        "--title",
+        "-t"
+       ],
+       "negation": "",
+       "help": "milestone title to create",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "milestones.list": {
+     "help": "",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "fields": {
+       "flags": [
+        "--fields",
+        "-f"
+       ],
+       "negation": "",
+       "help": "Comma-separated list of fields to print",
+       "type": "str",
+       "default": "title,items,duedate",
+       "choices": []
+      },
+      "limit": {
+       "flags": [
+        "--limit",
+        "--lm"
+       ],
+       "negation": "",
+       "help": "specify limit of items per page",
+       "type": "str",
+       "default": "30",
+       "choices": []
+      },
+      "login": {
+       "flags": [
+        "--login",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Use a different Gitea Login",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "output": {
+       "flags": [
+        "--output",
+        "-o"
+       ],
+       "negation": "",
+       "help": "Output format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "page": {
+       "flags": [
+        "--page",
+        "-p"
+       ],
+       "negation": "",
+       "help": "specify page",
+       "type": "str",
+       "default": "1",
+       "choices": []
+      },
+      "remote": {
+       "flags": [
+        "--remote",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Discover Gitea login from remote",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-r"
+       ],
+       "negation": "",
+       "help": "Override local repository path or gitea repository slug to interact with",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "state": {
+       "flags": [
+        "--state"
+       ],
+       "negation": "",
+       "help": "Filter by milestone state (all|open|closed)",
+       "type": "str",
+       "default": "open",
+       "choices": []
+      }
+     }
+    },
+    "pulls.checkout": {
+     "help": "",
+     "wraps": false,
+     "positional": "required",
+     "lead": "pull",
+     "options": {
+      "branch": {
+       "flags": [
+        "--branch",
+        "-b"
+       ],
+       "negation": "",
+       "help": "Create a local branch if it doesn't exist yet",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "login": {
+       "flags": [
+        "--login",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Use a different Gitea Login",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "output": {
+       "flags": [
+        "--output",
+        "-o"
+       ],
+       "negation": "",
+       "help": "Output format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "remote": {
+       "flags": [
+        "--remote",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Discover Gitea login from remote",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-r"
+       ],
+       "negation": "",
+       "help": "Override local repository path or gitea repository slug to interact with",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "pulls.create": {
+     "help": "",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "agit": {
+       "flags": [
+        "--agit"
+       ],
+       "negation": "",
+       "help": "Create an agit flow pull request",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "allow_maintainer_edits": {
+       "flags": [
+        "--allow-maintainer-edits",
+        "--edits"
+       ],
+       "negation": "",
+       "help": "Enable maintainers to push to the base branch of created pull",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "assignees": {
+       "flags": [
+        "--assignees",
+        "-a"
+       ],
+       "negation": "",
+       "help": "Comma-separated list of usernames to assign",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "base": {
+       "flags": [
+        "--base",
+        "-b"
+       ],
+       "negation": "",
+       "help": "Branch name of the PR target",
+       "type": "str",
+       "default": "is repos default branch",
+       "choices": []
+      },
+      "deadline": {
+       "flags": [
+        "--deadline",
+        "-D"
+       ],
+       "negation": "",
+       "help": "Deadline timestamp to assign",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "description": {
+       "flags": [
+        "--description",
+        "-d"
+       ],
+       "negation": "",
+       "help": "",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "draft": {
+       "flags": [
+        "--draft"
+       ],
+       "negation": "",
+       "help": "Create as a draft (prepends \"WIP: \" to the title; Gitea treats WIP-prefixed PRs as drafts)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "head": {
+       "flags": [
+        "--head"
+       ],
+       "negation": "",
+       "help": "Branch name of the PR source ",
+       "type": "str",
+       "default": "is current one",
+       "choices": []
+      },
+      "labels": {
+       "flags": [
+        "--labels",
+        "-L"
+       ],
+       "negation": "",
+       "help": "Comma-separated list of labels to assign",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "login": {
+       "flags": [
+        "--login",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Use a different Gitea Login",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "milestone": {
+       "flags": [
+        "--milestone",
+        "-m"
+       ],
+       "negation": "",
+       "help": "Milestone to assign",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "referenced_version": {
+       "flags": [
+        "--referenced-version",
+        "-v"
+       ],
+       "negation": "",
+       "help": "commit-hash or tag name to assign",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "remote": {
+       "flags": [
+        "--remote",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Discover Gitea login from remote",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-r"
+       ],
+       "negation": "",
+       "help": "Override local repository path or gitea repository slug to interact with",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "title": {
+       "flags": [
+        "--title",
+        "-t"
+       ],
+       "negation": "",
+       "help": "",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "topic": {
+       "flags": [
+        "--topic"
+       ],
+       "negation": "",
+       "help": "Topic name for agit flow pull request",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "pulls.list": {
+     "help": "",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "fields": {
+       "flags": [
+        "--fields",
+        "-f"
+       ],
+       "negation": "",
+       "help": "Comma-separated list of fields to print",
+       "type": "str",
+       "default": "index,title,state,author,milestone,updated,labels",
+       "choices": []
+      },
+      "limit": {
+       "flags": [
+        "--limit",
+        "--lm"
+       ],
+       "negation": "",
+       "help": "specify limit of items per page",
+       "type": "str",
+       "default": "30",
+       "choices": []
+      },
+      "login": {
+       "flags": [
+        "--login",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Use a different Gitea Login",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "output": {
+       "flags": [
+        "--output",
+        "-o"
+       ],
+       "negation": "",
+       "help": "Output format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "page": {
+       "flags": [
+        "--page",
+        "-p"
+       ],
+       "negation": "",
+       "help": "specify page",
+       "type": "str",
+       "default": "1",
+       "choices": []
+      },
+      "remote": {
+       "flags": [
+        "--remote",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Discover Gitea login from remote",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-r"
+       ],
+       "negation": "",
+       "help": "Override local repository path or gitea repository slug to interact with",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "state": {
+       "flags": [
+        "--state"
+       ],
+       "negation": "",
+       "help": "Filter by state (all|open|closed)",
+       "type": "str",
+       "default": "open",
+       "choices": []
+      }
+     }
+    },
+    "pulls.merge": {
+     "help": "",
+     "wraps": false,
+     "positional": "required",
+     "lead": "pull",
+     "options": {
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "login": {
+       "flags": [
+        "--login",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Use a different Gitea Login",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "message": {
+       "flags": [
+        "--message",
+        "-m"
+       ],
+       "negation": "",
+       "help": "Merge commit message",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "output": {
+       "flags": [
+        "--output",
+        "-o"
+       ],
+       "negation": "",
+       "help": "Output format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "remote": {
+       "flags": [
+        "--remote",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Discover Gitea login from remote",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-r"
+       ],
+       "negation": "",
+       "help": "Override local repository path or gitea repository slug to interact with",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "style": {
+       "flags": [
+        "--style",
+        "-s"
+       ],
+       "negation": "",
+       "help": "Kind of merge to perform: merge, rebase, squash, rebase-merge",
+       "type": "str",
+       "default": "merge",
+       "choices": []
+      },
+      "title": {
+       "flags": [
+        "--title",
+        "-t"
+       ],
+       "negation": "",
+       "help": "Merge commit title",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "releases.assets": {
+     "help": "",
+     "wraps": true,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "login": {
+       "flags": [
+        "--login",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Use a different Gitea Login",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "output": {
+       "flags": [
+        "--output",
+        "-o"
+       ],
+       "negation": "",
+       "help": "Output format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "remote": {
+       "flags": [
+        "--remote",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Discover Gitea login from remote",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-r"
+       ],
+       "negation": "",
+       "help": "Override local repository path or gitea repository slug to interact with",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "releases.create": {
+     "help": "",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "asset": {
+       "flags": [
+        "--asset",
+        "--asset",
+        "-a",
+        "-a"
+       ],
+       "negation": "",
+       "help": "Path to file attachment",
+       "type": "list[str]",
+       "default": null,
+       "choices": []
+      },
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "draft": {
+       "flags": [
+        "--draft",
+        "-d"
+       ],
+       "negation": "",
+       "help": "Is a draft",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "login": {
+       "flags": [
+        "--login",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Use a different Gitea Login",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "note": {
+       "flags": [
+        "--note",
+        "-n"
+       ],
+       "negation": "",
+       "help": "Release notes",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "note_file": {
+       "flags": [
+        "--note-file",
+        "-f"
+       ],
+       "negation": "",
+       "help": "Release notes file name",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "output": {
+       "flags": [
+        "--output",
+        "-o"
+       ],
+       "negation": "",
+       "help": "Output format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "prerelease": {
+       "flags": [
+        "--prerelease",
+        "-p"
+       ],
+       "negation": "",
+       "help": "Is a pre-release",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "remote": {
+       "flags": [
+        "--remote",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Discover Gitea login from remote",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-r"
+       ],
+       "negation": "",
+       "help": "Override local repository path or gitea repository slug to interact with",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "tag": {
+       "flags": [
+        "--tag"
+       ],
+       "negation": "",
+       "help": "Tag name",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "target": {
+       "flags": [
+        "--target"
+       ],
+       "negation": "",
+       "help": "Target branch name or commit hash",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "title": {
+       "flags": [
+        "--title",
+        "-t"
+       ],
+       "negation": "",
+       "help": "Release title",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "releases.list": {
+     "help": "",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "limit": {
+       "flags": [
+        "--limit",
+        "--lm"
+       ],
+       "negation": "",
+       "help": "specify limit of items per page",
+       "type": "str",
+       "default": "30",
+       "choices": []
+      },
+      "login": {
+       "flags": [
+        "--login",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Use a different Gitea Login",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "output": {
+       "flags": [
+        "--output",
+        "-o"
+       ],
+       "negation": "",
+       "help": "Output format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "page": {
+       "flags": [
+        "--page",
+        "-p"
+       ],
+       "negation": "",
+       "help": "specify page",
+       "type": "str",
+       "default": "1",
+       "choices": []
+      },
+      "remote": {
+       "flags": [
+        "--remote",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Discover Gitea login from remote",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-r"
+       ],
+       "negation": "",
+       "help": "Override local repository path or gitea repository slug to interact with",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "repos.create": {
+     "help": "",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "branch": {
+       "flags": [
+        "--branch"
+       ],
+       "negation": "",
+       "help": "use custom default branch (need --init)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "description": {
+       "flags": [
+        "--description",
+        "--desc"
+       ],
+       "negation": "",
+       "help": "add description to repo",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "gitignores": {
+       "flags": [
+        "--gitignores",
+        "--git"
+       ],
+       "negation": "",
+       "help": "list of gitignore templates (need --init)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "init": {
+       "flags": [
+        "--init"
+       ],
+       "negation": "",
+       "help": "initialize repo",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "labels": {
+       "flags": [
+        "--labels"
+       ],
+       "negation": "",
+       "help": "name of label set to add",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "license": {
+       "flags": [
+        "--license"
+       ],
+       "negation": "",
+       "help": "add license (need --init)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "login": {
+       "flags": [
+        "--login",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Use a different Gitea Login",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "name": {
+       "flags": [
+        "--name"
+       ],
+       "negation": "",
+       "help": "name of new repo",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "object_format": {
+       "flags": [
+        "--object-format"
+       ],
+       "negation": "",
+       "help": "select git object format (sha1,sha256)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "output": {
+       "flags": [
+        "--output",
+        "-o"
+       ],
+       "negation": "",
+       "help": "Output format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "owner": {
+       "flags": [
+        "--owner",
+        "-O"
+       ],
+       "negation": "",
+       "help": "name of repo owner",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "private": {
+       "flags": [
+        "--private"
+       ],
+       "negation": "",
+       "help": "make repo private",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "readme": {
+       "flags": [
+        "--readme"
+       ],
+       "negation": "",
+       "help": "use readme template (need --init)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "template": {
+       "flags": [
+        "--template"
+       ],
+       "negation": "",
+       "help": "make repo a template repo",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "trustmodel": {
+       "flags": [
+        "--trustmodel"
+       ],
+       "negation": "",
+       "help": "select trust model (committer,collaborator,collaborator+committer)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "repos.fork": {
+     "help": "",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "login": {
+       "flags": [
+        "--login",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Use a different Gitea Login",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "owner": {
+       "flags": [
+        "--owner",
+        "-O"
+       ],
+       "negation": "",
+       "help": "name of fork's owner, defaults to current user",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "remote": {
+       "flags": [
+        "--remote",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Discover Gitea login from remote",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-r"
+       ],
+       "negation": "",
+       "help": "Override local repository path or gitea repository slug to interact with",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "repos.list": {
+     "help": "",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "fields": {
+       "flags": [
+        "--fields",
+        "-f"
+       ],
+       "negation": "",
+       "help": "Comma-separated list of fields to print",
+       "type": "str",
+       "default": "owner,name,type,ssh",
+       "choices": []
+      },
+      "limit": {
+       "flags": [
+        "--limit",
+        "--lm"
+       ],
+       "negation": "",
+       "help": "specify limit of items per page",
+       "type": "str",
+       "default": "30",
+       "choices": []
+      },
+      "login": {
+       "flags": [
+        "--login",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Use a different Gitea Login",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "output": {
+       "flags": [
+        "--output",
+        "-o"
+       ],
+       "negation": "",
+       "help": "Output format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "owner": {
+       "flags": [
+        "--owner",
+        "-O"
+       ],
+       "negation": "",
+       "help": "List repos of a specific owner (org or user)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "page": {
+       "flags": [
+        "--page",
+        "-p"
+       ],
+       "negation": "",
+       "help": "specify page",
+       "type": "str",
+       "default": "1",
+       "choices": []
+      },
+      "starred": {
+       "flags": [
+        "--starred",
+        "-s"
+       ],
+       "negation": "",
+       "help": "List your starred repos instead",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "type": {
+       "flags": [
+        "--type",
+        "-T"
+       ],
+       "negation": "",
+       "help": "Filter by type: fork, mirror, source",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "watched": {
+       "flags": [
+        "--watched",
+        "-w"
+       ],
+       "negation": "",
+       "help": "List your watched repos instead",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "whoami": {
+     "help": "",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "debug": {
+       "flags": [
+        "--debug",
+        "--vvv"
+       ],
+       "negation": "",
+       "help": "Enable debug mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    }
+   }
+  }
+ },
+ "deltas": {
+  "0.15.0": {
+   "date": "2026-07-29",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  }
+ }
+}

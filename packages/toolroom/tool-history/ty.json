@@ -1,0 +1,486 @@
+{
+ "schema": 1,
+ "tool": "ty",
+ "observed_from": "0.0.55",
+ "base": {
+  "version": "0.0.73",
+  "date": "2026-08-19",
+  "platforms": [
+   "Linux",
+   "Windows",
+   "macOS"
+  ],
+  "extractor": 3,
+  "surface": {
+   "help": "An extremely fast Python type checker.",
+   "verbs": {
+    "": {
+     "help": "An extremely fast Python type checker.",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {}
+    },
+    "check": {
+     "help": "Check a project for type errors",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "add_ignore": {
+       "flags": [
+        "--add-ignore"
+       ],
+       "negation": "",
+       "help": "Adds `ty: ignore` comments to suppress all rule diagnostics",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "color": {
+       "flags": [
+        "--color"
+       ],
+       "negation": "",
+       "help": "Control when colored output is used",
+       "type": "choice",
+       "default": null,
+       "choices": [
+        "auto",
+        "always",
+        "never"
+       ]
+      },
+      "config": {
+       "flags": [
+        "--config",
+        "-c"
+       ],
+       "negation": "",
+       "help": "A TOML `<KEY> = <VALUE>` pair (such as you might find in a `ty.toml` configuration file) overriding a specific configuration option",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "config_file": {
+       "flags": [
+        "--config-file"
+       ],
+       "negation": "",
+       "help": "The path to a `ty.toml` file to use for configuration",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "error": {
+       "flags": [
+        "--error"
+       ],
+       "negation": "",
+       "help": "Treat the given rule as having severity 'error'",
+       "type": "list[str]",
+       "default": null,
+       "choices": []
+      },
+      "error_on_warning": {
+       "flags": [
+        "--error-on-warning"
+       ],
+       "negation": "",
+       "help": "Use exit code 1 if there are any warning-level diagnostics",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "exclude": {
+       "flags": [
+        "--exclude"
+       ],
+       "negation": "",
+       "help": "Glob patterns for files to exclude from type checking",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "exclude_scripts": {
+       "flags": [
+        "--exclude-scripts"
+       ],
+       "negation": "--include-scripts",
+       "help": "Exclude files containing PEP 723 inline script metadata unless passed explicitly",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "exit_zero": {
+       "flags": [
+        "--exit-zero"
+       ],
+       "negation": "",
+       "help": "Always use exit code 0, even when there are error-level diagnostics",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "exit_zero_on_warning": {
+       "flags": [
+        "--exit-zero-on-warning"
+       ],
+       "negation": "",
+       "help": "Use exit code 0 if there are no error-level diagnostics",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "extra_search_path": {
+       "flags": [
+        "--extra-search-path"
+       ],
+       "negation": "",
+       "help": "Additional path to use as a module-resolution source (can be passed multiple times)",
+       "type": "list[str]",
+       "default": null,
+       "choices": []
+      },
+      "fix": {
+       "flags": [
+        "--fix"
+       ],
+       "negation": "",
+       "help": "Apply fixes to resolve errors",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "force_exclude": {
+       "flags": [
+        "--force-exclude"
+       ],
+       "negation": "--no-force-exclude",
+       "help": "Enforce exclusions, even for paths passed to ty directly on the command-line",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "ignore": {
+       "flags": [
+        "--ignore"
+       ],
+       "negation": "",
+       "help": "Disables the rule",
+       "type": "list[str]",
+       "default": null,
+       "choices": []
+      },
+      "no_progress": {
+       "flags": [
+        "--no-progress"
+       ],
+       "negation": "",
+       "help": "Hide all progress outputs",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "output_format": {
+       "flags": [
+        "--output-format"
+       ],
+       "negation": "",
+       "help": "The format to use for printing diagnostic messages",
+       "type": "choice",
+       "default": null,
+       "choices": [
+        "full",
+        "concise",
+        "gitlab",
+        "github",
+        "junit"
+       ]
+      },
+      "project": {
+       "flags": [
+        "--project"
+       ],
+       "negation": "",
+       "help": "Run the command within the given project directory",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "python": {
+       "flags": [
+        "--python"
+       ],
+       "negation": "",
+       "help": "Path to your project's Python environment or interpreter",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "python_platform": {
+       "flags": [
+        "--python-platform"
+       ],
+       "negation": "",
+       "help": "Target platform to assume when resolving types",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "python_version": {
+       "flags": [
+        "--python-version"
+       ],
+       "negation": "",
+       "help": "Python version to assume when resolving types",
+       "type": "choice",
+       "default": null,
+       "choices": [
+        "3.7",
+        "3.8",
+        "3.9",
+        "3.10",
+        "3.11",
+        "3.12",
+        "3.13",
+        "3.14",
+        "3.15"
+       ]
+      },
+      "quiet": {
+       "flags": [
+        "--quiet",
+        "-q"
+       ],
+       "negation": "",
+       "help": "Use quiet output (or `-qq` for silent output)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "respect_ignore_files": {
+       "flags": [
+        "--respect-ignore-files"
+       ],
+       "negation": "--no-respect-ignore-files",
+       "help": "Respect file exclusions via `.gitignore` and other standard ignore files",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "typeshed": {
+       "flags": [
+        "--typeshed"
+       ],
+       "negation": "",
+       "help": "Custom directory to use for stdlib typeshed stubs",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "verbose": {
+       "flags": [
+        "--verbose",
+        "-v"
+       ],
+       "negation": "",
+       "help": "Use verbose output (or `-vv` and `-vvv` for more verbose output)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "warn": {
+       "flags": [
+        "--warn"
+       ],
+       "negation": "",
+       "help": "Treat the given rule as having severity 'warn'",
+       "type": "list[str]",
+       "default": null,
+       "choices": []
+      },
+      "watch": {
+       "flags": [
+        "--watch",
+        "-W"
+       ],
+       "negation": "",
+       "help": "Watch files for changes and recheck files related to the changed files",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    }
+   }
+  }
+ },
+ "deltas": {
+  "0.0.72": {
+   "date": "2026-08-14",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.71": {
+   "date": "2026-08-13",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.70": {
+   "date": "2026-08-10",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.69": {
+   "date": "2026-08-06",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.68": {
+   "date": "2026-08-06",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.67": {
+   "date": "2026-08-05",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.66": {
+   "date": "2026-08-04",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.65": {
+   "date": "2026-07-29",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.64": {
+   "date": "2026-07-29",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.63": {
+   "date": "2026-07-23",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3,
+   "drop": [
+    "check\texclude_scripts"
+   ]
+  },
+  "0.0.62": {
+   "date": "2026-07-22",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.61": {
+   "date": "2026-07-18",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.60": {
+   "date": "2026-07-16",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.59": {
+   "date": "2026-07-12",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.58": {
+   "date": "2026-07-10",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.57": {
+   "date": "2026-07-08",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.56": {
+   "date": "2026-07-01",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.55": {
+   "date": "2026-06-27",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  }
+ }
+}

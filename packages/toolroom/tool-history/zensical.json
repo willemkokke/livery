@@ -1,0 +1,255 @@
+{
+ "schema": 1,
+ "tool": "zensical",
+ "observed_from": "0.0.41",
+ "base": {
+  "version": "0.0.56",
+  "date": "2026-08-18",
+  "platforms": [
+   "Linux",
+   "Windows",
+   "macOS"
+  ],
+  "extractor": 3,
+  "surface": {
+   "help": "Zensical - A modern static site generator.",
+   "verbs": {
+    "": {
+     "help": "Zensical - A modern static site generator.",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {}
+    },
+    "build": {
+     "help": "Build a project.",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "clean": {
+       "flags": [
+        "--clean",
+        "-c"
+       ],
+       "negation": "",
+       "help": "Clean cache",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "config_file": {
+       "flags": [
+        "--config-file",
+        "-f"
+       ],
+       "negation": "",
+       "help": "Path to config file",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "strict": {
+       "flags": [
+        "--strict",
+        "-s"
+       ],
+       "negation": "",
+       "help": "Enable strict mode - abort the build on warnings",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "new": {
+     "help": "Create a new template project in the current or given directory.",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {}
+    },
+    "serve": {
+     "help": "Build and serve a project.",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "config_file": {
+       "flags": [
+        "--config-file",
+        "-f"
+       ],
+       "negation": "",
+       "help": "Path to config file",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "dev_addr": {
+       "flags": [
+        "--dev-addr",
+        "-a"
+       ],
+       "negation": "",
+       "help": "IP address and port",
+       "type": "str",
+       "default": "localhost:8000",
+       "choices": []
+      },
+      "open": {
+       "flags": [
+        "--open",
+        "-o"
+       ],
+       "negation": "",
+       "help": "Open preview in default browser",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "strict": {
+       "flags": [
+        "--strict",
+        "-s"
+       ],
+       "negation": "",
+       "help": "Strict mode (currently unsupported)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    }
+   }
+  }
+ },
+ "deltas": {
+  "0.0.55": {
+   "date": "2026-08-16",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.54": {
+   "date": "2026-08-13",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.53": {
+   "date": "2026-08-04",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.52": {
+   "date": "2026-07-30",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.51": {
+   "date": "2026-07-29",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.50": {
+   "date": "2026-07-09",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.48": {
+   "date": "2026-07-09",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.47": {
+   "date": "2026-07-05",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.46": {
+   "date": "2026-06-21",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.45": {
+   "date": "2026-06-09",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.44": {
+   "date": "2026-06-04",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.43": {
+   "date": "2026-05-19",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.42": {
+   "date": "2026-05-15",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.0.41": {
+   "date": "2026-05-09",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  }
+ }
+}

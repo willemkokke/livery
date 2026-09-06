@@ -181,7 +181,7 @@ def test_start_opens_a_worktree_by_default_and_provisions_it(
     created = repo.issue.create("tree work")
     provisioned: list[str] = []
 
-    import toolroom
+    from livery import toolroom
 
     def _uv(*args: str) -> SimpleNamespace:
         provisioned.append("uv " + " ".join(args))
@@ -760,8 +760,7 @@ def test_open_code_missing_binary_is_a_note(
 ) -> None:
     from types import SimpleNamespace
 
-    import toolroom
-
+    from livery import toolroom
     from livery.workshop._issue_tasks import _open_work
 
     def _missing(*_a: object, **_k: object) -> object:

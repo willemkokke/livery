@@ -10,7 +10,9 @@ resolution-markers = [
 members = [
     "livery",
     "livery-forge",
+    "livery-toolroom",
     "livery-workshop",
+    "toolroom",
 ]
 
 [[package]]
@@ -621,6 +623,7 @@ dev = [
     { name = "footman" },
     { name = "git-cliff" },
     { name = "livery-forge", extra = ["github-secrets"] },
+    { name = "livery-toolroom" },
     { name = "livery-workshop" },
     { name = "mypy" },
     { name = "pyrefly" },
@@ -648,6 +651,7 @@ dev = [
     { name = "footman", specifier = ">=0.52.1" },
     { name = "git-cliff", specifier = ">=2.13" },
     { name = "livery-forge", extras = ["github-secrets"], editable = "packages/forge" },
+    { name = "livery-toolroom", editable = "packages/toolroom" },
     { name = "livery-workshop", editable = "packages/workshop" },
     { name = "mypy", specifier = ">=1.14" },
     { name = "pyrefly" },
@@ -655,7 +659,7 @@ dev = [
     { name = "pytest-cov", specifier = ">=5" },
     { name = "pytest-xdist", specifier = ">=3.6" },
     { name = "ruff", specifier = ">=0.6" },
-    { name = "toolroom", specifier = ">=0.6.1" },
+    { name = "toolroom", editable = "packages/toolroom-compat" },
     { name = "ty" },
     { name = "types-pyyaml" },
     { name = "uv" },
@@ -680,6 +684,11 @@ requires-dist = [{ name = "pynacl", marker = "extra == 'github-secrets'", specif
 provides-extras = ["github-secrets"]
 
 [[package]]
+name = "livery-toolroom"
+version = "0.6.1"
+source = { editable = "packages/toolroom" }
+
+[[package]]
 name = "livery-workshop"
 version = "0.1.0"
 source = { editable = "packages/workshop" }
@@ -687,8 +696,8 @@ dependencies = [
     { name = "copier" },
     { name = "footman" },
     { name = "livery-forge" },
+    { name = "livery-toolroom" },
     { name = "pyyaml" },
-    { name = "toolroom" },
 ]
 
 [package.metadata]
@@ -696,8 +705,8 @@ requires-dist = [
     { name = "copier", specifier = ">=9.18.1" },
     { name = "footman", specifier = ">=0.50" },
     { name = "livery-forge", editable = "packages/forge" },
+    { name = "livery-toolroom", editable = "packages/toolroom" },
     { name = "pyyaml", specifier = ">=6.0.3" },
-    { name = "toolroom", specifier = ">=0.6.1" },
 ]
 
 [[package]]
@@ -1447,11 +1456,13 @@ wheels = [
 [[package]]
 name = "toolroom"
 version = "0.6.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/81/93/bbcf50797c3e3f91d7b519b8833b1818b9a2cfe120f3ee9b1acb973cc749/toolroom-0.6.1.tar.gz", hash = "sha256:946b44a605e389ba4ddc61008fdc50b344f197a20d0ea146a16c7fe2bed20b4e", size = 141991, upload-time = "2026-08-21T18:19:16.136Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/ca/99/4a2fc57be0450973ff0e20ddef472e29cb7a13b645d2c2c45662908a837e/toolroom-0.6.1-py3-none-any.whl", hash = "sha256:7c4e0b09bc9c770d704542b901fc6c013deb671bf85e6fa91af6734c353ec687", size = 170532, upload-time = "2026-08-21T18:19:14.701Z" },
+source = { editable = "packages/toolroom-compat" }
+dependencies = [
+    { name = "livery-toolroom" },
 ]
+
+[package.metadata]
+requires-dist = [{ name = "livery-toolroom", editable = "packages/toolroom" }]
 
 [[package]]
 name = "ty"
