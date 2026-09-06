@@ -913,7 +913,7 @@ docs = [
 
 [[package]]
 name = "livery-footman"
-version = "0.52.1"
+version = "0.52.2"
 source = { editable = "packages/footman" }
 
 [package.optional-dependencies]
@@ -963,7 +963,7 @@ provides-extras = ["github-secrets"]
 
 [[package]]
 name = "livery-toolroom"
-version = "0.6.1"
+version = "0.6.2"
 source = { editable = "packages/toolroom" }
 
 [package.optional-dependencies]

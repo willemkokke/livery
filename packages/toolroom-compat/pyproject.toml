@@ -24,7 +24,7 @@ classifiers = [
 # Exactly the real distribution and nothing else: the shim is the
 # old index name continuing its line, so an upgrade of `toolroom`
 # resolves onto it and every import keeps working.
-dependencies = ["livery-toolroom>=0.6.1"]
+dependencies = ["livery-toolroom>=0.6.2"]
 
 [project.urls]
 Repository = "https://github.com/willemkokke/livery"

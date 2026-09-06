@@ -7,7 +7,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-footman"
-version = "0.52.1"
+version = "0.52.2"
 description = "A task runner with typed commands, nested groups, and instant shell completion."
 readme = "README.md"
 license = "MIT"
@@ -59,7 +59,7 @@ test = [
     # The suite drives the toolroom bridge and the compat spelling of
     # its own distribution: both are ecosystem contracts the tests
     # assert on, not runtime dependencies.
-    "livery-toolroom>=0.6.1",
+    "livery-toolroom>=0.6.2",
     "toolroom>=0.6.2",
     "footman>=0.52.2",
 ]

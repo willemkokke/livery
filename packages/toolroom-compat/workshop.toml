@@ -15,7 +15,7 @@ api = false
 [[depends]]
 path = "packages/toolroom"
 kind = "runtime"
-floor = "0.6.1"
+floor = "0.6.2"
 
 [release]
 # The first release lands at the baseline itself, so the shim

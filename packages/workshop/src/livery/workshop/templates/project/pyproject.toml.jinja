@@ -43,8 +43,8 @@ dev = [
     # resolves it to one exact version (footman's lockfile-churn lesson).
     "uv",
     # Typed tool handles tasks.py runs through.
-{% if 'footman' not in py | map(attribute='dev') | list %}    "footman>=0.52.1",
-{% endif %}{% if 'toolroom' not in py | map(attribute='dev') | list %}    "toolroom>=0.6.1",
+{% if 'footman' not in py | map(attribute='dev') | list %}    "footman>=0.52.2",
+{% endif %}{% if 'toolroom' not in py | map(attribute='dev') | list %}    "toolroom>=0.6.2",
 {% endif %}    # The workspace members, so root tests import them; an entry may
     # carry extras the dev loop needs.
 {% for package in py %}    "{{ package.dev }}",
