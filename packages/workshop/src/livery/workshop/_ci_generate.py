@@ -832,6 +832,9 @@ def _github_docs_deploy(answers: dict[str, Any], prog: str) -> str:
         )
         checkout_ref = """        with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          # The release view reads the receipt tags; a shallow
+          # tagless clone renders its no-tags fallback page instead.
+          fetch-tags: true
 """
         coverage_step = f"""      - name: Coverage artifacts for the site
         if: github.event_name == 'workflow_run'
@@ -849,7 +852,7 @@ def _github_docs_deploy(answers: dict[str, Any], prog: str) -> str:
   workflow_dispatch:
 """
         deploy_if = ""
-        checkout_ref = ""
+        checkout_ref = "        with:\n          fetch-tags: true\n"
         coverage_step = ""
     return f"""name: docs
 
