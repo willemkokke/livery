@@ -8,7 +8,7 @@
 # it; nothing here is typed by hand.
 
 [bump]
-# The version rules, as footman practises them: before 1.0 a feature
+# The version rules, the ecosystem's own: before 1.0 a feature
 # bumps the minor and a break rides along in it, after 1.0 a break
 # bumps the major, a feature the minor, everything else the patch.
 features_always_bump_minor = true

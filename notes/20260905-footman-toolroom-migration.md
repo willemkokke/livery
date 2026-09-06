@@ -1,7 +1,7 @@
 # Footman and toolroom join the workspace
 
-Status: phases 1 and 2 landed 2026-09-06 (issues #247, #257);
-phases 3 and 4 not started. Approved in intent 2026-09-05 (Willem: "lets move them",
+Status: phases 1 to 3 landed 2026-09-06 (issues #247, #257, #260);
+phase 4 not started. Approved in intent 2026-09-05 (Willem: "lets move them",
 both at once); the docs prepass that blocked it completed
 2026-09-05. Strongroom's initial plan
 follows this one; toolroom's store rework over strongroom is out of
@@ -168,10 +168,12 @@ Deliverables:
 
 - `fm release.prepare packages/toolroom` and
   `fm release.prepare packages/footman`, entries appended to the
-  imported changelogs, versions continuing from 0.50.0 and 0.6.1.
+  imported changelogs, versions continuing from 0.6.1 and 0.52.1
+  (the versions the packages moved in at).
 - The `toolroom` and `footman` shim distributions released by the
-  train the same way, continuing the same lines, so the old names
-  upgrade onto the shims.
+  train the same way, continuing the same lines from 0.6.2 and
+  0.52.2 (one past their index twins, per the decision record), so
+  the old names upgrade onto the shims.
 - Tags `packages/toolroom/v*` and `packages/footman/v*` as
   annotated train receipts.
 - Both packages on the workspace site, release view included, at
@@ -317,6 +319,15 @@ Acceptance:
   spelling stays `["footman", "toolroom"]`, which resolves to the
   old layout on the index until phase 4 releases the shims, an
   accepted window in which the live playground pane is broken.
+
+- 2026-09-06, phase 3: the layer edit is the cliff templates'
+  version-rules comment (the ecosystem's own words now, not a
+  pointer at an outside footman), delivered by `fm template.apply`
+  into every python package's rendered cliff.toml, footman and
+  toolroom included; the second run answered "everything already
+  matches the render". In the monorepo the wave reduces to exactly
+  this, as `fm workflow.update.templates` itself teaches: the
+  source is HEAD, so a template edit is an ordinary feature branch.
 
 ## Open
 
