@@ -42,7 +42,7 @@ dev = [
     # uv itself, unconstrained so it tracks latest; the lockfile still
     # resolves it to one exact version (footman's lockfile-churn lesson).
     "uv",
-    "footman>=0.51",
+    "footman>=0.52.1",
     # Typed tool handles tasks.py runs through.
     "toolroom>=0.6.1",
     # The workspace members, so root tests import them; an entry may
