@@ -5,6 +5,19 @@ All notable changes to footman are documented here. The format is based on
 [Semantic Versioning](https://semver.org/). While footman is pre-1.0, minor
 versions may include breaking changes.
 
+## [0.52.2] - 2026-09-06
+
+### Added
+
+- Footman joins the workspace
+- The version rules speak as the ecosystem's own
+- The train carries a migrated line's first release
+
+### Fixed
+
+- One release number per distribution line
+- The api generator reads the module beside it
+
 ## [0.52.1] - 2026-09-06
 
 ### Fixed
