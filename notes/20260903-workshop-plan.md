@@ -661,7 +661,19 @@ green so each feature ships through the proven seams:
   Willem's ruling.
 - Phase 20: sparse checkouts as partial workspaces, and `fm clone`.
   Was 13; its pre-project verb rides the phase 13 carrier instead
-  of waiting here.
+  of waiting here. Ruled 2026-09-05: the workspace-atomic verbs
+  (`fm workflow.update.templates`, `fm workflow.update.dependencies`,
+  the bare `fm workflow.update`, `fm workflow.release`) refuse a
+  partial workspace through a footman `@requires` gate on an
+  `all_members_present()` predicate (discovery compared against the
+  roster in the answers file), the absent members named in the
+  refusal. The reason: on a partial workspace `uv lock --upgrade`
+  resolves absent siblings as registry wheels and would poison the
+  committed lock, floor bumps and the template render reach only the
+  present packages, and the full gate needs the absent packages'
+  toolchains, so widening the cone for the run does not help. The
+  gate lands with this phase, in its acceptance; it is trivially
+  true until then.
 
 ## Temporary, replaced by
 
@@ -995,6 +1007,15 @@ green so each feature ships through the proven seams:
   behind with Willem's uncommitted README rewrite parked on it,
   and `bring_current` misread that dirty-tree fast-forward refusal
   as local commits (filed as its own issue).
+- 2026-09-05, partial workspaces refuse the workspace-atomic verbs
+  (Willem, from the phase 20 discussion): `fm workflow.update.*`
+  and `fm workflow.release` gate on an `all_members_present()`
+  predicate through footman's `@requires`, discovery compared
+  against the answers-file roster, absent members named in the
+  refusal. Widening the cone for the run was considered and
+  rejected: the full gate needs the absent packages' toolchains,
+  which the partial persona's machine does not have. Recorded on
+  the phase 20 line; the gate ships with that phase.
 
 ## Open
 
