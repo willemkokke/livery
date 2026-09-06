@@ -25,11 +25,13 @@ default-groups = ["dev", "docs"]
 # file is rendered from it, so a glob would only re-derive the same
 # list while letting a stray directory join unnoticed. A non-python
 # member (a cpp-conan package) is no uv project and never appears.
-members = ["packages/forge", "packages/workshop"]
+members = ["packages/forge", "packages/workshop", "packages/toolroom", "packages/toolroom-compat"]
 
 [tool.uv.sources]
 livery-forge = { workspace = true }
 livery-workshop = { workspace = true }
+livery-toolroom = { workspace = true }
+toolroom = { workspace = true }
 
 [dependency-groups]
 # The docs toolchain, workshop-rendered so one layer release moves
@@ -44,11 +46,12 @@ dev = [
     "uv",
     "footman>=0.52.1",
     # Typed tool handles tasks.py runs through.
-    "toolroom>=0.6.1",
     # The workspace members, so root tests import them; an entry may
     # carry extras the dev loop needs.
     "livery-forge[github-secrets]",
     "livery-workshop",
+    "livery-toolroom",
+    "toolroom",
     # Every contract layer that is not already a member above, so a
     # rendered tasks.py can always import its plugins.
     "pytest>=8.0",
@@ -90,7 +93,7 @@ docs_url = "https://docs.willem.net/livery/_generated/tasks/{slug}/"
 [tool.ruff]
 line-length = 88
 target-version = "py311"
-src = ["packages/forge/src", "packages/forge/tests", "packages/workshop/src", "packages/workshop/tests", "tests"]
+src = ["packages/forge/src", "packages/forge/tests", "packages/workshop/src", "packages/workshop/tests", "packages/toolroom/src", "packages/toolroom/tests", "packages/toolroom-compat/src", "packages/toolroom-compat/tests", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF", "D"]
@@ -107,6 +110,10 @@ convention = "google"
 "tasks.py" = ["E501"]
 "tests/test_workspace_contracts.py" = ["E501"]
 "tests/test_docs_drift.py" = ["E501"]
+# Generated tool stubs keep each Args entry on one line so hovers
+# reflow them, and the text is the tool's own; the .pyi is not where
+# prose rules apply. Toolroom's standing ruling, carried over.
+"packages/*/src/**/_stubs/*.pyi" = ["E501", "D"]
 # The CI emitters carry workflow YAML as string content; its lines
 # are the generated files' lines, not prose to wrap.
 "**/_ci_generate.py" = ["E501"]
@@ -122,6 +129,13 @@ pythonVersion = "3.11"
 typeCheckingMode = "standard"
 reportMissingModuleSource = false
 
+# The imported toolroom tests monkeypatch module internals by
+# attribute, which this checker reads as private-import use; their
+# conformance rides the same tracked content pass as the docstrings.
+[[tool.basedpyright.executionEnvironments]]
+root = "packages/toolroom/tests"
+reportPrivateImportUsage = false
+
 [tool.mypy]
 # Second gate of the four. livery.* is fully strict; tests and tasks.py
 # run the usage-checking half (check_untyped_defs, on via strict), so
@@ -135,6 +149,10 @@ files = [
     "packages/forge/tests",
     "packages/workshop/src",
     "packages/workshop/tests",
+    "packages/toolroom/src",
+    "packages/toolroom/tests",
+    "packages/toolroom-compat/src",
+    "packages/toolroom-compat/tests",
     "tests",
     "tasks.py",
 ]
@@ -143,6 +161,10 @@ mypy_path = [
     "packages/forge/tests",
     "packages/workshop/src",
     "packages/workshop/tests",
+    "packages/toolroom/src",
+    "packages/toolroom/tests",
+    "packages/toolroom-compat/src",
+    "packages/toolroom-compat/tests",
 ]
 # PEP 420 namespace in a src layout: mypy needs both to derive module
 # names without an __init__.py trail.
@@ -169,11 +191,19 @@ disallow_incomplete_defs = true
 disallow_untyped_calls = true
 disallow_untyped_decorators = true
 
+[[tool.mypy.overrides]]
+# The generated tool stubs carry the suppressions their generator
+# placed for its own reading of each tool; which of them fire varies
+# with flags this config does not share, and an unused one there is
+# the generator's business, not drift.
+module = "*._stubs.*"
+warn_unused_ignores = false
+
 [tool.ty]
 # Third gate. Scope: the packages themselves; the consumer seam in
 # tests is already double-checked by basedpyright and mypy.
 [tool.ty.src]
-include = ["packages/forge/src", "packages/workshop/src"]
+include = ["packages/forge/src", "packages/workshop/src", "packages/toolroom/src", "packages/toolroom-compat/src"]
 
 [tool.ty.environment]
 # Every platform at once (ty checks the union), 3.11 floor.
@@ -186,7 +216,7 @@ python-version = "3.11"
 # zero-dependency 3.11 library cannot spell it without a
 # typing_extensions runtime dep. Revisit when 3.11 support ends.
 preset = "default"
-project-includes = ["packages/forge/src", "packages/workshop/src"]
+project-includes = ["packages/forge/src", "packages/workshop/src", "packages/toolroom/src", "packages/toolroom-compat/src"]
 # Both path heuristics off: a checkout under a dot-directory (a
 # `.claude/worktrees/` worktree) silently skips every include and the
 # gate fails on "no files matched". At the repo root neither setting

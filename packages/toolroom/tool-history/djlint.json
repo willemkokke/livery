@@ -1,0 +1,639 @@
+{
+ "schema": 1,
+ "tool": "djlint",
+ "observed_from": "1.40.8",
+ "base": {
+  "version": "1.44.2",
+  "date": "2026-08-08",
+  "platforms": [
+   "Linux",
+   "Windows",
+   "macOS"
+  ],
+  "extractor": 3,
+  "surface": {
+   "help": "djLint · HTML template linter and formatter.",
+   "verbs": {
+    "": {
+     "help": "djLint · HTML template linter and formatter.",
+     "wraps": false,
+     "positional": "required",
+     "lead": "src",
+     "options": {
+      "allow_empty_input": {
+       "flags": [
+        "--allow-empty-input"
+       ],
+       "negation": "",
+       "help": "Exit with 0 instead of 2 when the given paths match no files",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "blank_line_after_tag": {
+       "flags": [
+        "--blank-line-after-tag"
+       ],
+       "negation": "",
+       "help": "Add an additional blank line after {% <tag> ..",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "blank_line_before_tag": {
+       "flags": [
+        "--blank-line-before-tag"
+       ],
+       "negation": "",
+       "help": "Add an additional blank line before {% <tag> ..",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "check": {
+       "flags": [
+        "--check"
+       ],
+       "negation": "",
+       "help": "Check formatting on the file(s)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "close_void_tags": {
+       "flags": [
+        "--close-void-tags"
+       ],
+       "negation": "",
+       "help": "Add closing mark on known void tags",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "configuration": {
+       "flags": [
+        "--configuration"
+       ],
+       "negation": "",
+       "help": "Path to global configuration file in djlint.toml, .djlint.toml, or .djlintrc format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "custom_blocks": {
+       "flags": [
+        "--custom-blocks"
+       ],
+       "negation": "",
+       "help": "Indent custom template blocks",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "custom_html": {
+       "flags": [
+        "--custom-html"
+       ],
+       "negation": "",
+       "help": "Indent custom HTML tags",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "exclude": {
+       "flags": [
+        "--exclude"
+       ],
+       "negation": "",
+       "help": "Override the default exclude paths",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "extend_exclude": {
+       "flags": [
+        "--extend-exclude"
+       ],
+       "negation": "",
+       "help": "Add additional paths to the default exclude",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "extension": {
+       "flags": [
+        "--extension",
+        "-e"
+       ],
+       "negation": "",
+       "help": "File extension to check",
+       "type": "str",
+       "default": "html",
+       "choices": []
+      },
+      "format_attribute_js_json": {
+       "flags": [
+        "--format-attribute-js-json"
+       ],
+       "negation": "",
+       "help": "Also format JavaScript/JSON inside HTML attributes",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "format_attribute_js_json_min_props": {
+       "flags": [
+        "--format-attribute-js-json-min-props"
+       ],
+       "negation": "",
+       "help": "Minimum number of properties to treat attribute content as JS/JSON",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "format_attribute_js_json_pattern": {
+       "flags": [
+        "--format-attribute-js-json-pattern"
+       ],
+       "negation": "",
+       "help": "Regex pattern to match JavaScript attributes",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "format_attribute_template_tags": {
+       "flags": [
+        "--format-attribute-template-tags"
+       ],
+       "negation": "",
+       "help": "Attempt to format template syntax inside of tag attributes",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "format_css": {
+       "flags": [
+        "--format-css"
+       ],
+       "negation": "",
+       "help": "Also format contents of <style> tags",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "format_js": {
+       "flags": [
+        "--format-js"
+       ],
+       "negation": "",
+       "help": "Also format contents of <script> tags",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "github_output": {
+       "flags": [
+        "--no-github-output",
+        "--github-output"
+       ],
+       "negation": "",
+       "help": "Output GitHub-compatible formatting",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "ignore": {
+       "flags": [
+        "--ignore",
+        "-i"
+       ],
+       "negation": "",
+       "help": "Codes to ignore",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "ignore_blocks": {
+       "flags": [
+        "--ignore-blocks"
+       ],
+       "negation": "",
+       "help": "Comma list of template blocks to not indent",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "ignore_case": {
+       "flags": [
+        "--ignore-case"
+       ],
+       "negation": "",
+       "help": "Do not fix case on known html tags",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "include": {
+       "flags": [
+        "--include"
+       ],
+       "negation": "",
+       "help": "Codes to include",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "indent": {
+       "flags": [
+        "--indent"
+       ],
+       "negation": "",
+       "help": "Indent spacing",
+       "type": "str",
+       "default": "4",
+       "choices": []
+      },
+      "indent_css": {
+       "flags": [
+        "--indent-css"
+       ],
+       "negation": "",
+       "help": "Set CSS indent level",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "indent_js": {
+       "flags": [
+        "--indent-js"
+       ],
+       "negation": "",
+       "help": "Set JS indent level",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "line_break_after_multiline_tag": {
+       "flags": [
+        "--line-break-after-multiline-tag"
+       ],
+       "negation": "",
+       "help": "Do not condense the content of multi-line tags into the line of the last attribute",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "lint": {
+       "flags": [
+        "--lint"
+       ],
+       "negation": "",
+       "help": "Lint for common issues",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "linter_output_format": {
+       "flags": [
+        "--linter-output-format"
+       ],
+       "negation": "",
+       "help": "Customize order of linter output message",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "max_attribute_length": {
+       "flags": [
+        "--max-attribute-length"
+       ],
+       "negation": "",
+       "help": "Max attribute length",
+       "type": "str",
+       "default": "70",
+       "choices": []
+      },
+      "max_blank_lines": {
+       "flags": [
+        "--max-blank-lines"
+       ],
+       "negation": "",
+       "help": "Consolidate blank lines down to x lines",
+       "type": "str",
+       "default": "0",
+       "choices": []
+      },
+      "max_line_length": {
+       "flags": [
+        "--max-line-length"
+       ],
+       "negation": "",
+       "help": "Max line length",
+       "type": "str",
+       "default": "120",
+       "choices": []
+      },
+      "no_function_formatting": {
+       "flags": [
+        "--no-function-formatting"
+       ],
+       "negation": "",
+       "help": "Do not attempt to format function contents",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_line_after_yaml": {
+       "flags": [
+        "--no-line-after-yaml"
+       ],
+       "negation": "",
+       "help": "Do not add a blank line after yaml front matter",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_set_formatting": {
+       "flags": [
+        "--no-set-formatting"
+       ],
+       "negation": "",
+       "help": "Do not attempt to format set contents",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "per_file_ignores": {
+       "flags": [
+        "--per-file-ignores"
+       ],
+       "negation": "",
+       "help": "Ignore linter rules on a per-file basis",
+       "type": "list[str]",
+       "default": null,
+       "choices": []
+      },
+      "preserve_blank_lines": {
+       "flags": [
+        "--preserve-blank-lines"
+       ],
+       "negation": "",
+       "help": "Attempt to preserve blank lines",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "preserve_class_newlines": {
+       "flags": [
+        "--preserve-class-newlines"
+       ],
+       "negation": "",
+       "help": "Preserve line breaks inside multiline class attributes",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "preserve_leading_space": {
+       "flags": [
+        "--preserve-leading-space"
+       ],
+       "negation": "",
+       "help": "Attempt to preserve leading space on text",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "profile": {
+       "flags": [
+        "--profile"
+       ],
+       "negation": "",
+       "help": "Enable defaults by template language",
+       "type": "str",
+       "default": "html",
+       "choices": []
+      },
+      "quiet": {
+       "flags": [
+        "--quiet"
+       ],
+       "negation": "",
+       "help": "Do not print diff when reformatting",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "reformat": {
+       "flags": [
+        "--reformat"
+       ],
+       "negation": "",
+       "help": "Reformat the file(s)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "require_pragma": {
+       "flags": [
+        "--require-pragma"
+       ],
+       "negation": "",
+       "help": "Only format or lint files that starts with a comment with the text 'djlint:on'",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "rules": {
+       "flags": [
+        "--rules"
+       ],
+       "negation": "",
+       "help": "Path to custom rules file in .djlint_rules.yaml format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "single_attribute_per_line": {
+       "flags": [
+        "--single-attribute-per-line"
+       ],
+       "negation": "",
+       "help": "When an opening tag wraps, put each attribute on its own line",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "statistics": {
+       "flags": [
+        "--statistics"
+       ],
+       "negation": "",
+       "help": "Count the number of occurrences of each error/warning code",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "stdin_filename": {
+       "flags": [
+        "--stdin-filename"
+       ],
+       "negation": "",
+       "help": "Filename to use for per-file-ignores and messages when reading from stdin",
+       "type": "str",
+       "default": "-",
+       "choices": []
+      },
+      "use_gitignore": {
+       "flags": [
+        "--use-gitignore"
+       ],
+       "negation": "",
+       "help": "Use .gitignore file to extend excludes",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "warn": {
+       "flags": [
+        "--warn"
+       ],
+       "negation": "",
+       "help": "Return errors as warnings",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    }
+   }
+  }
+ },
+ "deltas": {
+  "1.44.1": {
+   "date": "2026-08-07",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "1.44.0": {
+   "date": "2026-08-04",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "1.43.2": {
+   "date": "2026-08-01",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3,
+   "drop": [
+    "\tallow_empty_input"
+   ]
+  },
+  "1.43.1": {
+   "date": "2026-07-29",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "1.43.0": {
+   "date": "2026-07-27",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "1.42.3": {
+   "date": "2026-07-23",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3,
+   "drop": [
+    "\tstdin_filename"
+   ]
+  },
+  "1.42.2": {
+   "date": "2026-07-22",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "1.42.1": {
+   "date": "2026-07-20",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "1.42.0": {
+   "date": "2026-07-20",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "1.41.0": {
+   "date": "2026-07-19",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "1.40.10": {
+   "date": "2026-07-19",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3,
+   "drop": [
+    "\trules"
+   ]
+  },
+  "1.40.9": {
+   "date": "2026-07-18",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "1.40.8": {
+   "date": "2026-07-17",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  }
+ }
+}

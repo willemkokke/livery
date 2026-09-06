@@ -1,0 +1,1186 @@
+{
+ "schema": 1,
+ "tool": "mypy",
+ "observed_from": "1.18.2",
+ "base": {
+  "version": "2.3.1",
+  "date": "2026-08-15",
+  "platforms": [
+   "Linux",
+   "Windows",
+   "macOS"
+  ],
+  "extractor": 3,
+  "surface": {
+   "help": "Mypy is a program that will type check your Python code.",
+   "verbs": {
+    "": {
+     "help": "Mypy is a program that will type check your Python code.",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "allow_redefinition": {
+       "flags": [
+        "--allow-redefinition"
+       ],
+       "negation": "",
+       "help": "Allow flexible variable redefinition with a new type (inverse: --disallow-redefinition)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "allow_redefinition_new": {
+       "flags": [
+        "--allow-redefinition-new"
+       ],
+       "negation": "",
+       "help": "Deprecated alias for --allow-redefinition (inverse: --disallow-redefinition-new)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "allow_redefinition_old": {
+       "flags": [
+        "--allow-redefinition-old"
+       ],
+       "negation": "",
+       "help": "Allow restricted, unconditional variable redefinition with a new type (inverse: --disallow-redefinition-old)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "allow_untyped_globals": {
+       "flags": [
+        "--allow-untyped-globals"
+       ],
+       "negation": "",
+       "help": "Suppress toplevel errors caused by missing annotations (inverse: --disallow-untyped-globals)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "always_false": {
+       "flags": [
+        "--always-false"
+       ],
+       "negation": "",
+       "help": "Additional variable to be considered False (may be repeated)",
+       "type": "list[str]",
+       "default": null,
+       "choices": []
+      },
+      "always_true": {
+       "flags": [
+        "--always-true"
+       ],
+       "negation": "",
+       "help": "Additional variable to be considered True (may be repeated)",
+       "type": "list[str]",
+       "default": null,
+       "choices": []
+      },
+      "any_exprs_report": {
+       "flags": [
+        "--any-exprs-report"
+       ],
+       "negation": "",
+       "help": "",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "cache_dir": {
+       "flags": [
+        "--cache-dir"
+       ],
+       "negation": "",
+       "help": "Store module cache info in the given folder in incremental mode (defaults to '.mypy_cache')",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "cache_fine_grained": {
+       "flags": [
+        "--cache-fine-grained"
+       ],
+       "negation": "",
+       "help": "Include fine-grained dependency information in the cache for the mypy daemon",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "check_untyped_defs": {
+       "flags": [
+        "--check-untyped-defs"
+       ],
+       "negation": "",
+       "help": "Type check the interior of functions without type annotations (inverse: --no-check-untyped-defs)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "cobertura_xml_report": {
+       "flags": [
+        "--cobertura-xml-report"
+       ],
+       "negation": "",
+       "help": "",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "command": {
+       "flags": [
+        "--command",
+        "-c"
+       ],
+       "negation": "",
+       "help": "Type-check program passed in as string",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "config_file": {
+       "flags": [
+        "--config-file"
+       ],
+       "negation": "",
+       "help": "Configuration file, must have a [mypy] section (defaults to mypy.ini, .mypy.ini, pyproject.toml, setup.cfg)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "custom_typeshed_dir": {
+       "flags": [
+        "--custom-typeshed-dir"
+       ],
+       "negation": "",
+       "help": "Use the custom typeshed in DIR",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "custom_typing_module": {
+       "flags": [
+        "--custom-typing-module"
+       ],
+       "negation": "",
+       "help": "Use a custom typing module",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "deprecated_calls_exclude": {
+       "flags": [
+        "--deprecated-calls-exclude"
+       ],
+       "negation": "",
+       "help": "Disable deprecated warnings for functions/methods coming from specific package, module, or class",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "disable_error_code": {
+       "flags": [
+        "--disable-error-code"
+       ],
+       "negation": "",
+       "help": "Disable a specific error code",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "disallow_any_decorated": {
+       "flags": [
+        "--disallow-any-decorated"
+       ],
+       "negation": "",
+       "help": "Disallow functions that have Any in their signature after decorator transformation",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "disallow_any_explicit": {
+       "flags": [
+        "--disallow-any-explicit"
+       ],
+       "negation": "",
+       "help": "Disallow explicit Any in type positions",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "disallow_any_expr": {
+       "flags": [
+        "--disallow-any-expr"
+       ],
+       "negation": "",
+       "help": "Disallow all expressions that have type Any",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "disallow_any_generics": {
+       "flags": [
+        "--disallow-any-generics"
+       ],
+       "negation": "",
+       "help": "Disallow usage of generic types that do not specify explicit type parameters (inverse: --allow-any-generics)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "disallow_any_unimported": {
+       "flags": [
+        "--disallow-any-unimported"
+       ],
+       "negation": "",
+       "help": "Disallow Any types resulting from unfollowed imports (inverse: --allow-any-unimported)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "disallow_incomplete_defs": {
+       "flags": [
+        "--disallow-incomplete-defs"
+       ],
+       "negation": "",
+       "help": "Disallow defining functions with incomplete type annotations (while still allowing entirely unannotated definitions) (inverse: --allow-incomplete-defs)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "disallow_subclassing_any": {
+       "flags": [
+        "--disallow-subclassing-any"
+       ],
+       "negation": "",
+       "help": "Disallow subclassing values of type 'Any' when defining classes (inverse: --allow-subclassing-any)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "disallow_untyped_calls": {
+       "flags": [
+        "--disallow-untyped-calls"
+       ],
+       "negation": "",
+       "help": "Disallow calling functions without type annotations from functions with type annotations (inverse: --allow-untyped-calls)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "disallow_untyped_decorators": {
+       "flags": [
+        "--disallow-untyped-decorators"
+       ],
+       "negation": "",
+       "help": "Disallow decorating typed functions with untyped decorators (inverse: --allow-untyped-decorators)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "disallow_untyped_defs": {
+       "flags": [
+        "--disallow-untyped-defs"
+       ],
+       "negation": "",
+       "help": "Disallow defining functions without type annotations or with incomplete type annotations (inverse: --allow-untyped-defs)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "enable_error_code": {
+       "flags": [
+        "--enable-error-code"
+       ],
+       "negation": "",
+       "help": "Enable a specific error code",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "enable_incomplete_feature": {
+       "flags": [
+        "--enable-incomplete-feature"
+       ],
+       "negation": "",
+       "help": "Enable support of incomplete/experimental features for early preview",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "exclude": {
+       "flags": [
+        "--exclude"
+       ],
+       "negation": "",
+       "help": "Regular expression to match file names, directory names or paths which mypy should ignore while recursively discovering files to check, e.g. --exclude '/setup\\.py$'",
+       "type": "list[str]",
+       "default": null,
+       "choices": []
+      },
+      "exclude_gitignore": {
+       "flags": [
+        "--exclude-gitignore"
+       ],
+       "negation": "",
+       "help": "Use .gitignore file(s) to exclude files from checking (in addition to any explicit --exclude if present) (inverse: --no-exclude-gitignore)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "explicit_package_bases": {
+       "flags": [
+        "--explicit-package-bases"
+       ],
+       "negation": "",
+       "help": "Use current directory and MYPYPATH to determine module names of files passed (inverse: --no-explicit-package-bases)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "extra_checks": {
+       "flags": [
+        "--extra-checks"
+       ],
+       "negation": "",
+       "help": "Enable additional checks that are technically correct but may be impractical in real code",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "find_occurrences": {
+       "flags": [
+        "--find-occurrences"
+       ],
+       "negation": "",
+       "help": "Print out all usages of a class member (experimental)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "follow_imports": {
+       "flags": [
+        "--follow-imports"
+       ],
+       "negation": "",
+       "help": "How to treat imports",
+       "type": "bool",
+       "default": false,
+       "choices": []
+      },
+      "follow_untyped_imports": {
+       "flags": [
+        "--follow-untyped-imports"
+       ],
+       "negation": "",
+       "help": "Typecheck modules without stubs or py.typed marker",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "hide_error_codes": {
+       "flags": [
+        "--hide-error-codes"
+       ],
+       "negation": "",
+       "help": "Hide error codes in error messages (inverse: --show-error-codes)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "html_report": {
+       "flags": [
+        "--html-report"
+       ],
+       "negation": "",
+       "help": "",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "ignore_missing_imports": {
+       "flags": [
+        "--ignore-missing-imports"
+       ],
+       "negation": "",
+       "help": "Silently ignore imports of missing modules",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "implicit_optional": {
+       "flags": [
+        "--implicit-optional"
+       ],
+       "negation": "",
+       "help": "Assume arguments with default values of None are Optional (inverse: --no-implicit-optional)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "install_types": {
+       "flags": [
+        "--install-types"
+       ],
+       "negation": "",
+       "help": "Install detected missing library stub packages using pip (inverse: --no-install-types)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "junit_format": {
+       "flags": [
+        "--junit-format"
+       ],
+       "negation": "",
+       "help": "If --junit-xml is set, specifies format",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "junit_xml": {
+       "flags": [
+        "--junit-xml"
+       ],
+       "negation": "",
+       "help": "Write a JUnit XML test result document with type checking results to the given file",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "linecount_report": {
+       "flags": [
+        "--linecount-report"
+       ],
+       "negation": "",
+       "help": "",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "linecoverage_report": {
+       "flags": [
+        "--linecoverage-report"
+       ],
+       "negation": "",
+       "help": "",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "lineprecision_report": {
+       "flags": [
+        "--lineprecision-report"
+       ],
+       "negation": "",
+       "help": "",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "module": {
+       "flags": [
+        "--module",
+        "-m"
+       ],
+       "negation": "",
+       "help": "Type-check module; can repeat for more modules",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "native_parser": {
+       "flags": [
+        "--native-parser"
+       ],
+       "negation": "",
+       "help": "Enable faster parser that parses directly to mypy AST (inverse: --no-native-parser)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_color_output": {
+       "flags": [
+        "--no-color-output"
+       ],
+       "negation": "",
+       "help": "Do not colorize error messages (inverse: --color-output)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_error_summary": {
+       "flags": [
+        "--no-error-summary"
+       ],
+       "negation": "",
+       "help": "Do not show error stats summary (inverse: --error-summary)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_fixed_format_cache": {
+       "flags": [
+        "--no-fixed-format-cache"
+       ],
+       "negation": "",
+       "help": "Do not use new fixed format cache (inverse: --fixed-format-cache)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_implicit_reexport": {
+       "flags": [
+        "--no-implicit-reexport"
+       ],
+       "negation": "",
+       "help": "Treat imports as private unless aliased (inverse: --implicit-reexport)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_incremental": {
+       "flags": [
+        "--no-incremental"
+       ],
+       "negation": "",
+       "help": "Disable module cache (inverse: --incremental)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_namespace_packages": {
+       "flags": [
+        "--no-namespace-packages"
+       ],
+       "negation": "",
+       "help": "Disable support for namespace packages (PEP 420, __init__.py-less) (inverse: --namespace-packages)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_silence_site_packages": {
+       "flags": [
+        "--no-silence-site-packages"
+       ],
+       "negation": "",
+       "help": "Do not silence errors in PEP 561 compliant installed packages",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_site_packages": {
+       "flags": [
+        "--no-site-packages"
+       ],
+       "negation": "",
+       "help": "Do not search for installed PEP 561 compliant packages",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_strict_bytes": {
+       "flags": [
+        "--no-strict-bytes"
+       ],
+       "negation": "",
+       "help": "Treat bytearray and memoryview as subtypes of bytes (inverse: --strict-bytes)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_strict_optional": {
+       "flags": [
+        "--no-strict-optional"
+       ],
+       "negation": "",
+       "help": "Disable strict Optional checks (inverse: --strict-optional)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_warn_no_return": {
+       "flags": [
+        "--no-warn-no-return"
+       ],
+       "negation": "",
+       "help": "Do not warn about functions that end without returning (inverse: --warn-no-return)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "non_interactive": {
+       "flags": [
+        "--non-interactive"
+       ],
+       "negation": "",
+       "help": "Install stubs without asking for confirmation and hide errors, with --install-types (inverse: --interactive)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "num_workers": {
+       "flags": [
+        "--num-workers",
+        "-n"
+       ],
+       "negation": "",
+       "help": "Number of separate mypy worker processes (experimental)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "package": {
+       "flags": [
+        "--package",
+        "-p"
+       ],
+       "negation": "",
+       "help": "Type-check package recursively; can be repeated",
+       "type": "list[str]",
+       "default": null,
+       "choices": []
+      },
+      "pdb": {
+       "flags": [
+        "--pdb"
+       ],
+       "negation": "",
+       "help": "Invoke pdb on fatal error",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "platform": {
+       "flags": [
+        "--platform"
+       ],
+       "negation": "",
+       "help": "Type check special-cased code for the given OS platform (defaults to sys.platform)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "pretty": {
+       "flags": [
+        "--pretty"
+       ],
+       "negation": "",
+       "help": "Use visually nicer output in error messages: Use soft word wrap, show source code snippets, and show error location markers (inverse: --no-pretty)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "python_executable": {
+       "flags": [
+        "--python-executable"
+       ],
+       "negation": "",
+       "help": "Python executable used for finding PEP 561 compliant installed packages and stubs",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "python_version": {
+       "flags": [
+        "--python-version"
+       ],
+       "negation": "",
+       "help": "Type check code assuming it will be running on Python x.y",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "raise_exceptions": {
+       "flags": [
+        "--raise-exceptions"
+       ],
+       "negation": "",
+       "help": "Raise exception on fatal error",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "report_deprecated_as_note": {
+       "flags": [
+        "--report-deprecated-as-note"
+       ],
+       "negation": "",
+       "help": "Report importing or using deprecated features as notes instead of errors (inverse: --no-report-deprecated-as-note)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "scripts_are_modules": {
+       "flags": [
+        "--scripts-are-modules"
+       ],
+       "negation": "",
+       "help": "Script x becomes module x instead of __main__",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "shadow_file": {
+       "flags": [
+        "--shadow-file"
+       ],
+       "negation": "",
+       "help": "When encountering SOURCE_FILE, read and type check the contents of SHADOW_FILE instead",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "show_absolute_path": {
+       "flags": [
+        "--show-absolute-path"
+       ],
+       "negation": "",
+       "help": "Show absolute paths to files (inverse: --hide-absolute-path)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "show_column_numbers": {
+       "flags": [
+        "--show-column-numbers"
+       ],
+       "negation": "",
+       "help": "Show column numbers in error messages (inverse: --hide-column-numbers)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "show_error_code_links": {
+       "flags": [
+        "--show-error-code-links"
+       ],
+       "negation": "",
+       "help": "Show links to error code documentation (inverse: --hide-error-code-links)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "show_error_context": {
+       "flags": [
+        "--show-error-context"
+       ],
+       "negation": "",
+       "help": "Precede errors with \"note:\" messages explaining context (inverse: --hide-error-context)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "show_error_end": {
+       "flags": [
+        "--show-error-end"
+       ],
+       "negation": "",
+       "help": "Show end line/end column numbers in error messages",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "show_traceback": {
+       "flags": [
+        "--show-traceback",
+        "--tb"
+       ],
+       "negation": "",
+       "help": "Show traceback on fatal error",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "skip_cache_mtime_checks": {
+       "flags": [
+        "--skip-cache-mtime-checks"
+       ],
+       "negation": "",
+       "help": "Skip cache internal consistency checks based on mtime",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "skip_version_check": {
+       "flags": [
+        "--skip-version-check"
+       ],
+       "negation": "",
+       "help": "Allow using cache written by older mypy version",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "sqlite_cache": {
+       "flags": [
+        "--sqlite-cache"
+       ],
+       "negation": "",
+       "help": "Use a sqlite database to store the cache (inverse: --no-sqlite-cache)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "strict": {
+       "flags": [
+        "--strict"
+       ],
+       "negation": "",
+       "help": "Strict mode; enables the following flags: --disallow-any-generics, --disallow-subclassing-any, --disallow-untyped-calls, --disallow-untyped-defs, --disallow-incomplete- defs, --check-untyped-defs, --disallow-untyped-decorators, --warn-redundant-casts, --warn-unused-ignores, --warn-return-any, --no-implicit-reexport, --strict-equality, --extra-checks",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "strict_equality": {
+       "flags": [
+        "--strict-equality"
+       ],
+       "negation": "",
+       "help": "Prohibit equality, identity, and container checks for non-overlapping types (except `None`) (inverse: --no-strict-equality)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "strict_equality_for_none": {
+       "flags": [
+        "--strict-equality-for-none"
+       ],
+       "negation": "",
+       "help": "Extend `--strict-equality` for `None` checks (inverse: --no-strict-equality-for-none)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "txt_report": {
+       "flags": [
+        "--txt-report"
+       ],
+       "negation": "",
+       "help": "",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "untyped_calls_exclude": {
+       "flags": [
+        "--untyped-calls-exclude"
+       ],
+       "negation": "",
+       "help": "Disable --disallow-untyped-calls for functions/methods coming from specific package, module, or class",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "warn_incomplete_stub": {
+       "flags": [
+        "--warn-incomplete-stub"
+       ],
+       "negation": "",
+       "help": "Warn if missing type annotation in typeshed, only relevant with --disallow-untyped-defs or --disallow-incomplete-defs enabled (inverse: --no-warn-incomplete-stub)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "warn_redundant_casts": {
+       "flags": [
+        "--warn-redundant-casts"
+       ],
+       "negation": "",
+       "help": "Warn about casting an expression to its inferred type (inverse: --no-warn-redundant-casts)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "warn_return_any": {
+       "flags": [
+        "--warn-return-any"
+       ],
+       "negation": "",
+       "help": "Warn about returning values of type Any from non-Any typed functions (inverse: --no-warn-return-any)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "warn_unreachable": {
+       "flags": [
+        "--warn-unreachable"
+       ],
+       "negation": "",
+       "help": "Warn about statements or expressions inferred to be unreachable (inverse: --no-warn-unreachable)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "warn_unused_configs": {
+       "flags": [
+        "--warn-unused-configs"
+       ],
+       "negation": "",
+       "help": "Warn about unused '[mypy-<pattern>]' or '[[tool.mypy.overrides]]' config sections (inverse: --no-warn-unused-configs)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "warn_unused_ignores": {
+       "flags": [
+        "--warn-unused-ignores"
+       ],
+       "negation": "",
+       "help": "Warn about unneeded '# type: ignore' comments (inverse: --no-warn-unused-ignores)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "xml_report": {
+       "flags": [
+        "--xml-report"
+       ],
+       "negation": "",
+       "help": "",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "xslt_html_report": {
+       "flags": [
+        "--xslt-html-report"
+       ],
+       "negation": "",
+       "help": "",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "xslt_txt_report": {
+       "flags": [
+        "--xslt-txt-report"
+       ],
+       "negation": "",
+       "help": "",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    }
+   }
+  }
+ },
+ "deltas": {
+  "2.3.0": {
+   "date": "2026-07-29",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "2.2.0": {
+   "date": "2026-07-08",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "2.1.0": {
+   "date": "2026-05-11",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "2.0.0": {
+   "date": "2026-05-06",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "1.20.2": {
+   "date": "2026-04-21",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3,
+   "drop": [
+    "\tnative_parser",
+    "\tno_strict_bytes",
+    "\tnum_workers"
+   ],
+   "add": {
+    "\tstrict_bytes": {
+     "flags": [
+      "--strict-bytes"
+     ],
+     "negation": "",
+     "help": "Disable treating bytearray and memoryview as subtypes of bytes (inverse: --no-strict-bytes)",
+     "type": "bool",
+     "default": null,
+     "choices": []
+    }
+   },
+   "revert": {
+    "\tallow_redefinition": {
+     "flags": [
+      "--allow-redefinition"
+     ],
+     "negation": "",
+     "help": "Alias to --allow-redefinition-old; will point to --allow-redefinition-new in v2.0 (inverse: --disallow-redefinition)",
+     "type": "bool",
+     "default": null,
+     "choices": []
+    },
+    "\tallow_redefinition_new": {
+     "flags": [
+      "--allow-redefinition-new"
+     ],
+     "negation": "",
+     "help": "Allow more flexible variable redefinition semantics (inverse: --disallow-redefinition-new)",
+     "type": "bool",
+     "default": null,
+     "choices": []
+    },
+    "\tstrict": {
+     "flags": [
+      "--strict"
+     ],
+     "negation": "",
+     "help": "Strict mode; enables the following flags: --disallow-any-generics, --disallow-subclassing-any, --disallow-untyped-calls, --disallow-untyped-defs, --disallow-incomplete- defs, --check-untyped-defs, --disallow-untyped-decorators, --warn-redundant-casts, --warn-unused-ignores, --warn-return-any, --no-implicit-reexport, --strict-equality, --strict-bytes, --extra-checks",
+     "type": "bool",
+     "default": null,
+     "choices": []
+    }
+   }
+  },
+  "1.20.1": {
+   "date": "2026-04-13",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "1.20.0": {
+   "date": "2026-03-31",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3,
+   "revert": {
+    "\tstrict": {
+     "flags": [
+      "--strict"
+     ],
+     "negation": "",
+     "help": "Strict mode; enables the following flags: --warn-unused-configs, --disallow-any-generics, --disallow-subclassing-any, --disallow-untyped-calls, --disallow-untyped-defs, --disallow-incomplete-defs, --check-untyped-defs, --disallow-untyped-decorators, --warn-redundant-casts, --warn-unused-ignores, --warn-return-any, --no-implicit-reexport, --strict-equality, --strict-bytes, --extra-checks",
+     "type": "bool",
+     "default": null,
+     "choices": []
+    }
+   }
+  },
+  "1.19.1": {
+   "date": "2025-12-15",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3,
+   "drop": [
+    "\tallow_redefinition_old",
+    "\tno_fixed_format_cache"
+   ],
+   "add": {
+    "\tfixed_format_cache": {
+     "flags": [
+      "--fixed-format-cache"
+     ],
+     "negation": "",
+     "help": "Use new fast and compact fixed format cache",
+     "type": "bool",
+     "default": null,
+     "choices": []
+    }
+   },
+   "revert": {
+    "\tallow_redefinition": {
+     "flags": [
+      "--allow-redefinition"
+     ],
+     "negation": "",
+     "help": "Allow restricted, unconditional variable redefinition with a new type (inverse: --disallow-redefinition)",
+     "type": "bool",
+     "default": null,
+     "choices": []
+    },
+    "\tallow_redefinition_new": {
+     "flags": [
+      "--allow-redefinition-new"
+     ],
+     "negation": "",
+     "help": "Allow more flexible variable redefinition semantics (experimental) (inverse: --disallow-redefinition-new)",
+     "type": "bool",
+     "default": null,
+     "choices": []
+    }
+   }
+  },
+  "1.19.0": {
+   "date": "2025-11-28",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "1.18.2": {
+   "date": "2025-09-19",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3,
+   "revert": {
+    "\tfixed_format_cache": {
+     "flags": [
+      "--fixed-format-cache"
+     ],
+     "negation": "",
+     "help": "Use experimental fast and compact fixed format cache",
+     "type": "bool",
+     "default": null,
+     "choices": []
+    },
+    "\tjunit_xml": {
+     "flags": [
+      "--junit-xml"
+     ],
+     "negation": "",
+     "help": "Write junit.xml to the given file",
+     "type": "str",
+     "default": null,
+     "choices": []
+    }
+   }
+  }
+ }
+}

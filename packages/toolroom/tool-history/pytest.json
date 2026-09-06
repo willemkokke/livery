@@ -1,0 +1,1205 @@
+{
+ "schema": 1,
+ "tool": "pytest",
+ "observed_from": "8.3.5",
+ "base": {
+  "version": "9.1.1",
+  "date": "2026-07-29",
+  "platforms": [
+   "Linux",
+   "Windows",
+   "macOS"
+  ],
+  "extractor": 3,
+  "surface": {
+   "help": "",
+   "verbs": {
+    "": {
+     "help": "",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "assert": {
+       "flags": [
+        "--assert"
+       ],
+       "negation": "",
+       "help": "Control assertion debugging tools",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "basetemp": {
+       "flags": [
+        "--basetemp"
+       ],
+       "negation": "",
+       "help": "Base temporary directory for this test run",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "cache_clear": {
+       "flags": [
+        "--cache-clear"
+       ],
+       "negation": "",
+       "help": "Remove all cache contents at start of test run",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "cache_show": {
+       "flags": [
+        "--cache-show"
+       ],
+       "negation": "",
+       "help": "Show cache contents, don't perform collection or tests",
+       "type": "str",
+       "default": "*",
+       "choices": []
+      },
+      "capture": {
+       "flags": [
+        "--capture"
+       ],
+       "negation": "",
+       "help": "Per-test capturing method: one of fd|sys|no|tee-sys",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "code_highlight": {
+       "flags": [
+        "--code-highlight"
+       ],
+       "negation": "",
+       "help": "Whether code should be highlighted (only if --color is also enabled)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "collect_in_virtualenv": {
+       "flags": [
+        "--collect-in-virtualenv"
+       ],
+       "negation": "",
+       "help": "Don't ignore tests in a local virtualenv directory",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "collect_only": {
+       "flags": [
+        "--collect-only",
+        "--co"
+       ],
+       "negation": "",
+       "help": "Only collect tests, don't execute them",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "color": {
+       "flags": [
+        "--color"
+       ],
+       "negation": "",
+       "help": "Color terminal output (yes/no/auto)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "confcutdir": {
+       "flags": [
+        "--confcutdir"
+       ],
+       "negation": "",
+       "help": "Only load conftest.py's relative to specified dir",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "config_file": {
+       "flags": [
+        "--config-file",
+        "-c"
+       ],
+       "negation": "",
+       "help": "Load configuration from `FILE` instead of trying to locate one of the implicit configuration files",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "continue_on_collection_errors": {
+       "flags": [
+        "--continue-on-collection-errors"
+       ],
+       "negation": "",
+       "help": "Force test execution even if collection errors occur",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "cov": {
+       "flags": [
+        "--cov"
+       ],
+       "negation": "",
+       "help": "Path or package name to measure during execution (multi-allowed)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "cov_append": {
+       "flags": [
+        "--cov-append"
+       ],
+       "negation": "",
+       "help": "Do not delete coverage but append to current",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "cov_branch": {
+       "flags": [
+        "--cov-branch"
+       ],
+       "negation": "",
+       "help": "Enable branch coverage",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "cov_config": {
+       "flags": [
+        "--cov-config"
+       ],
+       "negation": "",
+       "help": "Config file for coverage",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "cov_context": {
+       "flags": [
+        "--cov-context"
+       ],
+       "negation": "",
+       "help": "Dynamic contexts to use",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "cov_fail_under": {
+       "flags": [
+        "--cov-fail-under"
+       ],
+       "negation": "",
+       "help": "Fail if the total coverage is less than MIN",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "cov_precision": {
+       "flags": [
+        "--cov-precision"
+       ],
+       "negation": "",
+       "help": "Override the reporting precision",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "cov_report": {
+       "flags": [
+        "--cov-report"
+       ],
+       "negation": "",
+       "help": "Type of report to generate: term, term-missing, annotate, html, xml, json, markdown, markdown-append, lcov (multi-allowed)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "cov_reset": {
+       "flags": [
+        "--cov-reset"
+       ],
+       "negation": "",
+       "help": "Reset cov sources accumulated in options so far",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "debug": {
+       "flags": [
+        "--debug"
+       ],
+       "negation": "",
+       "help": "Store internal tracing debug information in this log file",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "deselect": {
+       "flags": [
+        "--deselect"
+       ],
+       "negation": "",
+       "help": "Deselect item (via node id prefix) during collection (multi-allowed)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "disable_plugin_autoload": {
+       "flags": [
+        "--disable-plugin-autoload"
+       ],
+       "negation": "",
+       "help": "Disable plugin auto-loading through entry point packaging metadata",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "disable_warnings": {
+       "flags": [
+        "--disable-pytest-warnings",
+        "--disable-warnings"
+       ],
+       "negation": "",
+       "help": "Disable warnings summary",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "doctest_continue_on_failure": {
+       "flags": [
+        "--doctest-continue-on-failure"
+       ],
+       "negation": "",
+       "help": "For a given doctest, continue to run after the first failure",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "doctest_glob": {
+       "flags": [
+        "--doctest-glob"
+       ],
+       "negation": "",
+       "help": "Doctests file matching pattern, default: test*.txt",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "doctest_ignore_import_errors": {
+       "flags": [
+        "--doctest-ignore-import-errors"
+       ],
+       "negation": "",
+       "help": "Ignore doctest collection errors",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "doctest_modules": {
+       "flags": [
+        "--doctest-modules"
+       ],
+       "negation": "",
+       "help": "Run doctests in all .py modules",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "doctest_report": {
+       "flags": [
+        "--doctest-report"
+       ],
+       "negation": "",
+       "help": "Choose another output format for diffs on doctest failure",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "durations": {
+       "flags": [
+        "--durations"
+       ],
+       "negation": "",
+       "help": "Show N slowest setup/test durations (N=0 for all)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "durations_min": {
+       "flags": [
+        "--durations-min"
+       ],
+       "negation": "",
+       "help": "Minimal duration in seconds for inclusion in slowest list",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "exitfirst": {
+       "flags": [
+        "--exitfirst",
+        "-x"
+       ],
+       "negation": "",
+       "help": "Exit instantly on first error or failed test",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "ff": {
+       "flags": [
+        "--failed-first",
+        "--ff"
+       ],
+       "negation": "",
+       "help": "Run all tests, but run the last failures first",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "fixtures": {
+       "flags": [
+        "--fixtures",
+        "--funcargs"
+       ],
+       "negation": "",
+       "help": "Show available fixtures, sorted by plugin appearance (fixtures with leading '_' are only shown with '-v')",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "fixtures_per_test": {
+       "flags": [
+        "--fixtures-per-test"
+       ],
+       "negation": "",
+       "help": "Show fixtures per test",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "force_short_summary": {
+       "flags": [
+        "--force-short-summary"
+       ],
+       "negation": "",
+       "help": "Force condensed summary output regardless of verbosity level",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "full_trace": {
+       "flags": [
+        "--full-trace"
+       ],
+       "negation": "",
+       "help": "Don't cut any tracebacks",
+       "type": "bool",
+       "default": false,
+       "choices": []
+      },
+      "ignore": {
+       "flags": [
+        "--ignore"
+       ],
+       "negation": "",
+       "help": "Ignore path during collection (multi-allowed)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "ignore_glob": {
+       "flags": [
+        "--ignore-glob"
+       ],
+       "negation": "",
+       "help": "Ignore path pattern during collection (multi-allowed)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "import_mode": {
+       "flags": [
+        "--import-mode"
+       ],
+       "negation": "",
+       "help": "Prepend/append to sys.path when importing test modules and conftest files",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "junitprefix": {
+       "flags": [
+        "--junit-prefix",
+        "--junitprefix"
+       ],
+       "negation": "",
+       "help": "Prepend prefix to classnames in junit-xml output",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "junitxml": {
+       "flags": [
+        "--junit-xml",
+        "--junitxml"
+       ],
+       "negation": "",
+       "help": "Create junit-xml style report file at given path",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "k": {
+       "flags": [
+        "-k"
+       ],
+       "negation": "",
+       "help": "Only run tests which match the given substring expression",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "keep_duplicates": {
+       "flags": [
+        "--keep-duplicates"
+       ],
+       "negation": "",
+       "help": "Keep duplicate tests",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "lf": {
+       "flags": [
+        "--last-failed",
+        "--lf"
+       ],
+       "negation": "",
+       "help": "Rerun only the tests that failed at the last run (or all if none failed)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "lfnf": {
+       "flags": [
+        "--last-failed-no-failures",
+        "--lfnf"
+       ],
+       "negation": "",
+       "help": "With ``--lf``, determines whether to execute tests when there are no previously (known) failures or when no cached ``lastfailed`` data was found",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "log_auto_indent": {
+       "flags": [
+        "--log-auto-indent"
+       ],
+       "negation": "",
+       "help": "Auto-indent multiline messages passed to the logging module",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "log_cli_date_format": {
+       "flags": [
+        "--log-cli-date-format"
+       ],
+       "negation": "",
+       "help": "Log date format used by the logging module",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "log_cli_format": {
+       "flags": [
+        "--log-cli-format"
+       ],
+       "negation": "",
+       "help": "Log format used by the logging module",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "log_cli_level": {
+       "flags": [
+        "--log-cli-level"
+       ],
+       "negation": "",
+       "help": "CLI logging level",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "log_date_format": {
+       "flags": [
+        "--log-date-format"
+       ],
+       "negation": "",
+       "help": "Log date format used by the logging module",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "log_disable": {
+       "flags": [
+        "--log-disable"
+       ],
+       "negation": "",
+       "help": "Disable a logger by name",
+       "type": "list[str]",
+       "default": null,
+       "choices": []
+      },
+      "log_file": {
+       "flags": [
+        "--log-file"
+       ],
+       "negation": "",
+       "help": "Path to a file when logging will be written to",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "log_file_date_format": {
+       "flags": [
+        "--log-file-date-format"
+       ],
+       "negation": "",
+       "help": "Log date format used by the logging module",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "log_file_format": {
+       "flags": [
+        "--log-file-format"
+       ],
+       "negation": "",
+       "help": "Log format used by the logging module",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "log_file_level": {
+       "flags": [
+        "--log-file-level"
+       ],
+       "negation": "",
+       "help": "Log file logging level",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "log_file_mode": {
+       "flags": [
+        "--log-file-mode"
+       ],
+       "negation": "",
+       "help": "Log file open mode",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "log_format": {
+       "flags": [
+        "--log-format"
+       ],
+       "negation": "",
+       "help": "Log format used by the logging module",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "log_level": {
+       "flags": [
+        "--log-level"
+       ],
+       "negation": "",
+       "help": "Level of messages to catch/display",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "m": {
+       "flags": [
+        "-m"
+       ],
+       "negation": "",
+       "help": "Only run tests matching given mark expression",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "markers": {
+       "flags": [
+        "--markers"
+       ],
+       "negation": "",
+       "help": "show markers (builtin, plugin and per-project ones)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "max_warnings": {
+       "flags": [
+        "--max-warnings"
+       ],
+       "negation": "",
+       "help": "Exit with error if all tests pass but the number of warnings exceeds this threshold",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "maxfail": {
+       "flags": [
+        "--maxfail"
+       ],
+       "negation": "",
+       "help": "Exit after first num failures or errors",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "nf": {
+       "flags": [
+        "--new-first",
+        "--nf"
+       ],
+       "negation": "",
+       "help": "Run tests from new files first, then the rest of the tests sorted by file mtime",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_cov": {
+       "flags": [
+        "--no-cov"
+       ],
+       "negation": "",
+       "help": "Disable coverage report completely (useful for debuggers)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_cov_on_fail": {
+       "flags": [
+        "--no-cov-on-fail"
+       ],
+       "negation": "",
+       "help": "Do not report coverage if test run fails",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_fold_skipped": {
+       "flags": [
+        "--no-fold-skipped"
+       ],
+       "negation": "",
+       "help": "Do not fold skipped tests in short summary",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_header": {
+       "flags": [
+        "--no-header"
+       ],
+       "negation": "",
+       "help": "Disable header",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "no_summary": {
+       "flags": [
+        "--no-summary"
+       ],
+       "negation": "",
+       "help": "Disable summary",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "noconftest": {
+       "flags": [
+        "--noconftest"
+       ],
+       "negation": "",
+       "help": "Don't load any conftest.py files",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "override_ini": {
+       "flags": [
+        "--override-ini",
+        "-o"
+       ],
+       "negation": "",
+       "help": "Override configuration option with \"option=value\" style, e.g. `-o strict_xfail=True -o cache_dir=cache`",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "p": {
+       "flags": [
+        "-p"
+       ],
+       "negation": "",
+       "help": "Early-load given plugin module name or entry point (multi-allowed)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "pastebin": {
+       "flags": [
+        "--pastebin"
+       ],
+       "negation": "",
+       "help": "Send failed|all info to bpaste.net pastebin service",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "pdb": {
+       "flags": [
+        "--pdb"
+       ],
+       "negation": "",
+       "help": "Start the interactive Python debugger on errors or KeyboardInterrupt",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "pdbcls": {
+       "flags": [
+        "--pdbcls"
+       ],
+       "negation": "",
+       "help": "Specify a custom interactive Python debugger for use with --pdb.For example: --pdbcls=IPython.terminal.debugger:TerminalPdb",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "pyargs": {
+       "flags": [
+        "--pyargs"
+       ],
+       "negation": "",
+       "help": "Try to interpret all arguments as Python packages",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "pythonwarnings": {
+       "flags": [
+        "--pythonwarnings",
+        "-W"
+       ],
+       "negation": "",
+       "help": "Set which warnings to report, see -W option of Python itself",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "quiet": {
+       "flags": [
+        "--quiet",
+        "-q"
+       ],
+       "negation": "",
+       "help": "Decrease verbosity",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "report_chars": {
+       "flags": [
+        "--report-chars",
+        "-r"
+       ],
+       "negation": "",
+       "help": "Show extra test summary info as specified by chars: (f)ailed, (E)rror, (s)kipped, (x)failed, (X)passed, (p)assed, (P)assed with output, (a)ll except passed (p/P), or (A)ll",
+       "type": "list[str]",
+       "default": "fE",
+       "choices": []
+      },
+      "rootdir": {
+       "flags": [
+        "--rootdir"
+       ],
+       "negation": "",
+       "help": "Define root directory for tests",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "runxfail": {
+       "flags": [
+        "--runxfail"
+       ],
+       "negation": "",
+       "help": "Report the results of xfail tests as if they were not marked",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "s": {
+       "flags": [
+        "-s"
+       ],
+       "negation": "",
+       "help": "Shortcut for --capture=no",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "setup_only": {
+       "flags": [
+        "--setup-only"
+       ],
+       "negation": "",
+       "help": "Only setup fixtures, do not execute tests",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "setup_plan": {
+       "flags": [
+        "--setup-plan"
+       ],
+       "negation": "",
+       "help": "Show what fixtures and tests would be executed but don't execute anything",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "setup_show": {
+       "flags": [
+        "--setup-show"
+       ],
+       "negation": "",
+       "help": "Show setup of fixtures while executing tests",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "show_capture": {
+       "flags": [
+        "--show-capture"
+       ],
+       "negation": "",
+       "help": "Controls how captured stdout/stderr/log is shown on failed tests",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "showlocals": {
+       "flags": [
+        "--showlocals",
+        "-l"
+       ],
+       "negation": "--no-showlocals",
+       "help": "Show locals in tracebacks (disabled by default)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "strict": {
+       "flags": [
+        "--strict"
+       ],
+       "negation": "",
+       "help": "Enables the strict option",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "strict_config": {
+       "flags": [
+        "--strict-config"
+       ],
+       "negation": "",
+       "help": "Enables the strict_config option",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "strict_markers": {
+       "flags": [
+        "--strict-markers"
+       ],
+       "negation": "",
+       "help": "Enables the strict_markers option",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "sw": {
+       "flags": [
+        "--stepwise",
+        "--sw"
+       ],
+       "negation": "",
+       "help": "Exit on test failure and continue from last failing test next time",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "sw_reset": {
+       "flags": [
+        "--stepwise-reset",
+        "--sw-reset"
+       ],
+       "negation": "",
+       "help": "Resets stepwise state, restarting the stepwise workflow",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "sw_skip": {
+       "flags": [
+        "--stepwise-skip",
+        "--sw-skip"
+       ],
+       "negation": "",
+       "help": "Ignore the first failing test but stop on the next failing test",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "tb": {
+       "flags": [
+        "--tb"
+       ],
+       "negation": "",
+       "help": "Traceback print mode (auto/long/short/line/native/no)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "trace": {
+       "flags": [
+        "--trace"
+       ],
+       "negation": "",
+       "help": "Immediately break when running each test",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "trace_config": {
+       "flags": [
+        "--trace-config"
+       ],
+       "negation": "",
+       "help": "Trace considerations of conftest.py files",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "verbose": {
+       "flags": [
+        "--verbose",
+        "-v"
+       ],
+       "negation": "",
+       "help": "Increase verbosity",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "verbosity": {
+       "flags": [
+        "--verbosity"
+       ],
+       "negation": "",
+       "help": "Set verbosity",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "xfail_tb": {
+       "flags": [
+        "--xfail-tb"
+       ],
+       "negation": "",
+       "help": "Show tracebacks for xfail (as long as --tb != no)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    }
+   }
+  }
+ },
+ "deltas": {
+  "9.1.0": {
+   "date": "2026-06-13",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "9.0.3": {
+   "date": "2026-04-07",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3,
+   "drop": [
+    "\tmax_warnings",
+    "\treport_chars"
+   ],
+   "add": {
+    "\tr": {
+     "flags": [
+      "-r"
+     ],
+     "negation": "",
+     "help": "Show extra test summary info as specified by chars: (f)ailed, (E)rror, (s)kipped, (x)failed, (X)passed, (p)assed, (P)assed with output, (a)ll except passed (p/P), or (A)ll",
+     "type": "list[str]",
+     "default": "fE",
+     "choices": []
+    }
+   }
+  },
+  "9.0.2": {
+   "date": "2025-12-06",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "9.0.1": {
+   "date": "2025-11-12",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "9.0.0": {
+   "date": "2025-11-08",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "8.4.2": {
+   "date": "2025-09-04",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3,
+   "revert": {
+    "\tcov_report": {
+     "flags": [
+      "--cov-report"
+     ],
+     "negation": "",
+     "help": "Type of report to generate: term, term-missing, annotate, html, xml, json, lcov (multi-allowed)",
+     "type": "str",
+     "default": null,
+     "choices": []
+    },
+    "\toverride_ini": {
+     "flags": [
+      "--override-ini",
+      "-o"
+     ],
+     "negation": "",
+     "help": "Override ini option with \"option=value\" style, e.g. `-o xfail_strict=True -o cache_dir=cache`",
+     "type": "str",
+     "default": null,
+     "choices": []
+    },
+    "\tstrict": {
+     "flags": [
+      "--strict"
+     ],
+     "negation": "",
+     "help": "(Deprecated) alias to --strict-markers",
+     "type": "bool",
+     "default": null,
+     "choices": []
+    },
+    "\tstrict_config": {
+     "flags": [
+      "--strict-config"
+     ],
+     "negation": "",
+     "help": "Any warnings encountered while parsing the `pytest` section of the configuration file raise errors",
+     "type": "bool",
+     "default": null,
+     "choices": []
+    },
+    "\tstrict_markers": {
+     "flags": [
+      "--strict-markers"
+     ],
+     "negation": "",
+     "help": "Markers not registered in the `markers` section of the configuration file raise errors",
+     "type": "bool",
+     "default": null,
+     "choices": []
+    }
+   }
+  },
+  "8.4.1": {
+   "date": "2025-06-18",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "8.4.0": {
+   "date": "2025-06-02",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "8.3.5": {
+   "date": "2025-03-02",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3,
+   "drop": [
+    "\tdisable_plugin_autoload",
+    "\tforce_short_summary",
+    "\tsw_reset"
+   ]
+  }
+ }
+}

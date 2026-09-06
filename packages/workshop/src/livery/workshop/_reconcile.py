@@ -116,7 +116,7 @@ def reconcile(root: Path) -> Reconciled:
         return result
     result.drifted = True
     before = installed_distributions(root)
-    import toolroom
+    from livery import toolroom
 
     sync = toolroom.uv.opts(cwd=root, nofail=True, recorded=False)("sync", "--frozen")
     if sync.code != 0:

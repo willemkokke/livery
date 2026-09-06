@@ -1,0 +1,68 @@
+# This package's section of the workspace site, hand-authored.
+# Labels map to pages relative to this docs/ tree, or to nested
+# lists. Every authored page must appear here, and every entry must
+# name a real page; the changelog and API entries are appended by
+# the emitter. The tool entries are authored with the curated
+# driver set: `fm toolroom.pages` writes the pages, and a driver
+# added without its entry goes red in the strict build.
+nav = [
+    { "Index" = "index.md" },
+    { "Playground" = "playground.md" },
+    { "Using the tools" = "usage.md" },
+    { "With footman" = "footman.md" },
+    { "Testing" = "testing.md" },
+    { "Typing and the stubs" = "typing.md" },
+    { "Colour" = "_generated/colour.md" },
+    { "API reference" = "api.md" },
+    { "Tools" = [
+        { "The curated tools" = "_generated/tools/index.md" },
+        # nav:begin tools
+        { "basedpyright" = "_generated/tools/basedpyright.md" },
+        { "bash" = "_generated/tools/bash.md" },
+        { "build" = "_generated/tools/build.md" },
+        { "bun" = "_generated/tools/bun.md" },
+        { "claude" = "_generated/tools/claude.md" },
+        { "cmake" = "_generated/tools/cmake.md" },
+        { "cmd" = "_generated/tools/cmd.md" },
+        { "coverage" = "_generated/tools/coverage.md" },
+        { "cspell" = "_generated/tools/cspell.md" },
+        { "djlint" = "_generated/tools/djlint.md" },
+        { "docker" = "_generated/tools/docker.md" },
+        { "eclint" = "_generated/tools/eclint.md" },
+        { "fish" = "_generated/tools/fish.md" },
+        { "gh" = "_generated/tools/gh.md" },
+        { "git" = "_generated/tools/git.md" },
+        { "git_changelog" = "_generated/tools/git_changelog.md" },
+        { "git_cliff" = "_generated/tools/git_cliff.md" },
+        { "markdownlint" = "_generated/tools/markdownlint.md" },
+        { "mkdocs" = "_generated/tools/mkdocs.md" },
+        { "mypy" = "_generated/tools/mypy.md" },
+        { "ninja" = "_generated/tools/ninja.md" },
+        { "nu" = "_generated/tools/nu.md" },
+        { "prek" = "_generated/tools/prek.md" },
+        { "pwsh" = "_generated/tools/pwsh.md" },
+        { "pytest" = "_generated/tools/pytest.md" },
+        { "python" = "_generated/tools/python.md" },
+        { "ruff" = "_generated/tools/ruff.md" },
+        { "ruff_format" = "_generated/tools/ruff_format.md" },
+        { "ssh" = "_generated/tools/ssh.md" },
+        { "ssh_keygen" = "_generated/tools/ssh_keygen.md" },
+        { "ssh_keyscan" = "_generated/tools/ssh_keyscan.md" },
+        { "tea" = "_generated/tools/tea.md" },
+        { "twine" = "_generated/tools/twine.md" },
+        { "ty" = "_generated/tools/ty.md" },
+        { "uv" = "_generated/tools/uv.md" },
+        { "zensical" = "_generated/tools/zensical.md" },
+        { "zsh" = "_generated/tools/zsh.md" },
+        # nav:end tools
+    ] },
+    # nav:begin tasks
+    { "Tasks" = [
+        { "Overview" = "_generated/tasks/index.md" },
+        { "toolroom" = [
+            { "Overview" = "_generated/tasks/toolroom/index.md" },
+            { "pages" = "_generated/tasks/toolroom/pages.md" },
+        ] },
+    ] },
+    # nav:end tasks
+]

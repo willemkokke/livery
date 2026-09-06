@@ -20,10 +20,10 @@ import tomllib
 from pathlib import Path
 
 import footman
-import toolroom
 from footman import fail
-from toolroom import basedpyright, mypy, pyrefly, pytest, ruff, ruff_format, ty
 
+from livery import toolroom
+from livery.toolroom import basedpyright, mypy, pyrefly, pytest, ruff, ruff_format, ty
 from livery.workshop._packages import Package
 
 #: The whole repo, as CI lints it.

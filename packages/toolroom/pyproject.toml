@@ -1,0 +1,52 @@
+# Seeded from the template channel (package-python kind) at
+# birth; this file is the workspace's own. Edit it directly:
+# the template never rewrites it.
+[build-system]
+requires = ["uv_build>=0.11,<0.13"]
+build-backend = "uv_build"
+
+[project]
+name = "livery-toolroom"
+version = "0.6.1"
+description = "Typed surfaces for command-line tools, generated from the tools themselves."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Willem Kokke", email = "mail@willem.net" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Typing :: Typed",
+]
+
+# Dependency-free at runtime, pinned by test: the one declared
+# runtime dependency stays reserved for strongroom. The private
+# _machinery and _docsgen modules import footman, and load only
+# through footman's own plugin() - the livery.forge._dev precedent.
+dependencies = []
+
+[project.entry-points."footman.tasks"]
+"livery.toolroom" = "livery.toolroom._docsgen"
+
+[project.urls]
+Repository = "https://github.com/willemkokke/livery"
+
+[tool.uv.build-backend]
+# PEP 420 namespace: the importable package is livery.toolroom and
+# there is no livery/__init__.py anywhere in this repository.
+module-name = "livery.toolroom"
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+
+[tool.ruff.lint.per-file-ignores]
+# The imported sources predate the workspace's pydocstyle rule;
+# their docstring conformance is a tracked content pass, not a
+# cut-time rewrite. Retired by that pass.
+"src/**" = ["D105", "D102", "D107", "D205", "D301", "D415"]
+"tests/**" = ["D1", "D205", "D301", "D415", "E501"]
+# The generated stubs' ruling rides here too when ruff resolves this
+# nested config for the package's own tree.
+"src/livery/toolroom/_stubs/*.pyi" = ["E501", "D"]

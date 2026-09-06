@@ -1,0 +1,170 @@
+{
+ "schema": 1,
+ "tool": "eclint",
+ "observed_from": "0.5.2-wk.1",
+ "base": {
+  "version": "0.6.0-wk.5",
+  "date": "2026-07-29",
+  "platforms": [
+   "Linux",
+   "Windows",
+   "macOS"
+  ],
+  "extractor": 3,
+  "surface": {
+   "help": "",
+   "verbs": {
+    "": {
+     "help": "",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "color": {
+       "flags": [
+        "-color"
+       ],
+       "negation": "",
+       "help": "use color when printing; can be \"always\", \"auto\", or \"never\"",
+       "type": "str",
+       "default": "auto",
+       "choices": []
+      },
+      "cpuprofile": {
+       "flags": [
+        "-cpuprofile"
+       ],
+       "negation": "",
+       "help": "write cpu profile to file",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "exclude": {
+       "flags": [
+        "-exclude"
+       ],
+       "negation": "",
+       "help": "paths to exclude",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "fix": {
+       "flags": [
+        "-fix"
+       ],
+       "negation": "",
+       "help": "enable fixing instead of error reporting",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "memprofile": {
+       "flags": [
+        "-memprofile"
+       ],
+       "negation": "",
+       "help": "write mem profile to file",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "no_gitignore": {
+       "flags": [
+        "-no_gitignore"
+       ],
+       "negation": "",
+       "help": "do not respect .gitignore rules when walking directories",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "show_all_errors": {
+       "flags": [
+        "-show_all_errors"
+       ],
+       "negation": "",
+       "help": "display all errors for each file (otherwise 10 are kept)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "show_error_quantity": {
+       "flags": [
+        "-show_error_quantity"
+       ],
+       "negation": "",
+       "help": "display only the first n errors (0 means all)",
+       "type": "str",
+       "default": "10",
+       "choices": []
+      },
+      "summary": {
+       "flags": [
+        "-summary"
+       ],
+       "negation": "",
+       "help": "enable the summary view",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "v": {
+       "flags": [
+        "-v"
+       ],
+       "negation": "",
+       "help": "number for the log level verbosity of the testing logger",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "vmodule": {
+       "flags": [
+        "-vmodule"
+       ],
+       "negation": "",
+       "help": "comma-separated list of pattern=N log level settings for files matching the patterns",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    }
+   }
+  }
+ },
+ "deltas": {
+  "0.6.0-wk.4": {
+   "date": "2026-07-07",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.6.0-wk.3": {
+   "date": "2026-03-18",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "0.5.2-wk.1": {
+   "date": "2026-03-10",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3,
+   "drop": [
+    "\tno_gitignore"
+   ]
+  }
+ }
+}

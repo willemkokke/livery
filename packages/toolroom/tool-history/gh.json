@@ -1,0 +1,2666 @@
+{
+ "schema": 1,
+ "tool": "gh",
+ "observed_from": "2.88.0",
+ "base": {
+  "version": "2.98.0",
+  "date": "2026-08-20",
+  "platforms": [
+   "Linux",
+   "Windows",
+   "macOS"
+  ],
+  "extractor": 3,
+  "surface": {
+   "help": "Work seamlessly with GitHub from the command line.",
+   "verbs": {
+    "": {
+     "help": "Work seamlessly with GitHub from the command line.",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {}
+    },
+    "api": {
+     "help": "Makes an authenticated HTTP request to the GitHub API and prints the response.",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "allow_escape_sequences": {
+       "flags": [
+        "--allow-escape-sequences"
+       ],
+       "negation": "",
+       "help": "Allow printing terminal escape sequences",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "cache": {
+       "flags": [
+        "--cache"
+       ],
+       "negation": "",
+       "help": "Cache the response, e.g. \"3600s\", \"60m\", \"1h\"",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "field": {
+       "flags": [
+        "--field",
+        "-F"
+       ],
+       "negation": "",
+       "help": "Add a typed parameter in key=value format (use \"@<path>\" or \"@-\" to read value from file or stdin)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "header": {
+       "flags": [
+        "--header",
+        "-H"
+       ],
+       "negation": "",
+       "help": "Add a HTTP request header in key:value format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "hostname": {
+       "flags": [
+        "--hostname"
+       ],
+       "negation": "",
+       "help": "The GitHub hostname for the request",
+       "type": "str",
+       "default": "github.com",
+       "choices": []
+      },
+      "include": {
+       "flags": [
+        "--include",
+        "-i"
+       ],
+       "negation": "",
+       "help": "Include HTTP response status line and headers in the output",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "input": {
+       "flags": [
+        "--input"
+       ],
+       "negation": "",
+       "help": "The file to use as body for the HTTP request (use \"-\" to read from standard input)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "jq": {
+       "flags": [
+        "--jq",
+        "-q"
+       ],
+       "negation": "",
+       "help": "Query to select values from the response using jq syntax",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "method": {
+       "flags": [
+        "--method",
+        "-X"
+       ],
+       "negation": "",
+       "help": "The HTTP method for the request",
+       "type": "str",
+       "default": "GET",
+       "choices": []
+      },
+      "paginate": {
+       "flags": [
+        "--paginate"
+       ],
+       "negation": "",
+       "help": "Make additional HTTP requests to fetch all pages of results",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "preview": {
+       "flags": [
+        "--preview",
+        "-p"
+       ],
+       "negation": "",
+       "help": "Opt into GitHub API previews (names should omit '-preview')",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "raw_field": {
+       "flags": [
+        "--raw-field",
+        "-f"
+       ],
+       "negation": "",
+       "help": "Add a string parameter in key=value format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "silent": {
+       "flags": [
+        "--silent"
+       ],
+       "negation": "",
+       "help": "Do not print the response body",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "slurp": {
+       "flags": [
+        "--slurp"
+       ],
+       "negation": "",
+       "help": "Use with \"--paginate\" to return an array of all pages of either JSON arrays or objects",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "template": {
+       "flags": [
+        "--template",
+        "-t"
+       ],
+       "negation": "",
+       "help": "Format JSON output using a Go template; see \"gh help formatting\"",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "verbose": {
+       "flags": [
+        "--verbose"
+       ],
+       "negation": "",
+       "help": "Include full HTTP request and response in the output",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "auth.login": {
+     "help": "Authenticate with a GitHub host.",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "clipboard": {
+       "flags": [
+        "--clipboard",
+        "-c"
+       ],
+       "negation": "",
+       "help": "Copy one-time OAuth device code to clipboard",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "git_protocol": {
+       "flags": [
+        "--git-protocol",
+        "-p"
+       ],
+       "negation": "",
+       "help": "The protocol to use for git operations on this host: {ssh|https}",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "hostname": {
+       "flags": [
+        "--hostname",
+        "-h"
+       ],
+       "negation": "",
+       "help": "The hostname of the GitHub instance to authenticate with",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "insecure_storage": {
+       "flags": [
+        "--insecure-storage"
+       ],
+       "negation": "",
+       "help": "Save authentication credentials in plain text instead of credential store",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "scopes": {
+       "flags": [
+        "--scopes",
+        "-s"
+       ],
+       "negation": "",
+       "help": "Additional authentication scopes to request",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "skip_ssh_key": {
+       "flags": [
+        "--skip-ssh-key"
+       ],
+       "negation": "",
+       "help": "Skip generate/upload SSH key prompt",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "web": {
+       "flags": [
+        "--web",
+        "-w"
+       ],
+       "negation": "",
+       "help": "Open a browser to authenticate",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "with_token": {
+       "flags": [
+        "--with-token"
+       ],
+       "negation": "",
+       "help": "Read token from standard input",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "auth.status": {
+     "help": "Display active account and authentication state on each known GitHub host.",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "active": {
+       "flags": [
+        "--active",
+        "-a"
+       ],
+       "negation": "",
+       "help": "Display the active account only",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "hostname": {
+       "flags": [
+        "--hostname",
+        "-h"
+       ],
+       "negation": "",
+       "help": "Check only a specific hostname's auth status",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "jq": {
+       "flags": [
+        "--jq"
+       ],
+       "negation": "",
+       "help": "Filter JSON output using a jq expression",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "json": {
+       "flags": [
+        "--json"
+       ],
+       "negation": "",
+       "help": "Output JSON with the specified fields",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "show_token": {
+       "flags": [
+        "--show-token",
+        "-t"
+       ],
+       "negation": "",
+       "help": "Display the auth token",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "template": {
+       "flags": [
+        "--template"
+       ],
+       "negation": "",
+       "help": "Format JSON output using a Go template; see \"gh help formatting\"",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "issue.create": {
+     "help": "Create an issue on GitHub.",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "assignee": {
+       "flags": [
+        "--assignee",
+        "-a"
+       ],
+       "negation": "",
+       "help": "Assign people by their login",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "blocked_by": {
+       "flags": [
+        "--blocked-by"
+       ],
+       "negation": "",
+       "help": "Mark the new issue as blocked by these issue numbers or URLs",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "blocking": {
+       "flags": [
+        "--blocking"
+       ],
+       "negation": "",
+       "help": "Mark the new issue as blocking these issue numbers or URLs",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "body": {
+       "flags": [
+        "--body",
+        "-b"
+       ],
+       "negation": "",
+       "help": "Supply a body",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "body_file": {
+       "flags": [
+        "--body-file",
+        "-F"
+       ],
+       "negation": "",
+       "help": "Read body text from file (use \"-\" to read from standard input)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "editor": {
+       "flags": [
+        "--editor",
+        "-e"
+       ],
+       "negation": "",
+       "help": "Skip prompts and open the text editor to write the title and body in",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "label": {
+       "flags": [
+        "--label",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Add labels by name",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "milestone": {
+       "flags": [
+        "--milestone",
+        "-m"
+       ],
+       "negation": "",
+       "help": "Add the issue to a milestone by name",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "parent": {
+       "flags": [
+        "--parent"
+       ],
+       "negation": "",
+       "help": "Add the new issue as a sub-issue of the specified parent number or URL",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "project": {
+       "flags": [
+        "--project",
+        "-p"
+       ],
+       "negation": "",
+       "help": "Add the issue to projects by title",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "recover": {
+       "flags": [
+        "--recover"
+       ],
+       "negation": "",
+       "help": "Recover input from a failed run of create",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Select another repository using the [HOST/]OWNER/REPO format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "template": {
+       "flags": [
+        "--template",
+        "-T"
+       ],
+       "negation": "",
+       "help": "Template name to use as starting body text",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "title": {
+       "flags": [
+        "--title",
+        "-t"
+       ],
+       "negation": "",
+       "help": "Supply a title",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "type": {
+       "flags": [
+        "--type"
+       ],
+       "negation": "",
+       "help": "Set the issue type by name",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "web": {
+       "flags": [
+        "--web",
+        "-w"
+       ],
+       "negation": "",
+       "help": "Open the browser to create an issue",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "issue.list": {
+     "help": "List issues in a GitHub repository. By default, this only lists open issues.",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "app": {
+       "flags": [
+        "--app"
+       ],
+       "negation": "",
+       "help": "Filter by GitHub App author",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "assignee": {
+       "flags": [
+        "--assignee",
+        "-a"
+       ],
+       "negation": "",
+       "help": "Filter by assignee",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "author": {
+       "flags": [
+        "--author",
+        "-A"
+       ],
+       "negation": "",
+       "help": "Filter by author (use --app to filter by a GitHub App)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "jq": {
+       "flags": [
+        "--jq",
+        "-q"
+       ],
+       "negation": "",
+       "help": "Filter JSON output using a jq expression",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "json": {
+       "flags": [
+        "--json"
+       ],
+       "negation": "",
+       "help": "Output JSON with the specified fields",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "label": {
+       "flags": [
+        "--label",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Filter by label",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "limit": {
+       "flags": [
+        "--limit",
+        "-L"
+       ],
+       "negation": "",
+       "help": "Maximum number of issues to fetch",
+       "type": "str",
+       "default": "30",
+       "choices": []
+      },
+      "mention": {
+       "flags": [
+        "--mention"
+       ],
+       "negation": "",
+       "help": "Filter by mention",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "milestone": {
+       "flags": [
+        "--milestone",
+        "-m"
+       ],
+       "negation": "",
+       "help": "Filter by milestone number or title",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Select another repository using the [HOST/]OWNER/REPO format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "search": {
+       "flags": [
+        "--search",
+        "-S"
+       ],
+       "negation": "",
+       "help": "Search issues with query",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "state": {
+       "flags": [
+        "--state",
+        "-s"
+       ],
+       "negation": "",
+       "help": "Filter by state: {open|closed|all}",
+       "type": "str",
+       "default": "open",
+       "choices": []
+      },
+      "template": {
+       "flags": [
+        "--template",
+        "-t"
+       ],
+       "negation": "",
+       "help": "Format JSON output using a Go template; see \"gh help formatting\"",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "type": {
+       "flags": [
+        "--type"
+       ],
+       "negation": "",
+       "help": "Filter by issue type name",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "web": {
+       "flags": [
+        "--web",
+        "-w"
+       ],
+       "negation": "",
+       "help": "List issues in the web browser",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "issue.view": {
+     "help": "Display the title, body, and other information about an issue.",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "comments": {
+       "flags": [
+        "--comments",
+        "-c"
+       ],
+       "negation": "",
+       "help": "View issue comments",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "jq": {
+       "flags": [
+        "--jq",
+        "-q"
+       ],
+       "negation": "",
+       "help": "Filter JSON output using a jq expression",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "json": {
+       "flags": [
+        "--json"
+       ],
+       "negation": "",
+       "help": "Output JSON with the specified fields",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Select another repository using the [HOST/]OWNER/REPO format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "template": {
+       "flags": [
+        "--template",
+        "-t"
+       ],
+       "negation": "",
+       "help": "Format JSON output using a Go template; see \"gh help formatting\"",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "web": {
+       "flags": [
+        "--web",
+        "-w"
+       ],
+       "negation": "",
+       "help": "Open an issue in the browser",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "label.create": {
+     "help": "Create a new label on GitHub, or update an existing one with `--force`.",
+     "wraps": false,
+     "positional": "required",
+     "lead": "name",
+     "options": {
+      "color": {
+       "flags": [
+        "--color",
+        "-c"
+       ],
+       "negation": "",
+       "help": "Color of the label",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "description": {
+       "flags": [
+        "--description",
+        "-d"
+       ],
+       "negation": "",
+       "help": "Description of the label",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "force": {
+       "flags": [
+        "--force",
+        "-f"
+       ],
+       "negation": "",
+       "help": "Update the label color and description if label already exists",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Select another repository using the [HOST/]OWNER/REPO format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "label.list": {
+     "help": "Display labels in a GitHub repository.",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "jq": {
+       "flags": [
+        "--jq",
+        "-q"
+       ],
+       "negation": "",
+       "help": "Filter JSON output using a jq expression",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "json": {
+       "flags": [
+        "--json"
+       ],
+       "negation": "",
+       "help": "Output JSON with the specified fields",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "limit": {
+       "flags": [
+        "--limit",
+        "-L"
+       ],
+       "negation": "",
+       "help": "Maximum number of labels to fetch",
+       "type": "str",
+       "default": "30",
+       "choices": []
+      },
+      "order": {
+       "flags": [
+        "--order"
+       ],
+       "negation": "",
+       "help": "Order of labels returned: {asc|desc}",
+       "type": "str",
+       "default": "asc",
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Select another repository using the [HOST/]OWNER/REPO format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "search": {
+       "flags": [
+        "--search",
+        "-S"
+       ],
+       "negation": "",
+       "help": "Search label names and descriptions",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "sort": {
+       "flags": [
+        "--sort"
+       ],
+       "negation": "",
+       "help": "Sort fetched labels: {created|name}",
+       "type": "str",
+       "default": "created",
+       "choices": []
+      },
+      "template": {
+       "flags": [
+        "--template",
+        "-t"
+       ],
+       "negation": "",
+       "help": "Format JSON output using a Go template; see \"gh help formatting\"",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "web": {
+       "flags": [
+        "--web",
+        "-w"
+       ],
+       "negation": "",
+       "help": "List labels in the web browser",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "pr.checkout": {
+     "help": "Check out a pull request in git",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "branch": {
+       "flags": [
+        "--branch",
+        "-b"
+       ],
+       "negation": "",
+       "help": "Local branch name to use",
+       "type": "str",
+       "default": "[the name of the head branch]",
+       "choices": []
+      },
+      "detach": {
+       "flags": [
+        "--detach"
+       ],
+       "negation": "",
+       "help": "Checkout PR with a detached HEAD",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "force": {
+       "flags": [
+        "--force",
+        "-f"
+       ],
+       "negation": "",
+       "help": "Reset the existing local branch to the latest state of the pull request",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "recurse_submodules": {
+       "flags": [
+        "--recurse-submodules"
+       ],
+       "negation": "",
+       "help": "Update all submodules after checkout",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Select another repository using the [HOST/]OWNER/REPO format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "worktree": {
+       "flags": [
+        "--worktree"
+       ],
+       "negation": "",
+       "help": "Check out the pull request into a worktree at the given path",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "pr.create": {
+     "help": "Create a pull request on GitHub.",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "assignee": {
+       "flags": [
+        "--assignee",
+        "-a"
+       ],
+       "negation": "",
+       "help": "Assign people by their login",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "base": {
+       "flags": [
+        "--base",
+        "-B"
+       ],
+       "negation": "",
+       "help": "The branch into which you want your code merged",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "body": {
+       "flags": [
+        "--body",
+        "-b"
+       ],
+       "negation": "",
+       "help": "Body for the pull request",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "body_file": {
+       "flags": [
+        "--body-file",
+        "-F"
+       ],
+       "negation": "",
+       "help": "Read body text from file (use \"-\" to read from standard input)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "draft": {
+       "flags": [
+        "--draft",
+        "-d"
+       ],
+       "negation": "",
+       "help": "Mark pull request as a draft",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "dry_run": {
+       "flags": [
+        "--dry-run"
+       ],
+       "negation": "",
+       "help": "Print details instead of creating the PR",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "editor": {
+       "flags": [
+        "--editor",
+        "-e"
+       ],
+       "negation": "",
+       "help": "Skip prompts and open the text editor to write the title and body in",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "fill": {
+       "flags": [
+        "--fill",
+        "-f"
+       ],
+       "negation": "",
+       "help": "Use commit info for title and body",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "fill_first": {
+       "flags": [
+        "--fill-first"
+       ],
+       "negation": "",
+       "help": "Use first commit info for title and body",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "fill_verbose": {
+       "flags": [
+        "--fill-verbose"
+       ],
+       "negation": "",
+       "help": "Use commits msg+body for description",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "head": {
+       "flags": [
+        "--head",
+        "-H"
+       ],
+       "negation": "",
+       "help": "The branch that contains commits for your pull request",
+       "type": "str",
+       "default": "[current branch]",
+       "choices": []
+      },
+      "label": {
+       "flags": [
+        "--label",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Add labels by name",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "milestone": {
+       "flags": [
+        "--milestone",
+        "-m"
+       ],
+       "negation": "",
+       "help": "Add the pull request to a milestone by name",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "no_maintainer_edit": {
+       "flags": [
+        "--no-maintainer-edit"
+       ],
+       "negation": "",
+       "help": "Disable maintainer's ability to modify pull request",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "project": {
+       "flags": [
+        "--project",
+        "-p"
+       ],
+       "negation": "",
+       "help": "Add the pull request to projects by title",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "recover": {
+       "flags": [
+        "--recover"
+       ],
+       "negation": "",
+       "help": "Recover input from a failed run of create",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Select another repository using the [HOST/]OWNER/REPO format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "reviewer": {
+       "flags": [
+        "--reviewer",
+        "-r"
+       ],
+       "negation": "",
+       "help": "Request reviews from people or teams by their handle",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "template": {
+       "flags": [
+        "--template",
+        "-T"
+       ],
+       "negation": "",
+       "help": "Template file to use as starting body text",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "title": {
+       "flags": [
+        "--title",
+        "-t"
+       ],
+       "negation": "",
+       "help": "Title for the pull request",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "web": {
+       "flags": [
+        "--web",
+        "-w"
+       ],
+       "negation": "",
+       "help": "Open the web browser to create a pull request",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "pr.list": {
+     "help": "List pull requests in a GitHub repository. By default, this only lists open PRs.",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "app": {
+       "flags": [
+        "--app"
+       ],
+       "negation": "",
+       "help": "Filter by GitHub App author",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "assignee": {
+       "flags": [
+        "--assignee",
+        "-a"
+       ],
+       "negation": "",
+       "help": "Filter by assignee",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "author": {
+       "flags": [
+        "--author",
+        "-A"
+       ],
+       "negation": "",
+       "help": "Filter by author (use --app to filter by a GitHub App)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "base": {
+       "flags": [
+        "--base",
+        "-B"
+       ],
+       "negation": "",
+       "help": "Filter by base branch",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "draft": {
+       "flags": [
+        "--draft",
+        "-d"
+       ],
+       "negation": "",
+       "help": "Filter by draft state",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "head": {
+       "flags": [
+        "--head",
+        "-H"
+       ],
+       "negation": "",
+       "help": "Filter by head branch (\"<owner>:<branch>\" syntax not supported)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "jq": {
+       "flags": [
+        "--jq",
+        "-q"
+       ],
+       "negation": "",
+       "help": "Filter JSON output using a jq expression",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "json": {
+       "flags": [
+        "--json"
+       ],
+       "negation": "",
+       "help": "Output JSON with the specified fields",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "label": {
+       "flags": [
+        "--label",
+        "-l"
+       ],
+       "negation": "",
+       "help": "Filter by label",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "limit": {
+       "flags": [
+        "--limit",
+        "-L"
+       ],
+       "negation": "",
+       "help": "Maximum number of items to fetch",
+       "type": "str",
+       "default": "30",
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Select another repository using the [HOST/]OWNER/REPO format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "search": {
+       "flags": [
+        "--search",
+        "-S"
+       ],
+       "negation": "",
+       "help": "Search pull requests with query",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "state": {
+       "flags": [
+        "--state",
+        "-s"
+       ],
+       "negation": "",
+       "help": "Filter by state: {open|closed|merged|all}",
+       "type": "str",
+       "default": "open",
+       "choices": []
+      },
+      "template": {
+       "flags": [
+        "--template",
+        "-t"
+       ],
+       "negation": "",
+       "help": "Format JSON output using a Go template; see \"gh help formatting\"",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "web": {
+       "flags": [
+        "--web",
+        "-w"
+       ],
+       "negation": "",
+       "help": "List pull requests in the web browser",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "pr.merge": {
+     "help": "Merge a pull request on GitHub.",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "admin": {
+       "flags": [
+        "--admin"
+       ],
+       "negation": "",
+       "help": "Use administrator privileges to merge a pull request that does not meet requirements",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "author_email": {
+       "flags": [
+        "--author-email",
+        "-A"
+       ],
+       "negation": "",
+       "help": "Email text for merge commit author",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "auto": {
+       "flags": [
+        "--auto"
+       ],
+       "negation": "",
+       "help": "Automatically merge only after necessary requirements are met",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "body": {
+       "flags": [
+        "--body",
+        "-b"
+       ],
+       "negation": "",
+       "help": "Body text for the merge commit",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "body_file": {
+       "flags": [
+        "--body-file",
+        "-F"
+       ],
+       "negation": "",
+       "help": "Read body text from file (use \"-\" to read from standard input)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "delete_branch": {
+       "flags": [
+        "--delete-branch",
+        "-d"
+       ],
+       "negation": "",
+       "help": "Delete the local and remote branch after merge",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "disable_auto": {
+       "flags": [
+        "--disable-auto"
+       ],
+       "negation": "",
+       "help": "Disable auto-merge for this pull request",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "match_head_commit": {
+       "flags": [
+        "--match-head-commit"
+       ],
+       "negation": "",
+       "help": "Commit SHA that the pull request head must match to allow merge",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "merge": {
+       "flags": [
+        "--merge",
+        "-m"
+       ],
+       "negation": "",
+       "help": "Merge the commits with the base branch",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "rebase": {
+       "flags": [
+        "--rebase",
+        "-r"
+       ],
+       "negation": "",
+       "help": "Rebase the commits onto the base branch",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Select another repository using the [HOST/]OWNER/REPO format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "squash": {
+       "flags": [
+        "--squash",
+        "-s"
+       ],
+       "negation": "",
+       "help": "Squash the commits into one commit and merge it into the base branch",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "subject": {
+       "flags": [
+        "--subject",
+        "-t"
+       ],
+       "negation": "",
+       "help": "Subject text for the merge commit",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "pr.view": {
+     "help": "Display the title, body, and other information about a pull request.",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "comments": {
+       "flags": [
+        "--comments",
+        "-c"
+       ],
+       "negation": "",
+       "help": "View pull request comments",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "jq": {
+       "flags": [
+        "--jq",
+        "-q"
+       ],
+       "negation": "",
+       "help": "Filter JSON output using a jq expression",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "json": {
+       "flags": [
+        "--json"
+       ],
+       "negation": "",
+       "help": "Output JSON with the specified fields",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Select another repository using the [HOST/]OWNER/REPO format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "template": {
+       "flags": [
+        "--template",
+        "-t"
+       ],
+       "negation": "",
+       "help": "Format JSON output using a Go template; see \"gh help formatting\"",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "web": {
+       "flags": [
+        "--web",
+        "-w"
+       ],
+       "negation": "",
+       "help": "Open a pull request in the browser",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "release.create": {
+     "help": "Create a new GitHub Release for a repository.",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "discussion_category": {
+       "flags": [
+        "--discussion-category"
+       ],
+       "negation": "",
+       "help": "Start a discussion in the specified category",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "draft": {
+       "flags": [
+        "--draft",
+        "-d"
+       ],
+       "negation": "",
+       "help": "Save the release as a draft instead of publishing it",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "fail_on_no_commits": {
+       "flags": [
+        "--fail-on-no-commits"
+       ],
+       "negation": "",
+       "help": "Fail if there are no commits since the last release (no impact on the first release)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "generate_notes": {
+       "flags": [
+        "--generate-notes"
+       ],
+       "negation": "",
+       "help": "Automatically generate title and notes for the release via GitHub Release Notes API",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "latest": {
+       "flags": [
+        "--latest"
+       ],
+       "negation": "",
+       "help": "Mark this release as \"Latest\" ",
+       "type": "bool",
+       "default": false,
+       "choices": []
+      },
+      "notes": {
+       "flags": [
+        "--notes",
+        "-n"
+       ],
+       "negation": "",
+       "help": "Release notes",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "notes_file": {
+       "flags": [
+        "--notes-file",
+        "-F"
+       ],
+       "negation": "",
+       "help": "Read release notes from file (use \"-\" to read from standard input)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "notes_from_tag": {
+       "flags": [
+        "--notes-from-tag"
+       ],
+       "negation": "",
+       "help": "Fetch notes from the tag annotation or message of commit associated with tag",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "notes_start_tag": {
+       "flags": [
+        "--notes-start-tag"
+       ],
+       "negation": "",
+       "help": "Tag to use as the starting point for generating release notes",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "prerelease": {
+       "flags": [
+        "--prerelease",
+        "-p"
+       ],
+       "negation": "",
+       "help": "Mark the release as a prerelease",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Select another repository using the [HOST/]OWNER/REPO format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "target": {
+       "flags": [
+        "--target"
+       ],
+       "negation": "",
+       "help": "Target branch or full commit SHA",
+       "type": "str",
+       "default": "[main branch]",
+       "choices": []
+      },
+      "title": {
+       "flags": [
+        "--title",
+        "-t"
+       ],
+       "negation": "",
+       "help": "Release title",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "verify_tag": {
+       "flags": [
+        "--verify-tag"
+       ],
+       "negation": "",
+       "help": "Abort in case the git tag doesn't already exist in the remote repository",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "release.list": {
+     "help": "List releases in a repository",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "exclude_drafts": {
+       "flags": [
+        "--exclude-drafts"
+       ],
+       "negation": "",
+       "help": "Exclude draft releases",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "exclude_pre_releases": {
+       "flags": [
+        "--exclude-pre-releases"
+       ],
+       "negation": "",
+       "help": "Exclude pre-releases",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "jq": {
+       "flags": [
+        "--jq",
+        "-q"
+       ],
+       "negation": "",
+       "help": "Filter JSON output using a jq expression",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "json": {
+       "flags": [
+        "--json"
+       ],
+       "negation": "",
+       "help": "Output JSON with the specified fields",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "limit": {
+       "flags": [
+        "--limit",
+        "-L"
+       ],
+       "negation": "",
+       "help": "Maximum number of items to fetch",
+       "type": "str",
+       "default": "30",
+       "choices": []
+      },
+      "order": {
+       "flags": [
+        "--order",
+        "-O"
+       ],
+       "negation": "",
+       "help": "Order of releases returned: {asc|desc}",
+       "type": "str",
+       "default": "desc",
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Select another repository using the [HOST/]OWNER/REPO format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "template": {
+       "flags": [
+        "--template",
+        "-t"
+       ],
+       "negation": "",
+       "help": "Format JSON output using a Go template; see \"gh help formatting\"",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "release.upload": {
+     "help": "Upload asset files to a GitHub Release.",
+     "wraps": false,
+     "positional": "required",
+     "lead": "tag",
+     "options": {
+      "clobber": {
+       "flags": [
+        "--clobber"
+       ],
+       "negation": "",
+       "help": "Delete and re-upload existing assets of the same name",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Select another repository using the [HOST/]OWNER/REPO format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "release.view": {
+     "help": "View information about a GitHub Release.",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "jq": {
+       "flags": [
+        "--jq",
+        "-q"
+       ],
+       "negation": "",
+       "help": "Filter JSON output using a jq expression",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "json": {
+       "flags": [
+        "--json"
+       ],
+       "negation": "",
+       "help": "Output JSON with the specified fields",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Select another repository using the [HOST/]OWNER/REPO format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "template": {
+       "flags": [
+        "--template",
+        "-t"
+       ],
+       "negation": "",
+       "help": "Format JSON output using a Go template; see \"gh help formatting\"",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "web": {
+       "flags": [
+        "--web",
+        "-w"
+       ],
+       "negation": "",
+       "help": "Open the release in the browser",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "repo.clone": {
+     "help": "Clone a GitHub repository locally. Pass additional `git clone` flags by listing",
+     "wraps": false,
+     "positional": "required",
+     "lead": "repository",
+     "options": {
+      "no_upstream": {
+       "flags": [
+        "--no-upstream"
+       ],
+       "negation": "",
+       "help": "Do not add an upstream remote when cloning a fork",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "upstream_remote_name": {
+       "flags": [
+        "--upstream-remote-name",
+        "-u"
+       ],
+       "negation": "",
+       "help": "Upstream remote name when cloning a fork",
+       "type": "str",
+       "default": "upstream",
+       "choices": []
+      }
+     }
+    },
+    "repo.view": {
+     "help": "Display the description and the README of a GitHub repository.",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "branch": {
+       "flags": [
+        "--branch",
+        "-b"
+       ],
+       "negation": "",
+       "help": "View a specific branch of the repository",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "jq": {
+       "flags": [
+        "--jq",
+        "-q"
+       ],
+       "negation": "",
+       "help": "Filter JSON output using a jq expression",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "json": {
+       "flags": [
+        "--json"
+       ],
+       "negation": "",
+       "help": "Output JSON with the specified fields",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "template": {
+       "flags": [
+        "--template",
+        "-t"
+       ],
+       "negation": "",
+       "help": "Format JSON output using a Go template; see \"gh help formatting\"",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "web": {
+       "flags": [
+        "--web",
+        "-w"
+       ],
+       "negation": "",
+       "help": "Open a repository in the browser",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "run.list": {
+     "help": "List recent workflow runs.",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "all": {
+       "flags": [
+        "--all",
+        "-a"
+       ],
+       "negation": "",
+       "help": "Include disabled workflows",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "branch": {
+       "flags": [
+        "--branch",
+        "-b"
+       ],
+       "negation": "",
+       "help": "Filter runs by branch",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "commit": {
+       "flags": [
+        "--commit",
+        "-c"
+       ],
+       "negation": "",
+       "help": "Filter runs by the SHA of the commit",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "created": {
+       "flags": [
+        "--created"
+       ],
+       "negation": "",
+       "help": "Filter runs by the date it was created",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "event": {
+       "flags": [
+        "--event",
+        "-e"
+       ],
+       "negation": "",
+       "help": "Filter runs by which event triggered the run",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "jq": {
+       "flags": [
+        "--jq",
+        "-q"
+       ],
+       "negation": "",
+       "help": "Filter JSON output using a jq expression",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "json": {
+       "flags": [
+        "--json"
+       ],
+       "negation": "",
+       "help": "Output JSON with the specified fields",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "limit": {
+       "flags": [
+        "--limit",
+        "-L"
+       ],
+       "negation": "",
+       "help": "Maximum number of runs to fetch",
+       "type": "str",
+       "default": "20",
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Select another repository using the [HOST/]OWNER/REPO format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "status": {
+       "flags": [
+        "--status",
+        "-s"
+       ],
+       "negation": "",
+       "help": "Filter runs by status: {queued|completed|in_progress|requested|waiting|pending|action_required|cancelled|failure|neutral|skipped|stale|startup_failure|success|timed_out}",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "template": {
+       "flags": [
+        "--template",
+        "-t"
+       ],
+       "negation": "",
+       "help": "Format JSON output using a Go template; see \"gh help formatting\"",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "user": {
+       "flags": [
+        "--user",
+        "-u"
+       ],
+       "negation": "",
+       "help": "Filter runs by user who triggered the run",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "workflow": {
+       "flags": [
+        "--workflow",
+        "-w"
+       ],
+       "negation": "",
+       "help": "Filter runs by workflow",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "run.view": {
+     "help": "View a summary of a workflow run.",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "attempt": {
+       "flags": [
+        "--attempt",
+        "-a"
+       ],
+       "negation": "",
+       "help": "The attempt number of the workflow run",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "exit_status": {
+       "flags": [
+        "--exit-status"
+       ],
+       "negation": "",
+       "help": "Exit with non-zero status if run failed",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "job": {
+       "flags": [
+        "--job",
+        "-j"
+       ],
+       "negation": "",
+       "help": "View a specific job ID from a run",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "jq": {
+       "flags": [
+        "--jq",
+        "-q"
+       ],
+       "negation": "",
+       "help": "Filter JSON output using a jq expression",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "json": {
+       "flags": [
+        "--json"
+       ],
+       "negation": "",
+       "help": "Output JSON with the specified fields",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "log": {
+       "flags": [
+        "--log"
+       ],
+       "negation": "",
+       "help": "View full log for either a run or specific job",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "log_failed": {
+       "flags": [
+        "--log-failed"
+       ],
+       "negation": "",
+       "help": "View the log for any failed steps in a run or specific job",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Select another repository using the [HOST/]OWNER/REPO format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "template": {
+       "flags": [
+        "--template",
+        "-t"
+       ],
+       "negation": "",
+       "help": "Format JSON output using a Go template; see \"gh help formatting\"",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "verbose": {
+       "flags": [
+        "--verbose",
+        "-v"
+       ],
+       "negation": "",
+       "help": "Show job steps",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "web": {
+       "flags": [
+        "--web",
+        "-w"
+       ],
+       "negation": "",
+       "help": "Open run in the browser",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "run.watch": {
+     "help": "Watch a run until it completes, showing its progress.",
+     "wraps": false,
+     "positional": "required",
+     "lead": "run_id",
+     "options": {
+      "compact": {
+       "flags": [
+        "--compact"
+       ],
+       "negation": "",
+       "help": "Show only relevant/failed steps",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "exit_status": {
+       "flags": [
+        "--exit-status"
+       ],
+       "negation": "",
+       "help": "Exit with non-zero status if run fails",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "interval": {
+       "flags": [
+        "--interval",
+        "-i"
+       ],
+       "negation": "",
+       "help": "Refresh interval in seconds",
+       "type": "str",
+       "default": "3",
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Select another repository using the [HOST/]OWNER/REPO format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "workflow.list": {
+     "help": "List workflow files, hiding disabled workflows by default.",
+     "wraps": false,
+     "positional": "none",
+     "lead": "",
+     "options": {
+      "all": {
+       "flags": [
+        "--all",
+        "-a"
+       ],
+       "negation": "",
+       "help": "Include disabled workflows",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "jq": {
+       "flags": [
+        "--jq",
+        "-q"
+       ],
+       "negation": "",
+       "help": "Filter JSON output using a jq expression",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "json": {
+       "flags": [
+        "--json"
+       ],
+       "negation": "",
+       "help": "Output JSON with the specified fields",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "limit": {
+       "flags": [
+        "--limit",
+        "-L"
+       ],
+       "negation": "",
+       "help": "Maximum number of workflows to fetch",
+       "type": "str",
+       "default": "50",
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Select another repository using the [HOST/]OWNER/REPO format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "template": {
+       "flags": [
+        "--template",
+        "-t"
+       ],
+       "negation": "",
+       "help": "Format JSON output using a Go template; see \"gh help formatting\"",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "workflow.run": {
+     "help": "Create a `workflow_dispatch` event for a given workflow.",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "field": {
+       "flags": [
+        "--field",
+        "-F"
+       ],
+       "negation": "",
+       "help": "Add a string parameter in key=value format, respecting @ syntax (see \"gh help api\")",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "json": {
+       "flags": [
+        "--json"
+       ],
+       "negation": "",
+       "help": "Read workflow inputs as JSON via STDIN",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "raw_field": {
+       "flags": [
+        "--raw-field",
+        "-f"
+       ],
+       "negation": "",
+       "help": "Add a string parameter in key=value format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "ref": {
+       "flags": [
+        "--ref",
+        "-r"
+       ],
+       "negation": "",
+       "help": "Branch or tag name which contains the version of the workflow file you'd like to run",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repo": {
+       "flags": [
+        "--repo",
+        "-R"
+       ],
+       "negation": "",
+       "help": "Select another repository using the [HOST/]OWNER/REPO format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      }
+     }
+    }
+   }
+  }
+ },
+ "deltas": {
+  "2.97.0": {
+   "date": "2026-07-31",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3,
+   "drop": [
+    "pr.checkout\tworktree"
+   ]
+  },
+  "2.96.0": {
+   "date": "2026-07-29",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3,
+   "drop": [
+    "api\tallow_escape_sequences"
+   ]
+  },
+  "2.95.0": {
+   "date": "2026-06-17",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "2.94.0": {
+   "date": "2026-06-10",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3,
+   "revert": {
+    "issue.list\tauthor": {
+     "flags": [
+      "--author",
+      "-A"
+     ],
+     "negation": "",
+     "help": "Filter by author",
+     "type": "str",
+     "default": null,
+     "choices": []
+    },
+    "pr.list\tauthor": {
+     "flags": [
+      "--author",
+      "-A"
+     ],
+     "negation": "",
+     "help": "Filter by author",
+     "type": "str",
+     "default": null,
+     "choices": []
+    }
+   }
+  },
+  "2.93.0": {
+   "date": "2026-05-27",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3,
+   "drop": [
+    "issue.create\tblocked_by",
+    "issue.create\tblocking",
+    "issue.create\tparent",
+    "issue.create\ttype",
+    "issue.list\ttype"
+   ]
+  },
+  "2.92.0": {
+   "date": "2026-04-28",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "2.91.0": {
+   "date": "2026-04-22",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "2.90.0": {
+   "date": "2026-04-16",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "2.89.0": {
+   "date": "2026-03-26",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "2.88.1": {
+   "date": "2026-03-12",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "2.88.0": {
+   "date": "2026-03-10",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  }
+ }
+}

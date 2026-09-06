@@ -1,0 +1,378 @@
+{
+ "schema": 1,
+ "tool": "python",
+ "observed_from": "3.13.12",
+ "base": {
+  "version": "3.14.7",
+  "date": "2026-08-07",
+  "platforms": [
+   "Linux",
+   "macOS"
+  ],
+  "extractor": 3,
+  "surface": {
+   "help": "",
+   "verbs": {
+    "": {
+     "help": "",
+     "wraps": true,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "B": {
+       "flags": [
+        "-B"
+       ],
+       "negation": "",
+       "help": "don't write .pyc files on import; also PYTHONDONTWRITEBYTECODE=x",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "E": {
+       "flags": [
+        "-E"
+       ],
+       "negation": "",
+       "help": "ignore PYTHON* environment variables (such as PYTHONPATH)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "I": {
+       "flags": [
+        "-I"
+       ],
+       "negation": "",
+       "help": "isolate Python from the user's environment (implies -E, -P and -s)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "O": {
+       "flags": [
+        "-O"
+       ],
+       "negation": "",
+       "help": "remove assert and __debug__-dependent statements; add .opt-1 before .pyc extension; also PYTHONOPTIMIZE=x",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "OO": {
+       "flags": [
+        "-OO"
+       ],
+       "negation": "",
+       "help": "do -O changes and also discard docstrings; add .opt-2 before .pyc extension",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "P": {
+       "flags": [
+        "-P"
+       ],
+       "negation": "",
+       "help": "don't prepend a potentially unsafe path to sys.path; also PYTHONSAFEPATH",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "S": {
+       "flags": [
+        "-S"
+       ],
+       "negation": "",
+       "help": "don't imply 'import site' on initialization",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "V": {
+       "flags": [
+        "-V"
+       ],
+       "negation": "",
+       "help": "print the Python version number and exit (also --version) when given twice, print more information about the build",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "W": {
+       "flags": [
+        "-W"
+       ],
+       "negation": "",
+       "help": "warning control; arg is action:message:category:module:lineno also PYTHONWARNINGS=arg",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "X": {
+       "flags": [
+        "-X"
+       ],
+       "negation": "",
+       "help": "set implementation-specific option",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "b": {
+       "flags": [
+        "-b"
+       ],
+       "negation": "",
+       "help": "issue warnings about converting bytes/bytearray to str and comparing bytes/bytearray with str or bytes with int",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "c": {
+       "flags": [
+        "-c"
+       ],
+       "negation": "",
+       "help": "program passed in as string (terminates option list)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "check_hash_based_pycs": {
+       "flags": [
+        "--check-hash-based-pycs"
+       ],
+       "negation": "",
+       "help": "control how Python invalidates hash-based .pyc files",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "d": {
+       "flags": [
+        "-d"
+       ],
+       "negation": "",
+       "help": "turn on parser debugging output (for experts only, only works on debug builds); also PYTHONDEBUG=x",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "h": {
+       "flags": [
+        "-h"
+       ],
+       "negation": "",
+       "help": "print this help message and exit (also -? or --help)",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "help_all": {
+       "flags": [
+        "--help-all"
+       ],
+       "negation": "",
+       "help": "",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "help_env": {
+       "flags": [
+        "--help-env"
+       ],
+       "negation": "",
+       "help": "",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "help_xoptions": {
+       "flags": [
+        "--help-xoptions",
+        "-X"
+       ],
+       "negation": "",
+       "help": "",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "i": {
+       "flags": [
+        "-i"
+       ],
+       "negation": "",
+       "help": "inspect interactively after running script; forces a prompt even if stdin does not appear to be a terminal; also PYTHONINSPECT=x",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "m": {
+       "flags": [
+        "-m"
+       ],
+       "negation": "",
+       "help": "run library module as a script (terminates option list)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "q": {
+       "flags": [
+        "-q"
+       ],
+       "negation": "",
+       "help": "don't print version and copyright messages on interactive startup",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "s": {
+       "flags": [
+        "-s"
+       ],
+       "negation": "",
+       "help": "don't add user site directory to sys.path; also PYTHONNOUSERSITE=x",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "u": {
+       "flags": [
+        "-u"
+       ],
+       "negation": "",
+       "help": "force the stdout and stderr streams to be unbuffered; this option has no effect on stdin; also PYTHONUNBUFFERED=x",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "v": {
+       "flags": [
+        "-v"
+       ],
+       "negation": "",
+       "help": "verbose (trace import statements); also PYTHONVERBOSE=x can be supplied multiple times to increase verbosity",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "x": {
+       "flags": [
+        "-x"
+       ],
+       "negation": "",
+       "help": "skip first line of source, allowing use of non-Unix forms of #!cmd",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    }
+   }
+  }
+ },
+ "deltas": {
+  "3.14.6": {
+   "date": "2026-07-29",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "3.14.5": {
+   "date": "2026-06-02",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "3.14.4": {
+   "date": "2026-04-14",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "3.14.3": {
+   "date": "2026-03-25",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "3.14.2": {
+   "date": "2026-01-27",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "3.14.1": {
+   "date": "2025-12-02",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "3.14.0": {
+   "date": "2025-11-20",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "3.13.15": {
+   "date": "2026-08-07",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "3.13.14": {
+   "date": "2026-07-28",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "3.13.13": {
+   "date": "2026-06-02",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "3.13.12": {
+   "date": "2026-03-25",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  }
+ }
+}

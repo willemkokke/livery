@@ -1,0 +1,316 @@
+{
+ "schema": 1,
+ "tool": "twine",
+ "observed_from": "4.0.1",
+ "base": {
+  "version": "7.0.0",
+  "date": "2026-07-29",
+  "platforms": [
+   "Linux",
+   "Windows",
+   "macOS"
+  ],
+  "extractor": 3,
+  "surface": {
+   "help": "",
+   "verbs": {
+    "": {
+     "help": "",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "no_color": {
+       "flags": [
+        "--no-color"
+       ],
+       "negation": "",
+       "help": "disable colored output",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "upload": {
+     "help": "",
+     "wraps": false,
+     "positional": "required",
+     "lead": "dist",
+     "options": {
+      "attestations": {
+       "flags": [
+        "--attestations"
+       ],
+       "negation": "",
+       "help": "Upload each file's associated attestations",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "cert": {
+       "flags": [
+        "--cert"
+       ],
+       "negation": "",
+       "help": "Path to alternate CA bundle (can also be set via TWINE_CERT environment variable)",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "client_cert": {
+       "flags": [
+        "--client-cert"
+       ],
+       "negation": "",
+       "help": "Path to SSL client certificate, a single file containing the private key and the certificate in PEM format",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "comment": {
+       "flags": [
+        "--comment",
+        "-c"
+       ],
+       "negation": "",
+       "help": "The comment to include with the distribution file",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "config_file": {
+       "flags": [
+        "--config-file"
+       ],
+       "negation": "",
+       "help": "The .pypirc config file to use",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "disable_progress_bar": {
+       "flags": [
+        "--disable-progress-bar"
+       ],
+       "negation": "",
+       "help": "Disable the progress bar",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "identity": {
+       "flags": [
+        "--identity",
+        "-i"
+       ],
+       "negation": "",
+       "help": "GPG identity used to sign files",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "non_interactive": {
+       "flags": [
+        "--non-interactive"
+       ],
+       "negation": "",
+       "help": "Do not interactively prompt for username/password if the required credentials are missing",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "password": {
+       "flags": [
+        "--password",
+        "-p"
+       ],
+       "negation": "",
+       "help": "The password to authenticate to the repository (package index) with",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "repository": {
+       "flags": [
+        "--repository",
+        "-r"
+       ],
+       "negation": "",
+       "help": "The repository (package index) to upload the package to",
+       "type": "str",
+       "default": "pypi",
+       "choices": []
+      },
+      "repository_url": {
+       "flags": [
+        "--repository-url"
+       ],
+       "negation": "",
+       "help": "The repository (package index) URL to upload the package to",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "sign": {
+       "flags": [
+        "--sign",
+        "-s"
+       ],
+       "negation": "",
+       "help": "Sign files to upload using GPG",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "sign_with": {
+       "flags": [
+        "--sign-with"
+       ],
+       "negation": "",
+       "help": "GPG program used to sign uploads",
+       "type": "str",
+       "default": "gpg",
+       "choices": []
+      },
+      "skip_existing": {
+       "flags": [
+        "--skip-existing"
+       ],
+       "negation": "",
+       "help": "Continue uploading files if one already exists",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "username": {
+       "flags": [
+        "--username",
+        "-u"
+       ],
+       "negation": "",
+       "help": "The username to authenticate to the repository (package index) as",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "verbose": {
+       "flags": [
+        "--verbose"
+       ],
+       "negation": "",
+       "help": "Show verbose output",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    },
+    "check": {
+     "help": "",
+     "wraps": false,
+     "positional": "required",
+     "lead": "dist",
+     "options": {
+      "strict": {
+       "flags": [
+        "--strict"
+       ],
+       "negation": "",
+       "help": "Fail on warnings",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    }
+   }
+  }
+ },
+ "deltas": {
+  "6.2.0": {
+   "date": "2025-09-04",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "6.1.0": {
+   "date": "2025-01-21",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "6.0.1": {
+   "date": "2024-12-01",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "6.0.0": {
+   "date": "2024-11-30",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "5.1.1": {
+   "date": "2024-06-26",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "5.1.0": {
+   "date": "2024-05-16",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "5.0.0": {
+   "date": "2024-02-11",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3,
+   "drop": [
+    "upload\tattestations"
+   ]
+  },
+  "4.0.2": {
+   "date": "2022-12-01",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "4.0.1": {
+   "date": "2022-06-01",
+   "platforms": [
+    "Linux",
+    "Windows",
+    "macOS"
+   ],
+   "extractor": 3
+  }
+ }
+}

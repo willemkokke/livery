@@ -1,8 +1,9 @@
 # Footman and toolroom join the workspace
 
-Status: PLAN, approved in intent 2026-09-05 (Willem: "lets move
-them", both at once). Blocked on the docs prepass plan, which is
-written as its own note and lands first. Strongroom's initial plan
+Status: phase 1 landed 2026-09-06 (issue #247); phases 2 to 4 not
+started. Approved in intent 2026-09-05 (Willem: "lets move them",
+both at once); the docs prepass that blocked it completed
+2026-09-05. Strongroom's initial plan
 follows this one; toolroom's store rework over strongroom is out of
 scope here.
 
@@ -228,6 +229,32 @@ Acceptance:
   read `livery.footman -> livery.fabric -> livery.strongroom`
   and `livery.toolroom -> livery.strongroom`.
 
+- 2026-09-06, phase 1 deviations, each ruled at the cut: toolroom
+  has no `__all__` (its surface is the stub plus a `__getattr__`
+  minting any name as a tool), so the shim forwards attributes and
+  mirrors the stub instead of re-exporting a list, and its contract
+  tests assert identity per name. The repo's `src/machinery` dev
+  package (9000 lines; imports footman internals) moves in as
+  `livery.toolroom._machinery` on the `livery.forge._dev`
+  exemption. The workshop's own imports sweep to
+  `from livery import toolroom` now rather than riding the shim,
+  which serves outside consumers only. `livery.toolroom` joins the
+  workspace layers so its docs generator verb (`toolroom.pages`,
+  the `_docsgen` entry point) mounts. The curated tools' nav
+  entries are authored between the standard marker pair; the
+  generator does not rewrite the block, because toolroom may not
+  import the workshop's rewrite helper (dependencies point only
+  downward), and a driver added without its entry goes red in the
+  strict build instead. `tool-history/` moves in as package data.
+  The template stays brand-neutral: the stubs' mypy override
+  generalises to `*._stubs.*`, and the import's docstring and
+  test-typing debt lives in the package's own nested ruff config,
+  tracked as its own conformance issue.
+- 2026-09-06, phase 1: the stub generator's escape layer grows a
+  rule (a help token carrying `][` renders as a code span, docker's
+  policy format strings being the case), and docker's checked-in
+  stub is regenerated through the same pinned path the history
+  round-trip test uses.
 - 2026-09-06: footman's stock `new` builtin is deleted when footman
   moves in; the workshop's `new` group is the one the ecosystem
   means (Willem). Until then the machine rung excludes it

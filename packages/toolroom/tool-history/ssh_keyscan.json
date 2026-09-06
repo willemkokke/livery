@@ -1,0 +1,896 @@
+{
+ "schema": 1,
+ "tool": "ssh_keyscan",
+ "observed_from": "2.9p1",
+ "base": {
+  "version": "10.5p1",
+  "date": "2026-08-10",
+  "platforms": [
+   "Linux",
+   "macOS"
+  ],
+  "extractor": 3,
+  "surface": {
+   "help": "gather SSH public keys from servers",
+   "verbs": {
+    "": {
+     "help": "gather SSH public keys from servers",
+     "wraps": false,
+     "positional": "any",
+     "lead": "",
+     "options": {
+      "D": {
+       "flags": [
+        "-D"
+       ],
+       "negation": "",
+       "help": "Print keys found as SSHFP DNS records",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "H": {
+       "flags": [
+        "-H"
+       ],
+       "negation": "",
+       "help": "Hash all hostnames and addresses in the output",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "O": {
+       "flags": [
+        "-O"
+       ],
+       "negation": "",
+       "help": "Specify a key/value option",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "T": {
+       "flags": [
+        "-T"
+       ],
+       "negation": "",
+       "help": "Set the timeout for connection attempts",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "c": {
+       "flags": [
+        "-c"
+       ],
+       "negation": "",
+       "help": "Request certificates from target hosts instead of plain keys",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "f": {
+       "flags": [
+        "-f"
+       ],
+       "negation": "",
+       "help": "Read hosts or \"addrlist namelist\" pairs from file, one per line",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "p": {
+       "flags": [
+        "-p"
+       ],
+       "negation": "",
+       "help": "Connect to port on the remote host",
+       "type": "str",
+       "default": null,
+       "choices": []
+      },
+      "q": {
+       "flags": [
+        "-q"
+       ],
+       "negation": "",
+       "help": "Quiet mode: do not print server host name and banners in comments",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      },
+      "t": {
+       "flags": [
+        "-t"
+       ],
+       "negation": "",
+       "help": "Specify the type of the key to fetch from the scanned hosts",
+       "type": "list[str]",
+       "default": null,
+       "choices": []
+      },
+      "v": {
+       "flags": [
+        "-v"
+       ],
+       "negation": "",
+       "help": "Verbose mode: print debugging messages about progress",
+       "type": "bool",
+       "default": null,
+       "choices": []
+      }
+     }
+    }
+   }
+  }
+ },
+ "deltas": {
+  "10.4p1": {
+   "date": "2026-07-06",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "10.3p1": {
+   "date": "2026-04-02",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "10.2p1": {
+   "date": "2025-10-10",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "10.1p1": {
+   "date": "2025-10-05",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "10.0p2": {
+   "date": "2025-04-09",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "10.0p1": {
+   "date": "2025-04-09",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "9.9p2": {
+   "date": "2025-02-18",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "9.9p1": {
+   "date": "2024-09-19",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "9.8p1": {
+   "date": "2024-07-01",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "9.7p1": {
+   "date": "2024-03-11",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3,
+   "drop": [
+    "\tq"
+   ]
+  },
+  "9.6p1": {
+   "date": "2023-12-18",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "9.5p1": {
+   "date": "2023-10-04",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "9.4p1": {
+   "date": "2023-08-09",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "9.3p2": {
+   "date": "2023-07-19",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "9.3p1": {
+   "date": "2023-03-15",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "9.2p1": {
+   "date": "2023-02-02",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3,
+   "drop": [
+    "\tO"
+   ]
+  },
+  "9.1p1": {
+   "date": "2022-10-03",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "9.0p1": {
+   "date": "2022-04-07",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "8.9p1": {
+   "date": "2022-02-23",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "8.8p1": {
+   "date": "2021-09-26",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "8.7p1": {
+   "date": "2021-08-19",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "8.6p1": {
+   "date": "2021-04-18",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "8.5p1": {
+   "date": "2021-03-02",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "8.4p1": {
+   "date": "2020-09-27",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "8.3p1": {
+   "date": "2020-05-26",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "8.2p1": {
+   "date": "2020-02-13",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "8.1p1": {
+   "date": "2019-10-08",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3,
+   "verbs": {
+    "": {
+     "help": "gather SSH public keys"
+    }
+   },
+   "help": "gather SSH public keys"
+  },
+  "8.0p1": {
+   "date": "2019-04-17",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "7.9p1": {
+   "date": "2018-10-18",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "7.8p1": {
+   "date": "2018-08-23",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "7.7p1": {
+   "date": "2018-04-02",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "7.6p1": {
+   "date": "2017-10-03",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3,
+   "drop": [
+    "\tD"
+   ],
+   "revert": {
+    "\tp": {
+     "flags": [
+      "-p"
+     ],
+     "negation": "",
+     "help": "Port to connect to on the remote host",
+     "type": "str",
+     "default": null,
+     "choices": []
+    },
+    "\tt": {
+     "flags": [
+      "-t"
+     ],
+     "negation": "",
+     "help": "Specifies the type of the key to fetch from the scanned hosts",
+     "type": "list[str]",
+     "default": null,
+     "choices": []
+    },
+    "\tv": {
+     "flags": [
+      "-v"
+     ],
+     "negation": "",
+     "help": "Verbose mode",
+     "type": "bool",
+     "default": null,
+     "choices": []
+    }
+   },
+   "verbs": {
+    "": {
+     "help": "gather ssh public keys"
+    }
+   },
+   "help": "gather ssh public keys"
+  },
+  "7.5p1": {
+   "date": "2017-03-20",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "7.4p1": {
+   "date": "2016-12-19",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "7.3p1": {
+   "date": "2016-08-01",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "7.2p2": {
+   "date": "2016-03-10",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "7.2p1": {
+   "date": "2016-02-28",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "7.1p2": {
+   "date": "2016-01-14",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3,
+   "drop": [
+    "\tc"
+   ]
+  },
+  "7.1p1": {
+   "date": "2015-08-20",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "7.0p1": {
+   "date": "2015-08-11",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "6.9p1": {
+   "date": "2015-06-30",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "6.8p1": {
+   "date": "2015-03-17",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "6.7p1": {
+   "date": "2014-10-06",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "6.6p1": {
+   "date": "2014-03-15",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "6.5p1": {
+   "date": "2014-01-29",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3,
+   "revert": {
+    "\tf": {
+     "flags": [
+      "-f"
+     ],
+     "negation": "",
+     "help": "Read hosts or addrlist namelist pairs from this file, one per line",
+     "type": "str",
+     "default": null,
+     "choices": []
+    }
+   }
+  },
+  "6.4p1": {
+   "date": "2013-11-07",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "6.3p1": {
+   "date": "2013-09-13",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "6.2p2": {
+   "date": "2013-05-15",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "6.2p1": {
+   "date": "2013-03-21",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "6.1p1": {
+   "date": "2012-08-28",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "6.0p1": {
+   "date": "2012-04-21",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "5.9p1": {
+   "date": "2011-09-06",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "5.8p2": {
+   "date": "2011-05-04",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "5.8p1": {
+   "date": "2011-02-03",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "5.7p1": {
+   "date": "2011-01-23",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "5.6p1": {
+   "date": "2010-08-23",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "5.5p1": {
+   "date": "2010-04-15",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "5.4p1": {
+   "date": "2010-03-07",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "5.3p1": {
+   "date": "2009-10-01",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "5.2p1": {
+   "date": "2009-02-22",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "5.1p1": {
+   "date": "2008-07-21",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "5.0p1": {
+   "date": "2008-04-03",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "4.9p1": {
+   "date": "2008-03-27",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "4.7p1": {
+   "date": "2007-09-04",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "4.6p1": {
+   "date": "2007-03-07",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "4.5p1": {
+   "date": "2006-11-07",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "4.4p1": {
+   "date": "2006-09-27",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "4.3p2": {
+   "date": "2006-02-10",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "4.3p1": {
+   "date": "2006-02-01",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "4.2p1": {
+   "date": "2005-09-01",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "4.1p1": {
+   "date": "2005-05-25",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "4.0p1": {
+   "date": "2005-03-09",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "3.9p1": {
+   "date": "2004-08-17",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3,
+   "drop": [
+    "\tH"
+   ]
+  },
+  "3.8p1": {
+   "date": "2004-02-24",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "3.7p1": {
+   "date": "2003-09-16",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "3.6p1": {
+   "date": "2003-03-31",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "3.5p1": {
+   "date": "2002-10-14",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "3.4p1": {
+   "date": "2002-09-17",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "3.3p1": {
+   "date": "2002-09-17",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "3.1p1": {
+   "date": "2002-09-17",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "3.0p1": {
+   "date": "2002-09-17",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  },
+  "2.9p2": {
+   "date": "2002-09-17",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3,
+   "drop": [
+    "\tT",
+    "\tp",
+    "\tv"
+   ],
+   "revert": {
+    "\tf": {
+     "flags": [
+      "-f"
+     ],
+     "negation": "",
+     "help": "Read hosts or addrlist namelist pairs from this file, one per line",
+     "type": "bool",
+     "default": null,
+     "choices": []
+    },
+    "\tt": {
+     "flags": [
+      "-t"
+     ],
+     "negation": "",
+     "help": "Set the timeout for connection attempts",
+     "type": "bool",
+     "default": null,
+     "choices": []
+    }
+   },
+   "verbs": {
+    "": {
+     "positional": "none"
+    }
+   }
+  },
+  "2.9p1": {
+   "date": "2002-09-17",
+   "platforms": [
+    "Linux",
+    "macOS"
+   ],
+   "extractor": 3
+  }
+ }
+}
