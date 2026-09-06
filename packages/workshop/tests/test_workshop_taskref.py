@@ -1,18 +1,22 @@
-"""The per-package task reference. Refusals and fallbacks first."""
+"""The per-package task reference. Refusals and fallbacks first.
+
+The section documents the package's whole offering: each advertised
+provider renders in isolation, so workspace composition, shadowing,
+and disabling can never change what a package's docs say.
+"""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
-from livery.workshop import _env_tasks
 from livery.workshop._packages import discover_packages
 from livery.workshop._taskref import (
-    _group_owners,
+    advertised_providers,
     generate_task_reference,
-    owning_package,
-    task_ownership,
+    provider_tree,
 )
 
 
@@ -23,14 +27,20 @@ def _workspace(tmp_path: Path) -> Path:
     (root / "pyproject.toml").write_text('[project]\nname = "acme-home"\n')
     (root / "docs").mkdir()
     (root / "docs" / "index.md").write_text("# Home\n")
-    for name in ("core", "extra"):
+    for name, points in (("core", ["acme.core"]), ("bare", [])):
         member = root / "packages" / name
         (member / "src" / "acme" / name).mkdir(parents=True)
         (member / "src" / "acme" / name / "__init__.py").write_text("")
         (member / "workshop.toml").write_text(
             f'type = "python"\nname = "acme-{name}"\n'
         )
-        (member / "pyproject.toml").write_text(f'[project]\nname = "acme-{name}"\n')
+        table = "".join(
+            f'[project.entry-points."footman.tasks"]\n"{point}" = "x"\n'
+            for point in points
+        )
+        (member / "pyproject.toml").write_text(
+            f'[project]\nname = "acme-{name}"\n{table}'
+        )
         (member / "docs").mkdir()
         (member / "docs" / "index.md").write_text(f"# {name}\n")
         (member / "docs" / "nav.toml").write_text(
@@ -40,46 +50,65 @@ def _workspace(tmp_path: Path) -> Path:
     return root
 
 
-def _stash(root: Path, sources: dict[str, str]) -> None:
-    _env_tasks.TASK_SOURCES.clear()
-    _env_tasks.TASK_SOURCES.update(
-        {name: str(root / path) if path else "" for name, path in sources.items()}
-    )
+def _row() -> dict[str, object]:
+    return {"help": "One line.", "params": []}
 
 
-def test_without_a_stash_the_reference_refuses(tmp_path: Path) -> None:
-    _env_tasks.TASK_SOURCES.clear()
-    with pytest.raises(BaseException, match="real runner invocation"):
-        task_ownership(_workspace(tmp_path))
-
-
-def test_outside_sources_own_nothing(tmp_path: Path) -> None:
+def test_a_package_without_the_table_provides_nothing(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
-    packages = discover_packages(root)
-    assert owning_package("/usr/lib/python/footman/compose.py", packages) is None
-    owner = owning_package(
-        str(root / "packages/core/src/acme/core/_tasks.py"), packages
-    )
-    assert owner is not None and owner.directory.name == "core"
+    bare = next(p for p in discover_packages(root) if p.directory.name == "bare")
+    assert advertised_providers(bare) == []
+    core = next(p for p in discover_packages(root) if p.directory.name == "core")
+    assert advertised_providers(core) == ["acme.core"]
 
 
-def test_ownership_maps_full_names_and_majorities(tmp_path: Path) -> None:
-    root = _workspace(tmp_path)
-    _stash(
-        root,
-        {
-            "docs.build": "packages/core/src/acme/core/_docs.py",
-            "docs.serve": "packages/core/src/acme/core/_docs.py",
-            "forge.dev.up": "packages/extra/src/acme/extra/_dev.py",
-            "sync": "packages/core/src/acme/core/_sync.py",
-            "self.install": "",  # a runner builtin: no source, not ours
-        },
-    )
-    owners = task_ownership(root)
-    assert owners["forge.dev.up"] == "extra"
-    assert "self.install" not in owners
-    heads = _group_owners(owners)
-    assert heads == {"docs": "core", "forge": "extra", "sync": "core"}
+def test_a_missing_runner_refuses_with_the_remedy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shutil as shutil_module
+
+    monkeypatch.setattr(shutil_module, "which", lambda name: None)
+    with pytest.raises(BaseException, match=r"setup\.sh"):
+        provider_tree(tmp_path, "acme.core")
+
+
+def test_a_failing_probe_names_the_provider(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shutil as shutil_module
+
+    import footman
+
+    monkeypatch.setattr(shutil_module, "which", lambda name: "/stub/fm")
+    monkeypatch.setattr(footman, "run", lambda *a, **k: 3)
+    with pytest.raises(BaseException, match=r"acme\.core.*exited 3"):
+        provider_tree(tmp_path, "acme.core")
+
+
+def test_the_probe_mounts_only_the_provider(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shutil as shutil_module
+
+    import footman
+
+    monkeypatch.setattr(shutil_module, "which", lambda name: "/stub/fm")
+    probes: list[str] = []
+
+    class _Result(int):
+        stdout = json.dumps({"tree": {"groups": {}, "tasks": {}}})
+
+    def _record(argv: list[str], **kwargs: object) -> int:
+        # The probe file's content is the isolation: one mount, no
+        # cascade, no base.
+        probe = next(a for a in argv if a.startswith("--tasks-file="))
+        probes.append(Path(probe.removeprefix("--tasks-file=")).read_text())
+        assert "--json" in argv and "--list" in argv
+        return _Result(0)
+
+    monkeypatch.setattr(footman, "run", _record)
+    provider_tree(tmp_path, "acme.core")
+    assert probes == ['from footman import plugin\n\nplugin("acme.core")\n']
 
 
 def test_missing_markers_refuse_naming_the_file(
@@ -91,18 +120,11 @@ def test_missing_markers_refuse_naming_the_file(
     (root / "packages/core/docs/nav.toml").write_text(
         'nav = [\n    { "Index" = "index.md" },\n]\n'
     )
-    _stash(root, {"docs.build": "packages/core/src/acme/core/_docs.py"})
     monkeypatch.setattr(
         _taskref,
-        "_tree",
-        lambda _root: {
-            "groups": {
-                "docs": {
-                    "help": "",
-                    "tasks": {"build": {"help": "Build.", "params": []}},
-                    "groups": {},
-                }
-            },
+        "provider_tree",
+        lambda _root, _identity: {
+            "groups": {"docs": {"help": "", "tasks": {"build": _row()}, "groups": {}}},
             "tasks": {},
         },
     )
@@ -110,62 +132,44 @@ def test_missing_markers_refuse_naming_the_file(
         generate_task_reference(root)
 
 
-def test_the_reference_renders_pages_nav_and_aliases(
+def test_the_reference_renders_the_advertised_tree_whole(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop import _taskref
 
     root = _workspace(tmp_path)
-    _stash(
-        root,
-        {
-            "docs.build": "packages/core/src/acme/core/_docs.py",
-            "sync": "packages/core/src/acme/core/_sync.py",
-            "forge.dev.up": "packages/extra/src/acme/extra/_dev.py",
-        },
-    )
-    tree = {
+    tree: dict[str, object] = {
         "help": "",
         "groups": {
             "docs": {
                 "help": "Docs.",
-                "tasks": {"build": {"help": "Build the site.", "params": []}},
+                "tasks": {"build": _row()},
                 "groups": {},
             },
             "forge": {
                 "help": "Forge.",
                 "tasks": {},
                 "groups": {
-                    "dev": {
-                        "help": "Dev rigs.",
-                        "tasks": {"up": {"help": "Start.", "params": []}},
-                        "groups": {},
-                    }
+                    "dev": {"help": "Rigs.", "tasks": {"up": _row()}, "groups": {}}
                 },
             },
         },
-        "tasks": {"sync": {"help": "Bring current.", "params": []}},
+        "tasks": {"sync": _row()},
     }
-    monkeypatch.setattr(_taskref, "_tree", lambda _root: tree)
-    assert generate_task_reference(root) == ["core", "extra"]
-    core_tasks = root / "packages/core/docs/_generated/tasks"
-    assert (core_tasks / "docs" / "build.md").is_file()
-    assert (core_tasks / "docs" / "index.md").is_file()
-    assert (core_tasks / "sync.md").is_file()
-    assert (core_tasks / "index.md").is_file()
-    extra_tasks = root / "packages/extra/docs/_generated/tasks"
-    assert (extra_tasks / "forge" / "dev" / "up.md").is_file()
+    monkeypatch.setattr(_taskref, "provider_tree", lambda _root, _identity: tree)
+    assert generate_task_reference(root) == ["core"]
+    tasks = root / "packages/core/docs/_generated/tasks"
+    assert (tasks / "docs" / "build.md").is_file()
+    assert (tasks / "forge" / "dev" / "up.md").is_file()
+    assert (tasks / "sync.md").is_file()
+    assert (tasks / "index.md").is_file()
     nav = (root / "packages/core/docs/nav.toml").read_text()
-    assert '{ "Tasks" = [' in nav
-    assert '"_generated/tasks/docs/build.md"' in nav
+    assert '"dev.up" = "_generated/tasks/forge/dev/up.md"' in nav
     assert '{ "sync" = "_generated/tasks/sync.md" },' in nav
-    extra_nav = (root / "packages/extra/docs/nav.toml").read_text()
-    assert '"dev.up" = "_generated/tasks/forge/dev/up.md"' in extra_nav
-    # The alias tree: a uniform address redirecting into the owner.
     alias = (root / "docs/_generated/tasks/forge-dev-up.md").read_text()
-    assert "../../packages/extra/_generated/tasks/forge/dev/up/" in alias
+    assert "../../packages/core/_generated/tasks/forge/dev/up/" in alias
     assert "window.location.replace" in alias
-    # Idempotent: the same tree rewrites the same bytes.
+    # Idempotent: the same trees rewrite the same bytes.
     before = (root / "packages/core/docs/nav.toml").read_bytes()
     generate_task_reference(root)
     assert (root / "packages/core/docs/nav.toml").read_bytes() == before
@@ -181,7 +185,7 @@ def test_a_shared_verb_declared_twice_runs_once(
     from livery.workshop._docs import run_generators
 
     root = _workspace(tmp_path)
-    for name in ("core", "extra"):
+    for name in ("core", "bare"):
         (root / "packages" / name / "workshop.toml").write_text(
             f'type = "python"\nname = "acme-{name}"\n'
             '[docs]\ngenerators = ["docs.task-reference"]\n'

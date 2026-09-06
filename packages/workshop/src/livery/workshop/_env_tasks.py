@@ -45,11 +45,6 @@ env = group("env", help="The environment: enter, show, set, verify")
 #: the emitters merge this back before selecting on provenance.
 _APPLIED: dict[str, str] = {}
 
-#: Every public task's defining source file, by full command name,
-#: stashed at pre-tasks for the task-reference generator. Empty in a
-#: process that is not a real runner invocation.
-TASK_SOURCES: dict[str, str] = {}
-
 
 def _workspace() -> tuple[Path, Path]:
     from livery.workshop._layers import workspace_root
@@ -92,7 +87,7 @@ def apply_cascade(inv: footman.Invocation) -> None:
         if not os.environ.get(key):
             os.environ[key] = value
             _APPLIED[key] = value
-    _stash_task_sources(inv)
+    _warn_unmounted_layers(root)
     # Belt and braces around the whole self-healing step: this hook
     # is the last thing standing between a surprise in the reconcile
     # and every command failing, so nothing short of a deliberate
@@ -109,36 +104,31 @@ def apply_cascade(inv: footman.Invocation) -> None:
         sys.stderr.write(f"environment reconcile skipped ({error})\n")
 
 
-def _stash_task_sources(inv: footman.Invocation) -> None:
-    """Record every public task's defining source, by full name.
+def _warn_unmounted_layers(root: Path) -> None:
+    """Teach when declared layers never mounted this process.
 
-    The Tasks view spells only leaf names, and the reference needs
-    the full command spelling, so this walks the merged tree once.
-    The root group behind the view is not public API
-    (footman#561 asks for TaskView.path); delete this walk and read
-    the view's own path once that ships.
+    Layers mount from the rendered ``tasks.py``; a workspace whose
+    file predates that shape imports the base layer and nothing
+    else, and every further layer's tasks silently vanish. Loud,
+    once per command, with the repair named.
     """
-    from footman import TaskView
+    import sys
 
-    TASK_SOURCES.clear()
-    tasks = getattr(inv, "tasks", None)
-    node = getattr(tasks, "_root", None)  # pyright: ignore[reportPrivateUsage]
-    if node is None:
+    from livery.workshop import _layers
+
+    if _layers.MOUNTED or not (root / "workshop.toml").is_file():
         return
+    declared = [name for name in _layers.layer_names(root) if name != _layers.SELF]
+    if not declared:
+        return
+    import footman
 
-    def walk(group: object, prefix: str) -> None:
-        for name, fn in getattr(group, "tasks", {}).items():
-            view = TaskView(fn, name)
-            if view.hidden:
-                continue
-            TASK_SOURCES[prefix + name] = view.source_file or ""
-        for sub_name, sub in getattr(group, "groups", {}).items():
-            walk(sub, f"{prefix}{sub_name}.")
-
-    try:
-        walk(node, "")
-    except Exception:  # a stash must never break a command
-        TASK_SOURCES.clear()
+    sys.stderr.write(
+        f"{footman.prog()}: the contract declares layers"
+        f" ({', '.join(declared)}) that this run never mounted; layers"
+        f" mount from tasks.py now, so run `{footman.prog()}"
+        " template.apply` to re-render it\n"
+    )
 
 
 @dataclass(frozen=True)
