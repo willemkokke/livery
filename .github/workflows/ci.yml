@@ -10,6 +10,11 @@ on:
 
 jobs:
   check:
+    # A release PR's title check answers in seconds; the matrix must
+    # not burn six legs under a title the merge would refuse anyway.
+    # Every other event skips release-title, and the skip passes.
+    needs: [release-title]
+    if: ${{ !cancelled() && (needs.release-title.result == 'success' || needs.release-title.result == 'skipped') }}
     strategy:
       fail-fast: false
       matrix:
@@ -56,6 +61,7 @@ jobs:
   # local check.
   docs:
     needs: [check]
+    if: ${{ !cancelled() && needs.check.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -119,6 +125,6 @@ jobs:
           version: "0.12.7"
       - name: Enter the workspace
         run: bash setup.sh github
-      - run: fm workflow.release.check-title --title "$TITLE"
+      - run: fm workflow.release.check-title --title="$TITLE"
         env:
           TITLE: ${{ github.event.pull_request.title }}

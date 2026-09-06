@@ -200,7 +200,15 @@ def _github_gate(answers: dict[str, Any], prog: str) -> str:
     setup_uv_docs = _setup_uv_step(answers, cache_suffix="docs")
     requirements = _docs_requirements_step(answers)
     coverage_declared = bool(answers.get("docs_coverage"))
-    docs_needs = "    needs: [check]\n" if coverage_declared else ""
+    # The explicit condition keeps docs alive past a skipped ancestor:
+    # release-title is skipped on every non-release event, and GitHub
+    # propagates a skip through default conditions transitively.
+    docs_needs = (
+        "    needs: [check]\n"
+        "    if: ${{ !cancelled() && needs.check.result == 'success' }}\n"
+        if coverage_declared
+        else ""
+    )
     coverage_step = (
         f"""      - name: Coverage artifacts for the site
         uses: {DOWNLOAD}
@@ -222,6 +230,11 @@ on:
 
 jobs:
   check:
+    # A release PR's title check answers in seconds; the matrix must
+    # not burn six legs under a title the merge would refuse anyway.
+    # Every other event skips release-title, and the skip passes.
+    needs: [release-title]
+    if: ${{{{ !cancelled() && (needs.release-title.result == 'success' || needs.release-title.result == 'skipped') }}}}
     strategy:
       fail-fast: false
       matrix:
@@ -295,7 +308,7 @@ jobs:
           # check-title compares against origin/main, which a shallow
           # checkout does not have.
           fetch-depth: 0
-{setup_uv}{enter}      - run: {prog} workflow.release.check-title --title "$TITLE"
+{setup_uv}{enter}      - run: {prog} workflow.release.check-title --title="$TITLE"
         env:
           TITLE: ${{{{ github.event.pull_request.title }}}}
 """
@@ -462,6 +475,11 @@ on:
 
 jobs:
   check:
+    # A release PR's title check answers in seconds; the matrix must
+    # not burn six legs under a title the merge would refuse anyway.
+    # Every other event skips release-title, and the skip passes.
+    needs: [release-title]
+    if: ${{{{ !cancelled() && (needs.release-title.result == 'success' || needs.release-title.result == 'skipped') }}}}
     strategy:
       fail-fast: false
       matrix:
@@ -503,7 +521,7 @@ jobs:
           # check-title compares against origin/main, which a shallow
           # checkout does not have.
           fetch-depth: 0
-{enter}      - run: {prog} workflow.release.check-title --title "$TITLE"
+{enter}      - run: {prog} workflow.release.check-title --title="$TITLE"
         env:
           TITLE: ${{{{ github.event.pull_request.title }}}}
 """
