@@ -54,7 +54,10 @@ _STUBS = Path(__file__).resolve().parents[1] / "_stubs"
 # generation is a maintainer task run from a checkout, while users read the
 # stubs — which already carry everything the log is for. Shipping it would
 # make every install pay for history nobody reads.
-_HISTORY = Path(__file__).resolve().parents[4] / "tool-history"
+# The curated readings ship inside the package: the stubs regenerate
+# from them, and the release legs run the suite against the installed
+# copy, where a checkout-relative anchor points at nothing.
+_HISTORY = Path(__file__).resolve().parent / "_history"
 
 
 class _Ambiguous(Exception):
@@ -1675,7 +1678,9 @@ def refresh(
     return _finish(_assemble_documents([found.document()]), changelog)
 
 
-_CHANGELOG = _HISTORY.parent / "CHANGELOG.md"
+# The changelog stays a checkout fact: the release-note writer edits
+# the repository, never an installed copy.
+_CHANGELOG = Path(__file__).resolve().parents[4] / "CHANGELOG.md"
 
 
 def _entry_for(key: str, doc: dict[str, Any], versions: list[str]) -> str:

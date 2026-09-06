@@ -43,6 +43,10 @@ test = [
     # meets whatever the machine carries, which the suite's python
     # cannot introspect.
     "mkdocs>=1.6",
+    # The playground writes a consumer tasks.py that imports the
+    # package by its index spelling; the suite drives that spelling
+    # on purpose, so it needs this package's own shim.
+    "toolroom>=0.6.2",
 ]
 
 [project.entry-points."footman.tasks"]

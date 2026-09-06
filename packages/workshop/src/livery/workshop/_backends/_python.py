@@ -633,6 +633,12 @@ def run_isolated_test(
                     "-q",
                     "-p",
                     "no:cacheprovider",
+                    # pytest derives its rootdir from the test paths and
+                    # finds the workspace pyproject, whose addopts would
+                    # hand the leg xdist workers and coverage flags; the
+                    # leg is serial and unmetered by design.
+                    "-o",
+                    "addopts=",
                 ],
                 cwd=scratch,
                 env=_leg_env(root, venv),
