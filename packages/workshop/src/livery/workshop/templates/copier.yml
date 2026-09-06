@@ -90,6 +90,16 @@ docs_site_url:
     the [docs] site_url from workshop.toml; injected at render time,
     it wires the runner's task links into the published reference
 
+release_baseline:
+  type: str
+  default: ""
+  when: false
+  help: >-
+    the [release] baseline from the package's workshop.toml; a
+    package whose version line predates this workspace (a migrated
+    distribution) names the version it continues from, and the
+    changelog engine derives the first release here on top of it
+
 template_source_label:
   type: str
   default: "the template source"

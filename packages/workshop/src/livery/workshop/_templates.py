@@ -512,6 +512,22 @@ PROJECT_SEEDS = (
 )
 
 
+def _release_baseline(directory: Path) -> str:
+    """The [release] baseline a package's contract declares, or empty.
+
+    A migrated distribution's version line predates this workspace;
+    the baseline names the version it continues from, and the cliff
+    render anchors the first release's derivation on it.
+    """
+    import tomllib
+
+    contract = directory / "workshop.toml"
+    if not contract.is_file():
+        return ""
+    data = tomllib.loads(contract.read_text("utf-8"))
+    return str((data.get("release") or {}).get("baseline", ""))
+
+
 def package_drift(root: Path) -> list[str]:
     """The drift report for every package's managed rendered files.
 
@@ -536,6 +552,7 @@ def package_drift(root: Path) -> list[str]:
             **read_answers(answers_path),
             **package_injections(root),
             "package_dir": directory.name,
+            "release_baseline": _release_baseline(directory),
         }
         with tempfile.TemporaryDirectory() as scratch:
             # The full chain, parent first, exactly as the package
@@ -629,6 +646,7 @@ def apply_packages(root: Path) -> list[str]:
             **read_answers(answers_path),
             **package_injections(root),
             "package_dir": directory.name,
+            "release_baseline": _release_baseline(directory),
         }
         with tempfile.TemporaryDirectory() as scratch:
             # The full chain, parent first, as in package_drift.

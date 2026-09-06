@@ -17,6 +17,11 @@ path = "packages/footman"
 kind = "runtime"
 floor = "0.52.1"
 
+[release]
+# The first release lands at the baseline itself, so the shim
+# names the first number past its index twin. It continues the footman index line past its last release.
+baseline = "0.52.2"
+
 [qa]
 # Forwarding lines only; the contract tests are the suite.
 coverage_floor = 100

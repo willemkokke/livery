@@ -188,6 +188,24 @@ def test_a_confirmed_publish_goes_to_the_configured_index(
     assert published == [("https://example.test/simple", "tok")]
 
 
+def test_a_package_before_its_first_tag_still_describes(tmp_path: Path) -> None:
+    # The fallback first: git describe refuses outright with no
+    # matching tag, and a package's first release is exactly that
+    # state. The whole history's count is the honest age.
+    root = _workspace(tmp_path)
+    git = GitOps(root)
+    packages = discover_packages(root)
+    subprocess.run(
+        ["git", "tag", "-d", f"{packages[0].path}/v0.2.0"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+    )
+    distance, sha = describe_distance(git, packages[0])
+    assert distance >= 1  # every commit in history counts
+    assert sha
+
+
 def test_the_version_grammar_and_its_pep440_form(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     _grow_on_branch(root)

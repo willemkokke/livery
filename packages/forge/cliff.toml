@@ -13,6 +13,9 @@
 # bumps the major, a feature the minor, everything else the patch.
 features_always_bump_minor = true
 breaking_always_bump_major = false
+# A migrated package names the version its line continues from in
+# its contract's [release] baseline; a package born here starts at
+# nothing.
 initial_tag = "packages/forge/v0.0.0"
 
 [git]

@@ -447,6 +447,26 @@ def _direct_requirements(package: Package) -> tuple[str, ...]:
     )
 
 
+def _install_target(package: Package, wheel: Path) -> str:
+    """The leg's install spelling for the wheel under test.
+
+    A package may declare a ``test`` extra naming what its suite needs
+    beyond its runtime dependencies (an optional host it drives, the
+    editor-intelligence libraries a doc probe imports). The leg runs
+    that suite, so it installs the wheel with the extra; without one
+    the wheel installs plain.
+    """
+    import tomllib
+
+    pyproject = package.directory / "pyproject.toml"
+    if pyproject.is_file():
+        data = tomllib.loads(pyproject.read_text("utf-8"))
+        extras = data.get("project", {}).get("optional-dependencies", {}) or {}
+        if "test" in extras:
+            return f"{package.name}[test] @ {wheel.resolve().as_uri()}"
+    return str(wheel)
+
+
 def _direct_versions(package: Package, resolved: dict[str, str]) -> dict[str, str]:
     """The resolved versions of *package*'s own direct dependencies."""
     import re
@@ -542,7 +562,7 @@ def run_isolated_test(
             f"--resolution={resolution}",
             *[f"--find-links={d}" for d in release_dirs],
             *_index_args(root),
-            str(wheels[0]),
+            _install_target(package, wheels[0]),
             # The declared dependencies ride the command line so
             # the resolution strategy treats them as direct; see
             # _direct_requirements.

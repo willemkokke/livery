@@ -329,6 +329,22 @@ Acceptance:
   this, as `fm workflow.update.templates` itself teaches: the
   source is HEAD, so a template edit is an ordinary feature branch.
 
+- 2026-09-06, phase 4 seams, found by the local rehearsal and each
+  pinned by test: (1) the isolated release legs install a wheel with
+  its declared `test` extra when the package has one; the leg runs
+  the suite, and toolroom's drives footman (the hosted seam, the
+  machinery, the playground probe) while footman's drives the
+  toolroom bridge and its own compat spelling. Both packages declare
+  the extra; a package without one installs plain, as before. (2)
+  `describe_distance`'s no-tag fallback was unreachable (git
+  describe refuses rather than answering empty), and a first
+  release is exactly the no-tag state. (3) A migrated package names
+  the version its line continues from in its contract's
+  `[release] baseline`, rendered into cliff's `initial_tag`; the
+  first release lands at the baseline itself, so the real packages
+  name 0.6.1 and 0.52.1 and the shims name 0.6.2 and 0.52.2, one
+  past their index twins. A package born here keeps v0.0.0.
+
 ## Open
 
 1. **Shim discontinuation.** When the `footman` and `toolroom`

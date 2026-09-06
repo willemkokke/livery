@@ -864,7 +864,7 @@ dev = [
     { name = "git-cliff" },
     { name = "livery-footman", extra = ["test"] },
     { name = "livery-forge", extra = ["github-secrets"] },
-    { name = "livery-toolroom" },
+    { name = "livery-toolroom", extra = ["test"] },
     { name = "livery-workshop" },
     { name = "mypy" },
     { name = "pyrefly" },
@@ -893,7 +893,7 @@ dev = [
     { name = "git-cliff", specifier = ">=2.13" },
     { name = "livery-footman", extras = ["test"], editable = "packages/footman" },
     { name = "livery-forge", extras = ["github-secrets"], editable = "packages/forge" },
-    { name = "livery-toolroom", editable = "packages/toolroom" },
+    { name = "livery-toolroom", extras = ["test"], editable = "packages/toolroom" },
     { name = "livery-workshop", editable = "packages/workshop" },
     { name = "mypy", specifier = ">=1.14" },
     { name = "pyrefly" },
@@ -918,12 +918,15 @@ source = { editable = "packages/footman" }
 
 [package.optional-dependencies]
 test = [
+    { name = "footman" },
     { name = "httpx" },
     { name = "jedi" },
+    { name = "livery-toolroom" },
     { name = "pyte" },
     { name = "python-dotenv" },
     { name = "requests" },
     { name = "rich" },
+    { name = "toolroom" },
 ]
 uv = [
     { name = "uv" },
@@ -931,12 +934,15 @@ uv = [
 
 [package.metadata]
 requires-dist = [
+    { name = "footman", marker = "extra == 'test'", editable = "packages/footman-compat" },
     { name = "httpx", marker = "extra == 'test'", specifier = ">=0.27" },
     { name = "jedi", marker = "extra == 'test'", specifier = ">=0.20.0" },
+    { name = "livery-toolroom", marker = "extra == 'test'", editable = "packages/toolroom" },
     { name = "pyte", marker = "extra == 'test'", specifier = ">=0.8" },
     { name = "python-dotenv", marker = "extra == 'test'", specifier = ">=1.0" },
     { name = "requests", marker = "extra == 'test'", specifier = ">=2.31" },
     { name = "rich", marker = "extra == 'test'", specifier = ">=13" },
+    { name = "toolroom", marker = "extra == 'test'", editable = "packages/toolroom-compat" },
     { name = "uv", marker = "extra == 'uv'", specifier = ">=0.6" },
 ]
 provides-extras = ["uv", "test"]
@@ -959,6 +965,15 @@ provides-extras = ["github-secrets"]
 name = "livery-toolroom"
 version = "0.6.1"
 source = { editable = "packages/toolroom" }
+
+[package.optional-dependencies]
+test = [
+    { name = "livery-footman" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "livery-footman", marker = "extra == 'test'", editable = "packages/footman" }]
+provides-extras = ["test"]
 
 [[package]]
 name = "livery-workshop"
