@@ -968,11 +968,15 @@ source = { editable = "packages/toolroom" }
 
 [package.optional-dependencies]
 test = [
+    { name = "footman" },
     { name = "livery-footman" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "livery-footman", marker = "extra == 'test'", editable = "packages/footman" }]
+requires-dist = [
+    { name = "footman", marker = "extra == 'test'", editable = "packages/footman-compat" },
+    { name = "livery-footman", marker = "extra == 'test'", editable = "packages/footman" },
+]
 provides-extras = ["test"]
 
 [[package]]

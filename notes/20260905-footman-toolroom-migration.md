@@ -346,6 +346,12 @@ Acceptance:
   the shim and its real package are identical releases and share one
   number, so all four baselines name 0.6.2 and 0.52.2, one past the
   numbers the index twins burned. A package born here keeps v0.0.0.
+  (4) The leg's process environment is scrubbed: its own venv leads
+  PATH, the workspace venv's entries drop out, and the ambient
+  coverage variables go. Found armed, not by rehearsal: the
+  workspace PATH made a click tool look installed to a leg whose
+  python could not introspect it, and the playground probe needs
+  the compat shim the extra now names.
 
 ## Open
 
