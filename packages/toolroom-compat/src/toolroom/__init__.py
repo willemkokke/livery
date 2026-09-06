@@ -12,6 +12,11 @@ from typing import Any
 
 import livery.toolroom as _real
 
+# A literal, not a forwarded read: the release train verifies the
+# released version is declared here, and the shim and its real
+# package release identically under one number by ruling.
+__version__ = "0.6.2"
+
 
 def __getattr__(name: str) -> Any:
     return getattr(_real, name)

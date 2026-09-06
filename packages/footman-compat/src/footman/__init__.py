@@ -13,6 +13,11 @@ import livery.footman as _real
 
 # The literal-False spelling checkers honour without importing typing:
 # the completion hot path pays for this module on every TAB press.
+# A literal, not a forwarded read: the release train verifies the
+# released version is declared here, and the shim and its real
+# package release identically under one number by ruling.
+__version__ = "0.52.2"
+
 TYPE_CHECKING = False
 if TYPE_CHECKING:
     from typing import Any
