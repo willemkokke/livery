@@ -22,7 +22,7 @@ import livery.footman as footman
 from livery.footman import fail
 from livery.workshop import _cliff
 from livery.workshop._backends import backend_for
-from livery.workshop._git_ops import GitOps
+from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._packages import Package
 from livery.workshop._publish import publish_wheels
 from livery.workshop._update import latest_released
@@ -88,9 +88,15 @@ def describe_distance(git: GitOps, package: Package) -> tuple[int, str]:
     history's count. Position only: the age marker in a dev version,
     not the content check (that is the unchanged refusal).
     """
-    described = git._run(
-        "describe", "--tags", "--long", "--match", f"{package.path}/v*"
-    ).strip()
+    try:
+        described = git._run(
+            "describe", "--tags", "--long", "--match", f"{package.path}/v*"
+        ).strip()
+    except GitError:
+        # A package before its first release has no tag to describe;
+        # git refuses rather than answering empty, and the whole
+        # history's count below is the honest age.
+        described = ""
     if described:
         parts = described.rsplit("-", 2)
         if len(parts) == 3:

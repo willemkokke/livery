@@ -13,7 +13,10 @@
 # bumps the major, a feature the minor, everything else the patch.
 features_always_bump_minor = true
 breaking_always_bump_major = false
-initial_tag = "packages/toolroom-compat/v0.0.0"
+# A migrated package names the version its line continues from in
+# its contract's [release] baseline; a package born here starts at
+# nothing.
+initial_tag = "packages/toolroom-compat/v0.6.2"
 
 [git]
 # One package, one tag line: only this package's paths are read, and

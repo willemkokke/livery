@@ -553,6 +553,52 @@ def test_the_toolchain_probe_refuses_a_moved_floor(
     assert "packaging 24.0 -> 25.0" in message
 
 
+def test_a_wheel_without_a_test_extra_installs_plain(tmp_path: Path) -> None:
+    # The fallback first: no declared extra, no changed spelling.
+    from livery.workshop._backends._python import _install_target
+
+    member = tmp_path / "packages" / "plain"
+    member.mkdir(parents=True)
+    (member / "pyproject.toml").write_text(
+        '[project]\nname = "livery-plain"\nversion = "0.1.0"\ndependencies = []\n'
+    )
+    package = Package(
+        directory=member,
+        path="packages/plain",
+        name="livery-plain",
+        type="python",
+        depends=(),
+    )
+    wheel = member / "dist" / "livery_plain-0.1.0-py3-none-any.whl"
+    assert _install_target(package, wheel) == str(wheel)
+
+
+def test_a_declared_test_extra_rides_the_leg_install(tmp_path: Path) -> None:
+    # The suite the leg runs may need more than the runtime deps; the
+    # declared extra names it and the install spelling carries it.
+    from livery.workshop._backends._python import _install_target
+
+    member = tmp_path / "packages" / "hosted"
+    member.mkdir(parents=True)
+    (member / "pyproject.toml").write_text(
+        '[project]\nname = "livery-hosted"\nversion = "0.1.0"\n'
+        "dependencies = []\n"
+        "[project.optional-dependencies]\n"
+        'test = ["livery-plain>=0.1.0"]\n'
+    )
+    package = Package(
+        directory=member,
+        path="packages/hosted",
+        name="livery-hosted",
+        type="python",
+        depends=(),
+    )
+    wheel = member / "dist" / "livery_hosted-0.1.0-py3-none-any.whl"
+    target = _install_target(package, wheel)
+    assert target.startswith("livery-hosted[test] @ file://")
+    assert target.endswith("livery_hosted-0.1.0-py3-none-any.whl")
+
+
 def test_dev_pins_export_the_locks_resolution_or_none(tmp_path: Path) -> None:
     from livery.workshop._backends._python import _dev_pins
 

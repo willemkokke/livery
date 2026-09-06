@@ -27,6 +27,13 @@ classifiers = [
 # through footman's own plugin() - the livery.forge._dev precedent.
 dependencies = []
 
+# The suite's needs beyond the (empty) runtime dependencies: the
+# hosted seam, the machinery, and the playground probe all drive
+# footman for real. The isolated release legs install this extra;
+# a consumer never sees it unasked.
+[project.optional-dependencies]
+test = ["livery-footman>=0.52.1"]
+
 [project.entry-points."footman.tasks"]
 "livery.toolroom" = "livery.toolroom._docsgen"
 

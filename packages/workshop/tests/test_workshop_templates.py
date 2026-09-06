@@ -661,3 +661,19 @@ def test_the_rewrite_keeps_copiers_commit_receipt(tmp_path: Path) -> None:
     text = (root / ".copier-answers.yml").read_text()
     # An update cannot know the old template references without it.
     assert "_commit: v0.0.2" in text
+
+
+def test_the_release_baseline_reads_the_contract_or_stays_empty(tmp_path):
+    # The fallbacks first: no contract, then a contract without the
+    # table, both answer empty and the cliff render keeps v0.0.0.
+    from livery.workshop._templates import _release_baseline
+
+    package = tmp_path / "packages" / "thing"
+    package.mkdir(parents=True)
+    assert _release_baseline(package) == ""
+    (package / "workshop.toml").write_text('type = "python"\nname = "thing"\n')
+    assert _release_baseline(package) == ""
+    (package / "workshop.toml").write_text(
+        'type = "python"\nname = "thing"\n[release]\nbaseline = "0.6.1"\n'
+    )
+    assert _release_baseline(package) == "0.6.1"

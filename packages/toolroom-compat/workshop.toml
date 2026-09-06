@@ -17,6 +17,11 @@ path = "packages/toolroom"
 kind = "runtime"
 floor = "0.6.1"
 
+[release]
+# The first release lands at the baseline itself, so the shim
+# names the first number past its index twin. It continues the toolroom index line past its last release.
+baseline = "0.6.2"
+
 [qa]
 # Three forwarding lines; the contract tests are the suite.
 coverage_floor = 100

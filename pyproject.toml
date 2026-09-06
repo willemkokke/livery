@@ -51,7 +51,7 @@ dev = [
     # carry extras the dev loop needs.
     "livery-forge[github-secrets]",
     "livery-workshop",
-    "livery-toolroom",
+    "livery-toolroom[test]",
     "toolroom",
     "livery-footman[test]",
     "footman",

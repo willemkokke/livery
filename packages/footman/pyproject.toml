@@ -56,6 +56,12 @@ test = [
     # casts; both pure Python, so every platform leg drives them.
     "rich>=13",
     "pyte>=0.8",
+    # The suite drives the toolroom bridge and the compat spelling of
+    # its own distribution: both are ecosystem contracts the tests
+    # assert on, not runtime dependencies.
+    "livery-toolroom>=0.6.1",
+    "toolroom>=0.6.2",
+    "footman>=0.52.2",
 ]
 
 [project.urls]
