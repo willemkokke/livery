@@ -971,6 +971,7 @@ test = [
     { name = "footman" },
     { name = "livery-footman" },
     { name = "mkdocs" },
+    { name = "toolroom" },
 ]
 
 [package.metadata]
@@ -978,6 +979,7 @@ requires-dist = [
     { name = "footman", marker = "extra == 'test'", editable = "packages/footman-compat" },
     { name = "livery-footman", marker = "extra == 'test'", editable = "packages/footman" },
     { name = "mkdocs", marker = "extra == 'test'", specifier = ">=1.6" },
+    { name = "toolroom", marker = "extra == 'test'", editable = "packages/toolroom-compat" },
 ]
 provides-extras = ["test"]
 

@@ -22,7 +22,7 @@ def test_a_bare_call_is_standalone_even_with_footman_imported():
     toolroom's ToolError — never footman's RunFailed — deterministically,
     whatever some other module imported.
     """
-    assert "footman" in sys.modules
+    assert "livery.footman" in sys.modules  # the plugin auto-load imported it
     with pytest.raises(ToolError):
         tools.python("-c", "raise SystemExit(5)")
 
