@@ -333,7 +333,7 @@ def shared_file(shared_dir: Path | None, environ: dict[str, str]) -> Path:
     if override:
         return Path(override)
     if shared_dir is None:
-        import footman
+        import livery.footman as footman
 
         shared_dir = footman.config_dir()
     return shared_dir / ".repo.shared.env"

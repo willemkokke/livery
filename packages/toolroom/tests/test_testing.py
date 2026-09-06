@@ -226,7 +226,7 @@ def test_the_process_cache_cannot_preempt_a_canned_version(monkeypatch):
 
 
 def test_hosted_simulation_speaks_footman_vocabulary():
-    import footman
+    import livery.footman as footman
 
     with answers({("git", "push"): 1}, hosted=True) as calls:
         ok = tools.git.status()
@@ -254,7 +254,7 @@ def test_answers_wins_inside_a_recording():
     # recording() is a rehearsal inside the real world; answers() replaces
     # the world. Nested, the innermost wins: the interception sits upstream
     # of footman, so the record sees nothing.
-    from footman.testing import recording
+    from livery.footman.testing import recording
 
     with recording() as steps, answers({("git", "branch"): "main\n"}) as calls:
         out = tools.git.branch()

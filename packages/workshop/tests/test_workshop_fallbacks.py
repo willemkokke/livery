@@ -16,8 +16,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from footman import Failed
 
+from livery.footman import Failed
 from livery.forge.testing import FakeForge
 from livery.workshop._backends import _python
 from livery.workshop._git_ops import GitOps
@@ -208,11 +208,20 @@ def test_the_enforcement_reads_real_coverage_data(tmp_path: Path) -> None:
     )
     module = package_dir / "src" / "mod.py"
     module.write_text("def run():\n    return 1\n\nrun()\n")
+    # Scrubbed of the outer gate's coverage variables: pytest-cov and
+    # the subprocess patch re-point any inheriting python at the live
+    # run's data file, and this recording must land in tmp_path.
+    hermetic = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("COVERAGE_", "COV_CORE_"))
+    }
     subprocess.run(
         ["python3", "-m", "coverage", "run", "--source", str(package_dir), str(module)],
         cwd=tmp_path,
         capture_output=True,
         check=True,
+        env=hermetic,
     )
     package = Package(
         directory=package_dir,
@@ -258,8 +267,7 @@ def test_the_changelog_runs_offline_when_no_credential_is_in_reach(
     # it can authenticate, and git-cliff stops rather than degrading.
     # Without the token the run must go offline instead, or every
     # release on a private forge dies at the changelog.
-    import footman
-
+    import livery.footman as footman
     from livery.workshop import _cliff
 
     root, package = _cliff_workspace(tmp_path, "gitea")
@@ -293,8 +301,7 @@ def test_the_changelog_runs_offline_when_no_credential_is_in_reach(
 def test_a_refused_author_lookup_says_what_to_check(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import footman
-
+    import livery.footman as footman
     from livery.workshop import _cliff
 
     root, package = _cliff_workspace(tmp_path, "gitea")
@@ -317,8 +324,7 @@ def test_a_refused_author_lookup_says_what_to_check(
 def test_a_missing_git_cliff_names_the_dependency(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import footman
-
+    import livery.footman as footman
     from livery.workshop import _cliff
 
     root, package = _cliff_workspace(tmp_path, "github")

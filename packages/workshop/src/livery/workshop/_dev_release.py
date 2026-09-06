@@ -18,9 +18,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-import footman
-from footman import fail
-
+import livery.footman as footman
+from livery.footman import fail
 from livery.workshop import _cliff
 from livery.workshop._backends import backend_for
 from livery.workshop._git_ops import GitOps
@@ -189,7 +188,7 @@ def dev_release(
     refusal costs nothing. With ``local`` (or with no custom index
     configured, which degrades to the same run and says so) nothing
     leaves the machine and nothing is asked. A publish always
-    confirms per member; headless, ``footman.confirm`` answers its
+    confirms per member; headless, ``livery.footman.confirm`` answers its
     default no, and the refusal teaches the explicit ``--yes``.
     """
     branch = git.current_branch()

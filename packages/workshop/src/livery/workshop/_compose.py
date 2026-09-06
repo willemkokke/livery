@@ -24,8 +24,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from footman import fail
 
+from livery.footman import fail
 from livery.workshop._layers import layer_entries
 
 #: The overlay's declaration file, at its template tree's root.

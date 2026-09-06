@@ -77,7 +77,7 @@ def test_a_failing_probe_names_the_provider(
 ) -> None:
     import shutil as shutil_module
 
-    import footman
+    import livery.footman as footman
 
     monkeypatch.setattr(shutil_module, "which", lambda name: "/stub/fm")
     monkeypatch.setattr(footman, "run", lambda *a, **k: 3)
@@ -90,7 +90,7 @@ def test_the_probe_mounts_only_the_provider(
 ) -> None:
     import shutil as shutil_module
 
-    import footman
+    import livery.footman as footman
 
     monkeypatch.setattr(shutil_module, "which", lambda name: "/stub/fm")
     probes: list[str] = []
@@ -108,7 +108,7 @@ def test_the_probe_mounts_only_the_provider(
 
     monkeypatch.setattr(footman, "run", _record)
     provider_tree(tmp_path, "acme.core")
-    assert probes == ['from footman import plugin\n\nplugin("acme.core")\n']
+    assert probes == ['from livery.footman import plugin\n\nplugin("acme.core")\n']
 
 
 def test_missing_markers_refuse_naming_the_file(
@@ -180,8 +180,7 @@ def test_a_shared_verb_declared_twice_runs_once(
 ) -> None:
     import shutil as shutil_module
 
-    import footman
-
+    import livery.footman as footman
     from livery.workshop._docs import run_generators
 
     root = _workspace(tmp_path)

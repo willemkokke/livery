@@ -7,9 +7,9 @@ import sys
 from pathlib import Path
 
 import pytest
-from footman.testing import recording
 
 from livery import toolroom as tools
+from livery.footman.testing import recording
 
 
 def _one(call) -> str:
@@ -137,7 +137,7 @@ def _intercept_run(monkeypatch, *, takes_colour: bool):
     """
     from typing import Any
 
-    import footman.context
+    from livery.footman import context as footman_context
 
     seen: dict[str, Any] = {}
 
@@ -152,7 +152,7 @@ def _intercept_run(monkeypatch, *, takes_colour: bool):
         return 0
 
     monkeypatch.setattr(
-        footman.context, "run", with_colour if takes_colour else without_colour
+        footman_context, "run", with_colour if takes_colour else without_colour
     )
     monkeypatch.setattr(tools._host, "hosted", lambda: True)
     monkeypatch.setattr(tools._host, "_RUN_COLOUR", None)  # the probe is cached
@@ -325,7 +325,7 @@ def test_tool_opts_stub_mirrors_run_signature():
     import inspect
     from pathlib import Path
 
-    from footman import context
+    from livery.footman import context
 
     stub = ast.parse(Path(tools.__file__).with_suffix(".pyi").read_text())
     cls = next(n for n in stub.body if isinstance(n, ast.ClassDef) and n.name == "Tool")
@@ -473,7 +473,7 @@ def test_dry_run_does_not_import_the_tool(monkeypatch):
 def test_in_process_never_spawns(monkeypatch):
     # coverage ships a console_scripts entry and is installed (pytest-cov);
     # if the subprocess layer is touched, this fails loudly.
-    from footman import context
+    from livery.footman import context
 
     def boom(*a, **k):
         raise AssertionError("subprocess used for an in-process tool")
@@ -504,9 +504,9 @@ def test_in_process_tools_run_concurrently_with_separate_capture(monkeypatch):
     """
     import threading
 
-    from footman import _manifest, _schedule
-    from footman._split import split_chain
-    from footman.registry import Group
+    from livery.footman import _manifest, _schedule
+    from livery.footman._split import split_chain
+    from livery.footman.registry import Group
 
     barrier = threading.Barrier(2, timeout=5)
 
@@ -549,9 +549,9 @@ def test_in_process_tool_with_foreign_cwd_demotes_to_subprocess(monkeypatch, tmp
     # target cwd differs from the live process cwd runs as its subprocess
     # twin instead: same command, right cwd, still fully parallel — the
     # in-process speedup is the only loss.
-    from footman import _manifest, _schedule
-    from footman._split import split_chain
-    from footman.registry import Group
+    from livery.footman import _manifest, _schedule
+    from livery.footman._split import split_chain
+    from livery.footman.registry import Group
 
     seen = {}
 
@@ -591,9 +591,9 @@ def test_in_process_tool_with_foreign_cwd_demotes_to_subprocess(monkeypatch, tmp
 def test_in_process_tool_with_matching_cwd_stays_in_process(monkeypatch):
     # Equal target and live cwd (the common single-package case): no
     # demotion, the in-process speedup is kept.
-    from footman import _globals, _manifest, _schedule
-    from footman._split import split_chain
-    from footman.registry import Group
+    from livery.footman import _globals, _manifest, _schedule
+    from livery.footman._split import split_chain
+    from livery.footman.registry import Group
 
     seen = {}
 
@@ -627,9 +627,9 @@ def test_in_process_tool_with_matching_cwd_stays_in_process(monkeypatch):
 def test_tool_opts_rel_roots_the_call(tmp_path):
     # Tool.opts(cwd=, rel=) is the bridge's per-call override — the same
     # policy carrier as nofail/capture, threading straight into run().
-    from footman import _manifest, _schedule
-    from footman._split import split_chain
-    from footman.registry import Group
+    from livery.footman import _manifest, _schedule
+    from livery.footman._split import split_chain
+    from livery.footman.registry import Group
 
     (tmp_path / "web").mkdir()
     reg = Group("root")
@@ -655,9 +655,9 @@ def test_tool_opts_none_means_unset(tmp_path):
     # None is "no opinion" for the four options run() treats that way, so a
     # caller can compute one (`cwd=None if inline else build_dir`) and a later
     # None clears an earlier bound value. The types say so; this says it runs.
-    from footman import _manifest, _schedule
-    from footman._split import split_chain
-    from footman.registry import Group
+    from livery.footman import _manifest, _schedule
+    from livery.footman._split import split_chain
+    from livery.footman.registry import Group
 
     (tmp_path / "web").mkdir()
     reg = Group("root")
@@ -707,9 +707,9 @@ def test_mixed_tool_output_is_never_interleaved(monkeypatch, capsys, tmp_path):
     import threading
     import time
 
-    from footman import _manifest, _schedule
-    from footman._split import split_chain
-    from footman.registry import Group
+    from livery.footman import _manifest, _schedule
+    from livery.footman._split import split_chain
+    from livery.footman.registry import Group
 
     lines, tool_count = 20, 8
     script = tmp_path / "vtool.py"
@@ -885,7 +885,7 @@ def test_in_process_call_shows_the_command_not_the_flattened_title():
     import io
     from contextlib import redirect_stdout
 
-    from footman.context import Context, use_context
+    from livery.footman.context import Context, use_context
 
     buf = io.StringIO()
     with redirect_stdout(buf), use_context(Context(dry_run=True)):
@@ -960,7 +960,7 @@ def test_raw_of_a_plain_run_shell_quotes_a_list(monkeypatch):
     monkeypatch.setattr(sys, "platform", "linux")  # POSIX display, pinned for Win CI
     # A direct `run([...])` (not through the bridge) still gets a raw form:
     # the list, shell-quoted so it pastes, while `.command` reads plainly.
-    from footman.context import Context, run, use_context
+    from livery.footman.context import Context, run, use_context
 
     ctx = Context(dry_run=True)
     with use_context(ctx):
@@ -1088,7 +1088,7 @@ def test_opts_step_false_runs_the_tool_without_recording_it(capsys):
     # The value-read case: call a tool, read the output, leave no trace. The
     # in-tree modules that dropped to raw subprocess to get this are why it
     # exists (_toolhelp, _provision, _colorprobe, _drivers).
-    from footman.context import Context, use_context
+    from livery.footman.context import Context, use_context
 
     ctx = Context()
     with use_context(ctx):
@@ -1102,7 +1102,7 @@ def test_opts_step_false_runs_the_tool_without_recording_it(capsys):
 
 
 def test_opts_step_true_is_the_default():
-    from footman.context import Context, use_context
+    from livery.footman.context import Context, use_context
 
     ctx = Context()
     with use_context(ctx):
@@ -1111,7 +1111,7 @@ def test_opts_step_true_is_the_default():
 
 
 def test_opts_timeout_bounds_a_tool_call():
-    from footman.context import Context, RunTimeout, use_context
+    from livery.footman.context import Context, RunTimeout, use_context
 
     with use_context(Context()), pytest.raises(RunTimeout) as caught:
         tools.Tool(sys.executable).opts(timeout=0.5)(
@@ -1124,7 +1124,7 @@ def test_a_timeout_demotes_an_in_process_tool_to_a_subprocess():
     # A bound needs a process to bound. The bridge demotes rather than
     # refusing — the same choice a foreign cwd forces — so the timeout the
     # caller asked for is the thing that survives.
-    from footman.context import Context, RunTimeout, use_context
+    from livery.footman.context import Context, RunTimeout, use_context
 
     tool = tools.Tool(sys.executable, in_process=True)
     with use_context(Context()), pytest.raises(RunTimeout):
@@ -1132,7 +1132,7 @@ def test_a_timeout_demotes_an_in_process_tool_to_a_subprocess():
 
 
 def test_opts_input_feeds_the_child_once_and_teaches_on_replay():
-    from footman.context import Context, use_context
+    from livery.footman.context import Context, use_context
 
     reader = "import sys; print(sys.stdin.read().upper(), end='')"
     fed = tools.python.opts(input="one shot\n")
@@ -1158,7 +1158,7 @@ def test_opts_input_is_consumed_across_the_whole_chained_family():
 
 
 def test_opts_input_rearms_with_a_fresh_payload():
-    from footman.context import Context, use_context
+    from livery.footman.context import Context, use_context
 
     reader = "import sys; print(sys.stdin.read(), end='')"
     fed = tools.python.opts(input="first")
@@ -1168,7 +1168,7 @@ def test_opts_input_rearms_with_a_fresh_payload():
 
 
 def test_opts_env_is_the_childs_environment_and_replays():
-    from footman.context import Context, use_context
+    from livery.footman.context import Context, use_context
 
     probe = "import os; print(os.environ.get('FOOTMAN_OPT_ENV', 'absent'), end='')"
     tool = tools.python.opts(env={**os.environ, "FOOTMAN_OPT_ENV": "yes"})
@@ -1182,7 +1182,7 @@ def test_at_rebinds_the_executable_for_any_tool():
     # Identity channel: any tool — even one footman never heard of — runs
     # the executable .at() names, while the shown line keeps the tool's own
     # name (the receipt says what the call *is*, the path says what ran).
-    from footman.context import Context, use_context
+    from livery.footman.context import Context, use_context
 
     ghost = tools.Tool("doesnotexist").at(sys.executable)
     with use_context(Context()):
@@ -1193,7 +1193,7 @@ def test_at_rebinds_the_executable_for_any_tool():
 
 
 def test_at_carries_policy_and_the_typed_surface():
-    from footman.context import Context, use_context
+    from livery.footman.context import Context, use_context
 
     tool = tools.python.opts(nofail=True).at(sys.executable)
     with use_context(Context()):
@@ -1204,7 +1204,7 @@ def test_at_carries_policy_and_the_typed_surface():
 def test_at_refuses_an_in_process_demand():
     # The in-process lane runs THIS interpreter; .at() names a different
     # executable — the two contradict, and the refusal teaches which to drop.
-    from footman.context import Context, use_context
+    from livery.footman.context import Context, use_context
 
     with (
         use_context(Context()),
@@ -1287,7 +1287,7 @@ def test_argv_never_consumes_a_pending_input():
     # Building feeds no child, so the one-shot payload must still be armed.
     handle = tools.terraform.opts(input="yes")
     assert handle.argv("apply") == ["terraform", "apply"]
-    from footman.context import Context, use_context
+    from livery.footman.context import Context, use_context
 
     with use_context(Context(dry_run=True, quiet=True)):
         handle("apply")  # the payload is still armed, not spent on the build
@@ -1363,7 +1363,7 @@ def test_a_flag_treats_an_argv_as_the_plain_list_it_is():
 
 
 def test_a_secret_option_value_is_redacted_in_the_shown_line():
-    from footman import Secret
+    from livery.footman import Secret
 
     cmd = _one(lambda: tools.git.commit(message="x", author=Secret("hunter2")))
     assert "hunter2" not in cmd
@@ -1371,7 +1371,7 @@ def test_a_secret_option_value_is_redacted_in_the_shown_line():
 
 
 def test_a_secret_positional_is_redacted_in_the_shown_line():
-    from footman import Secret
+    from livery.footman import Secret
 
     cmd = _one(lambda: tools.git.add(Secret("s3cret")))
     assert "s3cret" not in cmd
@@ -1379,7 +1379,7 @@ def test_a_secret_positional_is_redacted_in_the_shown_line():
 
 
 def test_a_secret_global_bound_via_flags_is_redacted_wholesale():
-    from footman import Secret
+    from livery.footman import Secret
 
     # `.flags()` lands in the chain's base as an attached token; the whole
     # token redacts — hiding the flag name too errs in the safe direction.
@@ -1389,7 +1389,7 @@ def test_a_secret_global_bound_via_flags_is_redacted_wholesale():
 
 
 def test_a_stringified_secret_passes_in_the_clear():
-    from footman import Secret
+    from livery.footman import Secret
 
     cmd = _one(lambda: tools.git.commit(message=f"by {Secret('alice')}"))
     assert "alice" in cmd

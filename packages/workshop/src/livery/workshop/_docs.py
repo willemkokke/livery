@@ -25,9 +25,8 @@ import tomllib
 from pathlib import Path
 from typing import Annotated
 
-from footman import doc, fail, group
-
 from livery import toolroom
+from livery.footman import doc, fail, group
 from livery.workshop._packages import Package, discover_packages
 
 #: The nav block the emitter owns; an edit between these is drift.
@@ -222,7 +221,7 @@ def run_generators(root: Path) -> list[str]:
     """
     import shutil as _shutil
 
-    import footman
+    import livery.footman as footman
 
     ran: list[str] = []
     runner = ""
@@ -379,11 +378,18 @@ def check_package_nav(package: Package, entries: list[object]) -> None:
     page the nav does not carry. Entries under ``_generated/`` are
     exempt from the missing check (a generator writes them at build
     time, and the strict site build owns them); generated pages are
-    likewise not required in the nav.
+    likewise not required in the nav. ``includes/`` is exempt from the
+    orphan check: its pages are snippet and glossary sources the
+    extension set consumes (``docs/includes/abbreviations.md`` is
+    auto-appended site-wide), never standalone pages.
     """
     docs = package.directory / "docs"
     leaves = _nav_leaves(entries)
-    authored = {page for page in _pages(docs) if not page.startswith("_generated/")}
+    authored = {
+        page
+        for page in _pages(docs)
+        if not page.startswith(("_generated/", "includes/"))
+    }
     nav_path = docs / NAV_TOML
     missing = [
         leaf
@@ -1290,7 +1296,7 @@ def _publish_ssh(root: Path) -> None:
     """
     import os
 
-    import footman
+    import livery.footman as footman
 
     host = os.environ.get("DOCS_HOST", "")
     user = os.environ.get("DOCS_USER", "")

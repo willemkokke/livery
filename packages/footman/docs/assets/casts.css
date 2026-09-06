@@ -1,0 +1,130 @@
+/* Playable casts — the control bar under an inlined recording.
+ *
+ * Sizing note: the recordings carry a viewBox and no width/height, so the
+ * inlined <svg> scales to whatever the column gives it. That is why the
+ * stage sets width and lets height follow.
+ */
+
+/* max-width is set per figure from the recording's own viewBox, so swapping
+ * the <img> for the player changes nothing about the page's layout. */
+/* `.md-typeset` on these two, not because they need the scope but because
+ * they have to outrank the theme's own `.md-typeset figure`, which sets
+ * `width: fit-content`. An inline <svg> carrying only a viewBox contributes
+ * no intrinsic width, so a shrink-to-fit figure collapses to its widest
+ * child — the control bar — and drags the recording down with it. A bare
+ * `.cast` rule loses that fight on specificity and silently does nothing,
+ * which is exactly what it did. The recording is vector text, so filling
+ * the column costs nothing. */
+.md-typeset .cast {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  margin: 1em 0;
+}
+
+.md-typeset .cast-stage svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 0.2rem;
+}
+
+.cast-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.2rem;
+  background: var(--md-code-bg-color);
+  color: var(--md-default-fg-color--light);
+  font-size: 0.7rem;
+}
+
+.cast-controls button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  border: none;
+  border-radius: 0.2rem;
+  background: transparent;
+  color: currentcolor;
+  cursor: pointer;
+}
+
+.cast-controls button:hover {
+  background: var(--md-default-fg-color--lightest);
+  color: var(--md-accent-fg-color);
+}
+
+.cast-controls button:focus-visible {
+  outline: 2px solid var(--md-accent-fg-color);
+  outline-offset: 1px;
+}
+
+.cast-controls button svg {
+  width: 1rem;
+  height: 1rem;
+  fill: currentcolor;
+  /* The icon must never be the click target — the button is. */
+  pointer-events: none;
+}
+
+.cast-time {
+  flex: 0 0 auto;
+  font-family: var(--md-code-font-family, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The scrubber. Styled explicitly in both directions, because the default
+ * range widget inherits none of the theme's palette. */
+.cast-scrub {
+  flex: 1 1 auto;
+  min-width: 4rem;
+  height: 1rem;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.cast-scrub::-webkit-slider-runnable-track {
+  height: 0.2rem;
+  border-radius: 0.1rem;
+  background: var(--md-default-fg-color--lightest);
+}
+
+.cast-scrub::-moz-range-track {
+  height: 0.2rem;
+  border-radius: 0.1rem;
+  background: var(--md-default-fg-color--lightest);
+}
+
+.cast-scrub::-webkit-slider-thumb {
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-top: -0.25rem;
+  border: none;
+  border-radius: 50%;
+  background: var(--md-accent-fg-color);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.cast-scrub::-moz-range-thumb {
+  width: 0.7rem;
+  height: 0.7rem;
+  border: none;
+  border-radius: 50%;
+  background: var(--md-accent-fg-color);
+}
+
+.cast-scrub:focus-visible {
+  outline: 2px solid var(--md-accent-fg-color);
+  outline-offset: 2px;
+}

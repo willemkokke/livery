@@ -1,0 +1,23 @@
+{
+  "name": "footman-playground-editor",
+  "private": true,
+  "description": "Build recipe for docs/assets/vendor/codemirror.js — see README.md",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild entry.js --bundle --format=esm --minify --banner:js=\"/* CodeMirror 6 (MIT) + @uiw vscode theme (MIT) — bundled for the footman playground; see vendor/codemirror/README.md */\" --outfile=../../docs/assets/vendor/codemirror.js && cp node_modules/firacode/distr/woff2/FiraCode-VF.woff2 ../../docs/assets/vendor/FiraCode-VF.woff2"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "6.20.3",
+    "@codemirror/commands": "6.10.4",
+    "@codemirror/lang-python": "6.2.1",
+    "@codemirror/language": "6.12.4",
+    "@codemirror/search": "6.7.1",
+    "@codemirror/state": "6.7.1",
+    "@codemirror/view": "6.43.8",
+    "@lezer/highlight": "1.2.3",
+    "firacode": "6.2.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.9"
+  }
+}

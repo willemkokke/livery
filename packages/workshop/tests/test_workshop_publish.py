@@ -12,8 +12,8 @@ import time
 from pathlib import Path
 
 import pytest
-from footman import Failed
 
+from livery.footman import Failed
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._publish import (

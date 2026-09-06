@@ -14,8 +14,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from footman import Failed
 
+from livery.footman import Failed
 from livery.forge import ForgeError
 from livery.forge.testing import FakeForge
 from livery.workshop._diagnostics import gather_bundle, record
@@ -396,7 +396,7 @@ def test_record_writes_prunes_and_never_raises(
 ) -> None:
     fake, _git_seam = rig
     repo = _repo(fake)
-    monkeypatch.setattr("footman.data_dir", lambda: tmp_path / "home")
+    monkeypatch.setattr("livery.footman.data_dir", lambda: tmp_path / "home")
     for index in range(23):
         path = record(
             repo,
@@ -438,7 +438,7 @@ def test_closed_is_definitive_on_a_single_read(
 ) -> None:
     fake, git = rig
     repo = _repo(fake)
-    monkeypatch.setattr("footman.data_dir", lambda: tmp_path / "home")
+    monkeypatch.setattr("livery.footman.data_dir", lambda: tmp_path / "home")
     monkeypatch.setattr(
         "livery.workshop._verdict.classify",
         lambda *a, **k: Verdict("closed", 12, "closed unmerged", 1),
@@ -640,7 +640,7 @@ def test_the_interactive_picker_asks_and_silence_stops(
     first = _wf(WorkflowState.FAILED, name="release/forge")
     second = _wf(WorkflowState.PREPARING, name="update/templates")
     # Declining the select aborts nothing, ever.
-    monkeypatch.setattr("footman.select", lambda message, options: None)
+    monkeypatch.setattr("livery.footman.select", lambda message, options: None)
     with pytest.raises(SystemExit) as caught:
         abort_policy(repo, git, (first, second), "", force=False, interactive=True)
     assert "nothing aborted" in str(caught.value)
@@ -649,7 +649,7 @@ def test_the_interactive_picker_asks_and_silence_stops(
     (git.root / "u.txt").write_text("u\n")
     git.commit_all("chore: u")
     git.switch("main")
-    monkeypatch.setattr("footman.select", lambda message, options: options[1][1])
+    monkeypatch.setattr("livery.footman.select", lambda message, options: options[1][1])
     monkeypatch.setattr(
         "livery.workshop._workflow_tasks._reconcile_configuration",
         lambda _git, _sha: None,

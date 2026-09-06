@@ -497,6 +497,20 @@ def test_generated_pages_are_exempt_both_ways(tmp_path: Path) -> None:
     assert "_generated/packages/core/_generated/ghost.md" in config
 
 
+def test_a_glossary_under_includes_is_not_an_orphan(tmp_path: Path) -> None:
+    # docs/includes/abbreviations.md is a source the extension set
+    # auto-appends site-wide, never a standalone page, so the orphan
+    # check must not demand a nav entry for it.
+    from livery.workshop._docs import zensical_config
+
+    root = _workspace(tmp_path)
+    glossary = root / "packages/core/docs/includes"
+    glossary.mkdir(parents=True)
+    (glossary / "abbreviations.md").write_text("*[CI]: Continuous integration\n")
+    config = zensical_config(root)
+    assert "abbreviations.md" in config  # appended, not navigated
+
+
 def test_the_authored_nav_drives_the_section(tmp_path: Path) -> None:
     import tomllib as toml
 
@@ -719,9 +733,9 @@ def test_a_failing_generator_names_the_verb_and_package(
 ) -> None:
     import shutil as shutil_module
 
-    import footman
     import pytest
 
+    import livery.footman as footman
     from livery.workshop._docs import run_generators
 
     root = _workspace(tmp_path)
@@ -753,8 +767,7 @@ def test_generators_run_in_declaration_order_at_the_root(
 ) -> None:
     import shutil as shutil_module
 
-    import footman
-
+    import livery.footman as footman
     from livery.workshop._docs import run_generators
 
     root = _workspace(tmp_path)

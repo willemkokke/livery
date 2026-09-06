@@ -16,7 +16,7 @@ invoked there.
 
 from __future__ import annotations
 
-from footman import task
+from livery.footman import task
 
 # Importing registers each module's tasks with footman.
 from livery.workshop import (  # noqa: F401

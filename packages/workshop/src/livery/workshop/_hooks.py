@@ -17,10 +17,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-import footman
-from footman import RunFailed, fail, run, stdin
-
+import livery.footman as footman
 from livery import toolroom
+from livery.footman import RunFailed, fail, run, stdin
 from livery.workshop._tree import agent_hooks
 
 

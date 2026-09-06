@@ -1,0 +1,43 @@
+# Seeded from the template channel (package-python kind) at
+# birth; this file is the workspace's own. Edit it directly:
+# the template never rewrites it.
+[build-system]
+requires = ["uv_build>=0.11,<0.13"]
+build-backend = "uv_build"
+
+[project]
+name = "footman"
+version = "0.52.2"
+description = "The footman distribution, now a thin shim over livery-footman."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Willem Kokke", email = "mail@willem.net" }]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Typing :: Typed",
+]
+
+# Exactly the real distribution and nothing else: the shim is the
+# old index name continuing its line, so an upgrade of `footman`
+# resolves onto it and every import keeps working. The console
+# scripts (`fm`, `footman`), the pytest plugin, and the task entry
+# points all ship with livery-footman; declaring them here too would
+# register each of them twice in one environment.
+dependencies = ["livery-footman>=0.52.1"]
+
+# The real distribution's uv extra, forwarded under the old spelling:
+# `uv tool install "footman[uv]"` keeps working.
+[project.optional-dependencies]
+uv = ["livery-footman[uv]>=0.52.1"]
+
+[project.urls]
+Repository = "https://github.com/willemkokke/livery"
+
+[tool.uv.build-backend]
+# The shim keeps the old import name alive: `import footman`
+# resolves here and forwards to livery.footman whole.
+module-name = "footman"

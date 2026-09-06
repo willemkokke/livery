@@ -24,9 +24,8 @@ import tempfile
 from pathlib import Path
 from typing import Annotated
 
-import footman
-from footman import doc, fail
-
+import livery.footman as footman
+from livery.footman import doc, fail
 from livery.forge import Forge, ForgeError, Repository
 from livery.workshop._templates import new as new_group
 
@@ -148,7 +147,7 @@ def new_project(
     # footman.BUILTIN is an import-time snapshot of the stock brand;
     # the running App's own list lives in _paths.builtin() (a public
     # runtime accessor is footman#536's family).
-    from footman import _paths
+    from livery.footman import _paths
 
     stack = [
         entry for entry in _paths.builtin() if not entry.startswith("footman.")

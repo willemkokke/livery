@@ -37,7 +37,7 @@ def _dev_env() -> dict[str, str]:
     Under `fm` the cascade already exported them; a bare pytest run
     reads the shared env file the containers were seeded into.
     """
-    import footman
+    import livery.footman as footman
 
     pairs = {
         key: os.environ[key]

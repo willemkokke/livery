@@ -7,8 +7,8 @@ import zipfile
 from pathlib import Path
 
 import pytest
-from footman import Failed
 
+from livery.footman import Failed
 from livery.workshop._dev_release import (
     DevPlan,
     build_dev,

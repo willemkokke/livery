@@ -14,9 +14,8 @@ import re
 import tomllib
 from pathlib import Path
 
-from footman import fail
-
 from livery import toolroom
+from livery.footman import fail
 from livery.forge import Forge, GiteaForge, GithubForge, GitlabForge, Repository
 from livery.workshop._tokens import admin_token, forge_token
 

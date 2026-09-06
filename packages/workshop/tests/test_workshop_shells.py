@@ -12,8 +12,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from footman import Failed
 
+from livery.footman import Failed
 from livery.forge.testing import FakeForge
 from livery.workshop import _ci_tasks, _graph, _quality
 from livery.workshop._backends import _python
@@ -136,7 +136,7 @@ def test_check_affected_scopes_or_says_nothing(
     # test wants the routing, so both collapse to run-in-place.
     import contextlib
 
-    import footman
+    import livery.footman as footman
 
     monkeypatch.setattr(_quality, "parallel", contextlib.nullcontext)
     monkeypatch.setattr(footman, "step", lambda fn, title=None: lambda: fn())

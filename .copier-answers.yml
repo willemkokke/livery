@@ -22,3 +22,9 @@ packages:
 - dir: toolroom-compat
   name: toolroom
   dev: toolroom
+- dir: footman
+  name: livery-footman
+  dev: livery-footman[test]
+- dir: footman-compat
+  name: footman
+  dev: footman

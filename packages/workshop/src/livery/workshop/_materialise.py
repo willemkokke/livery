@@ -41,7 +41,7 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
-import footman
+import livery.footman as footman
 
 _MANIFEST = ".workshop-materialised"
 """What this module *copied* into a directory: ``<hash> <name>`` lines.

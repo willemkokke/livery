@@ -97,7 +97,15 @@ def _hermetic(base: dict[str, str], venv: Path) -> dict[str, str]:
 
 def _build_wheels(source_root: Path, wheelhouse: Path, env: dict[str, str]) -> None:
     wheelhouse.mkdir(exist_ok=True)
-    for member in ("packages/workshop", "packages/forge", "packages/toolroom"):
+    members = (
+        "packages/workshop",
+        "packages/forge",
+        "packages/toolroom",
+        "packages/toolroom-compat",
+        "packages/footman",
+        "packages/footman-compat",
+    )
+    for member in members:
         _run(
             ["uv", "build", "--wheel", "-o", str(wheelhouse), member],
             source_root,

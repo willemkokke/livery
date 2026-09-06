@@ -21,7 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
-from footman import fail
+from livery.footman import fail
 
 if TYPE_CHECKING:
     from pathlib import Path

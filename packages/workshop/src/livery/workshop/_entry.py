@@ -20,7 +20,7 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
-import footman
+import livery.footman as footman
 
 
 def locked_uv_version(root: Path) -> str:

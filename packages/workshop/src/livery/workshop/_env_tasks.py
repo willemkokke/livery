@@ -19,10 +19,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Literal
 
-import footman
-from footman import Arg, Stdout, doc, fail, group, pre_tasks
-
+import livery.footman as footman
 from livery import toolroom
+from livery.footman import Arg, Stdout, doc, fail, group, pre_tasks
 from livery.forge import RepoConfig
 from livery.workshop._envfile import (
     Source,
@@ -57,7 +56,7 @@ def _workspace() -> tuple[Path, Path]:
 
 def _shared_dir() -> Path:
     """Where ``.repo.shared.env`` lives: the runner's config directory."""
-    import footman
+    import livery.footman as footman
 
     return footman.config_dir()
 
@@ -121,7 +120,7 @@ def _warn_unmounted_layers(root: Path) -> None:
     declared = [name for name in _layers.layer_names(root) if name != _layers.SELF]
     if not declared:
         return
-    import footman
+    import livery.footman as footman
 
     sys.stderr.write(
         f"{footman.prog()}: the contract declares layers"

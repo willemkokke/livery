@@ -29,10 +29,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-import footman
-from footman import fail
-
+import livery.footman as footman
 from livery import toolroom
+from livery.footman import fail
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package, discover_packages
 

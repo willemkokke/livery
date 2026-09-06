@@ -14,8 +14,8 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
-from footman import Failed
 
+from livery.footman import Failed
 from livery.forge import StateFilter
 from livery.forge.testing import FakeForge, Outcome
 from livery.workshop._ci_tasks import cancel_flow, doctor_flow, rerun_flow, status_flow

@@ -25,8 +25,8 @@ from importlib import resources
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import footman
-from footman import fail, task
+import livery.footman as footman
+from livery.footman import fail, task
 
 if TYPE_CHECKING:
     from livery.workshop._git_ops import GitOps
@@ -163,7 +163,7 @@ def _rebase_step(git: GitOps, onto: str, *, interactive: bool) -> bool:
     interactive run may choose to resolve it now, everything else
     parks with the teaching.
     """
-    import footman
+    import livery.footman as footman
 
     branch = git.current_branch()
     foreign = _foreign_authors(git, onto)

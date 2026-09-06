@@ -4,7 +4,7 @@ The gate verb configures and builds with cmake and ninja and runs
 the ctest suite through the generated ``test`` target, all through
 the toolroom handles. Packaging goes through conan, which has no
 toolroom handle yet, so ``build`` starts it as a deliberate
-``footman.run`` after probing that the binary resolves; a machine
+``livery.footman.run`` after probing that the binary resolves; a machine
 without conan gets the install command, never a stack trace.
 """
 
@@ -15,10 +15,9 @@ import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import footman
-from footman import fail
-
+import livery.footman as footman
 from livery import toolroom
+from livery.footman import fail
 
 if TYPE_CHECKING:
     from livery.workshop._packages import Package

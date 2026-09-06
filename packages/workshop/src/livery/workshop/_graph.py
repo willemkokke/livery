@@ -16,8 +16,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from footman import group
-
+from livery.footman import group
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package, discover_packages
 

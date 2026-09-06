@@ -26,8 +26,8 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import footman
-from footman import Arg, Stdout, group
+import livery.footman as footman
+from livery.footman import Arg, Stdout, group
 
 _KINDS = ("bash", "zsh", "pwsh")
 
@@ -167,7 +167,7 @@ def shell_launch_plan(kind: str, *, root: Path, tmp_dir: Path) -> ShellLaunch:
 
 def _realise(kind: str) -> ShellLaunch:
     """The plan for *kind*, with its rc files written to disk."""
-    import footman
+    import livery.footman as footman
 
     resolved = kind or default_kind()
     tmp_dir = Path(tempfile.mkdtemp(prefix="livery-shell-"))

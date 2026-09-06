@@ -13,7 +13,12 @@ ROOT = Path(__file__).resolve().parents[3]
 
 def test_this_workspace_declares_the_workshop_as_its_base() -> None:
     assert workspace_root(ROOT / "packages") == ROOT
-    assert layer_names(ROOT) == ("livery.workshop", "livery.forge", "livery.toolroom")
+    assert layer_names(ROOT) == (
+        "livery.workshop",
+        "livery.forge",
+        "livery.toolroom",
+        "livery.footman",
+    )
 
 
 def test_outside_a_workspace_there_are_no_layers(tmp_path: Path) -> None:
@@ -25,7 +30,7 @@ def test_outside_a_workspace_there_are_no_layers(tmp_path: Path) -> None:
 def test_the_workshop_never_mounts_itself() -> None:
     # The walk skips this package (importing it IS the base layer
     # arriving) and grafts only the further layers the contract names.
-    assert mount_layers(ROOT) == ("livery.forge", "livery.toolroom")
+    assert mount_layers(ROOT) == ("livery.forge", "livery.toolroom", "livery.footman")
 
 
 def test_a_contract_without_layers_names_none(tmp_path: Path) -> None:
@@ -88,7 +93,7 @@ def test_a_branded_builtin_layer_is_the_apps_to_mount(
     # sibling builtin would claim the same tasks twice in one rung.
     # The layer does not even exist here: skipped means never
     # imported, which is the proof.
-    from footman import _paths  # pyright: ignore[reportPrivateUsage]
+    from livery.footman import _paths  # pyright: ignore[reportPrivateUsage]
 
     (tmp_path / "workshop.toml").write_text(
         '[workspace]\nlayers = ["livery.workshop", "acme.missing"]\n'

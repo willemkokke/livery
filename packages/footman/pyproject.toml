@@ -1,0 +1,107 @@
+# Seeded from the template channel (package-python kind) at
+# birth; this file is the workspace's own. Edit it directly:
+# the template never rewrites it.
+[build-system]
+requires = ["uv_build>=0.11,<0.13"]
+build-backend = "uv_build"
+
+[project]
+name = "livery-footman"
+version = "0.52.1"
+description = "A task runner with typed commands, nested groups, and instant shell completion."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Willem Kokke", email = "mail@willem.net" }]
+keywords = ["task-runner", "cli", "completion", "duty", "typer"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: Free Threading :: 2 - Beta",
+    "Topic :: Software Development :: Build Tools",
+    "Typing :: Typed",
+]
+
+# Zero runtime dependencies: the completion hot path must stay stdlib-only,
+# and the execution path builds its CLI from function signatures directly.
+dependencies = []
+
+# One optional extra, and it is not a library: `pip install livery-footman[uv]`
+# (or `uv tool install "livery-footman[uv]"`) puts a uv binary in the same
+# scripts directory as `fm` itself, so a globally-installed runner carries the
+# tool both handoffs need: the project one, and the environment a tasks file
+# declares for itself. Nothing imports it; it is found on disk.
+[project.optional-dependencies]
+uv = ["uv>=0.6"]
+# The suite's third-party seams, driven for real rather than stubbed:
+# the env_files plugin's loader, the optional fetch backends, and the
+# playground's editor intelligence. Never runtime dependencies;
+# footman imports each lazily and teaches by name when absent.
+test = [
+    "python-dotenv>=1.0",
+    "httpx>=0.27",
+    "requests>=2.31",
+    "jedi>=0.20.0",
+    # rich renders the terminal screenshots, pyte replays the recorded
+    # casts; both pure Python, so every platform leg drives them.
+    "rich>=13",
+    "pyte>=0.8",
+]
+
+[project.urls]
+Repository = "https://github.com/willemkokke/livery"
+
+[project.scripts]
+footman = "livery.footman:main"
+fm = "livery.footman:main"
+
+# Auto-loaded pytest fixtures (fm, fm_project, fm_record) for testing tasks.
+# Zero runtime cost: only pytest itself ever imports the module.
+[project.entry-points.pytest11]
+footman = "livery.footman.pytest_plugin"
+
+# footman's own first-party tasks, advertised the way any plugin is: an
+# entry point is the console-script of task trees, a stable public identity
+# for a Group the package offers, inert until a tasks.py pulls it
+# (`plugin("footman.docs", into="footman")`). The entry names are the
+# ecosystem identities and keep their `footman.` spelling; only the
+# targets live under the livery namespace. Metadata only: a family
+# imports when pulled, never on a bare `import livery.footman`.
+[project.entry-points."footman.tasks"]
+"footman.docs" = "livery.footman.tasks.docs:tasks"
+"livery.footman" = "livery.footman._docsgen"
+"footman.env_files" = "livery.footman.env_files"
+"footman.self" = "livery.footman.tasks.self_:tasks"
+"footman.profile" = "livery.footman.profile"
+
+[tool.uv.build-backend]
+# PEP 420 namespace: the importable package is livery.footman and
+# there is no livery/__init__.py anywhere in this repository.
+module-name = "livery.footman"
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+
+[tool.ruff.lint.per-file-ignores]
+# The imported sources predate the workspace's pydocstyle rule;
+# their docstring conformance is a tracked content pass, not a
+# cut-time rewrite. Retired by that pass.
+"src/**" = ["D102", "D103", "D105", "D107", "D205", "D209", "D301", "D402", "D403", "D415", "D417", "D418"]
+# The A/B/ARG carve-out is the origin's own standing ruling: tasks
+# fixtures deliberately shadow builtins (format, list) and take
+# unused params to exercise the signature grammar.
+"tests/**" = ["A", "B", "ARG", "D1", "D205", "D209", "D300", "D301", "D403", "D415"]
+# The process-globals router is one deliberate monkeypatch: setattr
+# IS the honest spelling there (a static assignment can't be blessed
+# by any checker on any platform), so B010's advice is excused.
+"src/livery/footman/_globals.py" = ["B010"]

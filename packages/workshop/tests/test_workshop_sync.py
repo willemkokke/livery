@@ -6,9 +6,9 @@ import os
 import subprocess
 from pathlib import Path
 
-import footman
 import pytest
 
+import livery.footman as footman
 from livery.workshop._materialise import materialise
 from livery.workshop._sync import sync_workspace
 

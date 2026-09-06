@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-from footman import group
+from livery.footman import group
 
 agent_hooks = group("hooks", hidden=True, help="Agent lifecycle hooks (stdin-driven)")

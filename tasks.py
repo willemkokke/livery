@@ -9,7 +9,7 @@ template seeds this file once and never rewrites it, so anything a
 repository adds below the mount lines is its own.
 """
 
-from footman import plugin
+from livery.footman import plugin
 
 plugin("livery.workshop")
 

@@ -125,7 +125,7 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
       import time, plus its one declared lazy extra (PyNaCl), because
       the whole ecosystem stands on it being dependency-free. The one
       exception is the dev plugin under ``_dev``, which may also
-      import footman and toolroom: its only loader is footman's
+      import livery.footman as footman and toolroom: its only loader is footman's
       ``plugin()``, and only a workshop workspace mounts layers, so
       both are present whenever it loads.
     """

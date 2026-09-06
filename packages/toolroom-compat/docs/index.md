@@ -2,6 +2,8 @@
      birth; this file is the workspace's own. Edit it directly:
      the template never rewrites it.
 -->
-# livery-toolroom-compat
+# toolroom
 
-livery-toolroom-compat: a livery workspace package.
+The toolroom distribution, now a thin shim over livery-toolroom.
+Every `toolroom.*` attribute forwards to `livery.toolroom` whole.
+New code imports `livery.toolroom` directly.

@@ -148,7 +148,7 @@ def _fm_run(*args: Any, **kwargs: Any) -> Any:
     """`context.run`, imported at call time (the probe is reachable from the
     stub tooling, which has no interest in the run machinery).
     """
-    from footman.context import run
+    from livery.footman.context import run
 
     return run(*args, **kwargs)
 

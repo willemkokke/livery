@@ -45,7 +45,7 @@ from typing import TYPE_CHECKING, Any
 from livery.toolroom._machinery._toolspec import Option, ToolSpec, Verb
 
 if TYPE_CHECKING:
-    from footman.context import Result
+    from livery.footman.context import Result
 
 
 def _run(*args: Any, **kwargs: Any) -> Result:
@@ -55,7 +55,7 @@ def _run(*args: Any, **kwargs: Any) -> Result:
     bridge, which reaches here — and this module is also imported by the
     stub generator, which has no interest in the run machinery.
     """
-    from footman.context import run
+    from livery.footman.context import run
 
     return run(*args, **kwargs)
 

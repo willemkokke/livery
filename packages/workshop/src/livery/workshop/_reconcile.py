@@ -58,7 +58,7 @@ def is_cli_process() -> bool:
     shelled out to ``uv sync`` once per test would be slow and
     destructive.
     """
-    import footman
+    import livery.footman as footman
 
     if not sys.argv or not sys.argv[0]:
         return False
@@ -149,7 +149,7 @@ def _say(message: str) -> None:
 
 def apply(root: Path) -> None:
     """Reconcile, report, and re-run the command on changed code."""
-    import footman
+    import livery.footman as footman
 
     result = reconcile(root)
     if result.failure:
@@ -177,7 +177,7 @@ def _reexec(root: Path) -> None:
     would turn a repair into an outage. Windows has no real exec, so
     it waits and forwards the exit code.
     """
-    import footman
+    import livery.footman as footman
 
     prog = footman.prog()
     if os.environ.get(_GUARD):

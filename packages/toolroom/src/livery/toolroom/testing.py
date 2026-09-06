@@ -216,8 +216,8 @@ def answers(
     fm_failed: Any = None
     if hosted:
         try:
-            from footman.context import Result as fm_result
-            from footman.context import RunFailed as fm_failed
+            from livery.footman.context import Result as fm_result
+            from livery.footman.context import RunFailed as fm_failed
         except ImportError:
             raise ImportError(
                 "answers(hosted=True) simulates the hosted lane, which is "

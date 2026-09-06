@@ -13,9 +13,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated
 
-import footman
-from footman import doc, fail, group, suggest
-
+import livery.footman as footman
+from livery.footman import doc, fail, group, suggest
 from livery.forge import RepoConfig, Repository
 from livery.workshop._git_ops import GitOps
 from livery.workshop._layers import workspace_root
