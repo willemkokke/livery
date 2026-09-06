@@ -37,6 +37,13 @@ def test_the_shim_declares_no_scripts_and_no_entry_points() -> None:
 
 def test_every_public_name_forwards_identically() -> None:
     for name in real.__all__:
+        if name == "__version__":
+            # The one literal: the release train verifies the version
+            # is declared in the shim itself, and the ruling keeps the
+            # two distributions on one number, so equality is the
+            # contract here rather than identity.
+            assert footman.__version__ == real.__version__
+            continue
         assert getattr(footman, name) is getattr(real, name), name
 
 
