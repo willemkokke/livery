@@ -401,11 +401,11 @@ wheels = [
 
 [[package]]
 name = "footman"
-version = "0.51.0"
+version = "0.52.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/1a/cb/76957015b27428e3e35186f217b34db6e51703378c5cde2661390e7bbcfb/footman-0.51.0.tar.gz", hash = "sha256:b12664d3f1d701baac88f4e16399abd8080132fb2506d9e0bef6074a447714b7", size = 447294, upload-time = "2026-09-06T00:41:47.27Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1d/98/25ea203b48a8a1ae521b39a05a65d0cd3ffd71449d1f23ed27403b00679f/footman-0.52.1.tar.gz", hash = "sha256:a91cd057492e8bc85c93a3c7510f3fa2690ea8bad5e791fb7a690c7defccb16d", size = 449431, upload-time = "2026-09-06T03:02:06.698Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2f/df/459e586d4e2ae826f56eee5b1e7cce2acc8c3761205c247718a5eb4e9bc1/footman-0.51.0-py3-none-any.whl", hash = "sha256:d2c17a59b818d1a6631f1dbab87365be9a18247cebde63acc567b23a7568b0ad", size = 470327, upload-time = "2026-09-06T00:41:45.524Z" },
+    { url = "https://files.pythonhosted.org/packages/8f/b5/ae3a392727037b93b57997424b07466932b4462d7f7563f16ce6eadd7872/footman-0.52.1-py3-none-any.whl", hash = "sha256:49bdb7adf350751687b8255965b89f3168dbf30d922b2d7fbe099f5fda9224a8", size = 472445, upload-time = "2026-09-06T03:02:05.266Z" },
 ]
 
 [[package]]
@@ -645,7 +645,7 @@ dev = [
     { name = "basedpyright", specifier = ">=1.18" },
     { name = "coverage", extras = ["toml"], specifier = ">=7.10" },
     { name = "coverage-enable-subprocess", specifier = ">=1.0" },
-    { name = "footman", specifier = ">=0.51" },
+    { name = "footman", specifier = ">=0.52.1" },
     { name = "git-cliff", specifier = ">=2.13" },
     { name = "livery-forge", extras = ["github-secrets"], editable = "packages/forge" },
     { name = "livery-workshop", editable = "packages/workshop" },
