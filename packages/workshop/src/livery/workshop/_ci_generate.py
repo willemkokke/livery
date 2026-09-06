@@ -222,6 +222,11 @@ on:
 
 jobs:
   check:
+    # A release PR's title check answers in seconds; the matrix must
+    # not burn six legs under a title the merge would refuse anyway.
+    # Every other event skips release-title, and the skip passes.
+    needs: [release-title]
+    if: ${{{{ !cancelled() && (needs.release-title.result == 'success' || needs.release-title.result == 'skipped') }}}}
     strategy:
       fail-fast: false
       matrix:
@@ -295,7 +300,7 @@ jobs:
           # check-title compares against origin/main, which a shallow
           # checkout does not have.
           fetch-depth: 0
-{setup_uv}{enter}      - run: {prog} workflow.release.check-title --title "$TITLE"
+{setup_uv}{enter}      - run: {prog} workflow.release.check-title --title="$TITLE"
         env:
           TITLE: ${{{{ github.event.pull_request.title }}}}
 """
@@ -462,6 +467,11 @@ on:
 
 jobs:
   check:
+    # A release PR's title check answers in seconds; the matrix must
+    # not burn six legs under a title the merge would refuse anyway.
+    # Every other event skips release-title, and the skip passes.
+    needs: [release-title]
+    if: ${{{{ !cancelled() && (needs.release-title.result == 'success' || needs.release-title.result == 'skipped') }}}}
     strategy:
       fail-fast: false
       matrix:
@@ -503,7 +513,7 @@ jobs:
           # check-title compares against origin/main, which a shallow
           # checkout does not have.
           fetch-depth: 0
-{enter}      - run: {prog} workflow.release.check-title --title "$TITLE"
+{enter}      - run: {prog} workflow.release.check-title --title="$TITLE"
         env:
           TITLE: ${{{{ github.event.pull_request.title }}}}
 """
