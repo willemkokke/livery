@@ -66,6 +66,13 @@ def layer_names(start: Path | None = None) -> tuple[str, ...]:
     return tuple(import_path for import_path, _ in layer_entries(start))
 
 
+#: Whether mount_layers ran in this process. The cascade hook reads
+#: it: a workspace declaring further layers whose tasks.py never
+#: mounted them is running a pre-composition render, and the gap
+#: must teach rather than silently narrow the tree.
+MOUNTED: bool = False
+
+
 def mount_layers(start: Path | None = None) -> tuple[str, ...]:
     """Graft every further layer's plugin, in order; the names mounted.
 
@@ -85,6 +92,8 @@ def mount_layers(start: Path | None = None) -> tuple[str, ...]:
         plugin,
     )
 
+    global MOUNTED
+    MOUNTED = True
     builtin = set(_paths.builtin())
     mounted = []
     for layer, dist in layer_entries(start):

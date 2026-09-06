@@ -9,19 +9,16 @@ nav = [
     # nav:begin tasks
     { "Tasks" = [
         { "Overview" = "_generated/tasks/index.md" },
-        { "abandon" = "_generated/tasks/abandon.md" },
         { "caches" = [
             { "Overview" = "_generated/tasks/caches/index.md" },
             { "clear" = "_generated/tasks/caches/clear.md" },
         ] },
-        { "check" = "_generated/tasks/check.md" },
         { "ci" = [
             { "Overview" = "_generated/tasks/ci/index.md" },
             { "cancel" = "_generated/tasks/ci/cancel.md" },
             { "logs" = "_generated/tasks/ci/logs.md" },
             { "rerun" = "_generated/tasks/ci/rerun.md" },
         ] },
-        { "clean" = "_generated/tasks/clean.md" },
         { "coverage" = [
             { "Overview" = "_generated/tasks/coverage/index.md" },
             { "enforce" = "_generated/tasks/coverage/enforce.md" },
@@ -34,7 +31,6 @@ nav = [
             { "serve" = "_generated/tasks/docs/serve.md" },
             { "task-reference" = "_generated/tasks/docs/task-reference.md" },
         ] },
-        { "doctor" = "_generated/tasks/doctor.md" },
         { "env" = [
             { "Overview" = "_generated/tasks/env/index.md" },
             { "check" = "_generated/tasks/env/check.md" },
@@ -42,8 +38,6 @@ nav = [
             { "set" = "_generated/tasks/env/set.md" },
             { "show" = "_generated/tasks/env/show.md" },
         ] },
-        { "explain" = "_generated/tasks/explain.md" },
-        { "format" = "_generated/tasks/format.md" },
         { "graph" = [
             { "Overview" = "_generated/tasks/graph/index.md" },
             { "affected" = "_generated/tasks/graph/affected.md" },
@@ -54,7 +48,6 @@ nav = [
             { "pre-bash" = "_generated/tasks/hooks/pre-bash.md" },
             { "stop" = "_generated/tasks/hooks/stop.md" },
         ] },
-        { "integrate" = "_generated/tasks/integrate.md" },
         { "issue" = [
             { "Overview" = "_generated/tasks/issue/index.md" },
             { "close" = "_generated/tasks/issue/close.md" },
@@ -66,35 +59,33 @@ nav = [
             { "stop" = "_generated/tasks/issue/stop.md" },
             { "update" = "_generated/tasks/issue/update.md" },
         ] },
-        { "kindcheck" = "_generated/tasks/kindcheck.md" },
-        { "layers" = "_generated/tasks/layers.md" },
-        { "lint" = "_generated/tasks/lint.md" },
         { "new" = [
             { "Overview" = "_generated/tasks/new/index.md" },
             { "package" = "_generated/tasks/new/package.md" },
             { "project" = "_generated/tasks/new/project.md" },
         ] },
-        { "provenance" = "_generated/tasks/provenance.md" },
+        { "release" = [
+            { "Overview" = "_generated/tasks/release/index.md" },
+            { "prepare" = "_generated/tasks/release/prepare.md" },
+            { "templates" = "_generated/tasks/release/templates.md" },
+            { "verify" = "_generated/tasks/release/verify.md" },
+            { "wheels" = "_generated/tasks/release/wheels.md" },
+        ] },
         { "shell" = [
             { "Overview" = "_generated/tasks/shell/index.md" },
             { "default" = "_generated/tasks/shell/default.md" },
             { "prepare" = "_generated/tasks/shell/prepare.md" },
         ] },
-        { "status" = "_generated/tasks/status.md" },
         { "submit" = [
             { "Overview" = "_generated/tasks/submit/index.md" },
             { "default" = "_generated/tasks/submit/default.md" },
             { "merge" = "_generated/tasks/submit/merge.md" },
         ] },
-        { "sync" = "_generated/tasks/sync.md" },
         { "template" = [
             { "Overview" = "_generated/tasks/template/index.md" },
             { "apply" = "_generated/tasks/template/apply.md" },
             { "check" = "_generated/tasks/template/check.md" },
         ] },
-        { "test" = "_generated/tasks/test.md" },
-        { "typecheck" = "_generated/tasks/typecheck.md" },
-        { "typecomplete" = "_generated/tasks/typecomplete.md" },
         { "workflow" = [
             { "Overview" = "_generated/tasks/workflow/index.md" },
             { "abort" = "_generated/tasks/workflow/abort.md" },
@@ -106,6 +97,22 @@ nav = [
             { "update.dependencies" = "_generated/tasks/workflow/update/dependencies.md" },
             { "update.templates" = "_generated/tasks/workflow/update/templates.md" },
         ] },
+        { "abandon" = "_generated/tasks/abandon.md" },
+        { "check" = "_generated/tasks/check.md" },
+        { "clean" = "_generated/tasks/clean.md" },
+        { "doctor" = "_generated/tasks/doctor.md" },
+        { "explain" = "_generated/tasks/explain.md" },
+        { "format" = "_generated/tasks/format.md" },
+        { "integrate" = "_generated/tasks/integrate.md" },
+        { "kindcheck" = "_generated/tasks/kindcheck.md" },
+        { "layers" = "_generated/tasks/layers.md" },
+        { "lint" = "_generated/tasks/lint.md" },
+        { "provenance" = "_generated/tasks/provenance.md" },
+        { "status" = "_generated/tasks/status.md" },
+        { "sync" = "_generated/tasks/sync.md" },
+        { "test" = "_generated/tasks/test.md" },
+        { "typecheck" = "_generated/tasks/typecheck.md" },
+        { "typecomplete" = "_generated/tasks/typecomplete.md" },
     ] },
     # nav:end tasks
 ]

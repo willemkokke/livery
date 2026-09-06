@@ -100,3 +100,30 @@ def test_a_branded_builtin_layer_is_the_apps_to_mount(
     monkeypatch.setattr(_paths, "_builtin", ())
     with pytest.raises(RuntimeError, match=r"acme\.missing"):
         mount_layers(tmp_path)
+
+
+def test_declared_but_unmounted_layers_teach_the_rerender(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A tasks.py from before composition moved into it imports the
+    # base layer and nothing else; the gap teaches instead of
+    # silently narrowing the tree.
+    from livery.workshop import _layers
+    from livery.workshop._env_tasks import _warn_unmounted_layers
+
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nlayers = ["livery.workshop", "acme.brand"]\n'
+    )
+    monkeypatch.setattr(_layers, "MOUNTED", False)
+    _warn_unmounted_layers(tmp_path)
+    err = capsys.readouterr().err
+    assert "acme.brand" in err and "template.apply" in err
+    # Mounted, or base-only: silence.
+    monkeypatch.setattr(_layers, "MOUNTED", True)
+    _warn_unmounted_layers(tmp_path)
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nlayers = ["livery.workshop"]\n'
+    )
+    monkeypatch.setattr(_layers, "MOUNTED", False)
+    _warn_unmounted_layers(tmp_path)
+    assert capsys.readouterr().err == ""

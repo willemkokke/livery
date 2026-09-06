@@ -1,15 +1,16 @@
 """The per-package task reference: footman's renderer, one mechanism.
 
-Every package that provides task groups gets its tasks documented in
-its own site section. Ownership is the task's defining source file:
-a task whose function lives under a workspace package belongs to
-that package, and a task defined outside the workspace (a runner
-builtin) is not documented here; it arrives with its package at the
-migration. Pages render with ``footman.markdown.render_site`` over
-the same tree ``--json --list`` emits, into the owner's gitignored
-``docs/_generated/tasks/`` tree, and the owner's ``nav.toml``
-``tasks`` marker block is rewritten so the section's nav stays
-committed state and the drift gate stays offline.
+Every package that advertises ``footman.tasks`` entry points gets its
+tasks documented in its own site section, and the section documents
+the package's whole offering: each advertised provider renders in
+isolation (a one-line tasks file mounting only that provider, no
+cascade, no base), so no workspace composition, shadowing, disabling,
+or ``exclude=`` mount can change what a package's docs say. Hidden
+tasks stay out by the package's own flags. Pages render with
+``footman.markdown.render_site`` over the isolated tree, into the
+owner's gitignored ``docs/_generated/tasks/`` tree, and the owner's
+``nav.toml`` ``tasks`` marker block is rewritten so the section's
+nav stays committed state and the drift gate stays offline.
 
 The runner's ``docs_url`` is one URL template, so a generated alias
 tree at the uniform ``_generated/tasks/<slug>/`` address redirects
@@ -20,7 +21,8 @@ from __future__ import annotations
 
 import json
 import shutil
-from collections.abc import Sequence
+import tempfile
+import tomllib
 from pathlib import Path
 from typing import cast
 
@@ -34,66 +36,33 @@ from livery.workshop._packages import Package, discover_packages
 NAV_BLOCK = "tasks"
 
 
-def owning_package(source_file: str, packages: Sequence[Package]) -> Package | None:
-    """The workspace package whose tree defines *source_file*, or None."""
-    try:
-        source = Path(source_file).resolve()
-    except OSError:
-        return None
-    for package in packages:
-        if source.is_relative_to(package.directory.resolve()):
-            return package
-    return None
+def advertised_providers(package: Package) -> list[str]:
+    """The ``footman.tasks`` entry-point names *package* advertises.
 
-
-def task_ownership(root: Path) -> dict[str, str]:
-    """Owning package directory name per public task, by full name.
-
-    Read from the source map the cascade hook stashed for this run.
-    Tasks defined outside the workspace map to nothing and are not
-    documented here.
+    Read from the package's own committed ``pyproject.toml``, so the
+    enumeration is offline and deterministic; a package without the
+    table provides no tasks and gets no section.
     """
-    import footman
-
-    from livery.workshop import _env_tasks
-
-    if not _env_tasks.TASK_SOURCES:
-        fail(
-            "the task reference needs the merged tree, which only a"
-            " real runner invocation carries; run it as"
-            f" `{footman.prog()} docs.task-reference`"
-        )
-    packages = discover_packages(root)
-    owners: dict[str, str] = {}
-    for name, source in _env_tasks.TASK_SOURCES.items():
-        if not source:
-            continue
-        owner = owning_package(source, packages)
-        if owner is not None:
-            owners[name] = owner.directory.name
-    return owners
+    pyproject = package.directory / "pyproject.toml"
+    if not pyproject.is_file():
+        return []
+    parsed = tomllib.loads(pyproject.read_text("utf-8"))
+    project = parsed.get("project")
+    points = project.get("entry-points") if isinstance(project, dict) else None
+    table = points.get("footman.tasks") if isinstance(points, dict) else None
+    if not isinstance(table, dict):
+        return []
+    return sorted(str(name) for name in table)
 
 
-def _group_owners(owners: dict[str, str]) -> dict[str, str]:
-    """The owning package per top-level entry (group, or root task).
+def provider_tree(root: Path, identity: str) -> dict[str, object]:
+    """The provider's advertised tree, rendered in isolation.
 
-    A group belongs to the package defining most of its tasks; the
-    workspace has no mixed groups today, and a mixed group's minority
-    tasks still page under the group, where the runner shows them.
+    A one-line tasks file mounts only *identity* (``--tasks-file``
+    means one file, no cascade, no base), so the answer is the
+    package's whole offering regardless of how any workspace
+    composes it.
     """
-    tallies: dict[str, dict[str, int]] = {}
-    for name, owner in owners.items():
-        head = name.split(".", 1)[0]
-        tally = tallies.setdefault(head, {})
-        tally[owner] = tally.get(owner, 0) + 1
-    return {
-        head: max(tally, key=lambda owner: tally[owner])
-        for head, tally in tallies.items()
-    }
-
-
-def _tree(root: Path) -> dict[str, object]:
-    """The manifest tree, from the runner's own ``--json --list``."""
     import shutil as _shutil
 
     import footman
@@ -102,14 +71,26 @@ def _tree(root: Path) -> dict[str, object]:
     if not runner:
         fail(
             f"{footman.prog()} is not on PATH, so the task reference"
-            " cannot read the tree; enter the environment"
+            " cannot read the advertised trees; enter the environment"
             " (source setup.sh) first"
         )
-    result = footman.run(
-        [runner, "--json", "--list"], cwd=root, nofail=True, recorded=False
-    )
+    with tempfile.TemporaryDirectory() as scratch:
+        probe = Path(scratch) / "only.py"
+        probe.write_text(
+            f'from footman import plugin\n\nplugin("{identity}")\n',
+            encoding="utf-8",
+        )
+        result = footman.run(
+            [runner, f"--tasks-file={probe}", "--json", "--list"],
+            cwd=root,
+            nofail=True,
+            recorded=False,
+        )
     if int(result) != 0:
-        fail(f"{footman.prog()} --json --list exited {int(result)}")
+        fail(
+            f"{footman.prog()} --tasks-file --json --list for"
+            f" {identity!r} exited {int(result)}"
+        )
     return cast("dict[str, object]", json.loads(result.stdout)["tree"])
 
 
@@ -122,36 +103,51 @@ def _alias_page(target: str, name: str) -> str:
     )
 
 
-def generate_task_reference(root: Path) -> list[str]:
-    """Render every providing package's task reference; the packages.
+def _addresses(tree: dict[str, object], prefix: str = "") -> list[str]:
+    """Every task address in *tree*, depth-first."""
+    found: list[str] = []
+    tasks = tree.get("tasks")
+    if isinstance(tasks, dict):
+        found += [prefix + name for name in tasks]
+    groups = tree.get("groups")
+    if isinstance(groups, dict):
+        for name, sub in groups.items():
+            if isinstance(sub, dict):
+                found += _addresses(sub, f"{prefix}{name}.")
+    return found
 
-    An index per group and a page per public task into the owner's
-    ``docs/_generated/tasks/`` tree, the owner's ``tasks`` nav block
-    rewritten, and the site-root alias tree refreshed. A providing
-    package whose ``nav.toml`` lacks the marker pair refuses naming
-    the file: where the section sits in the tree is the author's
-    decision.
+
+def generate_task_reference(root: Path) -> list[str]:
+    """Render every advertising package's task reference; the packages.
+
+    An index per group and a page per task of each provider's
+    isolated tree, into the owner's ``docs/_generated/tasks/`` tree;
+    the owner's ``tasks`` nav block rewritten; the site-root alias
+    tree refreshed. A providing package whose ``nav.toml`` lacks the
+    marker pair refuses naming the file: where the section sits in
+    the tree is the author's decision.
     """
     import footman
     from footman import markdown
 
-    owners = task_ownership(root)
-    if not owners:
-        return []
-    heads = _group_owners(owners)
-    tree = _tree(root)
     prog = footman.prog()
-    packages = {p.directory.name: p for p in discover_packages(root)}
-    per_package: dict[str, list[str]] = {}
-    for head, owner in sorted(heads.items()):
-        per_package.setdefault(owner, []).append(head)
+    providing = [
+        (package, names)
+        for package in discover_packages(root)
+        if (names := advertised_providers(package))
+    ]
+    if not providing:
+        return []
     aliases = root / "docs" / "_generated" / "tasks"
     shutil.rmtree(aliases, ignore_errors=True)
     aliases.mkdir(parents=True)
-    groups = tree.get("groups")
-    top_tasks = tree.get("tasks")
-    for owner, names in per_package.items():
-        package = packages[owner]
+    rendered: list[str] = []
+    for package, names in providing:
+        trees = [provider_tree(root, identity) for identity in names]
+        trees = [tree for tree in trees if tree.get("groups") or tree.get("tasks")]
+        if not trees:
+            continue
+        owner = package.directory.name
         out = package.directory / "docs" / "_generated" / "tasks"
         shutil.rmtree(out, ignore_errors=True)
         out.mkdir(parents=True)
@@ -160,46 +156,51 @@ def generate_task_reference(root: Path) -> list[str]:
             '    { "Overview" = "_generated/tasks/index.md" },',
         ]
         index = ["# Task reference", ""]
-        for head in names:
-            if isinstance(groups, dict) and head in groups:
-                site = markdown.render_site(
-                    tree, path=(head,), flavor="material", prog=prog
-                )
-                for relative, content in site.items():
-                    target = out / head / relative
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_text(content, encoding="utf-8")
-                index.append(f"- [{head}]({head}/index.md)")
-                block.append(f'    {{ "{head}" = [')
-                block.append(
-                    f'        {{ "Overview" = "_generated/tasks/{head}/index.md" }},'
-                )
-                for relative in sorted(site):
-                    if relative.rsplit("/", 1)[-1] == "index.md":
-                        continue
-                    dotted = relative.removesuffix(".md").replace("/", ".")
-                    block.append(
-                        f'        {{ "{dotted}" ='
-                        f' "_generated/tasks/{head}/{relative}" }},'
+        addresses: list[str] = []
+        for tree in trees:
+            addresses += _addresses(tree)
+            groups = tree.get("groups")
+            top_tasks = tree.get("tasks")
+            if isinstance(groups, dict):
+                for head in sorted(groups):
+                    site = markdown.render_site(
+                        tree, path=(head,), flavor="material", prog=prog
                     )
-                block.append("    ] },")
-            elif isinstance(top_tasks, dict) and head in top_tasks:
-                page = markdown.render_page(
-                    tree, path=(head,), heading=1, flavor="material", prog=prog
-                )
-                (out / f"{head}.md").write_text(page, encoding="utf-8")
-                index.append(f"- [{head}]({head}.md)")
-                block.append(f'    {{ "{head}" = "_generated/tasks/{head}.md" }},')
+                    for relative, content in site.items():
+                        target = out / head / relative
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        target.write_text(content, encoding="utf-8")
+                    index.append(f"- [{head}]({head}/index.md)")
+                    block.append(f'    {{ "{head}" = [')
+                    block.append(
+                        f'        {{ "Overview" ='
+                        f' "_generated/tasks/{head}/index.md" }},'
+                    )
+                    for relative in sorted(site):
+                        if relative.rsplit("/", 1)[-1] == "index.md":
+                            continue
+                        dotted = relative.removesuffix(".md").replace("/", ".")
+                        block.append(
+                            f'        {{ "{dotted}" ='
+                            f' "_generated/tasks/{head}/{relative}" }},'
+                        )
+                    block.append("    ] },")
+            if isinstance(top_tasks, dict):
+                for head in sorted(top_tasks):
+                    page = markdown.render_page(
+                        tree, path=(head,), heading=1, flavor="material", prog=prog
+                    )
+                    (out / f"{head}.md").write_text(page, encoding="utf-8")
+                    index.append(f"- [{head}]({head}.md)")
+                    block.append(f'    {{ "{head}" = "_generated/tasks/{head}.md" }},')
         block.append("] },")
         (out / "index.md").write_text("\n".join(index) + "\n", encoding="utf-8")
         rewrite_nav_block(package.directory / "docs" / "nav.toml", NAV_BLOCK, block)
-    for name in sorted(owners):
-        head = name.split(".", 1)[0]
-        if heads.get(head) is None:
-            continue
-        section = "/".join(name.split("."))
-        destination = f"../../packages/{heads[head]}/_generated/tasks/{section}/"
-        (aliases / f"{name.replace('.', '-')}.md").write_text(
-            _alias_page(destination, name), encoding="utf-8"
-        )
-    return sorted(per_package)
+        for address in sorted(addresses):
+            section = "/".join(address.split("."))
+            destination = f"../../packages/{owner}/_generated/tasks/{section}/"
+            (aliases / f"{address.replace('.', '-')}.md").write_text(
+                _alias_page(destination, address), encoding="utf-8"
+            )
+        rendered.append(owner)
+    return sorted(rendered)
