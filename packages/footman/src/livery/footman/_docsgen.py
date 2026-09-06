@@ -337,7 +337,10 @@ def _api_markdown() -> str:
     """
     import ast
 
-    src = (_PACKAGE / "src" / "livery" / "footman" / "__init__.py").read_text("utf-8")
+    # The module beside this one, not a checkout path: the release
+    # legs run the suite against the installed copy, where src/ does
+    # not exist.
+    src = (Path(__file__).resolve().parent / "__init__.py").read_text("utf-8")
     exported: set[str] = set()
     for node in ast.walk(ast.parse(src)):
         if (
