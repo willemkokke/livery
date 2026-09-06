@@ -36,6 +36,32 @@ from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package, discover_packages
 
 _CHANGELOG_RE = re.compile(r"^packages/([^/]+)/CHANGELOG\.md$")
+
+#: The release set's own record, committed on the release branch by
+#: prepare. Discovery reads it at the squash, so a recovery
+#: re-prepare whose stamps are already on the base (and so touch
+#: nothing) still names every member; the diff-derived discovery
+#: below stays as the fallback for squashes that predate it.
+MANIFEST = ".release-manifest.json"
+
+
+def read_manifest(text: str) -> tuple[tuple[str, str], ...] | None:
+    """(package dir, version) pairs from manifest *text*, or None.
+
+    None for unreadable content: the caller falls back to the
+    diff-derived discovery rather than failing a legacy squash.
+    """
+    import json
+
+    try:
+        data = json.loads(text)
+        members = data["members"]
+        pairs = tuple((str(m["dir"]), str(m["version"])) for m in members)
+    except (ValueError, KeyError, TypeError):
+        return None
+    return pairs or None
+
+
 _HEADING_RE = re.compile(r"^## \[?(\d+\.\d+\.\d+)\]?", re.M)
 
 #: How long a member waits for the index to serve its version.
@@ -80,6 +106,27 @@ def discover_release(
     makes hand-editing an entry on the release branch safe.
     """
     from livery.workshop._graph import order_topologically
+
+    manifest_pairs: tuple[tuple[str, str], ...] | None = None
+    try:
+        manifest_pairs = read_manifest(git.file_at(ref, MANIFEST))
+    except Exception:
+        manifest_pairs = None
+    if manifest_pairs is not None:
+        listed = {p.directory.name: p for p in discover_packages(root)}
+        chosen: list[Package] = []
+        stated: dict[str, str] = {}
+        for name, version in manifest_pairs:
+            member = listed.get(name)
+            if member is None:
+                fail(
+                    f"the release manifest at {ref[:10]} names"
+                    f" packages/{name}, which is not a workspace package"
+                )
+            chosen.append(member)
+            stated[member.path] = version
+        in_order = order_topologically(tuple(chosen))
+        return tuple((member, stated[member.path]) for member in in_order)
 
     names: list[str] = []
     for path in git.files_in_commit(ref):

@@ -99,6 +99,31 @@ def derive_plans(root: Path, members: tuple[Package, ...]) -> tuple[MemberPlan, 
     return tuple(plans)
 
 
+def _write_manifest(root: Path, plans: tuple[MemberPlan, ...]) -> None:
+    """Write the release set's record for the squash's discovery.
+
+    The publish wave and the title check read it at the ref, so a
+    recovery re-prepare whose stamps already sit on the base still
+    names every member; see [livery.workshop._publish.MANIFEST][].
+    """
+    import json
+
+    from livery.workshop._publish import MANIFEST
+
+    payload = {
+        "schema": 1,
+        "members": [
+            {
+                "dir": plan.package.directory.name,
+                "name": plan.package.name,
+                "version": plan.version,
+            }
+            for plan in plans
+        ],
+    }
+    (root / MANIFEST).write_text(json.dumps(payload, indent=1) + "\n", encoding="utf-8")
+
+
 def bump_set_floors(root: Path, plans: tuple[MemberPlan, ...]) -> list[str]:
     """Raise floors between co-released members; the files changed.
 
@@ -412,6 +437,7 @@ class ReleaseDriver:
             if floor_changes:
                 print(f"  floors raised within the set: {', '.join(floor_changes)}")
             release_dirs = _wheel_dists(plans)
+            _write_manifest(self._root, plans)
             for plan in plans:
                 prepare_release(self._root, plan.package.path, plan.version)
                 backend_for(plan.package).build(plan.package, self._root)
@@ -426,6 +452,12 @@ class ReleaseDriver:
                     )
                     continue
                 git.commit_all(f"chore(release): {plan.package.name} v{plan.version}")
+            if not git.is_clean():
+                # Only the manifest changed: every member was already
+                # stamped on the base (a merged release whose publish
+                # failed), and the manifest alone is what lets the
+                # squash's discovery still name the whole set.
+                git.commit_all("chore(release): the set manifest")
             # Every member's wheel exists before any leg runs; a
             # failed leg still tears the whole branch down, commits
             # included, so nothing unvalidated survives.
@@ -628,7 +660,25 @@ def workflow_release_check_title(
     branch = git.current_branch()
     base = git._run("merge-base", "HEAD", "origin/main").strip()
     pairs: list[str] = []
-    for path in git._run("diff", "--name-only", base, "HEAD").splitlines():
+    from livery.workshop._publish import MANIFEST, read_manifest
+
+    try:
+        recorded = read_manifest(git.file_at("HEAD", MANIFEST))
+    except Exception:
+        recorded = None
+    if recorded is not None:
+        from livery.workshop._packages import discover_packages
+
+        named = {p.directory.name: p.name for p in discover_packages(root)}
+        pairs = [
+            f"{named.get(directory, directory)} v{version}"
+            for directory, version in recorded
+        ]
+    for path in (
+        []
+        if recorded is not None
+        else git._run("diff", "--name-only", base, "HEAD").splitlines()
+    ):
         parts = path.split("/")
         if len(parts) == 3 and parts[0] == "packages" and parts[2] == "CHANGELOG.md":
             version = changelog_version(git.file_at("HEAD", path))
