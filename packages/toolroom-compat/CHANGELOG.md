@@ -21,6 +21,7 @@ while it is pre-1.0 a minor version may include breaking changes.
 ### Fixed
 
 - One release number per distribution line
+- The shims declare their version literally
 
 ## [0.0.0]
 
