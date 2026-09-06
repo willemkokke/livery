@@ -150,6 +150,28 @@ def train(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     return root, git, registry, spans
 
 
+def test_a_garbled_manifest_falls_back_to_the_diff() -> None:
+    # The fallback first: unreadable content answers None and the
+    # caller keeps the diff-derived discovery for legacy squashes.
+    from livery.workshop._publish import read_manifest
+
+    assert read_manifest("not json") is None
+    assert read_manifest("{}") is None
+    assert read_manifest('{"members": []}') is None
+    assert read_manifest('{"members": [{"dir": "core"}]}') is None
+
+
+def test_the_manifest_names_the_set_the_diff_cannot() -> None:
+    from livery.workshop._publish import read_manifest
+
+    pairs = read_manifest(
+        '{"schema": 1, "members": ['
+        '{"dir": "core", "name": "livery-core", "version": "0.3.0"},'
+        '{"dir": "tool", "name": "livery-tool", "version": "0.3.0"}]}'
+    )
+    assert pairs == (("core", "0.3.0"), ("tool", "0.3.0"))
+
+
 def test_discovery_refuses_what_is_not_a_release(train) -> None:
     # The fallback first: a commit touching no member changelog is
     # not a release squash, whatever its title says.

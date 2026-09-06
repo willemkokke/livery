@@ -377,6 +377,13 @@ def test_a_release_already_stamped_on_the_base_reprepares_cleanly(
     pr = fake.repository(OWNER, NAME).pr.get(2)
     assert pr is not None
     assert "livery-core v0.3.0" in pr.title
+    # The re-prepared branch touches no changelog (the stamps were on
+    # the base), so the manifest is what names the set to the squash's
+    # discovery.
+    from livery.workshop._publish import MANIFEST, read_manifest
+
+    recorded = read_manifest(rig.file_at("HEAD", MANIFEST))
+    assert recorded == (("core", "0.3.0"),)
 
 
 def test_recovery_reads_the_branch_and_rebuilds_nothing(
