@@ -152,6 +152,40 @@ def _loop_home() -> Path:
     return data_dir() / "workshop-e2e"
 
 
+def _publish_dev_wheels(kind: str) -> None:
+    """Publish the workspace's dev wheels to the loop's registry.
+
+    The loop installs the workshop being edited, so every pass
+    publishes fresh dev wheels first: a lock pinned to an older dev
+    version would test yesterday's code with today's templates. The
+    dev act is idempotent at a given commit, and a re-publish of the
+    same version walks past.
+    """
+    from livery.footman import run
+
+    from livery.workshop._layers import workspace_root
+
+    root = workspace_root()
+    if root is None:
+        fail("no workspace: no workshop.toml above the working directory")
+    _, token = _dev_forge(kind)
+    run(
+        ["fm", "--yes", "workflow.release", "workshop", "forge", "toolroom", "footman"],
+        cwd=root,
+        # The whole environment, extended: env= replaces, and a bare
+        # pair would strip PATH from under the child fm.
+        env={
+            **os.environ,
+            "PYTHON_PUBLISH_INDEX": ALIAS_URL
+            + "/api/packages/"
+            + E2E_OWNER
+            + "/pypi",
+            "UV_PUBLISH_TOKEN": token,
+        },
+    )
+    print("  dev wheels: published to the loop's registry")
+
+
 def _birth(kind: str, url: str) -> Path:
     """Birth or resume the loop's workspace; the root it lives at.
 
@@ -229,6 +263,11 @@ def _eat_dev_wheels(root: Path) -> str:
             body = f.read_text("utf-8")
             if "http://localhost:3000" in body:
                 f.write_text(body.replace("http://localhost:3000", ALIAS_URL), "utf-8")
+    # The loop tracks the worktree's templates live, so each pass
+    # re-applies the render before judging cleanliness: worktree
+    # edits reach the loop's rendered files here, not as drift reds
+    # inside the loop's own gate.
+    _loop_fm(root, "template.apply")
     pyproject = root / "pyproject.toml"
     text = pyproject.read_text("utf-8")
     marker = "[[tool.uv.index]]"
@@ -329,6 +368,145 @@ def _watch(kind: str, url: str, sha: str, *, timeout: float = 900.0) -> None:
         fail(f"red runs on the loop: {names}; logs: {repo.web_url()}/actions")
 
 
+def _align_main(root: Path) -> None:
+    """Align the loop's main hard onto origin, superseded commits named.
+
+    Origin is the loop's truth: every local byte is regenerable
+    render output, and local main gathers aftercare commits the
+    squashes supersede, so a fast-forward regularly cannot. What
+    goes is printed, never silently vanished.
+    """
+    import livery.toolroom as toolroom
+
+    toolroom.git.opts(cwd=root)("fetch", "origin")
+    gone = toolroom.git.opts(cwd=root, nofail=True)(
+        "log", "--oneline", "origin/main..main"
+    )
+    if gone.code == 0 and gone.stdout.strip():
+        for line in gone.stdout.strip().splitlines():
+            print(f"  superseded local commit: {line}")
+    toolroom.git.opts(cwd=root)("switch", "main")
+    toolroom.git.opts(cwd=root)("reset", "--hard", "origin/main")
+    # Residue too: a failed pass's branch leaves untracked leftovers
+    # (a member directory without its contract refuses discovery).
+    # The venv survives, everything else is regenerable by charter.
+    residue = toolroom.git.opts(cwd=root, nofail=True)(
+        "clean", "-ndx", "-e", ".venv"
+    )
+    if residue.code == 0 and residue.stdout.strip():
+        for line in residue.stdout.strip().splitlines():
+            print(f"  cleaned: {line.removeprefix('Would remove ')}")
+        toolroom.git.opts(cwd=root)("clean", "-fdx", "-e", ".venv")
+
+
+def _loop_fm(root: Path, *args: str, timeout: float = 900.0) -> None:
+    """Run the loop's own fm, the dev wheels' one, inside the loop.
+
+    The whole point of the substrate: the workspace under test runs
+    the workshop being edited, so submit, release, and every other
+    verb exercise the dev wheels end to end. ``--yes`` rides every
+    call, because the loop is automation and silence never confirms.
+    """
+    import livery.toolroom as toolroom
+
+    # The caller's VIRTUAL_ENV points at the worktree; the loop's uv
+    # must resolve the loop's own venv, so the variable stays behind.
+    env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
+    result = toolroom.uv.opts(cwd=root, nofail=True, timeout=timeout, env=env)(
+        "run", "--no-sync", "fm", "--yes", *args
+    )
+    if result.code != 0:
+        fail(
+            f"the loop's `fm {' '.join(args)}` exited {result.code}:\n"
+            f"{result.stdout}{result.stderr}"
+        )
+
+
+def _ensure_member(root: Path) -> None:
+    """Give the loop one member package, landed through its own gate.
+
+    ``new.package`` renders and wires it, a `[release] baseline`
+    seeds the first release's number, and the loop's own
+    ``fm submit --armed`` lands it: the branch, the pull request,
+    the gate on the runner, and the merge, all on the dev wheels.
+    Idempotent: an existing member skips everything.
+    """
+    import livery.toolroom as toolroom
+
+    from livery.workshop._git_ops import GitOps
+
+    if list(root.glob("packages/*/workshop.toml")):
+        print("  member: already present")
+        return
+    git = GitOps(root)
+    _align_main(root)
+    # -C, not -b: a failed pass's stale branch is superseded by
+    # this pass, the way alignment supersedes stale main.
+    toolroom.git.opts(cwd=root)("switch", "-C", "feat/loop-echo")
+    _loop_fm(root, "new.package", "loop-echo")
+    member = root / "packages" / "loop-echo" / "workshop.toml"
+    body = member.read_text("utf-8")
+    if "[release]" not in body:
+        member.write_text(
+            body.rstrip("\n")
+            + '\n\n[release]\n# The first release lands at the baseline.\n'
+            + 'baseline = "0.1.0"\n',
+            "utf-8",
+        )
+    git.commit_all(
+        "feat(loop-echo): the loop's one member\n\nBorn through"
+        " new.package on the dev wheels, with the release baseline"
+        " seeded so the first release lands at 0.1.0."
+    )
+    _loop_fm(root, "submit", "--armed")
+    _align_main(root)
+    print("  member: landed through the loop's own gate")
+
+
+def _release_act(root: Path, kind: str) -> None:
+    """Release the member through the loop; verify wheel and receipt.
+
+    The armed release drives prepare, the isolated legs, the release
+    pull request through the gate, and the merge; the emitted
+    release workflow's wave then publishes to the forge's own
+    registry and cuts the receipt tag. Done means measured: the
+    served version and the annotated tag, never the exit code alone.
+    """
+    import livery.toolroom as toolroom
+
+    from livery.forge import SimpleRegistry
+
+    tag = "packages/loop-echo/v0.1.0"
+    listed = toolroom.git.opts(cwd=root, nofail=True)(
+        "ls-remote", "--tags", "origin", tag
+    )
+    if listed.code == 0 and tag in listed.stdout:
+        print(f"  release: receipt {tag} already on the loop")
+        return
+    _align_main(root)
+    _loop_fm(root, "workflow.release", "loop-echo", "--armed", timeout=1800.0)
+    _, token = _dev_forge(kind)
+    registry = SimpleRegistry(
+        f"{ALIAS_URL}/api/packages/{E2E_OWNER}/pypi/simple", token=token
+    )
+    import time
+
+    deadline = time.monotonic() + 300
+    while "0.1.0" not in registry.versions("livery-loop-echo"):
+        if time.monotonic() >= deadline:
+            fail(
+                "the wave reported done but the registry never served"
+                " livery-loop-echo 0.1.0"
+            )
+        time.sleep(5)
+    listed = toolroom.git.opts(cwd=root, nofail=True)(
+        "ls-remote", "--tags", "origin", tag
+    )
+    if tag not in listed.stdout:
+        fail(f"served, but the receipt tag {tag} is not on the loop")
+    print(f"  release: livery-loop-echo 0.1.0 served, receipt {tag} cut")
+
+
 def _merge_setup(kind: str, sha: str) -> None:
     """Merge the setup pull request when its green head is *sha*.
 
@@ -382,12 +560,19 @@ if _WORKSHOP_TESTS.is_dir():
         url = os.environ.get("GITEA_URL", "")
         _require_host_alias()
         _, lane_token = _dev_forge(forge)
+        _publish_dev_wheels(forge)
         root = _loop_home() / E2E_REPO
         if (root / ".git").is_dir():
             # A resumed birth pushes before it returns, so an
             # existing workspace authenticates first; birth resets
-            # the remote, so it authenticates again after.
+            # the remote, so it authenticates again after. Main then
+            # fast-forwards onto the merges the loop itself made:
+            # without the reconcile, birth's foreign-repo guard reads
+            # our own squash as a stranger's history and refuses.
+            import livery.toolroom as toolroom
+
             _authenticate_remote(root, lane_token)
+            _align_main(root)
         root = _birth(forge, url)
         _authenticate_remote(root, lane_token)
         provision(forge)
@@ -396,4 +581,6 @@ if _WORKSHOP_TESTS.is_dir():
         _watch(forge, url, sha)
         print("  green: the loop's gate ran on the real runner")
         _merge_setup(forge, sha)
-        print("  next: the release act into the local registry")
+        _ensure_member(root)
+        _release_act(root, forge)
+        print("  the loop is whole: gate, merge, release, receipt")

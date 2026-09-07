@@ -103,8 +103,42 @@ def run_typecomplete(packages: tuple[Package, ...]) -> None:
     verdict, 0 only when every public symbol has a fully known type.
     """
     for package in packages:
-        module = package.name.replace("-", ".")
-        basedpyright(verifytypes=module, ignoreexternal=True)
+        basedpyright(verifytypes=module_for(package), ignoreexternal=True)
+
+
+def module_for(package: Package) -> str:
+    """The package's importable module, read from its src tree.
+
+    The single-directory chain under ``src/`` down to the first
+    directory carrying python files is the module
+    (``src/livery/forge`` is ``livery.forge``). Deriving it from the
+    distribution name guessed wrong the moment a member's own name
+    carried a hyphen: ``loop-echo`` under a workspace prefix became
+    ``loop.echo``, a module that does not exist. A package without a
+    src tree falls back to the dist-name spelling, underscores for
+    hyphens beyond the namespace dot.
+    """
+    src = package.directory / "src"
+    if src.is_dir():
+        parts: list[str] = []
+        node = src
+        while True:
+            dirs = [
+                d for d in node.iterdir() if d.is_dir() and d.name.isidentifier()
+            ]
+            has_py = any(f.suffix == ".py" for f in node.iterdir() if f.is_file())
+            if parts and (has_py or len(dirs) != 1):
+                return ".".join(parts)
+            if len(dirs) != 1:
+                break
+            node = dirs[0]
+            parts.append(node.name)
+        if parts:
+            return ".".join(parts)
+    head, _, tail = package.name.partition("-")
+    if not tail:
+        return head
+    return head + "." + tail.replace("-", "_")
 
 
 def current_version(package: Package) -> str:
