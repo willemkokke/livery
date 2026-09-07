@@ -107,6 +107,12 @@ def provision(kind: str = "gitea") -> None:
     print("  secrets set: UV_PUBLISH_TOKEN, FORGE_TOKEN, FORGE_ADMIN_TOKEN")
 
 
+#: One forge URL true on both sides: the compose hostname, which
+#: the runner resolves natively and the host through its taught
+#: /etc/hosts alias. The contract carries it, so in-container verbs
+#: reach the forge the same way host-side ones do.
+ALIAS_URL = "http://gitea:3000"
+
 #: The registry as CI sees it: the compose network's service name,
 #: which the runner resolves and the host does not. The host-side
 #: half of the same registry is GITEA_URL.
@@ -166,11 +172,32 @@ def _birth(kind: str, url: str) -> Path:
             E2E_REPO,
             forge=kind,
             owner=E2E_OWNER,
-            url=url,
+            url=ALIAS_URL,
             templates=str(templates),
             description="The workshop's local CI loop. Scratch; recreated freely.",
         )
     return home / E2E_REPO
+
+
+def _authenticate_remote(root: Path, token: str) -> None:
+    """Embed the lane token in the scratch workspace's remote.
+
+    Birth writes a credential-free remote by design and a human's
+    pushes ride their credential helper; the loop is automation on a
+    scratch workspace, so the token rides the remote URL instead.
+    Unrecorded, so the credential never reaches a receipt. Gitea
+    validates the token and ignores the username (measured), and
+    ``oauth2`` is the conventional stand-in.
+    """
+    import livery.toolroom as toolroom
+
+    bare = ALIAS_URL.removeprefix("http://")
+    url = f"http://oauth2:{token}@{bare}/{E2E_OWNER}/{E2E_REPO}.git"
+    result = toolroom.git.opts(cwd=root, nofail=True, recorded=False)(
+        "remote", "set-url", "origin", url
+    )
+    if result.code != 0:
+        fail(f"git remote set-url exited {result.code}")
 
 
 def _eat_dev_wheels(root: Path) -> str:
@@ -196,6 +223,12 @@ def _eat_dev_wheels(root: Path) -> str:
             git.switch(_SETUP_BRANCH)
         else:
             git.create_branch(_SETUP_BRANCH)
+    for name in ("workshop.toml", ".copier-answers.yml"):
+        f = root / name
+        if f.is_file():
+            body = f.read_text("utf-8")
+            if "http://localhost:3000" in body:
+                f.write_text(body.replace("http://localhost:3000", ALIAS_URL), "utf-8")
     pyproject = root / "pyproject.toml"
     text = pyproject.read_text("utf-8")
     marker = "[[tool.uv.index]]"
@@ -296,6 +329,38 @@ def _watch(kind: str, url: str, sha: str, *, timeout: float = 900.0) -> None:
         fail(f"red runs on the loop: {names}; logs: {repo.web_url()}/actions")
 
 
+def _merge_setup(kind: str, sha: str) -> None:
+    """Merge the setup pull request when its green head is *sha*.
+
+    Birth's own done-line prescribes it: merging the setup PR proves
+    the gate and the protection wiring end to end. One retry after a
+    pause, because the forge recomputes mergeability after a status
+    lands and answers "try again later" in the window (measured).
+    Already merged, or a head that moved on, is a quiet skip.
+    """
+    import time
+
+    from livery.forge import ForgeError
+    from livery.workshop._new_project import _SETUP_BRANCH
+
+    forge, _ = _dev_forge(kind)
+    repo = forge.repository(E2E_OWNER, E2E_REPO)
+    pr = repo.pr.find_by_head(_SETUP_BRANCH)
+    if pr is None or pr.state != "open":
+        print("  setup PR: already merged or gone")
+        return
+    head = getattr(pr, "head_sha", "")
+    if head and head != sha:
+        print("  setup PR: head moved on; leaving it to the next run")
+        return
+    try:
+        repo.pr.merge_now(pr.number, title=pr.title)
+    except ForgeError:
+        time.sleep(5)
+        repo.pr.merge_now(pr.number, title=pr.title)
+    print(f"  setup PR #{pr.number}: merged; the gate is proven")
+
+
 if _WORKSHOP_TESTS.is_dir():
     # serial: the driver births into and pushes from its own
     # directories, so it owns the process globals for the run.
@@ -316,10 +381,19 @@ if _WORKSHOP_TESTS.is_dir():
 
         url = os.environ.get("GITEA_URL", "")
         _require_host_alias()
+        _, lane_token = _dev_forge(forge)
+        root = _loop_home() / E2E_REPO
+        if (root / ".git").is_dir():
+            # A resumed birth pushes before it returns, so an
+            # existing workspace authenticates first; birth resets
+            # the remote, so it authenticates again after.
+            _authenticate_remote(root, lane_token)
         root = _birth(forge, url)
+        _authenticate_remote(root, lane_token)
         provision(forge)
         sha = _eat_dev_wheels(root)
         print(f"  watching {sha[:12]} on the runner")
         _watch(forge, url, sha)
         print("  green: the loop's gate ran on the real runner")
-        print("  next: merge the setup PR and the release act")
+        _merge_setup(forge, sha)
+        print("  next: the release act into the local registry")

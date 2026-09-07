@@ -28,7 +28,9 @@ def _birth_rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeForge:
         cwd=origin,
         check=True,
     )
-    monkeypatch.setattr("livery.workshop._new_project._connect", lambda kind, url: fake)
+    monkeypatch.setattr(
+        "livery.workshop._new_project._connect", lambda kind, url: (fake, "")
+    )
     monkeypatch.setattr(
         "livery.workshop._new_project._clone_url",
         lambda kind, url, owner, name: str(origin),
@@ -223,3 +225,17 @@ def test_the_layer_arm_scaffolds_a_self_hosting_home(
     _birth(local=True, owner="", layer="brand")
     out = capsys.readouterr().out
     assert "already scaffolded" in out
+
+
+def test_the_push_target_carries_the_token_on_git_transport_only() -> None:
+    # The git lane goes over git transport with a token, never the
+    # API (the workflows note's definition): an http remote carries
+    # the credential in the push URL, anything else pushes to the
+    # remote as-is, and a tokenless resolution stays credential-free
+    # for a human's own helper.
+    from livery.workshop._new_project import _push_target
+
+    url = "http://gitea:3000/livery/loop.git"
+    assert _push_target(url, "t") == "http://oauth2:t@gitea:3000/livery/loop.git"
+    assert _push_target(url, "") == "origin"
+    assert _push_target("git@gitea:livery/loop.git", "t") == "origin"

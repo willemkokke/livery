@@ -76,13 +76,39 @@ def _remote_is_foreign(clone_url: str) -> bool:
     return listing.returncode == 0 and bool(listing.stdout.strip())
 
 
-def _connect(kind: str, url: str) -> Forge:
-    """The target forge, on the everyday token ladder."""
+def _connect(kind: str, url: str) -> tuple[Forge, str]:
+    """The target forge on the everyday token ladder, and the token.
+
+    The token rides back so the pushes can authenticate with it: the
+    committed remote stays credential-free (a human's pushes ride
+    their credential helper), and automation pushes to a
+    token-carrying URL instead, the way the emitted GitLab lane and
+    the stamp transport already do.
+    """
     from livery.workshop._forge_lane import _connect as connect
     from livery.workshop._tokens import forge_token
 
     token, _ = forge_token(kind, url)
-    return connect(kind, url, token or None)
+    if not token:
+        # The lane's documented fallback: a backend may resolve its
+        # own dialect variable internally, and the push credential
+        # mirrors that resolution or automation cannot push at all.
+        dialect = {"gitea": "GITEA_TOKEN", "gitlab": "GITLAB_TOKEN"}.get(kind, "")
+        token = os.environ.get(dialect, "") if dialect else ""
+    return connect(kind, url, token or None), token
+
+
+def _push_target(clone_url: str, token: str) -> str:
+    """Where pushes go: the token-embedded URL when one resolved.
+
+    Only http(s) URLs can carry the credential; anything else pushes
+    to the remote as-is. Never printed and never recorded: the
+    caller passes it to git alone.
+    """
+    if token and clone_url.startswith(("http://", "https://")):
+        scheme, _, rest = clone_url.partition("://")
+        return f"{scheme}://oauth2:{token}@{rest}"
+    return "origin"
 
 
 @new_group.task(name="project", expose="global_only", interactive=True)
@@ -266,7 +292,8 @@ def new_project(
         return
 
     clone_url = _clone_url(forge, url, owner, name)
-    target = _connect(forge, url)
+    target, push_token = _connect(forge, url)
+    push_to = _push_target(clone_url, push_token)
     existing = target.get_repo(owner, name)
     created_now = False
     if existing is None:
@@ -296,11 +323,11 @@ def new_project(
         # The protocol initialises a created repository with a default
         # branch, so the birth history replaces that init commit; the
         # repository is seconds old and this checkout is its author.
-        _git(root, "push", "-q", "--force", "-u", "origin", "main")
+        _git(root, "push", "-q", "--force", "-u", push_to, "main")
         print("  pushed: main")
     else:
         pushed = footman.run(
-            ["git", "push", "-q", "-u", "origin", "main"],
+            ["git", "push", "-q", "-u", push_to, "main"],
             cwd=root,
             nofail=True,
             recorded=False,
@@ -323,7 +350,7 @@ def new_project(
 
     assert_configuration(root)
 
-    _open_setup_pr(root, target.repository(owner, name))
+    _open_setup_pr(root, target.repository(owner, name), push_to)
     print(
         "  done: merge the setup PR to prove the gate; the repository"
         " is protected and live"
@@ -396,7 +423,7 @@ def _pushed_by_us(root: Path, clone_url: str) -> bool:
 _SETUP_BRANCH = "chore/setup-check"
 
 
-def _open_setup_pr(root: Path, repo: Repository) -> None:
+def _open_setup_pr(root: Path, repo: Repository, push_to: str) -> None:
     """Open the unarmed setup PR; find it instead when it exists."""
     found = repo.pr.find_by_head(_SETUP_BRANCH)
     if found is not None:
@@ -405,7 +432,7 @@ def _open_setup_pr(root: Path, repo: Repository) -> None:
     branches = _git(root, "branch", "--list", _SETUP_BRANCH)
     if not branches.strip():
         _git(root, "branch", _SETUP_BRANCH, "main")
-    _git(root, "push", "-q", "origin", _SETUP_BRANCH)
+    _git(root, "push", "-q", push_to, _SETUP_BRANCH)
     # The branch needs a diff or some forges refuse the PR; an empty
     # commit rides it, evaporating in the squash.
     tip = _git(root, "rev-parse", _SETUP_BRANCH).strip()
@@ -413,7 +440,7 @@ def _open_setup_pr(root: Path, repo: Repository) -> None:
     if tip == main:
         _git(root, "switch", "-q", _SETUP_BRANCH)
         _git(root, "commit", "-q", "--allow-empty", "-m", "chore: setup check")
-        _git(root, "push", "-q", "origin", _SETUP_BRANCH)
+        _git(root, "push", "-q", push_to, _SETUP_BRANCH)
         _git(root, "switch", "-q", "main")
     try:
         opened = repo.pr.open(
