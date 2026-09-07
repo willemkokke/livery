@@ -342,12 +342,13 @@ YAML, on a real runner, against a real index, from one command.
   docs job's "no task named"), and eating the dev wheels cures it;
   the full gate on the loop's fixture-scale workspace runs in 4 to
   6 seconds inside the container. And a third parity finding
-  (2026-09-07): the mergeability-recompute 405 refuses the arm
-  exactly like the immediate merge, because Gitea's arm is the same
-  merge endpoint, and a force push is the common trigger; the arm
-  and the immediate merge wait out the window through one shared
-  retry, and the fake's `merge_405_window` fault fires on both
-  paths.
+  (2026-09-07): Gitea's arm is the same merge endpoint as the
+  immediate merge, so its whole 405 family refuses both. That
+  family grew into the classified merge-hold state machine (the
+  decision record's 2026-09-08 entry), the fake's
+  `merge_405_window` fault fires on both paths speaking Gitea's
+  real words, and `test_merge_state` pins every documented state
+  across the three forges.
 - #270's mechanics are proven here: publishing to the local
   registry by token is the same code path. The GitHub flip itself
   is phase 6; whether the pypi environment's approval gate stays is
@@ -1063,3 +1064,21 @@ None. Every ruling raised in this plan was closed in the review of
   seam is testable locally too. The loop's default stays
   `[docs] publish = "none"` for speed; the flag arms the seam when
   it is the thing under test.
+- 2026-09-08, ruled by Willem: merge holds are a classified state
+  machine, never a retry budget. A refusal classifies (per forge)
+  into a state carrying a user-facing message and the forge's
+  native words; the categories are in-progress (follow through to
+  completion, no arbitrary timeout, the task's own timeout the
+  backstop, honest durations feeding footman's estimates),
+  recoverable (stop and say what would recover it), terminal, and
+  success (discovered merged walks past). `submit.merge` waits in
+  every waitable state: merge means merge as soon as possible, even
+  unarmed. Every documented forge state is mapped at build time,
+  the hard-to-stage ones included; an answer outside the map fails
+  loudly with the native words and the map is updated in software,
+  never guessed at runtime. GitLab classifies from its published
+  `detailed_merge_status`, GitHub from `mergeable_state` when its
+  lane arrives; Gitea classifies its 405 prose against the combined
+  status, and a required context nothing reports refuses with the
+  name mismatch rather than waiting forever. Recording Gitea's real
+  405 bodies as cassettes by staging them stays open work.
