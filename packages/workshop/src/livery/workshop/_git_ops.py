@@ -178,6 +178,31 @@ class GitOps:
         """Every tag name the repository knows."""
         return tuple(self._run("tag", "-l").split())
 
+    def remote_tags(self) -> tuple[str, ...]:
+        """Tag names on origin, asked of the remote.
+
+        ``ls-remote``, never the local list: a tag cut elsewhere (a
+        CI wave's receipt) is only guaranteed visible at the remote.
+        """
+        out = self._run("ls-remote", "--tags", "origin")
+        names: list[str] = []
+        for line in out.splitlines():
+            _, _, ref = line.partition("refs/tags/")
+            ref = ref.strip().removesuffix("^{}")
+            if ref:
+                names.append(ref)
+        return tuple(dict.fromkeys(names))
+
+    def recent_commits(self, count: int) -> tuple[tuple[str, str], ...]:
+        """(sha, subject) for the newest *count* commits on HEAD."""
+        out = self._run("log", f"-{count}", "--format=%H%x09%s")
+        pairs: list[tuple[str, str]] = []
+        for line in out.splitlines():
+            sha, _, subject = line.partition("\t")
+            if sha.strip():
+                pairs.append((sha.strip(), subject.strip()))
+        return tuple(pairs)
+
     def delete_local_branch(self, branch: str) -> None:
         """Delete the local *branch*, even if unmerged."""
         self._run("branch", "-D", branch)
