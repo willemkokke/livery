@@ -307,12 +307,17 @@ def _eat_dev_wheels(root: Path) -> str:
     # which keeps the re-run a true no-op. The alias makes the
     # compose hostname true on the host, so the lock's URL holds
     # on both sides.
-    if not git.is_clean() or not (root / "uv.lock").exists():
-        import livery.toolroom as toolroom
+    # Always relock: every pass publishes fresh dev wheels, and a
+    # lock pinning the previous pass's version would keep installing
+    # yesterday's bytes (measured: the loop stayed red on a bug the
+    # worktree had already fixed). An unchanged worktree republishes
+    # the same version, the lock re-resolves identically, and the
+    # cleanliness check below still yields the no-op.
+    import livery.toolroom as toolroom
 
-        result = toolroom.uv.opts(cwd=root, nofail=True)("lock")
-        if result.code != 0:
-            fail(f"uv lock in the loop workspace exited {result.code}")
+    result = toolroom.uv.opts(cwd=root, nofail=True)("lock", "--upgrade")
+    if result.code != 0:
+        fail(f"uv lock in the loop workspace exited {result.code}")
     # Cleanliness is the truth, not this run's edits: a resumed
     # half-wired workspace still commits and pushes here.
     if git.is_clean():
