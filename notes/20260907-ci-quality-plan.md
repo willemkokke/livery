@@ -296,10 +296,10 @@ YAML, on a real runner, against a real index, from one command.
   passed, and the next lock silently resolved the workshop back to
   the released PyPI index. Two resolution facts the loop forced,
   both load-bearing: uv's first-index strategy resolves a package
-  served by the declared index from that index alone, and the
-  prerelease policy must be `if-necessary`, never a global `allow`
-  (measured: `allow` resolved mkdocs 2.0.dev3 from PyPI and the
-  docs job lost `mkdocs.exceptions`). Still open in this seam:
+  served by the declared index from that index alone, and no
+  prerelease mode is declared, uv's default ruling (the decision
+  record's prerelease entry carries the ruling and the
+  measurements). Still open in this seam:
   reads as an ordered list (hse's caching mirror with a private
   overlay), rendering `publish`, and per-platform index pins (the
   pytorch case); what the contract cannot say still needs a durable
@@ -1026,3 +1026,21 @@ None. Every ruling raised in this plan was closed in the review of
   this shape; the machinery refs need instead is named in phases 1
   and 2 (compare-and-swap writes, the janitor, a namespace outside
   `refs/heads` so clones never fetch blobs).
+- 2026-09-07, ruled by Willem: prerelease resolution stays at uv's
+  default; the workshop declares no mode. The default admits a
+  prerelease where a requirement names one or where a package has
+  only prereleases, which under uv's first-index strategy means
+  exactly the workspace's own declared dev index and nothing else,
+  and Willem judges that the better default ("if there are only
+  dev releases that is fine"). The `[registries.python] prerelease`
+  key stays for a workspace that wants a deliberate mode. Measured
+  around the ruling: a global `allow` resolved mkdocs 2.0.dev3 from
+  PyPI and broke the docs job; `explicit` alone is unsatisfiable
+  because the layer floors and the packages' own dependency floors
+  (`livery-forge>=0.1.0`) carry no dev bounds.
+- 2026-09-07, asked by Willem: `fm forge.dev.up` grows a
+  `--with-docker` flag that configures the runner for the docker
+  installed in the default place, so the container docs-publish
+  seam is testable locally too. The loop's default stays
+  `[docs] publish = "none"` for speed; the flag arms the seam when
+  it is the thing under test.

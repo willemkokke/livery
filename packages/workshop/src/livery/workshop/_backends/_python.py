@@ -683,10 +683,23 @@ def run_isolated_test(
         # aimed at it once dragged pytest back a decade. Locked pins
         # where the workspace has them; pytest is a no-op re-request
         # when the pins already hold it.
+        # The toolchain resolves from the same indexes as the wheel:
+        # the lock's pins name whatever versions the workspace's own
+        # index serves, and a bare-PyPI install cannot see those.
         pins = _dev_pins(root, Path(scratch))
         if pins is not None:
-            _run_install("pip", "install", "--python", str(python), "-r", str(pins))
-        _run_install("pip", "install", "--python", str(python), "pytest")
+            _run_install(
+                "pip",
+                "install",
+                "--python",
+                str(python),
+                *_index_args(root),
+                "-r",
+                str(pins),
+            )
+        _run_install(
+            "pip", "install", "--python", str(python), *_index_args(root), "pytest"
+        )
         after = _direct_versions(package, _listing())
         moved = {
             name: (before[name], version)
