@@ -713,15 +713,16 @@ def _merge_setup(kind: str, sha: str) -> None:
     """Merge the setup pull request when its green head is *sha*.
 
     Birth's own done-line prescribes it: merging the setup PR proves
-    the gate and the protection wiring end to end. One retry after a
-    pause, because the forge recomputes mergeability after a status
-    lands and answers "try again later" in the window (measured).
-    Already merged, or a head that moved on, is a quiet skip.
+    the gate and the protection wiring end to end. Patient through
+    the forge's whole 405 family: the mergeability recompute's "try
+    again later" and the beat where a finished run's required
+    context has not propagated yet ("not all required status checks
+    successful", measured seconds after the watch saw the run
+    green). Already merged, or a head that moved on, is a quiet
+    skip.
     """
-    import time
-
-    from livery.forge import ForgeError
     from livery.workshop._new_project import _SETUP_BRANCH
+    from livery.workshop._submit import _MERGE_NOW_ATTEMPTS, _through_405_window
 
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
@@ -733,25 +734,9 @@ def _merge_setup(kind: str, sha: str) -> None:
     if head and head != sha:
         print("  setup PR: head moved on; leaving it to the next run")
         return
-    deadline = time.monotonic() + 90
-    while True:
-        try:
-            repo.pr.merge_now(pr.number, title=pr.title)
-            break
-        except ForgeError as error:
-            # The forge recomputes mergeability after a status lands
-            # and answers "try again later" through the window, which
-            # can outlast one polite retry (measured at over ten
-            # seconds). Only that class retries; anything else is a
-            # real refusal and surfaces verbatim.
-            if "try again later" not in str(error).lower():
-                raise
-            if time.monotonic() >= deadline:
-                fail(
-                    f"the forge kept answering 'try again later' for"
-                    f" 90s on merging setup PR #{pr.number}"
-                )
-            time.sleep(5)
+    _through_405_window(
+        _MERGE_NOW_ATTEMPTS, repo.pr.merge_now, pr.number, title=pr.title
+    )
     print(f"  setup PR #{pr.number}: merged; the gate is proven")
 
 

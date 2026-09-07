@@ -1,6 +1,10 @@
 # CI and quality gating: the plan
 
 Status: ruled 2026-09-07, every open ruling closed in review.
+Phase 1's substrate landed 2026-09-07 (issue #289): the loop is
+whole, gate to receipt; the evidence lives in the phase's
+acceptance bullet, and the one open line there names what rides
+the wheels-matrix work instead.
 Nothing is started; phase 1 begins on Willem's go.
 Absorbs #267 (the speed pass), #286 (no logic in YAML), #270 (token
 publishing), #273 (the act names itself), and the structural finding of
@@ -275,12 +279,13 @@ YAML, on a real runner, against a real index, from one command.
   legs run in the loop against the dummy platform-wheel member; a
   macos or native runner waits for a real platform-wheel member
   that needs those platforms.
-- Publishing is a kind seam (ruled by Willem 2026-09-07):
-  `resolve_registry` is already keyed by kind, build and the check
-  verbs already dispatch through the package's kind backend, and
-  the wave's publish call moves onto that backend too, `uv publish`
-  being the python kind's implementation. A future kind brings its
-  own publisher and registry rung without the wave changing shape.
+- Publishing is a kind seam (ruled by Willem 2026-09-07, landed
+  2026-09-07): `publish_artifact` is a `Backend` protocol member
+  and the wave dispatches through it, picking only the resolved
+  target for the kind's artifact. `uv publish` is the python kind's
+  implementation (the nanobind kind delegates to it), and the conan
+  kind wraps its recipe upload. A future kind brings its own
+  publisher and registry rung without the wave changing shape.
 - One index seam, broadened by Willem 2026-09-07: the contract
   expresses the registry topology, and the render emits it. The
   first slice landed 2026-09-07 and the loop proves it every pass:
@@ -350,12 +355,26 @@ YAML, on a real runner, against a real index, from one command.
 - #273 rides here: the release report names its act (dev, local,
   release) so a rehearsal can never impersonate a release again.
 - Housekeeping: the stale `.forge.dev.env` docstrings.
-- Acceptance: from a clean checkout, containers up, one `fm ci.e2e`
-  run lands a full release in the local registry with receipt tags
-  on local Gitea; run twice, idempotent; a deliberately broken
-  member fails with the leg's verdict, the refusal tested first.
-  (release-legs.yml, which this supersedes, is deleted in the
-  phase-6 file swap.)
+- Acceptance: met 2026-09-07, measured from a clean slate (the
+  scratch repository and its registry package deleted, the loop
+  workspace removed). One `fm ci.e2e` run birthed the repository,
+  proved the gate on the runner (the setup PR merged through
+  protection), landed the member through the loop's own armed
+  submit, released it through the real release PR and the emitted
+  wave (release.yml green on the squash), and measured the result:
+  the registry serves ci-e2e-loop-loop-echo 0.1.0 and the annotated
+  receipt packages/loop-echo/v0.1.0 points at the squash. A second
+  run is idempotent (member already landed, receipt already on the
+  loop, exit 0). The broken-member refusal has two measured layers:
+  the local gate refuses a red member before any push, naming
+  format, lint, and the failing test verbatim, and a red only CI
+  can see refuses with the leg's verdict and a diagnostics file
+  naming the job (measured live: "ci.yml: docs (failure)", submit
+  exit 13). (release-legs.yml, which this supersedes, is deleted in
+  the phase-6 file swap.)
+- Open in this phase: the dummy platform-wheel member and its linux
+  wheel leg in the loop have not run yet; they land with the
+  wheels-matrix mechanics rather than blocking the substrate.
 
 ### Phase 2: instrument the loop
 
