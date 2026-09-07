@@ -737,6 +737,15 @@ def workflow_release_publish(
         fail("no workspace: no workshop.toml above the working directory")
     git = GitOps(root)
     target = resolve_registry(root, "python")
+    if not target.publish_url:
+        from livery.workshop._dev_release import INDEX_VAR
+
+        fail(
+            "no publish address resolved for python: the declaration"
+            " names only a read index, and an upload endpoint is"
+            " never defaulted. Declare [registries.python] publish in"
+            f" workshop.toml, or set {INDEX_VAR}."
+        )
     # The probe carries the resolved credential: an authenticated
     # index, a forge's own registry or a private owner, answers only
     # with it, and an anonymous probe would time out waiting for a

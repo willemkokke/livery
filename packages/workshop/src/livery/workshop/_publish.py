@@ -257,10 +257,20 @@ def publish_wheels(package: Package, *, index_url: str = "", token: str = "") ->
     tolerated failure: a re-run must walk past what an earlier
     attempt landed. Anything else, a rejected credential, an
     unreachable index, surfaces verbatim.
+
+    The upload address is required: without ``--publish-url`` uv
+    silently defaults to PyPI, and an undeclared endpoint must
+    refuse rather than surprise. A deliberate PyPI publish arrives
+    here as the ecosystem rung's explicit URL.
     """
-    command = ["publish"]
-    if index_url:
-        command += ["--publish-url", index_url]
+    if not index_url:
+        fail(
+            f"{package.name}: no publish address given, and an upload"
+            " endpoint is never defaulted (uv's silent default is"
+            " PyPI). Declare [registries.python] publish in"
+            " workshop.toml, or set PYTHON_PUBLISH_INDEX."
+        )
+    command = ["publish", "--publish-url", index_url]
     if token:
         # recorded=False keeps the credential-carrying argv out of
         # receipts, --json, and recordings alike.

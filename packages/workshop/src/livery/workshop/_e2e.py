@@ -118,6 +118,10 @@ ALIAS_URL = "http://gitea:3000"
 #: half of the same registry is GITEA_URL.
 LOOP_INDEX = "http://gitea:3000/api/packages/livery/pypi/simple"
 
+#: The upload base the loop's releases publish to; the read index
+#: above is this plus /simple.
+LOOP_PUBLISH = "http://gitea:3000/api/packages/livery/pypi"
+
 
 def _require_host_alias() -> None:
     """Refuse until the host resolves the compose hostname.
@@ -236,8 +240,9 @@ def _eat_dev_wheels(root: Path) -> str:
     The registry joins the contract, the template renders it into
     uv's config, and the lock goes: the in-container sync then
     resolves the workshop's own dev wheels fresh, so the installed
-    workshop matches the emitter that rendered the workflows. Measured necessity: a released workshop predating
-    the emitted verbs fails the docs job with "no task named".
+    workshop matches the emitter that rendered the workflows.
+    Measured necessity: a released workshop predating the emitted
+    verbs fails the docs job with "no task named".
     Idempotent: an already-wired workspace pushes nothing.
     """
     import livery.toolroom as toolroom
@@ -281,9 +286,18 @@ def _eat_dev_wheels(root: Path) -> str:
             contract_text.rstrip("\n")
             + "\n\n# The loop eats the workshop's dev wheels from the local\n"
             + "# registry; the compose hostname is true on both sides,\n"
-            + "# the host through its /etc/hosts alias.\n"
+            + "# the host through its /etc/hosts alias. The publish base\n"
+            + "# is where the release wave uploads; without it the wave\n"
+            + "# refuses rather than default an upload endpoint.\n"
             + "[registries.python]\n"
             + f'url = "{LOOP_INDEX}"\n'
+            + f'publish = "{LOOP_PUBLISH}"\n'
+        )
+    elif f'publish = "{LOOP_PUBLISH}"' not in contract_text:
+        contract_text = contract_text.replace(
+            f'url = "{LOOP_INDEX}"\n',
+            f'url = "{LOOP_INDEX}"\npublish = "{LOOP_PUBLISH}"\n',
+            1,
         )
     contract_text = re.sub(r'prerelease = "[^"]*"\n', "", contract_text)
     if "[docs]" not in contract_text:
@@ -364,13 +378,20 @@ def _eat_dev_wheels(root: Path) -> str:
     return git.head_sha()
 
 
-def _watch(kind: str, url: str, sha: str, *, timeout: float = 900.0) -> None:
+def _watch(
+    kind: str,
+    url: str,
+    sha: str,
+    *,
+    timeout: float = 900.0,
+    require: tuple[str, ...] = (),
+) -> None:
     """Follow *sha*'s runs to their verdicts; red fails verbatim.
 
-    The one deliberate tolerance: the docs deploy, which publishes a
-    container image and the loop's runner carries no docker. The dev
-    shape stubs docs entirely once the workspace declares it; until
-    then the deploy's red is named, never counted.
+    *require* names workflows that must appear before the wait ends:
+    a workflow triggered by the push registers its run a beat after
+    the others, and a watch that settles on the early arrivals would
+    call the commit green while the required one is still unstarted.
     """
     import time
 
@@ -379,12 +400,19 @@ def _watch(kind: str, url: str, sha: str, *, timeout: float = 900.0) -> None:
     deadline = time.monotonic() + timeout
     while True:
         runs = repo.checks.runs(head_sha=sha)
-        if runs and all(r.status == "completed" for r in runs):
+        present = {run.workflow for run in runs}
+        if (
+            runs
+            and all(r.status == "completed" for r in runs)
+            and all(name in present for name in require)
+        ):
             break
         if time.monotonic() >= deadline:
+            missing = ", ".join(sorted(set(require) - present))
+            waited = f"; never appeared: {missing}" if missing else ""
             fail(
-                f"the loop's runs did not complete within {timeout:.0f}s:"
-                f" {repo.web_url()}/actions"
+                f"the loop's runs did not complete within {timeout:.0f}s"
+                f"{waited}: {repo.web_url()}/actions"
             )
         time.sleep(5)
     failed = []
@@ -392,10 +420,6 @@ def _watch(kind: str, url: str, sha: str, *, timeout: float = 900.0) -> None:
         verdict = run.conclusion or run.status
         print(f"  {run.workflow:14} {verdict}")
         if run.conclusion == "failure":
-            if run.workflow == "docs.yml":
-                print("    tolerated: the deploy seam wants docker, and")
-                print("    the dev shape stubs docs once declared")
-                continue
             failed.append(run)
     if failed:
         names = ", ".join(r.workflow for r in failed)
@@ -547,6 +571,15 @@ def _release_act(root: Path, kind: str) -> None:
         return
     _align_main(root)
     _loop_fm(root, "workflow.release", "loop-echo", "--armed", timeout=1800.0)
+    # The armed release returns at the merge; the wave runs on the
+    # squash asynchronously. Watch its verdict before probing: a
+    # registry poll alone cannot say whether the wave failed or is
+    # merely slow, and its red must surface verbatim.
+    _align_main(root)
+    merged = toolroom.git.opts(cwd=root, nofail=True)("rev-parse", "origin/main")
+    if merged.code != 0 or not merged.stdout.strip():
+        fail("could not resolve origin/main after the release merge")
+    _watch(kind, ALIAS_URL, merged.stdout.strip(), require=("release.yml",))
     _, token = _dev_forge(kind)
     registry = SimpleRegistry(
         f"{ALIAS_URL}/api/packages/{E2E_OWNER}/pypi/simple", token=token
@@ -557,8 +590,7 @@ def _release_act(root: Path, kind: str) -> None:
     while "0.1.0" not in registry.versions("livery-loop-echo"):
         if time.monotonic() >= deadline:
             fail(
-                "the wave reported done but the registry never served"
-                " livery-loop-echo 0.1.0"
+                "the wave is green but the registry never served livery-loop-echo 0.1.0"
             )
         time.sleep(5)
     listed = toolroom.git.opts(cwd=root, nofail=True)(

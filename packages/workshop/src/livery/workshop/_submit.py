@@ -25,6 +25,7 @@ import os
 import re
 import time
 import tomllib
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, ParamSpec
