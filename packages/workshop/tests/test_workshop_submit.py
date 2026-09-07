@@ -10,6 +10,7 @@ sleeps, no network.
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
@@ -223,7 +224,7 @@ def test_the_405_patience_is_per_message(monkeypatch: pytest.MonkeyPatch) -> Non
 
     monkeypatch.setattr("livery.workshop._submit.time.sleep", lambda _s: None)
 
-    def _refusing(message: str) -> tuple[list[int], object]:
+    def _refusing(message: str) -> tuple[list[int], Callable[[], None]]:
         calls: list[int] = []
 
         def act() -> None:
