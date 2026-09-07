@@ -464,8 +464,8 @@ def _loop_fm(root: Path, *args: str, timeout: float = 900.0) -> None:
     )
     if result.code != 0:
         fail(
-            f"the loop's `fm {' '.join(args)}` exited {result.code}:\n"
-            f"{result.stdout}{result.stderr}"
+            f"the loop's `{footman.prog()} {' '.join(args)}` exited"
+            f" {result.code}:\n{result.stdout}{result.stderr}"
         )
 
 
@@ -480,8 +480,13 @@ def _ensure_member(root: Path) -> None:
     """
     from livery.workshop._git_ops import GitOps
 
+    # Landed means on main: a failed pass leaves the working tree on
+    # the feature branch with the member present, and judging that
+    # tree would skip straight to the release act with nothing
+    # merged. The alignment makes the glob read main's truth.
+    _align_main(root)
     if list(root.glob("packages/*/workshop.toml")):
-        print("  member: already present")
+        print("  member: already landed")
         return
     git = GitOps(root)
     _fresh_branch(root, "feat/loop-echo")
@@ -495,6 +500,10 @@ def _ensure_member(root: Path) -> None:
             + 'baseline = "0.1.0"\n',
             "utf-8",
         )
+    # The baseline is a render input: cliff.toml was rendered before
+    # the append, so it must settle again or the gate names it as
+    # drift.
+    _loop_fm(root, "template.apply")
     git.commit_all(
         "feat(loop-echo): the loop's one member\n\nBorn through"
         " new.package on the dev wheels, with the release baseline"

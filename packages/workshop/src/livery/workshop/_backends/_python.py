@@ -123,9 +123,7 @@ def module_for(package: Package) -> str:
         parts: list[str] = []
         node = src
         while True:
-            dirs = [
-                d for d in node.iterdir() if d.is_dir() and d.name.isidentifier()
-            ]
+            dirs = [d for d in node.iterdir() if d.is_dir() and d.name.isidentifier()]
             has_py = any(f.suffix == ".py" for f in node.iterdir() if f.is_file())
             if parts and (has_py or len(dirs) != 1):
                 return ".".join(parts)
