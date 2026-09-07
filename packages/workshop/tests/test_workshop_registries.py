@@ -16,8 +16,10 @@ def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in (
         "PYTHON_REGISTRY_URL",
         "PYTHON_PUBLISH_INDEX",
+        "PYTHON_REGISTRY_TOKEN",
         "CONAN_REMOTE_URL",
         "CONTAINER_REGISTRY",
+        "FORGE_TOKEN",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -123,6 +125,57 @@ def test_the_forge_rung_serves_when_nothing_is_declared(
     assert python.url == "https://fake.example/api/packages/acme/python/simple"
     assert python.publish_url == "https://fake.example/api/packages/acme/python"
     assert resolve_registry(root, "container").url == "registry.fake.example/acme"
+
+
+def test_an_anonymous_resolution_carries_no_token(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    assert resolve_registry(root, "python").token == ""
+
+
+def test_the_env_token_rides_whatever_rung_answered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The credential is independent of the address: a declared or
+    # default URL may still need auth, so the token variable is read
+    # on every rung, not only the env one.
+    monkeypatch.setenv("PYTHON_REGISTRY_TOKEN", "env-token")
+    root = _workspace(tmp_path)
+    target = resolve_registry(root, "python")
+    assert target.url == "https://pypi.org/simple"
+    assert target.token == "env-token"
+
+
+def test_the_forge_rung_carries_the_lane_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.forge.testing import FakeForge
+
+    root = _workspace(
+        tmp_path, '[workspace]\n[forge]\nkind = "gitea"\nowner = "acme"\n'
+    )
+    monkeypatch.setattr(
+        "livery.workshop._forge_lane.this_forge", lambda _root: FakeForge()
+    )
+    monkeypatch.setenv("FORGE_TOKEN", "lane-token")
+    target = resolve_registry(root, "python")
+    assert target.url == "https://fake.example/api/packages/acme/python/simple"
+    assert target.token == "lane-token"
+
+
+def test_the_declared_token_wins_over_the_lane(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.forge.testing import FakeForge
+
+    root = _workspace(
+        tmp_path, '[workspace]\n[forge]\nkind = "gitea"\nowner = "acme"\n'
+    )
+    monkeypatch.setattr(
+        "livery.workshop._forge_lane.this_forge", lambda _root: FakeForge()
+    )
+    monkeypatch.setenv("FORGE_TOKEN", "lane-token")
+    monkeypatch.setenv("PYTHON_REGISTRY_TOKEN", "declared-token")
+    assert resolve_registry(root, "python").token == "declared-token"
 
 
 def test_an_unreachable_forge_is_a_silent_rung_not_a_failure(

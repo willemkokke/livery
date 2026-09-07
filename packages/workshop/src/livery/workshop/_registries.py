@@ -38,6 +38,14 @@ _ECOSYSTEM = {
     "python": ("https://pypi.org/simple", ""),
 }
 
+#: The env cascade's credential variable, per kind. Read on every
+#: rung, because the credential is independent of where the address
+#: came from: a declared or default URL may still need auth. Secrets
+#: never ride the contract's [registries] table.
+_CREDENTIAL_VARS = {
+    "python": "PYTHON_REGISTRY_TOKEN",
+}
+
 
 @dataclass(frozen=True)
 class RegistryTarget:
@@ -54,12 +62,18 @@ class RegistryTarget:
             trusted publishing on pypi.org). Unused by other kinds.
         local: True when the target is a folder or share rather
             than a server.
+        token: The registry credential, for reads and uploads alike:
+            the kind's credential variable when set, else the forge
+            lane's token when the forge rung answered. Empty reads
+            anonymously and lets the publisher's own resolution
+            decide.
     """
 
     kind: str
     url: str
     publish_url: str = ""
     local: bool = False
+    token: str = ""
 
 
 def _is_local(value: str) -> bool:
@@ -86,6 +100,7 @@ def resolve_registry(root: Path, kind: str) -> RegistryTarget:
     env_vars = _ENV_VARS.get(kind)
     if env_vars is None:
         fail(f"{kind!r} is not an artifact registry kind: python, conan, container")
+    token = os.environ.get(_CREDENTIAL_VARS.get(kind, ""), "")
     declared_read = os.environ.get(env_vars[0], "")
     declared_publish = os.environ.get(env_vars[1], "") if len(env_vars) > 1 else ""
     if not declared_read and not declared_publish:
@@ -104,19 +119,26 @@ def resolve_registry(root: Path, kind: str) -> RegistryTarget:
             url=_normalise(read),
             publish_url=_normalise(declared_publish),
             local=_is_local(read),
+            token=token,
         )
-    forge_url = _forge_registry(root, kind)
-    if forge_url is not None:
+    resolved = _forge_registry(root, kind)
+    if resolved is not None:
+        forge_url, lane_token = resolved
         if kind == "python":
             # The forge-registry shape: the base takes uploads and
             # serves the simple index under /simple.
             return RegistryTarget(
-                kind=kind, url=f"{forge_url}/simple", publish_url=forge_url
+                kind=kind,
+                url=f"{forge_url}/simple",
+                publish_url=forge_url,
+                token=token or lane_token,
             )
-        return RegistryTarget(kind=kind, url=forge_url)
+        return RegistryTarget(kind=kind, url=forge_url, token=token or lane_token)
     default = _ECOSYSTEM.get(kind)
     if default is not None:
-        return RegistryTarget(kind=kind, url=default[0], publish_url=default[1])
+        return RegistryTarget(
+            kind=kind, url=default[0], publish_url=default[1], token=token
+        )
     fail(
         f"no {kind} registry resolves: nothing declared (env or the"
         " [registries] table), this forge hosts none, and the kind has"
@@ -124,10 +146,18 @@ def resolve_registry(root: Path, kind: str) -> RegistryTarget:
     )
 
 
-def _forge_registry(root: Path, kind: str) -> str | None:
-    """The forge's own registry of *kind*, or None where it declines."""
+def _forge_registry(root: Path, kind: str) -> tuple[str, str] | None:
+    """The forge's registry of *kind* and the lane token, or None.
+
+    The token is the lane's own (``FORGE_TOKEN``, host-qualified
+    first), because the forge's registry authenticates with the same
+    credential as its API. It can be empty: a backend that resolves
+    its token through its own dialect never surfaces it here, and the
+    read then rides anonymously, which a public owner serves.
+    """
     from livery.forge import Unsupported
     from livery.workshop._forge_lane import this_forge
+    from livery.workshop._tokens import forge_token
 
     contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
     forge_table = contract.get("forge") or {}
@@ -146,6 +176,10 @@ def _forge_registry(root: Path, kind: str) -> str | None:
     # states that proof for the checkers.
     registry_kind = cast("RegistryKind", kind)
     try:
-        return forge.registry_url(registry_kind, owner)
+        url = forge.registry_url(registry_kind, owner)
     except Unsupported:
         return None
+    lane_token, _ = forge_token(
+        str(forge_table.get("kind", "")), str(forge_table.get("url", ""))
+    )
+    return url, lane_token

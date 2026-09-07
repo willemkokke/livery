@@ -735,7 +735,11 @@ def workflow_release_publish(
         fail("no workspace: no workshop.toml above the working directory")
     git = GitOps(root)
     target = resolve_registry(root, "python")
-    registry = SimpleRegistry(target.url)
+    # The probe carries the resolved credential: an authenticated
+    # index, a forge's own registry or a private owner, answers only
+    # with it, and an anonymous probe would time out waiting for a
+    # wheel the index is already serving.
+    registry = SimpleRegistry(target.url, token=target.token)
     registries: dict[str, Registry] = {"python": registry}
 
     def registry_for(package: Package) -> Registry:
@@ -762,7 +766,10 @@ def workflow_release_publish(
         registry_for,
         ref=ref,
         index_url=target.publish_url,
-        token=os.environ.get("UV_PUBLISH_TOKEN", ""),
+        # UV_PUBLISH_TOKEN is the explicit override; the resolved
+        # target's credential is the same seam the probe reads, so a
+        # forge registry publishes with the lane token unprompted.
+        token=os.environ.get("UV_PUBLISH_TOKEN", "") or target.token,
         prebuilt=prebuilt,
     )
     output = os.environ.get("GITHUB_OUTPUT", "")
