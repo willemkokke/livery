@@ -11,6 +11,7 @@ from livery.workshop._backends import _cpp_conan
 from livery.workshop._kinds import (
     CiContract,
     KindRecord,
+    gated,
     is_python_kind,
     kind_for,
     managed_files,
@@ -19,7 +20,7 @@ from livery.workshop._kinds import (
     template_chain,
 )
 from livery.workshop._packages import Package, discover_packages
-from livery.workshop._quality import gated, run_kind_checks
+from livery.workshop._quality import run_kind_checks
 from livery.workshop._templates import read_answers, render
 
 _FAILURES = (BaseException,)
