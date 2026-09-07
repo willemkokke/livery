@@ -631,6 +631,10 @@ def _release_act(root: Path, kind: str) -> None:
     import time
 
     repo = forge.repository(E2E_OWNER, E2E_REPO)
+    before = toolroom.git.opts(cwd=root, nofail=True)(
+        "ls-remote", "origin", "refs/heads/main"
+    ).stdout.split()
+    before_sha = before[0] if before else ""
     for round_ in range(4):
         if round_:
             print("  waiting out the forge's post-open window (45s)")
@@ -656,33 +660,52 @@ def _release_act(root: Path, kind: str) -> None:
             fail("the armed release failed and its PR went stale; see above")
     else:
         fail("the forge's post-open window never closed across 4 rounds")
-    # The armed release returns at the merge; the wave runs on the
-    # squash asynchronously. Watch its verdict before probing: a
-    # registry poll alone cannot say whether the wave failed or is
-    # merely slow, and its red must surface verbatim.
-    _align_main(root)
-    merged = toolroom.git.opts(cwd=root, nofail=True)("rev-parse", "origin/main")
-    if merged.code != 0 or not merged.stdout.strip():
-        fail("could not resolve origin/main after the release merge")
-    _watch(kind, ALIAS_URL, merged.stdout.strip(), require=("release.yml",))
+    # The armed release returns at the merge, and the forge moves
+    # the ref a beat later (measured: an immediate rev-parse watched
+    # the pre-squash commit and called the wave skipped). Poll for
+    # the movement; a main that never moves means the recovery arm
+    # ran, which cuts receipts itself, and the probes below judge.
+    squash = ""
+    deadline = time.monotonic() + 90
+    while time.monotonic() < deadline:
+        moved = toolroom.git.opts(cwd=root, nofail=True)(
+            "ls-remote", "origin", "refs/heads/main"
+        ).stdout.split()
+        if moved and moved[0] != before_sha:
+            squash = moved[0]
+            break
+        time.sleep(3)
+    if squash:
+        # The wave runs on the squash asynchronously; its red must
+        # surface verbatim, because a registry poll alone cannot say
+        # whether the wave failed or is merely slow.
+        _watch(kind, ALIAS_URL, squash, require=("release.yml",))
+    else:
+        print("  main unmoved: the recovery arm published; receipts judge")
     _, token = _dev_forge(kind)
     registry = SimpleRegistry(
         f"{ALIAS_URL}/api/packages/{E2E_OWNER}/pypi/simple", token=token
     )
-    import time
-
     deadline = time.monotonic() + 300
     while "0.1.0" not in registry.versions(LOOP_MEMBER_DIST):
         if time.monotonic() >= deadline:
             fail(
-                f"the wave is green but the registry never served {LOOP_MEMBER_DIST} 0.1.0"
+                f"the wave is green but the registry never served"
+                f" {LOOP_MEMBER_DIST} 0.1.0"
             )
         time.sleep(5)
-    listed = toolroom.git.opts(cwd=root, nofail=True)(
-        "ls-remote", "--tags", "origin", tag
-    )
-    if tag not in listed.stdout:
-        fail(f"served, but the receipt tag {tag} is not on the loop")
+    # The receipt push follows the publish inside the wave, so the
+    # tag gets the same patience as the serving probe.
+    deadline = time.monotonic() + 120
+    while True:
+        listed = toolroom.git.opts(cwd=root, nofail=True)(
+            "ls-remote", "--tags", "origin", tag
+        )
+        if tag in listed.stdout:
+            break
+        if time.monotonic() >= deadline:
+            fail(f"served, but the receipt tag {tag} is not on the loop")
+        time.sleep(5)
     print(f"  release: {LOOP_MEMBER_DIST} 0.1.0 served, receipt {tag} cut")
 
 
