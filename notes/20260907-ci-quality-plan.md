@@ -376,6 +376,13 @@ YAML, on a real runner, against a real index, from one command.
 - Open in this phase: the dummy platform-wheel member and its linux
   wheel leg in the loop have not run yet; they land with the
   wheels-matrix mechanics rather than blocking the substrate.
+- Open in this phase: the workshop coverage floor sits at 85, down
+  from 87, because the loop verb's orchestration is live-tested
+  only (accepted by Willem 2026-09-08 as a temporary state). The
+  e2e orchestration is expected to become the
+  initial-infrastructure wizard, and its unit coverage and the
+  floor return with that work; the auto-ratchet mode then keeps
+  floors climbing on their own.
 
 ### Phase 2: instrument the loop
 
