@@ -90,6 +90,23 @@ docs_site_url:
     the [docs] site_url from workshop.toml; injected at render time,
     it wires the runner's task links into the published reference
 
+python_registry:
+  type: str
+  default: ""
+  when: false
+  help: >-
+    the [registries] python read index from workshop.toml; injected
+    at render time, it becomes the root pyproject's uv index so the
+    committed file and the contract cannot disagree
+
+python_prerelease:
+  type: str
+  default: ""
+  when: false
+  help: >-
+    the [registries] python prerelease policy from workshop.toml;
+    injected at render time into the root pyproject's [tool.uv]
+
 release_baseline:
   type: str
   default: ""

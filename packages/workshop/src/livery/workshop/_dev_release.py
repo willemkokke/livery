@@ -204,6 +204,9 @@ def dev_release(
         for package in members
     )
     publishing = not local and bool(index)
+    # The report names its act first: a dev build must never read as
+    # a release.
+    print(f"  act: dev, from branch '{branch}'; no tags, no release PR")
     if not local and not index:
         print(
             f"  no custom index is configured ({INDEX_VAR} is unset), so"

@@ -26,6 +26,15 @@ from livery.forge._gitlab import (
     gitlab_configured_host,
     gitlab_is_configured_host,
 )
+from livery.forge._merge_state import (
+    MergeCategory,
+    MergeState,
+    classify_gitea_merge_refusal,
+    classify_github_mergeable_state,
+    classify_gitlab_detailed_status,
+    classify_merge_refusal,
+    merge_state,
+)
 from livery.forge._protocol import (
     Checks,
     Forge,
@@ -80,6 +89,8 @@ __all__ = [
     "Issues",
     "Job",
     "Label",
+    "MergeCategory",
+    "MergeState",
     "Protection",
     "PullRequest",
     "PullRequests",
@@ -100,8 +111,13 @@ __all__ = [
     "StateFilter",
     "Unsupported",
     "__version__",
+    "classify_gitea_merge_refusal",
+    "classify_github_mergeable_state",
+    "classify_gitlab_detailed_status",
+    "classify_merge_refusal",
     "gitea_configured_host",
     "gitea_is_configured_host",
     "gitlab_configured_host",
     "gitlab_is_configured_host",
+    "merge_state",
 ]

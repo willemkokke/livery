@@ -23,6 +23,7 @@ from livery.workshop import (  # noqa: F401
     _ci_tasks,
     _clean,
     _docs,
+    _e2e,
     _env_tasks,
     _graph,
     _hooks,

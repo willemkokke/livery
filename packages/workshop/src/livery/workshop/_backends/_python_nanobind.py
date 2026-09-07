@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 check = _python.check
 current_version = _python.current_version
 stamp_version = _python.stamp_version
+publish_artifact = _python.publish_artifact
 
 
 def declared_requirements(package: Package) -> dict[str, str]:

@@ -855,3 +855,15 @@ def test_active_names_degrade_to_local_when_the_remote_is_gone(
         lambda self, prefix: (_ for _ in ()).throw(RuntimeError("offline")),
     )
     assert active_workflow_names(_repo(fake), git) == ("update/templates",)
+
+
+def test_the_required_context_speaks_each_forge_grammar() -> None:
+    # GitHub reports the job name itself; Gitea reports Actions
+    # statuses as "<workflow> / <job> (<event>)", so a bare job name
+    # can never satisfy protection there: the probe repository's
+    # merge refused until the spelling matched (livery#289).
+    from livery.workshop._workflow_tasks import required_context_string
+
+    assert required_context_string("github", "gate") == "gate"
+    assert required_context_string("gitea", "gate") == "ci / gate (pull_request)"
+    assert required_context_string("", "gate") == "gate"

@@ -1,6 +1,10 @@
 # CI and quality gating: the plan
 
 Status: ruled 2026-09-07, every open ruling closed in review.
+Phase 1's substrate landed 2026-09-07 (issue #289): the loop is
+whole, gate to receipt; the evidence lives in the phase's
+acceptance bullet, and the one open line there names what rides
+the wheels-matrix work instead.
 Nothing is started; phase 1 begins on Willem's go.
 Absorbs #267 (the speed pass), #286 (no logic in YAML), #270 (token
 publishing), #273 (the act names itself), and the structural finding of
@@ -265,26 +269,50 @@ YAML, on a real runner, against a real index, from one command.
   `registry_url("python", owner)` returns
   `{host}/api/packages/{owner}/pypi` today. No new container, no
   new credential class, and a shipped rung that was an untested
-  fallback becomes exercised code. The surviving task either index
-  would have forced: `publish_wheels` grows username/password
-  passthrough beside `--token`, because Gitea authenticates uploads
-  as user plus token.
+  fallback becomes exercised code. The passthrough task either index
+  was assumed to force is measured unnecessary: Gitea validates the
+  token and ignores the basic-auth username, so uv's plain
+  `--token` form uploads as-is. A probe wheel published and read
+  back proved the circle.
 - The loop's CI is linux-only for now (ruled by Willem 2026-09-07):
   the containered act_runner is the whole runner fleet. Linux wheel
   legs run in the loop against the dummy platform-wheel member; a
   macos or native runner waits for a real platform-wheel member
   that needs those platforms.
-- Publishing is a kind seam (ruled by Willem 2026-09-07):
-  `resolve_registry` is already keyed by kind, build and the check
-  verbs already dispatch through the package's kind backend, and
-  the wave's publish call moves onto that backend too, `uv publish`
-  being the python kind's implementation. A future kind brings its
-  own publisher and registry rung without the wave changing shape.
-- One index seam: the isolated legs' `[[tool.uv.index]]` surface and
-  `resolve_registry` unify, so a checkout's index is one resolved
-  answer, not two config surfaces. The served-probe carries the
-  token `SimpleRegistry` already accepts, which the authenticated
-  local registry forces immediately.
+- Publishing is a kind seam (ruled by Willem 2026-09-07, landed
+  2026-09-07): `publish_artifact` is a `Backend` protocol member
+  and the wave dispatches through it, picking only the resolved
+  target for the kind's artifact. `uv publish` is the python kind's
+  implementation (the nanobind kind delegates to it), and the conan
+  kind wraps its recipe upload. A future kind brings its own
+  publisher and registry rung without the wave changing shape.
+- One index seam, broadened by Willem 2026-09-07: the contract
+  expresses the registry topology, and the render emits it. The
+  first slice landed 2026-09-07 and the loop proves it every pass:
+  `[registries.python]` (`url`, plus `prerelease` carrying uv's
+  policy value) renders into the root pyproject as the
+  `[[tool.uv.index]]` entry and the `[tool.uv]` prerelease line,
+  through `registry_injections` beside the other contract-fed
+  render inputs, so a re-render can never unwire the index again.
+  The loop measured the unwire live twice: birth's resume
+  re-rendered pyproject and the e2e's surgery re-applied, two
+  commits per run; then a member render (`new.package` re-renders
+  the roster) stripped the wiring after the surgery had already
+  passed, and the next lock silently resolved the workshop back to
+  the released PyPI index. Two resolution facts the loop forced,
+  both load-bearing: uv's first-index strategy resolves a package
+  served by the declared index from that index alone, and no
+  prerelease mode is declared, uv's default ruling (the decision
+  record's prerelease entry carries the ruling and the
+  measurements). Still open in this seam:
+  reads as an ordered list (hse's caching mirror with a private
+  overlay), rendering `publish`, and per-platform index pins (the
+  pytorch case); what the contract cannot say still needs a durable
+  seam in the rendered pyproject rather than a hand edit the next
+  render reverts. The isolated legs' `[[tool.uv.index]]` surface
+  and `resolve_registry` read one declaration. The served-probe
+  carries the token `SimpleRegistry` already accepts, which the
+  authenticated local registry forced immediately.
 - Provisioning: a verb births (or reuses, idempotently) the repo on
   the seeded Gitea org, pushes HEAD, asserts protection and context,
   and writes `UV_PUBLISH_TOKEN` (the registry credential) and the forge
@@ -301,7 +329,26 @@ YAML, on a real runner, against a real index, from one command.
 - Gitea emitter parity while it is finally exercised: the dispatch
   recovery entry, pinned checkout, the templates `contains` guard
   moved into its verb (phase 3 shape), and an explicit decision on
-  coverage metering for that lane.
+  coverage metering for that lane. Two parity findings already
+  measured and fixed on first contact (2026-09-07): Gitea reports
+  Actions statuses as `<workflow> / <job> (<event>)`, so a bare
+  required context could never match and no protected merge could
+  ever pass; `required_context_string` now spells protection per
+  forge, pinned. And the emitted gitea governance job carries no
+  ambient-token env, so `workflow.configure` refused in-workflow;
+  the loop provisions `FORGE_ADMIN_TOKEN` and the emitter gap is
+  phase-3 work. Also measured: the emitted-workflows-versus-
+  installed-workshop version skew fails exactly as predicted (the
+  docs job's "no task named"), and eating the dev wheels cures it;
+  the full gate on the loop's fixture-scale workspace runs in 4 to
+  6 seconds inside the container. And a third parity finding
+  (2026-09-07): Gitea's arm is the same merge endpoint as the
+  immediate merge, so its whole 405 family refuses both. That
+  family grew into the classified merge-hold state machine (the
+  decision record's 2026-09-08 entry), the fake's
+  `merge_405_window` fault fires on both paths speaking Gitea's
+  real words, and `test_merge_state` pins every documented state
+  across the three forges.
 - #270's mechanics are proven here: publishing to the local
   registry by token is the same code path. The GitHub flip itself
   is phase 6; whether the pypi environment's approval gate stays is
@@ -309,12 +356,33 @@ YAML, on a real runner, against a real index, from one command.
 - #273 rides here: the release report names its act (dev, local,
   release) so a rehearsal can never impersonate a release again.
 - Housekeeping: the stale `.forge.dev.env` docstrings.
-- Acceptance: from a clean checkout, containers up, one `fm ci.e2e`
-  run lands a full release in the local registry with receipt tags
-  on local Gitea; run twice, idempotent; a deliberately broken
-  member fails with the leg's verdict, the refusal tested first.
-  (release-legs.yml, which this supersedes, is deleted in the
-  phase-6 file swap.)
+- Acceptance: met 2026-09-07, measured from a clean slate (the
+  scratch repository and its registry package deleted, the loop
+  workspace removed). One `fm ci.e2e` run birthed the repository,
+  proved the gate on the runner (the setup PR merged through
+  protection), landed the member through the loop's own armed
+  submit, released it through the real release PR and the emitted
+  wave (release.yml green on the squash), and measured the result:
+  the registry serves ci-e2e-loop-loop-echo 0.1.0 and the annotated
+  receipt packages/loop-echo/v0.1.0 points at the squash. A second
+  run is idempotent (member already landed, receipt already on the
+  loop, exit 0). The broken-member refusal has two measured layers:
+  the local gate refuses a red member before any push, naming
+  format, lint, and the failing test verbatim, and a red only CI
+  can see refuses with the leg's verdict and a diagnostics file
+  naming the job (measured live: "ci.yml: docs (failure)", submit
+  exit 13). (release-legs.yml, which this supersedes, is deleted in
+  the phase-6 file swap.)
+- Open in this phase: the dummy platform-wheel member and its linux
+  wheel leg in the loop have not run yet; they land with the
+  wheels-matrix mechanics rather than blocking the substrate.
+- Open in this phase: the workshop coverage floor sits at 85, down
+  from 87, because the loop verb's orchestration is live-tested
+  only (accepted by Willem 2026-09-08 as a temporary state). The
+  e2e orchestration is expected to become the
+  initial-infrastructure wizard, and its unit coverage and the
+  floor return with that work; the auto-ratchet mode then keeps
+  floors climbing on their own.
 
 ### Phase 2: instrument the loop
 
@@ -985,3 +1053,39 @@ None. Every ruling raised in this plan was closed in the review of
   this shape; the machinery refs need instead is named in phases 1
   and 2 (compare-and-swap writes, the janitor, a namespace outside
   `refs/heads` so clones never fetch blobs).
+- 2026-09-07, ruled by Willem: prerelease resolution stays at uv's
+  default; the workshop declares no mode. The default admits a
+  prerelease where a requirement names one or where a package has
+  only prereleases, which under uv's first-index strategy means
+  exactly the workspace's own declared dev index and nothing else,
+  and Willem judges that the better default ("if there are only
+  dev releases that is fine"). The `[registries.python] prerelease`
+  key stays for a workspace that wants a deliberate mode. Measured
+  around the ruling: a global `allow` resolved mkdocs 2.0.dev3 from
+  PyPI and broke the docs job; `explicit` alone is unsatisfiable
+  because the layer floors and the packages' own dependency floors
+  (`livery-forge>=0.1.0`) carry no dev bounds.
+- 2026-09-07, asked by Willem: `fm forge.dev.up` grows a
+  `--with-docker` flag that configures the runner for the docker
+  installed in the default place, so the container docs-publish
+  seam is testable locally too. The loop's default stays
+  `[docs] publish = "none"` for speed; the flag arms the seam when
+  it is the thing under test.
+- 2026-09-08, ruled by Willem: merge holds are a classified state
+  machine, never a retry budget. A refusal classifies (per forge)
+  into a state carrying a user-facing message and the forge's
+  native words; the categories are in-progress (follow through to
+  completion, no arbitrary timeout, the task's own timeout the
+  backstop, honest durations feeding footman's estimates),
+  recoverable (stop and say what would recover it), terminal, and
+  success (discovered merged walks past). `submit.merge` waits in
+  every waitable state: merge means merge as soon as possible, even
+  unarmed. Every documented forge state is mapped at build time,
+  the hard-to-stage ones included; an answer outside the map fails
+  loudly with the native words and the map is updated in software,
+  never guessed at runtime. GitLab classifies from its published
+  `detailed_merge_status`, GitHub from `mergeable_state` when its
+  lane arrives; Gitea classifies its 405 prose against the combined
+  status, and a required context nothing reports refuses with the
+  name mismatch rather than waiting forever. Recording Gitea's real
+  405 bodies as cassettes by staging them stays open work.

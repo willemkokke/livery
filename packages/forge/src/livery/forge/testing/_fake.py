@@ -72,9 +72,11 @@ class Faults:
             recording a schedule, so the pull request reads unarmed
             afterwards. The lost-auto-merge-schedule quirk.
         merge_405_window: The next N calls to
-            livery.forge.PullRequests.merge_now raise
+            livery.forge.PullRequests.merge_now or
+            livery.forge.PullRequests.arm raise
             livery.forge.ForgeError with status 405, as a forge does
-            while a mergeability recompute is in flight.
+            while a mergeability recompute is in flight; the arm
+            shares the merge endpoint, so the window refuses both.
         wedge_status_queue: While True, runs never leave the queued
             state: a finished run is not recorded, so the combined
             status stays pending forever. Cancelling the run is the
@@ -768,17 +770,20 @@ class _FakePullRequests:
             raise ForgeError(f"pull request {number} is not open", status=405)
         if self._fake.faults.merge_405_window > 0:
             self._fake.faults.merge_405_window -= 1
+            # Gitea's own words for the recompute window, so a
+            # message-routing caller is exercised on the real text.
             raise ForgeError(
-                f"pull request {number} is not mergeable yet:"
-                " a mergeability recompute is in flight",
+                f"pull request {number}: Please try again later"
+                " (a mergeability recompute is in flight)",
                 status=405,
             )
         if (
             state.required_contexts
             and self._fake._derived_status(state, pr.head_sha).state != "success"
         ):
+            # Gitea's own words for the protection refusal.
             raise ForgeError(
-                f"pull request {number} has required checks that are not green",
+                f"pull request {number}: not all required status checks successful",
                 status=405,
             )
         pr.title = title or pr.title
@@ -795,6 +800,15 @@ class _FakePullRequests:
             )
         if pr.state != "open":
             raise ForgeError(f"pull request {number} is not open", status=405)
+        if self._fake.faults.merge_405_window > 0:
+            # The real endpoint is the merge endpoint, so the
+            # recompute window refuses the arm the same way.
+            self._fake.faults.merge_405_window -= 1
+            raise ForgeError(
+                f"pull request {number}: Please try again later"
+                " (a mergeability recompute is in flight)",
+                status=405,
+            )
         if self._fake.faults.lose_arm_schedule > 0:
             self._fake.faults.lose_arm_schedule -= 1
             return

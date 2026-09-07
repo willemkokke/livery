@@ -677,3 +677,76 @@ def test_the_release_baseline_reads_the_contract_or_stays_empty(tmp_path):
         'type = "python"\nname = "thing"\n[release]\nbaseline = "0.6.1"\n'
     )
     assert _release_baseline(package) == "0.6.1"
+
+
+def test_the_registry_injections_read_the_contract_or_stay_empty(
+    tmp_path: Path,
+) -> None:
+    # The fallbacks first: no [registries] table, then one without a
+    # python entry, both inject nothing and uv keeps the ecosystem
+    # default.
+    from livery.workshop._templates import registry_injections
+
+    empty = {"python_registry": "", "python_prerelease": ""}
+    root = tmp_path
+    (root / "workshop.toml").write_text('[workspace]\nlayers = ["livery.workshop"]\n')
+    assert registry_injections(root) == empty
+    (root / "workshop.toml").write_text(
+        '[workspace]\nlayers = ["livery.workshop"]\n[registries]\nconan = "x"\n'
+    )
+    assert registry_injections(root) == empty
+    # The string form declares the read index alone.
+    (root / "workshop.toml").write_text(
+        "[workspace]\n"
+        'layers = ["livery.workshop"]\n'
+        "[registries]\n"
+        'python = "http://gitea:3000/api/packages/livery/pypi/simple"\n'
+    )
+    assert registry_injections(root) == {
+        "python_registry": "http://gitea:3000/api/packages/livery/pypi/simple",
+        "python_prerelease": "",
+    }
+    # The table form carries the prerelease policy beside the index.
+    (root / "workshop.toml").write_text(
+        "[workspace]\n"
+        'layers = ["livery.workshop"]\n'
+        "[registries.python]\n"
+        'url = "http://gitea:3000/api/packages/livery/pypi/simple"\n'
+        'prerelease = "allow"\n'
+    )
+    assert registry_injections(root) == {
+        "python_registry": "http://gitea:3000/api/packages/livery/pypi/simple",
+        "python_prerelease": "allow",
+    }
+
+
+def test_a_declared_registry_renders_into_the_root_pyproject(
+    tmp_path: Path,
+) -> None:
+    # A roster change re-renders pyproject, and only a rendered index
+    # survives that: the contract's declaration must reach the bytes,
+    # or the next render locks the workspace back to the default
+    # index.
+    import tomllib
+
+    root = _template_instance(tmp_path)
+    contract = root / "workshop.toml"
+    contract.write_text(
+        contract.read_text()
+        + "\n[registries.python]\n"
+        + 'url = "http://gitea:3000/api/packages/livery/pypi/simple"\n'
+        + 'prerelease = "allow"\n'
+    )
+    apply_project(root)
+    parsed = tomllib.loads((root / "pyproject.toml").read_text())
+    assert parsed["tool"]["uv"]["index"] == [
+        {
+            "name": "workshop",
+            "url": "http://gitea:3000/api/packages/livery/pypi/simple",
+        }
+    ]
+    assert parsed["tool"]["uv"]["prerelease"] == "allow"
+    # The scalar stays inside [tool.uv] and the members survive: a
+    # misplaced insert would hand both to the index table silently.
+    assert parsed["tool"]["uv"]["package"] is False
+    assert "members" in parsed["tool"]["uv"]["workspace"]

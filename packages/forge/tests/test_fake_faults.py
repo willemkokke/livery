@@ -46,6 +46,21 @@ def test_the_405_window_refuses_merges_then_passes() -> None:
     assert merged.merged
 
 
+def test_the_405_window_refuses_arms_the_same_way() -> None:
+    # The arm shares the merge endpoint, so the recompute window
+    # refuses it identically; right after a force push is the common
+    # trigger.
+    driver = FakeDriver()
+    repo, pr, _ = _repo_with_open_pr(driver)
+    driver.fake.faults.merge_405_window = 1
+    with pytest.raises(ForgeError) as refusal:
+        repo.pr.arm(pr.number, title="feat: change")
+    assert refusal.value.status == 405
+    assert not repo.pr.is_armed(pr.number)
+    repo.pr.arm(pr.number, title="feat: change")
+    assert repo.pr.is_armed(pr.number)
+
+
 def test_a_wedged_status_queue_holds_pending_until_cancel_relieves_it() -> None:
     driver = FakeDriver()
     repo, _, sha = _repo_with_open_pr(driver)

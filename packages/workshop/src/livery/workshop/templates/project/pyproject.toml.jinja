@@ -20,7 +20,15 @@ requires-python = ">={{ python_floor }}"
 [tool.uv]
 package = false
 default-groups = ["dev", "docs"]
-
+{% if python_prerelease %}prerelease = "{{ python_prerelease }}"
+{% endif %}{% if python_registry %}
+# The contract's python registry: reads resolve here first, the
+# ecosystem default fills the rest. Declared in workshop.toml
+# [registries]; this render carries it, so edit the contract there.
+[[tool.uv.index]]
+name = "workshop"
+url = "{{ python_registry }}"
+{% endif %}
 [tool.uv.workspace]
 # The members, explicitly: the roster lives in the answers and this
 # file is rendered from it, so a glob would only re-derive the same

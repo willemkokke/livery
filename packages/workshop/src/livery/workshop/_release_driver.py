@@ -557,6 +557,7 @@ def local_release(root: Path, members: tuple[Package, ...]) -> None:
     never asked because nothing leaves the machine.
     """
     plans = derive_plans(root, members)
+    print("  act: local; nothing leaves this machine")
     try:
         bump_set_floors(root, plans)
         release_dirs = _wheel_dists(plans)
@@ -570,6 +571,34 @@ def local_release(root: Path, members: tuple[Package, ...]) -> None:
         print("  wheels in each member's dist/; the tree is restored")
     finally:
         rollback_prepare(root, members)
+
+
+def pending_release_wave(root: Path, git: GitOps) -> tuple[str, tuple[str, ...]] | None:
+    """The newest release squash whose receipts are not all cut.
+
+    A merged release whose wave died leaves the squash on the base
+    with the stamps and changelogs landed and receipt tags missing.
+    Re-preparing from that state derives an empty release (measured:
+    an empty pull request the forge never agrees to merge), so the
+    recovery is the wave at the squash, never a new pull request.
+    Only the newest release squash is consulted: older history is
+    not this verb's to rewrite. Returns the squash sha and the
+    missing receipt tags, or None when nothing is pending.
+    """
+    from livery.workshop._publish import discover_release
+
+    for sha, subject in git.recent_commits(50):
+        if not subject.startswith("chore(release): released"):
+            continue
+        released = discover_release(root, git, sha)
+        cut = set(git.remote_tags())
+        missing = tuple(
+            f"{package.path}/v{version}"
+            for package, version in released
+            if f"{package.path}/v{version}" not in cut
+        )
+        return (sha, missing) if missing else None
+    return None
 
 
 release_group = workflow.group("release", help="The release train")
@@ -623,6 +652,17 @@ def workflow_release(
         return
     if local:
         local_release(root, members)
+        return
+    print(f"  act: release train, from '{branch}'")
+    pending = pending_release_wave(root, git)
+    if pending is not None:
+        squash, missing = pending
+        print(f"  release squash {squash[:12]} has uncut receipts:")
+        for name in missing:
+            print(f"    {name}")
+        print("  recovering the wave at the squash; nothing new prepares")
+        workflow_release_publish(ref=squash)
+        print("  wave recovered; re-run to release work newer than the squash")
         return
     repo = this_repository(root)
     driver = ReleaseDriver(
@@ -735,7 +775,20 @@ def workflow_release_publish(
         fail("no workspace: no workshop.toml above the working directory")
     git = GitOps(root)
     target = resolve_registry(root, "python")
-    registry = SimpleRegistry(target.url)
+    if not target.publish_url:
+        from livery.workshop._dev_release import INDEX_VAR
+
+        fail(
+            "no publish address resolved for python: the declaration"
+            " names only a read index, and an upload endpoint is"
+            " never defaulted. Declare [registries.python] publish in"
+            f" workshop.toml, or set {INDEX_VAR}."
+        )
+    # The probe carries the resolved credential: an authenticated
+    # index, a forge's own registry or a private owner, answers only
+    # with it, and an anonymous probe would time out waiting for a
+    # wheel the index is already serving.
+    registry = SimpleRegistry(target.url, token=target.token)
     registries: dict[str, Registry] = {"python": registry}
 
     def registry_for(package: Package) -> Registry:
@@ -762,7 +815,10 @@ def workflow_release_publish(
         registry_for,
         ref=ref,
         index_url=target.publish_url,
-        token=os.environ.get("UV_PUBLISH_TOKEN", ""),
+        # UV_PUBLISH_TOKEN is the explicit override; the resolved
+        # target's credential is the same seam the probe reads, so a
+        # forge registry publishes with the lane token unprompted.
+        token=os.environ.get("UV_PUBLISH_TOKEN", "") or target.token,
         prebuilt=prebuilt,
     )
     output = os.environ.get("GITHUB_OUTPUT", "")

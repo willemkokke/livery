@@ -103,8 +103,40 @@ def run_typecomplete(packages: tuple[Package, ...]) -> None:
     verdict, 0 only when every public symbol has a fully known type.
     """
     for package in packages:
-        module = package.name.replace("-", ".")
-        basedpyright(verifytypes=module, ignoreexternal=True)
+        basedpyright(verifytypes=module_for(package), ignoreexternal=True)
+
+
+def module_for(package: Package) -> str:
+    """The package's importable module, read from its src tree.
+
+    The single-directory chain under ``src/`` down to the first
+    directory carrying python files is the module
+    (``src/livery/forge`` is ``livery.forge``). Deriving it from the
+    distribution name guessed wrong the moment a member's own name
+    carried a hyphen: ``loop-echo`` under a workspace prefix became
+    ``loop.echo``, a module that does not exist. A package without a
+    src tree falls back to the dist-name spelling, underscores for
+    hyphens beyond the namespace dot.
+    """
+    src = package.directory / "src"
+    if src.is_dir():
+        parts: list[str] = []
+        node = src
+        while True:
+            dirs = [d for d in node.iterdir() if d.is_dir() and d.name.isidentifier()]
+            has_py = any(f.suffix == ".py" for f in node.iterdir() if f.is_file())
+            if parts and (has_py or len(dirs) != 1):
+                return ".".join(parts)
+            if len(dirs) != 1:
+                break
+            node = dirs[0]
+            parts.append(node.name)
+        if parts:
+            return ".".join(parts)
+    head, _, tail = package.name.partition("-")
+    if not tail:
+        return head
+    return head + "." + tail.replace("-", "_")
 
 
 def current_version(package: Package) -> str:
@@ -410,6 +442,21 @@ def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
     return dist
 
 
+def publish_artifact(
+    package: Package, *, version: str, publish_url: str, token: str, local: bool
+) -> bool:
+    """Upload ``dist/*`` to the python index; the kind's publish seam.
+
+    ``uv publish``, through the wave's own uploader: *version* and
+    *local* are other kinds' fields, since the wheels in ``dist/``
+    already carry their versions and a python index is never a
+    folder.
+    """
+    from livery.workshop._publish import publish_wheels
+
+    return publish_wheels(package, index_url=publish_url, token=token)
+
+
 def _index_args(root: Path) -> tuple[str, ...]:
     """The repo's ``[[tool.uv.index]]`` entries as install flags.
 
@@ -651,10 +698,23 @@ def run_isolated_test(
         # aimed at it once dragged pytest back a decade. Locked pins
         # where the workspace has them; pytest is a no-op re-request
         # when the pins already hold it.
+        # The toolchain resolves from the same indexes as the wheel:
+        # the lock's pins name whatever versions the workspace's own
+        # index serves, and a bare-PyPI install cannot see those.
         pins = _dev_pins(root, Path(scratch))
         if pins is not None:
-            _run_install("pip", "install", "--python", str(python), "-r", str(pins))
-        _run_install("pip", "install", "--python", str(python), "pytest")
+            _run_install(
+                "pip",
+                "install",
+                "--python",
+                str(python),
+                *_index_args(root),
+                "-r",
+                str(pins),
+            )
+        _run_install(
+            "pip", "install", "--python", str(python), *_index_args(root), "pytest"
+        )
         after = _direct_versions(package, _listing())
         moved = {
             name: (before[name], version)

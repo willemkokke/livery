@@ -117,6 +117,9 @@ def test_no_index_degrades_to_local_with_the_teaching(
     out = capsys.readouterr().out
     assert "--local" in out and "PYTHON_PUBLISH_INDEX" in out
     assert "PyPI is never the fallback" in out
+    # The report opens by naming its act, so a dev build can never
+    # read as a release.
+    assert "act: dev, from branch" in out
     assert len(built) == 1
 
 

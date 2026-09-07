@@ -26,6 +26,14 @@ with `origin/main`.
   hides until the day it is the only path left. A fallback without a
   test forcing it is untested code.
 
+- Everything through `fm`: a job with a verb goes through the verb,
+  never the tool it wraps, because the verb carries the guards the
+  raw call skips. Branch switching shows why: a workflow verb pairs
+  every switch with an alignment against origin and names the
+  commits it supersedes, where a raw `git switch` in a shared
+  checkout strands unpushed work silently. A job no verb covers
+  marks a missing verb: file the issue rather than script around
+  it.
 - Development goes through issues: file one (`fm issue.create` or
   `fm issue.start "title"`), work it in its worktree, and let the
   merge close it. Branches follow `<kind>/<number>-<slug>` so the

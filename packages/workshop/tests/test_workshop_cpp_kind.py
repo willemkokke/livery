@@ -163,6 +163,17 @@ def test_kind_checks_announce_and_dispatch(
         def build(self, package: Package, root: Path, *, epoch: int = 0) -> Path:
             return package.directory
 
+        def publish_artifact(
+            self,
+            package: Package,
+            *,
+            version: str,
+            publish_url: str,
+            token: str,
+            local: bool,
+        ) -> bool:
+            return True
+
         def check(self, package: Package, root: Path) -> None:
             checked.append(package.name)
 
@@ -210,6 +221,17 @@ def test_host_tools_are_named_when_missing(restored_registry, tmp_path: Path) ->
     class _Idle:
         def build(self, package: Package, root: Path, *, epoch: int = 0) -> Path:
             return package.directory
+
+        def publish_artifact(
+            self,
+            package: Package,
+            *,
+            version: str,
+            publish_url: str,
+            token: str,
+            local: bool,
+        ) -> bool:
+            return True
 
         def check(self, package: Package, root: Path) -> None:
             return None

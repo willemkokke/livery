@@ -601,6 +601,36 @@ def test_the_toolchain_probe_refuses_a_moved_floor(
     assert "packaging 24.0 -> 25.0" in message
 
 
+def test_the_leg_reads_the_repos_declared_indexes(tmp_path: Path) -> None:
+    # The fallbacks first: no pyproject, then no declared index, both
+    # hand the leg nothing and it resolves from the default alone.
+    from livery.workshop._backends._python import _index_args
+
+    assert _index_args(tmp_path) == ()
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\n')
+    assert _index_args(tmp_path) == ()
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "x"\n'
+        "[[tool.uv.index]]\n"
+        'name = "loop"\n'
+        'url = "http://gitea:3000/api/packages/livery/pypi/simple"\n'
+    )
+    assert _index_args(tmp_path) == (
+        "--index",
+        "http://gitea:3000/api/packages/livery/pypi/simple",
+    )
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "x"\n'
+        "[[tool.uv.index]]\n"
+        'url = "https://mirror.example/simple"\n'
+        "default = true\n"
+    )
+    assert _index_args(tmp_path) == (
+        "--default-index",
+        "https://mirror.example/simple",
+    )
+
+
 def test_the_leg_env_leads_with_its_own_venv_and_drops_the_workspaces(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -54,6 +54,16 @@ def _record(
     return ran, calls
 
 
+def test_a_fixing_gate_refuses_inside_ci(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # CI judges, it never rewrites: a runner's CI variable turns
+    # --fix into a taught refusal instead of a silent mutation.
+    monkeypatch.setenv("CI", "true")
+    with pytest.raises(BaseException, match="never rewritten"):
+        _quality.check(fix=True)
+
+
 def test_the_scoped_gate_runs_every_verb(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -88,3 +98,40 @@ def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
     rewrites = {c["verb"]: c for c in calls[:2]}
     assert rewrites["format"]["check"] is False
     assert rewrites["lint"]["fix"] is True
+
+
+def test_the_module_derives_from_the_src_tree_not_the_dist_name(
+    tmp_path: Path,
+) -> None:
+    # loop-echo under a workspace prefix once became "loop.echo", a
+    # module that does not exist: the src tree is the truth.
+    from livery.workshop._backends._python import module_for
+
+    member = tmp_path / "packages" / "loop-echo"
+    (member / "src" / "ci_e2e_loop" / "loop_echo").mkdir(parents=True)
+    (member / "src" / "ci_e2e_loop" / "loop_echo" / "__init__.py").write_text("")
+    package = Package(
+        directory=member,
+        path="packages/loop-echo",
+        name="ci-e2e-loop-loop-echo",
+        type="python",
+        depends=(),
+    )
+    assert module_for(package) == "ci_e2e_loop.loop_echo"
+
+
+def test_a_srcless_package_falls_back_to_the_dist_spelling(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._backends._python import module_for
+
+    member = tmp_path / "packages" / "plain"
+    member.mkdir(parents=True)
+    package = Package(
+        directory=member,
+        path="packages/plain",
+        name="livery-loop-echo",
+        type="python",
+        depends=(),
+    )
+    assert module_for(package) == "livery.loop_echo"

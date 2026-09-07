@@ -11,6 +11,7 @@ the answer must be the index's own, never a cache's.
 
 from __future__ import annotations
 
+import base64
 import json
 import urllib.error
 import urllib.request
@@ -79,13 +80,19 @@ class SimpleRegistry:
         base: The index's simple root (``https://pypi.org/simple``,
             or a forge registry's equivalent), with or without a
             trailing slash.
-        token: Sent as basic auth when the index needs it; empty
-            reads anonymously.
+        token: Sent as HTTP basic auth when the index needs it;
+            empty reads anonymously. Basic covers the union: a
+            forge registry takes its account name and token, and an
+            API-token index takes ``__token__`` as the user.
+        username: The basic-auth user beside *token*; ``__token__``
+            when empty, which is what an API-token index expects.
+            Meaningless without a token.
     """
 
-    def __init__(self, base: str, *, token: str = "") -> None:
+    def __init__(self, base: str, *, token: str = "", username: str = "") -> None:
         self._base = base.rstrip("/")
         self._token = token
+        self._username = username
 
     def versions(self, name: str) -> tuple[str, ...]:
         """The published versions of *name*, oldest first.
@@ -96,13 +103,20 @@ class SimpleRegistry:
         whose answer is neither PEP 691 JSON nor PEP 503 HTML.
         """
         canonical = name.replace("_", "-").lower()
+        if self._token:
+            pair = f"{self._username or '__token__'}:{self._token}".encode()
+            authorization = {
+                "Authorization": f"Basic {base64.b64encode(pair).decode()}"
+            }
+        else:
+            authorization = {}
         request = urllib.request.Request(
             f"{self._base}/{canonical}/",
             headers={
                 # HTML is the fallback, declared so an index honouring
                 # content negotiation still answers JSON first.
                 "Accept": "application/vnd.pypi.simple.v1+json, text/html;q=0.1",
-                **({"Authorization": f"Bearer {self._token}"} if self._token else {}),
+                **authorization,
             },
         )
         try:

@@ -325,8 +325,8 @@ def dev_seed(
 def _seed_gitea() -> None:
     """Seed the running Gitea: admin user, API token, org, runner token.
 
-    Probes before every act. A working token in .forge.dev.env is kept;
-    a missing or dead one is re-minted.
+    Probes before every act. A working token in the shared env file
+    is kept; a missing or dead one is re-minted.
     """
     _wait_for_gitea()
     existing = _read_dev_env().get("GITEA_TOKEN", "")
@@ -424,8 +424,8 @@ def _docker_exec(service: str, *args: str) -> toolroom.Result:
 def _seed_gitlab() -> None:
     """Seed the running GitLab: a root PAT and the livery group.
 
-    Probes before every act. A working token in .forge.dev.env is
-    kept; a missing or dead one is minted through `gitlab-rails
+    Probes before every act. A working token in the shared env file
+    is kept; a missing or dead one is minted through `gitlab-rails
     runner`, which takes about a minute per invocation.
     """
     env = _read_dev_env()

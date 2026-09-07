@@ -150,6 +150,26 @@ def train(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     return root, git, registry, spans
 
 
+def test_publish_refuses_without_an_upload_address(tmp_path: Path) -> None:
+    # The refusal first: uv's silent default is PyPI, so an empty
+    # publish address must die loudly before any upload, teaching
+    # the declaration that fixes it.
+    from livery.workshop._publish import publish_wheels
+
+    package = Package(
+        directory=tmp_path,
+        path="packages/thing",
+        name="thing",
+        type="python",
+        depends=(),
+    )
+    with pytest.raises(_FAILURES) as caught:
+        publish_wheels(package, index_url="", token="t")
+    message = str(caught.value)
+    assert "never defaulted" in message
+    assert "[registries.python] publish" in message
+
+
 def test_a_garbled_manifest_falls_back_to_the_diff() -> None:
     # The fallback first: unreadable content answers None and the
     # caller keeps the diff-derived discovery for legacy squashes.
@@ -192,6 +212,26 @@ def test_discovery_reads_members_from_the_squash_content(train) -> None:
         ("base", "0.3.0"),
         ("left", "0.3.0"),
     ]
+
+
+def test_pending_release_wave_sees_only_an_unwaved_squash(train) -> None:
+    # The fallbacks first: plain history answers None, and a squash
+    # whose receipts are all cut answers None; only missing receipts
+    # name the recovery.
+    from livery.workshop._release_driver import pending_release_wave
+
+    root, git, _registry, _spans = train
+    assert pending_release_wave(root, git) is None
+    sha = _squash(root, ("base", "left"))
+    pending = pending_release_wave(root, git)
+    assert pending is not None
+    found, missing = pending
+    assert found == sha
+    assert missing == ("packages/base/v0.3.0", "packages/left/v0.3.0")
+    for tag in missing:
+        _git(root, "tag", "-a", tag, "-m", tag, sha)
+    _git(root, "push", "origin", "--tags")
+    assert pending_release_wave(root, git) is None
 
 
 def test_discovery_ignores_rider_files_and_survives_a_wrong_title(train) -> None:

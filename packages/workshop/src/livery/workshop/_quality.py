@@ -12,7 +12,8 @@ from typing import TYPE_CHECKING, Annotated
 if TYPE_CHECKING:
     from pathlib import Path
 
-from livery.footman import Forward, doc, group, parallel, task
+import livery.footman as footman
+from livery.footman import Forward, doc, fail, group, parallel, task
 from livery.workshop._backends import _python, require_backends
 from livery.workshop._kinds import gated
 from livery.workshop._layers import workspace_root
@@ -137,7 +138,21 @@ def check(
     outside the packages configures every gate, so the narrowing
     falls back to everything; ty and pyrefly always check their
     configured whole either way.
+
+    ``--fix`` refuses inside CI: a runner's checkout is judged,
+    never rewritten, because a fix there mutates a copy nobody
+    keeps and hides the finding from the verdict. Run the fix
+    locally and push the result.
     """
+    import os
+
+    if fix and os.environ.get("CI"):
+        fail(
+            "check --fix inside CI: the runner's checkout is judged,"
+            " never rewritten. A fix here would mutate a copy nobody"
+            " keeps and hide the finding from the verdict. Run"
+            f" `{footman.prog()} check --fix` locally and push the result."
+        )
     subset = _affected() if affected else None
     if affected and subset is not None:
         packages = _packages()
