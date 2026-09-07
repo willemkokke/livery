@@ -265,10 +265,11 @@ YAML, on a real runner, against a real index, from one command.
   `registry_url("python", owner)` returns
   `{host}/api/packages/{owner}/pypi` today. No new container, no
   new credential class, and a shipped rung that was an untested
-  fallback becomes exercised code. The surviving task either index
-  would have forced: `publish_wheels` grows username/password
-  passthrough beside `--token`, because Gitea authenticates uploads
-  as user plus token.
+  fallback becomes exercised code. The passthrough task either index
+  was assumed to force is measured unnecessary: Gitea validates the
+  token and ignores the basic-auth username, so uv's plain
+  `--token` form uploads as-is. A probe wheel published and read
+  back proved the circle.
 - The loop's CI is linux-only for now (ruled by Willem 2026-09-07):
   the containered act_runner is the whole runner fleet. Linux wheel
   legs run in the loop against the dummy platform-wheel member; a

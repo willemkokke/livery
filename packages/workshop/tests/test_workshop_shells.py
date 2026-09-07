@@ -197,6 +197,7 @@ def test_check_fix_rewrites_serially_then_judges_the_rest(
     import contextlib
 
     monkeypatch.setattr(_quality, "parallel", contextlib.nullcontext)
+    monkeypatch.delenv("CI", raising=False)  # the guard is its own test
     _quality.check(fix=True)
     # format and lint rewrite the same files, so they run first and in
     # order; the rest of the gate still judges after them.

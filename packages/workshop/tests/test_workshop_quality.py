@@ -54,6 +54,16 @@ def _record(
     return ran, calls
 
 
+def test_a_fixing_gate_refuses_inside_ci(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # CI judges, it never rewrites: a runner's CI variable turns
+    # --fix into a taught refusal instead of a silent mutation.
+    monkeypatch.setenv("CI", "true")
+    with pytest.raises(BaseException, match="never rewritten"):
+        _quality.check(fix=True)
+
+
 def test_the_scoped_gate_runs_every_verb(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

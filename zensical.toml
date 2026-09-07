@@ -351,6 +351,7 @@ nav = [
             { "livery.workshop._dev_release" = "_generated/api/workshop/_dev_release.md" },
             { "livery.workshop._diagnostics" = "_generated/api/workshop/_diagnostics.md" },
             { "livery.workshop._docs" = "_generated/api/workshop/_docs.md" },
+            { "livery.workshop._e2e" = "_generated/api/workshop/_e2e.md" },
             { "livery.workshop._entry" = "_generated/api/workshop/_entry.md" },
             { "livery.workshop._env_tasks" = "_generated/api/workshop/_env_tasks.md" },
             { "livery.workshop._envfile" = "_generated/api/workshop/_envfile.md" },
