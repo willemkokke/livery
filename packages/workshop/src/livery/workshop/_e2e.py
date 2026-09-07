@@ -487,7 +487,9 @@ def _fresh_branch(root: Path, name: str) -> None:
     toolroom.git.opts(cwd=root)("switch", "-C", name)
 
 
-def _loop_fm(root: Path, *args: str, timeout: float = 900.0) -> None:
+def _loop_fm(
+    root: Path, *args: str, timeout: float = 900.0, nofail: bool = False
+) -> int:
     """Run the loop's own fm, the dev wheels' one, inside the loop.
 
     The whole point of the substrate: the workspace under test runs
@@ -508,10 +510,19 @@ def _loop_fm(root: Path, *args: str, timeout: float = 900.0) -> None:
         "run", "fm", "--yes", *args
     )
     if result.code != 0:
+        if nofail:
+            # The evidence prints either way; the caller owns the
+            # verdict for one bounded retry, never a silent swallow.
+            print(
+                f"  the loop's `{footman.prog()} {' '.join(args)}` exited"
+                f" {result.code}:\n{result.stdout}{result.stderr}"
+            )
+            return result.code
         fail(
             f"the loop's `{footman.prog()} {' '.join(args)}` exited"
             f" {result.code}:\n{result.stdout}{result.stderr}"
         )
+    return 0
 
 
 def _ensure_member(root: Path) -> None:
@@ -606,7 +617,40 @@ def _release_act(root: Path, kind: str) -> None:
             )
             _loop_fm(root, "abandon")
             _align_main(root)
-    _loop_fm(root, "workflow.release", "loop-echo", "--armed", timeout=1800.0)
+    # Bounded self-heal for the forge's post-open window: right after
+    # a release PR opens, the arm can answer 405 for minutes while
+    # the forge computes mergeability (measured: still refusing at
+    # fifty seconds, mergeable when probed later). The verb's own
+    # recovery arms the surviving fresh PR, so re-running it is the
+    # ride-out; a failure with no fresh survivor is real and final.
+    import time
+
+    repo = forge.repository(E2E_OWNER, E2E_REPO)
+    for round_ in range(4):
+        if round_:
+            print("  waiting out the forge's post-open window (45s)")
+            time.sleep(45)
+        code = _loop_fm(
+            root,
+            "workflow.release",
+            "loop-echo",
+            "--armed",
+            timeout=1800.0,
+            nofail=True,
+        )
+        if code == 0:
+            break
+        survivor = repo.pr.find_by_head(release_branch)
+        if survivor is None or survivor.state != "open":
+            fail("the armed release failed with no fresh PR to recover; see above")
+        _align_main(root)
+        fresh = toolroom.git.opts(cwd=root, nofail=True)(
+            "merge-base", "--is-ancestor", "origin/main", f"origin/{release_branch}"
+        )
+        if fresh.code != 0:
+            fail("the armed release failed and its PR went stale; see above")
+    else:
+        fail("the forge's post-open window never closed across 4 rounds")
     # The armed release returns at the merge; the wave runs on the
     # squash asynchronously. Watch its verdict before probing: a
     # registry poll alone cannot say whether the wave failed or is
