@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import io
 import json
 import urllib.error
@@ -111,3 +112,52 @@ def test_a_json_index_answers_its_versions_and_gets_asked_for_json(
     accept = requests[0].get_header("Accept", "")
     assert "application/vnd.pypi.simple.v1+json" in accept
     assert requests[0].full_url.endswith("/livery-forge/")
+
+
+# The credential paths, refusals and header shape before the happy
+# path: an authenticated index (a forge's own registry) is the case
+# that forces them.
+
+
+def test_a_refused_credential_names_the_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def refused(request: urllib.request.Request, timeout: float = 0) -> Any:
+        raise urllib.error.HTTPError(
+            request.full_url, 401, "unauthorized", Message(), None
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", refused)
+    registry = SimpleRegistry("http://forge.example/simple", token="wrong")
+    with pytest.raises(ForgeError, match="HTTP 401"):
+        registry.versions("livery-forge")
+
+
+def test_an_anonymous_read_sends_no_authorization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests = _serve(monkeypatch, json.dumps({"versions": []}).encode())
+    SimpleRegistry("http://forge.example/simple").versions("livery-forge")
+    assert requests[0].get_header("Authorization") is None
+
+
+def test_the_token_rides_as_basic_auth_with_the_token_user(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests = _serve(monkeypatch, json.dumps({"versions": []}).encode())
+    SimpleRegistry("http://forge.example/simple", token="t").versions("livery-forge")
+    credential = base64.b64encode(b"__token__:t").decode()
+    assert requests[0].get_header("Authorization") == f"Basic {credential}"
+
+
+def test_a_named_user_rides_in_the_basic_credential(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests = _serve(monkeypatch, json.dumps({"versions": []}).encode())
+    SimpleRegistry(
+        "http://forge.example/api/packages/o/pypi/simple",
+        token="t",
+        username="livery-admin",
+    ).versions("livery-forge")
+    credential = base64.b64encode(b"livery-admin:t").decode()
+    assert requests[0].get_header("Authorization") == f"Basic {credential}"
