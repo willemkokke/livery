@@ -233,11 +233,10 @@ def _authenticate_remote(root: Path, token: str) -> None:
 def _eat_dev_wheels(root: Path) -> str:
     """Point the workspace at the dev wheels; the pushed head sha.
 
-    The registry index joins uv's config on the compose hostname,
-    prereleases are allowed, and the lock goes: the in-container
-    sync then resolves the workshop's own dev wheels fresh, so the
-    installed workshop matches the emitter that rendered the
-    workflows. Measured necessity: a released workshop predating
+    The registry joins the contract, the template renders it into
+    uv's config, and the lock goes: the in-container sync then
+    resolves the workshop's own dev wheels fresh, so the installed
+    workshop matches the emitter that rendered the workflows. Measured necessity: a released workshop predating
     the emitted verbs fails the docs job with "no task named".
     Idempotent: an already-wired workspace pushes nothing.
     """
@@ -266,6 +265,13 @@ def _eat_dev_wheels(root: Path) -> str:
     # render re-locks the workshop back to the released index).
     contract_file = root / "workshop.toml"
     contract_text = contract_file.read_text("utf-8")
+    # Policy if-necessary-or-explicit, never a global allow: uv's
+    # first-index strategy resolves the workshop from the loop index,
+    # where only prereleases exist, so if-necessary admits the dev
+    # wheels there while every PyPI-served package keeps its stable
+    # release (measured: a global allow resolved mkdocs 2.0.dev3 and
+    # the docs job lost mkdocs.exceptions).
+    policy = 'prerelease = "if-necessary-or-explicit"\n'
     if "[registries.python]" not in contract_text:
         contract_file.write_text(
             contract_text.rstrip("\n")
@@ -274,8 +280,12 @@ def _eat_dev_wheels(root: Path) -> str:
             + "# the host through its /etc/hosts alias.\n"
             + "[registries.python]\n"
             + f'url = "{LOOP_INDEX}"\n'
-            + 'prerelease = "allow"\n',
+            + policy,
             "utf-8",
+        )
+    elif 'prerelease = "allow"' in contract_text:
+        contract_file.write_text(
+            contract_text.replace('prerelease = "allow"\n', policy, 1), "utf-8"
         )
     # The loop tracks the worktree's templates live, so each pass
     # re-applies the render before judging cleanliness: worktree
@@ -303,7 +313,7 @@ def _eat_dev_wheels(root: Path) -> str:
             + "# The loop eats the workshop's dev wheels from the local\n"
             + "# registry; the compose hostname is true on both sides,\n"
             + "# the host through its /etc/hosts alias.\n"
-            + 'prerelease = "allow"\n',
+            + policy,
             1,
         )
         next_table = "\n[tool.uv.workspace]"
