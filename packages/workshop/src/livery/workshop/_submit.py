@@ -254,9 +254,25 @@ def disarm_before_push(repo: Repository, git: GitOps, branch: str) -> None:
 
 
 def _arm_verified(repo: Repository, number: int, *, title: str, message: str) -> None:
-    """Arm and read back, retrying a silently lost schedule."""
+    """Arm and read back, retrying a silently lost schedule.
+
+    Patient through the forge's mergeability-recompute window: right
+    after a push (a force push above all) the arm can answer 405
+    exactly like an immediate merge, and the recompute finishes in
+    seconds.
+    """
     for attempt in range(1, _ARM_RETRIES + 1):
-        repo.pr.arm(number, title=title, message=message)
+        try:
+            repo.pr.arm(number, title=title, message=message)
+        except ForgeError as exc:
+            if exc.status == 405 and attempt < _ARM_RETRIES:
+                print(
+                    f"  405 (mergeability recompute in flight), attempt"
+                    f" {attempt}/{_ARM_RETRIES}"
+                )
+                time.sleep(attempt)
+                continue
+            raise
         pr = repo.pr.get(number)
         if pr is not None and pr.merged:
             return  # the arm found green checks and merged on the spot

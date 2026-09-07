@@ -213,6 +213,20 @@ def test_the_lost_arm_schedule_is_retried(rig: tuple[FakeForge, SubmitGit]) -> N
     assert pr is not None and pr.merged
 
 
+def test_the_arm_rides_out_the_mergeability_recompute(
+    rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Right after a push (a force push above all) the arm answers 405
+    # like an immediate merge would; the submit waits through the
+    # window instead of dying on the first refusal.
+    fake, git = rig
+    monkeypatch.setattr("livery.workshop._submit.time.sleep", lambda _s: None)
+    fake.faults.merge_405_window = 2
+    number = _submit(fake, git, armed=True)
+    pr = _repo(fake).pr.get(number)
+    assert pr is not None and pr.merged
+
+
 def test_a_wedged_queue_times_out_and_cancel_is_the_relief(
     rig: tuple[FakeForge, SubmitGit],
 ) -> None:
