@@ -162,6 +162,51 @@ def test_the_forge_rung_carries_the_lane_token(
     assert target.token == "lane-token"
 
 
+def test_a_declared_forge_address_keeps_the_lane_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Committing the forge registry's address into [registries] must
+    # not lose the credential the forge rung would have carried.
+    from livery.forge.testing import FakeForge
+
+    root = _workspace(
+        tmp_path,
+        "[workspace]\n"
+        '[forge]\nkind = "gitea"\nowner = "acme"\n'
+        "[registries.python]\n"
+        'url = "https://fake.example/api/packages/acme/python/simple"\n'
+        'publish = "https://fake.example/api/packages/acme/python"\n',
+    )
+    monkeypatch.setattr(
+        "livery.workshop._forge_lane.this_forge", lambda _root: FakeForge()
+    )
+    monkeypatch.setenv("FORGE_TOKEN", "lane-token")
+    target = resolve_registry(root, "python")
+    assert target.publish_url == "https://fake.example/api/packages/acme/python"
+    assert target.token == "lane-token"
+
+
+def test_a_foreign_declared_address_never_inherits_the_lane_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The lane token authenticates the forge alone; a declared
+    # third-party index must resolve anonymous rather than leak it.
+    from livery.forge.testing import FakeForge
+
+    root = _workspace(
+        tmp_path,
+        "[workspace]\n"
+        '[forge]\nkind = "gitea"\nowner = "acme"\n'
+        "[registries.python]\n"
+        'url = "https://mirror.example/simple"\n',
+    )
+    monkeypatch.setattr(
+        "livery.workshop._forge_lane.this_forge", lambda _root: FakeForge()
+    )
+    monkeypatch.setenv("FORGE_TOKEN", "lane-token")
+    assert resolve_registry(root, "python").token == ""
+
+
 def test_the_declared_token_wins_over_the_lane(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

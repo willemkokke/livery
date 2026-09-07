@@ -114,6 +114,18 @@ def resolve_registry(root: Path, kind: str) -> RegistryTarget:
             declared_publish = str(entry.get("publish", ""))
     if declared_read or declared_publish:
         read = declared_read or declared_publish
+        if not token:
+            # A declaration naming the forge's own registry keeps the
+            # forge lane token: committing the address must not lose
+            # the credential the forge rung would have carried. A
+            # foreign address never inherits it.
+            resolved = _forge_registry(root, kind)
+            if resolved is not None:
+                forge_url, lane_token = resolved
+                if forge_url and (
+                    read.startswith(forge_url) or declared_publish.startswith(forge_url)
+                ):
+                    token = lane_token
         return RegistryTarget(
             kind=kind,
             url=_normalise(read),
