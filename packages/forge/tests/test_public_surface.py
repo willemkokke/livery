@@ -26,6 +26,8 @@ def test_the_surface_is_declared() -> None:
         "Issues",
         "Job",
         "Label",
+        "MergeCategory",
+        "MergeState",
         "Protection",
         "PullRequest",
         "PullRequests",
@@ -46,10 +48,15 @@ def test_the_surface_is_declared() -> None:
         "StateFilter",
         "Unsupported",
         "__version__",
+        "classify_gitea_merge_refusal",
+        "classify_github_mergeable_state",
+        "classify_gitlab_detailed_status",
+        "classify_merge_refusal",
         "gitea_configured_host",
         "gitea_is_configured_host",
         "gitlab_configured_host",
         "gitlab_is_configured_host",
+        "merge_state",
     ]
 
 

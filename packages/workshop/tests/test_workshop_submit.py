@@ -10,7 +10,6 @@ sleeps, no network.
 from __future__ import annotations
 
 import subprocess
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
@@ -214,39 +213,50 @@ def test_the_lost_arm_schedule_is_retried(rig: tuple[FakeForge, SubmitGit]) -> N
     assert pr is not None and pr.merged
 
 
-def test_the_405_patience_is_per_message(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Red first: the required-checks message is also how a genuinely
-    # red pull request refuses, so it gets a handful of attempts for
-    # the propagation beat and never the long window; an unknown 405
-    # surfaces immediately; only the recompute waits the window out.
-    from livery.forge import ForgeError
-    from livery.workshop._submit import _through_405_window
+def test_a_red_hold_refuses_at_once_and_never_waits(
+    rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Red first: merging against red checks must surface on the
+    # first answer with the classified message and the forge's
+    # words, never after a wait.
+    from livery.workshop._submit import _follow_merge_state
 
-    monkeypatch.setattr("livery.workshop._submit.time.sleep", lambda _s: None)
+    def _no_sleep(_s: float) -> None:
+        pytest.fail("a red refusal must never wait")
 
-    def _refusing(message: str) -> tuple[list[int], Callable[[], None]]:
-        calls: list[int] = []
+    fake, git = rig
+    git.outcome = "failure"
+    number = _submit(fake, git, armed=False, follow_to_verdict=False)
+    repo = _repo(fake)
+    pr = repo.pr.get(number)
+    assert pr is not None
+    fake._repos[(OWNER, NAME)].required_contexts = ("ci / gate (pull_request)",)
+    monkeypatch.setattr("livery.workshop._submit.time.sleep", _no_sleep)
+    with pytest.raises(_FAILURES) as caught:
+        _follow_merge_state(
+            repo, "gitea", number, repo.pr.merge_now, number, title="feat: x"
+        )
+    message = str(caught.value)
+    assert "required checks are red" in message
+    assert "the forge said" in message
 
-        def act() -> None:
-            calls.append(1)
-            raise ForgeError(message, status=405)
 
-        return calls, act
+def test_a_discovered_merge_walks_past_quietly(
+    rig: tuple[FakeForge, SubmitGit],
+) -> None:
+    # The armed schedule can land the merge while a follow loop is
+    # mid-flight; the classified success is a walk-past, not an
+    # error.
+    from livery.workshop._submit import _follow_merge_state
 
-    calls, act = _refusing("not all required status checks successful")
-    with pytest.raises(ForgeError):
-        _through_405_window(12, act)
-    assert len(calls) == 3
-
-    calls, act = _refusing("pull request 9 is not open")
-    with pytest.raises(ForgeError):
-        _through_405_window(12, act)
-    assert len(calls) == 1
-
-    calls, act = _refusing("Please try again later")
-    with pytest.raises(ForgeError):
-        _through_405_window(12, act)
-    assert len(calls) == 12
+    fake, git = rig
+    number = _submit(fake, git, armed=True)
+    repo = _repo(fake)
+    pr = repo.pr.get(number)
+    assert pr is not None and pr.merged
+    _follow_merge_state(
+        repo, "gitea", number, repo.pr.merge_now, number, title="feat: x"
+    )
 
 
 def test_the_arm_rides_out_the_mergeability_recompute(
@@ -285,27 +295,32 @@ def test_slow_status_reads_keep_the_watch_in_flight(
     assert _repo(fake).pr.get(number) is not None
 
 
-def test_submit_merge_refuses_red_and_pending(
-    rig: tuple[FakeForge, SubmitGit],
+def test_submit_merge_refuses_red_and_waits_out_pending(
+    rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # The refusals come before the happy path: a red head must name the
-    # red, a pending one must say wait, and neither may merge.
+    # The refusal first: a red head names the red at once and never
+    # merges. Pending is no refusal any more: merge means merge as
+    # soon as possible, so the verb follows a running CI to its
+    # verdict and merges on the green.
     fake, git = rig
-    git.auto_settle = False
-    _submit(fake, git, armed=False, follow_to_verdict=False)
-    with pytest.raises(_FAILURES) as caught:
-        merge_flow(_repo(fake), git, "feat/1-first")
-    assert "wait" in str(caught.value)
+    monkeypatch.setattr("livery.workshop._submit._HOLD_POLL", 0.01)
     git.outcome = "failure"
-    git.auto_settle = True
-    (git.root / "work.txt").write_text("more\n")
-    _git(git.root, "commit", "-am", "feat: more work")
     _submit(fake, git, armed=False, follow_to_verdict=False)
     with pytest.raises(_FAILURES) as caught:
         merge_flow(_repo(fake), git, "feat/1-first")
     assert "red" in str(caught.value)
     pr = _repo(fake).pr.get(1)
     assert pr is not None and not pr.merged
+    git.outcome = "success"
+    (git.root / "work.txt").write_text("more\n")
+    _git(git.root, "commit", "-am", "feat: more work")
+    _submit(fake, git, armed=False, follow_to_verdict=False)
+    # The slow-status window stands in for a running CI: the merge
+    # waits it out instead of refusing, then lands.
+    fake.faults.slow_status_reads = 2
+    merge_flow(_repo(fake), git, "feat/1-first")
+    pr = _repo(fake).pr.get(1)
+    assert pr is not None and pr.merged
 
 
 def test_submit_merge_refuses_a_behind_head(

@@ -67,54 +67,143 @@ _MAX_HEALS = 2
 #: read-back, never assumed from a 2xx.
 _ARM_RETRIES = 3
 
-#: Attempts through the forge's mergeability-recompute window, where
-#: an immediate merge answers 405. The waits below sum to about
-#: fifty seconds: a window was measured outlasting ten.
-_MERGE_NOW_ATTEMPTS = 12
-
 _P = ParamSpec("_P")
 
-
-#: How many attempts the required-context propagation beat gets: it
-#: was measured at seconds, and the same message is how genuinely
-#: red checks refuse, so red surfaces after this handful rather
-#: than a long window.
-_CONTEXT_LAG_ATTEMPTS = 3
+#: How often a followed merge hold re-tries or re-reads, seconds.
+_HOLD_POLL = 3.0
 
 
-def _through_405_window(
-    attempts: int, act: Callable[_P, object], *args: _P.args, **kwargs: _P.kwargs
-) -> None:
-    """Call *act*, waiting out the forge's transient 405s.
+def _contract_forge_kind(root: Path) -> str:
+    """The contract's forge kind; empty when unreadable."""
+    contract_path = root / "workshop.toml"
+    if not contract_path.is_file():
+        return ""
+    contract = tomllib.loads(contract_path.read_text("utf-8"))
+    return str((contract.get("forge") or {}).get("kind", ""))
 
-    The merge endpoint answers 405 for every "not now", the arm
-    included, so the message decides the patience: the mergeability
-    recompute ("please try again later") waits out the full window,
-    the beat where a finished run's required context has not
-    propagated yet ("status checks") gets a few seconds, because
-    that same message is how a genuinely red pull request refuses
-    and red must surface at once, and every other 405 raises
-    immediately. Each retry prints the forge's own reason, and the
-    final refusal raises verbatim.
+
+def _reported_context_names(repo: Repository, sha: str) -> tuple[str, ...]:
+    """The status contexts CI actually reports for *sha*.
+
+    Derived from the runs and their jobs in the grammar the forge
+    reports under ("<workflow> / <job> (<event>)"), so a required
+    context can be judged against what exists rather than what was
+    hoped for.
     """
-    for attempt in range(1, attempts + 1):
+    names: list[str] = []
+    for run in repo.checks.runs(head_sha=sha):
+        base = run.workflow.rsplit("/", 1)[-1]
+        base = base.removesuffix(".yml").removesuffix(".yaml")
+        for job in repo.checks.jobs(run.id):
+            names.append(f"{base} / {job.name} ({run.event})")
+    return tuple(dict.fromkeys(names))
+
+
+def _refuse_unreported_contexts(repo: Repository, number: int) -> None:
+    """Fail when protection requires a context nothing reports.
+
+    The never-converging cousin of the settling beat: the checks
+    read green, protection waits for a context name CI never emits,
+    and waiting would hang forever. The refusal names both sides.
+    """
+    pr = repo.pr.get(number)
+    if pr is None:
+        return
+    protection = repo.protection(pr.base_branch)
+    if protection is None:
+        return
+    reported = _reported_context_names(repo, pr.head_sha)
+    missing = [c for c in protection.required_contexts if c not in reported]
+    if missing:
+        fail(
+            f"protection requires contexts CI never reports:"
+            f" {', '.join(missing)}. Reported:"
+            f" {', '.join(reported) or 'nothing'}. Fix the required"
+            " context names to match what CI reports."
+        )
+
+
+def _wait_for_verdict(repo: Repository, number: int) -> None:
+    """Wait until *number*'s head has a completed combined verdict.
+
+    No inner deadline: merge means merge as soon as possible, so a
+    running CI is followed to its verdict and the task's own timeout
+    is the backstop. Progress prints on state changes and every
+    minute, so a long wait stays visible.
+    """
+    pr = repo.pr.get(number)
+    if pr is None:
+        return
+    last = ""
+    quiet_since = time.monotonic()
+    while True:
+        state = repo.checks.status(pr.head_sha).state
+        if state not in ("pending", "none"):
+            return
+        if state != last or time.monotonic() - quiet_since >= 60:
+            last = state
+            quiet_since = time.monotonic()
+            print(f"  waiting: checks are {state} for PR #{number}")
+        time.sleep(_HOLD_POLL)
+
+
+def _follow_merge_state(
+    repo: Repository,
+    kind: str,
+    number: int,
+    act: Callable[_P, object],
+    *args: _P.args,
+    **kwargs: _P.kwargs,
+) -> None:
+    """Drive *act* to a decided state; merge means as soon as possible.
+
+    A 405 classifies through [livery.forge.classify_merge_refusal][]
+    with the pull request and its combined status fetched fresh.
+    In-progress states follow through to completion, the task's own
+    timeout the only backstop; recoverable and terminal states fail
+    with the user-facing message and the forge's words verbatim;
+    discovered-merged walks past quietly. Entering the settling
+    state first verifies every required context has a reporter,
+    because a context nothing reports never settles.
+    """
+    from livery.forge import classify_merge_refusal
+
+    settling_checked = False
+    last_state = ""
+    while True:
         try:
             act(*args, **kwargs)
+            return
         except ForgeError as exc:
-            reason = str(exc)
-            lowered = reason.lower()
-            if "try again later" in lowered:
-                budget = attempts
-            elif "status checks" in lowered:
-                budget = min(_CONTEXT_LAG_ATTEMPTS, attempts)
-            else:
-                budget = 0
-            if exc.status == 405 and attempt < budget:
-                print(f"  405, retrying ({attempt}/{budget}): {reason}")
-                time.sleep(min(attempt, 5))
+            if exc.status != 405:
+                raise
+            pr = repo.pr.get(number)
+            if pr is None:
+                raise
+            hold = classify_merge_refusal(
+                kind,
+                str(exc),
+                combined=repo.checks.status(pr.head_sha),
+                item_state=pr.state,
+                merged=pr.merged,
+            )
+            if hold.category == "success":
+                print(f"  PR #{number}: {hold.message}; walking past")
+                return
+            if hold.category == "in-progress":
+                if hold.state == "contexts-settling" and not settling_checked:
+                    settling_checked = True
+                    _refuse_unreported_contexts(repo, number)
+                if hold.state != last_state:
+                    last_state = hold.state
+                    print(f"  waiting: {hold.message}")
+                if hold.state == "ci-running":
+                    _wait_for_verdict(repo, number)
+                else:
+                    time.sleep(_HOLD_POLL)
                 continue
-            raise
-        return
+            native = f"\n  the forge said: {hold.native}" if hold.native else ""
+            fail(f"PR #{number}: {hold.message}{native}")
 
 
 def _root() -> Path:
@@ -299,16 +388,18 @@ def disarm_before_push(repo: Repository, git: GitOps, branch: str) -> None:
     abort_if_merged(repo, git, branch)
 
 
-def _arm_verified(repo: Repository, number: int, *, title: str, message: str) -> None:
+def _arm_verified(
+    repo: Repository, number: int, *, title: str, message: str, kind: str = ""
+) -> None:
     """Arm and read back, retrying a silently lost schedule.
 
-    Each arm attempt waits out the mergeability-recompute window
-    first: the two quirks are separate, so each keeps its own
-    budget.
+    Each arm attempt follows the merge holds first (the arm shares
+    the merge endpoint): the two quirks are separate, so each keeps
+    its own loop.
     """
     for attempt in range(1, _ARM_RETRIES + 1):
-        _through_405_window(
-            _MERGE_NOW_ATTEMPTS, repo.pr.arm, number, title=title, message=message
+        _follow_merge_state(
+            repo, kind, number, repo.pr.arm, number, title=title, message=message
         )
         pr = repo.pr.get(number)
         if pr is not None and pr.merged:
@@ -527,7 +618,13 @@ def push_and_pr(
             repo.pr.update_title(pr.number, plan.title)
             print(f"  title updated: {plan.title}")
     if armed:
-        _arm_verified(repo, pr.number, title=_merge_title(repo, plan), message=body)
+        _arm_verified(
+            repo,
+            pr.number,
+            title=_merge_title(repo, plan),
+            message=body,
+            kind=_contract_forge_kind(git.root),
+        )
         print(f"  armed: PR #{pr.number} merges when green")
     return pr.number
 
@@ -793,27 +890,25 @@ def abandon() -> None:
 
 
 def merge_flow(repo: Repository, git: GitOps, branch: str, *, title: str = "") -> None:
-    """Merge the branch's green pull request, riding out the 405 window.
+    """Merge the branch's pull request as soon as possible.
 
-    The verb for a deliberately-unarmed pull request whose CI already
-    passed. Anything less than green refuses with the reason: red
-    names the failing job, pending says wait, behind base says
-    integrate. There is no force; merging red stays a person's act in
-    the forge's own interface.
+    Merge means merge asap, never merge-if-instant-else-fail: checks
+    still running are followed to their verdict, the forge's own
+    holds (the mergeability recompute, the settling beat) are
+    followed to completion, and the task's timeout is the only
+    backstop. Red refuses at once naming the state, behind base
+    teaches integrate, and merging red stays a person's act in the
+    forge's own interface.
     """
     pr = repo.pr.find_by_head(branch)
     if pr is None:
         fail(f"no open pull request for {branch}")
+    _wait_for_verdict(repo, pr.number)
     status = repo.checks.status(pr.head_sha)
     if status.state == "failure":
         fail(
             f"CI is red for PR #{pr.number}: fix it and `{footman.prog()} submit`."
             " Merging red is the forge UI's decision, not this verb's."
-        )
-    if status.state in ("pending", "none"):
-        fail(
-            f"CI is {status.state} for PR #{pr.number}: wait for the verdict"
-            f" or `{footman.prog()} status --watch`"
         )
     git.fetch()
     if git.behind_base(pr.base_branch):
@@ -823,8 +918,13 @@ def merge_flow(repo: Repository, git: GitOps, branch: str, *, title: str = "") -
             " and merge again"
         )
     subject = title or pr.title
-    _through_405_window(
-        _MERGE_NOW_ATTEMPTS, repo.pr.merge_now, pr.number, title=subject
+    _follow_merge_state(
+        repo,
+        _contract_forge_kind(git.root),
+        pr.number,
+        repo.pr.merge_now,
+        pr.number,
+        title=subject,
     )
     print(f"  merged PR #{pr.number}")
 
@@ -833,11 +933,11 @@ def merge_flow(repo: Repository, git: GitOps, branch: str, *, title: str = "") -
 def submit_merge(
     title: Annotated[str, doc("squash subject; defaults to the PR title")] = "",
 ) -> None:
-    """Merge this branch's green, deliberately-unarmed PR.
+    """Merge this branch's PR as soon as possible.
 
-    Refuses red, pending, or behind-base, saying why. Idempotent
-    through livery.forge.PullRequests.merge_now, and patient through
-    the forge's mergeability-recompute window (405).
+    Waits for a running CI's verdict and follows the forge's own
+    holds to completion; refuses red or behind-base at once, saying
+    why. Idempotent through livery.forge.PullRequests.merge_now.
     """
     root = _root()
     from livery.workshop._forge_lane import this_repository

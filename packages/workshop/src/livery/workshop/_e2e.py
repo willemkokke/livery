@@ -722,7 +722,7 @@ def _merge_setup(kind: str, sha: str) -> None:
     skip.
     """
     from livery.workshop._new_project import _SETUP_BRANCH
-    from livery.workshop._submit import _MERGE_NOW_ATTEMPTS, _through_405_window
+    from livery.workshop._submit import _follow_merge_state
 
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
@@ -734,8 +734,8 @@ def _merge_setup(kind: str, sha: str) -> None:
     if head and head != sha:
         print("  setup PR: head moved on; leaving it to the next run")
         return
-    _through_405_window(
-        _MERGE_NOW_ATTEMPTS, repo.pr.merge_now, pr.number, title=pr.title
+    _follow_merge_state(
+        repo, "gitea", pr.number, repo.pr.merge_now, pr.number, title=pr.title
     )
     print(f"  setup PR #{pr.number}: merged; the gate is proven")
 
