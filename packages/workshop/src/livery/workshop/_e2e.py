@@ -422,8 +422,12 @@ def _loop_fm(root: Path, *args: str, timeout: float = 900.0) -> None:
     # The caller's VIRTUAL_ENV points at the worktree; the loop's uv
     # must resolve the loop's own venv, so the variable stays behind.
     env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
+    # No --no-sync: the wiring moves the lock onto each pass's fresh
+    # dev wheels, and a frozen venv would keep running yesterday's
+    # workshop under today's lock (measured: a fixed bug stayed red
+    # in the loop while the fix sat published in the registry).
     result = toolroom.uv.opts(cwd=root, nofail=True, timeout=timeout, env=env)(
-        "run", "--no-sync", "fm", "--yes", *args
+        "run", "fm", "--yes", *args
     )
     if result.code != 0:
         fail(
