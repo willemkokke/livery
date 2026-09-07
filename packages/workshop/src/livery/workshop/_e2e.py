@@ -264,33 +264,42 @@ def _eat_dev_wheels(root: Path) -> str:
     # (a roster change re-renders pyproject too, and an unwired
     # render re-locks the workshop back to the released index).
     contract_file = root / "workshop.toml"
-    contract_text = contract_file.read_text("utf-8")
-    # Policy if-necessary, never a global allow: uv's first-index
-    # strategy resolves the workshop from the loop index, where only
-    # prereleases exist, so if-necessary admits the dev wheels there
-    # while every PyPI-served package keeps its stable release
-    # (measured: a global allow resolved mkdocs 2.0.dev3 and the
-    # docs job lost mkdocs.exceptions).
+    original = contract_file.read_text("utf-8")
+    contract_text = original
+    # No prerelease declaration: uv's default admits a prerelease
+    # where only prereleases exist or a requirement names one, and
+    # the first-index strategy serves the workshop from the loop
+    # index alone, so the dev wheels resolve with nothing declared
+    # (measured). A global "allow" is the measured trap: it resolved
+    # mkdocs 2.0.dev3 from PyPI and the docs job lost
+    # mkdocs.exceptions. The heal below removes any mode an earlier
+    # pass declared.
     import re
 
-    policy = 'prerelease = "if-necessary"\n'
     if "[registries.python]" not in contract_text:
-        contract_file.write_text(
+        contract_text = (
             contract_text.rstrip("\n")
             + "\n\n# The loop eats the workshop's dev wheels from the local\n"
             + "# registry; the compose hostname is true on both sides,\n"
             + "# the host through its /etc/hosts alias.\n"
             + "[registries.python]\n"
             + f'url = "{LOOP_INDEX}"\n'
-            + policy,
-            "utf-8",
         )
-    elif policy not in contract_text:
-        # An earlier pass declared another mode; settle on this one.
-        contract_file.write_text(
-            re.sub(r'prerelease = "[^"]*"\n', policy, contract_text, count=1),
-            "utf-8",
+    contract_text = re.sub(r'prerelease = "[^"]*"\n', "", contract_text)
+    if "[docs]" not in contract_text:
+        # The loop builds the site for real and publishes nowhere:
+        # the runner container has no docker, and the release act
+        # needs main green (an undeclared seam defaults to the forge
+        # kind's, container on gitea, which dies on the missing
+        # docker).
+        contract_text = (
+            contract_text.rstrip("\n")
+            + "\n\n# The site builds for real; nothing serves it here.\n"
+            + "[docs]\n"
+            + 'publish = "none"\n'
         )
+    if contract_text != original:
+        contract_file.write_text(contract_text, "utf-8")
     # The loop tracks the worktree's templates live, so each pass
     # re-applies the render before judging cleanliness: worktree
     # edits reach the loop's rendered files here, not as drift reds
@@ -304,35 +313,21 @@ def _eat_dev_wheels(root: Path) -> str:
         # template, which does not read [registries]. The edit holds
         # until the re-lock below installs the dev workshop; from
         # then on the template itself renders the wiring and this
-        # branch never fires again.
-        # Two inserts with TOML's structure respected: the scalar
-        # stays inside [tool.uv] (a key after an array-of-tables
-        # header would silently join that table instead, and
-        # default-groups once vanished exactly that way), and the
-        # index table lands before the next table header.
-        anchor = "[tool.uv]\n"
-        wired = text.replace(
-            anchor,
-            anchor
-            + "# The loop eats the workshop's dev wheels from the local\n"
-            + "# registry; the compose hostname is true on both sides,\n"
-            + "# the host through its /etc/hosts alias.\n"
-            + policy,
-            1,
-        )
+        # branch never fires again. The index table lands before the
+        # next table header, inside [tool.uv].
         next_table = "\n[tool.uv.workspace]"
-        wired2 = wired.replace(
+        wired = text.replace(
             next_table,
             f'\n{marker}\nname = "loop"\nurl = "{LOOP_INDEX}"\n' + next_table,
             1,
         )
-        if wired2 in (text, wired) or wired == text:
+        if wired == text:
             fail(
-                "the workspace's pyproject has no [tool.uv] table to"
-                " anchor the loop index on; the template moved and this"
-                " wiring must follow it"
+                "the workspace's pyproject has no [tool.uv.workspace]"
+                " table to anchor the loop index on; the template moved"
+                " and this wiring must follow it"
             )
-        pyproject.write_text(wired2, "utf-8")
+        pyproject.write_text(wired, "utf-8")
     # Re-lock when the tree moved or the lock is absent: birth's
     # resume re-renders pyproject (a dirty tree), and the wiring
     # above dirties it too, so the lock is rebuilt exactly when it

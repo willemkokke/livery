@@ -282,21 +282,32 @@ YAML, on a real runner, against a real index, from one command.
   being the python kind's implementation. A future kind brings its
   own publisher and registry rung without the wave changing shape.
 - One index seam, broadened by Willem 2026-09-07: the contract
-  expresses the full registry topology, and the render emits it.
-  Reads and publishes split (the `[registries]` table already
-  carries `url` and `publish`); reads are an ordered list, because
-  hse's reference shape is a caching PyPI mirror with a private
-  index overlaid, and that must be expressible; per-platform index
-  pins (the pytorch case) stay representable, so what the contract
-  cannot say needs a durable seam in the rendered pyproject rather
-  than a hand edit the next render reverts. The loop measured that
-  revert live: birth's resume re-renders pyproject and the e2e's
-  wiring re-applies, two commits per run, until the registry
-  topology renders from the contract natively. The isolated legs'
-  `[[tool.uv.index]]` surface and `resolve_registry` then read one
-  declaration. The served-probe carries the token `SimpleRegistry`
-  already accepts, which the authenticated local registry forced
-  immediately.
+  expresses the registry topology, and the render emits it. The
+  first slice landed 2026-09-07 and the loop proves it every pass:
+  `[registries.python]` (`url`, plus `prerelease` carrying uv's
+  policy value) renders into the root pyproject as the
+  `[[tool.uv.index]]` entry and the `[tool.uv]` prerelease line,
+  through `registry_injections` beside the other contract-fed
+  render inputs, so a re-render can never unwire the index again.
+  The loop measured the unwire live twice: birth's resume
+  re-rendered pyproject and the e2e's surgery re-applied, two
+  commits per run; then a member render (`new.package` re-renders
+  the roster) stripped the wiring after the surgery had already
+  passed, and the next lock silently resolved the workshop back to
+  the released PyPI index. Two resolution facts the loop forced,
+  both load-bearing: uv's first-index strategy resolves a package
+  served by the declared index from that index alone, and the
+  prerelease policy must be `if-necessary`, never a global `allow`
+  (measured: `allow` resolved mkdocs 2.0.dev3 from PyPI and the
+  docs job lost `mkdocs.exceptions`). Still open in this seam:
+  reads as an ordered list (hse's caching mirror with a private
+  overlay), rendering `publish`, and per-platform index pins (the
+  pytorch case); what the contract cannot say still needs a durable
+  seam in the rendered pyproject rather than a hand edit the next
+  render reverts. The isolated legs' `[[tool.uv.index]]` surface
+  and `resolve_registry` read one declaration. The served-probe
+  carries the token `SimpleRegistry` already accepts, which the
+  authenticated local registry forced immediately.
 - Provisioning: a verb births (or reuses, idempotently) the repo on
   the seeded Gitea org, pushes HEAD, asserts protection and context,
   and writes `UV_PUBLISH_TOKEN` (the registry credential) and the forge
@@ -325,7 +336,13 @@ YAML, on a real runner, against a real index, from one command.
   installed-workshop version skew fails exactly as predicted (the
   docs job's "no task named"), and eating the dev wheels cures it;
   the full gate on the loop's fixture-scale workspace runs in 4 to
-  6 seconds inside the container.
+  6 seconds inside the container. And a third parity finding
+  (2026-09-07): the mergeability-recompute 405 refuses the arm
+  exactly like the immediate merge, because Gitea's arm is the same
+  merge endpoint, and a force push is the common trigger; the arm
+  and the immediate merge wait out the window through one shared
+  retry, and the fake's `merge_405_window` fault fires on both
+  paths.
 - #270's mechanics are proven here: publishing to the local
   registry by token is the same code path. The GitHub flip itself
   is phase 6; whether the pypi environment's approval gate stays is

@@ -27,7 +27,7 @@ import time
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, ParamSpec
 
 import livery.footman as footman
 from livery.footman import doc, fail, group
@@ -69,6 +69,34 @@ _ARM_RETRIES = 3
 #: Attempts through the forge's mergeability-recompute window, where
 #: an immediate merge answers 405.
 _MERGE_NOW_ATTEMPTS = 5
+
+_P = ParamSpec("_P")
+
+
+def _through_405_window(
+    attempts: int, act: Callable[_P, object], *args: _P.args, **kwargs: _P.kwargs
+) -> None:
+    """Call *act*, waiting out the mergeability-recompute window.
+
+    Right after a push (a force push above all) the forge answers
+    405 on the merge endpoint while it recomputes mergeability, and
+    the arm shares that endpoint with the immediate merge. The
+    window closes in seconds; anything else, and the final refusal,
+    raise through.
+    """
+    for attempt in range(1, attempts + 1):
+        try:
+            act(*args, **kwargs)
+        except ForgeError as exc:
+            if exc.status == 405 and attempt < attempts:
+                print(
+                    f"  405 (mergeability recompute in flight), attempt"
+                    f" {attempt}/{attempts}"
+                )
+                time.sleep(attempt)
+                continue
+            raise
+        return
 
 
 def _root() -> Path:
@@ -256,23 +284,14 @@ def disarm_before_push(repo: Repository, git: GitOps, branch: str) -> None:
 def _arm_verified(repo: Repository, number: int, *, title: str, message: str) -> None:
     """Arm and read back, retrying a silently lost schedule.
 
-    Patient through the forge's mergeability-recompute window: right
-    after a push (a force push above all) the arm can answer 405
-    exactly like an immediate merge, and the recompute finishes in
-    seconds.
+    Each arm attempt waits out the mergeability-recompute window
+    first: the two quirks are separate, so each keeps its own
+    budget.
     """
     for attempt in range(1, _ARM_RETRIES + 1):
-        try:
-            repo.pr.arm(number, title=title, message=message)
-        except ForgeError as exc:
-            if exc.status == 405 and attempt < _ARM_RETRIES:
-                print(
-                    f"  405 (mergeability recompute in flight), attempt"
-                    f" {attempt}/{_ARM_RETRIES}"
-                )
-                time.sleep(attempt)
-                continue
-            raise
+        _through_405_window(
+            _MERGE_NOW_ATTEMPTS, repo.pr.arm, number, title=title, message=message
+        )
         pr = repo.pr.get(number)
         if pr is not None and pr.merged:
             return  # the arm found green checks and merged on the spot
@@ -786,20 +805,10 @@ def merge_flow(repo: Repository, git: GitOps, branch: str, *, title: str = "") -
             " and merge again"
         )
     subject = title or pr.title
-    for attempt in range(1, _MERGE_NOW_ATTEMPTS + 1):
-        try:
-            repo.pr.merge_now(pr.number, title=subject)
-        except ForgeError as exc:
-            if exc.status == 405 and attempt < _MERGE_NOW_ATTEMPTS:
-                print(
-                    f"  405 (mergeability recompute in flight), attempt"
-                    f" {attempt}/{_MERGE_NOW_ATTEMPTS}"
-                )
-                time.sleep(attempt)
-                continue
-            raise
-        print(f"  merged PR #{pr.number}")
-        return
+    _through_405_window(
+        _MERGE_NOW_ATTEMPTS, repo.pr.merge_now, pr.number, title=subject
+    )
+    print(f"  merged PR #{pr.number}")
 
 
 @submit.task(name="merge")
