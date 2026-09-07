@@ -214,16 +214,16 @@ def test_discovery_reads_members_from_the_squash_content(train) -> None:
     ]
 
 
-def test_pending_wave_sees_only_an_unwaved_squash(train) -> None:
+def test_pending_release_wave_sees_only_an_unwaved_squash(train) -> None:
     # The fallbacks first: plain history answers None, and a squash
     # whose receipts are all cut answers None; only missing receipts
     # name the recovery.
-    from livery.workshop._release_driver import pending_wave
+    from livery.workshop._release_driver import pending_release_wave
 
     root, git, _registry, _spans = train
-    assert pending_wave(root, git) is None
+    assert pending_release_wave(root, git) is None
     sha = _squash(root, ("base", "left"))
-    pending = pending_wave(root, git)
+    pending = pending_release_wave(root, git)
     assert pending is not None
     found, missing = pending
     assert found == sha
@@ -231,7 +231,7 @@ def test_pending_wave_sees_only_an_unwaved_squash(train) -> None:
     for tag in missing:
         _git(root, "tag", "-a", tag, "-m", tag, sha)
     _git(root, "push", "origin", "--tags")
-    assert pending_wave(root, git) is None
+    assert pending_release_wave(root, git) is None
 
 
 def test_discovery_ignores_rider_files_and_survives_a_wrong_title(train) -> None:

@@ -573,7 +573,7 @@ def local_release(root: Path, members: tuple[Package, ...]) -> None:
         rollback_prepare(root, members)
 
 
-def pending_wave(root: Path, git: GitOps) -> tuple[str, tuple[str, ...]] | None:
+def pending_release_wave(root: Path, git: GitOps) -> tuple[str, tuple[str, ...]] | None:
     """The newest release squash whose receipts are not all cut.
 
     A merged release whose wave died leaves the squash on the base
@@ -654,7 +654,7 @@ def workflow_release(
         local_release(root, members)
         return
     print(f"  act: release train, from '{branch}'")
-    pending = pending_wave(root, git)
+    pending = pending_release_wave(root, git)
     if pending is not None:
         squash, missing = pending
         print(f"  release squash {squash[:12]} has uncut receipts:")

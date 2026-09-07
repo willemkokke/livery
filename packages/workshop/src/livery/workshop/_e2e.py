@@ -122,6 +122,11 @@ LOOP_INDEX = "http://gitea:3000/api/packages/livery/pypi/simple"
 #: above is this plus /simple.
 LOOP_PUBLISH = "http://gitea:3000/api/packages/livery/pypi"
 
+#: The member's distribution name: new.package prefixes the
+#: project's namespace (ci_e2e_loop), so the dist is never
+#: "livery-loop-echo".
+LOOP_MEMBER_DIST = "ci-e2e-loop-loop-echo"
+
 
 def _require_host_alias() -> None:
     """Refuse until the host resolves the compose hostname.
@@ -667,10 +672,10 @@ def _release_act(root: Path, kind: str) -> None:
     import time
 
     deadline = time.monotonic() + 300
-    while "0.1.0" not in registry.versions("livery-loop-echo"):
+    while "0.1.0" not in registry.versions(LOOP_MEMBER_DIST):
         if time.monotonic() >= deadline:
             fail(
-                "the wave is green but the registry never served livery-loop-echo 0.1.0"
+                f"the wave is green but the registry never served {LOOP_MEMBER_DIST} 0.1.0"
             )
         time.sleep(5)
     listed = toolroom.git.opts(cwd=root, nofail=True)(
@@ -678,7 +683,7 @@ def _release_act(root: Path, kind: str) -> None:
     )
     if tag not in listed.stdout:
         fail(f"served, but the receipt tag {tag} is not on the loop")
-    print(f"  release: livery-loop-echo 0.1.0 served, receipt {tag} cut")
+    print(f"  release: {LOOP_MEMBER_DIST} 0.1.0 served, receipt {tag} cut")
 
 
 def _merge_setup(kind: str, sha: str) -> None:
