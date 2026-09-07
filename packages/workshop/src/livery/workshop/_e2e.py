@@ -536,11 +536,25 @@ def _merge_setup(kind: str, sha: str) -> None:
     if head and head != sha:
         print("  setup PR: head moved on; leaving it to the next run")
         return
-    try:
-        repo.pr.merge_now(pr.number, title=pr.title)
-    except ForgeError:
-        time.sleep(5)
-        repo.pr.merge_now(pr.number, title=pr.title)
+    deadline = time.monotonic() + 90
+    while True:
+        try:
+            repo.pr.merge_now(pr.number, title=pr.title)
+            break
+        except ForgeError as error:
+            # The forge recomputes mergeability after a status lands
+            # and answers "try again later" through the window, which
+            # can outlast one polite retry (measured at over ten
+            # seconds). Only that class retries; anything else is a
+            # real refusal and surfaces verbatim.
+            if "try again later" not in str(error).lower():
+                raise
+            if time.monotonic() >= deadline:
+                fail(
+                    f"the forge kept answering 'try again later' for"
+                    f" 90s on merging setup PR #{pr.number}"
+                )
+            time.sleep(5)
     print(f"  setup PR #{pr.number}: merged; the gate is proven")
 
 
