@@ -212,14 +212,37 @@ def _requirement_name(spec: str) -> str:
     return re.split(r"[\[<>=!~; ]", spec.strip(), maxsplit=1)[0]
 
 
+def registry_injections(root: Path) -> dict[str, str]:
+    """The contract's python registry, as render inputs.
+
+    Only the committed ``[registries]`` table feeds a render: the
+    resolution ladder's environment rung is machine truth, and a
+    rendered file must derive from the repository alone or the drift
+    check would judge each machine differently. Nothing declared
+    renders nothing, and uv resolves from the ecosystem default.
+    """
+    import tomllib
+
+    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+    table = contract.get("registries") or {}
+    entry = table.get("python") if isinstance(table, dict) else None
+    url, prerelease = "", ""
+    if isinstance(entry, str):
+        url = entry
+    elif isinstance(entry, dict):
+        url = str(entry.get("url", ""))
+        prerelease = str(entry.get("prerelease", ""))
+    return {"python_registry": url, "python_prerelease": prerelease}
+
+
 def render_injections(root: Path, answers: dict[str, Any]) -> dict[str, Any]:
     """The render-time values no answer stores.
 
     Identity is answered, configuration is declared: the runner's
     name belongs to the process, the Python floor to the root
-    ``pyproject.toml``, and the layers to ``workshop.toml``. Every
-    project render mixes these in, so the answers hold identity and
-    the ``packages`` roster alone.
+    ``pyproject.toml``, the layers and the registry to
+    ``workshop.toml``. Every project render mixes these in, so the
+    answers hold identity and the ``packages`` roster alone.
     """
     entries = layer_entries(root)
     if not entries:
@@ -243,6 +266,7 @@ def render_injections(root: Path, answers: dict[str, Any]) -> dict[str, Any]:
         "layer_requirements": [
             dist for _, dist in entries if _requirement_name(dist) not in members
         ],
+        **registry_injections(root),
     }
 
 

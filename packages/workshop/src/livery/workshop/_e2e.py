@@ -162,7 +162,6 @@ def _publish_dev_wheels(kind: str) -> None:
     same version walks past.
     """
     from livery.footman import run
-
     from livery.workshop._layers import workspace_root
 
     root = workspace_root()
@@ -176,10 +175,7 @@ def _publish_dev_wheels(kind: str) -> None:
         # pair would strip PATH from under the child fm.
         env={
             **os.environ,
-            "PYTHON_PUBLISH_INDEX": ALIAS_URL
-            + "/api/packages/"
-            + E2E_OWNER
-            + "/pypi",
+            "PYTHON_PUBLISH_INDEX": ALIAS_URL + "/api/packages/" + E2E_OWNER + "/pypi",
             "UV_PUBLISH_TOKEN": token,
         },
     )
@@ -246,7 +242,6 @@ def _eat_dev_wheels(root: Path) -> str:
     Idempotent: an already-wired workspace pushes nothing.
     """
     import livery.toolroom as toolroom
-
     from livery.workshop._git_ops import GitOps
     from livery.workshop._new_project import _SETUP_BRANCH
 
@@ -258,14 +253,30 @@ def _eat_dev_wheels(root: Path) -> str:
     # the very squashes it produced (measured: green statuses,
     # mergeable false, the merge API answering 'try again later'
     # forever).
-    _align_main(root)
-    toolroom.git.opts(cwd=root)("switch", "-C", _SETUP_BRANCH)
+    _fresh_branch(root, _SETUP_BRANCH)
     for name in ("workshop.toml", ".copier-answers.yml"):
         f = root / name
         if f.is_file():
             body = f.read_text("utf-8")
             if "http://localhost:3000" in body:
                 f.write_text(body.replace("http://localhost:3000", ALIAS_URL), "utf-8")
+    # The registry lives in the contract, and the template renders it
+    # into pyproject from there: every re-render preserves the wiring
+    # (a roster change re-renders pyproject too, and an unwired
+    # render re-locks the workshop back to the released index).
+    contract_file = root / "workshop.toml"
+    contract_text = contract_file.read_text("utf-8")
+    if "[registries.python]" not in contract_text:
+        contract_file.write_text(
+            contract_text.rstrip("\n")
+            + "\n\n# The loop eats the workshop's dev wheels from the local\n"
+            + "# registry; the compose hostname is true on both sides,\n"
+            + "# the host through its /etc/hosts alias.\n"
+            + "[registries.python]\n"
+            + f'url = "{LOOP_INDEX}"\n'
+            + 'prerelease = "allow"\n',
+            "utf-8",
+        )
     # The loop tracks the worktree's templates live, so each pass
     # re-applies the render before judging cleanliness: worktree
     # edits reach the loop's rendered files here, not as drift reds
@@ -275,6 +286,11 @@ def _eat_dev_wheels(root: Path) -> str:
     text = pyproject.read_text("utf-8")
     marker = "[[tool.uv.index]]"
     if marker not in text:
+        # Bootstrap only: a stale venv's workshop renders the old
+        # template, which does not read [registries]. The edit holds
+        # until the re-lock below installs the dev workshop; from
+        # then on the template itself renders the wiring and this
+        # branch never fires again.
         # Two inserts with TOML's structure respected: the scalar
         # stays inside [tool.uv] (a key after an array-of-tables
         # header would silently join that table instead, and
@@ -316,7 +332,6 @@ def _eat_dev_wheels(root: Path) -> str:
     # worktree had already fixed). An unchanged worktree republishes
     # the same version, the lock re-resolves identically, and the
     # cleanliness check below still yields the no-op.
-    import livery.toolroom as toolroom
 
     result = toolroom.uv.opts(cwd=root, nofail=True)("lock", "--upgrade")
     if result.code != 0:
@@ -400,13 +415,31 @@ def _align_main(root: Path) -> None:
     # Residue too: a failed pass's branch leaves untracked leftovers
     # (a member directory without its contract refuses discovery).
     # The venv survives, everything else is regenerable by charter.
-    residue = toolroom.git.opts(cwd=root, nofail=True)(
-        "clean", "-ndx", "-e", ".venv"
-    )
+    residue = toolroom.git.opts(cwd=root, nofail=True)("clean", "-ndx", "-e", ".venv")
     if residue.code == 0 and residue.stdout.strip():
         for line in residue.stdout.strip().splitlines():
             print(f"  cleaned: {line.removeprefix('Would remove ')}")
         toolroom.git.opts(cwd=root)("clean", "-fdx", "-e", ".venv")
+
+
+def _fresh_branch(root: Path, name: str) -> None:
+    """A pass-owned branch, recreated from an aligned main.
+
+    ``switch -C`` from a dirty tree drags or clobbers state, so the
+    alignment and the switch are one operation here, never two calls
+    a future edit can separate: the tree is reset to origin and
+    cleaned before the branch is recreated on it.
+    """
+    import livery.toolroom as toolroom
+
+    _align_main(root)
+    stale = toolroom.git.opts(cwd=root, nofail=True)(
+        "log", "--oneline", f"main..{name}"
+    )
+    if stale.code == 0 and stale.stdout.strip():
+        for line in stale.stdout.strip().splitlines():
+            print(f"  superseded branch commit: {line}")
+    toolroom.git.opts(cwd=root)("switch", "-C", name)
 
 
 def _loop_fm(root: Path, *args: str, timeout: float = 900.0) -> None:
@@ -445,25 +478,20 @@ def _ensure_member(root: Path) -> None:
     the gate on the runner, and the merge, all on the dev wheels.
     Idempotent: an existing member skips everything.
     """
-    import livery.toolroom as toolroom
-
     from livery.workshop._git_ops import GitOps
 
     if list(root.glob("packages/*/workshop.toml")):
         print("  member: already present")
         return
     git = GitOps(root)
-    _align_main(root)
-    # -C, not -b: a failed pass's stale branch is superseded by
-    # this pass, the way alignment supersedes stale main.
-    toolroom.git.opts(cwd=root)("switch", "-C", "feat/loop-echo")
+    _fresh_branch(root, "feat/loop-echo")
     _loop_fm(root, "new.package", "loop-echo")
     member = root / "packages" / "loop-echo" / "workshop.toml"
     body = member.read_text("utf-8")
     if "[release]" not in body:
         member.write_text(
             body.rstrip("\n")
-            + '\n\n[release]\n# The first release lands at the baseline.\n'
+            + "\n\n[release]\n# The first release lands at the baseline.\n"
             + 'baseline = "0.1.0"\n',
             "utf-8",
         )
@@ -487,7 +515,6 @@ def _release_act(root: Path, kind: str) -> None:
     served version and the annotated tag, never the exit code alone.
     """
     import livery.toolroom as toolroom
-
     from livery.forge import SimpleRegistry
 
     tag = "packages/loop-echo/v0.1.0"
@@ -597,7 +624,6 @@ if _WORKSHOP_TESTS.is_dir():
             # fast-forwards onto the merges the loop itself made:
             # without the reconcile, birth's foreign-repo guard reads
             # our own squash as a stranger's history and refuses.
-            import livery.toolroom as toolroom
 
             _authenticate_remote(root, lane_token)
             _align_main(root)
