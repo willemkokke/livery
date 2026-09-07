@@ -46,7 +46,8 @@ def test_provisioning_creates_then_reuses_and_writes_the_secret(
     # The fake's private state is the assertion surface: secrets are
     # write-only through the protocol, by design.
     state = fake._repos[(_e2e.E2E_OWNER, _e2e.E2E_REPO)]
-    assert state.secrets["UV_PUBLISH_TOKEN"] == "the-lane-token"
+    for key in ("UV_PUBLISH_TOKEN", "FORGE_TOKEN", "FORGE_ADMIN_TOKEN"):
+        assert state.secrets[key] == "the-lane-token"
     # Re-running is the recovery procedure: the second pass reuses.
     _e2e.provision("gitea")
     assert f"reusing {_e2e.E2E_OWNER}/{_e2e.E2E_REPO}" in capsys.readouterr().out
@@ -57,3 +58,16 @@ def test_the_registration_gate_sees_this_source_checkout() -> None:
     # path arithmetic must find this very suite.
     assert _e2e._WORKSHOP_TESTS.is_dir()
     assert (_e2e._WORKSHOP_TESTS / "test_workshop_e2e.py").is_file()
+
+
+def test_a_hostless_alias_teaches_the_one_liner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import urllib.request
+
+    def refuse(*args: object, **kwargs: object) -> object:
+        raise OSError("unreachable")
+
+    monkeypatch.setattr(urllib.request, "urlopen", refuse)
+    with pytest.raises(_FAILURES, match="/etc/hosts"):
+        _e2e._require_host_alias()

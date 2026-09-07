@@ -281,11 +281,22 @@ YAML, on a real runner, against a real index, from one command.
   the wave's publish call moves onto that backend too, `uv publish`
   being the python kind's implementation. A future kind brings its
   own publisher and registry rung without the wave changing shape.
-- One index seam: the isolated legs' `[[tool.uv.index]]` surface and
-  `resolve_registry` unify, so a checkout's index is one resolved
-  answer, not two config surfaces. The served-probe carries the
-  token `SimpleRegistry` already accepts, which the authenticated
-  local registry forces immediately.
+- One index seam, broadened by Willem 2026-09-07: the contract
+  expresses the full registry topology, and the render emits it.
+  Reads and publishes split (the `[registries]` table already
+  carries `url` and `publish`); reads are an ordered list, because
+  hse's reference shape is a caching PyPI mirror with a private
+  index overlaid, and that must be expressible; per-platform index
+  pins (the pytorch case) stay representable, so what the contract
+  cannot say needs a durable seam in the rendered pyproject rather
+  than a hand edit the next render reverts. The loop measured that
+  revert live: birth's resume re-renders pyproject and the e2e's
+  wiring re-applies, two commits per run, until the registry
+  topology renders from the contract natively. The isolated legs'
+  `[[tool.uv.index]]` surface and `resolve_registry` then read one
+  declaration. The served-probe carries the token `SimpleRegistry`
+  already accepts, which the authenticated local registry forced
+  immediately.
 - Provisioning: a verb births (or reuses, idempotently) the repo on
   the seeded Gitea org, pushes HEAD, asserts protection and context,
   and writes `UV_PUBLISH_TOKEN` (the registry credential) and the forge
@@ -302,7 +313,19 @@ YAML, on a real runner, against a real index, from one command.
 - Gitea emitter parity while it is finally exercised: the dispatch
   recovery entry, pinned checkout, the templates `contains` guard
   moved into its verb (phase 3 shape), and an explicit decision on
-  coverage metering for that lane.
+  coverage metering for that lane. Two parity findings already
+  measured and fixed on first contact (2026-09-07): Gitea reports
+  Actions statuses as `<workflow> / <job> (<event>)`, so a bare
+  required context could never match and no protected merge could
+  ever pass; `required_context_string` now spells protection per
+  forge, pinned. And the emitted gitea governance job carries no
+  ambient-token env, so `workflow.configure` refused in-workflow;
+  the loop provisions `FORGE_ADMIN_TOKEN` and the emitter gap is
+  phase-3 work. Also measured: the emitted-workflows-versus-
+  installed-workshop version skew fails exactly as predicted (the
+  docs job's "no task named"), and eating the dev wheels cures it;
+  the full gate on the loop's fixture-scale workspace runs in 4 to
+  6 seconds inside the container.
 - #270's mechanics are proven here: publishing to the local
   registry by token is the same code path. The GitHub flip itself
   is phase 6; whether the pypi environment's approval gate stays is

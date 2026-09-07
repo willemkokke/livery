@@ -185,6 +185,23 @@ def workflow_abort(
     )
 
 
+def required_context_string(forge_kind: str, context: str) -> str:
+    """The status context string protection must require, per forge.
+
+    The name in the contract is the gate job's; forges report it
+    differently. GitHub reports the job name itself. Gitea reports
+    Actions statuses as ``<workflow name> / <job> (<event>)``, so a
+    bare job name never matches and the required check can never
+    pass; the workflow's emitted name is ``ci``, and the merge-
+    deciding event is the pull request's. GitLab has no required
+    contexts (the capability probe drops the half), so its spelling
+    never reaches a forge.
+    """
+    if forge_kind == "gitea":
+        return f"ci / {context} (pull_request)"
+    return context
+
+
 def contract_config(root: Path) -> RepoConfig:
     """The repository settings the workspace contract states.
 
@@ -202,12 +219,13 @@ def contract_config(root: Path) -> RepoConfig:
     contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
     ci = contract.get("ci") or {}
     context = str(ci.get("required_context") or "gate")
+    forge_kind = str((contract.get("forge") or {}).get("kind", ""))
     approvals = governance_config(root)
     return RepoConfig(
         squash_only=True,
         delete_branch_on_merge=True,
         allow_auto_merge=True,
-        required_contexts=(context,),
+        required_contexts=(required_context_string(forge_kind, context),),
         min_approvals=approvals.min_approvals,
         require_codeowner_review=approvals.require_codeowner_review,
     )

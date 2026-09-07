@@ -91,22 +91,235 @@ def provision(kind: str = "gitea") -> None:
     else:
         print(f"  reusing {E2E_OWNER}/{E2E_REPO}")
     repo = forge.repository(E2E_OWNER, E2E_REPO)
-    repo.configure(RepoConfig(secrets={"UV_PUBLISH_TOKEN": token}))
-    print("  secret UV_PUBLISH_TOKEN set: the registry credential")
+    # Three secrets, all the lane token: the registry credential the
+    # publish reads, the forge lane's everyday token, and the admin
+    # ladder's, because the emitted governance job asks for it and
+    # the seeded admin account holds every grant anyway.
+    repo.configure(
+        RepoConfig(
+            secrets={
+                "UV_PUBLISH_TOKEN": token,
+                "FORGE_TOKEN": token,
+                "FORGE_ADMIN_TOKEN": token,
+            }
+        )
+    )
+    print("  secrets set: UV_PUBLISH_TOKEN, FORGE_TOKEN, FORGE_ADMIN_TOKEN")
+
+
+#: The registry as CI sees it: the compose network's service name,
+#: which the runner resolves and the host does not. The host-side
+#: half of the same registry is GITEA_URL.
+LOOP_INDEX = "http://gitea:3000/api/packages/livery/pypi/simple"
+
+
+def _require_host_alias() -> None:
+    """Refuse until the host resolves the compose hostname.
+
+    One registry URL must be true on both sides of the loop: the
+    runner resolves the compose service name ``gitea``, the host
+    does not, and a split URL forces an unlocked workspace and a
+    hostname fork through every file. The one-line alias makes the
+    compose name true on the host too, and the lock then carries a
+    URL both sides can read.
+    """
+    import urllib.error
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen("http://gitea:3000/api/v1/version", timeout=2):
+            return
+    except (urllib.error.URLError, TimeoutError, OSError):
+        fail(
+            "the host cannot reach http://gitea:3000, the compose"
+            " hostname CI uses for the registry (a network resolving"
+            " 'gitea' elsewhere fails the same way; /etc/hosts wins"
+            " over DNS). Add the alias once:"
+            " sudo sh -c 'echo \"127.0.0.1 gitea\" >> /etc/hosts'"
+        )
+
+
+def _loop_home() -> Path:
+    """Where the loop's workspace lives: durable, per machine."""
+    from livery.footman.context import data_dir
+
+    return data_dir() / "workshop-e2e"
+
+
+def _birth(kind: str, url: str) -> Path:
+    """Birth or resume the loop's workspace; the root it lives at.
+
+    ``fm new.project`` owns the whole half: render, git, repository,
+    protection, and the setup pull request. Re-running resumes, so
+    this is the recovery procedure too. The templates are this
+    package's own tree: the loop tests the source being edited.
+    """
+    import contextlib
+
+    from livery.workshop._new_project import new_project
+
+    home = _loop_home()
+    home.mkdir(parents=True, exist_ok=True)
+    templates = Path(__file__).parent / "templates"
+    with contextlib.chdir(home):
+        new_project(
+            E2E_REPO,
+            forge=kind,
+            owner=E2E_OWNER,
+            url=url,
+            templates=str(templates),
+            description="The workshop's local CI loop. Scratch; recreated freely.",
+        )
+    return home / E2E_REPO
+
+
+def _eat_dev_wheels(root: Path) -> str:
+    """Point the workspace at the dev wheels; the pushed head sha.
+
+    The registry index joins uv's config on the compose hostname,
+    prereleases are allowed, and the lock goes: the in-container
+    sync then resolves the workshop's own dev wheels fresh, so the
+    installed workshop matches the emitter that rendered the
+    workflows. Measured necessity: a released workshop predating
+    the emitted verbs fails the docs job with "no task named".
+    Idempotent: an already-wired workspace pushes nothing.
+    """
+    from livery.workshop._git_ops import GitOps
+    from livery.workshop._new_project import _SETUP_BRANCH
+
+    git = GitOps(root)
+    # main is protected by the birth's own assertion, so the wiring
+    # rides the setup branch and its pull request proves the gate.
+    git.fetch()
+    if git.current_branch() != _SETUP_BRANCH:
+        if git.local_branch_exists(_SETUP_BRANCH):
+            git.switch(_SETUP_BRANCH)
+        else:
+            git.create_branch(_SETUP_BRANCH)
+    pyproject = root / "pyproject.toml"
+    text = pyproject.read_text("utf-8")
+    marker = "[[tool.uv.index]]"
+    if marker not in text:
+        # Two inserts with TOML's structure respected: the scalar
+        # stays inside [tool.uv] (a key after an array-of-tables
+        # header would silently join that table instead, and
+        # default-groups once vanished exactly that way), and the
+        # index table lands before the next table header.
+        anchor = "[tool.uv]\n"
+        wired = text.replace(
+            anchor,
+            anchor
+            + "# The loop eats the workshop's dev wheels from the local\n"
+            + "# registry; the compose hostname is true on both sides,\n"
+            + "# the host through its /etc/hosts alias.\n"
+            + 'prerelease = "allow"\n',
+            1,
+        )
+        next_table = "\n[tool.uv.workspace]"
+        wired2 = wired.replace(
+            next_table,
+            f'\n{marker}\nname = "loop"\nurl = "{LOOP_INDEX}"\n' + next_table,
+            1,
+        )
+        if wired2 in (text, wired) or wired == text:
+            fail(
+                "the workspace's pyproject has no [tool.uv] table to"
+                " anchor the loop index on; the template moved and this"
+                " wiring must follow it"
+            )
+        pyproject.write_text(wired2, "utf-8")
+    # Re-lock when the tree moved or the lock is absent: birth's
+    # resume re-renders pyproject (a dirty tree), and the wiring
+    # above dirties it too, so the lock is rebuilt exactly when it
+    # could be stale. A clean, locked workspace relocks nothing,
+    # which keeps the re-run a true no-op. The alias makes the
+    # compose hostname true on the host, so the lock's URL holds
+    # on both sides.
+    if not git.is_clean() or not (root / "uv.lock").exists():
+        import livery.toolroom as toolroom
+
+        result = toolroom.uv.opts(cwd=root, nofail=True)("lock")
+        if result.code != 0:
+            fail(f"uv lock in the loop workspace exited {result.code}")
+    # Cleanliness is the truth, not this run's edits: a resumed
+    # half-wired workspace still commits and pushes here.
+    if git.is_clean():
+        print("  dev wheels: already wired")
+    else:
+        git.commit_all(
+            "chore: the loop eats the dev wheels\n\nThe registry index"
+            " joins uv's config on the compose hostname, true on both"
+            " sides, and the lock pins the workshop's own dev wheels,"
+            " so the installed workshop matches the emitter that"
+            " rendered these workflows."
+        )
+        git.push(_SETUP_BRANCH)
+        print("  dev wheels: wired and pushed")
+    return git.head_sha()
+
+
+def _watch(kind: str, url: str, sha: str, *, timeout: float = 900.0) -> None:
+    """Follow *sha*'s runs to their verdicts; red fails verbatim.
+
+    The one deliberate tolerance: the docs deploy, which publishes a
+    container image and the loop's runner carries no docker. The dev
+    shape stubs docs entirely once the workspace declares it; until
+    then the deploy's red is named, never counted.
+    """
+    import time
+
+    forge, _ = _dev_forge(kind)
+    repo = forge.repository(E2E_OWNER, E2E_REPO)
+    deadline = time.monotonic() + timeout
+    while True:
+        runs = repo.checks.runs(head_sha=sha)
+        if runs and all(r.status == "completed" for r in runs):
+            break
+        if time.monotonic() >= deadline:
+            fail(
+                f"the loop's runs did not complete within {timeout:.0f}s:"
+                f" {repo.web_url()}/actions"
+            )
+        time.sleep(5)
+    failed = []
+    for run in runs:
+        verdict = run.conclusion or run.status
+        print(f"  {run.workflow:14} {verdict}")
+        if run.conclusion == "failure":
+            if run.workflow == "docs.yml":
+                print("    tolerated: the deploy seam wants docker, and")
+                print("    the dev shape stubs docs once declared")
+                continue
+            failed.append(run)
+    if failed:
+        names = ", ".join(r.workflow for r in failed)
+        fail(f"red runs on the loop: {names}; logs: {repo.web_url()}/actions")
 
 
 if _WORKSHOP_TESTS.is_dir():
-
-    @ci.task(name="e2e")
+    # serial: the driver births into and pushes from its own
+    # directories, so it owns the process globals for the run.
+    @ci.task(name="e2e", serial=True)
     def e2e(forge: str = "gitea") -> None:
         """Exercise the CI and release story on the local forge.
 
-        Today this provisions: the scratch repository ensured on the
-        seeded organisation and the registry credential written as
-        an Actions secret, idempotently. The workspace push, the
-        workflow verdicts, and the release act into the local
-        registry follow in this phase; each lands here as it is
-        built, so the verb always says exactly what it covers.
+        Births or resumes the loop's workspace through
+        ``fm new.project`` (repository, protection, setup pull
+        request), provisions the secrets, wires the workspace to the
+        workshop's own dev wheels, and follows the pushed head's
+        workflow runs to their verdicts on the real runner. Re-running
+        is the recovery procedure at every step. The release act into
+        the local registry follows in this phase; the verb always says
+        exactly what it covers.
         """
+        import os
+
+        url = os.environ.get("GITEA_URL", "")
+        _require_host_alias()
+        root = _birth(forge, url)
         provision(forge)
-        print("  next: the workspace push and the workflow verdicts")
+        sha = _eat_dev_wheels(root)
+        print(f"  watching {sha[:12]} on the runner")
+        _watch(forge, url, sha)
+        print("  green: the loop's gate ran on the real runner")
+        print("  next: merge the setup PR and the release act")

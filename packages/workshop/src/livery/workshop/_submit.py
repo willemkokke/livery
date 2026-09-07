@@ -387,12 +387,19 @@ def _heal_context_rename(
             protection = admin_repo.protection(plan.base)
         except ForgeError:
             protection = None
-        if protection is not None and ours in protection.required_contexts:
+        import tomllib
+
+        from livery.workshop._workflow_tasks import required_context_string
+
+        contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+        kind = str((contract.get("forge") or {}).get("kind", ""))
+        spelled = required_context_string(kind, ours)
+        if protection is not None and spelled in protection.required_contexts:
             return  # already applied: the re-run is quietly green
         from livery.forge import RepoConfig
 
         try:
-            admin_repo.configure(RepoConfig(required_contexts=(ours,)))
+            admin_repo.configure(RepoConfig(required_contexts=(spelled,)))
         except ForgeError as error:
             used = admin_var or "the everyday token"
             fail(
