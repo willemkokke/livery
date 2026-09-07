@@ -453,6 +453,24 @@ def _align_main(root: Path) -> None:
         for line in residue.stdout.strip().splitlines():
             print(f"  cleaned: {line.removeprefix('Would remove ')}")
         toolroom.git.opts(cwd=root)("clean", "-fdx", "-e", ".venv")
+    # Local branches too: main is the loop's only durable ref, and
+    # every other local branch is a past pass's residue (a prepared
+    # release branch whose PR already merged makes the driver refuse
+    # as stale). What goes is printed, never silently vanished.
+    heads = toolroom.git.opts(cwd=root, nofail=True)(
+        "for-each-ref", "--format=%(refname:short)", "refs/heads/"
+    )
+    for name in heads.stdout.split() if heads.code == 0 else []:
+        if name == "main":
+            continue
+        stale = toolroom.git.opts(cwd=root, nofail=True)(
+            "log", "--oneline", f"main..{name}"
+        )
+        if stale.code == 0 and stale.stdout.strip():
+            for line in stale.stdout.strip().splitlines():
+                print(f"  superseded branch commit: {line} ({name})")
+        toolroom.git.opts(cwd=root, nofail=True)("branch", "-D", name)
+        print(f"  pruned pass-owned branch: {name}")
 
 
 def _fresh_branch(root: Path, name: str) -> None:
@@ -460,18 +478,12 @@ def _fresh_branch(root: Path, name: str) -> None:
 
     ``switch -C`` from a dirty tree drags or clobbers state, so the
     alignment and the switch are one operation here, never two calls
-    a future edit can separate: the tree is reset to origin and
-    cleaned before the branch is recreated on it.
+    a future edit can separate: the tree is reset to origin, cleaned,
+    and swept of stale local branches before this one is recreated.
     """
     import livery.toolroom as toolroom
 
     _align_main(root)
-    stale = toolroom.git.opts(cwd=root, nofail=True)(
-        "log", "--oneline", f"main..{name}"
-    )
-    if stale.code == 0 and stale.stdout.strip():
-        for line in stale.stdout.strip().splitlines():
-            print(f"  superseded branch commit: {line}")
     toolroom.git.opts(cwd=root)("switch", "-C", name)
 
 
