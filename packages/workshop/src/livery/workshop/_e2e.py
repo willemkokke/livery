@@ -582,6 +582,22 @@ def _release_act(root: Path, kind: str) -> None:
         print(f"  release: receipt {tag} already on the loop")
         return
     _align_main(root)
+    # A prepared release PR surviving from an earlier pass is stale
+    # by construction: every pass relocks main onto fresh dev wheels,
+    # so its base has always moved. The driver refuses those and
+    # teaches `abandon`; the loop follows the teach through the verb
+    # before releasing.
+    release_branch = "workflow/release/loop-echo"
+    forge, _ = _dev_forge(kind)
+    stale_pr = forge.repository(E2E_OWNER, E2E_REPO).pr.find_by_head(release_branch)
+    if stale_pr is not None and stale_pr.state == "open":
+        print(f"  abandoning stale prepared release PR #{stale_pr.number}")
+        toolroom.git.opts(cwd=root)("fetch", "origin", release_branch)
+        toolroom.git.opts(cwd=root)(
+            "switch", "-C", release_branch, f"origin/{release_branch}"
+        )
+        _loop_fm(root, "abandon")
+        _align_main(root)
     _loop_fm(root, "workflow.release", "loop-echo", "--armed", timeout=1800.0)
     # The armed release returns at the merge; the wave runs on the
     # squash asynchronously. Watch its verdict before probing: a
