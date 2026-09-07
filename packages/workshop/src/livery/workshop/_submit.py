@@ -75,26 +75,42 @@ _MERGE_NOW_ATTEMPTS = 12
 _P = ParamSpec("_P")
 
 
+#: How many attempts the required-context propagation beat gets: it
+#: was measured at seconds, and the same message is how genuinely
+#: red checks refuse, so red surfaces after this handful rather
+#: than a long window.
+_CONTEXT_LAG_ATTEMPTS = 3
+
+
 def _through_405_window(
     attempts: int, act: Callable[_P, object], *args: _P.args, **kwargs: _P.kwargs
 ) -> None:
-    """Call *act*, waiting out the mergeability-recompute window.
+    """Call *act*, waiting out the forge's transient 405s.
 
-    Right after a push (a force push above all) the forge answers
-    405 on the merge endpoint while it recomputes mergeability, and
-    the arm shares that endpoint with the immediate merge. The
-    window closes in seconds; anything else, and the final refusal,
-    raise through.
+    The merge endpoint answers 405 for every "not now", the arm
+    included, so the message decides the patience: the mergeability
+    recompute ("please try again later") waits out the full window,
+    the beat where a finished run's required context has not
+    propagated yet ("status checks") gets a few seconds, because
+    that same message is how a genuinely red pull request refuses
+    and red must surface at once, and every other 405 raises
+    immediately. Each retry prints the forge's own reason, and the
+    final refusal raises verbatim.
     """
     for attempt in range(1, attempts + 1):
         try:
             act(*args, **kwargs)
         except ForgeError as exc:
-            if exc.status == 405 and attempt < attempts:
-                print(
-                    f"  405 (mergeability recompute in flight), attempt"
-                    f" {attempt}/{attempts}"
-                )
+            reason = str(exc)
+            lowered = reason.lower()
+            if "try again later" in lowered:
+                budget = attempts
+            elif "status checks" in lowered:
+                budget = min(_CONTEXT_LAG_ATTEMPTS, attempts)
+            else:
+                budget = 0
+            if exc.status == 405 and attempt < budget:
+                print(f"  405, retrying ({attempt}/{budget}): {reason}")
                 time.sleep(min(attempt, 5))
                 continue
             raise

@@ -770,17 +770,20 @@ class _FakePullRequests:
             raise ForgeError(f"pull request {number} is not open", status=405)
         if self._fake.faults.merge_405_window > 0:
             self._fake.faults.merge_405_window -= 1
+            # Gitea's own words for the recompute window, so a
+            # message-routing caller is exercised on the real text.
             raise ForgeError(
-                f"pull request {number} is not mergeable yet:"
-                " a mergeability recompute is in flight",
+                f"pull request {number}: Please try again later"
+                " (a mergeability recompute is in flight)",
                 status=405,
             )
         if (
             state.required_contexts
             and self._fake._derived_status(state, pr.head_sha).state != "success"
         ):
+            # Gitea's own words for the protection refusal.
             raise ForgeError(
-                f"pull request {number} has required checks that are not green",
+                f"pull request {number}: not all required status checks successful",
                 status=405,
             )
         pr.title = title or pr.title
@@ -802,8 +805,8 @@ class _FakePullRequests:
             # recompute window refuses the arm the same way.
             self._fake.faults.merge_405_window -= 1
             raise ForgeError(
-                f"pull request {number} is not mergeable yet:"
-                " a mergeability recompute is in flight",
+                f"pull request {number}: Please try again later"
+                " (a mergeability recompute is in flight)",
                 status=405,
             )
         if self._fake.faults.lose_arm_schedule > 0:

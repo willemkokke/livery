@@ -213,6 +213,41 @@ def test_the_lost_arm_schedule_is_retried(rig: tuple[FakeForge, SubmitGit]) -> N
     assert pr is not None and pr.merged
 
 
+def test_the_405_patience_is_per_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Red first: the required-checks message is also how a genuinely
+    # red pull request refuses, so it gets a handful of attempts for
+    # the propagation beat and never the long window; an unknown 405
+    # surfaces immediately; only the recompute waits the window out.
+    from livery.forge import ForgeError
+    from livery.workshop._submit import _through_405_window
+
+    monkeypatch.setattr("livery.workshop._submit.time.sleep", lambda _s: None)
+
+    def _refusing(message: str) -> tuple[list[int], object]:
+        calls: list[int] = []
+
+        def act() -> None:
+            calls.append(1)
+            raise ForgeError(message, status=405)
+
+        return calls, act
+
+    calls, act = _refusing("not all required status checks successful")
+    with pytest.raises(ForgeError):
+        _through_405_window(12, act)
+    assert len(calls) == 3
+
+    calls, act = _refusing("pull request 9 is not open")
+    with pytest.raises(ForgeError):
+        _through_405_window(12, act)
+    assert len(calls) == 1
+
+    calls, act = _refusing("Please try again later")
+    with pytest.raises(ForgeError):
+        _through_405_window(12, act)
+    assert len(calls) == 12
+
+
 def test_the_arm_rides_out_the_mergeability_recompute(
     rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
 ) -> None:
