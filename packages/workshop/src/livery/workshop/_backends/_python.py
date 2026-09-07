@@ -256,6 +256,55 @@ def enforce_coverage(root: Path, packages: tuple[Package, ...]) -> None:
         )
 
 
+def scoped_rewrite(subset: tuple[Package, ...]) -> None:
+    """Run the python kind's rewriters over *subset*, serially.
+
+    Format and lint rewrite the same files, so their order is this
+    backend's knowledge: format first, lint's fixes second. The
+    caller runs rewrites before any kind's checks read the tree.
+    """
+    from livery.footman import step
+
+    paths = package_paths(subset)
+    # The record-only block: the calls run bare and serial, and the
+    # record keeps the title, verdict, and duration.
+    with step("format"):
+        run_format(check=False, paths=paths)
+    with step("lint"):
+        run_lint(fix=True, paths=paths)
+
+
+def scoped_gate(
+    subset: tuple[Package, ...], *, root: Path, check_style: bool = True
+) -> None:
+    """Run the python kind's checks over *subset*, composed here.
+
+    The verbs, their titles, and what runs in parallel are this
+    backend's knowledge: everything fans out together, and
+    [livery.workshop._backends._python.run_typecheck][] nests its
+    own fan-out inside. ``check_style`` is off when a rewrite pass
+    already ran, where re-judging the style it just wrote would
+    only spend time agreeing.
+
+    The steps are built at call time, so the property tests that
+    patch this module's verbs keep gating the composition.
+    """
+    from livery.footman import parallel, step
+    from livery.workshop._kinds import gated
+
+    paths = package_paths(subset)
+    type_paths = package_paths(gated(subset, "typecheck"))
+    complete = gated(subset, "typecomplete")
+    tested = gated(subset, "test")
+    with parallel() as p:
+        if check_style:
+            p(step(run_format, title="format")(check=True, paths=paths))
+            p(step(run_lint, title="lint")(paths=paths))
+        p(step(run_typecheck, title="typecheck")(paths=type_paths))
+        p(step(run_typecomplete, title="typecomplete")(complete))
+        p(step(run_test, title="test")(packages=tested, root=root, scoped=True))
+
+
 def run_test(
     *pytest_args: str,
     packages: tuple[Package, ...] = (),

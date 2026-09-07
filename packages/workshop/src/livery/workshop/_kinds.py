@@ -173,6 +173,23 @@ def backend_for(package: Package) -> Backend:
     return kind_for(package.type).backend
 
 
+def gated(packages: tuple[Package, ...], verb: str) -> tuple[Package, ...]:
+    """The subset whose kind's CI contract carries *verb*.
+
+    Every excluded package prints a skip naming itself, its kind,
+    and the verb, so a narrowed gate is visible in the output and
+    never passes silently.
+    """
+    kept = []
+    for package in packages:
+        record = kind_for(package.type)
+        if verb in record.ci.check_verbs:
+            kept.append(package)
+        else:
+            print(f"  {verb}: {package.path} skips ({record.name} kind)")
+    return tuple(kept)
+
+
 def kind_chain(type_name: str) -> tuple[KindRecord, ...]:
     """The render chain, parent first, ending at *type_name*.
 

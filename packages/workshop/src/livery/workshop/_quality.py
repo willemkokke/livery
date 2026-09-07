@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 from livery.footman import Forward, doc, group, parallel, task
 from livery.workshop._backends import _python, require_backends
+from livery.workshop._kinds import gated
 from livery.workshop._layers import workspace_root
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._templates import template_check
@@ -27,25 +28,6 @@ def _packages() -> tuple[Package, ...]:
     packages = discover_packages(root)
     require_backends(packages)
     return packages
-
-
-def gated(packages: tuple[Package, ...], verb: str) -> tuple[Package, ...]:
-    """The subset whose kind's CI contract carries *verb*.
-
-    Every excluded package prints a skip naming itself, its kind,
-    and the verb, so a narrowed gate is visible in the output and
-    never passes silently.
-    """
-    from livery.workshop._kinds import kind_for
-
-    kept = []
-    for package in packages:
-        record = kind_for(package.type)
-        if verb in record.ci.check_verbs:
-            kept.append(package)
-        else:
-            print(f"  {verb}: {package.path} skips ({record.name} kind)")
-    return tuple(kept)
 
 
 def run_kind_checks(packages: tuple[Package, ...], root: Path) -> None:
@@ -192,50 +174,27 @@ def check(
 
 
 def _scoped_check(subset: tuple[Package, ...], *, fix: bool = False) -> None:
-    """The gate over *subset* only, each verb explicitly scoped.
+    """The gate over *subset* only: this routes, the backends compose.
 
     The render gate is skipped: its inputs are the root answers and
     the template source, which a package-scoped change cannot touch
     (touching them makes the change root-scoped, and the full gate
-    runs instead). ``fix`` behaves as in the whole gate: format and
-    lint rewrite serially first, then the rest run in parallel.
+    runs instead). ``fix`` runs every kind's rewriters serially
+    before any check reads the tree, exactly as the whole gate does;
+    what each kind checks, and in what parallel shape, is its
+    backend's knowledge, not this router's.
     """
     from livery.footman import step
 
     root = workspace_root()
     assert root is not None
-    paths = _python.package_paths(subset)
-    # The python checkers take only the packages whose kind gates on
-    # them: mypy refuses a directory holding no python files, and a
-    # skipped package says so through gated(). An all-skipped verb
-    # falls back to its configured whole, which the rendered configs
-    # already scope to the python members: conservative, never wrong.
-    type_paths = _python.package_paths(gated(subset, "typecheck"))
-    complete = gated(subset, "typecomplete")
-    tested = gated(subset, "test")
-    # step(fn, title=...)() BUILDS an item, and building runs
-    # nothing: a serial item runs by calling the built item, and a
-    # block item joins through p(...). The block refuses strays, so
-    # this shape is the contract's, not a style choice.
     if fix:
-        step(lambda: _python.run_format(check=False, paths=paths), title="format")()()
-        step(lambda: _python.run_lint(fix=True, paths=paths), title="lint")()()
+        _python.scoped_rewrite(subset)
     with parallel() as p:
-        if not fix:
-            p(
-                step(
-                    lambda: _python.run_format(check=True, paths=paths),
-                    title="format",
-                )()
-            )
-            p(step(lambda: _python.run_lint(paths=paths), title="lint")())
-        p(step(lambda: _python.run_typecheck(paths=type_paths), title="typecheck")())
-        p(step(lambda: _python.run_typecomplete(complete), title="typecomplete")())
         p(
-            step(
-                lambda: _python.run_test(packages=tested, root=root, scoped=True),
-                title="test",
-            )()
+            step(_python.scoped_gate, title="python")(
+                subset, root=root, check_style=not fix
+            )
         )
         run_kind_checks(subset, root)
 
