@@ -213,19 +213,30 @@ def _scoped_check(subset: tuple[Package, ...], *, fix: bool = False) -> None:
     type_paths = _python.package_paths(gated(subset, "typecheck"))
     complete = gated(subset, "typecomplete")
     tested = gated(subset, "test")
+    # step(fn, title=...)() BUILDS an item, and building runs
+    # nothing: a serial item runs by calling the built item, and a
+    # block item joins through p(...). The block refuses strays, so
+    # this shape is the contract's, not a style choice.
     if fix:
-        step(lambda: _python.run_format(check=False, paths=paths), title="format")()
-        step(lambda: _python.run_lint(fix=True, paths=paths), title="lint")()
-    with parallel():
+        step(lambda: _python.run_format(check=False, paths=paths), title="format")()()
+        step(lambda: _python.run_lint(fix=True, paths=paths), title="lint")()()
+    with parallel() as p:
         if not fix:
-            step(lambda: _python.run_format(check=True, paths=paths), title="format")()
-            step(lambda: _python.run_lint(paths=paths), title="lint")()
-        step(lambda: _python.run_typecheck(paths=type_paths), title="typecheck")()
-        step(lambda: _python.run_typecomplete(complete), title="typecomplete")()
-        step(
-            lambda: _python.run_test(packages=tested, root=root, scoped=True),
-            title="test",
-        )()
+            p(
+                step(
+                    lambda: _python.run_format(check=True, paths=paths),
+                    title="format",
+                )()
+            )
+            p(step(lambda: _python.run_lint(paths=paths), title="lint")())
+        p(step(lambda: _python.run_typecheck(paths=type_paths), title="typecheck")())
+        p(step(lambda: _python.run_typecomplete(complete), title="typecomplete")())
+        p(
+            step(
+                lambda: _python.run_test(packages=tested, root=root, scoped=True),
+                title="test",
+            )()
+        )
         run_kind_checks(subset, root)
 
 

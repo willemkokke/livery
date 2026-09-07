@@ -132,14 +132,9 @@ def test_check_affected_scopes_or_says_nothing(
         "run_test",
         lambda **kwargs: ran.append("test"),
     )
-    # footman's parallel block insists on a real run context; the
-    # test wants the routing, so both collapse to run-in-place.
-    import contextlib
-
-    import livery.footman as footman
-
-    monkeypatch.setattr(_quality, "parallel", contextlib.nullcontext)
-    monkeypatch.setattr(footman, "step", lambda fn, title=None: lambda: fn())
+    # The block contract runs unstubbed, deliberately: stubbing
+    # parallel and step here once certified a gate whose steps were
+    # built and never run (livery#291). Execution is the property.
     # Nothing changed: the affected gate says so and runs nothing.
     _quality.check(affected=True)
     out = capsys.readouterr().out
