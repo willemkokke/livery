@@ -245,18 +245,21 @@ def _eat_dev_wheels(root: Path) -> str:
     the emitted verbs fails the docs job with "no task named".
     Idempotent: an already-wired workspace pushes nothing.
     """
+    import livery.toolroom as toolroom
+
     from livery.workshop._git_ops import GitOps
     from livery.workshop._new_project import _SETUP_BRANCH
 
     git = GitOps(root)
     # main is protected by the birth's own assertion, so the wiring
     # rides the setup branch and its pull request proves the gate.
-    git.fetch()
-    if git.current_branch() != _SETUP_BRANCH:
-        if git.local_branch_exists(_SETUP_BRANCH):
-            git.switch(_SETUP_BRANCH)
-        else:
-            git.create_branch(_SETUP_BRANCH)
+    # The branch is pass-owned: rebuilt from current main every
+    # time, because a reused branch atop stale bases conflicts with
+    # the very squashes it produced (measured: green statuses,
+    # mergeable false, the merge API answering 'try again later'
+    # forever).
+    _align_main(root)
+    toolroom.git.opts(cwd=root)("switch", "-C", _SETUP_BRANCH)
     for name in ("workshop.toml", ".copier-answers.yml"):
         f = root / name
         if f.is_file():
@@ -330,7 +333,9 @@ def _eat_dev_wheels(root: Path) -> str:
             " so the installed workshop matches the emitter that"
             " rendered these workflows."
         )
-        git.push(_SETUP_BRANCH)
+        # Force: the branch is rebuilt from main each pass, so the
+        # remote's copy is always superseded, like everything scratch.
+        git.push_force(_SETUP_BRANCH)
         print("  dev wheels: wired and pushed")
     return git.head_sha()
 
