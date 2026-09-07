@@ -442,6 +442,21 @@ def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
     return dist
 
 
+def publish_artifact(
+    package: Package, *, version: str, publish_url: str, token: str, local: bool
+) -> bool:
+    """Upload ``dist/*`` to the python index; the kind's publish seam.
+
+    ``uv publish``, through the wave's own uploader: *version* and
+    *local* are other kinds' fields, since the wheels in ``dist/``
+    already carry their versions and a python index is never a
+    folder.
+    """
+    from livery.workshop._publish import publish_wheels
+
+    return publish_wheels(package, index_url=publish_url, token=token)
+
+
 def _index_args(root: Path) -> tuple[str, ...]:
     """The repo's ``[[tool.uv.index]]`` entries as install flags.
 

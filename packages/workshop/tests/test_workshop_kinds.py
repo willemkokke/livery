@@ -48,6 +48,17 @@ class _FakeBackend:
         self.built.append(package.name)
         return package.directory / "dist"
 
+    def publish_artifact(
+        self,
+        package: Package,
+        *,
+        version: str,
+        publish_url: str,
+        token: str,
+        local: bool,
+    ) -> bool:
+        return True
+
     def check(self, package: Package, root: Path) -> None:
         return None
 

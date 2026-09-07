@@ -48,6 +48,23 @@ class Backend(Protocol):
         """Build the package's artifacts into its dist; the dist dir."""
         ...
 
+    def publish_artifact(
+        self,
+        package: Package,
+        *,
+        version: str,
+        publish_url: str,
+        token: str,
+        local: bool,
+    ) -> bool:
+        """Upload the built artifacts to the kind's target.
+
+        False when everything was already there: a re-run walks past
+        what an earlier attempt landed. Each kind reads the fields
+        it needs and ignores the rest.
+        """
+        ...
+
     def current_version(self, package: Package) -> str:
         """The version the package's own manifest declares."""
         ...

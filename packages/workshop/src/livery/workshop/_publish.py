@@ -455,18 +455,24 @@ def publish_release(
             else:
                 backend_for(package).build(package, root, epoch=epoch)
             assert_wheel_identity(package)
+            # The kind's backend owns the upload; the wave only picks
+            # the resolved target for the kind's artifact.
             if record.artifact == "conan":
-                from livery.workshop._backends import _cpp_conan
-
                 assert conan_target is not None
-                published = _cpp_conan.publish(
-                    package,
+                art_url, art_token, art_local = (
                     conan_target.url,
-                    version=version,
-                    local=conan_target.local,
+                    conan_target.token,
+                    conan_target.local,
                 )
             else:
-                published = publish_wheels(package, index_url=index_url, token=token)
+                art_url, art_token, art_local = index_url, token, False
+            published = backend_for(package).publish_artifact(
+                package,
+                version=version,
+                publish_url=art_url,
+                token=art_token,
+                local=art_local,
+            )
             probe_until_served(
                 registry_for(package),
                 package.name,

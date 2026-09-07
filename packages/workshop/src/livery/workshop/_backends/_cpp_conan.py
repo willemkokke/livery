@@ -148,6 +148,18 @@ def _conan(
 CONAN_REMOTE = "workshop"
 
 
+def publish_artifact(
+    package: Package, *, version: str, publish_url: str, token: str, local: bool
+) -> bool:
+    """The kind's publish seam: the recipe to the resolved target.
+
+    *token* is another kind's field: conan credentials stay
+    conan-native (``CONAN_LOGIN_USERNAME`` and ``CONAN_PASSWORD``),
+    resolved by the tool itself.
+    """
+    return publish(package, publish_url, version=version, local=local)
+
+
 def publish(package: Package, target_url: str, *, version: str, local: bool) -> bool:
     """Upload the recipe to the resolved target; False when already there.
 
