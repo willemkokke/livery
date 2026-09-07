@@ -191,7 +191,17 @@ def _forge_registry(root: Path, kind: str) -> tuple[str, str] | None:
         url = forge.registry_url(registry_kind, owner)
     except Unsupported:
         return None
-    lane_token, _ = forge_token(
-        str(forge_table.get("kind", "")), str(forge_table.get("url", ""))
-    )
+    forge_kind = str(forge_table.get("kind", ""))
+    lane_token, _ = forge_token(forge_kind, str(forge_table.get("url", "")))
+    if not lane_token:
+        # The backend's own documented dialect variable, the same
+        # fallback the connection itself uses: the registry
+        # authenticates with the lane's credential, and a dialect
+        # token that opened the forge must reach the registry too.
+        dialect = {
+            "gitea": "GITEA_TOKEN",
+            "gitlab": "GITLAB_TOKEN",
+            "github": "GITHUB_TOKEN",
+        }.get(forge_kind, "")
+        lane_token = os.environ.get(dialect, "") if dialect else ""
     return url, lane_token
