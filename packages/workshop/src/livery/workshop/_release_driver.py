@@ -557,6 +557,7 @@ def local_release(root: Path, members: tuple[Package, ...]) -> None:
     never asked because nothing leaves the machine.
     """
     plans = derive_plans(root, members)
+    print("  act: local; nothing leaves this machine")
     try:
         bump_set_floors(root, plans)
         release_dirs = _wheel_dists(plans)
@@ -625,6 +626,7 @@ def workflow_release(
         local_release(root, members)
         return
     repo = this_repository(root)
+    print(f"  act: release train, from '{branch}'")
     driver = ReleaseDriver(
         root,
         repo,

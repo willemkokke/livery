@@ -265,13 +265,15 @@ def _eat_dev_wheels(root: Path) -> str:
     # render re-locks the workshop back to the released index).
     contract_file = root / "workshop.toml"
     contract_text = contract_file.read_text("utf-8")
-    # Policy if-necessary-or-explicit, never a global allow: uv's
-    # first-index strategy resolves the workshop from the loop index,
-    # where only prereleases exist, so if-necessary admits the dev
-    # wheels there while every PyPI-served package keeps its stable
-    # release (measured: a global allow resolved mkdocs 2.0.dev3 and
-    # the docs job lost mkdocs.exceptions).
-    policy = 'prerelease = "if-necessary-or-explicit"\n'
+    # Policy if-necessary, never a global allow: uv's first-index
+    # strategy resolves the workshop from the loop index, where only
+    # prereleases exist, so if-necessary admits the dev wheels there
+    # while every PyPI-served package keeps its stable release
+    # (measured: a global allow resolved mkdocs 2.0.dev3 and the
+    # docs job lost mkdocs.exceptions).
+    import re
+
+    policy = 'prerelease = "if-necessary"\n'
     if "[registries.python]" not in contract_text:
         contract_file.write_text(
             contract_text.rstrip("\n")
@@ -283,9 +285,11 @@ def _eat_dev_wheels(root: Path) -> str:
             + policy,
             "utf-8",
         )
-    elif 'prerelease = "allow"' in contract_text:
+    elif policy not in contract_text:
+        # An earlier pass declared another mode; settle on this one.
         contract_file.write_text(
-            contract_text.replace('prerelease = "allow"\n', policy, 1), "utf-8"
+            re.sub(r'prerelease = "[^"]*"\n', policy, contract_text, count=1),
+            "utf-8",
         )
     # The loop tracks the worktree's templates live, so each pass
     # re-applies the render before judging cleanliness: worktree
@@ -519,7 +523,10 @@ def _ensure_member(root: Path) -> None:
         " new.package on the dev wheels, with the release baseline"
         " seeded so the first release lands at 0.1.0."
     )
-    _loop_fm(root, "submit", "--armed")
+    # Force for the same reason the setup branch pushes force: the
+    # branch is pass-owned, rebuilt from main every time, so the
+    # remote's copy is always superseded.
+    _loop_fm(root, "submit", "--force", "--armed")
     _align_main(root)
     print("  member: landed through the loop's own gate")
 
