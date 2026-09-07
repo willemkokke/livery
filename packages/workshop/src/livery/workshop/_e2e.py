@@ -582,22 +582,30 @@ def _release_act(root: Path, kind: str) -> None:
         print(f"  release: receipt {tag} already on the loop")
         return
     _align_main(root)
-    # A prepared release PR surviving from an earlier pass is stale
-    # by construction: every pass relocks main onto fresh dev wheels,
-    # so its base has always moved. The driver refuses those and
-    # teaches `abandon`; the loop follows the teach through the verb
-    # before releasing.
+    # A prepared release PR may survive an earlier pass. Fresh (its
+    # branch still contains main) it is the driver's own recovery:
+    # left alone, the re-run arms and merges it, which is also how
+    # the forge's long post-open conflict-check window is ridden out
+    # (measured outlasting the merge retry budget). Stale (main has
+    # moved past it) the driver refuses and teaches `abandon`; the
+    # loop follows the teach through the verb before releasing.
     release_branch = "workflow/release/loop-echo"
     forge, _ = _dev_forge(kind)
-    stale_pr = forge.repository(E2E_OWNER, E2E_REPO).pr.find_by_head(release_branch)
-    if stale_pr is not None and stale_pr.state == "open":
-        print(f"  abandoning stale prepared release PR #{stale_pr.number}")
+    survivor = forge.repository(E2E_OWNER, E2E_REPO).pr.find_by_head(release_branch)
+    if survivor is not None and survivor.state == "open":
         toolroom.git.opts(cwd=root)("fetch", "origin", release_branch)
-        toolroom.git.opts(cwd=root)(
-            "switch", "-C", release_branch, f"origin/{release_branch}"
+        fresh = toolroom.git.opts(cwd=root, nofail=True)(
+            "merge-base", "--is-ancestor", "origin/main", f"origin/{release_branch}"
         )
-        _loop_fm(root, "abandon")
-        _align_main(root)
+        if fresh.code == 0:
+            print(f"  prepared release PR #{survivor.number} is fresh; recovering it")
+        else:
+            print(f"  abandoning stale prepared release PR #{survivor.number}")
+            toolroom.git.opts(cwd=root)(
+                "switch", "-C", release_branch, f"origin/{release_branch}"
+            )
+            _loop_fm(root, "abandon")
+            _align_main(root)
     _loop_fm(root, "workflow.release", "loop-echo", "--armed", timeout=1800.0)
     # The armed release returns at the merge; the wave runs on the
     # squash asynchronously. Watch its verdict before probing: a
