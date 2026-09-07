@@ -68,8 +68,9 @@ _MAX_HEALS = 2
 _ARM_RETRIES = 3
 
 #: Attempts through the forge's mergeability-recompute window, where
-#: an immediate merge answers 405.
-_MERGE_NOW_ATTEMPTS = 5
+#: an immediate merge answers 405. The waits below sum to about
+#: fifty seconds: a window was measured outlasting ten.
+_MERGE_NOW_ATTEMPTS = 12
 
 _P = ParamSpec("_P")
 
@@ -94,7 +95,7 @@ def _through_405_window(
                     f"  405 (mergeability recompute in flight), attempt"
                     f" {attempt}/{attempts}"
                 )
-                time.sleep(attempt)
+                time.sleep(min(attempt, 5))
                 continue
             raise
         return
