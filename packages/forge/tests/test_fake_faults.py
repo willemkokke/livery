@@ -102,3 +102,26 @@ def test_a_skipped_run_is_not_a_verdict() -> None:
     status = repo.checks.status(sha)
     assert status.state == "success"
     assert status.contexts == 1
+
+
+def test_the_pipeline_success_block_refuses_red_without_contexts() -> None:
+    # The GitLab shape: no named contexts anywhere, only the
+    # pipeline-success block, and a red head still cannot merge; a
+    # green one can.
+    from livery.forge import RepoConfig
+
+    driver = FakeDriver()
+    repo, pr, sha = _repo_with_open_pr(driver)
+    repo.configure(RepoConfig(require_pipeline_success=True))
+    run = repo.checks.runs(head_sha=sha)[0].id
+    repo.checks.cancel_run(run)  # the head reads red
+    with pytest.raises(ForgeError) as refusal:
+        repo.pr.merge_now(pr.number, title="feat: change")
+    assert refusal.value.status == 405
+    green = FakeDriver()
+    repo2, pr2, sha2 = _repo_with_open_pr(green)
+    repo2.configure(RepoConfig(require_pipeline_success=True))
+    green.settle(repo2.owner, repo2.name, sha2)
+    repo2.pr.merge_now(pr2.number, title="feat: change")
+    merged = repo2.pr.get(pr2.number)
+    assert merged is not None and merged.merged

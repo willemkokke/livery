@@ -226,6 +226,10 @@ def contract_config(root: Path) -> RepoConfig:
         delete_branch_on_merge=True,
         allow_auto_merge=True,
         required_contexts=(required_context_string(forge_kind, context),),
+        # The same truth spelled for a forge that cannot name
+        # contexts: the server refuses merges while the head is not
+        # green, the UI's merge button included.
+        require_pipeline_success=True,
         min_approvals=approvals.min_approvals,
         require_codeowner_review=approvals.require_codeowner_review,
     )
@@ -280,15 +284,14 @@ def assert_configuration(root: Path) -> None:
         )
         config = replace(config, min_approvals=None, require_codeowner_review=None)
     if config.required_contexts is not None and not forge.supports("required_contexts"):
-        # GitLab: protection cannot name check contexts. The armed
-        # merge and the runner's own refusals gate here; the forge's
-        # UI is not blocked server-side (livery#303 tracks closing
-        # that with the pipeline-success flag).
+        # GitLab: protection cannot name check contexts, and the
+        # pipeline-success block carries the same truth there, the
+        # UI's merge button included.
         print(
             "  note: this forge cannot name required check contexts"
-            " (capability: required_contexts); the armed merge and"
-            " this runner's refusals gate instead, and the forge UI"
-            " is not blocked"
+            " (capability: required_contexts); the pipeline-success"
+            " block enforces green-before-merge instead, the forge"
+            " UI included"
         )
         config = replace(config, required_contexts=None)
     try:
