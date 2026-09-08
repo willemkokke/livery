@@ -200,15 +200,21 @@ def test_check_fix_rewrites_serially_then_judges_the_rest(
     monkeypatch.delenv("CI", raising=False)  # the guard is its own test
     _quality.check(fix=True)
     # format and lint rewrite the same files, so they run first and in
-    # order; the rest of the gate still judges after them.
-    assert calls[0] == ("format", {"check": False})
-    assert calls[1] == ("lint", {"fix": True})
+    # order; the rest of the gate still judges after them. The exact
+    # kwargs beyond the mode flag are the verb's business (paths,
+    # safe_fix); the pin is the order and the rewrite mode.
+    name0, kw0 = calls[0]
+    name1, kw1 = calls[1]
+    assert name0 == "format" and isinstance(kw0, dict) and kw0["check"] is False
+    assert name1 == "lint" and isinstance(kw1, dict) and kw1["fix"] is True
     assert {name for name, _ in calls[2:]} == {"types", "complete", "test", "render"}
     calls.clear()
     # Without --fix nothing rewrites: format checks and lint reports.
     _quality.check()
-    assert ("format", {"check": True}) in calls
-    assert ("lint", {"fix": False}) in calls
+    by_name = dict(calls)
+    fmt, lnt = by_name["format"], by_name["lint"]
+    assert isinstance(fmt, dict) and fmt["check"] is True
+    assert isinstance(lnt, dict) and lnt["fix"] is False
 
 
 def test_coverage_enforce_reads_the_workspace(

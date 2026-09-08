@@ -40,14 +40,63 @@ def package_paths(packages: tuple[Package, ...]) -> tuple[str, ...]:
     return tuple(paths)
 
 
-def run_format(check: bool = False, paths: tuple[str, ...] = SRC) -> None:
-    """Format with ruff; *check* reports instead of rewriting."""
-    ruff_format(*paths, check=check)
+#: The python suffixes ruff owns; other files pass through untouched
+#: when an explicit path names them.
+_PY_SUFFIXES = (".py", ".pyi")
+
+#: What ``--safe-fix`` refuses to let ruff remove: rules that delete
+#: code an edit in flight has not finished writing. This is the one
+#: place the meaning of safe-fix lives for python.
+_SAFE_UNFIXABLE = "F401"
 
 
-def run_lint(fix: bool = False, paths: tuple[str, ...] = SRC) -> None:
-    """Lint with ruff; *fix* applies safe fixes in place."""
-    ruff.check(*paths, fix=fix)
+def _python_paths(paths: tuple[str, ...]) -> tuple[str, ...]:
+    """Keep the directories and python files; drop foreign files.
+
+    A directory is ruff's to walk; a named python file is its to
+    read; a named C++ or markdown file is not, so it passes through
+    as a no-op rather than an error.
+    """
+    kept: list[str] = []
+    for entry in paths:
+        path = Path(entry)
+        if not path.is_file() or path.suffix in _PY_SUFFIXES:
+            kept.append(entry)
+    return tuple(kept)
+
+
+def run_format(
+    check: bool = False, safe_fix: bool = False, paths: tuple[str, ...] = SRC
+) -> None:
+    """Format with ruff; *check* reports instead of rewriting.
+
+    Formatting removes no code, so ``safe_fix`` rewrites exactly as
+    a plain fix does; the flag exists for symmetry with lint.
+    """
+    chosen = _python_paths(paths)
+    if not chosen:
+        return
+    ruff_format(*chosen, check=check and not safe_fix)
+
+
+def run_lint(
+    fix: bool = False, safe_fix: bool = False, paths: tuple[str, ...] = SRC
+) -> None:
+    """Lint with ruff; *fix* applies safe fixes, *safe_fix* fewer.
+
+    ``safe_fix`` applies fixes but never the code-removing rules
+    (unused imports): an edit in flight adds an import before the
+    code that uses it, and removing it between the two edits deletes
+    real work. What safe-fix withholds is _SAFE_UNFIXABLE, defined
+    here and nowhere above.
+    """
+    chosen = _python_paths(paths)
+    if not chosen:
+        return
+    if safe_fix:
+        ruff.check(*chosen, fix=True, unfixable=_SAFE_UNFIXABLE)
+        return
+    ruff.check(*chosen, fix=fix)
 
 
 def run_typecheck(paths: tuple[str, ...] = ()) -> None:
