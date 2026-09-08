@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import Annotated
 
 import livery.footman as footman
-from livery import toolroom
 from livery.footman import RunFailed, fail, run, stdin
 from livery.workshop._tree import agent_hooks
 
@@ -168,15 +167,18 @@ def post_edit(event: Annotated[HookEvent, stdin]) -> None:
     """
     import contextlib
 
+    from livery.workshop._quality import format as format_verb
+    from livery.workshop._quality import lint as lint_verb
+
     path = event.tool_input.file_path
-    if not path.endswith(".py") or not Path(path).is_file():
+    if not path or not Path(path).is_file():
         return
-    for args in (
-        ["check", "--fix", "--unfixable", "F401", "--quiet"],
-        ["format", "--quiet"],
-    ):
-        with contextlib.suppress(OSError):
-            toolroom.ruff.opts(nofail=True, recorded=False)(*args, path)
+    # Through the verbs, never a tool: a polyglot workspace lints C++
+    # with C++ tools, and the verb is where that dispatch grows. The
+    # foreign filetype is the verb's no-op, not the hook's business.
+    for verb in (format_verb, lint_verb):
+        with contextlib.suppress(Exception):
+            verb(path, safe_fix=True)
 
 
 _FAIL = re.compile(

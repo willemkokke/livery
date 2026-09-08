@@ -135,3 +135,39 @@ def test_a_srcless_package_falls_back_to_the_dist_spelling(
         depends=(),
     )
     assert module_for(package) == "livery.loop_echo"
+
+
+def test_safe_fix_keeps_imports_and_foreign_files_pass_through(
+    tmp_path: Path,
+) -> None:
+    # The edit-in-flight fix: the unused import survives, the sortable
+    # one still heals, and a non-python path named alongside is a
+    # no-op rather than an error.
+    victim = tmp_path / "wip.py"
+    victim.write_text("import sys\nimport os\n\nprint(sys.path)\n")
+    foreign = tmp_path / "notes.md"
+    foreign.write_text("#Heading\n")
+    # The file heals in place; lint still reports the withheld import
+    # by exiting non-zero (which the hook suppresses and a user
+    # reads). The pin is the healed bytes, not the exit.
+    import contextlib
+
+    with contextlib.suppress(Exception):
+        _python.run_lint(safe_fix=True, paths=(str(victim), str(foreign)))
+    healed = victim.read_text()
+    assert "import os" in healed  # F401 withheld
+    assert healed.index("import os") < healed.index("import sys")  # I001 healed
+    assert foreign.read_text() == "#Heading\n"  # foreign file untouched
+    # A plain fix removes the unused import; safe-fix is the weaker one.
+    with contextlib.suppress(Exception):
+        _python.run_lint(fix=True, paths=(str(victim),))
+    assert "import os" not in victim.read_text()
+
+
+def test_lint_and_format_refuse_both_fix_flags() -> None:
+    with pytest.raises((SystemExit, Exception)) as caught:
+        _quality.lint(fix=True, safe_fix=True)
+    assert "Pass one" in str(caught.value)
+    with pytest.raises((SystemExit, Exception)) as caught:
+        _quality.format(fix=True, safe_fix=True)
+    assert "Pass one" in str(caught.value)

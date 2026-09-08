@@ -54,18 +54,52 @@ def run_kind_checks(packages: tuple[Package, ...], root: Path) -> None:
         record.backend.check(package, root)
 
 
-@task
-def lint(fix: Annotated[bool, doc("apply safe fixes in place")] = False) -> None:
-    """Lint every package with its type's linter."""
-    _packages()
-    _python.run_lint(fix=fix)
+def _refuse_both(fix: bool, safe_fix: bool) -> None:
+    if fix and safe_fix:
+        fail(
+            "--fix and --safe-fix are two answers to one question: --fix"
+            " applies every safe fix, --safe-fix withholds the"
+            " code-removing ones. Pass one."
+        )
 
 
 @task
-def format(fix: Annotated[bool, doc("rewrite instead of reporting")] = False) -> None:
-    """Check every package's formatting; ``--fix`` rewrites."""
-    _packages()
-    _python.run_format(check=not fix)
+def lint(
+    *paths: str,
+    fix: Annotated[bool, doc("apply safe fixes in place")] = False,
+    safe_fix: Annotated[
+        bool, doc("apply fixes safe for in-progress edits (keeps imports)")
+    ] = False,
+) -> None:
+    """Lint every package with its type's linter.
+
+    With *paths*, lints exactly those files (foreign filetypes pass
+    through); without, every package. ``--safe-fix`` is the
+    edit-in-flight fix, documented as safe to apply mid-edit.
+    """
+    _refuse_both(fix, safe_fix)
+    if not paths:
+        _packages()
+    _python.run_lint(fix=fix, safe_fix=safe_fix, paths=paths or _python.SRC)
+
+
+@task
+def format(
+    *paths: str,
+    fix: Annotated[bool, doc("rewrite instead of reporting")] = False,
+    safe_fix: Annotated[
+        bool, doc("rewrite; safe to apply to in-progress edits")
+    ] = False,
+) -> None:
+    """Check every package's formatting; ``--fix`` rewrites.
+
+    With *paths*, formats exactly those files (foreign filetypes
+    pass through); without, every package.
+    """
+    _refuse_both(fix, safe_fix)
+    if not paths:
+        _packages()
+    _python.run_format(check=not fix, safe_fix=safe_fix, paths=paths or _python.SRC)
 
 
 @task
