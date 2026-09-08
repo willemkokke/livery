@@ -512,6 +512,21 @@ def _heal_context_rename(
     theirs = _required_context_at(git, f"origin/{plan.base}")
     if not ours or not theirs or ours == theirs:
         return
+    from livery.workshop._forge_lane import this_forge
+    from livery.workshop._layers import workspace_root
+
+    heal_root = workspace_root()
+    if heal_root is not None and not this_forge(heal_root).supports(
+        "required_contexts"
+    ):
+        # A forge whose protection cannot name contexts has nothing
+        # to move: the rename only renames the emitted pipeline job,
+        # and the pull request goes green on its own.
+        print(
+            f"  required context renamed ({theirs!r} -> {ours!r}); this"
+            " forge names no contexts in protection, nothing to heal"
+        )
+        return
     if fix:
         from livery.workshop._forge_lane import admin_repository
         from livery.workshop._layers import workspace_root
@@ -908,7 +923,7 @@ def merge_flow(repo: Repository, git: GitOps, branch: str, *, title: str = "") -
     if status.state == "failure":
         fail(
             f"CI is red for PR #{pr.number}: fix it and `{footman.prog()} submit`."
-            " Merging red is the forge UI's decision, not this verb's."
+            " This verb never merges red."
         )
     git.fetch()
     if git.behind_base(pr.base_branch):

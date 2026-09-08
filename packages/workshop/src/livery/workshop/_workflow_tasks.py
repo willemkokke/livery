@@ -280,12 +280,15 @@ def assert_configuration(root: Path) -> None:
         )
         config = replace(config, min_approvals=None, require_codeowner_review=None)
     if config.required_contexts is not None and not forge.supports("required_contexts"):
-        # GitLab: protection cannot name check contexts; the
-        # pipeline's own rules gate merges there instead.
+        # GitLab: protection cannot name check contexts. The armed
+        # merge and the runner's own refusals gate here; the forge's
+        # UI is not blocked server-side (livery#303 tracks closing
+        # that with the pipeline-success flag).
         print(
             "  note: this forge cannot name required check contexts"
-            " (capability: required_contexts); the pipeline's own rules"
-            " gate merges instead"
+            " (capability: required_contexts); the armed merge and"
+            " this runner's refusals gate instead, and the forge UI"
+            " is not blocked"
         )
         config = replace(config, required_contexts=None)
     try:
