@@ -114,6 +114,8 @@ def test_configure_stores_protected_tag_patterns_idempotently() -> None:
     assert state.protected_tag_patterns == ("packages/*/v*",)
     repo.configure(RepoConfig(protected_tag_patterns=("packages/*/v*",)))
     assert state.protected_tag_patterns == ("packages/*/v*",)
+
+
 def test_the_pipeline_success_block_refuses_red_without_contexts() -> None:
     # The GitLab shape: no named contexts anywhere, only the
     # pipeline-success block, and a red head still cannot merge; a
