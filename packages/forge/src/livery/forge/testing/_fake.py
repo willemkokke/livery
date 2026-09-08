@@ -187,9 +187,11 @@ class FakeForge:
         user: str = "fake-user",
         version: str = "1.0.0",
         capabilities: tuple[Capability, ...] = _ALL_CAPABILITIES,
+        token: str = "",
     ) -> None:
         """Build an empty forge for *user* with *capabilities*."""
         self.faults: Faults = Faults()
+        self._token = token
         self._user = user
         self._version = version
         self._capabilities = frozenset(capabilities)
@@ -201,6 +203,11 @@ class FakeForge:
         self._next_job = 1
 
     # -- the protocol half -------------------------------------------------
+
+    @property
+    def token(self) -> str:
+        """The credential this connection authenticates with; empty when anonymous."""
+        return self._token
 
     def whoami(self) -> str:
         """The configured user's login name."""

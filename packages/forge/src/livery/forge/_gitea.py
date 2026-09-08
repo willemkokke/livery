@@ -141,9 +141,15 @@ class GiteaForge:
         headers = {"Authorization": f"token {token}"} if token else {}
         headers["Accept"] = "application/json"
         self._client = JsonClient(api_base, headers=headers, opener=opener)
+        self._token = token
         self._version: str | None = None
         # Gitea serves the API under /api/v1 on the web host.
         self._web_root = api_base.rstrip("/").removesuffix("/api/v1")
+
+    @property
+    def token(self) -> str:
+        """The credential this connection authenticates with; empty when anonymous."""
+        return self._token
 
     @classmethod
     def connect(
