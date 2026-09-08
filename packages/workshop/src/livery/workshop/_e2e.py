@@ -595,6 +595,7 @@ def _release_act(root: Path, kind: str) -> None:
         "ls-remote", "--tags", "origin", tag
     )
     if listed.code == 0 and tag in listed.stdout:
+        _require_receipt_protected(root, tag)
         print(f"  release: receipt {tag} already on the loop")
         return
     _align_main(root)
@@ -706,10 +707,19 @@ def _release_act(root: Path, kind: str) -> None:
         if time.monotonic() >= deadline:
             fail(f"served, but the receipt tag {tag} is not on the loop")
         time.sleep(5)
-    # The receipt's protection, proven by attempting the crime: a
-    # protected tag's delete must be refused by the forge. The tag
-    # is fetched first so an unexpected success can be pushed back,
-    # keeping the evidence alive through its own test.
+    _require_receipt_protected(root, tag)
+    print(f"  release: {LOOP_MEMBER_DIST} 0.1.0 served, receipt {tag} cut")
+
+
+def _require_receipt_protected(root: Path, tag: str) -> None:
+    """Prove the receipt's protection by attempting the crime.
+
+    A protected tag's delete must be refused by the forge. The tag
+    is fetched first so an unexpected success can be pushed back,
+    keeping the evidence alive through its own test.
+    """
+    import livery.toolroom as toolroom
+
     toolroom.git.opts(cwd=root, nofail=True)("fetch", "origin", "tag", tag)
     denied = toolroom.git.opts(cwd=root, nofail=True)(
         "push", "origin", f":refs/tags/{tag}"
@@ -721,7 +731,6 @@ def _release_act(root: Path, kind: str) -> None:
             " holding (the receipt was pushed back)"
         )
     print(f"  receipt {tag}: delete refused; protection holds")
-    print(f"  release: {LOOP_MEMBER_DIST} 0.1.0 served, receipt {tag} cut")
 
 
 def _merge_setup(kind: str, sha: str) -> None:
