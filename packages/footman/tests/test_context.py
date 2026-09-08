@@ -3102,8 +3102,18 @@ def test_ctrl_c_reaps_the_child_a_task_was_waiting_on(tmp_path):
         start_new_session=True,
     )
     try:
-        pids = _await_pids(pid_file)
-        assert pids is not None, "the child never started; the test proves nothing"
+        # The runner is a cold interpreter loading a tree before the
+        # task can spawn the child, and a loaded machine legitimately
+        # stretches that; the deadline covers load, and a miss fails
+        # with the runner's own words instead of proving nothing.
+        pids = _await_pids(pid_file, timeout=120.0)
+        if pids is None:
+            runner.kill()
+            _, stderr = runner.communicate(timeout=10)
+            pytest.fail(
+                "the child never started within 120s; the runner said:\n"
+                + (stderr or "(nothing on stderr)")
+            )
         (child,) = pids
 
         os.killpg(runner.pid, signal.SIGINT)  # what a terminal does

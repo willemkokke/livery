@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+from collections.abc import Generator
 from pathlib import Path
 from typing import Any
 
@@ -160,3 +161,38 @@ def _clean_abort_state():
     """
     context.reset_abort()
     yield
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_makereport(
+    item: pytest.Item, call: pytest.CallInfo[None]
+) -> Generator[None, pytest.TestReport, pytest.TestReport]:
+    """Append discovery forensics to the two flake families' failures.
+
+    The branding and docs-plugin tests have failed under full-suite
+    load with a foreign tasks file entering discovery (livery#263),
+    and the failures resist on-demand reproduction. When one fails,
+    the report carries the state that steers discovery, so the next
+    natural occurrence names its own leak.
+    """
+    report = yield
+    if call.when != "call" or not report.failed:
+        return report
+    name = str(getattr(item, "fspath", ""))
+    if "test_branding" not in name and "test_tasks_plugin" not in name:
+        return report
+    import os
+    import sys
+
+    lines = ["", "--- discovery forensics (livery#263) ---", f"cwd: {os.getcwd()}"]
+    for key in sorted(os.environ):
+        if any(part in key for part in ("XDG_", "FOOTMAN", "FM_", "ACME")):
+            lines.append(f"env {key}={os.environ[key]!r}")
+    tasks_modules = [
+        f"sys.modules[{module_name!r}] <- {getattr(module, '__file__', None)}"
+        for module_name, module in sorted(sys.modules.items())
+        if module_name.startswith("footman_tasks")
+    ]
+    lines.extend(tasks_modules or ["no footman_tasks_* modules loaded"])
+    report.longrepr = f"{report.longrepr}\n" + "\n".join(lines)
+    return report
