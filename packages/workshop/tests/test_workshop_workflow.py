@@ -666,6 +666,9 @@ def test_contract_config_reads_the_required_context(tmp_path: Path) -> None:
     )
     config = contract_config(tmp_path)
     assert config.required_contexts == ("the-gate",)
+    # The same truth for a forge that cannot name contexts: the
+    # server blocks a red merge for everyone, the UI included.
+    assert config.require_pipeline_success is True
     assert config.squash_only is True
     assert config.min_approvals is None  # no owners: no requirement
     (tmp_path / "workshop.toml").write_text("[workspace]\n")
