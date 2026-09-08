@@ -226,6 +226,9 @@ def contract_config(root: Path) -> RepoConfig:
         delete_branch_on_merge=True,
         allow_auto_merge=True,
         required_contexts=(required_context_string(forge_kind, context),),
+        # The release train's receipts: once cut, no ordinary push
+        # may delete or move them.
+        protected_tag_patterns=("packages/*/v*",),
         min_approvals=approvals.min_approvals,
         require_codeowner_review=approvals.require_codeowner_review,
     )

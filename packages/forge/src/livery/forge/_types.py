@@ -150,6 +150,14 @@ class RepoConfig:
             blocking on official review requests, which the
             codeowners file feeds; the read side answers through the
             same field.
+        protected_tag_patterns: Tag name patterns (glob) whose
+            tags, once created, cannot be deleted or re-pointed by
+            an ordinary push. Who may create them follows each
+            forge's nearest model: Gitea and GitLab restrict
+            creation to the configuring identity's level, GitHub
+            leaves creation open and blocks deletion and movement
+            through a tag ruleset. Patterns already protected are
+            left as they are.
         secrets: CI secrets to store, by name. Write-only: no protocol
             operation reads a secret back. Setting this on a forge
             without the ``ci_secrets`` capability raises
@@ -165,6 +173,7 @@ class RepoConfig:
     delete_branch_on_merge: bool | None = None
     allow_auto_merge: bool | None = None
     required_contexts: tuple[str, ...] | None = None
+    protected_tag_patterns: tuple[str, ...] | None = None
     min_approvals: int | None = None
     require_codeowner_review: bool | None = None
     secrets: Mapping[str, str] | None = None

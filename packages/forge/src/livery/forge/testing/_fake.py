@@ -144,6 +144,7 @@ class _RepoState:
     delete_branch_on_merge: bool = False
     allow_auto_merge: bool = False
     required_contexts: tuple[str, ...] = ()
+    protected_tag_patterns: tuple[str, ...] = ()
     pages_build_type: str = ""
     secrets: dict[str, str] = field(default_factory=dict)
     variables: dict[str, str] = field(default_factory=dict)
@@ -589,6 +590,8 @@ class _FakeRepository:
                 block_on_rejected=current.block_on_rejected,
                 required_contexts=current.required_contexts,
             )
+        if config.protected_tag_patterns is not None:
+            state.protected_tag_patterns = config.protected_tag_patterns
         if config.required_contexts is not None:
             state.required_contexts = config.required_contexts
             # Asserting contexts creates the branch protection, as it

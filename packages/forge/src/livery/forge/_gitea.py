@@ -374,6 +374,32 @@ class _GiteaRepository:
             " (capability: pages_config)"
         )
 
+    def _protect_tags(self, patterns: tuple[str, ...]) -> None:
+        """Protect *patterns*: matching tags cannot be deleted or moved.
+
+        Creation stays with the configuring identity: Gitea's
+        protected tags admit only whitelisted users, and the lane
+        that configures is the lane the release train pushes with.
+        Already-protected patterns are left as they are.
+        """
+        existing = self._client.request(f"{self._base}/tag_protections")
+        present = {
+            str(entry.get("name_pattern", ""))
+            for entry in existing or []
+            if isinstance(entry, dict)
+        }
+        for pattern in patterns:
+            if pattern in present:
+                continue
+            self._client.request(
+                f"{self._base}/tag_protections",
+                method="POST",
+                data={
+                    "name_pattern": pattern,
+                    "whitelist_usernames": [self._forge.whoami()],
+                },
+            )
+
     def configure(self, config: RepoConfig) -> None:
         """Assert the stated settings; every step probes before acting."""
         patch: dict[str, Any] = {}
@@ -399,6 +425,8 @@ class _GiteaRepository:
             or config.require_codeowner_review is not None
         ):
             self._protect_default_branch(config)
+        if config.protected_tag_patterns is not None:
+            self._protect_tags(config.protected_tag_patterns)
         if config.secrets is not None:
             for key, value in config.secrets.items():
                 self._client.request(

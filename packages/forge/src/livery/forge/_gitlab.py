@@ -427,6 +427,29 @@ class _GitlabRepository:
             " (capability: pages_config)"
         )
 
+    def _protect_tags(self, patterns: tuple[str, ...]) -> None:
+        """Protect *patterns*: matching tags cannot be deleted or moved.
+
+        Creation needs maintainer level; deleting a protected tag
+        needs a deliberate unprotect first, which is the audit trail
+        the receipt tags want. Already-protected patterns are left
+        as they are.
+        """
+        existing = self._client.request(f"{self._base}/protected_tags")
+        present = {
+            str(entry.get("name", ""))
+            for entry in existing or []
+            if isinstance(entry, dict)
+        }
+        for pattern in patterns:
+            if pattern in present:
+                continue
+            self._client.request(
+                f"{self._base}/protected_tags",
+                method="POST",
+                data={"name": pattern, "create_access_level": 40},
+            )
+
     def configure(self, config: RepoConfig) -> None:
         """Assert the stated settings; every step probes before acting."""
         if config.min_approvals is not None or (
@@ -460,6 +483,8 @@ class _GitlabRepository:
                 " (capability: required_contexts): the nearest fact, only"
                 " allowing merges when the pipeline succeeds, is a boolean"
             )
+        if config.protected_tag_patterns is not None:
+            self._protect_tags(config.protected_tag_patterns)
         if config.secrets is not None:
             for key, value in config.secrets.items():
                 self._put_variable(key, value, masked=_maskable(value))

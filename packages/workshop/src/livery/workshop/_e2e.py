@@ -706,6 +706,21 @@ def _release_act(root: Path, kind: str) -> None:
         if time.monotonic() >= deadline:
             fail(f"served, but the receipt tag {tag} is not on the loop")
         time.sleep(5)
+    # The receipt's protection, proven by attempting the crime: a
+    # protected tag's delete must be refused by the forge. The tag
+    # is fetched first so an unexpected success can be pushed back,
+    # keeping the evidence alive through its own test.
+    toolroom.git.opts(cwd=root, nofail=True)("fetch", "origin", "tag", tag)
+    denied = toolroom.git.opts(cwd=root, nofail=True)(
+        "push", "origin", f":refs/tags/{tag}"
+    )
+    if denied.code == 0:
+        toolroom.git.opts(cwd=root, nofail=True)("push", "origin", f"refs/tags/{tag}")
+        fail(
+            f"the receipt tag {tag} was deletable: tag protection is not"
+            " holding (the receipt was pushed back)"
+        )
+    print(f"  receipt {tag}: delete refused; protection holds")
     print(f"  release: {LOOP_MEMBER_DIST} 0.1.0 served, receipt {tag} cut")
 
 

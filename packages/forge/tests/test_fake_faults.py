@@ -102,3 +102,15 @@ def test_a_skipped_run_is_not_a_verdict() -> None:
     status = repo.checks.status(sha)
     assert status.state == "success"
     assert status.contexts == 1
+
+
+def test_configure_stores_protected_tag_patterns_idempotently() -> None:
+    from livery.forge import RepoConfig
+
+    driver = FakeDriver()
+    repo = driver.fresh_repo()
+    repo.configure(RepoConfig(protected_tag_patterns=("packages/*/v*",)))
+    state = driver.fake._repos[(repo.owner, repo.name)]
+    assert state.protected_tag_patterns == ("packages/*/v*",)
+    repo.configure(RepoConfig(protected_tag_patterns=("packages/*/v*",)))
+    assert state.protected_tag_patterns == ("packages/*/v*",)
