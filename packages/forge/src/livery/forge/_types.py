@@ -153,11 +153,15 @@ class RepoConfig:
         protected_tag_patterns: Tag name patterns (glob) whose
             tags, once created, cannot be deleted or re-pointed by
             an ordinary push. Who may create them follows each
-            forge's nearest model: Gitea and GitLab restrict
-            creation to the configuring identity's level, GitHub
-            leaves creation open and blocks deletion and movement
-            through a tag ruleset. Patterns already protected are
-            left as they are.
+            forge's nearest model: GitLab restricts creation to
+            maintainers and blocks push-deletion for everyone (the
+            web interface with a deliberate unprotect is the only
+            way); GitHub leaves creation open and blocks deletion
+            and movement through a tag ruleset; Gitea ties creation,
+            deletion, and movement to one whitelist holding the
+            configuring identity, so its protection binds everyone
+            outside that lane rather than the lane itself. Patterns
+            already protected are left as they are.
         secrets: CI secrets to store, by name. Write-only: no protocol
             operation reads a secret back. Setting this on a forge
             without the ``ci_secrets`` capability raises
