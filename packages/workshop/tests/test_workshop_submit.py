@@ -833,6 +833,7 @@ def test_a_context_rename_refuses_teaching_fix_armed(
     monkeypatch.setattr(
         "livery.workshop._layers.workspace_root", lambda start=None: git.root
     )
+    monkeypatch.setattr("livery.workshop._forge_lane.this_forge", lambda _root: fake)
     with pytest.raises(_FAILURES) as caught:
         _submit(fake, git, follow_to_verdict=False)
     message = str(caught.value)
@@ -861,6 +862,7 @@ def test_fix_applies_the_rename_and_rereruns_quietly(
     monkeypatch.setattr(
         "livery.workshop._layers.workspace_root", lambda start=None: git.root
     )
+    monkeypatch.setattr("livery.workshop._forge_lane.this_forge", lambda _root: fake)
     monkeypatch.setattr(
         "livery.workshop._forge_lane.admin_repository",
         lambda _root: (_repo(fake), "GITHUB_ADMIN_TOKEN"),
@@ -911,6 +913,7 @@ def test_a_refused_admin_write_teaches_instead_of_half_healing(
     monkeypatch.setattr(
         "livery.workshop._layers.workspace_root", lambda start=None: git.root
     )
+    monkeypatch.setattr("livery.workshop._forge_lane.this_forge", lambda _root: fake)
 
     class _Refused:
         def protection(self, branch: str) -> object:
@@ -936,3 +939,56 @@ def test_a_refused_admin_write_teaches_instead_of_half_healing(
     assert "403 must be an administrator" in text  # verbatim
     assert "the everyday token" in text  # which rung refused
     assert "admin variable" in text  # and the repair
+
+
+def test_the_rename_heal_skips_a_forge_that_names_no_contexts(
+    rig: tuple[FakeForge, SubmitGit],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The GitLab shape, forced first: protection cannot name check
+    # contexts there, so a required-context rename has nothing to
+    # heal, and the submit proceeds saying so, without --fix and
+    # with it. Before the gate existed, the no-fix arm failed
+    # falsely and the --fix arm died on an unhandled Unsupported.
+    fake, git = rig
+    _git(git.root, "checkout", "main")
+    (git.root / "workshop.toml").write_text(
+        '[workspace]\n\n[forge]\nkind = "gitlab"\nowner = "acme"\n\n'
+        '[ci]\nrequired_context = "old-gate"\n'
+    )
+    _git(git.root, "add", "-A")
+    _git(git.root, "commit", "-m", "chore: contract")
+    _git(git.root, "push", "origin", "main")
+    _git(git.root, "checkout", "feat/1-first")
+    _git(git.root, "rebase", "main")
+    (git.root / "workshop.toml").write_text(
+        '[workspace]\n\n[forge]\nkind = "gitlab"\nowner = "acme"\n\n'
+        '[ci]\nrequired_context = "new-gate"\n'
+    )
+    _git(git.root, "add", "-A")
+    _git(git.root, "commit", "-m", "feat: rename the gate")
+    limited = FakeForge(
+        capabilities=(
+            "auto_merge",
+            "force_cancel",
+            "ci_secrets",
+            "schedule_events",
+            "min_approvals",
+            "pages_config",
+        )
+    )
+    monkeypatch.setattr(
+        "livery.workshop._layers.workspace_root", lambda start=None: git.root
+    )
+    monkeypatch.setattr("livery.workshop._forge_lane.this_forge", lambda _root: limited)
+    number = _submit(fake, git, armed=False, title="feat: rename the gate")
+    assert "nothing to heal" in capsys.readouterr().out
+    (git.root / "more.txt").write_text("x\n")
+    _git(git.root, "add", "-A")
+    _git(git.root, "commit", "-m", "feat: more work")
+    assert (
+        _submit(fake, git, armed=False, fix=True, title="feat: rename the gate")
+        == number
+    )
+    assert "nothing to heal" in capsys.readouterr().out
