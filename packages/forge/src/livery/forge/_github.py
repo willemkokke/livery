@@ -400,6 +400,47 @@ class _GithubRepository:
                 data={"build_type": build_type},
             )
 
+    def _protect_tags(self, patterns: tuple[str, ...]) -> None:
+        """Protect *patterns* through one tag ruleset, idempotently.
+
+        Deletion, update, and non-fast-forward moves are blocked for
+        everyone; creation stays open, which is where the release
+        train pushes. The ruleset is found by its name and updated
+        in place when the patterns change.
+        """
+        payload = {
+            "name": "workshop-protected-tags",
+            "target": "tag",
+            "enforcement": "active",
+            "conditions": {
+                "ref_name": {
+                    "include": [f"refs/tags/{p}" for p in patterns],
+                    "exclude": [],
+                }
+            },
+            "rules": [
+                {"type": "deletion"},
+                {"type": "update"},
+                {"type": "non_fast_forward"},
+            ],
+        }
+        existing = self._client.request(f"{self._base}/rulesets") or []
+        found = next(
+            (
+                entry
+                for entry in existing
+                if isinstance(entry, dict)
+                and entry.get("name") == "workshop-protected-tags"
+            ),
+            None,
+        )
+        if found is None:
+            self._client.request(f"{self._base}/rulesets", method="POST", data=payload)
+        else:
+            self._client.request(
+                f"{self._base}/rulesets/{found['id']}", method="PUT", data=payload
+            )
+
     def configure(self, config: RepoConfig) -> None:
         """Assert the stated settings; every step probes before acting."""
         patch: dict[str, Any] = {}
@@ -423,6 +464,8 @@ class _GithubRepository:
             or config.require_codeowner_review is not None
         ):
             self._protect_default_branch(config)
+        if config.protected_tag_patterns is not None:
+            self._protect_tags(config.protected_tag_patterns)
         if config.secrets is not None:
             if importlib.util.find_spec("nacl") is None:
                 raise Unsupported(

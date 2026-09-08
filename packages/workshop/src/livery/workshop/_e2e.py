@@ -595,6 +595,7 @@ def _release_act(root: Path, kind: str) -> None:
         "ls-remote", "--tags", "origin", tag
     )
     if listed.code == 0 and tag in listed.stdout:
+        _require_receipt_protected(root, tag)
         print(f"  release: receipt {tag} already on the loop")
         return
     _align_main(root)
@@ -706,7 +707,57 @@ def _release_act(root: Path, kind: str) -> None:
         if time.monotonic() >= deadline:
             fail(f"served, but the receipt tag {tag} is not on the loop")
         time.sleep(5)
+    _require_receipt_protected(root, tag)
     print(f"  release: {LOOP_MEMBER_DIST} 0.1.0 served, receipt {tag} cut")
+
+
+def _require_receipt_protected(root: Path, tag: str) -> None:
+    """Prove the receipt's protection by attempting the crime.
+
+    A refused delete is the strongest proof and ends it. Gitea ties
+    creation, deletion, and movement to one whitelist, so the loop's
+    own lane (the whitelisted admin) can delete; there the tag is
+    pushed straight back and the proof is the protection's presence
+    with the lane on its whitelist, read from the API, which is what
+    binds everyone else.
+    """
+    import fnmatch
+    import json
+    import urllib.request
+
+    import livery.toolroom as toolroom
+
+    toolroom.git.opts(cwd=root, nofail=True)("fetch", "origin", "tag", tag)
+    denied = toolroom.git.opts(cwd=root, nofail=True)(
+        "push", "origin", f":refs/tags/{tag}"
+    )
+    if denied.code != 0:
+        print(f"  receipt {tag}: delete refused; protection holds")
+        return
+    toolroom.git.opts(cwd=root, nofail=True)("push", "origin", f"refs/tags/{tag}")
+    url = os.environ.get("GITEA_URL", "")
+    token = os.environ.get("GITEA_TOKEN", "")
+    request = urllib.request.Request(
+        f"{url}/api/v1/repos/{E2E_OWNER}/{E2E_REPO}/tag_protections",
+        headers={"Authorization": f"token {token}"},
+    )
+    with urllib.request.urlopen(request, timeout=10) as answer:
+        entries = json.load(answer)
+    covering = [
+        entry
+        for entry in entries
+        if fnmatch.fnmatch(tag, str(entry.get("name_pattern", "")))
+    ]
+    if not covering:
+        fail(
+            f"the receipt tag {tag} was deletable and no tag protection"
+            " covers it: the contract's assertion did not hold (the"
+            " receipt was pushed back)"
+        )
+    print(
+        f"  receipt {tag}: protected; the configuring lane stays on the"
+        " whitelist (gitea's one-whitelist model), everyone else is bound"
+    )
 
 
 def _merge_setup(kind: str, sha: str) -> None:

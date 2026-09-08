@@ -376,6 +376,10 @@ YAML, on a real runner, against a real index, from one command.
 - Open in this phase: the dummy platform-wheel member and its linux
   wheel leg in the loop have not run yet; they land with the
   wheels-matrix mechanics rather than blocking the substrate.
+- Open in this phase: the GitHub arm of receipt-tag protection
+  (livery#305) is implemented and fake-verified; its first live
+  application, `workflow.configure` against the livery repository
+  itself, is outward-facing and rides the public phase.
 - Open in this phase: the workshop coverage floor sits at 85, down
   from 87, because the loop verb's orchestration is live-tested
   only (accepted by Willem 2026-09-08 as a temporary state). The
