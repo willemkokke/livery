@@ -89,13 +89,13 @@ def _connect(kind: str, url: str) -> tuple[Forge, str]:
     from livery.workshop._tokens import forge_token
 
     token, _ = forge_token(kind, url)
+    forge = connect(kind, url, token or None)
     if not token:
-        # The lane's documented fallback: a backend may resolve its
-        # own dialect variable internally, and the push credential
-        # mirrors that resolution or automation cannot push at all.
-        dialect = {"gitea": "GITEA_TOKEN", "gitlab": "GITLAB_TOKEN"}.get(kind, "")
-        token = os.environ.get(dialect, "") if dialect else ""
-    return connect(kind, url, token or None), token
+        # The connection resolved its own dialect variable; the push
+        # credential mirrors that resolution or automation cannot
+        # push at all.
+        token = forge.token
+    return forge, token
 
 
 def _push_target(clone_url: str, token: str) -> str:

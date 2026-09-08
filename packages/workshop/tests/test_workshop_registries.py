@@ -162,22 +162,24 @@ def test_the_forge_rung_carries_the_lane_token(
     assert target.token == "lane-token"
 
 
-def test_the_forge_rung_falls_back_to_the_dialect_token(
+def test_the_forge_rung_carries_the_connections_credential(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # A machine that authenticates through the backend's own dialect
-    # variable (GITEA_TOKEN, no FORGE_TOKEN) must still publish: the
-    # registry speaks the same credential as the connection.
+    # variable (no FORGE_TOKEN) must still publish: the connection
+    # resolved that credential once, and the registry asks it
+    # instead of re-deriving.
     from livery.forge.testing import FakeForge
 
     root = _workspace(
         tmp_path, '[workspace]\n[forge]\nkind = "gitea"\nowner = "acme"\n'
     )
     monkeypatch.setattr(
-        "livery.workshop._forge_lane.this_forge", lambda _root: FakeForge()
+        "livery.workshop._forge_lane.this_forge",
+        lambda _root: FakeForge(token="dialect-token"),
     )
     monkeypatch.delenv("FORGE_TOKEN", raising=False)
-    monkeypatch.setenv("GITEA_TOKEN", "dialect-token")
+    monkeypatch.delenv("GITEA_TOKEN", raising=False)
     assert resolve_registry(root, "python").token == "dialect-token"
 
 

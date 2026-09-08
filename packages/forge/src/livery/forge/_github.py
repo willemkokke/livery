@@ -132,6 +132,7 @@ class GithubForge:
         if token:
             headers["Authorization"] = f"Bearer {token}"
         self._client = JsonClient(api_base, headers=headers, opener=opener)
+        self._token = token
         self._opener = opener
         # github.com's API lives on its own host; an Enterprise server
         # serves the API under /api/v3 on the web host.
@@ -140,6 +141,11 @@ class GithubForge:
             self._web_root = "https://github.com"
         else:
             self._web_root = stripped.removesuffix("/api/v3")
+
+    @property
+    def token(self) -> str:
+        """The credential this connection authenticates with; empty when anonymous."""
+        return self._token
 
     @classmethod
     def connect(

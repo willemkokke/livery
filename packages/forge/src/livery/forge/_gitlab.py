@@ -130,10 +130,16 @@ class GitlabForge:
         """
         headers = {"PRIVATE-TOKEN": token} if token else {}
         self._client = JsonClient(api_base, headers=headers, opener=opener, timeout=120)
+        self._token = token
         # GitLab serves the API under /api/v4 on the web host.
         self._web_root = api_base.rstrip("/").removesuffix("/api/v4")
         #: The licence probe's cached answer; None until first asked.
         self._min_approvals: bool | None = None
+
+    @property
+    def token(self) -> str:
+        """The credential this connection authenticates with; empty when anonymous."""
+        return self._token
 
     @classmethod
     def connect(

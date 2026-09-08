@@ -533,6 +533,17 @@ class Forge(Protocol):
     belongs to exactly one host: a foreign host is never sent it.
     """
 
+    @property
+    def token(self) -> str:
+        """The credential this connection authenticates with.
+
+        Empty for a connection deliberately opened anonymously. The
+        backend resolved it once at connect time, its own dialect
+        variables included, so a caller needing the lane's
+        credential asks here instead of re-deriving it.
+        """
+        ...
+
     def whoami(self) -> str:
         """The authenticated user's login name.
 
