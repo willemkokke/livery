@@ -475,13 +475,20 @@ class _GitlabRepository:
             patch["remove_source_branch_after_merge"] = config.delete_branch_on_merge
         # allow_auto_merge needs no switch: merge when pipeline
         # succeeds is always available on GitLab.
+        if config.require_pipeline_success is not None:
+            # The one server-side block GitLab's protection offers:
+            # it binds the UI's merge button too, for everyone.
+            patch["only_allow_merge_if_pipeline_succeeds"] = (
+                config.require_pipeline_success
+            )
         if patch:
             self._client.request(self._base, method="PUT", data=patch)
         if config.required_contexts is not None:
             raise Unsupported(
                 "GitLab protection cannot name required check contexts"
                 " (capability: required_contexts): the nearest fact, only"
-                " allowing merges when the pipeline succeeds, is a boolean"
+                " allowing merges when the pipeline succeeds, is a"
+                " boolean, set through require_pipeline_success"
             )
         if config.protected_tag_patterns is not None:
             self._protect_tags(config.protected_tag_patterns)

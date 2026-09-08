@@ -145,6 +145,7 @@ class _RepoState:
     allow_auto_merge: bool = False
     required_contexts: tuple[str, ...] = ()
     protected_tag_patterns: tuple[str, ...] = ()
+    require_pipeline_success: bool = False
     pages_build_type: str = ""
     secrets: dict[str, str] = field(default_factory=dict)
     variables: dict[str, str] = field(default_factory=dict)
@@ -570,6 +571,8 @@ class _FakeRepository:
             state.delete_branch_on_merge = config.delete_branch_on_merge
         if config.allow_auto_merge is not None:
             state.allow_auto_merge = config.allow_auto_merge
+        if config.require_pipeline_success is not None:
+            state.require_pipeline_success = config.require_pipeline_success
         if config.min_approvals is not None or (
             config.require_codeowner_review is not None
         ):
@@ -781,9 +784,8 @@ class _FakePullRequests:
                 status=405,
             )
         if (
-            state.required_contexts
-            and self._fake._derived_status(state, pr.head_sha).state != "success"
-        ):
+            state.required_contexts or state.require_pipeline_success
+        ) and self._fake._derived_status(state, pr.head_sha).state != "success":
             # Gitea's own words for the protection refusal.
             raise ForgeError(
                 f"pull request {number}: not all required status checks successful",

@@ -139,6 +139,15 @@ class RepoConfig:
             protection requires before a merge. Setting this on a
             forge without the ``required_contexts`` capability raises
             livery.forge.Unsupported.
+        require_pipeline_success: True makes the server refuse
+            merges while the head's checks are not green, for
+            everyone, the forge's own UI included. GitHub and Gitea
+            already enforce exactly this through required_contexts
+            and ignore the field; GitLab maps it to its
+            merge-only-when-the-pipeline-succeeds switch, the one
+            server-side block its protection offers. On a repository
+            with several pipeline sources that switch blocks on any
+            red pipeline, which is as precise as GitLab's data gets.
         min_approvals: Approving reviews the default branch's
             protection requires before a merge. Applied with admins
             bound: protection that exempts admins is a bypass nobody
@@ -178,6 +187,7 @@ class RepoConfig:
     allow_auto_merge: bool | None = None
     required_contexts: tuple[str, ...] | None = None
     protected_tag_patterns: tuple[str, ...] | None = None
+    require_pipeline_success: bool | None = None
     min_approvals: int | None = None
     require_codeowner_review: bool | None = None
     secrets: Mapping[str, str] | None = None
