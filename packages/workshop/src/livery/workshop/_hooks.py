@@ -159,13 +159,22 @@ def post_edit(event: Annotated[HookEvent, stdin]) -> None:
     Best-effort by design: every outcome exits 0 and says nothing,
     because a formatter problem must never block an edit. The gate,
     not the hook, is the arbiter; this only saves round trips.
+
+    Imports are never removed here: an edit in flight legitimately
+    adds an import before the code that uses it, and a hook firing
+    between the two edits would delete it (measured, twice in one
+    session). The full clean, unused imports included, belongs to
+    the stop hook and the gate.
     """
     import contextlib
 
     path = event.tool_input.file_path
     if not path.endswith(".py") or not Path(path).is_file():
         return
-    for args in (["check", "--fix", "--quiet"], ["format", "--quiet"]):
+    for args in (
+        ["check", "--fix", "--unfixable", "F401", "--quiet"],
+        ["format", "--quiet"],
+    ):
         with contextlib.suppress(OSError):
             toolroom.ruff.opts(nofail=True, recorded=False)(*args, path)
 

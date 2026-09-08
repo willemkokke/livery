@@ -316,6 +316,19 @@ def test_post_edit_is_best_effort_and_touches_only_python(
     assert other.read_text() == "#Heading\n"
 
 
+def test_post_edit_never_removes_an_import_mid_edit(tmp_path: Path) -> None:
+    # An edit in flight adds the import before the code that uses
+    # it; the hook firing between the two edits must fix everything
+    # else and leave the import standing (measured deleted, twice in
+    # one session, before this held).
+    victim = tmp_path / "wip.py"
+    victim.write_text("import os\nx=1\n")
+    post_edit(_event(tool_input=ToolInput(file_path=str(victim))))
+    healed = victim.read_text()
+    assert "import os" in healed  # the not-yet-used import survives
+    assert "x = 1" in healed  # everything else still heals
+
+
 def _transcript(tmp_path: Path, result_text: str) -> Path:
     import json
 
