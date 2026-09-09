@@ -103,6 +103,9 @@ class RunContext:
             synthesised, and the run's own head is the pull request's
             head, which the event payload names; on a push both are
             the same commit. Empty when the runner did not say.
+        base_ref: The branch a pull request proposes into, as the event
+            payload names it (GitLab: the merge request's target);
+            empty on a push or when the runner did not say.
     """
 
     forge: str
@@ -110,6 +113,7 @@ class RunContext:
     event: str
     ref: str
     head_sha: str = ""
+    base_ref: str = ""
 
 
 def event_payload(environ: Mapping[str, str] | None = None) -> dict[str, Any] | None:
@@ -145,6 +149,17 @@ def _event_head_sha(env: Mapping[str, str]) -> str:
     return env.get("GITHUB_SHA", "")
 
 
+def _event_base_ref(env: Mapping[str, str]) -> str:
+    """The pull request's base branch from the event payload, or empty."""
+    payload = event_payload(env)
+    if payload is None:
+        return ""
+    base = (payload.get("pull_request") or {}).get("base") or {}
+    if isinstance(base, dict) and base.get("ref"):
+        return str(base["ref"])
+    return ""
+
+
 def run_context(environ: dict[str, str] | None = None) -> RunContext | None:
     """The CI run this process runs in, or ``None`` outside CI.
 
@@ -161,6 +176,7 @@ def run_context(environ: dict[str, str] | None = None) -> RunContext | None:
             env.get("GITHUB_EVENT_NAME", ""),
             env.get("GITHUB_REF", ""),
             _event_head_sha(env),
+            _event_base_ref(env),
         )
     if env.get("GITLAB_CI") == "true":
         return RunContext(
@@ -169,6 +185,7 @@ def run_context(environ: dict[str, str] | None = None) -> RunContext | None:
             env.get("CI_PIPELINE_SOURCE", ""),
             env.get("CI_COMMIT_REF_NAME", ""),
             env.get("CI_COMMIT_SHA", ""),
+            env.get("CI_MERGE_REQUEST_TARGET_BRANCH_NAME", ""),
         )
     return None
 

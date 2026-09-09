@@ -428,7 +428,9 @@ def _eat_dev_wheels(root: Path, pins: dict[str, str]) -> str:
                 " born by the loop"
             )
         contract_text = contract_text.replace(
-            marker, marker + 'python-versions = ["3.14"]\n', 1
+            marker,
+            marker + 'python-versions = ["3.14"]\naffected-legs = true\n',
+            1,
         )
     if "[[ci.schedule]]" not in contract_text:
         # The schedule seam's first entry: the nightly point replays

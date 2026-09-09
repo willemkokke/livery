@@ -263,6 +263,10 @@ jobs:
     runs-on: ${{{{ matrix.os }}}}
     steps:
       - uses: {CHECKOUT}
+        with:
+          # The scoped gate diffs against the merge base with the
+          # pull request's base branch, which a shallow clone lacks.
+          fetch-depth: 0
 {setup_uv_leg}{enter_leg}      - name: Gate, measured
         env:
           # Coverage's own subprocess contract: the .pth the
@@ -545,6 +549,10 @@ jobs:
     runs-on: ${{{{ matrix.os }}}}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The scoped gate diffs against the merge base with the
+          # pull request's base branch, which a shallow clone lacks.
+          fetch-depth: 0
       # act_runner host mode: no setup actions. The entry script
       # installs the lock's pinned uv itself where the host has none.
 {rung}{enter_leg}      - name: Check

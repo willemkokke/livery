@@ -36,7 +36,10 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
   the render gate, in parallel. `--affected` narrows the gate to the
   packages the branch's changes can influence (their dependents'
   closure over the `[[depends]]` graph); a change outside the
-  packages runs everything.
+  packages runs everything. A workspace that declares
+  `[ci] affected-legs = true` has its CI check legs run that scoped
+  gate against the pull request's base branch; the gate job runs
+  the render gate and the provenance check on every run.
 - `fm submit`: get the branch onto the remote, verified; `--armed`
   lets it land, `--fix` heals mechanical gate findings into the
   branch, and the follow classifies the verdict with stable exit

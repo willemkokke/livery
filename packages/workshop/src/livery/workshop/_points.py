@@ -74,6 +74,11 @@ BUILTIN: tuple[Entry, ...] = (
     Entry("gate", "check", "check", profiled=True),
     Entry("gate", "check", "ci.metrics.leg", ("--job={display}", "--label={label}")),
     Entry("gate", "docs", "docs.build"),
+    # The render gate and the provenance check live here, not in the
+    # check legs: a scoped leg skips them, and this job runs once on
+    # every run, whatever the legs narrowed to.
+    Entry("gate", "gate", "template.check"),
+    Entry("gate", "gate", "provenance"),
     Entry("gate", "gate", "ci.metrics.collect"),
     Entry("gate", "gate", "ci.verdict", ("--needs=check,docs,release-title",)),
     Entry("gate", "release-title", "workflow.release.check-title"),
