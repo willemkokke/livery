@@ -267,9 +267,23 @@ def test_the_workspace_tests_are_a_unit_keyed_by_the_tree(work: Path) -> None:
     unit = _coverage_store.workspace_suite(work)
     assert unit is not None and unit.path == "tests" and unit.name == "workspace-tests"
     git = GitOps(work)
-    assert _coverage_store.closure_id(git, (base, top), unit) == git.object_id(
-        "HEAD^{tree}"
-    )
+    (work / "tests" / "test_all.py").write_text("def test_it():\n    pass\n")
+    _git(work, "add", "tests")
+    _git(work, "commit", "-qm", "workspace tests")
+    before = _coverage_store.closure_id(git, (base, top), unit)
+    # Prose leaves the key alone; a package or a pin moves it.
+    (work / "notes").mkdir()
+    (work / "notes" / "plan.md").write_text("# plan\n")
+    _git(work, "add", "notes")
+    _git(work, "commit", "-qm", "a note")
+    assert _coverage_store.closure_id(git, (base, top), unit) == before
+    (work / "packages" / "top" / "src" / "top" / "mod.py").write_text("a = 9\n")
+    _git(work, "commit", "-qam", "top changes")
+    after = _coverage_store.closure_id(git, (base, top), unit)
+    assert after != before
+    (work / "uv.lock").write_text("version = 3\n")
+    _git(work, "commit", "-qam", "lock moves")
+    assert _coverage_store.closure_id(git, (base, top), unit) != after
     # Any file is the unit's to store: its tests reach every package.
     assert _coverage_store.in_closure(
         (base, top), unit, "packages/base/src/base/mod.py"
