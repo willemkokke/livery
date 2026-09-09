@@ -5,10 +5,10 @@ Phase 1's substrate landed 2026-09-07 (issue #289): the loop is
 whole, gate to receipt; the evidence lives in the phase's
 acceptance bullet, and the one open line there names what rides
 the wheels-matrix work instead.
-Phase 2's first two slices landed 2026-09-09: the profile mount and
-the profiled legs with their trace artifacts (issue #314), and the
-CI state store on `refs/workshop/*` (issue #317); the metrics rows
-and the reading verb follow.
+Phase 2 landed 2026-09-09 in three slices: the profile mount and
+the profiled legs with their trace artifacts (issue #314), the CI
+state store on `refs/workshop/*` (issue #317), and the metrics rows
+with `fm ci.timings` (issue #319). Phase 3 is next.
 Absorbs #267 (the speed pass), #286 (no logic in YAML), #270 (token
 publishing), #273 (the act names itself), and the structural finding of
 the phase-4 post-mortem (notes/20260906-phase-4-post-mortem.md): the
@@ -500,6 +500,29 @@ exists.
   nightly point may write benchmarks later), so a years-long,
   kilobyte-rows series coexists with a ten-run trace window and a
   new series is a new key, never a migration.
+  Landed 2026-09-09 (issue #319) as `livery.workshop._metrics`, on
+  the store: one file per run on the `metrics` series, named by
+  zero-padded run id so name order is time order, three hundred
+  kept. A row is per job: the queue wait, the wall, and every step's
+  wall from the forge, beside the per-task durations, the lane waits,
+  and the per-package test time from the leg's trace. The forge
+  protocol times its runs and jobs for it: `Run` carries when the
+  forge accepted it, started it, and ended it; `Job` carries its
+  start and end and its `Step`s, each timed; Gitea and GitHub serve
+  all of it from the calls the backends already make, GitLab times
+  jobs and serves no steps. Each check leg ends with the hidden
+  `ci.metrics.leg`, whatever the gate's verdict, which puts the
+  trace half on the leg's per-run ref; the gate job runs the hidden
+  `ci.metrics.collect` before its own verdict, joining the halves
+  with the forge's times and dropping the per-run refs. Both fail
+  open loudly. The GitHub jobs declare `contents: write`. Measured
+  on the loop's runner in the same pass: the pull request's run and
+  main's run after the merge each landed one file, the per-run refs
+  were gone after each gate job, and the collect step costs under a
+  second. Also measured on the way: a parameter without a default
+  is a positional to footman, so the leg's `--job` and `--label`
+  are keyword-only; and a step that quotes the store's skip marker
+  in a commit message gets no CI run (the decision record's trap).
 - Traces stay local files for now, and only the metrics rows ride
   the ref. Measured 2026-09-09: the loop's act_runner sweeps the
   job's working directory after the job, so the per-leg artifact is
@@ -511,17 +534,30 @@ exists.
   when it lands.
 - A reading verb (working name `fm ci.timings`): per-verb, per-leg
   trend, p50/p90, biggest movers since a base. This is the ledger
-  #267's "measure the loop end to end" asks for.
+  #267's "measure the loop end to end" asks for. Landed 2026-09-09
+  (issue #319), listed: per job and metric the latest value, the
+  median and the ninetieth percentile over the series' window, then
+  the movers, the recent runs' median against the base runs' median,
+  `--since` and `--base` choosing the two windows. A row of another
+  schema is skipped and named; an empty series says the gate writes
+  one row per run. First reading on the loop, two runs: the enter
+  step moved from 7 s to 13 s between the pull request's run and
+  main's, the gate itself held at 5 s, and the runner's queue wait
+  was 4 to 5 s.
 - Acceptance: a trace retrievable for every leg of one run (met
   2026-09-09: one `fm ci.e2e` pass left `profile-ubuntu-latest-3.11`
   and `-3.14` on the loop repository for the setup-branch run and
   again for main's run after the merge, each a trace with every
   task's duration and the member's tests in three phases, and the
   emitter test pins the profiled invocation and the two upload
-  rules); the metrics ref carrying rows from at least two runs; the
-  reading verb rendering them; the transport's refusal paths tested
-  before its happy path (fallbacks first), the windowed rewrite
-  included (met 2026-09-09 with the store's landing, above).
+  rules); the metrics ref carrying rows from at least two runs and
+  the reading verb rendering them (met 2026-09-09: after one
+  `fm ci.e2e` pass the loop's metrics ref held the pull request's
+  run and main's run after the merge, both legs each, and
+  `fm ci.timings` through the loop's own fm rendered them, above);
+  the transport's refusal paths tested before its happy path
+  (fallbacks first), the windowed rewrite included (met 2026-09-09
+  with the store's landing, above).
 - Found and fixed on the way (2026-09-09): the loop had been testing
   the #289 branch's wheels on every pass since that branch landed.
   A dev version's number counts commits since the release tag, so
@@ -1181,3 +1217,14 @@ None. Every ruling raised in this plan was closed in the review of
   only with a stated reason not to (the rendered tasks.py docstring
   contradicting the drift gate was fixed in #314 and #315 closed by
   it).
+- 2026-09-09: the metrics rows take the per-step times from the
+  forge's run API rather than from the job logs. The API is
+  structured and the same shape on Gitea and GitHub, the recorded
+  cassettes already carried the fields, and the protocol grew
+  `Step` for it; log parsing would have avoided the protocol change
+  at the cost of a dialect per forge. Stated to Willem as the
+  recommended shape before the build; not ruled on yet, so an
+  objection reopens it. Payloads on the store are
+  text until the trace story lands, the janitor sweeps per-run refs
+  by age because the protocol has no run-by-id lookup, and the
+  writer classes finer than `ci_only` wait for phase 3's points.
