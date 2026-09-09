@@ -18,7 +18,11 @@ nanobind member (issue #335) landed on the gitea emitter: phase 3
 is complete. Phase 4 began the same day with affected mode in the
 check legs behind `[ci] affected-legs` (issue #338) and the
 verified-tree record that lets main's run skip a tree its pull
-request already proved (issue #340). The
+request already proved (issue #340), and the coverage union on the
+gitea lane, judging only the packages the legs' scopes covered,
+with `fm ci.e2e` proving its three shapes from the runs' logs
+(issue #342, first step; the second step, per-suite measurements
+judged from the record, is issue #345). The
 entry-points race (#263) has its root cause and fix (the completion
 test healing the real project's environment mid-suite; the dev
 build leaving editables stale).
@@ -975,7 +979,24 @@ guessed. The candidate list, from what is already known:
   suite fresh, so the store self-heals and needs no backfill. The
   gitea lane has no coverage metering today, so the local loop
   carries no coverage transport at all until this phase decides
-  that lane's story.
+  that lane's story. Decided and landed 2026-09-09 (issue #342,
+  first step): the gitea lane meters its check legs from
+  interpreter start, `fm coverage.leg` combines a leg's data for
+  its artifact, the gate job collects every leg's data, and
+  `fm coverage.union`, a builtin gate entry before the verdict,
+  combines it and enforces the floors. Each leg ships its scope
+  marker beside its data, and the union judges only the packages
+  the legs' scopes covered, naming the rest as unjudged this run
+  (measured: the first union reddened main's run after a verified
+  skip, whose leg had data with nothing to report, and read a
+  narrowed leg's missing suite as 100% because no statement was
+  counted). Both verbs refuse an empty input by name.
+  Proven on the loop 2026-09-09, read from the runs' logs by
+  `fm ci.e2e` itself: main's run 1152 after the setup squash skipped
+  the gate and its union judged nothing, naming both members
+  unjudged; the member-only pull request's union judged loop-echo
+  alone and named loop-native unjudged; main's full run 1154 after it
+  judged both members at 100%.
 - Coverage over time, and the floor mode declared per package
   (ruled by Willem 2026-09-07). A per-package percentage row lands
   beside the timing rows on every gated run, so the reader renders

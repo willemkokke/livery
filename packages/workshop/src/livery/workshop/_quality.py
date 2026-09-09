@@ -366,6 +366,44 @@ def _scoped_check(subset: tuple[Package, ...], *, fix: bool = False) -> None:
 coverage = group("coverage", help="The measured union and its floors")
 
 
+@coverage.task(name="leg", hidden=True)
+def coverage_leg() -> None:
+    """Combine this leg's metered data into one ``.coverage`` file for upload.
+
+    Runs at the end of a check leg that metered from interpreter
+    start: the run left one data file per process, and the artifact
+    carries one. Refuses when the leg left no data, naming the
+    variable that arms the meter, so a leg that measured nothing is
+    never shipped as an empty union.
+    """
+    root = workspace_root()
+    if root is None:
+        raise ValueError("no workspace: no workshop.toml above the working directory")
+    _python.combine_leg(root)
+
+
+@coverage.task(name="union", hidden=True)
+def coverage_union() -> None:
+    """Union the collected legs' coverage data and enforce the judged floors.
+
+    Runs in the gate job after the legs' artifacts were collected
+    under ``coverage-data/``, one directory per leg with its scope
+    marker beside its data. Only the packages whose suites a leg ran
+    are judged: every package after a full leg, the named ones after
+    a narrowed leg, none after a leg whose gate skipped on a proved
+    tree; the rest are named as unjudged this run. Refuses when no
+    leg's data is there, so a broken upload reddens the gate instead
+    of passing an empty union; the report and the verdicts print, so
+    the numbers on screen are the numbers enforced.
+    """
+    root = workspace_root()
+    if root is None:
+        raise ValueError("no workspace: no workshop.toml above the working directory")
+    judged = _python.combine_union(root, _packages())
+    if judged:
+        _python.enforce_coverage(root, judged)
+
+
 @coverage.task(name="enforce")
 def coverage_enforce() -> None:
     """Enforce every package's floor on the combined coverage data.

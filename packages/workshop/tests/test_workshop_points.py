@@ -154,6 +154,7 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
             "--job=check (ubuntu-latest, 3.14)",
             "--label=check-ubuntu-latest-3.14",
         ],
+        ["hse", "coverage.leg"],
     ]
     seen.clear()
     _points.run_point(root, "gate", "gate", spawn=green)
@@ -163,6 +164,7 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
         ["hse", "template.check"],
         ["hse", "provenance"],
         ["hse", "ci.metrics.collect"],
+        ["hse", "coverage.union"],
         ["hse", "ci.verdict", "--needs=check,docs,release-title"],
         ["hse", "ci.verified.stamp"],
     ]

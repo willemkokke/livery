@@ -308,6 +308,133 @@ def report_coverage(root: Path, packages: tuple[Package, ...]) -> None:
         )
 
 
+#: Where the gate job collects every leg's coverage artifact.
+COVERAGE_DATA = "coverage-data"
+
+
+def combine_leg(root: Path) -> None:
+    """Combine the leg's per-process data files into ``.coverage``.
+
+    Refuses when a leg that ran its gate left no data, naming the
+    variable that arms the meter; a leg whose gate skipped (a tree
+    already proved, or nothing affected) legitimately measured
+    nothing, and says so instead.
+    """
+    from livery.workshop._verified import NOTHING, VERIFIED, read_marker
+
+    parts = sorted(root.glob(".coverage.*"))
+    scope = read_marker(root)["scope"]
+    if not parts and not (root / ".coverage").is_file():
+        if scope not in (VERIFIED, NOTHING):
+            fail(
+                "this leg left no coverage data: nothing was metered. The leg's"
+                " runner sets COVERAGE_PROCESS_START=pyproject.toml so every"
+                " python starts metered; without it there is nothing to union."
+            )
+        print(f"  coverage: no data, the gate ran {scope!r}; nothing to combine")
+        return
+    if parts:
+        result = toolroom.coverage.opts(cwd=root, nofail=True, recorded=False)(
+            "combine"
+        )
+        if result.code != 0:
+            fail(
+                f"coverage combine exited {result.code}:\n"
+                f"{result.stdout}{result.stderr}"
+            )
+    print(f"  coverage: {len(parts)} data file(s) combined into .coverage")
+
+
+def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, ...]:
+    """Combine the collected legs' data into the union; the packages it judges.
+
+    Each leg's directory under `COVERAGE_DATA` carries its scope
+    marker beside its data. A full leg judges every package, a
+    narrowed leg the packages its marker names, and a leg whose gate
+    skipped (a tree already proved, or nothing affected) measured
+    nothing and contributes no data. The packages no leg judged are
+    named as unjudged this run, never read as covered because nothing
+    was counted.
+
+    Refuses by name when no leg directory was collected, when a leg
+    carries no readable marker, when a marker names a scope the union
+    does not read, and when a leg that ran its gate left no data: a
+    missing upload is a red gate, never a smaller union.
+
+    Returns:
+        The judged packages, in *packages* order; empty when no leg
+        ran a suite, and then no union file is written.
+    """
+    from livery.workshop._verified import (
+        AFFECTED,
+        FULL,
+        MARKER,
+        NOTHING,
+        VERIFIED,
+        read_marker,
+    )
+
+    legs = sorted(path for path in (root / COVERAGE_DATA).glob("*") if path.is_dir())
+    if not legs:
+        fail(
+            f"no leg's coverage data under {COVERAGE_DATA}/: the check legs"
+            " upload theirs as coverage-<os>-<python> artifacts, and the gate"
+            " job collects them before this union. A missing upload is a red"
+            " leg, never a smaller union."
+        )
+    collected: list[Path] = []
+    judged: set[str] = set()
+    for leg in legs:
+        marker = read_marker(leg)
+        scope = marker["scope"]
+        if scope in (VERIFIED, NOTHING):
+            print(f"  coverage: leg {leg.name} ran {scope!r}: no suite, no data")
+            continue
+        if scope not in (FULL, AFFECTED):
+            fail(
+                f"leg {leg.name}: no readable {MARKER} beside its data (scope"
+                f" {scope!r}); the check legs upload the marker with the data,"
+                " and the union judges by it"
+            )
+        data = leg / ".coverage"
+        if not data.is_file():
+            fail(
+                f"leg {leg.name} ran its gate {scope!r} and left no .coverage:"
+                " a leg that ran a suite uploads its data, and a missing"
+                " upload is a red gate, never a smaller union"
+            )
+        collected.append(data)
+        if scope == FULL:
+            judged.update(package.path for package in packages)
+        else:
+            judged.update(marker["packages"])
+    unjudged = [package.path for package in packages if package.path not in judged]
+    if unjudged:
+        print(
+            "  coverage: unjudged this run, no leg ran their suites:"
+            f" {', '.join(unjudged)}"
+        )
+    if not collected:
+        print("  coverage: no leg ran a suite this run; nothing to union")
+        return ()
+    scrubbed = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("COVERAGE_", "COV_CORE_"))
+    }
+    result = toolroom.coverage.opts(
+        cwd=root, env=scrubbed, nofail=True, recorded=False
+    )("combine", *(str(path) for path in collected))
+    if result.code != 0:
+        fail(f"coverage combine exited {result.code}:\n{result.stdout}{result.stderr}")
+    report = toolroom.coverage.opts(
+        cwd=root, env=scrubbed, nofail=True, recorded=False
+    )("report", "--sort=cover")
+    print(report.stdout.rstrip())
+    print(f"  coverage: the union of {len(collected)} leg(s)")
+    return tuple(package for package in packages if package.path in judged)
+
+
 def enforce_coverage(root: Path, packages: tuple[Package, ...]) -> None:
     """Fail any package measurably below its committed floor.
 
