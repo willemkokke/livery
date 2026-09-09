@@ -81,6 +81,9 @@ BUILTIN: tuple[Entry, ...] = (
     Entry("gate", "gate", "provenance"),
     Entry("gate", "gate", "ci.metrics.collect"),
     Entry("gate", "gate", "ci.verdict", ("--needs=check,docs,release-title",)),
+    # After a green verdict only: a red verdict fails the job before
+    # this entry, so the record never names a tree a run proved red.
+    Entry("gate", "gate", "ci.verified.stamp"),
     Entry("gate", "release-title", "workflow.release.check-title"),
     Entry("merge", "deploy", "docs.build"),
     Entry("merge", "deploy", "docs.publish"),

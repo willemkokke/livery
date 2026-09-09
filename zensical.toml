@@ -393,6 +393,7 @@ nav = [
             { "livery.workshop._update_driver" = "_generated/api/workshop/_update_driver.md" },
             { "livery.workshop._uv" = "_generated/api/workshop/_uv.md" },
             { "livery.workshop._verdict" = "_generated/api/workshop/_verdict.md" },
+            { "livery.workshop._verified" = "_generated/api/workshop/_verified.md" },
             { "livery.workshop._wheels" = "_generated/api/workshop/_wheels.md" },
             { "livery.workshop._workflow_decision" = "_generated/api/workshop/_workflow_decision.md" },
             { "livery.workshop._workflow_engine" = "_generated/api/workshop/_workflow_engine.md" },

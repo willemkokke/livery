@@ -39,7 +39,12 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
   packages runs everything. A workspace that declares
   `[ci] affected-legs = true` has its CI check legs run that scoped
   gate against the pull request's base branch; the gate job runs
-  the render gate and the provenance check on every run.
+  the render gate and the provenance check on every run, and after
+  a green verdict stamps the tree it proved on the `workshop/verified`
+  record, so a later run of the same tree, such as main's run after
+  a squash of a branch on its tip, skips the gate in seconds. A
+  narrowed leg never stamps, and the release train reads the same
+  record before it waits on main's run.
 - `fm submit`: get the branch onto the remote, verified; `--armed`
   lets it land, `--fix` heals mechanical gate findings into the
   branch, and the follow classifies the verdict with stable exit
