@@ -447,7 +447,10 @@ def coverage_union() -> None:
         raise ValueError("no workspace: no workshop.toml above the working directory")
     judged = _python.combine_union(root, _packages())
     if judged:
-        _python.enforce_coverage(root, judged)
+        from livery.workshop._metrics import write_coverage_row
+
+        measured = _python.enforce_coverage(root, judged)
+        print(f"  {write_coverage_row(root, measured)}")
 
 
 @coverage.task(name="enforce")
@@ -463,6 +466,91 @@ def coverage_enforce() -> None:
     if root is None:
         raise ValueError("no workspace: no workshop.toml above the working directory")
     _python.enforce_coverage(root, _packages())
+
+
+@coverage.task(name="accept")
+def coverage_accept(
+    package: Annotated[str, doc("the package path, as packages/forge")],
+    value: Annotated[float, doc("the new mark, in percent")],
+    reason: Annotated[str, doc("why the mark comes down; goes on the record")] = "",
+) -> None:
+    """Lower a package's coverage mark deliberately, with the reason on the record.
+
+    The mark rises on its own when a run clears it; lowering it is a
+    person's act, so this writes a dated row naming who and why, and
+    the next gated run judges from it. Refuses without a reason, for
+    a package not under auto-ratchet, at or above the current mark,
+    or when the marks cannot be read.
+    """
+    from livery.workshop import _coverage_marks
+
+    root = workspace_root()
+    if root is None:
+        raise ValueError("no workspace: no workshop.toml above the working directory")
+    if not reason.strip():
+        fail(
+            "a reason is required: --reason=<why the mark comes down> goes on the"
+            " record beside the new mark"
+        )
+    packages = _packages()
+    found = next((item for item in packages if item.path == package), None)
+    if found is None:
+        fail(
+            f"no package at {package!r}; the packages are "
+            + ", ".join(item.path for item in packages)
+        )
+    policy = _python.coverage_policy(found)
+    if policy is None or not policy.ratchet:
+        fail(
+            f"{package} is not under auto-ratchet: its floor is committed in its"
+            " workshop.toml, so lower it there"
+        )
+    if not 0 <= value <= 100:
+        fail(f"the mark is a percentage; {value!r} is not")
+    current, why = _coverage_marks.marks(root)
+    if current is None:
+        fail(f"refusing: {why}; a write from an unread store would erase its rows")
+    mark = current.get(package)
+    if mark is None:
+        fail(
+            f"{package} has no mark yet: the next gated run records one, and"
+            " there is nothing to lower"
+        )
+    if value >= mark.value:
+        fail(
+            f"{package}'s mark is {mark.value:.2f}%; {value:.2f}% does not lower"
+            " it. Raising is the ratchet's own move, when a run clears the mark."
+        )
+    who = _git_identity(root)
+    written = _coverage_marks.write_mark(
+        root,
+        package=package,
+        value=value,
+        kind="accept",
+        by=who,
+        reason=reason.strip(),
+        ci_only=False,
+    )
+    if written:
+        fail(f"the mark was not written: {written}")
+    print(
+        f"  coverage {package}: mark {mark.value:.2f}% -> {value:.2f}%"
+        f" accepted by {who}"
+    )
+    print(f"    reason: {reason.strip()}")
+
+
+def _git_identity(root: Path) -> str:
+    """Who is accepting: the git identity, or the user name the shell has."""
+    import os
+
+    import livery.toolroom as toolroom
+
+    result = toolroom.git.opts(cwd=root, nofail=True, recorded=False)(
+        "config", "user.name"
+    )
+    name = result.stdout.strip() if result.code == 0 else ""
+    return name or os.environ.get("USER", "unknown")
 
 
 caches = group("caches", help="The workspace's derived caches")

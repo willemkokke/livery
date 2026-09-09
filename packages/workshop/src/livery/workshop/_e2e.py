@@ -872,7 +872,7 @@ def _prove_verified_skip(root: Path, kind: str) -> None:
             "coverage: packages/loop-native on check-ubuntu-latest-3.14:"
             " reused from run",
             "coverage packages/loop-echo: 100.0% (floor 100.0%",
-            "coverage packages/loop-native: 100.0% (floor 100.0%",
+            "coverage packages/loop-native: 100.0% (",
             "coverage: the union of 0 leg(s) and 2 reused suite(s)",
         ),
         forbidden=("unjudged this run",),
@@ -881,6 +881,61 @@ def _prove_verified_skip(root: Path, kind: str) -> None:
         f"  verified skip: proven on main's run {run.id}; the union reused both"
         " suites from the store"
     )
+
+
+#: The member the loop keeps under auto-ratchet, so every pass proves
+#: the mark's first record, an accepted lowering, and the ratchet up.
+RATCHET_MEMBER = "loop-native"
+
+
+def _prepare_ratchet(root: Path) -> None:
+    """Put the ratchet member under auto-ratchet, then lower its mark for the proof.
+
+    The member's contract lands through the loop's own gate while it
+    still commits a literal floor: that pull request's run records the
+    first mark. Then `fm coverage.accept` lowers the mark to 90 with a
+    reason, so the member-only pull request that follows judges from
+    the accepted row and ratchets the mark back up. A refusal (a mark
+    a pass that did not finish already lowered) is printed and the
+    mark stands; the proof reads the same lines either way.
+    """
+    import livery.toolroom as toolroom
+    from livery.workshop._git_ops import GitOps
+
+    contract = root / "packages" / RATCHET_MEMBER / "workshop.toml"
+    body = contract.read_text("utf-8")
+    if 'coverage-floor = "auto-ratchet"' not in body:
+        _fresh_branch(root, "chore/ratchet-member")
+        switched = body.replace(
+            "coverage-floor = 100", 'coverage-floor = "auto-ratchet"'
+        )
+        if switched == body:
+            fail(f"{contract}: no literal floor to switch to auto-ratchet")
+        contract.write_text(switched, "utf-8")
+        GitOps(root).commit_all(
+            f"chore({RATCHET_MEMBER}): the member's floor is the mark on the"
+            " store\n\nUnder auto-ratchet the first gated run records the"
+            " mark, and the loop proves the record, an accepted lowering,"
+            " and the ratchet up on every pass."
+        )
+        toolroom.git.opts(cwd=root, nofail=True)("fetch", "--prune", "origin")
+        _loop_fm(root, "submit", "--force", "--armed")
+        _align_main(root)
+        print(f"  ratchet member: {RATCHET_MEMBER} landed under auto-ratchet")
+    code = _loop_fm(
+        root,
+        "coverage.accept",
+        f"packages/{RATCHET_MEMBER}",
+        "90",
+        "--reason=the loop proves an accepted lowering",
+        nofail=True,
+    )
+    if code == 0:
+        print(f"  ratchet member: {RATCHET_MEMBER}'s mark accepted down to 90")
+    else:
+        print(
+            f"  ratchet member: the accept was refused (exit {code}); the mark stands"
+        )
 
 
 def _prove_scoped_leg(root: Path, kind: str) -> None:
@@ -958,10 +1013,12 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
             "coverage: packages/loop-native on check-ubuntu-latest-3.14:"
             " reused from run",
             "coverage packages/loop-echo: 100.0% (floor 100.0%",
-            "coverage packages/loop-native: 100.0% (floor 100.0%",
+            "coverage packages/loop-native: 100.0% (mark 90.0% accept by",
+            "accepted: the loop proves an accepted lowering",
+            "new mark: 100.0%",
             "coverage: the union of 1 leg(s) and 1 reused suite(s)",
         ),
-        forbidden=("unjudged this run",),
+        forbidden=("unjudged this run", "not recorded:"),
     )
     print(
         "  scoped leg: proven on a member-only pull request (affected:"
@@ -978,7 +1035,7 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
         "gate",
         (
             "coverage packages/loop-echo: 100.0% (floor 100.0%",
-            "coverage packages/loop-native: 100.0% (floor 100.0%",
+            "coverage packages/loop-native: 100.0% (mark 100.0% ratchet by run",
             "coverage: the union of 1 leg(s) and 0 reused suite(s)",
         ),
     )
@@ -1283,6 +1340,7 @@ if _WORKSHOP_TESTS.is_dir():
         _merge_setup(forge, sha)
         _prove_verified_skip(root, forge)
         _ensure_members(root)
+        _prepare_ratchet(root)
         _prove_scoped_leg(root, forge)
         _release_act(root, forge)
         print("  the loop is whole: gate, merge, release, receipt")
