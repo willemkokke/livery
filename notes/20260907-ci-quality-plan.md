@@ -23,7 +23,8 @@ gitea lane, judging only the packages the legs' scopes covered,
 with `fm ci.e2e` proving its three shapes from the runs' logs
 (issue #342, first step) and the per-suite coverage store that
 lets a narrowed leg skip a suite and the gate reuse its lines
-(issue #345). The
+(issue #345), and the gate point's shell reached the GitHub lane
+with livery's own pull requests narrowed (issues #352, #353). The
 entry-points race (#263) has its root cause and fix (the completion
 test healing the real project's environment mid-suite; the dev
 build leaving editables stale).
@@ -1203,7 +1204,16 @@ for what cannot exist locally:
   point's own jobs (deploy, governance, dispatch) keep their
   GitHub workflows until the rest of the port. Declaring
   `[ci] affected-legs` for livery follows as its own change, and
-  carries the port's evidence from GitHub. The port's first run
+  carries the port's evidence from GitHub. Proven on GitHub
+  2026-09-09: the port's pull request run 34392572536 ran the four
+  legs on the shell, each leg stored its suites (five closures per
+  leg), the gate job unioned the four legs, judged every floor,
+  gave the verdict, and stamped the tree; main's run after the
+  squash found the record and skipped its gate. Landed the same
+  day (issue #353): `[ci] affected-legs = true` in livery's
+  contract, so a pull request's legs narrow and the gate job
+  reuses the skipped suites; the first member-only pull request
+  after it is the proof of the narrowing. The port's first run
   found the Windows legs red with 37 failing workshop tests that
   every earlier run had carried too: the old step ran two commands
   under pwsh, which fails a step only on the last command's exit,
