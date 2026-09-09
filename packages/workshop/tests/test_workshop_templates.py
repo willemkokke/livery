@@ -363,6 +363,7 @@ def test_the_gitea_shell_is_one_verb_per_job_and_only_event_filters(
     check_step = next(s for s in jobs["check"]["steps"] if s.get("name") == "Check")
     assert "fm ci.run --point=gate --job=check" in check_step["run"]
     assert jobs["gate"]["if"] == "always()"
+    assert jobs["gate"]["steps"][0]["with"]["fetch-depth"] == 0
     assert jobs["deploy"]["if"] == "github.event_name == 'push'"
     assert jobs["govern"]["if"] == "github.event_name == 'push'"
     assert "if" not in jobs["check"] and "if" not in jobs["release-title"]
@@ -435,6 +436,9 @@ def test_the_github_shell_is_one_verb_per_job_for_the_gate_point(
     assert upload["with"]["if-no-files-found"] == "error"
     gate = jobs["gate"]
     assert gate["needs"] == ["check", "docs"]
+    # The stamp composes a narrowed run with its base tree's record,
+    # which needs the merge base a shallow clone lacks.
+    assert gate["steps"][0]["with"]["fetch-depth"] == 0
     names = [step.get("name", "") for step in gate["steps"]]
     assert names.index("Collect every leg's coverage data") < names.index("Verdict")
     collect = gate["steps"][names.index("Collect every leg's coverage data")]

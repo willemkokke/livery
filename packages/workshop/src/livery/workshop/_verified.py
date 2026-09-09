@@ -13,9 +13,14 @@ pays in full.
 The record is advisory in the safe direction only: a missing entry,
 an unreachable store, another tree, or a narrowed scope runs the
 gate, and a stamp that cannot be written prints why. A leg leaves
-its scope in a marker file beside its trace, so the stamp says
-``full`` only when every check leg ran the whole gate; a pull request
-narrowed by ``[ci] affected-legs`` never lets main skip.
+its scope in a marker file beside its trace. The stamp says
+``full`` when every check leg ran the whole gate, and also when the
+legs ran narrowed on top of a tree the record already names as
+full: every package a narrowed leg skipped is byte for byte the
+base tree's, and so is every root file the gate reads, so their
+verdicts carry over from the base's run, and the row names that
+base. Without a full row for the base, a narrowed run stamps
+nothing.
 """
 
 from __future__ import annotations
@@ -26,7 +31,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from livery.workshop._git_ops import GitOps
+from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._state import RunContext, Series, put, read
 
 #: The series: one file per tree id, the newest kept.
@@ -45,6 +50,9 @@ AFFECTED = "affected"
 NOTHING = "nothing"
 VERIFIED = "verified"
 
+#: The scopes a leg can leave; anything else means the leg said nothing.
+KNOWN = (FULL, AFFECTED, NOTHING, VERIFIED)
+
 
 @dataclass(frozen=True)
 class Verified:
@@ -54,8 +62,11 @@ class Verified:
         tree: The git tree id the gate proved.
         run: The forge's run id.
         sha: The commit the run checked out.
-        scope: ``full`` when every check leg ran the whole gate.
+        scope: ``full`` when every check leg ran the whole gate, or
+            when narrowed legs composed with a full base.
         legs: The check legs' names, as the forge lists them.
+        base_tree: The tree a composed row rests on; empty otherwise.
+        base_run: The run that proved that base; empty otherwise.
     """
 
     tree: str
@@ -63,6 +74,8 @@ class Verified:
     sha: str
     scope: str
     legs: tuple[str, ...]
+    base_tree: str = ""
+    base_run: str = ""
 
 
 def tree_id(git: GitOps, ref: str = "HEAD") -> str:
@@ -133,20 +146,29 @@ def record(root: Path, tree: str) -> tuple[Verified | None, str]:
             sha=str(entry.get("sha", "")),
             scope=str(entry.get("scope", "")),
             legs=tuple(str(leg) for leg in entry.get("legs", [])),
+            base_tree=str(entry.get("base_tree", "")),
+            base_run=str(entry.get("base_run", "")),
         ),
         "",
     )
 
 
 def stamp(
-    root: Path, run: RunContext, *, tree: str, sha: str, legs: tuple[str, ...]
+    root: Path,
+    run: RunContext,
+    *,
+    tree: str,
+    sha: str,
+    legs: tuple[str, ...],
+    base: Verified | None = None,
 ) -> str:
     """Record *tree* as proved green by *run*; ``""`` or the reason.
 
-    Only a CI run writes; the legs named must all have run the full
-    gate, which the caller judged from their scopes.
+    Only a CI run writes. The legs named all ran the full gate, or
+    ran narrowed on top of *base*, a full row the caller read from
+    the record; a composed row names that base and its run.
     """
-    entry = {
+    entry: dict[str, object] = {
         "schema": SCHEMA,
         "tree": tree,
         "run": run.run_id,
@@ -156,22 +178,32 @@ def stamp(
         "legs": list(legs),
         "when": datetime.now(UTC).isoformat(timespec="seconds"),
     }
+    basis = ""
+    if base is not None:
+        entry["base_tree"] = base.tree
+        entry["base_run"] = base.run
+        basis = f" on top of {base.tree[:12]}"
     return put(
         root,
         SERIES.ref,
         {tree: json.dumps(entry, sort_keys=True)},
-        message=f"verified: tree {tree[:12]} by run {run.run_id}",
+        message=f"verified: tree {tree[:12]} by run {run.run_id}{basis}",
         window=SERIES.window,
         ci_only=True,
     )
 
 
 def stamp_from_metrics(root: Path, run: RunContext, *, sha: str) -> str:
-    """Stamp the run's tree when every check leg's row says it ran the full gate.
+    """Stamp the run's tree from what its check legs' rows say they ran.
 
     Reads the run's file on the metrics series, which the collect
     step put before the verdict; each check leg's row carries the
-    scope its marker named. Returns the line to print.
+    scope its marker named. Every leg full: the tree is stamped.
+    Legs narrowed (``affected``, or ``nothing`` for a prose-only
+    diff): the tree is stamped when the merge base with the run's
+    base branch is a tree the record names as full, and the row
+    names that base; otherwise nothing is written and the line
+    says which proof is missing. Returns the line to print.
     """
     from livery.workshop._metrics import SERIES as METRICS
     from livery.workshop._metrics import run_file
@@ -191,15 +223,48 @@ def stamp_from_metrics(root: Path, run: RunContext, *, sha: str) -> str:
     legs = tuple(sorted(name for name in jobs if name.startswith("check")))
     if not legs:
         return "  verified: no stamp, the run had no check leg"
-    narrowed = [
-        name
+    scopes = {
+        name: str((jobs[name].get("scope") or {}).get("scope", "unknown"))
         for name in legs
-        if str((jobs[name].get("scope") or {}).get("scope", "unknown")) != FULL
-    ]
-    if narrowed:
-        return f"  verified: no stamp, {', '.join(narrowed)} did not run the full gate"
-    tree = tree_id(GitOps(root))
-    why = stamp(root, run, tree=tree, sha=sha, legs=legs)
+    }
+    unknown = [name for name, scope in scopes.items() if scope not in KNOWN]
+    if unknown:
+        return f"  verified: no stamp, {', '.join(unknown)} left no scope"
+    git = GitOps(root)
+    tree = tree_id(git)
+    if all(scope == VERIFIED for scope in scopes.values()):
+        return f"  verified: tree {tree[:12]} is already recorded; nothing to stamp"
+    if all(scope in (FULL, VERIFIED) for scope in scopes.values()):
+        why = stamp(root, run, tree=tree, sha=sha, legs=legs)
+        if why:
+            return f"  verified: no stamp, {why}"
+        return (
+            f"  verified: tree {tree[:12]} recorded as proved green by run {run.run_id}"
+        )
+    # Narrowed legs prove the packages they ran; the base tree's row
+    # proves the rest, since those packages and every root file the
+    # gate reads are the base's bytes, or the legs would have widened.
+    branch = run.base_ref or "main"
+    try:
+        git.fetch()
+        base = tree_id(git, git.merge_base(branch))
+    except GitError as error:
+        return f"  verified: no stamp, no merge base with origin/{branch} ({error})"
+    base_row, why = record(root, base)
+    if why:
+        return (
+            f"  verified: no stamp, the base tree {base[:12]} could not be read ({why})"
+        )
+    narrowed = ", ".join(name for name, scope in scopes.items() if scope != FULL)
+    if base_row is None or base_row.scope != FULL:
+        return (
+            f"  verified: no stamp, {narrowed} ran narrowed on base tree {base[:12]},"
+            " which the record has not proved in full"
+        )
+    why = stamp(root, run, tree=tree, sha=sha, legs=legs, base=base_row)
     if why:
         return f"  verified: no stamp, {why}"
-    return f"  verified: tree {tree[:12]} recorded as proved green by run {run.run_id}"
+    return (
+        f"  verified: tree {tree[:12]} recorded as proved green by run {run.run_id}"
+        f" on top of tree {base[:12]} (run {base_row.run})"
+    )

@@ -1821,3 +1821,28 @@ None. Every ruling raised in this plan was closed in the review of
   the whole workspace, forge included (run 34409391944), where the
   local affected gate had narrowed to footman, toolroom, and
   workshop.
+- 2026-09-10 (issue #378), ruled by Willem ("that's a very sensible
+  extension"): a narrowed green run on a verified base stamps its
+  tree as verified in full. The legs narrowed against the merge base
+  with the base branch, every package they skipped is byte for byte
+  the base tree's, and so is every root file the gate reads, so when
+  the record names the base tree as full the skipped packages'
+  verdicts carry over from the base's run and the whole tree is
+  proved: the row names the base tree and its run, the legs' skip
+  line says what it rests on, and the proof chains through composed
+  rows. Without a full row for the base, or without a merge base
+  (the gate job's checkout now fetches the history on both emitted
+  shells), the run stamps nothing and says which proof is missing.
+  The occasion: main paid the full gate after every narrowed pull
+  request (538 s and 557 s after #374 and #376, against 260 s and
+  298 s after the full runs #370 and #373), and the release train
+  waits on that run. The loop's member-only and note-only proofs
+  now expect main's run after each squash to skip on the composed
+  row; the note-only proof also carries the site-files wording of
+  #375, which had changed the line the loop asserts without a loop
+  pass. Proven on the loop 2026-09-10, read from the runs' logs by
+  `fm ci.e2e` itself: the member-only pull request's run composed
+  its stamp with main's tree and main's run 1216 after the squash
+  skipped the gate with the union reusing every unit; the note-only
+  pull request's run 1217 composed too, and main's run 1218 after
+  its squash skipped.
