@@ -23,7 +23,7 @@ from livery.footman import fail
 from livery.workshop._ci_tasks import ci
 
 if TYPE_CHECKING:
-    from livery.forge import Forge, Repository, Run
+    from livery.forge import Forge, Job, Repository, Run
 
 #: The seeded organisation and the loop's one scratch repository.
 E2E_OWNER = "livery"
@@ -774,15 +774,16 @@ def _ensure_members(root: Path) -> None:
         print(f"  member {name}: landed through the loop's own gate")
 
 
-def _job_logs(
+def _completed_run(
     repo: Repository, sha: str, *, event: str, timeout: float = 900.0
-) -> tuple[Run, dict[str, str]]:
-    """The newest completed ``ci.yml`` run of *sha* for *event*, with its logs.
+) -> tuple[Run, tuple[Job, ...]]:
+    """The newest completed ``ci.yml`` run of *sha* for *event*, with its jobs.
 
     Waits for the run to register and complete; a red run fails
-    verbatim, naming its page. The logs are keyed by job name, the
-    check legs by their matrix display (``check (ubuntu-latest,
-    3.14)``), so a reader looks for the prefix it needs.
+    verbatim, naming its page. The jobs carry their names, the check
+    legs by their matrix display (``check (ubuntu-latest, 3.14)``),
+    so a reader looks for the prefix it needs; the logs are read per
+    job on demand, since a job the run skipped has none to serve.
     """
     import time
 
@@ -807,18 +808,17 @@ def _job_logs(
             f"run {run.id} ({event}, {sha[:10]}) ended {run.conclusion}:"
             f" {repo.web_url()}/actions/runs/{run.id}"
         )
-    return run, {
-        job.name: repo.checks.job_log(job.id) for job in repo.checks.jobs(run.id)
-    }
+    return run, repo.checks.jobs(run.id)
 
 
 def _require_lines(
-    repo: Repository, run: Run, logs: dict[str, str], job: str, needed: tuple[str, ...]
+    repo: Repository, run: Run, jobs: tuple[Job, ...], job: str, needed: tuple[str, ...]
 ) -> None:
     """Fail unless the log of the job whose name starts with *job* has every line."""
-    log = next((text for name, text in logs.items() if name.startswith(job)), None)
-    if log is None:
+    found = next((item for item in jobs if item.name.startswith(job)), None)
+    if found is None:
         fail(f"run {run.id} has no {job} job: {repo.web_url()}/actions/runs/{run.id}")
+    log = repo.checks.job_log(found.id)
     missing = [line for line in needed if line not in log]
     if missing:
         fail(
@@ -842,7 +842,7 @@ def _prove_verified_skip(root: Path, kind: str) -> None:
     head = GitOps(root).head_sha()
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
-    run, logs = _job_logs(repo, head, event="push")
+    run, logs = _completed_run(repo, head, event="push")
     _require_lines(repo, run, logs, "check", ("skipping the gate",))
     _require_lines(
         repo,
@@ -905,7 +905,7 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
     _align_main(root)
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
-    run, logs = _job_logs(repo, head, event="pull_request")
+    run, logs = _completed_run(repo, head, event="pull_request")
     _require_lines(
         repo,
         run,
@@ -936,7 +936,7 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
     # A narrowed leg never stamps, so main's push after the squash pays
     # the full gate, and its union judges both members.
     landed = GitOps(root).head_sha()
-    run, logs = _job_logs(repo, landed, event="push")
+    run, logs = _completed_run(repo, landed, event="push")
     _require_lines(
         repo,
         run,

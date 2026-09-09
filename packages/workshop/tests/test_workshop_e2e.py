@@ -169,7 +169,7 @@ def test_a_red_run_fails_the_proof_naming_its_page() -> None:
     fake.push(_e2e.E2E_OWNER, _e2e.E2E_REPO, "main", outcome="failure", sha=_SHA)
     fake.settle(_e2e.E2E_OWNER, _e2e.E2E_REPO, _SHA)
     with pytest.raises(_FAILURES) as caught:
-        _e2e._job_logs(repo, _SHA, event="push")
+        _e2e._completed_run(repo, _SHA, event="push")
     assert "ended failure" in str(caught.value)
     assert "/actions/runs/" in str(caught.value)
 
@@ -179,18 +179,17 @@ def test_a_proof_waits_only_until_its_deadline_and_reads_its_event_alone() -> No
     fake.push(_e2e.E2E_OWNER, _e2e.E2E_REPO, "main", sha=_SHA)
     fake.settle(_e2e.E2E_OWNER, _e2e.E2E_REPO, _SHA)
     with pytest.raises(_FAILURES, match="no completed push run for dddddddddd"):
-        _e2e._job_logs(repo, "d" * 40, event="push", timeout=0)
+        _e2e._completed_run(repo, "d" * 40, event="push", timeout=0)
     with pytest.raises(_FAILURES, match="no completed pull_request run"):
-        _e2e._job_logs(repo, _SHA, event="pull_request", timeout=0)
+        _e2e._completed_run(repo, _SHA, event="pull_request", timeout=0)
 
 
 def test_a_proof_names_the_job_it_cannot_find_and_the_lines_it_misses() -> None:
     fake, repo = _proof_rig()
     fake.push(_e2e.E2E_OWNER, _e2e.E2E_REPO, "main", sha=_SHA)
     fake.settle(_e2e.E2E_OWNER, _e2e.E2E_REPO, _SHA)
-    run, logs = _e2e._job_logs(repo, _SHA, event="push")
-    assert list(logs) == ["gate"]
-    assert "concluded success" in logs["gate"]
+    run, logs = _e2e._completed_run(repo, _SHA, event="push")
+    assert [job.name for job in logs] == ["gate"]
     with pytest.raises(_FAILURES, match="has no check job"):
         _e2e._require_lines(repo, run, logs, "check", ("x",))
     with pytest.raises(_FAILURES, match=r"did not say \['absent line'\]"):
