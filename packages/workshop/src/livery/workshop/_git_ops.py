@@ -168,6 +168,13 @@ class GitOps:
         )
         return result.stdout.strip() if result.code == 0 else ""
 
+    def merge_base(self, base: str) -> str:
+        """The merge base of HEAD and ``origin/<base>``; raises GitError without one.
+
+        A shallow clone, or a base the fetch did not bring, has none.
+        """
+        return self._run("merge-base", "HEAD", f"origin/{base}").strip()
+
     def changed_paths(self, base: str) -> list[str]:
         """Repo-relative paths this branch touches, committed or not.
 
@@ -177,7 +184,7 @@ class GitOps:
         named one by one (a collapsed directory reads as neither
         prose nor package).
         """
-        merge_base = self._run("merge-base", "HEAD", f"origin/{base}").strip()
+        merge_base = self.merge_base(base)
         committed = self._run("diff", "--name-only", merge_base, "HEAD").splitlines()
         pending: list[str] = []
         for line in self._run(

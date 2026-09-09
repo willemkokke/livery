@@ -958,10 +958,11 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
     the loop's gate, and reads the run's logs: the check leg must say
     it narrowed against main to that one member and stored that
     member's suite, and the gate job's union must judge both members,
-    the other one reused from the store. Main's push run after the
-    squash then pays the full gate, stores both suites, and its union
-    judges both. Re-run on a pass-owned branch with main's tip as the
-    stamp, so the diff is never empty.
+    the other one reused from the store, and its stamp composes with
+    main's verified tree. Main's push run after the squash then skips
+    on that composed row, and its union reuses every unit. Re-run on
+    a pass-owned branch with main's tip as the stamp, so the diff is
+    never empty.
     """
     from livery.workshop._git_ops import GitOps
 
@@ -1028,17 +1029,29 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
             "accepted: the loop proves an accepted lowering",
             "new mark: 100.0%",
             "coverage: the union of 1 leg(s) and 1 reused suite(s)",
+            "recorded as proved green by run",
+            " on top of tree ",
         ),
         forbidden=("unjudged this run", "not recorded:"),
     )
     print(
         "  scoped leg: proven on a member-only pull request (affected:"
-        " packages/loop-echo; the union reused loop-native from the store)"
+        " packages/loop-echo; the union reused loop-native from the store;"
+        " the stamp composed with main's tree)"
     )
-    # A narrowed leg never stamps, so main's push after the squash pays
-    # the full gate, and its union judges both members.
+    # The narrowed run rested on main's verified tree, so its stamp
+    # composed, and main's push after the squash skips the gate; the
+    # union reuses every unit and judges both members from the store.
     landed = GitOps(root).head_sha()
     run, logs = _completed_run(repo, landed, event="push")
+    _require_lines(
+        repo,
+        run,
+        logs,
+        "check",
+        ("skipping the gate", " on top of tree "),
+        forbidden=("coverage store: packages/loop-echo stored for closure",),
+    )
     _require_lines(
         repo,
         run,
@@ -1047,21 +1060,14 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
         (
             "coverage packages/loop-echo: 100.0% (floor 100.0%",
             "coverage packages/loop-native: 100.0% (mark 100.0% ratchet by run",
-            "coverage: the union of 1 leg(s) and 0 reused suite(s)",
+            "coverage: the union of 0 leg(s) and 3 reused suite(s)",
         ),
+        forbidden=("unjudged this run",),
     )
-    _require_lines(
-        repo,
-        run,
-        logs,
-        "check",
-        (
-            "coverage store: packages/loop-echo stored for closure",
-            "coverage store: packages/loop-native stored for closure",
-            "coverage store: tests stored for closure",
-        ),
+    print(
+        f"  composed skip: proven on main's run {run.id} after the member-only"
+        " squash; the union reused every unit"
     )
-    print(f"  full push: proven on main's run {run.id}; the union judged both members")
 
 
 def _prove_prose_leg(root: Path, kind: str) -> None:
@@ -1071,8 +1077,9 @@ def _prove_prose_leg(root: Path, kind: str) -> None:
     else, landed through the loop's gate on a pass-owned branch with
     main's tip as the stamp so the diff is never empty. The check
     leg must say nothing is affected because only prose changed and
-    skip its gate; the gate job must reuse every unit from the store
-    and judge both members.
+    skip its gate; the gate job must reuse every unit from the store,
+    judge both members, and compose the stamp with main's verified
+    tree, so main's push run after the squash skips too.
     """
     from livery.workshop._git_ops import GitOps
 
@@ -1107,8 +1114,9 @@ def _prove_prose_leg(root: Path, kind: str) -> None:
         "check",
         (
             "affected-legs: the scoped gate against origin/main",
-            "nothing affected: only prose changed (1 file(s) under notes/ or"
-            " markdown); the gate skips",
+            "nothing affected: only prose and site files changed (1 file(s)"
+            " under notes/, markdown, the root docs/ tree, or zensical.toml);"
+            " the gate skips",
         ),
         forbidden=("affected: packages/", "coverage store: packages/"),
     )
@@ -1125,13 +1133,19 @@ def _prove_prose_leg(root: Path, kind: str) -> None:
             "coverage packages/loop-echo: 100.0% (floor 100.0%",
             "coverage packages/loop-native: 100.0% (",
             "coverage: the union of 0 leg(s) and 3 reused suite(s)",
+            "recorded as proved green by run",
+            " on top of tree ",
         ),
         forbidden=("unjudged this run",),
     )
     print(
         f"  prose leg: proven on a note-only pull request (run {run.id}: the"
-        " check leg skipped, the union reused every unit)"
+        " check leg skipped, the union reused every unit, the stamp composed)"
     )
+    landed = GitOps(root).head_sha()
+    run, logs = _completed_run(repo, landed, event="push")
+    _require_lines(repo, run, logs, "check", ("skipping the gate", " on top of tree "))
+    print(f"  composed skip: proven on main's run {run.id} after the note-only squash")
 
 
 def _release_act(root: Path, kind: str) -> None:

@@ -47,8 +47,11 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
   a green verdict stamps the tree it proved on the `workshop/verified`
   record, so a later run of the same tree, such as main's run after
   a squash of a branch on its tip, skips the gate in seconds. A
-  narrowed leg never stamps, and the release train reads the same
-  record before it waits on main's run.
+  narrowed run stamps too when the tree it narrowed against is on
+  the record in full: every package it skipped is byte-identical to
+  that base tree's, so their verdicts carry over, and the row names
+  the base. Without such a base a narrowed run stamps nothing. The
+  release train reads the same record before it waits on main's run.
 - `fm submit`: get the branch onto the remote, verified. Its local
   gate is the one the CI legs run: the whole workspace, or the
   affected gate against the base branch when the contract declares

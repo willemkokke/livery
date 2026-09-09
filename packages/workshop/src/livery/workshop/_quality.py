@@ -207,9 +207,10 @@ def verified_already(root: Path) -> bool:
         return False
     if found is None or found.scope != _verified.FULL:
         return False
+    basis = f" on top of tree {found.base_tree[:12]}" if found.base_tree else ""
     print(
         f"  verified: tree {tree[:12]} proved green by run {found.run}"
-        f" at {found.sha[:12]}; skipping the gate"
+        f" at {found.sha[:12]}{basis}; skipping the gate"
     )
     return True
 

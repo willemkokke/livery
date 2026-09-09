@@ -330,6 +330,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: {CHECKOUT}
+        with:
+          # The stamp composes a narrowed run with its base tree's
+          # record through the merge base, which a shallow clone lacks.
+          fetch-depth: 0
       # Every leg's coverage data, for the union the gate's own
       # entries combine and judge against the floors.
       - name: Collect every leg's coverage data
@@ -633,6 +637,10 @@ jobs:
     runs-on: {first}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The stamp composes a narrowed run with its base tree's
+          # record through the merge base, which a shallow clone lacks.
+          fetch-depth: 0
       # Every leg's coverage data, for the union the gate's own
       # entries combine and judge against the committed floors.
       - name: Collect every leg's coverage data

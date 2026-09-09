@@ -120,6 +120,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The stamp composes a narrowed run with its base tree's
+          # record through the merge base, which a shallow clone lacks.
+          fetch-depth: 0
       # Every leg's coverage data, for the union the gate's own
       # entries combine and judge against the floors.
       - name: Collect every leg's coverage data
