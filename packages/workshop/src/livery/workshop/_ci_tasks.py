@@ -6,13 +6,15 @@ follows instead of reading once. The ``ci`` group acts on the head
 commit's runs: ``ci.rerun`` re-runs the failed jobs, ``ci.cancel``
 cancels what is still moving (the relief for a wedged queue), and
 ``ci.logs`` prints the job logs, the one read that stays here so
-logs reach an agent through fm. ``ci.janitor`` sweeps the CI state
-store (livery.workshop._state): the per-run refs a cancelled run
-left behind, and each series' window. ``ci.timings`` prints the
-timing rows the gate writes on that store (livery.workshop._metrics);
-the two hidden ``ci.metrics`` verbs are the writers the emitted
-workflows call. ``doctor`` says who you are, which server this is,
-and what it grants.
+logs reach an agent through fm. ``ci.run`` runs one job of a point
+(livery.workshop._points), the one verb the emitted shells call;
+``ci.verdict`` is the gate job's judgement of the jobs it needs.
+``ci.janitor`` sweeps the CI state store (livery.workshop._state):
+the per-run refs a cancelled run left behind, and each series'
+window. ``ci.timings`` prints the timing rows the gate writes on
+that store (livery.workshop._metrics); the two hidden ``ci.metrics``
+verbs are the writers ``ci.run`` schedules. ``doctor`` says who you
+are, which server this is, and what it grants.
 """
 
 from __future__ import annotations
@@ -253,6 +255,92 @@ def ci_janitor(
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
     janitor_flow(root, older_than_hours=older_than)
+
+
+@ci.task(name="run")
+def ci_run(
+    *,
+    point: Annotated[str, doc("the point: gate, merge, nightly, or release")],
+    job: Annotated[str, doc("the point's job this runner executes")],
+    os: Annotated[str, doc("the matrix runner label, on a matrix job")] = "",
+    python: Annotated[str, doc("the matrix python, on a matrix job")] = "",
+) -> None:
+    """Run one job of a point: every task scheduled there, in order.
+
+    The one verb the emitted workflows call, once per job. What the
+    job does is data: the workshop's builtin schedule plus the
+    contract's ``[[ci.schedule]]`` entries. A push to main promotes
+    the gate to the merge point, so the shell spells no decision. A
+    person may run a job by hand; the tasks that only CI may do
+    refuse or fail open on their own.
+    """
+    from livery.workshop._points import run_point
+
+    root = workspace_root()
+    if root is None:
+        fail("no workspace: no workshop.toml above the working directory")
+    run_point(root, point, job, os_label=os, python=python)
+
+
+def verdict_flow(repo: Repository, *, needs: tuple[str, ...], job: str) -> list[str]:
+    """The red jobs of this run among *needs*, and any other red job; empty is green.
+
+    A needed job is matched by name or, for a matrix job, by its
+    display name's prefix (``check (ubuntu-latest, 3.14)`` answers to
+    ``check``). A needed job the forge does not list at all counts as
+    red: the verdict never passes on a job it could not see.
+    """
+    from livery.workshop._state import run_context
+
+    run = run_context()
+    if run is None:
+        return ["not a CI run: the verdict reads the run's jobs from the forge"]
+    runs = repo.checks.runs(head_sha=run.head_sha) if run.head_sha else ()
+    forge_run = next((r for r in runs if str(r.id) == run.run_id), None)
+    if forge_run is None:
+        return [f"the forge lists no run {run.run_id} for {run.head_sha[:12]}"]
+    jobs = repo.checks.jobs(forge_run.id)
+    red: list[str] = []
+    for needed in needs:
+        matching = [
+            j for j in jobs if j.name == needed or j.name.startswith(f"{needed} (")
+        ]
+        if not matching:
+            red.append(f"{needed}: not among the run's jobs")
+        for found in matching:
+            if found.status != "completed" or found.conclusion != "success":
+                red.append(f"{found.name}: {found.conclusion or found.status}")
+    for found in jobs:
+        if found.name == job or any(line.startswith(found.name) for line in red):
+            continue
+        if found.status == "completed" and found.conclusion not in (
+            "success",
+            "skipped",
+        ):
+            red.append(f"{found.name}: {found.conclusion}")
+    return red
+
+
+@ci.task(name="verdict", hidden=True)
+def ci_verdict(
+    *,
+    needs: Annotated[str, doc("the jobs this verdict requires, comma-separated")] = "",
+) -> None:
+    """Judge the run: green when every needed job succeeded, red naming the rest.
+
+    Runs in the gate job, the one required context, after the jobs
+    it needs have completed. It asks the forge for the run's jobs, so
+    the YAML carries no expression over them; a job it cannot see is
+    red, never assumed.
+    """
+    import os as _os
+
+    repo, _ = _resolved()
+    names = tuple(name.strip() for name in needs.split(",") if name.strip())
+    red = verdict_flow(repo, needs=names, job=_os.environ.get("GITHUB_JOB", "gate"))
+    if red:
+        fail("the run is red:\n  " + "\n  ".join(red))
+    print(f"  green: {', '.join(names) or 'every job'} succeeded")
 
 
 metrics = ci.group("metrics", help="The timing rows CI writes", hidden=True)

@@ -396,8 +396,11 @@ def test_the_deploy_emitters_follow_the_seam(tmp_path: Path) -> None:
         '[workspace]\n[forge]\nkind = "gitea"\nowner = "acme"\n'
     )
     files = generate(root)
-    assert ".gitea/workflows/docs.yml" in files
-    assert "docs.publish" in files[".gitea/workflows/docs.yml"]
+    # The gitea lane folds the deploy into ci.yml's merge point: the
+    # deploy job runs whatever the seam, and the verb decides.
+    assert ".gitea/workflows/docs.yml" not in files
+    deploy = files[".gitea/workflows/ci.yml"].split("  deploy:")[1]
+    assert "fm ci.run --point=merge --job=deploy" in deploy
     (root / "workshop.toml").write_text(
         '[workspace]\n[forge]\nkind = "gitlab"\nowner = "acme"\n'
     )

@@ -295,11 +295,14 @@ def test_every_gate_leg_runs_profiled_and_uploads_its_trace(tmp_path: Path) -> N
     for kind, path, action in lanes:
         check = yaml.safe_load(generate(_contract_root(tmp_path, kind))[path])
         steps = check["jobs"]["check"]["steps"]
-        gates = [
-            step
-            for step in steps
-            if "fm --profile=fm-profile.json check" in step.get("run", "")
-        ]
+        # On gitea the profiled gate runs inside ci.run; on GitHub it
+        # is still the leg's own step until the phase-6 port.
+        spelled = (
+            "fm ci.run --point=gate --job=check"
+            if kind == "gitea"
+            else "fm --profile=fm-profile.json check"
+        )
+        gates = [step for step in steps if spelled in step.get("run", "")]
         assert len(gates) == 1, kind
         uploads = [
             step
@@ -316,6 +319,41 @@ def test_every_gate_leg_runs_profiled_and_uploads_its_trace(tmp_path: Path) -> N
         assert upload["with"]["name"] == "profile-${{ matrix.os }}-${{ matrix.python }}"
 
 
+def test_the_gitea_shell_is_one_verb_per_job_and_only_event_filters(
+    tmp_path: Path,
+) -> None:
+    # Phase 3's shape on the gitea lane: every job's work is reached
+    # through `fm ci.run`, the docs deploy and governance are merge
+    # jobs of ci.yml, and #286's census finds only event filters,
+    # plus the verdict job's always().
+    import yaml
+
+    from livery.workshop._ci_generate import generate
+
+    files = generate(_contract_root(tmp_path, "gitea"))
+    assert set(files) >= {".gitea/workflows/ci.yml", ".gitea/workflows/release.yml"}
+    assert ".gitea/workflows/governance.yml" not in files
+    assert ".gitea/workflows/docs.yml" not in files
+    workflow = yaml.safe_load(files[".gitea/workflows/ci.yml"])
+    jobs = workflow["jobs"]
+    assert list(jobs) == ["check", "docs", "gate", "release-title", "deploy", "govern"]
+    for name, job in jobs.items():
+        runs = [step["run"] for step in job["steps"] if "run" in step]
+        # One verb per job: the entry script, then ci.run, nothing else.
+        verbs = [run for run in runs if "ci.run" in run]
+        assert len(verbs) == 1, name
+        assert all("setup.sh" in run or "ci.run" in run for run in runs), (name, runs)
+        for step in job["steps"]:
+            if "if" in step:
+                assert step["if"] == "always()", (name, step)
+    assert "fm ci.run --point=gate --job=check" in jobs["check"]["steps"][-2]["run"]
+    assert jobs["gate"]["if"] == "always()"
+    assert jobs["deploy"]["if"] == "github.event_name == 'push'"
+    assert jobs["govern"]["if"] == "github.event_name == 'push'"
+    assert "if" not in jobs["check"] and "if" not in jobs["release-title"]
+    assert jobs["govern"]["steps"][0]["with"]["fetch-depth"] == 2
+
+
 def test_every_leg_records_its_timings_and_the_gate_collects_before_it_decides(
     tmp_path: Path,
 ) -> None:
@@ -326,10 +364,9 @@ def test_every_leg_records_its_timings_and_the_gate_collects_before_it_decides(
 
     from livery.workshop._ci_generate import generate
 
-    for kind, path in (
-        ("github", ".github/workflows/ci.yml"),
-        ("gitea", ".gitea/workflows/ci.yml"),
-    ):
+    # On gitea the two steps live inside ci.run; the YAML pin is the
+    # GitHub lane's until the phase-6 port.
+    for kind, path in (("github", ".github/workflows/ci.yml"),):
         workflow = yaml.safe_load(generate(_contract_root(tmp_path, kind))[path])
         legs = [
             step
