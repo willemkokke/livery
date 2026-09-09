@@ -247,11 +247,9 @@ on:
 
 jobs:
   check:
-    # A release PR's title check answers in seconds; the matrix must
-    # not burn six legs under a title the merge would refuse anyway.
-    # Every other event skips release-title, and the skip passes.
+    # The title check answers in seconds and is green off a release
+    # branch; the matrix waits for it so a refused title burns no legs.
     needs: [release-title]
-    if: ${{{{ !cancelled() && (needs.release-title.result == 'success' || needs.release-title.result == 'skipped') }}}}
     # The leg pushes its timing row to the state store's namespace;
     # the ambient token needs the grant declared, since organisation
     # defaults are read-only.
@@ -269,25 +267,29 @@ jobs:
           # The scoped gate diffs against the merge base with the
           # pull request's base branch, which a shallow clone lacks.
           fetch-depth: 0
-{setup_uv_leg}{enter_leg}      - name: Gate, measured
+{setup_uv_leg}{enter_leg}      - name: Check
         env:
           # Coverage's own subprocess contract: the .pth the
           # coverage-enable-subprocess dev dependency installs calls
           # coverage.process_startup() in every python this venv
           # starts, armed by this variable, so the whole {prog}
-          # invocation meters from interpreter start with no module
-          # spelling and no wrapper. The test step reads the same
-          # variable and adds no second meter; the floors are judged
-          # once, on the merged union, in the gate job below.
+          # invocation meters from interpreter start; the leg's data
+          # is combined by the check job's own entries and judged
+          # once, on the union, in the gate job below.
           COVERAGE_PROCESS_START: pyproject.toml
-        run: |
-          {prog} --profile=fm-profile.json check
-          coverage combine
+        run: >-
+          {prog} ci.run --point=gate --job=check
+          --os="${{{{ matrix.os }}}}" --python="${{{{ matrix.python }}}}"
+      # The data and the scope the gate ran (fm-gate.json): the union
+      # judges only the packages a leg's scope covered, and pulls the
+      # suites it skipped from the coverage store.
       - name: Leg coverage data
         uses: {UPLOAD}
         with:
           name: coverage-${{{{ matrix.os }}}}-${{{{ matrix.python }}}}
-          path: .coverage
+          path: |
+            .coverage
+            fm-gate.json
           include-hidden-files: true
           if-no-files-found: error
       # The run as a Chrome trace, one artifact per leg: every task,
@@ -302,16 +304,6 @@ jobs:
           name: profile-${{{{ matrix.os }}}}-${{{{ matrix.python }}}}
           path: fm-profile.json
           if-no-files-found: ignore
-      # The leg's timing row: the gate's tasks from the trace, put on
-      # the run's per-leg ref for the gate job to collect. It fails
-      # open loudly: a store fault prints its reason and never reddens
-      # the leg.
-      - name: Record the leg's timings
-        if: always()
-        run: >-
-          {prog} ci.metrics.leg
-          --job="check (${{{{ matrix.os }}}}, ${{{{ matrix.python }}}})"
-          --label="check-${{{{ matrix.os }}}}-${{{{ matrix.python }}}}"
 
   # The strict site build: broken links and orphan pages go red
   # here, required through the gate context below, never inside the
@@ -320,17 +312,16 @@ jobs:
 {docs_needs}    runs-on: ubuntu-latest
     steps:
       - uses: {CHECKOUT}
-{setup_uv_docs}{requirements}{coverage_step}{enter}      - name: Build the site, strict
-        run: {prog} docs.build
+{setup_uv_docs}{requirements}{coverage_step}{enter}      - name: Docs
+        run: {prog} ci.run --point=gate --job=docs
 
   # The one required context. Branch protection points here, so the
   # matrix can grow or shrink without touching repository settings.
-  # It also owns the one coverage enforcement: every leg's data,
-  # combined across platforms, judged against the committed floors.
-  # And it collects the run's timing rows: every leg's trace half
-  # joined with the forge's own job and step times, one file per run
-  # on the metrics series. The verdict comes last, so a red run's
-  # rows are collected before the job decides.
+  # Its entries collect the run's timing rows, union every leg's
+  # coverage and judge the floors, ask the forge for the jobs it
+  # needs, and stamp the tree a green run proved; always(), so a red
+  # run is judged too. The state store's pushes need the grant, since
+  # organisation defaults are read-only.
   {context}:
     if: always()
     needs: [check, docs]
@@ -339,26 +330,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: {CHECKOUT}
-{setup_uv}{enter}      - name: Collect the run's timings
-        env:
-          FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
-        run: {prog} ci.metrics.collect
-      - name: Verdict
-        run: |
-          test "${{{{ needs.check.result }}}}" = "success"
-          test "${{{{ needs.docs.result }}}}" = "success"
-      - name: Combine every leg
+      # Every leg's coverage data, for the union the gate's own
+      # entries combine and judge against the floors.
+      - name: Collect every leg's coverage data
         uses: {DOWNLOAD}
         with:
           pattern: coverage-*
           path: coverage-data
-      - name: Enforce the floors on the union
-        run: |
-          coverage combine coverage-data/*/.coverage
-          coverage report --sort=cover
-          {prog} coverage.enforce
+{setup_uv}{enter}      - name: Verdict
+        env:
+          FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
+        run: {prog} ci.run --point=gate --job=gate
   release-title:
-    if: startsWith(github.head_ref, 'workflow/release/')
     runs-on: ubuntu-latest
     steps:
       - uses: {CHECKOUT}
@@ -366,9 +349,8 @@ jobs:
           # check-title compares against origin/main, which a shallow
           # checkout does not have.
           fetch-depth: 0
-{setup_uv}{enter}      - run: {prog} workflow.release.check-title --title="$TITLE"
-        env:
-          TITLE: ${{{{ github.event.pull_request.title }}}}
+{setup_uv}{enter}      - name: Release title
+        run: {prog} ci.run --point=gate --job=release-title
 """
 
 

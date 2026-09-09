@@ -274,7 +274,7 @@ def test_the_default_brand_emits_fm(tmp_path: Path) -> None:
     from livery.workshop._ci_generate import generate
 
     gate = generate(_contract_root(tmp_path, "github"))[".github/workflows/ci.yml"]
-    assert "fm coverage.enforce" in gate
+    assert "fm ci.run --point=gate --job=gate" in gate
 
 
 def test_every_gate_leg_runs_profiled_and_uploads_its_trace(tmp_path: Path) -> None:
@@ -295,13 +295,8 @@ def test_every_gate_leg_runs_profiled_and_uploads_its_trace(tmp_path: Path) -> N
     for kind, path, action in lanes:
         check = yaml.safe_load(generate(_contract_root(tmp_path, kind))[path])
         steps = check["jobs"]["check"]["steps"]
-        # On gitea the profiled gate runs inside ci.run; on GitHub it
-        # is still the leg's own step until the phase-6 port.
-        spelled = (
-            "fm ci.run --point=gate --job=check"
-            if kind == "gitea"
-            else "fm --profile=fm-profile.json check"
-        )
+        # On both lanes the profiled gate runs inside ci.run.
+        spelled = "fm ci.run --point=gate --job=check"
         gates = [step for step in steps if spelled in step.get("run", "")]
         assert len(gates) == 1, kind
         uploads = [
@@ -394,42 +389,61 @@ def test_the_gitea_shell_is_one_verb_per_job_and_only_event_filters(
             assert step["with"]["token"] == "${{ secrets.FORGE_TOKEN }}"
 
 
-def test_every_leg_records_its_timings_and_the_gate_collects_before_it_decides(
+def test_the_github_shell_is_one_verb_per_job_for_the_gate_point(
     tmp_path: Path,
 ) -> None:
-    # The leg's row rides whatever the gate's verdict, and the gate
-    # job collects every row before its own verdict step, so a red
-    # run's timings are as recorded as a green run's.
+    # The GitHub lane's ci.yml is the same shell as the gitea lane's
+    # for the gate point: every job's work is reached through
+    # `fm ci.run`, the leg uploads its data with its scope marker, the
+    # gate job collects every leg's data before its one verb, and the
+    # census finds no condition beyond the verdict job's always().
     import yaml
 
     from livery.workshop._ci_generate import generate
 
-    # On gitea the two steps live inside ci.run; the YAML pin is the
-    # GitHub lane's until the phase-6 port.
-    for kind, path in (("github", ".github/workflows/ci.yml"),):
-        workflow = yaml.safe_load(generate(_contract_root(tmp_path, kind))[path])
-        legs = [
-            step
-            for step in workflow["jobs"]["check"]["steps"]
-            if "fm ci.metrics.leg" in step.get("run", "")
-        ]
-        assert len(legs) == 1, kind
-        assert legs[0]["if"] == "always()", kind
-        assert (
-            '--job="check (${{ matrix.os }}, ${{ matrix.python }})"' in legs[0]["run"]
-        )
-        assert '--label="check-${{ matrix.os }}-${{ matrix.python }}"' in legs[0]["run"]
-        gate = workflow["jobs"]["gate"]["steps"]
-        names = [step.get("name", "") for step in gate]
-        assert names.index("Collect the run's timings") < names.index("Verdict"), kind
-        collect = gate[names.index("Collect the run's timings")]
-        assert collect["run"] == "fm ci.metrics.collect"
-        assert collect["env"]["FORGE_TOKEN"] == "${{ secrets.GITHUB_TOKEN }}"
-        if kind == "github":
-            # Organisation defaults are read-only; the pushes to the
-            # store's namespace need the grant declared.
-            assert workflow["jobs"]["check"]["permissions"] == {"contents": "write"}
-            assert workflow["jobs"]["gate"]["permissions"] == {"contents": "write"}
+    workflow = yaml.safe_load(
+        generate(_contract_root(tmp_path, "github"))[".github/workflows/ci.yml"]
+    )
+    jobs = workflow["jobs"]
+    assert list(jobs) == ["check", "docs", "gate", "release-title"]
+    for name, job in jobs.items():
+        runs = [step["run"] for step in job["steps"] if "run" in step]
+        verbs = [run for run in runs if "ci.run" in run]
+        assert len(verbs) == 1, name
+        assert all("setup.sh" in run or "ci.run" in run for run in runs), (name, runs)
+        assert "if" not in job or (name == "gate" and job["if"] == "always()"), name
+        for step in job["steps"]:
+            if "if" in step:
+                assert step["if"] == "always()", (name, step)
+    check = jobs["check"]
+    assert check["needs"] == ["release-title"]
+    check_step = next(s for s in check["steps"] if s.get("name") == "Check")
+    assert "fm ci.run --point=gate --job=check" in check_step["run"]
+    assert (
+        '--os="${{ matrix.os }}" --python="${{ matrix.python }}"' in check_step["run"]
+    )
+    assert check_step["env"] == {"COVERAGE_PROCESS_START": "pyproject.toml"}
+    assert not [s for s in check["steps"] if "ci.metrics.leg" in s.get("run", "")]
+    upload = next(s for s in check["steps"] if s.get("name") == "Leg coverage data")
+    assert upload["with"]["path"].split() == [".coverage", "fm-gate.json"]
+    assert upload["with"]["if-no-files-found"] == "error"
+    gate = jobs["gate"]
+    assert gate["needs"] == ["check", "docs"]
+    names = [step.get("name", "") for step in gate["steps"]]
+    assert names.index("Collect every leg's coverage data") < names.index("Verdict")
+    collect = gate["steps"][names.index("Collect every leg's coverage data")]
+    assert collect["with"] == {"pattern": "coverage-*", "path": "coverage-data"}
+    verdict = gate["steps"][names.index("Verdict")]
+    assert verdict["run"] == "fm ci.run --point=gate --job=gate"
+    assert verdict["env"] == {"FORGE_TOKEN": "${{ secrets.GITHUB_TOKEN }}"}
+    # Organisation defaults are read-only; the pushes to the store's
+    # namespace need the grant declared on both writers.
+    assert check["permissions"] == {"contents": "write"}
+    assert gate["permissions"] == {"contents": "write"}
+    title = jobs["release-title"]
+    assert title["steps"][0]["with"]["fetch-depth"] == 0
+    assert "fm ci.run --point=gate --job=release-title" in title["steps"][-1]["run"]
+    assert jobs["docs"]["steps"][-1]["run"] == "fm ci.run --point=gate --job=docs"
 
 
 def test_apply_retires_the_workflows_the_emission_folded_away(tmp_path: Path) -> None:
@@ -598,7 +612,9 @@ def test_the_remote_update_arm_brands_and_reemits(
     tasks = (instance / "tasks.py").read_text()
     assert "Run with ``hse <task>``" in tasks and "``fm <task>``" not in tasks
     gate = (instance / ".github/workflows/ci.yml").read_text()
-    assert "hse coverage.enforce" in gate  # the workflows re-emitted branded
+    assert (
+        "hse ci.run --point=gate --job=gate" in gate
+    )  # the workflows re-emitted branded
 
 
 def test_no_runtime_string_spells_the_default_brand() -> None:

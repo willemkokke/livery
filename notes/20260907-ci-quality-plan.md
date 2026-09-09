@@ -1159,7 +1159,31 @@ for what cannot exist locally:
 
 - The port itself: points shells, merge-point dispatch, state
   store, verified trees, the caching keys, the parametrised
-  matrices, one emitter at its final shape.
+  matrices, one emitter at its final shape. Pulled forward in
+  part, ruled by Willem 2026-09-09 ("every ticket still goes
+  through github CI ... if we can move any optimisation benefits
+  on github forward easily enough, we should"): the gate point's
+  shell, the check legs and the gate job, landed in the GitHub
+  emitter the same day (issue #352), lifted from the gitea shell
+  with GitHub's own actions, so the legs record their scope and
+  store their suites, and the gate job unions by scope, reuses
+  the store, judges the floors, gives the verdict, and stamps the
+  verified record on GitHub as on the loop. The release-title job
+  runs on every event through the shell, green off a release
+  branch, so the legs wait on it without a condition. The merge
+  point's own jobs (deploy, governance, dispatch) keep their
+  GitHub workflows until the rest of the port. Declaring
+  `[ci] affected-legs` for livery follows as its own change, and
+  carries the port's evidence from GitHub. The port's first run
+  found the Windows legs red with 37 failing workshop tests that
+  every earlier run had carried too: the old step ran two commands
+  under pwsh, which fails a step only on the last command's exit,
+  and the coverage combine was last, so the legs had gated nothing
+  (issue #357 holds the failures). Ruled by Willem 2026-09-09:
+  "drop windows-latest for now"; the runner leaves livery's
+  `[ci] runners` until the suite is green there, and its legs,
+  the slowest by far (a test task of 600 to 800 s against 210 s on
+  ubuntu), leave the pull request's wall time with it.
 - #270 executes (ruled 2026-09-07): token publishing is the
   default. The pypi environment gains `UV_PUBLISH_TOKEN` and the
   id-token plumbing leaves the default emission. Trusted publishing

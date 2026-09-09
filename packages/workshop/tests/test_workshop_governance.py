@@ -518,17 +518,12 @@ def test_the_release_title_job_receives_the_actual_title(tmp_path: Path) -> None
     for kind in ("github", "gitea"):
         gate = generate(_contract_root(tmp_path, kind))[f".{kind}/workflows/ci.yml"]
         job = gate.split("release-title:")[1]
-        if kind == "github":
-            # The f-string emitter must collapse to the two-brace
-            # Actions expression; a single-braced `${ ... }` is a
-            # literal string the check would compare against instead
-            # of the title.
-            assert "TITLE: ${{ github.event.pull_request.title }}" in job
-        else:
-            # The points shell passes no title: the verb reads it from
-            # the event payload, and off a pull request it is green.
-            assert "fm ci.run --point=gate --job=release-title" in job
-            assert "TITLE" not in job
+        # The points shell passes no title on either lane: the verb
+        # reads it from the event payload, and off a pull request or a
+        # release branch it is green, so the job carries no condition.
+        assert "fm ci.run --point=gate --job=release-title" in job
+        assert "TITLE" not in job
+        assert "    if:" not in job.split("steps:")[0]
         assert "${ github" not in gate
         # check-title diffs against origin/main: full history needed.
         assert "fetch-depth: 0" in job
