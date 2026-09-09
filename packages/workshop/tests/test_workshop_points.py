@@ -164,6 +164,7 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
         ["hse", "provenance"],
         ["hse", "ci.metrics.collect"],
         ["hse", "ci.verdict", "--needs=check,docs,release-title"],
+        ["hse", "ci.verified.stamp"],
     ]
 
 

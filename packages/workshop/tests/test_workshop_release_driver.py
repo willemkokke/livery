@@ -814,3 +814,36 @@ def test_the_toolchain_pins_carry_no_workspace_member(tmp_path: Path) -> None:
     assert "pytest" in text  # the toolchain itself is pinned
     assert "packages/forge" not in text
     assert "packages/workshop" not in text
+
+
+def test_a_verified_tip_tree_lets_the_release_start_without_waiting(
+    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _verified
+
+    fake, git, _root_dir = workspace
+    sha = git.remote_head("main")
+    # The push CI is red, which alone would refuse; the record vouches.
+    fake.push(OWNER, NAME, "main", outcome="failure", sha=sha)
+    fake.settle(OWNER, NAME, sha)
+    repo = fake.repository(OWNER, NAME)
+    tree = _verified.tree_id(git, sha)
+    asked: list[str] = []
+
+    def _record(root: Path, wanted: str) -> tuple[_verified.Verified | None, str]:
+        asked.append(wanted)
+        return _verified.Verified(wanted, "77", sha, _verified.FULL, ("check",)), ""
+
+    monkeypatch.setattr("livery.workshop._verified.record", _record)
+    require_verified_base(repo, git, "main")  # returns at once
+    assert asked == [tree]
+    # A narrowed entry does not vouch: the red push CI decides again.
+    monkeypatch.setattr(
+        "livery.workshop._verified.record",
+        lambda root, wanted: (
+            _verified.Verified(wanted, "78", sha, _verified.AFFECTED, ("check",)),
+            "",
+        ),
+    )
+    with pytest.raises(_FAILURES):
+        require_verified_base(repo, git, "main")

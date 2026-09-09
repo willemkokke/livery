@@ -130,6 +130,11 @@ def put_leg(root: Path, run: RunContext, *, job: str, label: str, trace: Path) -
     row, why = leg_row(trace, job=job)
     if row is None:
         return why
+    from livery.workshop._verified import read_marker
+
+    # The scope the gate ran, from the marker it left beside the
+    # trace: the stamp after the verdict reads it back per leg.
+    row["scope"] = read_marker(trace.parent if trace.is_absolute() else root)
     return put(
         root,
         run_ref(run, label),
@@ -243,6 +248,7 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
             "tasks": half.get("tasks", {}),
             "waits_ms": half.get("waits_ms", {}),
             "packages": half.get("packages", {}),
+            "scope": half.get("scope", {"scope": "unknown", "packages": []}),
         }
         if job is None:
             lines.append(f"  {name}: unknown to the forge; its trace half rides alone")

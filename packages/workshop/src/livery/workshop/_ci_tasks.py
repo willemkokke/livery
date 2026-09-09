@@ -344,6 +344,35 @@ def ci_verdict(
     print(f"  green: {', '.join(names) or 'every job'} succeeded")
 
 
+verified = ci.group("verified", help="The trees a green gate proved", hidden=True)
+
+
+def verified_stamp_flow(root: Path, git: GitOps) -> None:
+    """Stamp the run's tree when every check leg ran the full gate; print why not."""
+    from livery.workshop._state import run_context
+    from livery.workshop._verified import stamp_from_metrics
+
+    run = run_context()
+    if run is None:
+        print("  not a CI run: the verified record is written by CI only")
+        return
+    print(stamp_from_metrics(root, run, sha=git.head_sha()))
+
+
+@verified.task(name="stamp")
+def ci_verified_stamp() -> None:
+    """Record this run's tree as proved green, for the runs that share it.
+
+    Runs in the gate job after the verdict, so only a green run
+    reaches it. Every check leg's metrics row must say it ran the
+    full gate; a narrowed leg leaves the tree unstamped, and a later
+    run of the same tree pays the gate. Fails open loudly: every
+    reason is printed and the exit stays 0.
+    """
+    _repo, git = _resolved()
+    verified_stamp_flow(git.root, git)
+
+
 metrics = ci.group("metrics", help="The timing rows CI writes", hidden=True)
 
 

@@ -184,6 +184,36 @@ def ci_affected_base(root: Path, run: RunContext | None) -> str:
     return run.base_ref
 
 
+def verified_already(root: Path) -> bool:
+    """Whether the record names this checkout's tree as proved green in full.
+
+    Prints the run that proved it when it does, and the reason when
+    the record could not decide (an unreadable store, an entry of
+    another shape); an absent entry or a narrowed scope is the
+    ordinary case and stays quiet. Never skips on anything but a
+    full entry for this exact tree.
+    """
+    from livery.workshop import _verified
+    from livery.workshop._git_ops import GitError, GitOps
+
+    try:
+        tree = _verified.tree_id(GitOps(root))
+    except GitError as error:
+        print(f"  verified: this checkout has no tree id ({error}); running the gate")
+        return False
+    found, why = _verified.record(root, tree)
+    if why:
+        print(f"  verified: {why}; running the gate")
+        return False
+    if found is None or found.scope != _verified.FULL:
+        return False
+    print(
+        f"  verified: tree {tree[:12]} proved green by run {found.run}"
+        f" at {found.sha[:12]}; skipping the gate"
+    )
+    return True
+
+
 def _affected(base: str = "main") -> tuple[Package, ...] | None:
     """The affected subset for the gate; None means everything.
 
@@ -243,11 +273,16 @@ def check(
             " keeps and hide the finding from the verdict. Run"
             f" `{footman.prog()} check --fix` locally and push the result."
         )
+    from livery.workshop import _verified
     from livery.workshop._state import run_context
 
     root_for_ci = workspace_root()
+    run = run_context()
+    if root_for_ci is not None and run is not None and verified_already(root_for_ci):
+        _verified.write_marker(root_for_ci, _verified.VERIFIED)
+        return
     ci_base = (
-        ci_affected_base(root_for_ci, run_context())
+        ci_affected_base(root_for_ci, run)
         if not affected and root_for_ci is not None
         else ""
     )
@@ -259,12 +294,25 @@ def check(
         packages = _packages()
         if not subset:
             print("  nothing affected: the branch changes no files")
+            if root_for_ci is not None and run is not None:
+                _verified.write_marker(root_for_ci, _verified.NOTHING)
             return
         if len(subset) < len(packages):
             names = ", ".join(package.path for package in subset)
             print(f"  affected: {names}")
+            if root_for_ci is not None and run is not None:
+                _verified.write_marker(
+                    root_for_ci,
+                    _verified.AFFECTED,
+                    tuple(package.path for package in subset),
+                )
             _scoped_check(subset, fix=fix)
             return
+    # The marker is a CI leg's fact for its metrics row and the stamp;
+    # a local run leaves none, since an untracked root file would read
+    # as a root change on the next affected gate.
+    if root_for_ci is not None and run is not None:
+        _verified.write_marker(root_for_ci, _verified.FULL)
     from livery.workshop._provenance import provenance_check
 
     if fix:

@@ -8,6 +8,7 @@ __pycache__/
 .ruff_cache/
 .coverage*
 fm-profile.json
+fm-gate.json
 .claude/worktrees/
 .mypy_cache/
 .forge.dev.env

@@ -269,6 +269,35 @@ def validate_member(
         print(f"  {plan.package.name} {label}: {listed}")
 
 
+def _base_tree_verified(git: GitOps, base: str) -> bool:
+    """Whether the verified record already vouches for *base*'s tip tree.
+
+    A gate that proved this exact tree green in full, on the pull
+    request whose squash became the tip, lets the release start at
+    once instead of waiting for the tip's own push run. Anything the
+    record cannot decide answers False and the wait proceeds.
+    """
+    from livery.workshop import _verified
+    from livery.workshop._git_ops import GitError
+
+    try:
+        git.fetch()
+        sha = git.remote_head(base)
+        tree = _verified.tree_id(git, sha) if sha else ""
+    except (GitError, Exception):
+        return False
+    if not tree:
+        return False
+    found, _why = _verified.record(git.root, tree)
+    if found is None or found.scope != _verified.FULL:
+        return False
+    print(
+        f"  {base} verified: tree {tree[:12]} proved green by run {found.run};"
+        " the release starts now"
+    )
+    return True
+
+
 def require_verified_base(
     repo: Repository,
     git: GitOps,
@@ -303,6 +332,8 @@ def require_verified_base(
     """
     if force:
         print("  base verification skipped (--force-unverified-base)")
+        return
+    if _base_tree_verified(git, base):
         return
     deadline = time.monotonic() + timeout
     announced = False
