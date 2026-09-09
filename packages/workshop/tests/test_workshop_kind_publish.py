@@ -290,7 +290,13 @@ def _release_answers(*, with_native: bool) -> dict[str, object]:
                 "kind": "python-nanobind",
             }
         )
-    return {"packages": packages, "runners": ["ubuntu-latest", "windows"]}
+    return {
+        "packages": packages,
+        "runners": ["ubuntu-latest", "windows"],
+        # The wheels matrix is the union of the platform-wheel members'
+        # declared labels, which the facts carry beside the roster.
+        "wheel_runners": ["ubuntu-latest", "windows"] if with_native else [],
+    }
 
 
 def test_the_github_release_gains_the_matrix_only_with_a_native_member() -> None:
@@ -301,14 +307,15 @@ def test_the_github_release_gains_the_matrix_only_with_a_native_member() -> None
     assert "--prebuilt" not in pure
     native = _github_release(_release_answers(with_native=True), "fm")
     assert "wheels:" in native
-    assert "matrix:" in native and "macos-latest" in native
+    # The matrix is the declared wheel platforms, never a fixed OS list.
+    assert "matrix:" in native and "os: [ubuntu-latest, windows]" in native
     assert "release.wheels" in native
     assert "needs: [wheels]" in native
     assert "--prebuilt" in native
     assert "pattern: wheels-*" in native
 
 
-def test_the_gitea_release_matrix_rides_the_declared_runners() -> None:
+def test_the_gitea_release_matrix_rides_the_declared_wheel_platforms() -> None:
     from livery.workshop._ci_generate import _gitea_release
 
     pure = _gitea_release(_release_answers(with_native=False), "fm")

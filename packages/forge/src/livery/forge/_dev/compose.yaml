@@ -57,9 +57,9 @@ services:
       # never written into this file.
       GITEA_RUNNER_REGISTRATION_TOKEN: ${GITEA_RUNNER_TOKEN:-}
       GITEA_RUNNER_NAME: livery-dev
-      # Host mode: jobs run inside the runner container itself. The
-      # conformance workflows are shell one-liners, so no Docker socket
-      # is mounted.
+      # Host mode: jobs run inside the runner container itself; the
+      # host's docker socket below serves cibuildwheel's build
+      # containers, the way a hosted linux runner's daemon does.
       GITEA_RUNNER_LABELS: ubuntu-latest:host,linux:host
       CONFIG_FILE: /runner-config.yaml
     configs:
@@ -67,6 +67,11 @@ services:
         target: /runner-config.yaml
     volumes:
       - runner-data:/data
+      # cibuildwheel runs its manylinux and musllinux containers
+      # through this socket; it copies the project in over the
+      # daemon rather than bind-mounting it, so a socket-only daemon
+      # is enough.
+      - /var/run/docker.sock:/var/run/docker.sock
 
   gitlab:
     # The image is architecture-dependent: GitLab ships no official

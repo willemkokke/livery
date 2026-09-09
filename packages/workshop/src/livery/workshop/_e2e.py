@@ -135,6 +135,20 @@ LOOP_PUBLISH = "http://gitea:3000/api/packages/livery/pypi"
 #: "livery-loop-echo".
 LOOP_MEMBER_DIST = "ci-e2e-loop-loop-echo"
 
+#: The loop's members, name and template kind (empty for the default
+#: python kind). The nanobind member forces the wheels path on
+#: every pass: its wheel is built on the runner through cibuildwheel,
+#: published, and installed in the isolated leg.
+LOOP_MEMBERS: tuple[tuple[str, str], ...] = (
+    ("loop-echo", ""),
+    ("loop-native", "package-python-nanobind"),
+)
+
+
+def _member_dist(name: str) -> str:
+    """The distribution name ``new.package`` gives the loop member *name*."""
+    return f"ci-e2e-loop-{name}"
+
 
 def _require_host_alias() -> None:
     """Refuse until the host resolves the compose hostname.
@@ -629,14 +643,16 @@ def _loop_fm(
     return 0
 
 
-def _ensure_member(root: Path) -> None:
-    """Give the loop one member package, landed through its own gate.
+def _ensure_members(root: Path) -> None:
+    """Give the loop its members, each landed through its own gate.
 
-    ``new.package`` renders and wires it, a `[release] baseline`
-    seeds the first release's number, and the loop's own
-    ``fm submit --armed`` lands it: the branch, the pull request,
-    the gate on the runner, and the merge, all on the dev wheels.
-    Idempotent: an existing member skips everything.
+    ``new.package`` renders and wires a member, a `[release] baseline`
+    seeds the first release's number, the nanobind member's contract
+    names the loop's one runner as its wheel platform, and the loop's
+    own ``fm submit --armed`` lands it: the branch, the pull request,
+    the gate on the runner (which compiles the native member's
+    editable install), and the merge, all on the dev wheels.
+    Idempotent: a member already on main skips everything.
     """
     from livery.workshop._git_ops import GitOps
 
@@ -645,36 +661,44 @@ def _ensure_member(root: Path) -> None:
     # tree would skip straight to the release act with nothing
     # merged. The alignment makes the glob read main's truth.
     _align_main(root)
-    if list(root.glob("packages/*/workshop.toml")):
-        print("  member: already landed")
-        return
-    git = GitOps(root)
-    _fresh_branch(root, "feat/loop-echo")
-    _loop_fm(root, "new.package", "loop-echo")
-    member = root / "packages" / "loop-echo" / "workshop.toml"
-    body = member.read_text("utf-8")
-    if "[release]" not in body:
-        member.write_text(
-            body.rstrip("\n")
-            + "\n\n[release]\n# The first release lands at the baseline.\n"
-            + 'baseline = "0.1.0"\n',
-            "utf-8",
+    for name, kind in LOOP_MEMBERS:
+        if (root / "packages" / name / "workshop.toml").is_file():
+            print(f"  member {name}: already landed")
+            continue
+        git = GitOps(root)
+        _fresh_branch(root, f"feat/{name}")
+        _loop_fm(root, "new.package", name, *([f"--kind={kind}"] if kind else []))
+        member = root / "packages" / name / "workshop.toml"
+        body = member.read_text("utf-8")
+        if kind:
+            # The seed names the hosted runners; the loop's fleet is its
+            # one linux container, and the leg must be schedulable.
+            body = body.replace(
+                'wheel-platforms = ["ubuntu-latest", "macos-latest", "windows-latest"]',
+                'wheel-platforms = ["ubuntu-latest"]',
+            )
+        if "[release]" not in body:
+            body = (
+                body.rstrip("\n")
+                + "\n\n[release]\n# The first release lands at the baseline.\n"
+                + 'baseline = "0.1.0"\n'
+            )
+        member.write_text(body, "utf-8")
+        # The baseline is a render input: cliff.toml was rendered before
+        # the append, so it must settle again or the gate names it as
+        # drift.
+        _loop_fm(root, "template.apply")
+        git.commit_all(
+            f"feat({name}): a loop member\n\nBorn through new.package on"
+            " the dev wheels, with the release baseline seeded so the"
+            " first release lands at 0.1.0."
         )
-    # The baseline is a render input: cliff.toml was rendered before
-    # the append, so it must settle again or the gate names it as
-    # drift.
-    _loop_fm(root, "template.apply")
-    git.commit_all(
-        "feat(loop-echo): the loop's one member\n\nBorn through"
-        " new.package on the dev wheels, with the release baseline"
-        " seeded so the first release lands at 0.1.0."
-    )
-    # Force for the same reason the setup branch pushes force: the
-    # branch is pass-owned, rebuilt from main every time, so the
-    # remote's copy is always superseded.
-    _loop_fm(root, "submit", "--force", "--armed")
-    _align_main(root)
-    print("  member: landed through the loop's own gate")
+        # Force for the same reason the setup branch pushes force: the
+        # branch is pass-owned, rebuilt from main every time, so the
+        # remote's copy is always superseded.
+        _loop_fm(root, "submit", "--force", "--armed")
+        _align_main(root)
+        print(f"  member {name}: landed through the loop's own gate")
 
 
 def _release_act(root: Path, kind: str) -> None:
@@ -688,15 +712,27 @@ def _release_act(root: Path, kind: str) -> None:
     """
     import livery.toolroom as toolroom
     from livery.forge import SimpleRegistry
+    from livery.workshop._release_driver import release_name
 
-    tag = "packages/loop-echo/v0.1.0"
+    # Only the members without a receipt release: the driver refuses a
+    # set with a member nothing unreleased touches, and a cut receipt
+    # is exactly that. A fresh loop releases both in one set.
+    all_tags = {name: f"packages/{name}/v0.1.0" for name, _kind in LOOP_MEMBERS}
     listed = toolroom.git.opts(cwd=root, nofail=True)(
-        "ls-remote", "--tags", "origin", tag
+        "ls-remote", "--tags", "origin", *all_tags.values()
     )
-    if listed.code == 0 and tag in listed.stdout:
-        _require_receipt_protected(root, tag)
-        print(f"  release: receipt {tag} already on the loop")
+    cut = {
+        name
+        for name, tag in all_tags.items()
+        if listed.code == 0 and tag in listed.stdout
+    }
+    for name in sorted(cut):
+        _require_receipt_protected(root, all_tags[name])
+        print(f"  release: receipt {all_tags[name]} already on the loop")
+    names = tuple(name for name, _kind in LOOP_MEMBERS if name not in cut)
+    if not names:
         return
+    tags = {name: all_tags[name] for name in names}
     _align_main(root)
     # A prepared release PR may survive an earlier pass. Fresh (its
     # branch still contains main) it is the driver's own recovery:
@@ -705,7 +741,7 @@ def _release_act(root: Path, kind: str) -> None:
     # (measured outlasting the merge retry budget). Stale (main has
     # moved past it) the driver refuses and teaches `abandon`; the
     # loop follows the teach through the verb before releasing.
-    release_branch = "workflow/release/loop-echo"
+    release_branch = f"workflow/{release_name(names)}"
     forge, _ = _dev_forge(kind)
     survivor = forge.repository(E2E_OWNER, E2E_REPO).pr.find_by_head(release_branch)
     if survivor is not None and survivor.state == "open":
@@ -742,7 +778,7 @@ def _release_act(root: Path, kind: str) -> None:
         code = _loop_fm(
             root,
             "workflow.release",
-            "loop-echo",
+            *names,
             "--armed",
             timeout=1800.0,
             nofail=True,
@@ -787,27 +823,30 @@ def _release_act(root: Path, kind: str) -> None:
         f"{ALIAS_URL}/api/packages/{E2E_OWNER}/pypi/simple", token=token
     )
     deadline = time.monotonic() + 300
-    while "0.1.0" not in registry.versions(LOOP_MEMBER_DIST):
-        if time.monotonic() >= deadline:
-            fail(
-                f"the wave is green but the registry never served"
-                f" {LOOP_MEMBER_DIST} 0.1.0"
-            )
-        time.sleep(5)
+    for name in names:
+        while "0.1.0" not in registry.versions(_member_dist(name)):
+            if time.monotonic() >= deadline:
+                fail(
+                    f"the wave is green but the registry never served"
+                    f" {_member_dist(name)} 0.1.0"
+                )
+            time.sleep(5)
     # The receipt push follows the publish inside the wave, so the
     # tag gets the same patience as the serving probe.
     deadline = time.monotonic() + 120
-    while True:
-        listed = toolroom.git.opts(cwd=root, nofail=True)(
-            "ls-remote", "--tags", "origin", tag
-        )
-        if tag in listed.stdout:
-            break
-        if time.monotonic() >= deadline:
-            fail(f"served, but the receipt tag {tag} is not on the loop")
-        time.sleep(5)
-    _require_receipt_protected(root, tag)
-    print(f"  release: {LOOP_MEMBER_DIST} 0.1.0 served, receipt {tag} cut")
+    for tag in tags.values():
+        while True:
+            listed = toolroom.git.opts(cwd=root, nofail=True)(
+                "ls-remote", "--tags", "origin", tag
+            )
+            if tag in listed.stdout:
+                break
+            if time.monotonic() >= deadline:
+                fail(f"served, but the receipt tag {tag} is not on the loop")
+            time.sleep(5)
+        _require_receipt_protected(root, tag)
+    served = ", ".join(f"{_member_dist(name)} 0.1.0" for name in names)
+    print(f"  release: {served} served, receipts {', '.join(tags.values())} cut")
 
 
 def _require_receipt_protected(root: Path, tag: str) -> None:
@@ -941,6 +980,6 @@ if _WORKSHOP_TESTS.is_dir():
         _watch(forge, url, sha)
         print("  green: the loop's gate ran on the real runner")
         _merge_setup(forge, sha)
-        _ensure_member(root)
+        _ensure_members(root)
         _release_act(root, forge)
         print("  the loop is whole: gate, merge, release, receipt")

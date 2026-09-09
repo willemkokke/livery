@@ -12,6 +12,8 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+import sysconfig
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from livery import toolroom
@@ -73,6 +75,25 @@ def assert_platform_tagged(package: Package, dist: Path) -> None:
         )
 
 
+def host_is_musl() -> bool:
+    """Whether this interpreter's C library is musl.
+
+    Decides which linux wheel flavour the host can install: a
+    musl-based interpreter (an Alpine runner's uv-managed python)
+    takes the musllinux wheel, a glibc one the manylinux wheel. Read
+    from the interpreter's build triple, with the loader the
+    platform ships as the second signal, so a python built against
+    musl on a glibc host still answers for itself.
+    """
+    triple = str(sysconfig.get_config_var("HOST_GNU_TYPE") or "")
+    return "musl" in triple or _musl_loader_present()
+
+
+def _musl_loader_present() -> bool:
+    """Whether the platform ships musl's dynamic loader under ``/lib``."""
+    return any(Path("/lib").glob("ld-musl-*.so.1"))
+
+
 def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
     """Build the platform wheel through cibuildwheel, and the sdist.
 
@@ -95,11 +116,12 @@ def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
         "CIBW_BUILD",
         f"cp{sys.version_info.major}{sys.version_info.minor}-*",
     )
-    # One wheel for this machine: without the skip, the linux run
-    # also builds a musllinux wheel the host cannot install, and the
-    # isolated leg would have two candidates for one venv. The
-    # release matrix sets its own build set explicitly.
-    env.setdefault("CIBW_SKIP", "*-musllinux_*")
+    # One wheel for this machine: a linux run builds a manylinux and
+    # a musllinux wheel of the same arch, and the host can install
+    # only the one for its own libc, so the isolated leg would have
+    # two candidates for one venv. The skip follows the host's libc;
+    # the release matrix sets its own build set explicitly.
+    env.setdefault("CIBW_SKIP", "*-manylinux_*" if host_is_musl() else "*-musllinux_*")
     result = toolroom.uv.opts(
         cwd=package.directory, env=env, nofail=True, recorded=False
     )("tool", "run", "--from", CIBUILDWHEEL, "cibuildwheel", "--output-dir", str(dist))
