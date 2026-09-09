@@ -128,7 +128,12 @@ def in_closure(packages: tuple[Package, ...], package: Package, filename: str) -
 
 
 def _entry_name(when: datetime, closure_key: str) -> str:
-    return f"{when.strftime('%Y%m%dT%H%M%SZ')}--{closure_key}"
+    """The entry's file name: its moment to the microsecond, then its closure.
+
+    The window keeps the newest names in sort order, so the moment
+    leads and is fine enough that two stamps never share a name.
+    """
+    return f"{when.strftime('%Y%m%dT%H%M%S.%fZ')}--{closure_key}"
 
 
 def stamp(
@@ -149,6 +154,7 @@ def stamp(
     """
     if not leg:
         return "refusing: the leg has no label, so the measurement has no key"
+    now = datetime.now(UTC)
     entry = {
         "schema": SCHEMA,
         "leg": leg,
@@ -157,17 +163,13 @@ def stamp(
         "run": run.run_id,
         "sha": sha,
         "forge": run.forge,
-        "when": datetime.now(UTC).isoformat(timespec="seconds"),
+        "when": now.isoformat(timespec="microseconds"),
         "files": {name: sorted(lines) for name, lines in sorted(files.items())},
     }
     return put(
         root,
         suite_ref(leg, package),
-        {
-            _entry_name(datetime.now(UTC), closure_key): json.dumps(
-                entry, sort_keys=True
-            )
-        },
+        {_entry_name(now, closure_key): json.dumps(entry, sort_keys=True)},
         message=f"coverage: {package.path} on {leg} by run {run.run_id}",
         window=WINDOW,
         ci_only=True,
