@@ -263,6 +263,35 @@ def test_collect_joins_the_forge_times_and_drops_the_halves(
     assert _state.list_refs(work, _state.RUN_PREFIX) == {}
 
 
+def test_collect_finds_a_pull_requests_run_under_the_events_head(
+    work: Path, tmp_path: Path
+) -> None:
+    # The checkout sha is the merge commit; the forge filed the run
+    # under the pull request's head, which the run context carries.
+    fake = FakeForge()
+    fake.create_repo("owner", "repo")
+    repo = fake.repository("owner", "repo")
+    head = "d" * 40
+    fake.push("owner", "repo", "feature", sha=head)
+    fake.settle("owner", "repo", head)
+    state = fake._repos[("owner", "repo")]
+    run_state = next(iter(state.runs.values()))
+    run = _state.RunContext(
+        "github", str(run_state.id), "pull_request", "refs/pull/1/merge", head
+    )
+    trace = _trace(tmp_path / "t.json", tasks={"check": 100.0})
+    assert _metrics.put_leg(work, run, job="gate", label="gate", trace=trace) == ""
+    merge_commit = "e" * 40
+    lines = _metrics.collect(work, repo, run, sha=merge_commit)
+    assert not any("lists no such run" in line for line in lines)
+    rows = _state.read(work, _metrics.SERIES.ref).files
+    assert rows is not None
+    entry = json.loads(rows[_metrics.run_file(run.run_id)])
+    assert entry["sha"] == head and entry["checkout"] == merge_commit
+    assert entry["jobs"]["gate"]["wall_ms"] == 30000.0
+    assert [step["name"] for step in entry["jobs"]["gate"]["steps"]] == ["gate"]
+
+
 def test_run_files_sort_by_time() -> None:
     assert _metrics.run_file("9") < _metrics.run_file("10") < _metrics.run_file("1013")
     assert _metrics.run_file("abc") == "abc.json"
