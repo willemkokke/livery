@@ -189,3 +189,30 @@ def test_a_suite_the_store_holds_stays_skipped_and_a_miss_runs(
         "packages": ["packages/x", "packages/z"],
         "leg": "check-a",
     }
+
+
+def test_a_prose_only_diff_says_so_and_skips(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = _root(tmp_path, "affected-legs = true\n")
+    monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: root)
+    monkeypatch.setattr(
+        "livery.workshop._state.run_context", lambda: _run("pull_request", "main")
+    )
+    monkeypatch.setattr("livery.workshop._quality._affected", lambda base="main": ())
+    monkeypatch.setattr(
+        "livery.workshop._git_ops.GitOps.changed_paths",
+        lambda self, base: ["notes/plan.md", "packages/x/README.md"],
+    )
+    _quality.check()
+    out = capsys.readouterr().out
+    assert (
+        "nothing affected: only prose changed (2 file(s) under notes/ or markdown);"
+        " the gate skips" in out
+    )
+    assert read_marker(root)["scope"] == "nothing"
+    monkeypatch.setattr(
+        "livery.workshop._git_ops.GitOps.changed_paths", lambda self, base: []
+    )
+    _quality.check()
+    assert "nothing affected: the branch changes no files" in capsys.readouterr().out

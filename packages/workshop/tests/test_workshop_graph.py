@@ -92,3 +92,34 @@ def test_committed_and_uncommitted_changes_both_count(tmp_path: Path) -> None:
         "packages/mid",
         "packages/top",
     }
+
+
+# --- prose affects no package ----------------------------------------------------
+
+
+def test_a_prose_only_change_affects_nothing(tmp_path: Path) -> None:
+    from livery.workshop._graph import is_prose
+
+    root = _workspace(tmp_path)
+    (root / "notes").mkdir()
+    (root / "notes" / "plan.md").write_text("# a plan\n")
+    (root / "README.md").write_text("# the readme\n")
+    (root / "packages" / "core" / "docs").mkdir(parents=True)
+    (root / "packages" / "core" / "docs" / "index.md").write_text("# core\n")
+    assert affected_packages(root, GitOps(root)) == ()
+    assert is_prose("notes/anything.txt") and is_prose("packages/core/README.md")
+    assert not is_prose("packages/core/thing.py") and not is_prose("tests/notes.py")
+
+
+def test_a_mixed_change_narrows_to_its_packages_and_a_root_file_still_widens(
+    tmp_path: Path,
+) -> None:
+    root = _workspace(tmp_path)
+    (root / "notes").mkdir()
+    (root / "notes" / "plan.md").write_text("# a plan\n")
+    (root / "packages" / "mid" / "thing.py").write_text("x = 2\n")
+    affected = affected_packages(root, GitOps(root))
+    assert affected is not None
+    assert [p.path for p in affected] == ["packages/mid", "packages/top"]
+    (root / "tasks.py").write_text("# touched\n")
+    assert affected_packages(root, GitOps(root)) is None

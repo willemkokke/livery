@@ -45,6 +45,19 @@ def dependents_closure(
     return tuple(package for package in packages if package.path in affected)
 
 
+#: The prose directory: nothing under it reaches a gate.
+NOTES = "notes/"
+
+
+def is_prose(path: str) -> bool:
+    """Whether *path* is prose: under ``notes/``, or a markdown file anywhere.
+
+    Prose reaches no format, lint, type, or test gate. The site build
+    is where markdown is judged, and it runs on every run.
+    """
+    return path.startswith(NOTES) or path.endswith(".md")
+
+
 def affected_packages(
     root: Path, git: GitOps, *, base: str = "main"
 ) -> tuple[Package, ...] | None:
@@ -52,8 +65,10 @@ def affected_packages(
 
     None means everything: a touched file outside every package (the
     root configuration, templates, workspace tests) configures every
-    gate, so no narrowing is honest. An empty tuple means the branch
-    changes nothing at all.
+    gate, so no narrowing is honest. Prose (`is_prose`) affects no
+    package wherever it lives, so a diff confined to it affects
+    nothing. An empty tuple means the branch changes nothing a gate
+    reads.
     """
     from livery.workshop._kinds import kind_names
 
@@ -71,6 +86,8 @@ def affected_packages(
             return None
     seeds: set[str] = set()
     for path in git.changed_paths(base):
+        if is_prose(path):
+            continue
         for package in packages:
             if path.startswith(package.path + "/"):
                 seeds.add(package.path)
