@@ -168,7 +168,11 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
     when no leg left a row, and a per-run ref is dropped only after
     the run's file landed, so a failed put keeps the halves for a
     re-run. A job the forge does not know keeps its trace half and
-    is named; a row of another schema is skipped and named.
+    is named; a row of another schema is skipped and named. The run
+    is looked up under the head the runner's event names, because a
+    pull request's checkout is a merge commit the forge never files
+    a run under; *sha* is the checkout, the fallback and the row's
+    own record.
     """
     lines: list[str] = []
     prefix = f"{RUN_PREFIX}{run.run_id}/"
@@ -201,12 +205,13 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
     # numbers the run differently from the environment (a pull
     # request's merge sha, say) still yields the newest run for the
     # sha, named as a substitution.
-    runs = repo.checks.runs(head_sha=sha)
+    head = run.head_sha or sha
+    runs = repo.checks.runs(head_sha=head)
     forge_run = next((r for r in runs if str(r.id) == run.run_id), None)
     if forge_run is None and runs:
         forge_run = runs[0]
         lines.append(
-            f"  run {run.run_id}: not among the forge's runs for {sha[:12]};"
+            f"  run {run.run_id}: not among the forge's runs for {head[:12]};"
             f" using the newest, run {forge_run.id}"
         )
     jobs = (
@@ -214,7 +219,7 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
     )
     if forge_run is None:
         lines.append(
-            f"  run {run.run_id}: the forge lists no such run for {sha[:12]};"
+            f"  run {run.run_id}: the forge lists no such run for {head[:12]};"
             " the rows carry their trace halves alone"
         )
     entry: dict[str, Any] = {
@@ -223,7 +228,8 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
         "run": run.run_id,
         "workflow": forge_run.workflow if forge_run else "",
         "event": run.event,
-        "sha": sha,
+        "sha": head,
+        "checkout": sha,
         "ref": run.ref,
         "created_at": forge_run.created_at if forge_run else "",
         "started_at": forge_run.started_at if forge_run else "",

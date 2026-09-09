@@ -523,6 +523,13 @@ exists.
   is a positional to footman, so the leg's `--job` and `--label`
   are keyword-only; and a step that quotes the store's skip marker
   in a commit message gets no CI run (the decision record's trap).
+  The first GitHub run (PR #320) added a quirk of its own: a pull
+  request's checkout is the merge commit GitHub synthesises, and
+  the forge files the run under the pull request's head, so a
+  lookup by the checkout's sha found nothing and the six rows rode
+  without the forge's times. The run context now carries the head
+  the event payload names, with the checkout as the fallback, and
+  the row records both (issue #321).
 - Traces stay local files for now, and only the metrics rows ride
   the ref. Measured 2026-09-09: the loop's act_runner sweeps the
   job's working directory after the job, so the per-leg artifact is

@@ -41,8 +41,10 @@ file no ``show`` could find.
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -95,12 +97,38 @@ class RunContext:
         run_id: The forge's identifier of the run (GitLab: the pipeline).
         event: What started the run (``push``, ``pull_request``, ...).
         ref: The ref the run is for, as the runner spells it.
+        head_sha: The commit the forge files the run under. On a pull
+            request the checkout is the merge commit the forge
+            synthesised, and the run's own head is the pull request's
+            head, which the event payload names; on a push both are
+            the same commit. Empty when the runner did not say.
     """
 
     forge: str
     run_id: str
     event: str
     ref: str
+    head_sha: str = ""
+
+
+def _event_head_sha(env: Mapping[str, str]) -> str:
+    """The pull request's head from the event payload, or the pushed commit.
+
+    A payload that is missing or does not parse falls back to the
+    pushed commit: the lookup then works on a push and misses on a
+    pull request, which the collect names rather than fails on.
+    """
+    path = env.get("GITHUB_EVENT_PATH", "")
+    if path:
+        try:
+            payload = json.loads(Path(path).read_text("utf-8"))
+        except (OSError, ValueError):
+            payload = None
+        if isinstance(payload, dict):
+            head = (payload.get("pull_request") or {}).get("head") or {}
+            if isinstance(head, dict) and head.get("sha"):
+                return str(head["sha"])
+    return env.get("GITHUB_SHA", "")
 
 
 def run_context(environ: dict[str, str] | None = None) -> RunContext | None:
@@ -118,6 +146,7 @@ def run_context(environ: dict[str, str] | None = None) -> RunContext | None:
             env.get("GITHUB_RUN_ID", ""),
             env.get("GITHUB_EVENT_NAME", ""),
             env.get("GITHUB_REF", ""),
+            _event_head_sha(env),
         )
     if env.get("GITLAB_CI") == "true":
         return RunContext(
@@ -125,6 +154,7 @@ def run_context(environ: dict[str, str] | None = None) -> RunContext | None:
             env.get("CI_PIPELINE_ID", ""),
             env.get("CI_PIPELINE_SOURCE", ""),
             env.get("CI_COMMIT_REF_NAME", ""),
+            env.get("CI_COMMIT_SHA", ""),
         )
     return None
 
