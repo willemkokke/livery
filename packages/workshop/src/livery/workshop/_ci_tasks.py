@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Annotated
 
 from livery.footman import doc, fail, group, task
-from livery.forge import Capability, Forge, ForgeError, Repository, Run
+from livery.forge import Capability, Forge, ForgeError, Job, Repository, Run
 from livery.workshop._contract import load_contract
 from livery.workshop._git_ops import GitOps
 from livery.workshop._layers import workspace_root
@@ -283,6 +283,24 @@ def ci_run(
     run_point(root, point, job, os_label=os, python=python)
 
 
+def _conclusion_words(repo: Repository, run: Run, job: Job) -> str:
+    """A red job's conclusion, with the run that superseded a cancelled one named."""
+    words = job.conclusion or job.status
+    if job.conclusion != "cancelled":
+        return words
+    from livery.workshop._runs import successor
+
+    found = successor(repo, run)
+    if found is None:
+        return "cancelled; no newer run for this head or its pull request is known"
+    where = (
+        "for the same head"
+        if found.same_head
+        else f"for the moved head {found.run.head_sha[:12]}"
+    )
+    return f"cancelled, superseded by run {found.run.id} {where}"
+
+
 def verdict_flow(repo: Repository, *, needs: tuple[str, ...], job: str) -> list[str]:
     """The red jobs of this run among *needs*, and any other red job; empty is green.
 
@@ -310,7 +328,7 @@ def verdict_flow(repo: Repository, *, needs: tuple[str, ...], job: str) -> list[
             red.append(f"{needed}: not among the run's jobs")
         for found in matching:
             if found.status != "completed" or found.conclusion != "success":
-                red.append(f"{found.name}: {found.conclusion or found.status}")
+                red.append(f"{found.name}: {_conclusion_words(repo, forge_run, found)}")
     for found in jobs:
         if found.name == job or any(line.startswith(found.name) for line in red):
             continue
