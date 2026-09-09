@@ -871,9 +871,10 @@ def _prove_verified_skip(root: Path, kind: str) -> None:
             "coverage: packages/loop-echo on check-ubuntu-latest-3.14: reused from run",
             "coverage: packages/loop-native on check-ubuntu-latest-3.14:"
             " reused from run",
+            "coverage: tests on check-ubuntu-latest-3.14: reused from run",
             "coverage packages/loop-echo: 100.0% (floor 100.0%",
             "coverage packages/loop-native: 100.0% (",
-            "coverage: the union of 0 leg(s) and 2 reused suite(s)",
+            "coverage: the union of 0 leg(s) and 3 reused suite(s)",
         ),
         forbidden=("unjudged this run",),
     )
@@ -1005,6 +1006,7 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
             "affected-legs: the scoped gate against origin/main",
             "affected: packages/loop-echo",
             "coverage store: packages/loop-echo stored for closure",
+            "coverage store: tests stored for closure",
         ),
         forbidden=(
             "affected: packages/loop-echo, packages/loop-native",
@@ -1056,6 +1058,7 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
         (
             "coverage store: packages/loop-echo stored for closure",
             "coverage store: packages/loop-native stored for closure",
+            "coverage store: tests stored for closure",
         ),
     )
     print(f"  full push: proven on main's run {run.id}; the union judged both members")

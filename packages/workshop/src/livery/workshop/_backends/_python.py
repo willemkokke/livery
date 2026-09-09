@@ -19,6 +19,7 @@ import tempfile
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import livery.footman as footman
 from livery import toolroom
@@ -382,6 +383,14 @@ def suites_of(packages: tuple[Package, ...]) -> tuple[Package, ...]:
     )
 
 
+def units_of(root: Path, packages: tuple[Package, ...]) -> tuple[Package, ...]:
+    """The stored units: every package's suite, then the workspace's own tests."""
+    from livery.workshop._coverage_store import workspace_suite
+
+    unit = workspace_suite(root)
+    return suites_of(packages) + ((unit,) if unit is not None else ())
+
+
 def suite_lines_by_context(
     data: Path, packages: tuple[Package, ...], package: Package, *, root: Path
 ) -> dict[str, list[int]]:
@@ -399,12 +408,16 @@ def suite_lines_by_context(
 
     from coverage import CoverageData
 
-    from livery.workshop._coverage_store import in_closure
+    from livery.workshop._coverage_store import WORKSPACE_TESTS, in_closure
 
     measured = CoverageData(basename=str(data))
     measured.read()
     files: dict[str, list[int]] = {}
-    own = rf"^{re.escape(package.path)}/tests/"
+    own = (
+        rf"^{re.escape(package.path)}/"
+        if package.path == WORKSPACE_TESTS
+        else rf"^{re.escape(package.path)}/tests/"
+    )
     for query in ([own], [r"^$"]):
         measured.set_query_contexts(query)
         for filename in measured.measured_files():
@@ -418,18 +431,31 @@ def suite_lines_by_context(
     return files
 
 
-def suites_that_ran(data: Path, packages: tuple[Package, ...]) -> tuple[Package, ...]:
-    """The suites with at least one test context in the leg's data."""
-    from coverage import CoverageData
+def suites_that_ran(
+    marker: dict[str, Any], root: Path, packages: tuple[Package, ...]
+) -> tuple[Package, ...]:
+    """The units the leg ran, by its scope marker.
 
-    measured = CoverageData(basename=str(data))
-    measured.read()
-    contexts = measured.measured_contexts()
-    return tuple(
-        package
-        for package in suites_of(packages)
-        if any(context.startswith(f"{package.path}/tests/") for context in contexts)
-    )
+    Every suite after a full gate, the named packages' suites after a
+    narrowed one, none after a skip; the workspace's own tests
+    whenever any suite ran, since every leg that runs a suite runs
+    them. The marker decides, never the data's contexts: a suite whose
+    tests reach no line that collection had not already reached leaves
+    no context of its own under a first-hit tracer, and still ran.
+    """
+    from livery.workshop._coverage_store import workspace_suite
+    from livery.workshop._verified import AFFECTED, FULL
+
+    scope = marker["scope"]
+    if scope == FULL:
+        ran = suites_of(packages)
+    elif scope == AFFECTED:
+        named = set(marker["packages"])
+        ran = tuple(package for package in suites_of(packages) if package.path in named)
+    else:
+        return ()
+    unit = workspace_suite(root)
+    return ran + ((unit,) if unit is not None else ())
 
 
 def _relative(filename: str, root: Path) -> str | None:
@@ -447,16 +473,19 @@ def _relative(filename: str, root: Path) -> str | None:
 SUITES_DATA = "coverage-suites.db"
 
 
-def store_suites(root: Path, packages: tuple[Package, ...], *, leg: str) -> None:
-    """Split the leg's data per suite and stamp each suite on the coverage store.
+def store_suites(
+    root: Path, packages: tuple[Package, ...], *, marker: dict[str, Any]
+) -> None:
+    """Split the leg's data per unit and stamp each unit on the coverage store.
 
     The leg's parts combine into `SUITES_DATA` first (kept apart from
-    the upload); each suite with a test context is split out and its
-    lines within its closure are stamped under *leg*'s label and the
-    suite's closure identity. Only a CI run stamps; a refusal from the
-    store is printed, never fatal, since the next leg that misses the
-    suite runs it fresh.
+    the upload); each unit the marker says ran is split out and its
+    lines within its closure are stamped under the marker's leg label
+    and the unit's closure identity. Only a CI run stamps; a refusal
+    from the store is printed, never fatal, since the next leg that
+    misses the unit runs it fresh.
     """
+    leg = marker["leg"]
     from coverage import CoverageData
 
     from livery.workshop._coverage_store import closure_id, stamp
@@ -474,7 +503,7 @@ def store_suites(root: Path, packages: tuple[Package, ...], *, leg: str) -> None
     combined.write()
     run = run_context()
     git = GitOps(root)
-    for package in suites_that_ran(root / SUITES_DATA, packages):
+    for package in suites_that_ran(marker, root, packages):
         files = suite_lines_by_context(root / SUITES_DATA, packages, package, root=root)
         if run is None:
             print(
@@ -528,7 +557,7 @@ def combine_leg(root: Path, packages: tuple[Package, ...]) -> None:
             )
         print(f"  coverage: no data, the gate ran {scope!r}; nothing to combine")
         return
-    store_suites(root, packages, leg=marker["leg"])
+    store_suites(root, packages, marker=marker)
     if parts:
         result = toolroom.coverage.opts(
             cwd=root, env=_unmetered(), nofail=True, recorded=False
@@ -565,6 +594,7 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
         The judged packages, in *packages* order; empty when nothing
         ran and nothing was reused, and then no union file is written.
     """
+    from livery.workshop._coverage_store import WORKSPACE_TESTS
     from livery.workshop._verified import (
         AFFECTED,
         FULL,
@@ -611,6 +641,7 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
             judged.update(package.path for package in packages)
         else:
             judged.update(marker["packages"])
+        judged.add(WORKSPACE_TESTS)
     reused = _reuse_suites(root, packages, judged, labels)
     collected.extend(reused)
     unjudged = [package.path for package in packages if package.path not in judged]
@@ -645,12 +676,13 @@ def _reuse_suites(
     judged: set[str],
     labels: list[tuple[Path, str]],
 ) -> list[Path]:
-    """Pull every suite no leg ran from the store, one data file per leg.
+    """Pull every unit no leg ran from the store, one data file per leg.
 
-    Extends *judged* to every package once each suite is accounted
+    The units are the packages' suites and the workspace's own tests.
+    Extends *judged* to every package once each unit is accounted
     for. Refuses by name when a leg has no label to read the store by,
     when the store cannot be read, and when it holds no entry for a
-    suite's closure on a leg.
+    unit's closure on a leg.
     """
     from coverage import CoverageData
 
@@ -658,9 +690,9 @@ def _reuse_suites(
     from livery.workshop._git_ops import GitOps
     from livery.workshop._verified import MARKER
 
-    pending = [package for package in suites_of(packages) if package.path not in judged]
+    pending = [unit for unit in units_of(root, packages) if unit.path not in judged]
     if not pending:
-        # Every suite ran: the union is complete, and the packages
+        # Every unit ran: the union is complete, and the packages
         # without a suite of their own are judged on it too.
         judged.update(package.path for package in packages)
         return []
@@ -853,11 +885,16 @@ def run_test(
         return
     dirs: tuple[str, ...] = ()
     if scoped:
+        # The workspace's own tests ride every scoped run: they reach
+        # any package, so no narrowing excuses them, and the leg stores
+        # them as a unit keyed by the whole tree.
+        from livery.workshop._coverage_store import WORKSPACE_TESTS
+
         dirs = tuple(
             f"{package.path}/tests"
             for package in packages
             if (package.directory / "tests").is_dir()
-        )
+        ) + ((WORKSPACE_TESTS,) if (root / WORKSPACE_TESTS).is_dir() else ())
     if os.environ.get("COVERAGE_PROCESS_START"):
         # Coverage's own subprocess variable: when it is set, every
         # python this venv starts is already metered from interpreter
