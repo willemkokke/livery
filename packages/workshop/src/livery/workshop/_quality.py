@@ -279,7 +279,7 @@ def check(
     root_for_ci = workspace_root()
     run = run_context()
     if root_for_ci is not None and run is not None and verified_already(root_for_ci):
-        _verified.write_marker(root_for_ci, _verified.VERIFIED)
+        _verified.write_marker(root_for_ci, _verified.VERIFIED, leg=run.leg)
         return
     ci_base = (
         ci_affected_base(root_for_ci, run)
@@ -292,10 +292,12 @@ def check(
     subset = _affected(ci_base or "main") if affected else None
     if affected and subset is not None:
         packages = _packages()
+        if root_for_ci is not None and run is not None:
+            subset = _with_unstored_suites(root_for_ci, run, packages, subset)
         if not subset:
             print("  nothing affected: the branch changes no files")
             if root_for_ci is not None and run is not None:
-                _verified.write_marker(root_for_ci, _verified.NOTHING)
+                _verified.write_marker(root_for_ci, _verified.NOTHING, leg=run.leg)
             return
         if len(subset) < len(packages):
             names = ", ".join(package.path for package in subset)
@@ -305,6 +307,7 @@ def check(
                     root_for_ci,
                     _verified.AFFECTED,
                     tuple(package.path for package in subset),
+                    leg=run.leg,
                 )
             _scoped_check(subset, fix=fix)
             return
@@ -312,7 +315,7 @@ def check(
     # a local run leaves none, since an untracked root file would read
     # as a root change on the next affected gate.
     if root_for_ci is not None and run is not None:
-        _verified.write_marker(root_for_ci, _verified.FULL)
+        _verified.write_marker(root_for_ci, _verified.FULL, leg=run.leg)
     from livery.workshop._provenance import provenance_check
 
     if fix:
@@ -335,6 +338,49 @@ def check(
         kindcheck()
         template_check()
         provenance_check()
+
+
+def _with_unstored_suites(
+    root: Path,
+    run: RunContext,
+    packages: tuple[Package, ...],
+    subset: tuple[Package, ...],
+) -> tuple[Package, ...]:
+    """*subset* plus every suite the coverage store cannot supply for this leg.
+
+    A leg skips a suite only when the store holds the suite's lines
+    for its closure on this leg. A miss, an unreadable store, a leg
+    without a label, or a closure git cannot identify runs the suite
+    fresh and says why, so the union never lacks a suite and the
+    store needs no backfill.
+    """
+    from livery.workshop._backends._python import suites_of
+    from livery.workshop._coverage_store import closure_id, find
+    from livery.workshop._git_ops import GitError, GitOps
+
+    kept = {package.path for package in subset}
+    extra: set[str] = set()
+    git = GitOps(root)
+    for package in suites_of(packages):
+        if package.path in kept:
+            continue
+        if not run.leg:
+            why = "this leg has no label"
+        else:
+            try:
+                key = closure_id(git, packages, package)
+            except GitError as error:
+                why = f"its closure has no identity ({error})"
+            else:
+                found, why = find(root, leg=run.leg, package=package, closure_key=key)
+                if found is not None:
+                    continue
+                why = why or "no measurement stored for its closure on this leg"
+        print(f"  coverage store: {package.path} runs, nothing to reuse ({why})")
+        extra.add(package.path)
+    if not extra:
+        return subset
+    return tuple(package for package in packages if package.path in kept | extra)
 
 
 def _scoped_check(subset: tuple[Package, ...], *, fix: bool = False) -> None:
@@ -379,7 +425,7 @@ def coverage_leg() -> None:
     root = workspace_root()
     if root is None:
         raise ValueError("no workspace: no workshop.toml above the working directory")
-    _python.combine_leg(root)
+    _python.combine_leg(root, _packages())
 
 
 @coverage.task(name="union", hidden=True)

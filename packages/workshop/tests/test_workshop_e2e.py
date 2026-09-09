@@ -197,3 +197,9 @@ def test_a_proof_names_the_job_it_cannot_find_and_the_lines_it_misses() -> None:
             repo, run, logs, "gate", ("concluded success", "absent line")
         )
     _e2e._require_lines(repo, run, logs, "gate", ("concluded success",))
+    with pytest.raises(
+        _FAILURES, match=r"said \['concluded success'\], which the proof"
+    ):
+        _e2e._require_lines(
+            repo, run, logs, "gate", (), forbidden=("concluded success", "absent")
+        )

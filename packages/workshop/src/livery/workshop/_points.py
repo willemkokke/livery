@@ -24,6 +24,7 @@ no decision.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,7 +32,7 @@ from pathlib import Path
 import livery.footman as footman
 from livery.footman import fail
 from livery.workshop._contract import load_contract
-from livery.workshop._state import run_context
+from livery.workshop._state import LEG_VARIABLE, run_context
 
 #: The points, in the order a change meets them.
 POINTS = ("gate", "merge", "nightly", "release")
@@ -191,15 +192,16 @@ def effective_point(point: str) -> str:
     return point
 
 
-def _spawn(argv: list[str]) -> int:
+def _spawn(argv: list[str], env: dict[str, str]) -> int:
     """Run one entry as a child of the runner's own command; its exit code.
 
     Streamed, never captured: the job's log is the run's evidence,
     and what each verb said belongs there in order, green or red.
+    *env* is the child's whole environment.
     """
     from livery.footman import run
 
-    return run(argv, nofail=True, capture=False).code
+    return run(argv, nofail=True, capture=False, env=env).code
 
 
 def run_point(
@@ -209,15 +211,17 @@ def run_point(
     *,
     os_label: str = "",
     python: str = "",
-    spawn: Callable[[list[str]], int] = _spawn,
+    spawn: Callable[[list[str], dict[str, str]], int] = _spawn,
 ) -> None:
     """Run every entry of *job* at *point*, in order; the first red entry fails.
 
     *os_label* and *python* are the matrix facts the shell passes for
     a matrix job; they format the entries' arguments and name the
     leg. A profiled entry runs under ``--profile`` with its trace
-    left at `TRACE`. *spawn* runs one entry's command and returns its
-    exit code; the default is the runner's own child.
+    left at `TRACE`. Every child's environment names the leg in
+    `livery.workshop._state.LEG_VARIABLE`, the key of the leg's rows
+    and stamps. *spawn* runs one entry's command in that environment
+    and returns its exit code; the default is the runner's own child.
     """
     resolved = effective_point(point)
     entries = entries_for(root, resolved, job)
@@ -226,6 +230,7 @@ def run_point(
     display = f"{job} ({os_label}, {python})" if os_label or python else job
     label = f"{job}-{os_label}-{python}" if os_label or python else job
     facts = {"display": display, "label": label, "os": os_label, "python": python}
+    env = {**os.environ, LEG_VARIABLE: label}
     prog = footman.prog()
     for entry in entries:
         argv = [prog]
@@ -234,7 +239,7 @@ def run_point(
         argv.append(entry.task)
         argv.extend(arg.format(**facts) for arg in entry.args)
         print(f"  {resolved}/{job}: {entry.task} ({entry.source})")
-        code = spawn(argv)
+        code = spawn(argv, env)
         if code != 0:
             fail(f"{resolved}/{job}: {entry.task} exited {code}")
     if not entries:

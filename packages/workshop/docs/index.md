@@ -70,12 +70,18 @@ high-water mark the gate enforces. The number that is judged is the
 CI union: every leg runs measured (each `fm` child included) and the
 aggregating job combines all platforms before enforcing, so the
 floors are deterministic per change and never depend on one
-machine's view. Only the packages whose suites a leg ran are
-judged: every package after a full leg, the named ones after a
-leg that narrowed to the affected packages, none after a leg whose
-gate skipped on a tree already proved. The gate job names the rest
-as unjudged this run and never reads them as covered because
-nothing was counted. A local `fm test` prints its own lower-biased
+machine's view. Coverage stays global under the affected mode: a
+check leg runs each package's suite as its own metered process and
+stores the suite's lines on the `workshop/coverage` record, keyed by
+the leg, the package, and the identity of the package's dependency
+closure (the tree ids of the package and of every package it
+depends on, plus the root's `pyproject.toml` and `uv.lock`). A leg
+skips a suite only when the record holds its lines for that
+identity; otherwise the suite runs, and the leg says why. The gate
+job pulls every skipped suite from the record before it judges, so
+the union is the same global union a full run produces; a suite the
+record cannot supply is red by name, never a smaller union. A local
+`fm test` prints its own lower-biased
 preview beside the floor, for information. Raise a floor as the
 suite grows; lower it only deliberately, in a reviewed change. The
 release legs publish a further, informational union that includes

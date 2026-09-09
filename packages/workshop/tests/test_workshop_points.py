@@ -78,7 +78,7 @@ def test_a_red_entry_fails_the_job_and_stops(tmp_path: Path) -> None:
     root = _root(tmp_path)
     seen: list[list[str]] = []
 
-    def red(argv: list[str]) -> int:
+    def red(argv: list[str], env: dict[str, str]) -> int:
         seen.append(argv)
         return 3
 
@@ -139,13 +139,18 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
     root = _root(tmp_path)
     seen: list[list[str]] = []
 
-    def green(argv: list[str]) -> int:
+    legs: list[str] = []
+
+    def green(argv: list[str], env: dict[str, str]) -> int:
         seen.append(argv)
+        legs.append(env.get("WORKSHOP_LEG", "<unset>"))
         return 0
 
     _points.run_point(
         root, "gate", "check", os_label="ubuntu-latest", python="3.14", spawn=green
     )
+    # Every child's environment names the leg, the key of its stamps.
+    assert legs == ["check-ubuntu-latest-3.14"] * len(seen)
     assert seen == [
         ["hse", "--profile=fm-profile.json", "check"],
         [
@@ -180,7 +185,7 @@ def test_a_push_promotes_the_gate_to_the_merge_point(
     assert _points.effective_point("nightly") == "nightly"
     seen: list[list[str]] = []
 
-    def green(argv: list[str]) -> int:
+    def green(argv: list[str], env: dict[str, str]) -> int:
         seen.append(argv)
         return 0
 

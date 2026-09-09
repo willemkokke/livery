@@ -67,6 +67,11 @@ RUN_PREFIX = NAMESPACE + "run/"
 #: another writer moved the ref.
 ATTEMPTS = 3
 
+#: The variable the job runner sets for every entry it spawns, naming
+#: the check leg (``check-ubuntu-latest-3.14``): the key of the leg's
+#: rows and stamps.
+LEG_VARIABLE = "WORKSHOP_LEG"
+
 
 @dataclass(frozen=True)
 class Series:
@@ -106,6 +111,9 @@ class RunContext:
         base_ref: The branch a pull request proposes into, as the event
             payload names it (GitLab: the merge request's target);
             empty on a push or when the runner did not say.
+        leg: The check leg this process runs in (``check-ubuntu-latest-3.14``),
+            as the job runner names it in ``WORKSHOP_LEG`` for every entry it
+            spawns; empty outside a scheduled job.
     """
 
     forge: str
@@ -114,6 +122,7 @@ class RunContext:
     ref: str
     head_sha: str = ""
     base_ref: str = ""
+    leg: str = ""
 
 
 def event_payload(environ: Mapping[str, str] | None = None) -> dict[str, Any] | None:
@@ -177,6 +186,7 @@ def run_context(environ: dict[str, str] | None = None) -> RunContext | None:
             env.get("GITHUB_REF", ""),
             _event_head_sha(env),
             _event_base_ref(env),
+            env.get(LEG_VARIABLE, ""),
         )
     if env.get("GITLAB_CI") == "true":
         return RunContext(
@@ -186,6 +196,7 @@ def run_context(environ: dict[str, str] | None = None) -> RunContext | None:
             env.get("CI_COMMIT_REF_NAME", ""),
             env.get("CI_COMMIT_SHA", ""),
             env.get("CI_MERGE_REQUEST_TARGET_BRANCH_NAME", ""),
+            env.get(LEG_VARIABLE, ""),
         )
     return None
 

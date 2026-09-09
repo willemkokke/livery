@@ -812,9 +812,19 @@ def _completed_run(
 
 
 def _require_lines(
-    repo: Repository, run: Run, jobs: tuple[Job, ...], job: str, needed: tuple[str, ...]
+    repo: Repository,
+    run: Run,
+    jobs: tuple[Job, ...],
+    job: str,
+    needed: tuple[str, ...],
+    *,
+    forbidden: tuple[str, ...] = (),
 ) -> None:
-    """Fail unless the log of the job whose name starts with *job* has every line."""
+    """Fail unless the log of the job whose name starts with *job* has every line.
+
+    *forbidden* names lines the log must not carry: a proof of what a
+    leg skipped reads the same as a proof of what it ran.
+    """
     found = next((item for item in jobs if item.name.startswith(job)), None)
     if found is None:
         fail(f"run {run.id} has no {job} job: {repo.web_url()}/actions/runs/{run.id}")
@@ -825,16 +835,24 @@ def _require_lines(
             f"run {run.id}'s {job} job did not say {missing};"
             f" {repo.web_url()}/actions/runs/{run.id}"
         )
+    present = [line for line in forbidden if line in log]
+    if present:
+        fail(
+            f"run {run.id}'s {job} job said {present}, which the proof forbids;"
+            f" {repo.web_url()}/actions/runs/{run.id}"
+        )
 
 
 def _prove_verified_skip(root: Path, kind: str) -> None:
-    """Prove main's run after the setup squash skips the gate and unions nothing.
+    """Prove main's run after the setup squash skips the gate and reuses both suites.
 
-    The setup pull request's check leg ran the full gate and stamped
-    its tree; the squash lands the same tree on main, so main's push
-    run finds it on the record, skips the gate, and its union judges
-    no floor, naming both members as unjudged this run. A skipped leg
-    reddening the union is the failure this proof exists for.
+    The setup pull request's check leg ran the full gate, stamped its
+    tree on the verified record, and stored both members' suites; the
+    squash lands the same tree on main, so main's push run finds it
+    on the record, skips the gate, and its union pulls both suites
+    from the store and judges both floors. A skipped leg reddening
+    the union, or passing it with nothing counted, is the failure
+    this proof exists for.
     """
     from livery.workshop._git_ops import GitOps
 
@@ -850,12 +868,19 @@ def _prove_verified_skip(root: Path, kind: str) -> None:
         logs,
         "gate",
         (
-            "coverage: unjudged this run, no leg ran their suites:"
-            " packages/loop-echo, packages/loop-native",
-            "coverage: no leg ran a suite this run; nothing to union",
+            "coverage: packages/loop-echo on check-ubuntu-latest-3.14: reused from run",
+            "coverage: packages/loop-native on check-ubuntu-latest-3.14:"
+            " reused from run",
+            "coverage packages/loop-echo: 100.0% (floor 100.0%",
+            "coverage packages/loop-native: 100.0% (floor 100.0%",
+            "coverage: the union of 0 leg(s) and 2 reused suite(s)",
         ),
+        forbidden=("unjudged this run",),
     )
-    print(f"  verified skip: proven on main's run {run.id}; the union judged nothing")
+    print(
+        f"  verified skip: proven on main's run {run.id}; the union reused both"
+        " suites from the store"
+    )
 
 
 def _prove_scoped_leg(root: Path, kind: str) -> None:
@@ -866,11 +891,12 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
     legs pay the full gate by the affected rule. This one rewrites a
     test file inside ``loop-echo`` and nothing else, lands it through
     the loop's gate, and reads the run's logs: the check leg must say
-    it narrowed against main to that one member, and the gate job's
-    union must judge that member alone and name the other as
-    unjudged. Main's push run after the squash then pays the full
-    gate, and its union must judge both. Re-run on a pass-owned
-    branch with main's tip as the stamp, so the diff is never empty.
+    it narrowed against main to that one member and stored that
+    member's suite, and the gate job's union must judge both members,
+    the other one reused from the store. Main's push run after the
+    squash then pays the full gate, stores both suites, and its union
+    judges both. Re-run on a pass-owned branch with main's tip as the
+    stamp, so the diff is never empty.
     """
     from livery.workshop._git_ops import GitOps
 
@@ -914,24 +940,32 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
         (
             "affected-legs: the scoped gate against origin/main",
             "affected: packages/loop-echo",
+            "coverage store: packages/loop-echo stored for closure",
+        ),
+        forbidden=(
+            "affected: packages/loop-echo, packages/loop-native",
+            "coverage store: packages/loop-native runs",
         ),
     )
-    # The union judges the one member the leg ran and names the other.
+    # The union takes the one member the leg ran from the leg and the
+    # other from the store, and judges both.
     _require_lines(
         repo,
         run,
         logs,
         "gate",
         (
-            "coverage: unjudged this run, no leg ran their suites:"
-            " packages/loop-native",
+            "coverage: packages/loop-native on check-ubuntu-latest-3.14:"
+            " reused from run",
             "coverage packages/loop-echo: 100.0% (floor 100.0%",
-            "coverage: the union of 1 leg(s)",
+            "coverage packages/loop-native: 100.0% (floor 100.0%",
+            "coverage: the union of 1 leg(s) and 1 reused suite(s)",
         ),
+        forbidden=("unjudged this run",),
     )
     print(
-        "  scoped leg: proven on a member-only pull request"
-        " (affected: packages/loop-echo; the union judged loop-echo alone)"
+        "  scoped leg: proven on a member-only pull request (affected:"
+        " packages/loop-echo; the union reused loop-native from the store)"
     )
     # A narrowed leg never stamps, so main's push after the squash pays
     # the full gate, and its union judges both members.
@@ -945,7 +979,17 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
         (
             "coverage packages/loop-echo: 100.0% (floor 100.0%",
             "coverage packages/loop-native: 100.0% (floor 100.0%",
-            "coverage: the union of 1 leg(s)",
+            "coverage: the union of 1 leg(s) and 0 reused suite(s)",
+        ),
+    )
+    _require_lines(
+        repo,
+        run,
+        logs,
+        "check",
+        (
+            "coverage store: packages/loop-echo stored for closure",
+            "coverage store: packages/loop-native stored for closure",
         ),
     )
     print(f"  full push: proven on main's run {run.id}; the union judged both members")

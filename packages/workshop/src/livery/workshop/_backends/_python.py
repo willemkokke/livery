@@ -312,18 +312,171 @@ def report_coverage(root: Path, packages: tuple[Package, ...]) -> None:
 COVERAGE_DATA = "coverage-data"
 
 
-def combine_leg(root: Path) -> None:
-    """Combine the leg's per-process data files into ``.coverage``.
+def _unmetered() -> dict[str, str]:
+    """The environment for a coverage CLI call on a named data file.
 
-    Refuses when a leg that ran its gate left no data, naming the
-    variable that arms the meter; a leg whose gate skipped (a tree
-    already proved, or nothing affected) legitimately measured
-    nothing, and says so instead.
+    Under a metered gate the ambient ``COVERAGE_*`` and ``COV_CORE_*``
+    variables re-point the coverage CLI at the outer run's live data
+    file, whose parallel parts are still being written, and meter the
+    CLI process itself; scrubbing them keeps the call on the files the
+    caller named.
+    """
+    return {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("COVERAGE_", "COV_CORE_"))
+    }
+
+
+def suites_of(packages: tuple[Package, ...]) -> tuple[Package, ...]:
+    """The packages with a test directory: the units the coverage store keys."""
+    return tuple(
+        package for package in packages if (package.directory / "tests").is_dir()
+    )
+
+
+def suite_prefix(package: Package) -> str:
+    """The data-file prefix *package*'s suite writes its metered parts under."""
+    from livery.workshop._coverage_store import slug
+
+    return f".coverage.suite-{slug(package.name)}"
+
+
+def run_suites(
+    packages: tuple[Package, ...],
+    root: Path,
+    pytest_args: tuple[str, ...],
+    *,
+    scoped: bool,
+) -> None:
+    """Run each suite as its own metered process; the red ones are named at the end.
+
+    A suite's processes write under `suite_prefix`, the workspace's
+    own ``tests/`` directory (run last, and only by a whole gate)
+    under the leg's plain prefix: it belongs to no package and is
+    never reused. A suite that collects no test (pytest exit 5) is
+    not red: it measured nothing and stores nothing.
+    """
+    red: list[str] = []
+    for package in suites_of(packages):
+        env = {**os.environ, "COVERAGE_FILE": suite_prefix(package)}
+        result = pytest.opts(in_process=False, nofail=True, env=env)(
+            f"{package.path}/tests", *pytest_args
+        )
+        if result.code == 5:
+            print(f"  tests {package.path}: no tests collected")
+        elif result.code != 0:
+            red.append(f"{package.path} (exit {result.code})")
+    if not scoped and (root / "tests").is_dir():
+        result = pytest.opts(in_process=False, nofail=True)("tests", *pytest_args)
+        if result.code not in (0, 5):
+            red.append(f"tests (exit {result.code})")
+    if red:
+        fail("tests failed in " + ", ".join(red))
+
+
+def suite_lines(
+    data: Path, packages: tuple[Package, ...], package: Package, *, root: Path
+) -> dict[str, list[int]]:
+    """The lines *package*'s combined suite data holds, for its closure's files.
+
+    The names are workspace-relative, whichever way the meter stored
+    them, so a stored suite reads the same on every leg. Files outside
+    the closure are not the suite's to store: a suite reaches them
+    only through the leg's shared processes, and their identity is
+    not part of the suite's key.
+    """
+    from coverage import CoverageData
+
+    from livery.workshop._coverage_store import in_closure
+
+    measured = CoverageData(basename=str(data))
+    measured.read()
+    files: dict[str, list[int]] = {}
+    for filename in measured.measured_files():
+        name = filename.replace("\\", "/")
+        if Path(name).is_absolute():
+            try:
+                name = Path(name).relative_to(root).as_posix()
+            except ValueError:
+                continue
+        if not in_closure(packages, package, name):
+            continue
+        lines = measured.lines(filename) or []
+        if lines:
+            files[name] = sorted(lines)
+    return files
+
+
+def store_suites(root: Path, packages: tuple[Package, ...], *, leg: str) -> None:
+    """Combine each suite that ran and stamp its lines on the coverage store.
+
+    Only a CI run stamps, under *leg*'s label and the suite's closure
+    identity; a refusal from the store is printed, never fatal, since
+    the next leg that misses the suite runs it fresh. The parts stay
+    for the leg's own combine.
+    """
+    from livery.workshop._coverage_store import closure_id, stamp
+    from livery.workshop._git_ops import GitOps
+    from livery.workshop._state import run_context
+
+    run = run_context()
+    git = GitOps(root)
+    for package in suites_of(packages):
+        prefix = suite_prefix(package)
+        if not any(root.glob(f"{prefix}.*")):
+            continue
+        result = toolroom.coverage.opts(
+            cwd=root, env=_unmetered(), nofail=True, recorded=False
+        )("combine", "--keep", f"--data-file={prefix}")
+        if result.code != 0:
+            fail(
+                f"coverage combine for {package.path} exited {result.code}:\n"
+                f"{result.stdout}{result.stderr}"
+            )
+        files = suite_lines(root / prefix, packages, package, root=root)
+        if run is None:
+            print(
+                f"  coverage store: {package.path} measured ({len(files)} files);"
+                " outside CI nothing is stored"
+            )
+            continue
+        key = closure_id(git, packages, package)
+        why = stamp(
+            root,
+            run,
+            leg=leg,
+            package=package,
+            closure_key=key,
+            sha=git.head_sha(),
+            files=files,
+        )
+        if why:
+            print(f"  coverage store: {package.path} not stored ({why})")
+        else:
+            print(
+                f"  coverage store: {package.path} stored for closure {key[:12]}"
+                f" on {leg} ({len(files)} files)"
+            )
+
+
+def combine_leg(root: Path, packages: tuple[Package, ...]) -> None:
+    """Combine the leg's data into ``.coverage``, each suite's lines stored first.
+
+    Every suite the leg ran is combined apart and stamped on the
+    coverage store under the leg's label (the marker's), so a later
+    leg that skips the suite reuses its lines; then every data file
+    combines into the leg's ``.coverage`` for the union. Refuses when
+    a leg that ran its gate left no data, naming the variable that
+    arms the meter; a leg whose gate skipped (a tree already proved,
+    or nothing affected) legitimately measured nothing, and says so
+    instead.
     """
     from livery.workshop._verified import NOTHING, VERIFIED, read_marker
 
     parts = sorted(root.glob(".coverage.*"))
-    scope = read_marker(root)["scope"]
+    marker = read_marker(root)
+    scope = marker["scope"]
     if not parts and not (root / ".coverage").is_file():
         if scope not in (VERIFIED, NOTHING):
             fail(
@@ -333,10 +486,11 @@ def combine_leg(root: Path) -> None:
             )
         print(f"  coverage: no data, the gate ran {scope!r}; nothing to combine")
         return
+    store_suites(root, packages, leg=marker["leg"])
     if parts:
-        result = toolroom.coverage.opts(cwd=root, nofail=True, recorded=False)(
-            "combine"
-        )
+        result = toolroom.coverage.opts(
+            cwd=root, env=_unmetered(), nofail=True, recorded=False
+        )("combine")
         if result.code != 0:
             fail(
                 f"coverage combine exited {result.code}:\n"
@@ -349,12 +503,16 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
     """Combine the collected legs' data into the union; the packages it judges.
 
     Each leg's directory under `COVERAGE_DATA` carries its scope
-    marker beside its data. A full leg judges every package, a
-    narrowed leg the packages its marker names, and a leg whose gate
-    skipped (a tree already proved, or nothing affected) measured
-    nothing and contributes no data. The packages no leg judged are
-    named as unjudged this run, never read as covered because nothing
-    was counted.
+    marker beside its data. A full leg's data judges every package
+    and a narrowed leg's the suites its marker names; a leg whose
+    gate skipped (a tree already proved, or nothing affected)
+    measured nothing. Every suite no leg ran is pulled from the
+    coverage store, per leg label, for its closure identity, so the
+    union is the same global union a full run produces and every
+    package is judged. A suite the store cannot supply refuses by
+    name: a leg skips a suite only when the store holds it, so a miss
+    here is a leg that narrowed without the store, or a store since
+    trimmed, never a smaller union.
 
     Refuses by name when no leg directory was collected, when a leg
     carries no readable marker, when a marker names a scope the union
@@ -362,8 +520,8 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
     missing upload is a red gate, never a smaller union.
 
     Returns:
-        The judged packages, in *packages* order; empty when no leg
-        ran a suite, and then no union file is written.
+        The judged packages, in *packages* order; empty when nothing
+        ran and nothing was reused, and then no union file is written.
     """
     from livery.workshop._verified import (
         AFFECTED,
@@ -384,11 +542,13 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
         )
     collected: list[Path] = []
     judged: set[str] = set()
+    labels: list[tuple[Path, str]] = []
     for leg in legs:
         marker = read_marker(leg)
         scope = marker["scope"]
         if scope in (VERIFIED, NOTHING):
             print(f"  coverage: leg {leg.name} ran {scope!r}: no suite, no data")
+            labels.append((leg, marker["leg"]))
             continue
         if scope not in (FULL, AFFECTED):
             fail(
@@ -404,10 +564,13 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
                 " upload is a red gate, never a smaller union"
             )
         collected.append(data)
+        labels.append((leg, marker["leg"]))
         if scope == FULL:
             judged.update(package.path for package in packages)
         else:
             judged.update(marker["packages"])
+    reused = _reuse_suites(root, packages, judged, labels)
+    collected.extend(reused)
     unjudged = [package.path for package in packages if package.path not in judged]
     if unjudged:
         print(
@@ -417,11 +580,7 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
     if not collected:
         print("  coverage: no leg ran a suite this run; nothing to union")
         return ()
-    scrubbed = {
-        key: value
-        for key, value in os.environ.items()
-        if not key.startswith(("COVERAGE_", "COV_CORE_"))
-    }
+    scrubbed = _unmetered()
     result = toolroom.coverage.opts(
         cwd=root, env=scrubbed, nofail=True, recorded=False
     )("combine", *(str(path) for path in collected))
@@ -431,8 +590,72 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
         cwd=root, env=scrubbed, nofail=True, recorded=False
     )("report", "--sort=cover")
     print(report.stdout.rstrip())
-    print(f"  coverage: the union of {len(collected)} leg(s)")
+    print(
+        f"  coverage: the union of {len(collected) - len(reused)} leg(s)"
+        f" and {len(reused)} reused suite(s)"
+    )
     return tuple(package for package in packages if package.path in judged)
+
+
+def _reuse_suites(
+    root: Path,
+    packages: tuple[Package, ...],
+    judged: set[str],
+    labels: list[tuple[Path, str]],
+) -> list[Path]:
+    """Pull every suite no leg ran from the store, one data file per leg.
+
+    Extends *judged* to every package once each suite is accounted
+    for. Refuses by name when a leg has no label to read the store by,
+    when the store cannot be read, and when it holds no entry for a
+    suite's closure on a leg.
+    """
+    from coverage import CoverageData
+
+    from livery.workshop._coverage_store import closure_id, find, slug
+    from livery.workshop._git_ops import GitOps
+    from livery.workshop._verified import MARKER
+
+    pending = [package for package in suites_of(packages) if package.path not in judged]
+    if not pending:
+        # Every suite ran: the union is complete, and the packages
+        # without a suite of their own are judged on it too.
+        judged.update(package.path for package in packages)
+        return []
+    git = GitOps(root)
+    keys = {package.path: closure_id(git, packages, package) for package in pending}
+    written: list[Path] = []
+    for leg, label in labels:
+        if not label:
+            fail(
+                f"leg {leg.name} names no label in its {MARKER}, so the"
+                f" store cannot supply {', '.join(p.path for p in pending)};"
+                " the job runner sets WORKSHOP_LEG for every leg"
+            )
+        for package in pending:
+            found, why = find(
+                root, leg=label, package=package, closure_key=keys[package.path]
+            )
+            if found is None:
+                fail(
+                    f"leg {leg.name}: no stored suite for {package.path} at"
+                    f" closure {keys[package.path][:12]} on {label}"
+                    f"{' (' + why + ')' if why else ''}. A leg skips a suite"
+                    " only when the store holds it, so this leg narrowed"
+                    " without the store, or the store was trimmed since;"
+                    " a run of the full gate stores it again."
+                )
+            path = leg / f"reuse-{slug(package.name)}.coverage"
+            data = CoverageData(basename=str(path))
+            data.add_lines(dict(found.files))
+            data.write()
+            written.append(path)
+            print(
+                f"  coverage: {package.path} on {label}: reused from run"
+                f" {found.run} ({len(found.files)} files)"
+            )
+    judged.update(package.path for package in packages)
+    return written
 
 
 def enforce_coverage(root: Path, packages: tuple[Package, ...]) -> None:
@@ -543,8 +766,10 @@ def run_test(
         # python this venv starts is already metered from interpreter
         # start (the CI gate arms it), so the run adds no second
         # meter and the enforcement happens once, on the merged
-        # union, in the aggregating job.
-        pytest.opts(in_process=False)(*dirs, *pytest_args)
+        # union, in the aggregating job. Each suite runs as its own
+        # process under its own data-file prefix, so the leg can
+        # combine and store a suite's lines apart from the others.
+        run_suites(packages, root, pytest_args, scoped=scoped)
         return
     # Bare --cov: the measured source is [tool.coverage.run] source,
     # the namespace the render derived, never a spelled module.
