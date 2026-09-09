@@ -237,10 +237,19 @@ def test_a_prose_only_diff_says_so_and_skips(
     _quality.check()
     out = capsys.readouterr().out
     assert (
-        "nothing affected: only prose changed (2 file(s) under notes/ or markdown);"
-        " the gate skips" in out
+        "nothing affected: only prose and site files changed (2 file(s) under"
+        " notes/, markdown, the root docs/ tree, or zensical.toml); the gate"
+        " skips, the site build judges them" in out
     )
     assert read_marker(root)["scope"] == "nothing"
+    # The site's own files count the same way: a docs-only change
+    # with the root zensical.toml among it runs no gate on the legs.
+    monkeypatch.setattr(
+        "livery.workshop._git_ops.GitOps.changed_paths",
+        lambda self, base: ["zensical.toml", "docs/assets/logo.svg", "notes/a.md"],
+    )
+    _quality.check()
+    assert "only prose and site files changed (3 file(s)" in capsys.readouterr().out
     monkeypatch.setattr(
         "livery.workshop._git_ops.GitOps.changed_paths", lambda self, base: []
     )

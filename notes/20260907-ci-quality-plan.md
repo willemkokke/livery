@@ -1809,3 +1809,15 @@ None. Every ruling raised in this plan was closed in the review of
   toolroom and workshop tests: the whole gate 5m17s, the affected
   gate 3m08s; a submit after `fm check --affected --fix` paid both,
   and `fm submit --fix --armed` now pays the narrowed one once.
+- 2026-09-09 (issue #375), an extension of the prose class: the
+  site's own files at the root, `zensical.toml` and the `docs/` tree,
+  affect no package. Only the site build reads them, and it runs on
+  every run, so a diff confined to prose and site files runs no gate
+  on the legs and says so; beside a package change they change
+  nothing, and the legs narrow to the package. Every other root file
+  still widens to everything, and the widening now names the file.
+  The occasion: pull request #373 carried the regenerated task nav
+  with the re-rendered root `zensical.toml`, and its four legs ran
+  the whole workspace, forge included (run 34409391944), where the
+  local affected gate had narrowed to footman, toolroom, and
+  workshop.

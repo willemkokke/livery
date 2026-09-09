@@ -5,6 +5,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from livery.workshop._git_ops import GitOps
 from livery.workshop._graph import affected_packages, dependents_closure
 from livery.workshop._packages import discover_packages
@@ -123,3 +125,37 @@ def test_a_mixed_change_narrows_to_its_packages_and_a_root_file_still_widens(
     assert [p.path for p in affected] == ["packages/mid", "packages/top"]
     (root / "tasks.py").write_text("# touched\n")
     assert affected_packages(root, GitOps(root)) is None
+
+
+# --- the site's own files affect no package ------------------------------------
+
+
+def test_a_site_only_change_affects_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Refusals first: another root file still widens to everything,
+    # and the reason names the file, so a widened gate is never silent.
+    from livery.workshop._graph import is_site
+
+    root = _workspace(tmp_path)
+    (root / "pyproject.toml").write_text("[project]\nname = 'x'\n")
+    assert affected_packages(root, GitOps(root)) is None
+    assert "pyproject.toml: outside the packages" in capsys.readouterr().out
+    (root / "pyproject.toml").unlink()
+    # The site's configuration and the root docs tree reach no gate:
+    # the site build judges them, on every run.
+    (root / "zensical.toml").write_text("site_name = 'x'\n")
+    (root / "docs" / "assets").mkdir(parents=True)
+    (root / "docs" / "assets" / "logo.svg").write_text("<svg/>\n")
+    assert affected_packages(root, GitOps(root)) == ()
+    assert is_site("zensical.toml") and is_site("docs/assets/logo.svg")
+    # A package's own docs file is the package's; the workspace tests
+    # and a nested zensical.toml are not the site's.
+    assert not is_site("packages/core/docs/nav.toml")
+    assert not is_site("tests/docs/thing.py") and not is_site("packages/zensical.toml")
+    # Beside a package change the site files change nothing: the
+    # legs narrow to the package.
+    (root / "packages" / "mid" / "thing.py").write_text("x = 2\n")
+    affected = affected_packages(root, GitOps(root))
+    assert affected is not None
+    assert [p.path for p in affected] == ["packages/mid", "packages/top"]

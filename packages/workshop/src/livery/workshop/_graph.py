@@ -48,6 +48,20 @@ def dependents_closure(
 #: The prose directory: nothing under it reaches a gate.
 NOTES = "notes/"
 
+#: The site's own files at the root: its configuration and its pages.
+SITE_CONFIG = "zensical.toml"
+SITE_DOCS = "docs/"
+
+
+def is_site(path: str) -> bool:
+    """Whether *path* is the site's own: the root ``zensical.toml`` or ``docs/`` tree.
+
+    Only the site build reads them, and it runs on every run, so
+    they reach no format, lint, type, or test gate. A package's
+    ``docs/`` directory is the package's, not the site's.
+    """
+    return path == SITE_CONFIG or path.startswith(SITE_DOCS)
+
 
 def is_prose(path: str) -> bool:
     """Whether *path* is prose: under ``notes/``, or a markdown file anywhere.
@@ -65,8 +79,9 @@ def affected_packages(
 
     None means everything: a touched file outside every package (the
     root configuration, templates, workspace tests) configures every
-    gate, so no narrowing is honest. Prose (`is_prose`) affects no
-    package wherever it lives, so a diff confined to it affects
+    gate, so no narrowing is honest, and the file is named. Prose
+    (`is_prose`) and the site's own files (`is_site`) affect no
+    package wherever they live, so a diff confined to them affects
     nothing. An empty tuple means the branch changes nothing a gate
     reads.
     """
@@ -86,13 +101,14 @@ def affected_packages(
             return None
     seeds: set[str] = set()
     for path in git.changed_paths(base):
-        if is_prose(path):
+        if is_prose(path) or is_site(path):
             continue
         for package in packages:
             if path.startswith(package.path + "/"):
                 seeds.add(package.path)
                 break
         else:
+            print(f"  {path}: outside the packages; everything runs")
             return None
     return dependents_closure(packages, seeds)
 
