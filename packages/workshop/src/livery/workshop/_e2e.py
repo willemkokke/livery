@@ -1064,6 +1064,76 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
     print(f"  full push: proven on main's run {run.id}; the union judged both members")
 
 
+def _prove_prose_leg(root: Path, kind: str) -> None:
+    """Prove a note-only pull request pays no package gate.
+
+    The change is one markdown file under ``notes/`` and nothing
+    else, landed through the loop's gate on a pass-owned branch with
+    main's tip as the stamp so the diff is never empty. The check
+    leg must say nothing is affected because only prose changed and
+    skip its gate; the gate job must reuse every unit from the store
+    and judge both members.
+    """
+    from livery.workshop._git_ops import GitOps
+
+    git = GitOps(root)
+    _fresh_branch(root, "chore/prose-leg")
+    stamp = git.head_sha()
+    note = root / "notes" / "loop-prose.md"
+    note.parent.mkdir(exist_ok=True)
+    note.write_text(
+        "# The loop's prose probe\n\nA note-only change, so the check legs"
+        f" skip their gate.\n\nStamp: {stamp}\n",
+        "utf-8",
+    )
+    git.commit_all(
+        "docs(notes): a note-only change for the prose leg\n\nOne markdown"
+        " file under notes/, so the check leg finds nothing affected and"
+        " skips its gate."
+    )
+    head = git.head_sha()
+    import livery.toolroom as toolroom
+
+    toolroom.git.opts(cwd=root, nofail=True)("fetch", "--prune", "origin")
+    _loop_fm(root, "submit", "--force", "--armed")
+    _align_main(root)
+    forge, _ = _dev_forge(kind)
+    repo = forge.repository(E2E_OWNER, E2E_REPO)
+    run, logs = _completed_run(repo, head, event="pull_request")
+    _require_lines(
+        repo,
+        run,
+        logs,
+        "check",
+        (
+            "affected-legs: the scoped gate against origin/main",
+            "nothing affected: only prose changed (1 file(s) under notes/ or"
+            " markdown); the gate skips",
+        ),
+        forbidden=("affected: packages/", "coverage store: packages/"),
+    )
+    _require_lines(
+        repo,
+        run,
+        logs,
+        "gate",
+        (
+            "coverage: packages/loop-echo on check-ubuntu-latest-3.14: reused from run",
+            "coverage: packages/loop-native on check-ubuntu-latest-3.14:"
+            " reused from run",
+            "coverage: tests on check-ubuntu-latest-3.14: reused from run",
+            "coverage packages/loop-echo: 100.0% (floor 100.0%",
+            "coverage packages/loop-native: 100.0% (",
+            "coverage: the union of 0 leg(s) and 3 reused suite(s)",
+        ),
+        forbidden=("unjudged this run",),
+    )
+    print(
+        f"  prose leg: proven on a note-only pull request (run {run.id}: the"
+        " check leg skipped, the union reused every unit)"
+    )
+
+
 def _release_act(root: Path, kind: str) -> None:
     """Release the member through the loop; verify wheel and receipt.
 
@@ -1354,5 +1424,6 @@ if _WORKSHOP_TESTS.is_dir():
         _ensure_members(root)
         _prepare_ratchet(root, forge)
         _prove_scoped_leg(root, forge)
+        _prove_prose_leg(root, forge)
         _release_act(root, forge)
         print("  the loop is whole: gate, merge, release, receipt")

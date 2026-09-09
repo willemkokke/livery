@@ -295,7 +295,7 @@ def check(
         if root_for_ci is not None and run is not None:
             subset = _with_unstored_suites(root_for_ci, run, packages, subset)
         if not subset:
-            print("  nothing affected: the branch changes no files")
+            print(f"  nothing affected: {_nothing_reason(ci_base or 'main')}")
             if root_for_ci is not None and run is not None:
                 _verified.write_marker(root_for_ci, _verified.NOTHING, leg=run.leg)
             return
@@ -338,6 +338,27 @@ def check(
         kindcheck()
         template_check()
         provenance_check()
+
+
+def _nothing_reason(base: str) -> str:
+    """Why nothing is affected: only prose changed, or nothing changed at all."""
+    from livery.workshop._git_ops import GitError, GitOps
+    from livery.workshop._graph import is_prose
+
+    root = workspace_root()
+    if root is None:
+        raise ValueError("no workspace: no workshop.toml above the working directory")
+    try:
+        changed = GitOps(root).changed_paths(base)
+    except GitError:
+        return "the branch changes no files"
+    prose = [path for path in changed if is_prose(path)]
+    if changed and len(prose) == len(changed):
+        return (
+            f"only prose changed ({len(prose)} file(s) under notes/ or markdown);"
+            " the gate skips, the site build judges the words"
+        )
+    return "the branch changes no files"
 
 
 def _with_unstored_suites(
