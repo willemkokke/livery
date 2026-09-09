@@ -1,6 +1,7 @@
 """``fm submit``: get the branch onto the remote, verified, and landed.
 
-Local gate first (a red gate costs zero network calls), then the
+Local gate first (the gate the CI legs run, so a red gate costs
+zero network calls), then the
 closes-link resolution with existence probes, disarm-before-push,
 push, find-or-open with the title rules, arm per the arming ladder,
 and follow until it lands or says what stopped it. Exits 10 and 17 self-heal by
@@ -705,7 +706,7 @@ def submit_flow(
     repository.
     """
     if gate:
-        _gate(fix)
+        _gate(fix, root=git.root, base=base)
         if fix and not git.is_clean():
             _fold_fixes(git, base)
     else:
@@ -750,7 +751,7 @@ def submit_flow(
                         f" and re-run `{footman.prog()} submit`:\n{exc2}"
                     )
                 if gate:
-                    _gate()
+                    _gate(root=git.root, base=plan.base)
                 number = push_and_pr(
                     repo, git, plan, closes=linked, armed=armed, force=force
                 )
@@ -759,16 +760,25 @@ def submit_flow(
         return number
 
 
-def _gate(fix: bool = False) -> None:
+def _gate(fix: bool = False, *, root: Path, base: str = "main") -> None:
     """The local gate; red raises before any network call.
 
-    *fix* runs format and lint in their fix modes, so mechanical
-    findings heal instead of failing; the caller folds any rewrites
-    into the branch before pushing.
+    The gate the CI legs run: the whole workspace, or, when the
+    contract declares ``[ci] affected-legs``, the affected packages
+    against *base*, the branch the pull request merges into, so the
+    submit proves what CI verifies and pays for nothing more. Says
+    which one it runs and why. *fix* runs format and lint in their
+    fix modes, so mechanical findings heal instead of failing; the
+    caller folds any rewrites into the branch before pushing.
     """
-    from livery.workshop._quality import check
+    from livery.workshop._quality import affected_legs, check
 
-    check(fix=fix)
+    if affected_legs(root):
+        print(f"  gate: the affected gate against origin/{base}, as the CI legs run it")
+        check(affected=True, fix=fix, base=base)
+        return
+    print("  gate: the whole workspace (the contract declares no [ci] affected-legs)")
+    check(fix=fix, base=base)
 
 
 def _fold_fixes(git: GitOps, base: str) -> None:
