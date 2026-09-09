@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Annotated
 
 from livery import toolroom
-from livery.footman import doc, fail, group
+from livery.footman import Context, doc, fail, group
 from livery.workshop import _cliff
 from livery.workshop._backends import backend_for
 from livery.workshop._git_ops import GitOps
@@ -406,6 +406,7 @@ def release_replay(
 
 @release.task(name="wheels", hidden=True)
 def release_wheels(
+    ctx: Context,
     ref: Annotated[str, doc("the release squash; empty means HEAD")] = "",
 ) -> None:
     """Build this platform's wheels for the squash's native members.
@@ -419,8 +420,6 @@ def release_wheels(
     and builds nothing, so the matrix job stays green on a pure
     release.
     """
-    import os
-
     from livery.workshop._backends import backend_for
     from livery.workshop._kinds import kind_for
     from livery.workshop._publish import discover_release
@@ -441,9 +440,12 @@ def release_wheels(
         return
     # The full set for this platform: the python matrix's interpreters,
     # and both libc flavours kept (an empty CIBW_SKIP reads as no skip,
-    # and its presence stops the local narrowing's setdefault).
-    os.environ.setdefault("CIBW_BUILD", cibw_build_set(python_matrix(root)))
-    os.environ.setdefault("CIBW_SKIP", "")
+    # and its presence stops the local narrowing's setdefault). Set on
+    # the task's own environment, which every build child inherits; a
+    # write to os.environ here would be scoped the same way and is
+    # refused as an environment write meant to travel sideways.
+    ctx.env.setdefault("CIBW_BUILD", cibw_build_set(python_matrix(root)))
+    ctx.env.setdefault("CIBW_SKIP", "")
     for package in native:
         dist = backend_for(package).build(package, root, epoch=epoch)
         wheels = ", ".join(sorted(w.name for w in dist.glob("*.whl")))

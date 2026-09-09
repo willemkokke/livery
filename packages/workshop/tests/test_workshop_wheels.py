@@ -172,3 +172,63 @@ def test_the_build_set_names_the_matrix_interpreters() -> None:
     assert _wheels.cibw_build_set(["3.11", "3.14"]) == "cp311-* cp314-*"
     assert _wheels.cibw_build_set(["3.14t"]) == "cp314t-*"
     assert _wheels.cibw_build_set([]) == ""
+
+
+def test_the_wheels_verb_sets_the_build_set_on_the_task_context(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+    import subprocess
+    from types import SimpleNamespace
+
+    from livery.workshop._release import release_wheels
+
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nlayers = ["livery.workshop"]\n\n[forge]\nkind = "github"\n'
+    )
+    _member(
+        tmp_path,
+        "ext",
+        'type = "python-nanobind"\nname = "ext"\n[ci]\n'
+        'wheel-platforms = ["ubuntu-latest"]\n',
+    )
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.email=t@l",
+            "-c",
+            "user.name=T",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "seed",
+        ],
+        cwd=tmp_path,
+        check=True,
+    )
+    (package,) = discover_packages(tmp_path)
+    built: list[dict[str, str]] = []
+
+    class _Backend:
+        def build(self, package: object, root: Path, *, epoch: int = 0) -> Path:
+            built.append({"epoch": str(epoch)})
+            dist = tmp_path / "packages" / "ext" / "dist"
+            dist.mkdir(exist_ok=True)
+            (dist / "ext-0.1.0-cp314-cp314-manylinux_2_28_x86_64.whl").write_text("")
+            return dist
+
+    monkeypatch.setattr("livery.workshop._backends.backend_for", lambda _p: _Backend())
+    monkeypatch.setattr(
+        "livery.workshop._publish.discover_release",
+        lambda root, git, ref: ((package, "0.1.0"),),
+    )
+    monkeypatch.chdir(tmp_path)
+    ctx = SimpleNamespace(env={})
+    release_wheels(ctx)  # type: ignore[arg-type]  # a task context stand-in
+    # No root pyproject: the matrix is the default floor and the newest minor.
+    assert ctx.env == {"CIBW_BUILD": "cp311-* cp314-*", "CIBW_SKIP": ""}
+    assert "CIBW_BUILD" not in os.environ
+    assert built and built[0]["epoch"].isdigit()
