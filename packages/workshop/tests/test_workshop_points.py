@@ -157,7 +157,11 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
     ]
     seen.clear()
     _points.run_point(root, "gate", "gate", spawn=green)
+    # The render gate and the provenance check live in the gate job,
+    # the one place a scoped leg cannot skip them.
     assert seen == [
+        ["hse", "template.check"],
+        ["hse", "provenance"],
         ["hse", "ci.metrics.collect"],
         ["hse", "ci.verdict", "--needs=check,docs,release-title"],
     ]

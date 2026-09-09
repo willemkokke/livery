@@ -403,3 +403,43 @@ def test_sweep_names_a_remote_it_cannot_list(
     assert lines == [
         f"  {_state.RUN_PREFIX}*: the remote could not be listed; nothing swept"
     ]
+
+
+def test_the_run_context_base_is_the_pull_requests_and_empty_otherwise(
+    tmp_path: Path,
+) -> None:
+    event = tmp_path / "event.json"
+    env = {
+        "GITHUB_ACTIONS": "true",
+        "GITHUB_RUN_ID": "7",
+        "GITHUB_EVENT_NAME": "pull_request",
+        "GITHUB_REF": "refs/pull/3/merge",
+        "GITHUB_SHA": "a" * 40,
+        "GITHUB_EVENT_PATH": str(event),
+    }
+    # Fallbacks first: no base in the payload, a push, a missing payload.
+    event.write_text(json.dumps({"pull_request": {"head": {"sha": "b" * 40}}}))
+    run = _state.run_context(env)
+    assert run is not None and run.base_ref == ""
+    pushed = _state.run_context({**env, "GITHUB_EVENT_NAME": "push"})
+    assert pushed is not None and pushed.base_ref == ""
+    missing = _state.run_context({**env, "GITHUB_EVENT_PATH": str(tmp_path / "none")})
+    assert missing is not None and missing.base_ref == ""
+    event.write_text(
+        json.dumps(
+            {"pull_request": {"head": {"sha": "b" * 40}, "base": {"ref": "main"}}}
+        )
+    )
+    run = _state.run_context(env)
+    assert run is not None and run.base_ref == "main"
+    gitlab = _state.run_context(
+        {
+            "GITLAB_CI": "true",
+            "CI_PIPELINE_ID": "9",
+            "CI_PIPELINE_SOURCE": "merge_request_event",
+            "CI_COMMIT_REF_NAME": "feat/x",
+            "CI_COMMIT_SHA": "c" * 40,
+            "CI_MERGE_REQUEST_TARGET_BRANCH_NAME": "main",
+        }
+    )
+    assert gitlab is not None and gitlab.base_ref == "main"

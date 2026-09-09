@@ -428,7 +428,9 @@ def _eat_dev_wheels(root: Path, pins: dict[str, str]) -> str:
                 " born by the loop"
             )
         contract_text = contract_text.replace(
-            marker, marker + 'python-versions = ["3.14"]\n', 1
+            marker,
+            marker + 'python-versions = ["3.14"]\naffected-legs = true\n',
+            1,
         )
     if "[[ci.schedule]]" not in contract_text:
         # The schedule seam's first entry: the nightly point replays
@@ -727,6 +729,74 @@ def _ensure_members(root: Path) -> None:
         print(f"  member {name}: landed through the loop's own gate")
 
 
+def _prove_scoped_leg(root: Path, kind: str) -> None:
+    """Prove the scoped check leg on a member-only pull request.
+
+    The loop's other pull requests all touch the root (``new.package``
+    wires the workspace, the release stamps the manifest), so their
+    legs pay the full gate by the affected rule. This one rewrites a
+    test file inside ``loop-echo`` and nothing else, lands it through
+    the loop's gate, and reads the check leg's log: the leg must say
+    it narrowed against main to that one member. Re-run on a
+    pass-owned branch with main's tip as the stamp, so the diff is
+    never empty.
+    """
+    from livery.workshop._git_ops import GitOps
+
+    git = GitOps(root)
+    _fresh_branch(root, "chore/scoped-leg")
+    stamp = git.head_sha()
+    probe = root / "packages" / "loop-echo" / "tests" / "test_scoped_leg.py"
+    probe.write_text(
+        '"""A member-only change: the loop proves the scoped check leg on it."""\n'
+        "\n"
+        f'STAMP = "{stamp}"\n'
+        "\n\n"
+        "def test_the_stamp_is_a_commit():\n"
+        "    assert len(STAMP) == 40\n",
+        "utf-8",
+    )
+    git.commit_all(
+        "chore(loop-echo): a member-only change for the scoped leg\n\nOne file"
+        " under one member, so the check leg narrows to that member and"
+        " says so."
+    )
+    head = git.head_sha()
+    _loop_fm(root, "submit", "--force", "--armed")
+    _align_main(root)
+    forge, _ = _dev_forge(kind)
+    repo = forge.repository(E2E_OWNER, E2E_REPO)
+    runs = [
+        run
+        for run in repo.checks.runs(head_sha=head)
+        if run.workflow.endswith("ci.yml") and run.event == "pull_request"
+    ]
+    if not runs:
+        fail(f"no pull request run for the scoped-leg commit {head[:10]}")
+    run = max(runs, key=lambda run: run.id)
+    log = ""
+    for job in repo.checks.jobs(run.id):
+        if job.name.startswith("check"):
+            log = repo.checks.job_log(job.id)
+            break
+    else:
+        fail(f"run {run.id} has no check leg: {repo.web_url()}/actions/runs/{run.id}")
+    needed = (
+        "affected-legs: the scoped gate against origin/main",
+        "affected: packages/loop-echo",
+    )
+    missing = [line for line in needed if line not in log]
+    if missing:
+        fail(
+            f"the check leg did not narrow to the member: missing {missing};"
+            f" {repo.web_url()}/actions/runs/{run.id}"
+        )
+    print(
+        "  scoped leg: proven on a member-only pull request"
+        " (affected: packages/loop-echo)"
+    )
+
+
 def _release_act(root: Path, kind: str) -> None:
     """Release the member through the loop; verify wheel and receipt.
 
@@ -1012,5 +1082,6 @@ if _WORKSHOP_TESTS.is_dir():
         print("  green: the loop's gate ran on the real runner")
         _merge_setup(forge, sha)
         _ensure_members(root)
+        _prove_scoped_leg(root, forge)
         _release_act(root, forge)
         print("  the loop is whole: gate, merge, release, receipt")

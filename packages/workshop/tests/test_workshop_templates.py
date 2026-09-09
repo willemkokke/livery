@@ -956,3 +956,19 @@ def test_the_apply_verb_migrates_underscore_keys_before_the_render(
     out = capsys.readouterr().out
     assert "  migrated: workshop.toml: required_context -> required-context" in out
     assert 'required-context = "gate"' in contract.read_text()
+
+
+def test_the_check_jobs_fetch_history_for_the_merge_base(tmp_path: Path) -> None:
+    import yaml
+
+    from livery.workshop._ci_generate import generate
+
+    for kind, path in (
+        ("gitea", ".gitea/workflows/ci.yml"),
+        ("github", ".github/workflows/ci.yml"),
+    ):
+        (tmp_path / kind).mkdir()
+        root = _contract_root(tmp_path / kind, kind)
+        workflow = yaml.safe_load(generate(root)[path])
+        checkout = workflow["jobs"]["check"]["steps"][0]
+        assert checkout["with"]["fetch-depth"] == 0, kind

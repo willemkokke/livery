@@ -18,6 +18,7 @@ from livery.workshop._backends import _python, require_backends
 from livery.workshop._kinds import gated
 from livery.workshop._layers import workspace_root
 from livery.workshop._packages import Package, discover_packages
+from livery.workshop._state import RunContext
 from livery.workshop._templates import template_check
 
 
@@ -140,9 +141,57 @@ def kindcheck() -> None:
     run_kind_checks(packages, root)
 
 
-def _affected() -> tuple[Package, ...] | None:
-    """The affected subset for the gate; None means everything."""
-    from livery.workshop._git_ops import GitOps
+#: The contract key that lets CI's check legs run the scoped gate.
+AFFECTED_LEGS_KEY = "affected-legs"
+
+
+def affected_legs(root: Path) -> bool:
+    """The contract's ``[ci] affected-legs``; false when undeclared.
+
+    Refuses a value that is not a boolean, naming the key: the legs
+    either narrow or they do not, and a stray string would read as
+    true by accident.
+    """
+    from livery.workshop._contract import load_contract
+
+    ci = load_contract(root / "workshop.toml").get("ci") or {}
+    declared = ci.get(AFFECTED_LEGS_KEY, False) if isinstance(ci, dict) else False
+    if not isinstance(declared, bool):
+        fail(f"[ci] {AFFECTED_LEGS_KEY} must be true or false, not {declared!r}")
+    return declared
+
+
+def ci_affected_base(root: Path, run: RunContext | None) -> str:
+    """The base branch a CI check leg narrows against, or empty for the full gate.
+
+    Empty outside CI, when the contract does not declare
+    ``[ci] affected-legs``, on any event but a pull request (the merge
+    point runs the full gate until the verified-tree record exists),
+    and when the payload names no base; the last two print why, so a
+    full leg is never a silent fallback.
+    """
+    if run is None or not affected_legs(root):
+        return ""
+    if run.event != "pull_request":
+        print(
+            f"  affected-legs: a {run.event or 'non pull request'} run pays"
+            " the full gate"
+        )
+        return ""
+    if not run.base_ref:
+        print("  affected-legs: the event payload names no base branch; full gate")
+        return ""
+    return run.base_ref
+
+
+def _affected(base: str = "main") -> tuple[Package, ...] | None:
+    """The affected subset for the gate; None means everything.
+
+    A merge base git cannot compute (a shallow checkout, a base the
+    fetch did not bring) falls open to everything with git's words
+    printed, the same way an unregistered kind does.
+    """
+    from livery.workshop._git_ops import GitError, GitOps
     from livery.workshop._graph import affected_packages
 
     root = workspace_root()
@@ -150,7 +199,14 @@ def _affected() -> tuple[Package, ...] | None:
         raise ValueError("no workspace: no workshop.toml above the working directory")
     git = GitOps(root)
     git.fetch()
-    return affected_packages(root, git)
+    try:
+        return affected_packages(root, git, base=base)
+    except GitError as error:
+        print(
+            f"  affected: no merge base with origin/{base}; failing open to"
+            f" everything ({error})"
+        )
+        return None
 
 
 @task
@@ -187,7 +243,18 @@ def check(
             " keeps and hide the finding from the verdict. Run"
             f" `{footman.prog()} check --fix` locally and push the result."
         )
-    subset = _affected() if affected else None
+    from livery.workshop._state import run_context
+
+    root_for_ci = workspace_root()
+    ci_base = (
+        ci_affected_base(root_for_ci, run_context())
+        if not affected and root_for_ci is not None
+        else ""
+    )
+    if ci_base:
+        print(f"  affected-legs: the scoped gate against origin/{ci_base}")
+        affected = True
+    subset = _affected(ci_base or "main") if affected else None
     if affected and subset is not None:
         packages = _packages()
         if not subset:
