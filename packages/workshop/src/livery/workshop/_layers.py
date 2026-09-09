@@ -43,6 +43,10 @@ def layer_entries(start: Path | None = None) -> tuple[tuple[str, str], ...]:
     root = workspace_root(start)
     if root is None:
         return ()
+    # Parsed raw on purpose: this read happens while the layers mount,
+    # before any verb runs, and a refusal here would take every
+    # command with it, the migration verb included. The contract
+    # loader judges the same file on the first verb read.
     contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
     workspace = contract.get("workspace") or {}
     entries: list[tuple[str, str]] = []

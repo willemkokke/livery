@@ -22,11 +22,11 @@ def _home(tmp_path: Path) -> Path:
     (root / "workshop.toml").write_text(
         "[workspace]\n"
         'layers = ["livery.workshop", "acme.brand"]\n'
-        'templates_artifact = ""\n'
+        'templates-artifact = ""\n'
         "\n"
         '[forge]\nkind = "gitea"\nowner = "acme"\nurl = "https://forge.acme.example"\n'
         "\n"
-        '[ci]\nrunners = ["ubuntu-latest"]\nrequired_context = "gate"\n'
+        '[ci]\nrunners = ["ubuntu-latest"]\nrequired-context = "gate"\n'
     )
     (root / "pyproject.toml").write_text(
         '[project]\nname = "home"\nrequires-python = ">=3.11"\n'
@@ -131,7 +131,7 @@ def test_an_ordinary_instance_refuses_to_publish(
     )
     with pytest.raises(_FAILURES) as caught:
         release_templates()
-    assert "templates_artifact" in str(caught.value)
+    assert "templates-artifact" in str(caught.value)
 
 
 def test_the_emitters_gate_the_artifact_job_on_the_home_shape(
@@ -143,8 +143,8 @@ def test_the_emitters_gate_the_artifact_job_on_the_home_shape(
     contract = (root / "workshop.toml").read_text()
     (root / "workshop.toml").write_text(
         contract.replace(
-            'templates_artifact = ""',
-            'templates_artifact = "https://forge.acme.example/acme/brand-templates.git"',
+            'templates-artifact = ""',
+            'templates-artifact = "https://forge.acme.example/acme/brand-templates.git"',
         )
     )
     release = generate(root)[".gitea/workflows/release.yml"]
@@ -181,7 +181,7 @@ def test_a_child_renders_from_the_composed_artifact(
         "\n"
         '[forge]\nkind = "gitea"\nowner = "kid"\nurl = "https://forge.acme.example"\n'
         "\n"
-        '[ci]\nrunners = ["ubuntu-latest"]\nrequired_context = "gate"\n'
+        '[ci]\nrunners = ["ubuntu-latest"]\nrequired-context = "gate"\n'
     )
     (child / "pyproject.toml").write_text(
         '[project]\nname = "child"\nrequires-python = ">=3.11"\n'
@@ -232,7 +232,7 @@ def test_every_generated_workflow_parses_as_yaml(
     contract = (root / "workshop.toml").read_text()
     contract = contract.replace('kind = "gitea"', f'kind = "{kind}"')
     contract = contract.replace(
-        'templates_artifact = ""', f'templates_artifact = "{artifact}"'
+        'templates-artifact = ""', f'templates-artifact = "{artifact}"'
     )
     (root / "workshop.toml").write_text(contract)
     for path, content in generate(root).items():

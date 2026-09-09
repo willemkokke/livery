@@ -239,3 +239,17 @@ def test_the_push_target_carries_the_token_on_git_transport_only() -> None:
     assert _push_target(url, "t") == "http://oauth2:t@gitea:3000/livery/loop.git"
     assert _push_target(url, "") == "origin"
     assert _push_target("git@gitea:livery/loop.git", "t") == "origin"
+
+
+def test_a_resumed_birth_migrates_the_seeded_contracts_keys(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _birth()
+    contract = tmp_path / "acme-tools" / "workshop.toml"
+    contract.write_text(
+        contract.read_text().replace("required-context", "required_context")
+    )
+    _birth()
+    out = capsys.readouterr().out
+    assert "  migrated: workshop.toml: required_context -> required-context" in out
+    assert 'required-context = "gate"' in contract.read_text()

@@ -11,12 +11,12 @@ documented lookups.
 from __future__ import annotations
 
 import re
-import tomllib
 from pathlib import Path
 
 from livery import toolroom
 from livery.footman import fail
 from livery.forge import Forge, GiteaForge, GithubForge, GitlabForge, Repository
+from livery.workshop._contract import load_contract
 from livery.workshop._tokens import admin_token, forge_token
 
 # http and https (ports and embedded credentials included), and the
@@ -59,7 +59,7 @@ def this_forge(root: Path) -> Forge:
     Returns:
         The connected [livery.forge.Forge][].
     """
-    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+    contract = load_contract(root / "workshop.toml")
     forge_table = contract.get("forge") or {}
     kind = str(forge_table.get("kind", ""))
     url = str(forge_table.get("url", ""))
@@ -80,7 +80,7 @@ def admin_forge(root: Path) -> tuple[Forge, str]:
     nothing extra. The second value names the admin variable used,
     "" for the fallback, so a refusal can teach the missing grant.
     """
-    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+    contract = load_contract(root / "workshop.toml")
     table = contract.get("forge") or {}
     kind = str(table.get("kind", ""))
     url = str(table.get("url", ""))
@@ -92,7 +92,7 @@ def admin_forge(root: Path) -> tuple[Forge, str]:
 
 def admin_repository(root: Path) -> tuple[Repository, str]:
     """The repository bound to the admin ladder's forge."""
-    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+    contract = load_contract(root / "workshop.toml")
     owner = str((contract.get("forge") or {}).get("owner", ""))
     if not owner:
         fail("workshop.toml [forge] must carry kind and owner")
@@ -102,7 +102,7 @@ def admin_repository(root: Path) -> tuple[Repository, str]:
 
 def this_repository(root: Path) -> Repository:
     """The workspace's repository, per the contract and the remote."""
-    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+    contract = load_contract(root / "workshop.toml")
     owner = str((contract.get("forge") or {}).get("owner", ""))
     if not owner:
         fail("workshop.toml [forge] must carry kind and owner")

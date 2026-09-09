@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import ast
 import sys
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+
+from livery.workshop._contract import load_contract
 
 
 @dataclass(frozen=True)
@@ -78,7 +79,7 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
         if not contract_file.is_file():
             problems.append(f"{directory.name}: no workshop.toml")
             continue
-        contract = tomllib.loads(contract_file.read_text("utf-8"))
+        contract = load_contract(contract_file)
         type_name = str(contract.get("type", ""))
         if (
             requires_pyproject(type_name)

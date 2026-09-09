@@ -14,12 +14,12 @@ to a path, so a workspace can work with no registry server at all.
 from __future__ import annotations
 
 import os
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from livery.footman import fail
+from livery.workshop._contract import load_contract
 
 if TYPE_CHECKING:
     from livery.forge import RegistryKind
@@ -104,7 +104,7 @@ def resolve_registry(root: Path, kind: str) -> RegistryTarget:
     declared_read = os.environ.get(env_vars[0], "")
     declared_publish = os.environ.get(env_vars[1], "") if len(env_vars) > 1 else ""
     if not declared_read and not declared_publish:
-        contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+        contract = load_contract(root / "workshop.toml")
         table = contract.get("registries") or {}
         entry = table.get(kind) if isinstance(table, dict) else None
         if isinstance(entry, str):
@@ -171,7 +171,7 @@ def _forge_registry(root: Path, kind: str) -> tuple[str, str] | None:
     from livery.workshop._forge_lane import this_forge
     from livery.workshop._tokens import forge_token
 
-    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+    contract = load_contract(root / "workshop.toml")
     forge_table = contract.get("forge") or {}
     owner = str(forge_table.get("owner", ""))
     if not owner:

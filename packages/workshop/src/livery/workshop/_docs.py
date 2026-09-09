@@ -27,6 +27,7 @@ from typing import Annotated
 
 from livery import toolroom
 from livery.footman import doc, fail, group
+from livery.workshop._contract import load_contract
 from livery.workshop._packages import Package, discover_packages
 
 #: The nav block the emitter owns; an edit between these is drift.
@@ -54,7 +55,7 @@ INVENTORIES = (
 
 def docs_table(root: Path) -> dict[str, object]:
     """The contract's ``[docs]`` table; empty when undeclared."""
-    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+    contract = load_contract(root / "workshop.toml")
     table = contract.get("docs") or {}
     return dict(table) if isinstance(table, dict) else {}
 
@@ -70,7 +71,7 @@ def package_generators(package: Package) -> list[tuple[str, tuple[str, ...]]]:
     without a declaration.
     """
     contract_path = package.directory / "workshop.toml"
-    contract = tomllib.loads(contract_path.read_text("utf-8"))
+    contract = load_contract(contract_path)
     table = contract.get("docs") or {}
     declared = table.get("generators") if isinstance(table, dict) else None
     if declared is None:
@@ -106,7 +107,7 @@ def package_coverage_reports(package: Package) -> list[tuple[str, str]]:
     thing to it. A path reaching outside the package refuses.
     """
     contract_path = package.directory / "workshop.toml"
-    contract = tomllib.loads(contract_path.read_text("utf-8"))
+    contract = load_contract(contract_path)
     table = contract.get("docs") or {}
     declared = table.get("coverage") if isinstance(table, dict) else None
     if declared is None:
@@ -470,22 +471,22 @@ def abbreviation_files(root: Path) -> list[str]:
 def package_docs_extras(package: Package) -> tuple[list[str], list[object]]:
     """The css and javascript a package's ``[docs]`` table declares.
 
-    ``extra_css`` entries are paths relative to the package's
-    ``docs/`` tree; ``extra_javascript`` entries are the same, or
+    ``extra-css`` entries are paths relative to the package's
+    ``docs/`` tree; ``extra-javascript`` entries are the same, or
     tables carrying ``path`` with ``type``, ``defer``, and ``async``.
     Anything else refuses naming the file and the entry.
     """
     contract_path = package.directory / "workshop.toml"
-    contract = tomllib.loads(contract_path.read_text("utf-8"))
+    contract = load_contract(contract_path)
     table = contract.get("docs") or {}
     if not isinstance(table, dict):
         return ([], [])
-    css_declared = table.get("extra_css", [])
-    js_declared = table.get("extra_javascript", [])
+    css_declared = table.get("extra-css", [])
+    js_declared = table.get("extra-javascript", [])
     if not isinstance(css_declared, list) or not all(
         isinstance(entry, str) for entry in css_declared
     ):
-        fail(f"{contract_path}: [docs] extra_css must be a list of paths")
+        fail(f"{contract_path}: [docs] extra-css must be a list of paths")
     allowed = {"path", "type", "defer", "async"}
     for entry in js_declared if isinstance(js_declared, list) else ():
         if isinstance(entry, str):
@@ -497,11 +498,11 @@ def package_docs_extras(package: Package) -> tuple[list[str], list[object]]:
         ):
             continue
         fail(
-            f"{contract_path}: [docs] extra_javascript entry {entry!r} is"
+            f"{contract_path}: [docs] extra-javascript entry {entry!r} is"
             " not a path or a { path, type, defer, async } table"
         )
     if not isinstance(js_declared, list):
-        fail(f"{contract_path}: [docs] extra_javascript must be a list")
+        fail(f"{contract_path}: [docs] extra-javascript must be a list")
     return (list(css_declared), list(js_declared))
 
 
@@ -731,7 +732,7 @@ def zensical_config(root: Path) -> str:
     """
     table = docs_table(root)
     title = str(table.get("title", "")) or _project_name(root)
-    site_url = str(table.get("site_url", ""))
+    site_url = str(table.get("site-url", ""))
     description = str(table.get("description", ""))
     lines = ["[project]", f'site_name = "{title}"']
     if site_url:
@@ -1077,7 +1078,7 @@ def scoped_config(root: Path, package: Package) -> str:
     lines += _extension_block(root, relative_to="../..")
     if has_modules:
         inventories: list[str] = [*INVENTORIES]
-        site_url = str(table.get("site_url", ""))
+        site_url = str(table.get("site-url", ""))
         if site_url:
             inventories.append(site_url.rstrip("/") + "/objects.inv")
         lines += _mkdocstrings_lines(
@@ -1145,7 +1146,7 @@ def api_modules(package: Package) -> list[tuple[str, str]]:
     package's, and documenting the forwarders would document the
     real thing twice.
     """
-    contract = tomllib.loads((package.directory / "workshop.toml").read_text("utf-8"))
+    contract = load_contract(package.directory / "workshop.toml")
     table = contract.get("docs") or {}
     if isinstance(table, dict) and table.get("api") is False:
         return []
@@ -1246,7 +1247,7 @@ def publish_seam(root: Path) -> str:
                 " pages, container, ssh, or none"
             )
         return declared
-    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+    contract = load_contract(root / "workshop.toml")
     kind = str((contract.get("forge") or {}).get("kind", ""))
     return DEFAULT_SEAMS.get(kind, "none")
 

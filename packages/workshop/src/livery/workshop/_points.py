@@ -24,13 +24,13 @@ no decision.
 
 from __future__ import annotations
 
-import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 import livery.footman as footman
 from livery.footman import fail
+from livery.workshop._contract import load_contract
 from livery.workshop._state import run_context
 
 #: The points, in the order a change meets them.
@@ -96,7 +96,7 @@ def declared(root: Path) -> tuple[Entry, ...]:
     ``args``. An unknown point, a missing task, or arguments that are
     not strings refuse at load, naming the entry.
     """
-    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+    contract = load_contract(root / "workshop.toml")
     raw = (contract.get("ci") or {}).get("schedule") or []
     if not isinstance(raw, list):
         fail("[ci] schedule must be a list of [[ci.schedule]] tables")

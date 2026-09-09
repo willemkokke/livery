@@ -33,6 +33,7 @@ from typing import Annotated, ParamSpec
 import livery.footman as footman
 from livery.footman import doc, fail, group
 from livery.forge import ForgeError, Repository
+from livery.workshop._contract import load_contract, normalise_keys
 from livery.workshop._conventional import TITLE_RE, TYPES
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._layers import workspace_root
@@ -78,7 +79,7 @@ def _contract_forge_kind(root: Path) -> str:
     contract_path = root / "workshop.toml"
     if not contract_path.is_file():
         return ""
-    contract = tomllib.loads(contract_path.read_text("utf-8"))
+    contract = load_contract(contract_path)
     return str((contract.get("forge") or {}).get("kind", ""))
 
 
@@ -218,7 +219,7 @@ def ci_automerge() -> bool:
     root = workspace_root()
     if root is None:
         return False
-    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+    contract = load_contract(root / "workshop.toml")
     return bool((contract.get("ci") or {}).get("automerge", False))
 
 
@@ -230,7 +231,7 @@ def arming_reason(*, armed: bool, flag_given: bool) -> str:
         return "WORKSHOP_AUTOMERGE (per-user standing preference)"
     root = workspace_root()
     if root is not None:
-        contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+        contract = load_contract(root / "workshop.toml")
         if "automerge" in (contract.get("ci") or {}):
             return "[ci] automerge in workshop.toml (committed repo policy)"
     return "the default (auto-merge is opt-in; nothing configured)"
@@ -487,8 +488,10 @@ def _required_context_at(git: GitOps, ref: str) -> str:
         text = git._run("show", f"{ref}:workshop.toml")
     except GitError:
         return ""
-    data = tomllib.loads(text)
-    return str((data.get("ci") or {}).get("required_context") or "gate")
+    # History is read, never rewritten: a contract from before the
+    # kebab-case keys is normalised instead of refused.
+    data = normalise_keys(tomllib.loads(text))
+    return str((data.get("ci") or {}).get("required-context") or "gate")
 
 
 def _heal_context_rename(
@@ -546,11 +549,10 @@ def _heal_context_rename(
             protection = admin_repo.protection(plan.base)
         except ForgeError:
             protection = None
-        import tomllib
 
         from livery.workshop._workflow_tasks import required_context_string
 
-        contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+        contract = load_contract(root / "workshop.toml")
         kind = str((contract.get("forge") or {}).get("kind", ""))
         spelled = required_context_string(kind, ours)
         if protection is not None and spelled in protection.required_contexts:

@@ -45,7 +45,7 @@ _CONTRACT = (
     "\n"
     "[ci]\n"
     'runners = ["ubuntu-latest"]\n'
-    'required_context = "gate"\n'
+    'required-context = "gate"\n'
 )
 
 

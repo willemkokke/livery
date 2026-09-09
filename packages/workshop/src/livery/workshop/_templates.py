@@ -29,6 +29,7 @@ import yaml
 import livery.footman as footman
 from livery import toolroom
 from livery.footman import doc, fail, group
+from livery.workshop._contract import load_contract
 from livery.workshop._layers import layer_entries, workspace_root
 from livery.workshop._materialise import write_lf
 from livery.workshop._pythons import python_floor
@@ -46,17 +47,15 @@ DEFAULT_TEMPLATE_SOURCE = "https://github.com/willemkokke/workshop-templates"
 def templates_artifact(root: Path) -> str:
     """Where this workspace publishes its template artifact, or empty.
 
-    ``[workspace] templates_artifact`` in ``workshop.toml``: the git
+    ``[workspace] templates-artifact`` in ``workshop.toml``: the git
     remote a home's release pushes its (composed) template tree to,
     tagged with the publishing layer's version. Empty means this
     workspace publishes no templates, which is every ordinary
     instance.
     """
-    import tomllib
-
-    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+    contract = load_contract(root / "workshop.toml")
     workspace = contract.get("workspace") or {}
-    return str(workspace.get("templates_artifact", ""))
+    return str(workspace.get("templates-artifact", ""))
 
 
 def template_source(root: Path) -> str:
@@ -67,9 +66,7 @@ def template_source(root: Path) -> str:
     ``packages/workshop``), or a git URL (a fork, at its own risk).
     Silent means the published artifact repository.
     """
-    import tomllib
-
-    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+    contract = load_contract(root / "workshop.toml")
     workspace = contract.get("workspace") or {}
     return str(workspace.get("templates", "")) or DEFAULT_TEMPLATE_SOURCE
 
@@ -221,9 +218,7 @@ def registry_injections(root: Path) -> dict[str, str]:
     check would judge each machine differently. Nothing declared
     renders nothing, and uv resolves from the ecosystem default.
     """
-    import tomllib
-
-    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+    contract = load_contract(root / "workshop.toml")
     table = contract.get("registries") or {}
     entry = table.get("python") if isinstance(table, dict) else None
     url, prerelease = "", ""
@@ -260,7 +255,7 @@ def render_injections(root: Path, answers: dict[str, Any]) -> dict[str, Any]:
     return {
         "runner_prog": footman.prog(),
         "python_floor": python_floor(root),
-        "docs_site_url": str(docs_table(root).get("site_url", "")),
+        "docs_site_url": str(docs_table(root).get("site-url", "")),
         "template_source_label": redacted_source(template_source(root)),
         "layer_imports": [import_path for import_path, _ in entries],
         "layer_requirements": [
@@ -277,9 +272,7 @@ def package_injections(root: Path) -> dict[str, Any]:
     package would let one workspace's packages disagree about where
     they live.
     """
-    import tomllib
-
-    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+    contract = load_contract(root / "workshop.toml")
     forge_table = contract.get("forge") or {}
     root_answers = read_answers(root / _ANSWERS)
     from livery.workshop._docs import docs_table
@@ -287,7 +280,7 @@ def package_injections(root: Path) -> dict[str, Any]:
     return {
         "runner_prog": footman.prog(),
         "python_floor": python_floor(root),
-        "docs_site_url": str(docs_table(root).get("site_url", "")),
+        "docs_site_url": str(docs_table(root).get("site-url", "")),
         "template_source_label": redacted_source(template_source(root)),
         "forge_kind": str(forge_table.get("kind", "github")),
         "forge_owner": str(forge_table.get("owner", "")),
@@ -510,14 +503,12 @@ PACKAGE_MANAGED = ("cliff.toml",)
 
 def _managed_for(directory: Path) -> tuple[str, ...]:
     """The drift-judged files for the package at *directory*."""
-    import tomllib
-
     from livery.workshop._kinds import managed_files
 
     contract = directory / "workshop.toml"
     if not contract.is_file():
         return PACKAGE_MANAGED
-    declared = str(tomllib.loads(contract.read_text("utf-8")).get("type", "python"))
+    declared = str(load_contract(contract).get("type", "python"))
     return managed_files(declared)
 
 
@@ -543,12 +534,10 @@ def _release_baseline(directory: Path) -> str:
     the baseline names the version it continues from, and the cliff
     render anchors the first release's derivation on it.
     """
-    import tomllib
-
     contract = directory / "workshop.toml"
     if not contract.is_file():
         return ""
-    data = tomllib.loads(contract.read_text("utf-8"))
+    data = load_contract(contract)
     return str((data.get("release") or {}).get("baseline", ""))
 
 
@@ -723,10 +712,16 @@ def template_apply() -> None:
     The recovery procedure for drift, and the delivery step after a
     template edit. A package's seeds are never rewritten: only the
     files the template keeps owning
-    (livery.workshop._templates.PACKAGE_MANAGED). Idempotent: a clean
-    tree changes nothing.
+    (livery.workshop._templates.PACKAGE_MANAGED). Contract keys
+    spelled with underscores are rewritten to kebab-case first, the
+    root's and every member's, so the render reads contracts it
+    accepts. Idempotent: a clean tree changes nothing.
     """
+    from livery.workshop._contract import migrate_contracts
+
     root = _root()
+    for note in migrate_contracts(root):
+        print(f"  migrated: {note}")
     changed = apply_project(root) + apply_packages(root)
     for name in changed:
         print(f"  rendered: {name}")

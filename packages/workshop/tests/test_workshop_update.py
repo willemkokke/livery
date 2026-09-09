@@ -51,7 +51,7 @@ def _instance(tmp_path: Path) -> Path:
         'layers = ["livery.workshop"]\n'
         'templates = "templates"\n'
         '\n[forge]\nkind = "github"\nowner = "owner"\n'
-        '\n[ci]\nrunners = ["ubuntu-latest"]\nrequired_context = "gate"\n'
+        '\n[ci]\nrunners = ["ubuntu-latest"]\nrequired-context = "gate"\n'
     )
     from livery.workshop._sync import sync_workspace
     from livery.workshop._templates import apply_project
@@ -595,3 +595,30 @@ def test_new_package_renders_and_wires(
     assert "dir: scratch" in (root / ".copier-answers.yml").read_text()
     with pytest.raises(_FAILURES):
         new_package("scratch")  # already exists
+
+
+def test_the_work_migrates_contract_keys_before_the_floors_read_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _instance(tmp_path)
+    _fake, git = _fake_pair(root)
+    contract = root / "workshop.toml"
+    contract.write_text(
+        contract.read_text().replace("required-context", "required_context")
+    )
+    seen: list[str] = []
+
+    def _floors(_root: Path, _git: GitOps, *, only: tuple[str, ...] = ()) -> list[str]:
+        # The floors parse every contract; by then the keys are kebab-case.
+        seen.append(contract.read_text())
+        return []
+
+    monkeypatch.setattr("livery.workshop._update_driver.bump_floors", _floors)
+    monkeypatch.setattr(
+        "livery.workshop._update_driver.refresh_rendered", lambda _root: []
+    )
+    driver = UpdateDriver(root, git, "templates", armed=False)
+    git.create_branch(driver.branch)
+    notes = driver._work()
+    assert notes[0] == "contract: workshop.toml: required_context -> required-context"
+    assert 'required-context = "gate"' in seen[0]

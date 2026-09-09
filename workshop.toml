@@ -10,11 +10,11 @@ layers = ["livery.workshop", "livery.forge", "livery.toolroom", "livery.footman"
 # root, or a git URL (a fork, at your own risk). The update wave
 # follows this value.
 templates = "packages/workshop/src/livery/workshop/templates"
-templates_artifact = "git@github.com:willemkokke/workshop-templates.git"
+templates-artifact = "git@github.com:willemkokke/workshop-templates.git"
 
 [docs]
 # The site's home; the account-level domain serves every project.
-site_url = "https://docs.willem.net/livery/"
+site-url = "https://docs.willem.net/livery/"
 description = "The livery ecosystem: one forge interface and the workshop that runs every project on it."
 
 [forge]
@@ -34,4 +34,4 @@ approvals = 0
 runners = ["ubuntu-latest", "macos-latest", "windows-latest"]
 # The one status name branch protection requires, spelled by contract
 # so each forge's CI renders it rather than anyone retyping it.
-required_context = "gate"
+required-context = "gate"

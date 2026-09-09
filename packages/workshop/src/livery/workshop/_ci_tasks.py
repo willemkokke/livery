@@ -24,6 +24,7 @@ from typing import Annotated
 
 from livery.footman import doc, fail, group, task
 from livery.forge import Capability, Forge, ForgeError, Repository, Run
+from livery.workshop._contract import load_contract
 from livery.workshop._git_ops import GitOps
 from livery.workshop._layers import workspace_root
 from livery.workshop._verdict import classify, follow
@@ -440,12 +441,10 @@ def doctor_flow(forge: Forge) -> None:
 
     root = workspace_root()
     if root is not None:
-        import tomllib
-
         from livery.workshop._governance import unknown_owners
         from livery.workshop._tokens import admin_token
 
-        contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+        contract = load_contract(root / "workshop.toml")
         owner = str((contract.get("forge") or {}).get("owner", ""))
         kind = str((contract.get("forge") or {}).get("kind", ""))
         url = str((contract.get("forge") or {}).get("url", ""))

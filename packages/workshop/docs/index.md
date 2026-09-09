@@ -9,6 +9,9 @@ verb below arrives through that line.
 The workspace contract (`workshop.toml` at the root) names the layers
 in precedence order, and that list is the whole of discovery: a
 package installed by accident never changes a repository.
+Contract keys are kebab-case, at the root and in every package's
+contract: a key spelled with underscores refuses on read, naming its
+spelling, and `fm template.apply` rewrites the keys in place.
 
 - `livery.workshop` is the base layer. Importing its plugin registers
   the task surface and then mounts every further layer the contract
@@ -54,7 +57,7 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
 
 ## Coverage floors
 
-Each package's `workshop.toml` may declare `[qa] coverage_floor`, the
+Each package's `workshop.toml` may declare `[qa] coverage-floor`, the
 high-water mark the gate enforces. The number that is judged is the
 CI union: every leg runs measured (each `fm` child included) and the
 aggregating job combines all platforms before enforcing, so the

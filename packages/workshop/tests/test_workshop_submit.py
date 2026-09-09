@@ -813,7 +813,7 @@ def test_the_lease_refuses_an_advance_this_clone_never_saw(
 def _contract(clone: Path, context: str) -> None:
     (clone / "workshop.toml").write_text(
         '[workspace]\n\n[forge]\nkind = "github"\nowner = "acme"\n\n'
-        f'[ci]\nrequired_context = "{context}"\n'
+        f'[ci]\nrequired-context = "{context}"\n'
     )
 
 
@@ -955,7 +955,7 @@ def test_the_rename_heal_skips_a_forge_that_names_no_contexts(
     _git(git.root, "checkout", "main")
     (git.root / "workshop.toml").write_text(
         '[workspace]\n\n[forge]\nkind = "gitlab"\nowner = "acme"\n\n'
-        '[ci]\nrequired_context = "old-gate"\n'
+        '[ci]\nrequired-context = "old-gate"\n'
     )
     _git(git.root, "add", "-A")
     _git(git.root, "commit", "-m", "chore: contract")
@@ -964,7 +964,7 @@ def test_the_rename_heal_skips_a_forge_that_names_no_contexts(
     _git(git.root, "rebase", "main")
     (git.root / "workshop.toml").write_text(
         '[workspace]\n\n[forge]\nkind = "gitlab"\nowner = "acme"\n\n'
-        '[ci]\nrequired_context = "new-gate"\n'
+        '[ci]\nrequired-context = "new-gate"\n'
     )
     _git(git.root, "add", "-A")
     _git(git.root, "commit", "-m", "feat: rename the gate")

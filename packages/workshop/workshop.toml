@@ -25,7 +25,7 @@ kind = "build"
 floor = "0.2.0"
 
 [docs]
-extra_css = ["assets/workshop.css"]
+extra-css = ["assets/workshop.css"]
 generators = ["docs.python-coverage", "docs.task-reference"]
 coverage = [
     { label = "Python", path = "htmlcov" },
@@ -38,7 +38,7 @@ coverage = [
 # e2e loop verb: its orchestration is proven by the live loop
 # against the local forge, not by unit tests, and unit-metered
 # coverage counts it uncovered.
-coverage_floor = 85
+coverage-floor = 85
 
 # Who reviews this package; the codeowners file renders from
 # these declarations.
