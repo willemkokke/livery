@@ -22,7 +22,7 @@ request already proved (issue #340), and the coverage union on the
 gitea lane, judging only the packages the legs' scopes covered,
 with `fm ci.e2e` proving its three shapes from the runs' logs
 (issue #342, first step; the second step, per-suite measurements
-judged from the record, is open). The
+judged from the record, is issue #345). The
 entry-points race (#263) has its root cause and fix (the completion
 test healing the real project's environment mid-suite; the dev
 build leaving editables stale).
