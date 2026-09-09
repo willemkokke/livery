@@ -749,7 +749,7 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
     probe = root / "packages" / "loop-echo" / "tests" / "test_scoped_leg.py"
     probe.write_text(
         '"""A member-only change: the loop proves the scoped check leg on it."""\n'
-        "\n\n"
+        "\n"
         f'STAMP = "{stamp}"\n'
         "\n\n"
         "def test_the_stamp_is_a_commit():\n"
