@@ -480,7 +480,12 @@ exists.
   second each, the read merging both, a root commit carrying the
   store's identity and `[skip ci]`, no local ref after a default
   fetch, `main` the only branch the forge lists, no workflow run
-  started, and the delete idempotent.
+  started, and the delete idempotent. One trap, measured the same
+  day on the landing itself: GitHub reads the skip marker anywhere
+  in a head commit's message, prose included, so a commit message
+  that quotes the store's marker gets no CI run at all and an armed
+  submit waits on nothing. The store's own commits carry the marker
+  on purpose; no other message may spell it.
 - `workshop/metrics`: a compact row per job per run, window-capped. The
   row is end to end, not gate-only: queue wait and per-step wall
   times lifted from the forge's own run API (checkout, cache
