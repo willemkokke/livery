@@ -44,6 +44,10 @@ def work(tmp_path: Path) -> Path:
 
 @pytest.fixture(autouse=True)
 def _in_ci(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A fake run, with the real runner's payload and refs scrubbed so
+    # the suite reads the same under a runner as on a desk.
+    for name in ("GITHUB_EVENT_PATH", "GITHUB_SHA", "GITHUB_REF", "GITHUB_JOB"):
+        monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     monkeypatch.setenv("GITEA_ACTIONS", "true")
     monkeypatch.setenv("GITHUB_RUN_ID", RUN.run_id)

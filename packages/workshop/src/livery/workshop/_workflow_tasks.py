@@ -238,19 +238,60 @@ def contract_config(root: Path) -> RepoConfig:
     )
 
 
+#: The paths whose change means the repository's settings may have
+#: moved: the contracts and the owners file, on every forge's spelling.
+GOVERNED_PATHS = (
+    "workshop.toml",
+    "CODEOWNERS",
+    ".gitea/CODEOWNERS",
+    ".github/CODEOWNERS",
+)
+
+
+def contract_changed(root: Path) -> tuple[str, ...]:
+    """The governed paths HEAD's own commit changed; empty is none.
+
+    The merge point's commit is one squash on main, so its file list
+    is the merge's whole diff. A shallow checkout of depth one reads
+    a squash as a root commit and lists every file, so the shell
+    fetches two.
+    """
+    from livery.workshop._git_ops import GitOps
+
+    changed = GitOps(root).files_in_commit("HEAD")
+    return tuple(
+        path
+        for path in changed
+        if path in GOVERNED_PATHS
+        or (path.startswith("packages/") and path.endswith("/workshop.toml"))
+    )
+
+
 @workflow.task(name="configure", hidden=True)
-def workflow_configure() -> None:
+def workflow_configure(
+    if_changed: Annotated[
+        bool, doc("only when HEAD changed a contract or the owners file")
+    ] = False,
+) -> None:
     """Assert the contract's repository settings; idempotent drift repair.
 
     Run at repository birth, as release aftercare, after an abort,
-    and by the post-merge governance job. Resolves the admin ladder
-    (``FORGE_ADMIN_TOKEN``, host-qualified first, the everyday token
-    as the fallback); a refused write teaches the grant and the
-    variable. Declared owners the forge does not know refuse before
-    anything is applied: a review chain pointing at nobody is worse
-    than unapplied settings.
+    and at the merge point, where ``--if-changed`` makes it classify
+    its own commit and exit fast when no contract path changed.
+    Resolves the admin ladder (``FORGE_ADMIN_TOKEN``, host-qualified
+    first, the everyday token as the fallback); a refused write
+    teaches the grant and the variable. Declared owners the forge
+    does not know refuse before anything is applied: a review chain
+    pointing at nobody is worse than unapplied settings.
     """
-    assert_configuration(_root())
+    root = _root()
+    if if_changed:
+        changed = contract_changed(root)
+        if not changed:
+            print("  no contract or owners path changed in HEAD; nothing to reconcile")
+            return
+        print(f"  governed paths changed: {', '.join(changed)}")
+    assert_configuration(root)
 
 
 def assert_configuration(root: Path) -> None:

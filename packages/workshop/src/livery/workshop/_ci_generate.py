@@ -504,6 +504,13 @@ jobs:
 
 
 def _gitea_gate(answers: dict[str, Any], prog: str) -> str:
+    """The gate and merge points' shell: a trigger, a checkout, an enter, one verb.
+
+    Every job runs ``ci.run`` for its point and job; what the job does
+    is the schedule (livery.workshop._points), and a push to main
+    promotes the gate to the merge point inside the verb. The only
+    conditions are event filters and the verdict job's ``always()``.
+    """
     context = answers.get("required_context", "gate")
     runners = _csv(list(answers.get("runners", ["ubuntu-latest"])))
     pythons = _csv(list(answers.get("python_versions", ["3.11"])), quoted=True)
@@ -514,6 +521,11 @@ def _gitea_gate(answers: dict[str, Any], prog: str) -> str:
     enter_leg = _enter_step(matrix_python=True)
     return f"""name: ci
 
+# The gate and merge points: a trigger, a checkout, an enter, and one
+# `{prog} ci.run` per job. What a job does is data, the workshop's
+# builtin schedule plus [[ci.schedule]] in workshop.toml, and a push
+# to main is the merge point, promoted inside the verb. The only
+# conditions here are event filters and the verdict job's always().
 on:
   pull_request:
   push:
@@ -521,11 +533,9 @@ on:
 
 jobs:
   check:
-    # A release PR's title check answers in seconds; the matrix must
-    # not burn six legs under a title the merge would refuse anyway.
-    # Every other event skips release-title, and the skip passes.
+    # The title check answers in seconds and is green off a release
+    # branch; the matrix waits for it so a refused title burns no legs.
     needs: [release-title]
-    if: ${{{{ !cancelled() && (needs.release-title.result == 'success' || needs.release-title.result == 'skipped') }}}}
     strategy:
       fail-fast: false
       matrix:
@@ -536,8 +546,10 @@ jobs:
       - uses: actions/checkout@v4
       # act_runner host mode: no setup actions. The entry script
       # installs the lock's pinned uv itself where the host has none.
-{rung}{enter_leg}      - name: Gate
-        run: {prog} --profile=fm-profile.json check
+{rung}{enter_leg}      - name: Check
+        run: >-
+          {prog} ci.run --point=gate --job=check
+          --os="${{{{ matrix.os }}}}" --python="${{{{ matrix.python }}}}"
       # The run as a Chrome trace, one artifact per leg: every task,
       # step, lane wait, and pytest test as slices. Observational, so
       # it runs on a red gate too (the run worth reading) and its own
@@ -553,47 +565,30 @@ jobs:
           name: profile-${{{{ matrix.os }}}}-${{{{ matrix.python }}}}
           path: fm-profile.json
           if-no-files-found: ignore
-      # The leg's timing row: the gate's tasks from the trace, put on
-      # the run's per-leg ref for the gate job to collect. It fails
-      # open loudly: a store fault prints its reason and never reddens
-      # the leg.
-      - name: Record the leg's timings
-        if: always()
-        run: >-
-          {prog} ci.metrics.leg
-          --job="check (${{{{ matrix.os }}}}, ${{{{ matrix.python }}}})"
-          --label="check-${{{{ matrix.os }}}}-${{{{ matrix.python }}}}"
 
   # The strict site build, required through the gate context below.
   docs:
     runs-on: {first}
     steps:
       - uses: actions/checkout@v4
-{requirements}{enter}      - name: Build the site, strict
-        run: {prog} docs.build
+{requirements}{enter}      - name: Docs
+        run: {prog} ci.run --point=gate --job=docs
 
   # The one required context. Branch protection points here, so the
   # matrix can grow or shrink without touching repository settings.
-  # It also collects the run's timing rows: every leg's trace half
-  # joined with the forge's own job and step times, one file per run
-  # on the metrics series. The verdict comes last, so a red run's
-  # rows are collected before the job decides.
+  # It collects the run's timing rows, then judges the jobs it needs
+  # by asking the forge; always(), so a red run is judged too.
   {context}:
     if: always()
     needs: [check, docs]
     runs-on: {first}
     steps:
       - uses: actions/checkout@v4
-{rung}{enter}      - name: Collect the run's timings
+{rung}{enter}      - name: Verdict
         env:
           FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
-        run: {prog} ci.metrics.collect
-      - name: Verdict
-        run: |
-          test "${{{{ needs.check.result }}}}" = "success"
-          test "${{{{ needs.docs.result }}}}" = "success"
+        run: {prog} ci.run --point=gate --job=gate
   release-title:
-    if: startsWith(github.head_ref, 'workflow/release/')
     runs-on: {first}
     steps:
       - uses: actions/checkout@v4
@@ -601,9 +596,35 @@ jobs:
           # check-title compares against origin/main, which a shallow
           # checkout does not have.
           fetch-depth: 0
-{enter}      - run: {prog} workflow.release.check-title --title="$TITLE"
+{enter}      - name: Release title
+        run: {prog} ci.run --point=gate --job=release-title
+
+  # The merge point's own jobs, on the push alone: the site's deploy
+  # through the contract's seam, and the repository settings
+  # reconciled when the merge changed a contract or the owners file.
+  deploy:
+    if: github.event_name == 'push'
+    needs: [{context}]
+    runs-on: {first}
+    steps:
+      - uses: actions/checkout@v4
+{requirements}{enter}      - name: Deploy
         env:
-          TITLE: ${{{{ github.event.pull_request.title }}}}
+          FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
+        run: {prog} ci.run --point=merge --job=deploy
+  govern:
+    if: github.event_name == 'push'
+    runs-on: {first}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The commit's own file list decides whether anything is
+          # governed; a depth of one would read a squash as a root.
+          fetch-depth: 2
+{enter}      - name: Govern
+        env:
+          FORGE_ADMIN_TOKEN: ${{{{ secrets.FORGE_ADMIN_TOKEN }}}}
+        run: {prog} ci.run --point=merge --job=govern
 """
 
 
@@ -839,34 +860,6 @@ jobs:
 """
 
 
-def _gitea_governance(answers: dict[str, Any], prog: str) -> str:
-    """Gitea's spelling of the same path-filtered apply job.
-
-    act_runner host mode, like the gate: no setup actions, uv from
-    the entry script's pinned installer, on the configured runner
-    label.
-    """
-    first = next(iter(answers.get("runners", ["ubuntu-latest"])))
-    enter = _enter_step()
-    return f"""name: governance
-on:
-  push:
-    branches: [main]
-    paths:
-      - workshop.toml
-      - packages/*/workshop.toml
-      - {_CODEOWNERS_PATH["gitea"]}
-jobs:
-  apply:
-    runs-on: {first}
-    steps:
-      - uses: actions/checkout@v4
-{enter}      - run: {prog} workflow.configure
-        env:
-          FORGE_ADMIN_TOKEN: ${{{{ secrets.FORGE_ADMIN_TOKEN }}}}
-"""
-
-
 def _gitlab_governance(answers: dict[str, Any], prog: str) -> str:
     """GitLab's spelling: a pipeline job on the same pinned image."""
     python = next(iter(answers.get("python_versions", ["3.11"])))
@@ -966,33 +959,6 @@ jobs:
 """
 
 
-def _gitea_docs_deploy(answers: dict[str, Any], prog: str) -> str:
-    first = next(iter(answers.get("runners", ["ubuntu-latest"])))
-    requirements = _docs_requirements_step(answers)
-    enter = _enter_step()
-    return f"""name: docs
-
-# The container seam: the built site pushed as an image to the
-# forge's own registry. The job needs a runner with docker; the
-# publish verb resolves the seam and the registry from the contract.
-on:
-  push:
-    branches: [main]
-
-jobs:
-  deploy:
-    runs-on: {first}
-    steps:
-      - uses: actions/checkout@v4
-{requirements}{enter}      - name: Build the site, strict
-        run: {prog} docs.build
-      - name: Publish the site image
-        env:
-          FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
-        run: {prog} docs.publish
-"""
-
-
 def generate(root: Path) -> dict[str, str]:
     """Every generated CI file for *root*'s forge kind, by path.
 
@@ -1023,13 +989,12 @@ def generate(root: Path) -> dict[str, str]:
         if seam == "pages":
             files[".github/workflows/docs.yml"] = _github_docs_deploy(facts, prog)
     elif kind == "gitea":
+        # The docs deploy and the governance reconcile are merge-point
+        # jobs of ci.yml: two files, whatever the seam.
         files = {
             ".gitea/workflows/ci.yml": _gitea_gate(facts, prog),
             ".gitea/workflows/release.yml": _gitea_release(facts, prog),
-            ".gitea/workflows/governance.yml": _gitea_governance(facts, prog),
         }
-        if seam == "container":
-            files[".gitea/workflows/docs.yml"] = _gitea_docs_deploy(facts, prog)
     else:
         files = {
             ".gitlab-ci.yml": _gitlab_pipeline(facts, prog)
@@ -1052,3 +1017,17 @@ def generate(root: Path) -> dict[str, str]:
 def generated_files(root: Path) -> dict[Path, str]:
     """The generated artifacts as absolute paths under *root*."""
     return {root / relative: content for relative, content in generate(root).items()}
+
+
+#: Generated files an earlier emission wrote and this one folds away:
+#: the apply deletes them where present, so a workspace never keeps a
+#: workflow the emitter no longer owns.
+RETIRED = (
+    ".gitea/workflows/governance.yml",
+    ".gitea/workflows/docs.yml",
+)
+
+
+def retired_files(root: Path) -> tuple[Path, ...]:
+    """The retired generated files present under *root*, to delete."""
+    return tuple(root / relative for relative in RETIRED if (root / relative).is_file())

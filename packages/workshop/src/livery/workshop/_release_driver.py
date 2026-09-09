@@ -687,13 +687,31 @@ def workflow_release_check_title(
     consistent, so a title that no longer names what the changelogs
     prepared is refused here, in a non-required CI job, before it
     can mislead a reader. Not a required context: a red here wants a
-    human look, never a parked merge.
+    human look, never a parked merge. Without ``--title`` the title
+    comes from the runner's event payload; a run that is not a pull
+    request, or a pull request off a release branch, is green here
+    and says so.
     """
     from livery.workshop._layers import workspace_root
 
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
+    if not title:
+        # The shell passes no title: the event payload names it, and
+        # names the head branch too. An explicit --title is always
+        # checked, whatever branch the runner is on.
+        from livery.workshop._state import event_payload
+
+        pull = (event_payload() or {}).get("pull_request") or {}
+        title = str(pull.get("title") or "")
+        if not title:
+            print("  not a pull request: no title to check")
+            return
+        head_ref = str((pull.get("head") or {}).get("ref") or "")
+        if head_ref and not head_ref.startswith("workflow/release/"):
+            print(f"  {head_ref} is not a release branch: nothing to check")
+            return
     from livery.workshop._publish import changelog_version
 
     git = GitOps(root)

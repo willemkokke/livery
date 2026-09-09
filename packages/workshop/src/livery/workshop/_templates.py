@@ -649,6 +649,11 @@ def apply_generated(root: Path) -> list[str]:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(body)
             changed.append(str(path.relative_to(root)))
+    from livery.workshop._ci_generate import retired_files
+
+    for path in retired_files(root):
+        path.unlink()
+        changed.append(f"{path.relative_to(root)} (retired)")
     return changed
 
 

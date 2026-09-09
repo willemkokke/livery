@@ -49,7 +49,17 @@ def repos(tmp_path: Path) -> tuple[Path, Path]:
 
 @pytest.fixture(autouse=True)
 def _outside_ci(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in ("GITHUB_ACTIONS", "GITEA_ACTIONS", "GITLAB_CI"):
+    for name in (
+        "GITHUB_ACTIONS",
+        "GITEA_ACTIONS",
+        "GITLAB_CI",
+        "GITHUB_EVENT_NAME",
+        "GITHUB_EVENT_PATH",
+        "GITHUB_SHA",
+        "GITHUB_RUN_ID",
+        "GITHUB_REF",
+        "GITHUB_JOB",
+    ):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -313,6 +323,22 @@ def test_the_run_context_head_is_the_pull_requests_on_a_pull_request(
     assert push is not None and push.head_sha == "a" * 40
     gitlab = _state.run_context({"GITLAB_CI": "true", "CI_COMMIT_SHA": "c" * 40})
     assert gitlab is not None and gitlab.head_sha == "c" * 40
+
+
+def test_the_event_payload_is_none_when_missing_junk_or_not_an_object(
+    tmp_path: Path,
+) -> None:
+    assert _state.event_payload({}) is None
+    assert _state.event_payload({"GITHUB_EVENT_PATH": str(tmp_path / "none")}) is None
+    junk = tmp_path / "event.json"
+    junk.write_text("{not json")
+    assert _state.event_payload({"GITHUB_EVENT_PATH": str(junk)}) is None
+    junk.write_text("[1, 2]")
+    assert _state.event_payload({"GITHUB_EVENT_PATH": str(junk)}) is None
+    junk.write_text(json.dumps({"action": "opened"}))
+    assert _state.event_payload({"GITHUB_EVENT_PATH": str(junk)}) == {
+        "action": "opened"
+    }
 
 
 def test_a_ci_run_may_write_a_ci_only_series(

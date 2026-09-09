@@ -8,7 +8,10 @@ the wheels-matrix work instead.
 Phase 2 landed 2026-09-09 in three slices: the profile mount and
 the profiled legs with their trace artifacts (issue #314), the CI
 state store on `refs/workshop/*` (issue #317), and the metrics rows
-with `fm ci.timings` (issue #319). Phase 3 is next.
+with `fm ci.timings` (issue #319, the pull-request lookup fixed in
+#321). Phase 3 began the same day: the points shell landed on the
+gitea emitter (issue #322); the release dispatch, the wheels
+matrix, nightly's adoption, and the kebab-case keys follow.
 Absorbs #267 (the speed pass), #286 (no logic in YAML), #270 (token
 publishing), #273 (the act names itself), and the structural finding of
 the phase-4 post-mortem (notes/20260906-phase-4-post-mortem.md): the
@@ -764,6 +767,37 @@ nightly).
   hand-written, all under the drift gate, zero decision expressions
   beyond event filters, every job's work reached through
   `fm ci.run --point=<name>`.
+- The first slice landed 2026-09-09 (issue #322) on the gitea
+  emitter: `livery.workshop._points` holds the four points, the
+  workshop's builtin schedule, and the `[[ci.schedule]]` seam, which
+  refuses an unknown point, a missing task, or arguments that are
+  not strings at load; `fm ci.run --point=<p> --job=<j>` runs a
+  job's entries as children of the runner's own command, the gate's
+  check profiled so the leg's timing row records itself, and a push
+  to main promotes the gate to the merge point inside the verb, so
+  the shared jobs spell `--point=gate` and the YAML decides nothing.
+  The emitted gitea `ci.yml` is the shell: a trigger, a checkout, an
+  enter, one `ci.run` per job; the docs deploy and the governance
+  reconcile are merge-point jobs behind the push filter, and the
+  gitea `governance.yml` and `docs.yml` are retired on apply (the
+  loop lost both on its next render). The gate job judges the run
+  through `ci.verdict`, which asks the forge for the jobs it needs
+  and reads a job it cannot see as red; `workflow.configure
+  --if-changed` classifies its own commit's file list and exits
+  fast when no contract or owners path changed; the release-title
+  verb reads its title from the event payload and is green off a
+  pull request or off a release branch. The census on the emitted
+  gitea `ci.yml` finds only event filters and the verdict job's
+  `always()`, pinned by the emitter test. Measured on the loop the
+  same day: the pull request's run went green through the shell
+  with the metrics row collected inside `ci.run`, and main's run
+  promoted every shared job to the merge point (the logs say
+  "gate on a push is the merge point"), ran the deploy and the
+  govern jobs, and skipped them on the pull request. What this slice
+  does not cover, by design: `release.yml` keeps its merge-triggered
+  shape until the dispatch slice; the wheels matrix, nightly's
+  adoption, and the kebab-case keys are the slices after; the
+  GitHub emitter keeps its shape until phase 6.
 - Acceptance: the census in #286 re-run shows only event filters; a
   merged PR creates three run entries, none skipped; drift gate
   covers every workflow file in the repo; a task scheduled through
@@ -1235,3 +1269,16 @@ None. Every ruling raised in this plan was closed in the review of
   text until the trace story lands, the janitor sweeps per-run refs
   by age because the protocol has no run-by-id lookup, and the
   writer classes finer than `ci_only` wait for phase 3's points.
+- 2026-09-09: the points shell's shape, stated as the recommended
+  form before the build and not yet ruled. A matrix job's runner
+  label and python reach `ci.run` as `--os` and `--python`, facts
+  the YAML alone knows, and the verb derives the forge's job
+  display name and the leg's label from them. Scheduled entries run
+  as child processes of the runner's own command rather than
+  in-process calls, so any mounted task is schedulable and the
+  gate's child carries `--profile` for its trace. The verdict job
+  keeps `if: always()`, the one condition beyond event filters,
+  because a red run must still be judged; it reads the run's jobs
+  from the forge, never from the YAML context. `release.yml` keeps
+  its merge trigger until the dispatch slice, so `train_if` is the
+  one decision expression left on the gitea lane.
