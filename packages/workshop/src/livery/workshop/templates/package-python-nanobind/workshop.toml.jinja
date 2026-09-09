@@ -7,6 +7,11 @@
 type = "python-nanobind"
 name = "{{ package_name }}"
 
+[ci]
+# The runner labels that build this member's platform wheels, one
+# release leg each; the publish job collects and ships the set.
+wheel-platforms = ["ubuntu-latest", "macos-latest", "windows-latest"]
+
 [qa]
 # The coverage high-water mark the gate enforces; raise it as the
 # suite grows, lower it only deliberately.

@@ -284,6 +284,9 @@ def dev_up(
         _compose("--profile", "gitea", "up", "-d", "--wait", "gitea")
         _seed_gitea()
         token = _read_dev_env().get("GITEA_RUNNER_TOKEN", "")
+        # --build: the runner image is built from runner.Dockerfile, so
+        # a changed toolchain line rebuilds it here instead of running
+        # on the stale image under the pinned tag.
         _compose(
             "--profile",
             "gitea",
@@ -291,6 +294,7 @@ def dev_up(
             "gitea-runner",
             "up",
             "-d",
+            "--build",
             "act_runner",
             env={"GITEA_RUNNER_TOKEN": token},
         )

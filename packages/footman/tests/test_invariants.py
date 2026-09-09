@@ -75,7 +75,7 @@ def test_zero_runtime_dependencies_is_declared_and_true():
     assert not importers, importers  # the exemption must stay one-way
 
 
-def test_the_completion_hot_path_imports_no_framework_and_no_tasks():
+def test_the_completion_hot_path_imports_no_framework_and_no_tasks(tmp_path):
     # One real TAB press in a fresh project, in a fresh interpreter. The
     # process answers, then testifies about every module it loaded: no
     # framework internals (registry, _app, _split — the run machinery), and
@@ -95,11 +95,16 @@ def test_the_completion_hot_path_imports_no_framework_and_no_tasks():
         ")\n"
         "print('LOADED ' + json.dumps(loaded))\n"
     )
+    # From a directory outside any locked project: run from this
+    # repository, the completion path heals its environment (uv sync
+    # against the real venv), re-installing editables under the other
+    # xdist workers' entry-point scans.
     done = subprocess.run(
         [sys.executable, "-c", probe, "--complete", "--", ""],
         capture_output=True,
         text=True,
         timeout=60,
+        cwd=tmp_path,
     )
     line = next(
         (ln for ln in done.stdout.splitlines() if ln.startswith("LOADED ")), None

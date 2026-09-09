@@ -36,7 +36,16 @@ renders:
 - github: trusted publishing to PyPI. No token is stored; the
   workflow's identity is the credential.
 - gitea and gitlab: `uv publish` with the `UV_PUBLISH_TOKEN` secret
-  to the index the contract's `publish_index` names.
+  to the registry the contract's `[registries]` table names for the
+  kind, else the forge's own package registry.
+
+A member whose kind builds platform wheels (the nanobind kind) names
+the runner labels that build them under `[ci] wheel-platforms` in its
+own `workshop.toml`. The release workflow runs one wheels leg per
+label before the wave, each building that platform's wheels for the
+workspace's python matrix through cibuildwheel, and the publish job
+ships the collected set. A pure member's one wheel is built by the
+publish job itself, and the key on such a member refuses.
 
 A release of livery-workshop also publishes the template snapshot:
 the `templates/` tree at the tagged commit becomes the artifact

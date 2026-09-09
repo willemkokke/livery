@@ -59,6 +59,7 @@ def _facts(root: Path) -> dict[str, Any]:
     from livery.workshop._envfile import parse_env_file
     from livery.workshop._layers import layer_entries
     from livery.workshop._templates import templates_artifact
+    from livery.workshop._wheels import member_roster, wheel_runners
 
     contract = load_contract(root / "workshop.toml")
     ci = contract.get("ci") or {}
@@ -94,6 +95,11 @@ def _facts(root: Path) -> dict[str, Any]:
         # artifact, and which member layer's release triggers it.
         "templates_artifact": templates_artifact(root),
         "templates_publisher": publisher,
+        # The members with their kinds, and the runner labels the
+        # platform-wheel members declare: the wheels job exists when
+        # the union is non-empty and runs one leg per label.
+        "packages": member_roster(root),
+        "wheel_runners": wheel_runners(root),
     }
 
 
@@ -360,21 +366,15 @@ jobs:
 """
 
 
-def _wants_wheel_matrix(answers: dict[str, Any]) -> bool:
-    """Whether a member's kind publishes platform wheels.
+def _wheel_runners(answers: dict[str, Any]) -> list[str]:
+    """The runner labels that build platform wheels; empty for a pure workspace.
 
-    The per-OS wheels matrix is emitted only then: a pure workspace
-    releases from one runner, and its workflow says so by shape.
+    The facts carry the union of the members' ``[ci] wheel-platforms``
+    declarations. The wheels job is emitted only when it is
+    non-empty: a pure workspace releases from one runner, and its
+    workflow says so by shape.
     """
-    from livery.workshop._kinds import kind_for, kind_names
-
-    for entry in answers.get("packages", []) or []:
-        if not isinstance(entry, dict):
-            continue
-        kind = str(entry.get("kind", "") or "")
-        if kind in kind_names() and kind_for(kind).wheel_identity == "platform":
-            return True
-    return False
+    return [str(label) for label in answers.get("wheel_runners", []) or []]
 
 
 def _github_release(answers: dict[str, Any], prog: str) -> str:
@@ -382,7 +382,8 @@ def _github_release(answers: dict[str, Any], prog: str) -> str:
     setup_uv = _setup_uv_step(answers)
     enter = _enter_step()
     publisher = str(answers.get("templates_publisher", ""))
-    wheels = _wants_wheel_matrix(answers)
+    wheel_labels = _wheel_runners(answers)
+    wheels = bool(wheel_labels)
     train_if = """>-
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.merged == true &&
@@ -397,7 +398,7 @@ def _github_release(answers: dict[str, Any], prog: str) -> str:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [{_csv(wheel_labels)}]
     runs-on: ${{{{ matrix.os }}}}
     steps:
       - uses: {CHECKOUT}
@@ -690,11 +691,12 @@ def _gitea_release(answers: dict[str, Any], prog: str) -> str:
     first = next(iter(answers.get("runners", ["ubuntu-latest"])))
     rung = _rung_step(answers)
     enter = _enter_step()
-    wheels = _wants_wheel_matrix(answers)
-    runners = _csv(list(answers.get("runners", ["ubuntu-latest"])))
+    wheel_labels = _wheel_runners(answers)
+    wheels = bool(wheel_labels)
+    runners = _csv(wheel_labels)
     wheels_job = (
-        f"""  # Every declared runner's wheels, built before the wave and
-  # collected as artifacts. linux arm waits on a docker-capable
+        f"""  # Every declared wheel platform's wheels, built before the wave
+  # and collected as artifacts. linux arm waits on a docker-capable
   # runner, the container seam's known constraint.
   wheels:
     strategy:
