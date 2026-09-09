@@ -1708,3 +1708,22 @@ None. Every ruling raised in this plan was closed in the review of
   filter absorbs, and the loop's reuse runs judging both members
   at exactly 100 percent is the measurement that the union stays
   complete.
+  Reversed 2026-09-09 (issue #361) after main's run on GitHub after
+  the port's squash went red: a suite whose tests reach no line
+  that collection had not already reached leaves no context of its
+  own under sysmon, so the leg read it as not run and stored
+  nothing, and main's reuse missed it. The units a leg ran now come
+  from its scope marker, never from the contexts; the legs measure
+  with the C tracer (`core = "ctrace"` in the rendered coverage
+  config), so every context holds every line its tests reached and
+  a reused suite's data is whole; and the workspace's own `tests/`
+  directory is a unit keyed by the whole tree, run by every leg
+  that runs a suite and reused by a skipped one, so a reused union
+  carries the lines only those tests reach.
+  Proven on the loop 2026-09-09, read from the runs' logs by
+  `fm ci.e2e` itself: main's run 1188 after the setup squash skipped
+  the gate and its union reused both members' suites and the
+  workspace's tests from the store (three reused units); the
+  member-only pull request's leg stored loop-echo's suite and the
+  workspace's tests, and its union reused loop-native; main's full
+  run 1190 stored all three units and judged both members.
