@@ -774,6 +774,90 @@ def _ensure_members(root: Path) -> None:
         print(f"  member {name}: landed through the loop's own gate")
 
 
+def _job_logs(
+    repo: Repository, sha: str, *, event: str, timeout: float = 900.0
+) -> tuple[Run, dict[str, str]]:
+    """The newest completed ``ci.yml`` run of *sha* for *event*, with its logs.
+
+    Waits for the run to register and complete; a red run fails
+    verbatim, naming its page. The logs are keyed by job name, the
+    check legs by their matrix display (``check (ubuntu-latest,
+    3.14)``), so a reader looks for the prefix it needs.
+    """
+    import time
+
+    deadline = time.monotonic() + timeout
+    while True:
+        runs = [
+            run
+            for run in repo.checks.runs(head_sha=sha)
+            if run.workflow.endswith("ci.yml") and run.event == event
+        ]
+        run = max(runs, key=lambda run: run.id, default=None)
+        if run is not None and run.status == "completed":
+            break
+        if time.monotonic() >= deadline:
+            fail(
+                f"no completed {event} run for {sha[:10]} within {timeout:.0f}s:"
+                f" {repo.web_url()}/actions"
+            )
+        time.sleep(5)
+    if run.conclusion != "success":
+        fail(
+            f"run {run.id} ({event}, {sha[:10]}) ended {run.conclusion}:"
+            f" {repo.web_url()}/actions/runs/{run.id}"
+        )
+    return run, {
+        job.name: repo.checks.job_log(job.id) for job in repo.checks.jobs(run.id)
+    }
+
+
+def _require_lines(
+    repo: Repository, run: Run, logs: dict[str, str], job: str, needed: tuple[str, ...]
+) -> None:
+    """Fail unless the log of the job whose name starts with *job* has every line."""
+    log = next((text for name, text in logs.items() if name.startswith(job)), None)
+    if log is None:
+        fail(f"run {run.id} has no {job} job: {repo.web_url()}/actions/runs/{run.id}")
+    missing = [line for line in needed if line not in log]
+    if missing:
+        fail(
+            f"run {run.id}'s {job} job did not say {missing};"
+            f" {repo.web_url()}/actions/runs/{run.id}"
+        )
+
+
+def _prove_verified_skip(root: Path, kind: str) -> None:
+    """Prove main's run after the setup squash skips the gate and unions nothing.
+
+    The setup pull request's check leg ran the full gate and stamped
+    its tree; the squash lands the same tree on main, so main's push
+    run finds it on the record, skips the gate, and its union judges
+    no floor, naming both members as unjudged this run. A skipped leg
+    reddening the union is the failure this proof exists for.
+    """
+    from livery.workshop._git_ops import GitOps
+
+    _align_main(root)
+    head = GitOps(root).head_sha()
+    forge, _ = _dev_forge(kind)
+    repo = forge.repository(E2E_OWNER, E2E_REPO)
+    run, logs = _job_logs(repo, head, event="push")
+    _require_lines(repo, run, logs, "check", ("skipping the gate",))
+    _require_lines(
+        repo,
+        run,
+        logs,
+        "gate",
+        (
+            "coverage: unjudged this run, no leg ran their suites:"
+            " packages/loop-echo, packages/loop-native",
+            "coverage: no leg ran a suite this run; nothing to union",
+        ),
+    )
+    print(f"  verified skip: proven on main's run {run.id}; the union judged nothing")
+
+
 def _prove_scoped_leg(root: Path, kind: str) -> None:
     """Prove the scoped check leg on a member-only pull request.
 
@@ -781,10 +865,12 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
     wires the workspace, the release stamps the manifest), so their
     legs pay the full gate by the affected rule. This one rewrites a
     test file inside ``loop-echo`` and nothing else, lands it through
-    the loop's gate, and reads the check leg's log: the leg must say
-    it narrowed against main to that one member. Re-run on a
-    pass-owned branch with main's tip as the stamp, so the diff is
-    never empty.
+    the loop's gate, and reads the run's logs: the check leg must say
+    it narrowed against main to that one member, and the gate job's
+    union must judge that member alone and name the other as
+    unjudged. Main's push run after the squash then pays the full
+    gate, and its union must judge both. Re-run on a pass-owned
+    branch with main's tip as the stamp, so the diff is never empty.
     """
     from livery.workshop._git_ops import GitOps
 
@@ -819,35 +905,50 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
     _align_main(root)
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
-    runs = [
-        run
-        for run in repo.checks.runs(head_sha=head)
-        if run.workflow.endswith("ci.yml") and run.event == "pull_request"
-    ]
-    if not runs:
-        fail(f"no pull request run for the scoped-leg commit {head[:10]}")
-    run = max(runs, key=lambda run: run.id)
-    log = ""
-    for job in repo.checks.jobs(run.id):
-        if job.name.startswith("check"):
-            log = repo.checks.job_log(job.id)
-            break
-    else:
-        fail(f"run {run.id} has no check leg: {repo.web_url()}/actions/runs/{run.id}")
-    needed = (
-        "affected-legs: the scoped gate against origin/main",
-        "affected: packages/loop-echo",
+    run, logs = _job_logs(repo, head, event="pull_request")
+    _require_lines(
+        repo,
+        run,
+        logs,
+        "check",
+        (
+            "affected-legs: the scoped gate against origin/main",
+            "affected: packages/loop-echo",
+        ),
     )
-    missing = [line for line in needed if line not in log]
-    if missing:
-        fail(
-            f"the check leg did not narrow to the member: missing {missing};"
-            f" {repo.web_url()}/actions/runs/{run.id}"
-        )
+    # The union judges the one member the leg ran and names the other.
+    _require_lines(
+        repo,
+        run,
+        logs,
+        "gate",
+        (
+            "coverage: unjudged this run, no leg ran their suites:"
+            " packages/loop-native",
+            "coverage packages/loop-echo: 100.0% (floor 100.0%",
+            "coverage: the union of 1 leg(s)",
+        ),
+    )
     print(
         "  scoped leg: proven on a member-only pull request"
-        " (affected: packages/loop-echo)"
+        " (affected: packages/loop-echo; the union judged loop-echo alone)"
     )
+    # A narrowed leg never stamps, so main's push after the squash pays
+    # the full gate, and its union judges both members.
+    landed = GitOps(root).head_sha()
+    run, logs = _job_logs(repo, landed, event="push")
+    _require_lines(
+        repo,
+        run,
+        logs,
+        "gate",
+        (
+            "coverage packages/loop-echo: 100.0% (floor 100.0%",
+            "coverage packages/loop-native: 100.0% (floor 100.0%",
+            "coverage: the union of 1 leg(s)",
+        ),
+    )
+    print(f"  full push: proven on main's run {run.id}; the union judged both members")
 
 
 def _release_act(root: Path, kind: str) -> None:
@@ -1136,6 +1237,7 @@ if _WORKSHOP_TESTS.is_dir():
         _watch(forge, url, sha, branch=_SETUP_BRANCH)
         print("  green: the loop's gate ran on the real runner")
         _merge_setup(forge, sha)
+        _prove_verified_skip(root, forge)
         _ensure_members(root)
         _prove_scoped_leg(root, forge)
         _release_act(root, forge)

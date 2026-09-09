@@ -384,10 +384,14 @@ def coverage_leg() -> None:
 
 @coverage.task(name="union", hidden=True)
 def coverage_union() -> None:
-    """Union every collected leg's coverage data and enforce the floors.
+    """Union the collected legs' coverage data and enforce the judged floors.
 
     Runs in the gate job after the legs' artifacts were collected
-    under ``coverage-data/``, one directory per leg. Refuses when no
+    under ``coverage-data/``, one directory per leg with its scope
+    marker beside its data. Only the packages whose suites a leg ran
+    are judged: every package after a full leg, the named ones after
+    a narrowed leg, none after a leg whose gate skipped on a proved
+    tree; the rest are named as unjudged this run. Refuses when no
     leg's data is there, so a broken upload reddens the gate instead
     of passing an empty union; the report and the verdicts print, so
     the numbers on screen are the numbers enforced.
@@ -395,8 +399,9 @@ def coverage_union() -> None:
     root = workspace_root()
     if root is None:
         raise ValueError("no workspace: no workshop.toml above the working directory")
-    _python.combine_union(root)
-    _python.enforce_coverage(root, _packages())
+    judged = _python.combine_union(root, _packages())
+    if judged:
+        _python.enforce_coverage(root, judged)
 
 
 @coverage.task(name="enforce")
