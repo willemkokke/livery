@@ -558,15 +558,26 @@ def list_(
     """
     on = wants_color(sys.stdout)
     rows: list[tuple[str, str, str, str]] = []
-    for driver in _drivers.DRIVERS:
-        here = _drivers.installed(driver)
-        if show == "missing" and here:
-            continue
-        if show == "installed" and not here:
-            continue
+    shown = [
+        (driver, here)
+        for driver in _drivers.DRIVERS
+        for here in (_drivers.installed(driver),)
+        if not (show == "missing" and here) and not (show == "installed" and not here)
+    ]
+    # Every version is one spawn, and a tool answers in its own time
+    # (up to the 30s the read allows), so the reads run side by side:
+    # the table waits for the slowest tool, not for the sum of them.
+    from concurrent.futures import ThreadPoolExecutor
+
+    present = [driver.name for driver, here in shown if here]
+    with ThreadPoolExecutor(max_workers=max(1, len(present))) as pool:
+        versions = dict(
+            zip(present, pool.map(_drivers._read_version, present), strict=True)
+        )
+    for driver, here in shown:
         version = why = ""
         if here:
-            version, why = _drivers._read_version(driver.name)
+            version, why = versions[driver.name]
         capable = _drivers.in_process_capable(driver.name) if here else False
         mode = "in-process" if driver.in_process else ("capable" if capable else "—")
         stub = "yes" if _stub_path(driver.key).exists() else "no"

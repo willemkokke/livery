@@ -1,4 +1,9 @@
-"""The render gate: byte-honest, drift-naming, namespace-clean."""
+"""The render gate: byte-honest, drift-naming, namespace-clean.
+
+The monorepo's own render is judged by the gate's render check on every
+leg, never here: a second render of the whole workspace per leg bought
+nothing but time.
+"""
 
 from __future__ import annotations
 
@@ -90,15 +95,6 @@ def test_the_template_source_is_the_contracts_call(tmp_path: Path) -> None:
         '[workspace]\ntemplates = "git@example.com:me/fork.git"\n'
     )
     assert local_template_dir(tmp_path) is None
-
-
-def test_the_monorepo_matches_its_own_render() -> None:
-    # The dogfood pin: contract 8 says the monorepo is the workshop's
-    # first instance, so a fresh render of the project kind agrees
-    # with the committed tree byte for byte.
-    assert project_drift(ROOT) == []
-    # Each package's managed files answer to the template too.
-    assert package_drift(ROOT) == []
 
 
 def test_package_drift_judges_only_the_managed_files(tmp_path: Path) -> None:
