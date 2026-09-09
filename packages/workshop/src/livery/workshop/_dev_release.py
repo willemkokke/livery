@@ -153,7 +153,11 @@ def build_dev(root: Path, plan: DevPlan) -> Path:
     only; every touched file is restored from an in-memory snapshot,
     never from git, because a dirty tree is legal here and a
     checkout would discard its edits. The index page is the only
-    place the excerpt exists.
+    place the excerpt exists. Timestamps are restored with the
+    bytes: uv judges an editable install fresh by its
+    ``pyproject.toml``'s modification time, and a touched file
+    would make the next sync re-install the package while other
+    processes read its metadata.
     """
     package = plan.package
     touched = [package.directory / "pyproject.toml"]
@@ -164,6 +168,7 @@ def build_dev(root: Path, plan: DevPlan) -> Path:
     if readme.is_file():
         touched.append(readme)
     snapshots = {path: path.read_bytes() for path in touched}
+    stamps = {path: path.stat() for path in touched}
     try:
         backend_for(package).stamp_version(package).stamp(
             semver_to_pep440(plan.version)
@@ -179,6 +184,8 @@ def build_dev(root: Path, plan: DevPlan) -> Path:
     finally:
         for path, content in snapshots.items():
             path.write_bytes(content)
+            stat = stamps[path]
+            os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns))
 
 
 def dev_release(
