@@ -762,6 +762,12 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
         " says so."
     )
     head = git.head_sha()
+    # The branch survives on origin from the last pass, and the forced
+    # submit pushes with a lease on the clone's view of it: refresh that
+    # view first, or the lease refuses the force as stale.
+    import livery.toolroom as toolroom
+
+    toolroom.git.opts(cwd=root, nofail=True)("fetch", "origin", "chore/scoped-leg")
     _loop_fm(root, "submit", "--force", "--armed")
     _align_main(root)
     forge, _ = _dev_forge(kind)
