@@ -81,10 +81,10 @@ BUILTIN: tuple[Entry, ...] = (
     # every run, whatever the legs narrowed to.
     Entry("gate", "gate", "template.check"),
     Entry("gate", "gate", "provenance"),
-    Entry("gate", "gate", "ci.metrics.collect"),
-    # The union of every leg's data, judged against the floors before
-    # the verdict: a broken upload or a floor below its mark is red.
+    # The union before the collect: its per-package percentages ride
+    # the run's row beside the timings.
     Entry("gate", "gate", "coverage.union"),
+    Entry("gate", "gate", "ci.metrics.collect"),
     Entry("gate", "gate", "ci.verdict", ("--needs=check,docs,release-title",)),
     # After a green verdict only: a red verdict fails the job before
     # this entry, so the record never names a tree a run proved red.

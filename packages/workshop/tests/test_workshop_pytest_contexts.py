@@ -30,6 +30,7 @@ class _Meter:
 def test_without_a_process_meter_every_hook_is_quiet(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv(_pytest_contexts.ARMED, "pyproject.toml")
     monkeypatch.delattr(coverage.process_startup, "coverage", raising=False)
     item = _Item()
     _pytest_contexts.pytest_runtest_setup(item)  # type: ignore[arg-type]
@@ -38,9 +39,22 @@ def test_without_a_process_meter_every_hook_is_quiet(
     _pytest_contexts.pytest_runtest_logfinish(item.nodeid, None)
 
 
+def test_an_unarmed_run_leaves_even_a_present_meter_alone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # pytest-cov's own workers carry a meter of their own; only a run
+    # armed by coverage's variable is this plugin's to name.
+    monkeypatch.delenv(_pytest_contexts.ARMED, raising=False)
+    meter = _Meter()
+    monkeypatch.setattr(coverage.process_startup, "coverage", meter, raising=False)
+    _pytest_contexts.pytest_runtest_call(_Item())  # type: ignore[arg-type]
+    assert meter.contexts == []
+
+
 def test_a_meter_that_is_not_collecting_is_left_alone(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv(_pytest_contexts.ARMED, "pyproject.toml")
     meter = _Meter(started=False)
     monkeypatch.setattr(coverage.process_startup, "coverage", meter, raising=False)
     _pytest_contexts.pytest_runtest_call(_Item())  # type: ignore[arg-type]
@@ -50,6 +64,7 @@ def test_a_meter_that_is_not_collecting_is_left_alone(
 def test_each_phase_records_under_the_tests_node_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv(_pytest_contexts.ARMED, "pyproject.toml")
     meter = _Meter()
     monkeypatch.setattr(coverage.process_startup, "coverage", meter, raising=False)
     item = _Item()

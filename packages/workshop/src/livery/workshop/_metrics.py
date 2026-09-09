@@ -55,6 +55,37 @@ SERIES = Series("metrics", window=300)
 #: The one file a leg puts on its per-run ref.
 ROW_FILE = "row.json"
 
+#: The union's per-package percentages, left by the gate job's
+#: coverage entry for the collect entry to fold into the run's file.
+COVERAGE_ROW = "fm-coverage.json"
+
+
+def write_coverage_row(root: Path, measured: dict[str, float]) -> str:
+    """Leave the union's percentages beside the trace; the line to print."""
+    (root / COVERAGE_ROW).write_text(
+        json.dumps({path: round(value, 2) for path, value in sorted(measured.items())}),
+        encoding="utf-8",
+    )
+    return f"coverage row: {len(measured)} package(s) for the run's record"
+
+
+def read_coverage_row(root: Path) -> dict[str, float] | None:
+    """The union's percentages the gate job left, or ``None`` when it left none."""
+    path = root / COVERAGE_ROW
+    if not path.is_file():
+        return None
+    try:
+        loaded = json.loads(path.read_text("utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(loaded, dict):
+        return None
+    out: dict[str, float] = {}
+    for name, value in loaded.items():
+        if isinstance(value, int | float) and not isinstance(value, bool):
+            out[str(name)] = float(value)
+    return out
+
 
 def _ms(event: dict[str, Any]) -> float:
     return round(float(event.get("dur", 0.0)) / 1000.0, 1)
@@ -261,6 +292,10 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
                 for step in job.steps
             ]
         entry["jobs"][name] = row
+    coverage = read_coverage_row(root)
+    if coverage is not None:
+        entry["coverage"] = coverage
+        lines.append(f"  coverage: {len(coverage)} package(s) recorded on the run")
     why = put(
         root,
         SERIES.ref,
@@ -400,4 +435,28 @@ def render(
                 f"    {sign}{abs(delta) / 1000:.1f}s  {job}: {metric}"
                 f" ({then / 1000:.1f}s -> {now / 1000:.1f}s)"
             )
+    lines.extend(_render_coverage(entries))
+    return lines
+
+
+def _render_coverage(entries: list[dict[str, Any]]) -> list[str]:
+    """The coverage rows: per package the latest, p50, and p90 percentage."""
+    series: dict[str, list[float]] = defaultdict(list)
+    latest: dict[str, float] = {}
+    for entry in entries:
+        row = entry.get("coverage")
+        if not isinstance(row, dict):
+            continue
+        for package, value in sorted(row.items()):
+            if isinstance(value, int | float) and not isinstance(value, bool):
+                series[str(package)].append(float(value))
+                latest[str(package)] = float(value)
+    if not series:
+        return []
+    lines = ["  coverage", f"    {'package':<44} {'latest':>9} {'p50':>9} {'p90':>9}"]
+    for package, values in sorted(series.items()):
+        lines.append(
+            f"    {package[:44]:<44} {latest[package]:8.1f}%"
+            f" {_percentile(values, 0.5):8.1f}% {_percentile(values, 0.9):8.1f}%"
+        )
     return lines

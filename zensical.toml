@@ -350,6 +350,7 @@ nav = [
             { "livery.workshop._compose" = "_generated/api/workshop/_compose.md" },
             { "livery.workshop._contract" = "_generated/api/workshop/_contract.md" },
             { "livery.workshop._conventional" = "_generated/api/workshop/_conventional.md" },
+            { "livery.workshop._coverage_marks" = "_generated/api/workshop/_coverage_marks.md" },
             { "livery.workshop._coverage_store" = "_generated/api/workshop/_coverage_store.md" },
             { "livery.workshop._dev_release" = "_generated/api/workshop/_dev_release.md" },
             { "livery.workshop._diagnostics" = "_generated/api/workshop/_diagnostics.md" },
