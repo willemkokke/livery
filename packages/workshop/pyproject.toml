@@ -46,6 +46,12 @@ dependencies = [
 [project.entry-points."footman.builtin"]
 "livery.workshop" = "livery.workshop._tasks"
 
+# Every pytest this venv starts carries the context plugin: in a
+# metered CI leg it names each test's coverage context by node id,
+# so the leg splits one run's data per suite; elsewhere it is quiet.
+[project.entry-points.pytest11]
+livery-workshop-contexts = "livery.workshop._pytest_contexts"
+
 [project.urls]
 Repository = "https://github.com/willemkokke/livery"
 
