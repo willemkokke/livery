@@ -377,6 +377,7 @@ nav = [
             { "livery.workshop._release" = "_generated/api/workshop/_release.md" },
             { "livery.workshop._release_driver" = "_generated/api/workshop/_release_driver.md" },
             { "livery.workshop._shell" = "_generated/api/workshop/_shell.md" },
+            { "livery.workshop._state" = "_generated/api/workshop/_state.md" },
             { "livery.workshop._submit" = "_generated/api/workshop/_submit.md" },
             { "livery.workshop._sync" = "_generated/api/workshop/_sync.md" },
             { "livery.workshop._taskref" = "_generated/api/workshop/_taskref.md" },

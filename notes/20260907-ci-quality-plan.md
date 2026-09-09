@@ -5,9 +5,10 @@ Phase 1's substrate landed 2026-09-07 (issue #289): the loop is
 whole, gate to receipt; the evidence lives in the phase's
 acceptance bullet, and the one open line there names what rides
 the wheels-matrix work instead.
-Phase 2's first slice, the profile mount and the profiled legs
-with their trace artifacts, landed 2026-09-09 (issue #314); the
-state store and the metrics rows follow.
+Phase 2's first two slices landed 2026-09-09: the profile mount and
+the profiled legs with their trace artifacts (issue #314), and the
+CI state store on `refs/workshop/*` (issue #317); the metrics rows
+and the reading verb follow.
 Absorbs #267 (the speed pass), #286 (no logic in YAML), #270 (token
 publishing), #273 (the act names itself), and the structural finding of
 the phase-4 post-mortem (notes/20260906-phase-4-post-mortem.md): the
@@ -454,6 +455,32 @@ exists.
   run's refs also enforces the windows. Port the rulebook: gated
   run class only, fail open loudly, no rewrite from an unread
   state, `[skip ci]`, own identity.
+  Landed 2026-09-09 (issue #317) as `livery.workshop._state`: `put`
+  lays files over the ref's kept tree, trims to the series' window,
+  and pushes a fresh root commit under `--force-with-lease` with the
+  sha the read returned, re-reading and merging on a refused lease
+  (three attempts, then the reason); `read` fetches into FETCH_HEAD
+  and says whether a miss is absence or failure; `drop` deletes;
+  `sweep` is the janitor behind `fm ci.janitor`. Every failure is a
+  returned reason. Blobs are hashed from temporary files and the
+  tree is fed to `mktree -z`, so no newline crosses a text-mode
+  stdin on any platform. Payloads are text for now; a binary blob
+  needs a binary-safe read path when the trace story lands. The
+  janitor sweeps per-run refs by age (default six hours): the forge
+  protocol has no run-by-id lookup, and no run lasts that long. The
+  finer writer classes (which point may write which series) arrive
+  with phase 3's points; today a series is `ci_only` or open, and a
+  local run refuses a `ci_only` write. Refusals are tested first
+  against a bare repository as origin: the namespace guard, the
+  local write of a CI-only series, no origin, an unreachable remote
+  as a failed read, the refused rewrite from an unread state, the
+  stale lease (merged and won, then exhausted and named), the lying
+  readback, and the idempotent delete. Proven live on the loop's
+  Gitea the same day: two compare-and-swap writes of about half a
+  second each, the read merging both, a root commit carrying the
+  store's identity and `[skip ci]`, no local ref after a default
+  fetch, `main` the only branch the forge lists, no workflow run
+  started, and the delete idempotent.
 - `workshop/metrics`: a compact row per job per run, window-capped. The
   row is end to end, not gate-only: queue wait and per-step wall
   times lifted from the forge's own run API (checkout, cache
@@ -489,7 +516,7 @@ exists.
   rules); the metrics ref carrying rows from at least two runs; the
   reading verb rendering them; the transport's refusal paths tested
   before its happy path (fallbacks first), the windowed rewrite
-  included.
+  included (met 2026-09-09 with the store's landing, above).
 - Found and fixed on the way (2026-09-09): the loop had been testing
   the #289 branch's wheels on every pass since that branch landed.
   A dev version's number counts commits since the release tag, so

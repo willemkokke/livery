@@ -482,6 +482,53 @@ the kit cannot drift from the enforcement.
   issue #228, found live during this phase). The branch carries no
   commits, so the rehearsal's clone was byte-for-byte main and the
   fault predates the phase.
+- 2026-09-09, five refinements from a fresh derivation (Willem and
+  the agent independently re-derived this note's architecture while
+  routing the post-edit hook off a hard-coded ruff call, issue #312;
+  the re-derivation validated the design and added detail the phases
+  fold in):
+  - `--safe-fix` is a first-class flag on every task that takes
+    `--fix`, documented once as "safe to apply to in-progress
+    edits". It applies fixes but withholds the code-removing rules,
+    and what it withholds lives only in the lowest linter seam (for
+    ruff, `F401`), never named above. `--fix` and `--safe-fix` are
+    mutually exclusive with a teaching refusal. Landed minimally in
+    #312 for python (`fm lint`/`fm format` gained `*paths` and
+    `--safe-fix`, the hook calls the verbs); the check record's
+    fix-mode callable (phase 4) generalises it per tool.
+  - The config fragment a check owns (phase 4) is overridden the
+    way every content fragment already is: whole file, last layer
+    wins, through the existing `content/fragments` cascade in
+    `_sync.py`. Overriding a tool's config in a layer means shipping
+    the whole config and owning all of it, never a merged delta.
+    Deep-merge of deltas is a possible later extension and the one
+    hard part (TOML merge determinism); start whole-file.
+  - Two scaffolding verbs: `fm layer.new` scaffolds a layer, and
+    `fm layer.override <file>` copies the currently composed result
+    of a file into the layer being edited (an explicit layer
+    argument, not an inferred one), so an override starts from the
+    real current content. Slots beside phase 3.
+  - Per-package enforcement is structural, not a bolted-on check:
+    each package's composed config emits into that package's own
+    directory, so tool-native discovery (ruff, mypy, and the editor
+    all walk up from a file to the nearest config) lands on the
+    owning package's config by construction. A file cannot be
+    judged by another package's rules. The drift gate adds two
+    cheap checks on top: every package's emitted config matches its
+    composition, and no source file is orphaned or ambiguous. This
+    moves phase 4's "render manages the fragment" from one root
+    `pyproject.toml` to per-package emission; the cost is more
+    config files, every one derived and drift-checked.
+  - A package is a layer on top of its package kind. The cascade
+    gains two inner rungs below the workspace layers: the kind (as
+    a layer contributing its toolset and default config as
+    fragments, which today it does not, it ships only templates),
+    then the package (as a layer contributing its own overrides).
+    Composition resolves once per package with the package
+    innermost, which is what makes per-package emission fall out.
+    Unifies this note's role-gating (phase 2) with per-package
+    config; the composition-per-package is the structural change
+    phases 4 and 5 build on.
 
 ## Open
 
