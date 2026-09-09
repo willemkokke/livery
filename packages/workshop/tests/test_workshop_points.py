@@ -106,11 +106,15 @@ def test_the_builtin_jobs_of_each_point(tmp_path: Path) -> None:
         "govern",
         "dispatch",
     )
-    assert _points.jobs_of(root, "nightly") == ()
-    assert _points.jobs_of(root, "release") == ()
+    # The nightly point runs the whole check, its own tests selected in.
+    assert _points.jobs_of(root, "nightly") == ("nightly",)
+    assert _points.entries_for(root, "nightly", "nightly") == (
+        _points.Entry("nightly", "nightly", "check", profiled=True),
+    )
     # A point's own job exists before its first entry: the shell runs
     # green and empty until the contract attaches a task.
-    assert _points.entries_for(root, "nightly", "nightly") == ()
+    assert _points.jobs_of(root, "release") == ()
+    assert _points.entries_for(root, "release", "release") == ()
 
 
 def test_a_declared_entry_joins_its_point(tmp_path: Path) -> None:
@@ -121,8 +125,9 @@ def test_a_declared_entry_joins_its_point(tmp_path: Path) -> None:
         '\n[[ci.schedule]]\npoint = "gate"\njob = "docs"\ntask = "docs.links"\n',
     )
     assert _points.jobs_of(root, "nightly") == ("nightly",)
-    (entry,) = _points.entries_for(root, "nightly", "nightly")
-    assert entry == _points.Entry(
+    entries = _points.entries_for(root, "nightly", "nightly")
+    assert [e.task for e in entries] == ["check", "release.replay"]
+    assert entries[-1] == _points.Entry(
         "nightly", "nightly", "release.replay", ("--all",), source="workshop.toml"
     )
     docs = _points.entries_for(root, "gate", "docs")
@@ -140,17 +145,21 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
     seen: list[list[str]] = []
 
     legs: list[str] = []
+    points: list[str] = []
 
     def green(argv: list[str], env: dict[str, str]) -> int:
         seen.append(argv)
         legs.append(env.get("WORKSHOP_LEG", "<unset>"))
+        points.append(env.get("WORKSHOP_POINT", "<unset>"))
         return 0
 
     _points.run_point(
         root, "gate", "check", os_label="ubuntu-latest", python="3.14", spawn=green
     )
-    # Every child's environment names the leg, the key of its stamps.
+    # Every child's environment names the leg, the key of its stamps,
+    # and the point, which selects the tests.
     assert legs == ["check-ubuntu-latest-3.14"] * len(seen)
+    assert points == ["gate"] * len(seen)
     assert seen == [
         ["hse", "--profile=fm-profile.json", "check"],
         [
@@ -196,3 +205,20 @@ def test_a_push_promotes_the_gate_to_the_merge_point(
     assert _points.effective_point("gate") == "gate"
     with pytest.raises(_FAILURES, match="the gate point has no job 'govern'"):
         _points.run_point(root, "gate", "govern", spawn=green)
+
+
+def test_the_nightly_point_runs_the_whole_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import livery.footman as footman
+
+    monkeypatch.setattr(footman, "prog", lambda: "hse")
+    root = _root(tmp_path)
+    seen: list[tuple[list[str], str]] = []
+
+    def green(argv: list[str], env: dict[str, str]) -> int:
+        seen.append((argv, env.get("WORKSHOP_POINT", "<unset>")))
+        return 0
+
+    _points.run_point(root, "nightly", "nightly", python="3.14", spawn=green)
+    assert seen == [(["hse", "--profile=fm-profile.json", "check"], "nightly")]

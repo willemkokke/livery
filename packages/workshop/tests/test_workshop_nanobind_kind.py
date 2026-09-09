@@ -173,6 +173,9 @@ def test_the_drift_loop_renders_the_chain(tmp_path: Path) -> None:
 # isolated leg imports the compiled module.
 
 
+# The build is the suite's largest cost by far (77 s on a linux leg);
+# the nightly point pays it, a pull request's legs do not.
+@pytest.mark.only_at("nightly")
 @needs_build_rig
 def test_the_wheel_is_platform_tagged_and_imports(tmp_path: Path) -> None:
     package = _render_chain(tmp_path)

@@ -278,12 +278,25 @@ def check(
 
     root_for_ci = workspace_root()
     run = run_context()
-    if root_for_ci is not None and run is not None and verified_already(root_for_ci):
+    # The nightly point pays the whole gate: the record it would skip on
+    # was stamped by a run that selected the gate's tests, not its own,
+    # and a narrowed nightly would be no nightly.
+    nightly = _current_point() == "nightly"
+    if nightly:
+        print(
+            "  nightly: the whole gate, the verified record and the narrowing set aside"
+        )
+    if (
+        not nightly
+        and root_for_ci is not None
+        and run is not None
+        and verified_already(root_for_ci)
+    ):
         _verified.write_marker(root_for_ci, _verified.VERIFIED, leg=run.leg)
         return
     ci_base = (
         ci_affected_base(root_for_ci, run)
-        if not affected and root_for_ci is not None
+        if not affected and not nightly and root_for_ci is not None
         else ""
     )
     if ci_base:
@@ -338,6 +351,15 @@ def check(
         kindcheck()
         template_check()
         provenance_check()
+
+
+def _current_point() -> str:
+    """The point this process runs at, as the job runner named it; gate outside CI."""
+    import os
+
+    from livery.workshop._pytest_points import POINT_VARIABLE
+
+    return os.environ.get(POINT_VARIABLE, "gate")
 
 
 def _with_unstored_suites(
