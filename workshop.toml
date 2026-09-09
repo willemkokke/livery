@@ -35,6 +35,11 @@ approvals = 0
 # (livery#357): its legs had passed with failing tests masked by the
 # shell, and were the slowest legs by far.
 runners = ["ubuntu-latest", "macos-latest"]
+# A pull request's check legs run the scoped gate against its base:
+# the packages the change can influence run, the others' suites are
+# reused from the coverage store; a push run and a change outside
+# the packages pay the full gate.
+affected-legs = true
 # The one status name branch protection requires, spelled by contract
 # so each forge's CI renders it rather than anyone retyping it.
 required-context = "gate"
