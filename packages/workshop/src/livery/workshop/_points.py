@@ -32,6 +32,7 @@ from pathlib import Path
 import livery.footman as footman
 from livery.footman import fail
 from livery.workshop._contract import load_contract
+from livery.workshop._pytest_points import POINT_VARIABLE
 from livery.workshop._state import LEG_VARIABLE, run_context
 
 #: The points, in the order a change meets them.
@@ -94,6 +95,9 @@ BUILTIN: tuple[Entry, ...] = (
     Entry("merge", "deploy", "docs.publish"),
     Entry("merge", "govern", "workflow.configure", ("--if-changed",)),
     Entry("merge", "dispatch", "workflow.release.dispatch"),
+    # The clock's point: the whole check, with the tests that declare
+    # the nightly point selected in, on every python of the matrix.
+    Entry("nightly", "nightly", "check", profiled=True),
 )
 
 #: A point whose jobs include another point's: the merge point runs
@@ -220,8 +224,11 @@ def run_point(
     leg. A profiled entry runs under ``--profile`` with its trace
     left at `TRACE`. Every child's environment names the leg in
     `livery.workshop._state.LEG_VARIABLE`, the key of the leg's rows
-    and stamps. *spawn* runs one entry's command in that environment
-    and returns its exit code; the default is the runner's own child.
+    and stamps, and the resolved point in
+    `livery.workshop._pytest_points.POINT_VARIABLE`, which selects the
+    tests a point runs. *spawn* runs one entry's command in that
+    environment and returns its exit code; the default is the runner's
+    own child.
     """
     resolved = effective_point(point)
     entries = entries_for(root, resolved, job)
@@ -230,7 +237,7 @@ def run_point(
     display = f"{job} ({os_label}, {python})" if os_label or python else job
     label = f"{job}-{os_label}-{python}" if os_label or python else job
     facts = {"display": display, "label": label, "os": os_label, "python": python}
-    env = {**os.environ, LEG_VARIABLE: label}
+    env = {**os.environ, LEG_VARIABLE: label, POINT_VARIABLE: resolved}
     prog = footman.prog()
     for entry in entries:
         argv = [prog]

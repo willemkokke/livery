@@ -397,11 +397,21 @@ def test_the_github_shell_is_one_verb_per_job_for_the_gate_point(
 
     from livery.workshop._ci_generate import generate
 
-    workflow = yaml.safe_load(
-        generate(_contract_root(tmp_path, "github"))[".github/workflows/ci.yml"]
-    )
+    files = generate(_contract_root(tmp_path, "github"))
+    workflow = yaml.safe_load(files[".github/workflows/ci.yml"])
     jobs = workflow["jobs"]
     assert list(jobs) == ["check", "docs", "gate", "release-title"]
+    # The nightly point's shell: the clock, a dispatch, one verb per
+    # python, no condition; the tests that declare the point ride it.
+    nightly = yaml.safe_load(files[".github/workflows/nightly.yml"])
+    assert sorted(nightly[True] if True in nightly else nightly["on"]) == [
+        "schedule",
+        "workflow_dispatch",
+    ]
+    (job,) = nightly["jobs"].values()
+    verbs = [step["run"] for step in job["steps"] if "ci.run" in step.get("run", "")]
+    assert len(verbs) == 1 and "--point=nightly --job=nightly" in verbs[0]
+    assert "if" not in job and job["steps"][0]["with"]["fetch-depth"] == 0
     for name, job in jobs.items():
         runs = [step["run"] for step in job["steps"] if "run" in step]
         verbs = [run for run in runs if "ci.run" in run]

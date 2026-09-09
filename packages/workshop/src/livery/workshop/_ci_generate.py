@@ -365,6 +365,44 @@ def _wheel_runners(answers: dict[str, Any]) -> list[str]:
     return [str(label) for label in answers.get("wheel_runners", []) or []]
 
 
+def _github_nightly(answers: dict[str, Any], prog: str) -> str:
+    """The nightly point's shell for GitHub: the clock, a dispatch, one verb per python."""
+    pythons = _csv(list(answers.get("python_versions", ["3.11"])), quoted=True)
+    first = next(iter(answers.get("runners", ["ubuntu-latest"])))
+    setup_uv_leg = _setup_uv_step(answers, cache_suffix="nightly-${{ matrix.python }}")
+    enter_leg = _enter_step(matrix_python=True)
+    return f"""name: nightly
+
+# The nightly point: the clock and a manual trigger, one
+# `{prog} ci.run` per python. What the point runs is data, the
+# workshop's builtin schedule plus [[ci.schedule]] in workshop.toml,
+# and the tests that declare the nightly point are selected in.
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+jobs:
+  nightly:
+    strategy:
+      fail-fast: false
+      matrix:
+        python: [{pythons}]
+    runs-on: {first}
+    steps:
+      - uses: {CHECKOUT}
+        with:
+          # A replay checks the tree out at a release tag.
+          fetch-depth: 0
+{setup_uv_leg}{enter_leg}      - name: Nightly
+        env:
+          FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
+        run: >-
+          {prog} ci.run --point=nightly --job=nightly
+          --python="${{{{ matrix.python }}}}"
+"""
+
+
 def _github_release(answers: dict[str, Any], prog: str) -> str:
     rung = _rung_step(answers)
     setup_uv = _setup_uv_step(answers)
@@ -1069,6 +1107,7 @@ def generate(root: Path) -> dict[str, str]:
         files = {
             ".github/workflows/ci.yml": _github_gate(facts, prog),
             ".github/workflows/release.yml": _github_release(facts, prog),
+            ".github/workflows/nightly.yml": _github_nightly(facts, prog),
             ".github/workflows/governance.yml": _github_governance(facts, prog),
         }
         if seam == "pages":
