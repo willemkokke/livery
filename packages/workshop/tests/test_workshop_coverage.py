@@ -53,6 +53,8 @@ def test_enforcement_grants_the_grace_and_no_more(
 class _Result:
     def __init__(self, code: int) -> None:
         self.code = code
+        self.stdout = f"suite output (exit {code})\n" if code else ""
+        self.stderr = ""
 
 
 class _FakePytest:
@@ -98,6 +100,9 @@ def test_a_measuring_parent_runs_each_suite_apart_and_names_the_red_ones(
     monkeypatch.setenv("COVERAGE_PROCESS_CONFIG", "the parent's serialised config")
     with pytest.raises(_FAILURES, match=r"tests failed in packages/other \(exit 1\)"):
         _python.run_test(packages=(thing, other, empty), root=tmp_path)
+    # The red suite's own output is printed: its words name the failure.
+    out = capsys.readouterr().out
+    assert "tests packages/other: exit 1\nsuite output (exit 1)" in out
     # A suite's process reads the configuration file under its own
     # prefix, never the parent's serialised configuration.
     assert all(
@@ -120,7 +125,7 @@ def test_a_measuring_parent_runs_each_suite_apart_and_names_the_red_ones(
         None,
     ]
     assert not any("--cov" in args for args, _env in fake.calls)
-    assert "tests packages/empty: no tests collected" in capsys.readouterr().out
+    assert "tests packages/empty: no tests collected" in out
     # A scoped run leaves the workspace's own tests alone.
     fake.calls.clear()
     fake.codes.clear()
@@ -203,7 +208,10 @@ def test_a_leg_stores_each_suite_it_ran_within_its_closure(
     monkeypatch.setattr(
         "livery.workshop._git_ops.GitOps.head_sha", lambda self: "a" * 40
     )
-    # Outside CI the suite is measured, and nothing is stored.
+    # Outside CI the suite is measured, and nothing is stored; the test
+    # forces "outside" since it may itself run on a runner.
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.delenv("GITLAB_CI", raising=False)
     _python.combine_leg(tmp_path, (x, y))
     out = capsys.readouterr().out
     assert "coverage store: packages/x measured (1 files); outside CI" in out

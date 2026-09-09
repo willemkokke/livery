@@ -378,13 +378,23 @@ def run_suites(
         if result.code == 5:
             print(f"  tests {package.path}: no tests collected")
         elif result.code != 0:
+            _report_red_suite(package.path, result.code, result.stdout, result.stderr)
             red.append(f"{package.path} (exit {result.code})")
     if not scoped and (root / "tests").is_dir():
         result = pytest.opts(in_process=False, nofail=True)("tests", *pytest_args)
         if result.code not in (0, 5):
+            _report_red_suite("tests", result.code, result.stdout, result.stderr)
             red.append(f"tests (exit {result.code})")
     if red:
         fail("tests failed in " + ", ".join(red))
+
+
+def _report_red_suite(name: str, code: int, stdout: str, stderr: str) -> None:
+    """Print a red suite's output: the failing tests are named there."""
+    print(f"  tests {name}: exit {code}")
+    text = (stdout + stderr).rstrip()
+    if text:
+        print(text)
 
 
 def suite_lines(
