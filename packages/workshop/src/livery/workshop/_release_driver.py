@@ -21,7 +21,7 @@ from typing import Annotated
 import livery.footman as footman
 from livery import toolroom
 from livery.footman import doc, fail
-from livery.forge import ForgeError, Repository
+from livery.forge import ForgeError, Repository, Run
 from livery.workshop import _cliff
 from livery.workshop._backends import _python, backend_for
 from livery.workshop._git_ops import GitOps
@@ -388,6 +388,7 @@ class ReleaseDriver:
         *,
         armed: bool,
         force_unverified_base: bool = False,
+        wave_timeout: float = 1800.0,
     ) -> None:
         self._root = root
         self._repo = repo
@@ -397,6 +398,7 @@ class ReleaseDriver:
         self.name = release_name(self.members)
         self.armed = armed
         self._force = force_unverified_base
+        self._wave_timeout = wave_timeout
 
     @property
     def branch(self) -> str:
@@ -541,9 +543,31 @@ class ReleaseDriver:
         return Submission(title=f"chore(release): released {listed}", body=body)
 
     def on_merged(self) -> None:
-        """Publishing is the merge-triggered workflow's act."""
+        """The merge point dispatches the wave; done means its run id is confirmed.
+
+        A wave timeout of zero reports the merge and names the
+        dispatch verb as the confirmation instead of waiting: the
+        engine's own tests run against a forge with no merge point.
+        """
+        if self._wave_timeout <= 0:
+            print(
+                "  merged; the merge point dispatches the wave, confirm it with"
+                f" `{footman.prog()} workflow.release.dispatch`"
+            )
+            return
+        before = {run.id for run in _wave_runs(self._repo)}
+        run_id = await_wave(self._repo, before=before, timeout=self._wave_timeout)
+        if run_id is None:
+            fail(
+                "merged, but no release wave appeared within"
+                f" {self._wave_timeout:.0f}s: the merge point's dispatch job"
+                " runs after main's own verdict, so a red main or a slow"
+                " queue is the usual cause. The recovery is"
+                f" `{footman.prog()} workflow.release.dispatch` from any"
+                " checkout, which answers green once the wave is up."
+            )
         print(
-            "  merged; the publish workflow takes it from here and the"
+            f"  merged; the merge point dispatched the wave, run {run_id}; the"
             " receipt tags say when each member is done"
         )
 
@@ -571,6 +595,116 @@ def local_release(root: Path, members: tuple[Package, ...]) -> None:
         print("  wheels in each member's dist/; the tree is restored")
     finally:
         rollback_prepare(root, members)
+
+
+#: The release workflow, as the forges address one for a dispatch and
+#: name one on a run (GitHub lists the path, Gitea the file; the
+#: basename is the comparison).
+RELEASE_WORKFLOW = "release.yml"
+
+
+def _wave_runs(repo: Repository) -> tuple[Run, ...]:
+    """The release workflow's dispatched runs, newest first."""
+    return tuple(
+        run
+        for run in repo.checks.runs(event="workflow_dispatch")
+        if run.workflow.rsplit("/", 1)[-1] == RELEASE_WORKFLOW
+    )
+
+
+def await_wave(
+    repo: Repository,
+    *,
+    before: set[int],
+    timeout: float = 1800.0,
+    interval: float = 5.0,
+) -> int | None:
+    """The id of the newest wave run not in *before*, or ``None`` when none appears.
+
+    Any state counts: a wave that already finished by the time the
+    poll saw it is still the wave that ran, and a confirmation that
+    demanded a live run would miss a fast forge.
+    """
+    import time
+
+    deadline = time.monotonic() + timeout
+    while True:
+        new = [run for run in _wave_runs(repo) if run.id not in before]
+        if new:
+            return new[0].id
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(interval)
+
+
+def dispatch_flow(
+    root: Path,
+    repo: Repository,
+    git: GitOps,
+    *,
+    base: str = "main",
+    timeout: float = 60.0,
+    interval: float = 2.0,
+) -> list[str]:
+    """Dispatch the wave for a merged, unpublished release, or say why not.
+
+    Reads the manifest at HEAD. Green when there is none, or when
+    every member's receipt tag is already on the remote: the
+    manifest is permanent residue of the last release, so presence
+    is not the signal, missing receipts are. A wave already in
+    flight is reported green with its run id. Otherwise the wave is
+    dispatched on *base* with the commit that stamped the manifest
+    as its ``ref`` input, never this run's own sha, so an unrelated
+    merge landing first cannot move the wave onto another tree; the
+    dispatch is confirmed by the run id that appears, or refused
+    with the reason. Remote state only, receipts by ``ls-remote`` and
+    runs by the forge, so any checkout answers the same as CI.
+    """
+    from livery.workshop._publish import MANIFEST, read_manifest
+
+    text = git.file_at("HEAD", MANIFEST)
+    recorded = read_manifest(text) if text else None
+    if not recorded:
+        return ["  no release manifest at HEAD: nothing to dispatch"]
+    cut = set(git.remote_tags())
+    receipts = [f"packages/{directory}/v{version}" for directory, version in recorded]
+    missing = [tag for tag in receipts if tag not in cut]
+    if not missing:
+        return [f"  every receipt is cut ({', '.join(receipts)}): nothing to dispatch"]
+    live = [run for run in _wave_runs(repo) if run.status != "completed"]
+    if live:
+        return [
+            f"  the wave is already in flight: run {live[0].id};"
+            f" uncut so far: {', '.join(missing)}"
+        ]
+    stamping = git.last_commit_touching(MANIFEST)
+    if not stamping:
+        return [
+            f"  {MANIFEST} is at HEAD but no commit touches it: nothing to dispatch"
+        ]
+    seen = {run.id for run in _wave_runs(repo)}
+    try:
+        repo.checks.dispatch(RELEASE_WORKFLOW, ref=base, inputs={"ref": stamping})
+    except ForgeError as error:
+        return [
+            f"  the forge refused the dispatch: {error}; uncut: {', '.join(missing)}"
+        ]
+    import time
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        new = [run for run in _wave_runs(repo) if run.id not in seen]
+        if new:
+            return [
+                f"  dispatched the wave at {stamping[:12]}: run {new[0].id};"
+                f" uncut: {', '.join(missing)}"
+            ]
+        time.sleep(interval)
+    return [
+        "  the dispatch was accepted but no wave run appeared within"
+        f" {timeout:.0f}s; re-run `{footman.prog()} workflow.release.dispatch`,"
+        " which reports a wave that has since appeared"
+    ]
 
 
 def pending_release_wave(root: Path, git: GitOps) -> tuple[str, tuple[str, ...]] | None:
@@ -655,16 +789,20 @@ def workflow_release(
         return
     print(f"  act: release train, from '{branch}'")
     pending = pending_release_wave(root, git)
+    repo = this_repository(root)
     if pending is not None:
         squash, missing = pending
         print(f"  release squash {squash[:12]} has uncut receipts:")
         for name in missing:
             print(f"    {name}")
-        print("  recovering the wave at the squash; nothing new prepares")
-        workflow_release_publish(ref=squash)
-        print("  wave recovered; re-run to release work newer than the squash")
+        # CI publishes, never this machine: the wave is dispatched
+        # at the squash, the duplicate-tolerant wave walks past what
+        # an earlier attempt already did, and nothing new prepares.
+        print("  dispatching the wave at the squash; nothing new prepares")
+        for line in dispatch_flow(root, repo, git):
+            print(line)
+        print("  re-run to release work newer than the squash")
         return
-    repo = this_repository(root)
     driver = ReleaseDriver(
         root,
         repo,
@@ -674,6 +812,25 @@ def workflow_release(
         force_unverified_base=force_unverified_base,
     )
     run_workflow(driver, repo, git)
+
+
+@release_group.task(name="dispatch")
+def workflow_release_dispatch() -> None:
+    """Dispatch the release wave for a merged, unpublished release; green otherwise.
+
+    The merge point's last task, and the recovery gesture by hand:
+    it reads the manifest at HEAD and the receipts on the remote, so
+    on a normal day it prints green, after a died merge run it
+    dispatches, and a wave in flight is reported with its run id.
+    """
+    from livery.workshop._forge_lane import this_repository
+    from livery.workshop._layers import workspace_root
+
+    root = workspace_root()
+    if root is None:
+        fail("no workspace: no workshop.toml above the working directory")
+    for line in dispatch_flow(root, this_repository(root), GitOps(root)):
+        print(line)
 
 
 @release_group.task(name="check-title", hidden=True)

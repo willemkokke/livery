@@ -104,6 +104,7 @@ def test_the_builtin_jobs_of_each_point(tmp_path: Path) -> None:
         "release-title",
         "deploy",
         "govern",
+        "dispatch",
     )
     assert _points.jobs_of(root, "nightly") == ()
     assert _points.jobs_of(root, "release") == ()

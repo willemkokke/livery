@@ -336,7 +336,15 @@ def test_the_gitea_shell_is_one_verb_per_job_and_only_event_filters(
     assert ".gitea/workflows/docs.yml" not in files
     workflow = yaml.safe_load(files[".gitea/workflows/ci.yml"])
     jobs = workflow["jobs"]
-    assert list(jobs) == ["check", "docs", "gate", "release-title", "deploy", "govern"]
+    assert list(jobs) == [
+        "check",
+        "docs",
+        "gate",
+        "release-title",
+        "deploy",
+        "govern",
+        "dispatch",
+    ]
     for name, job in jobs.items():
         runs = [step["run"] for step in job["steps"] if "run" in step]
         # One verb per job: the entry script, then ci.run, nothing else.
@@ -352,6 +360,22 @@ def test_the_gitea_shell_is_one_verb_per_job_and_only_event_filters(
     assert jobs["govern"]["if"] == "github.event_name == 'push'"
     assert "if" not in jobs["check"] and "if" not in jobs["release-title"]
     assert jobs["govern"]["steps"][0]["with"]["fetch-depth"] == 2
+    assert jobs["dispatch"]["if"] == "github.event_name == 'push'"
+    assert jobs["dispatch"]["needs"] == ["gate"]
+    # The wave is dispatch-only: no closed-pull-request trigger, no
+    # decision expression, the ref an input the jobs check out.
+    release = yaml.safe_load(files[".gitea/workflows/release.yml"])
+    assert list(release[True] if True in release else release["on"]) == [
+        "workflow_dispatch"
+    ]
+    assert "if" not in release["jobs"]["publish"]
+    assert "${{ inputs.ref }}" in files[".gitea/workflows/release.yml"]
+    assert "merge_commit_sha" not in files[".gitea/workflows/release.yml"]
+    # The wave's receipt push is the lane's: receipt tags are protected
+    # and the ambient token is bound (measured on the loop).
+    for step in release["jobs"]["publish"]["steps"]:
+        if step.get("uses", "").startswith("actions/checkout"):
+            assert step["with"]["token"] == "${{ secrets.FORGE_TOKEN }}"
 
 
 def test_every_leg_records_its_timings_and_the_gate_collects_before_it_decides(
