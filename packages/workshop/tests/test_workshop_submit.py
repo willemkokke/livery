@@ -510,7 +510,7 @@ def test_submit_fix_amends_rewrites_into_an_unpushed_head(
     # without changing the subject, or the pushed commit lies.
     monkeypatch.setattr(
         "livery.workshop._submit._gate",
-        lambda fix: (git.root / "work.txt").write_text("healed\n"),
+        lambda fix, **_: (git.root / "work.txt").write_text("healed\n"),
     )
     _submit(fake, git, gate=True, fix=True, armed=False, follow_to_verdict=False)
     assert git.is_clean()
@@ -526,7 +526,7 @@ def test_submit_fix_commits_rewrites_on_a_pushed_head(
     _submit(fake, git, armed=False, follow_to_verdict=False)  # pushed, PR open
     monkeypatch.setattr(
         "livery.workshop._submit._gate",
-        lambda fix: (git.root / "work.txt").write_text("healed\n"),
+        lambda fix, **_: (git.root / "work.txt").write_text("healed\n"),
     )
     _submit(fake, git, gate=True, fix=True, armed=False, follow_to_verdict=False)
     # A pushed commit is never amended: the fixes ride a follow-up
@@ -992,3 +992,110 @@ def test_the_rename_heal_skips_a_forge_that_names_no_contexts(
         == number
     )
     assert "nothing to heal" in capsys.readouterr().out
+
+
+# --- the gate narrows the way the CI legs do ---------------------------------
+
+
+def _recording_check(calls: list[dict[str, object]]):
+    def _check(affected: bool = False, fix: bool = False, base: str = "main") -> None:
+        calls.append({"affected": affected, "fix": fix, "base": base})
+
+    return _check
+
+
+def _declare(git: SubmitGit, contract: str) -> None:
+    """The contract rides the branch's one unpushed commit."""
+    (git.root / "workshop.toml").write_text(contract)
+    _git(git.root, "add", "-A")
+    _git(git.root, "commit", "--amend", "--no-edit")
+
+
+def test_the_gate_pays_the_whole_workspace_without_the_contract_key(
+    rig: tuple[FakeForge, SubmitGit],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # A contract without the key pays the full gate, with and without
+    # --fix, and the submit says which gate it ran and why.
+    fake, git = rig
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr("livery.workshop._quality.check", _recording_check(calls))
+    _declare(git, '[workspace]\n\n[ci]\nrunners = ["ubuntu-latest"]\n')
+    _submit(fake, git, gate=True, armed=False, follow_to_verdict=False)
+    assert calls == [{"affected": False, "fix": False, "base": "main"}]
+    out = capsys.readouterr().out
+    assert "gate: the whole workspace" in out
+    assert "affected-legs" in out
+    calls.clear()
+    _submit(fake, git, gate=True, fix=True, armed=False, follow_to_verdict=False)
+    assert calls == [{"affected": False, "fix": True, "base": "main"}]
+    assert "gate: the whole workspace" in capsys.readouterr().out
+
+
+def test_the_gate_narrows_against_the_base_when_the_legs_do(
+    rig: tuple[FakeForge, SubmitGit],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fake, git = rig
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr("livery.workshop._quality.check", _recording_check(calls))
+    _declare(git, "[workspace]\n\n[ci]\naffected-legs = true\n")
+    _git(git.root, "branch", "develop", "main")
+    _git(git.root, "push", "origin", "develop")
+    fake.push(
+        OWNER, NAME, "develop", sha=_git(git.root, "rev-parse", "develop").strip()
+    )
+    _submit(
+        fake,
+        git,
+        gate=True,
+        fix=True,
+        armed=False,
+        follow_to_verdict=False,
+        base="develop",
+    )
+    # The same narrowing the CI legs apply, against the branch the pull
+    # request merges into, with the fix mode the caller asked for.
+    assert calls == [{"affected": True, "fix": True, "base": "develop"}]
+    out = capsys.readouterr().out
+    assert "gate: the affected gate against origin/develop" in out
+    assert "as the CI legs run it" in out
+
+
+def test_the_self_heal_gate_narrows_the_same_way(
+    rig: tuple[FakeForge, SubmitGit],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A clean advance of main behind an armed submit heals through 17:
+    # integrate, gate again, push again. The second gate is the same
+    # affected gate, never a silent widening to the whole workspace.
+    # The fake merges a green armed PR whatever its distance from
+    # main, so the follow answers 17 once by hand, as a strict forge
+    # would.
+    fake, git = rig
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr("livery.workshop._quality.check", _recording_check(calls))
+    _declare(git, "[workspace]\n\n[ci]\naffected-legs = true\n")
+    other = git.root.parent / "other"
+    _git(git.root.parent, "clone", str(git.root.parent / "origin.git"), "other")
+    _git(other, "config", "user.email", "other@livery.local")
+    _git(other, "config", "user.name", "Other")
+    (other / "elsewhere.txt").write_text("independent\n")
+    _git(other, "add", ".")
+    _git(other, "commit", "-m", "feat: independent change")
+    _git(other, "push", "origin", "main")
+    answered: list[int] = []
+
+    def _follow(*args: object, **kwargs: object) -> None:
+        if not answered:
+            answered.append(EXIT_BEHIND)
+            raise SystemExit(EXIT_BEHIND)
+
+    monkeypatch.setattr("livery.workshop._submit.follow", _follow)
+    git.auto_settle = False  # CI never settles, so the PR waits for the heal
+    _submit(fake, git, gate=True, armed=True)
+    assert answered == [EXIT_BEHIND]
+    assert calls == [{"affected": True, "fix": False, "base": "main"}] * 2
+    assert git.behind_base("main") == 0  # the heal integrated the advance

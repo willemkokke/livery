@@ -1771,3 +1771,14 @@ None. Every ruling raised in this plan was closed in the review of
   member-only pull request's leg stored loop-echo's suite and the
   workspace's tests, and its union reused loop-native; main's full
   run 1190 stored all three units and judged both members.
+- 2026-09-09 (issue #372), an extension of the affected-legs ruling:
+  `fm submit`'s local gate is the gate the CI legs run. With
+  `[ci] affected-legs = true` it narrows to the affected packages
+  against the branch the pull request merges into, and says so;
+  without the key it pays the whole workspace and says that. The
+  self-heal gate after an integrate narrows the same way. `fm check
+  --affected` takes `--base` for the branch it narrows against, main
+  when absent. Measured today on this machine for a change in
+  toolroom and workshop tests: the whole gate 5m17s, the affected
+  gate 3m08s; a submit after `fm check --affected --fix` paid both,
+  and `fm submit --fix --armed` now pays the narrowed one once.
