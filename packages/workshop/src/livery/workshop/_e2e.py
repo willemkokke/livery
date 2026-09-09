@@ -496,6 +496,32 @@ def _eat_dev_wheels(root: Path, pins: dict[str, str]) -> str:
     return git.head_sha()
 
 
+def _watch_latest(kind: str, workflow: str, *, timeout: float = 900.0) -> None:
+    """Follow the newest run of *workflow* to its verdict; red fails verbatim."""
+    import time
+
+    forge, _ = _dev_forge(kind)
+    repo = forge.repository(E2E_OWNER, E2E_REPO)
+    deadline = time.monotonic() + timeout
+    while True:
+        runs = [run for run in repo.checks.runs() if run.workflow.endswith(workflow)]
+        latest = max(runs, key=lambda run: run.id, default=None)
+        if latest is not None and latest.status == "completed":
+            if latest.conclusion != "success":
+                fail(
+                    f"{workflow} run {latest.id} ended {latest.conclusion}:"
+                    f" {repo.web_url()}/actions/runs/{latest.id}"
+                )
+            print(f"  {workflow:<14} {latest.conclusion}")
+            return
+        if time.monotonic() >= deadline:
+            fail(
+                f"{workflow} did not complete within {timeout:.0f}s:"
+                f" {repo.web_url()}/actions"
+            )
+        time.sleep(5)
+
+
 def _watch(
     kind: str,
     url: str,
@@ -817,7 +843,12 @@ def _release_act(root: Path, kind: str) -> None:
         # whether the wave failed or is merely slow.
         _watch(kind, ALIAS_URL, squash, require=("release.yml",))
     else:
-        print("  main unmoved: the recovery arm published; receipts judge")
+        # The recovery arm dispatched the wave at the stamping commit,
+        # which is not main's tip, so the newest release run is the
+        # one to follow: its red surfaces verbatim instead of a blind
+        # registry wait that expires on a slow wheels leg.
+        print("  main unmoved: the recovery arm dispatched; following its wave")
+        _watch_latest(kind, "release.yml")
     _, token = _dev_forge(kind)
     registry = SimpleRegistry(
         f"{ALIAS_URL}/api/packages/{E2E_OWNER}/pypi/simple", token=token
