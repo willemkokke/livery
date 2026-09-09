@@ -286,3 +286,126 @@ def test_forge_lane_reads_the_contract_and_the_remote(
     (root / "workshop.toml").write_text("[workspace]\n")
     with pytest.raises(_FAILURES):
         _forge_lane.this_repository(root)
+
+
+# --- the points shells ----------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _outside_ci(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in ("GITHUB_ACTIONS", "GITEA_ACTIONS", "GITLAB_CI", "GITHUB_EVENT_NAME"):
+        monkeypatch.delenv(name, raising=False)
+
+
+def test_ci_run_spawns_the_jobs_entries(
+    rig: tuple[FakeForge, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from types import SimpleNamespace
+
+    import livery.footman as footman
+
+    seen: list[list[str]] = []
+
+    def green(argv: list[str], **_: object) -> SimpleNamespace:
+        seen.append(argv)
+        return SimpleNamespace(code=0)
+
+    monkeypatch.setattr(footman, "run", green)
+    _ci_tasks.ci_run(point="gate", job="docs")
+    assert seen == [["fm", "docs.build"]]
+    assert "gate/docs: docs.build (builtin)" in capsys.readouterr().out
+    with pytest.raises(_FAILURES, match="has no job 'nope'"):
+        _ci_tasks.ci_run(point="gate", job="nope")
+
+
+def test_ci_verdict_outside_ci_and_inside(
+    rig: tuple[FakeForge, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    fake, _root = rig
+    with pytest.raises(_FAILURES, match="not a CI run"):
+        _ci_tasks.ci_verdict(needs="gate")
+    sha = fake.push(OWNER, NAME, "feat/1-thing")
+    fake.settle(OWNER, NAME, sha)
+    run = fake.repository(OWNER, NAME).checks.runs(head_sha=sha)[0]
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_RUN_ID", str(run.id))
+    monkeypatch.setenv("GITHUB_SHA", sha)
+    monkeypatch.setenv("GITHUB_JOB", "verdict")
+    _ci_tasks.ci_verdict(needs="gate")
+    assert "green: gate succeeded" in capsys.readouterr().out
+    # A needed job the forge does not list is red, never assumed.
+    with pytest.raises(_FAILURES, match="check: not among the run's jobs"):
+        _ci_tasks.ci_verdict(needs="check")
+    monkeypatch.setenv("GITHUB_RUN_ID", "999999")
+    with pytest.raises(_FAILURES, match="lists no run 999999"):
+        _ci_tasks.ci_verdict(needs="gate")
+
+
+def test_the_store_shells_outside_ci(
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    _ci_tasks.ci_metrics_leg(job="check (a, b)", label="check-a-b")
+    _ci_tasks.ci_metrics_collect()
+    _ci_tasks.ci_timings()
+    _ci_tasks.ci_janitor()
+    out = capsys.readouterr().out
+    assert "not a CI run: the leg's timing row is written by CI only" in out
+    assert "not a CI run: the run's timing rows are collected by CI only" in out
+    assert "no timing rows yet" in out
+    assert (
+        "refs/workshop/run/*" in out
+        or "kept" in out
+        or "within its window" in out
+        or out
+    )
+
+
+def test_configure_if_changed_classifies_its_own_commit(
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop._workflow_tasks import contract_changed, workflow_configure
+
+    _, root = rig
+    (root / "packages" / "thing" / "src" / "livery" / "thing" / "mod.py").write_text(
+        "x = 2\n"
+    )
+    _git(root, "commit", "-am", "feat: code only")
+    assert contract_changed(root) == ()
+    workflow_configure(if_changed=True)
+    assert "no contract or owners path changed" in capsys.readouterr().out
+    (root / "workshop.toml").write_text("[workspace]\n# governed\n")
+    (root / "packages" / "thing" / "workshop.toml").write_text(
+        'type = "python"\nname = "livery-thing"\n# governed\n'
+    )
+    _git(root, "commit", "-am", "chore: contracts")
+    assert contract_changed(root) == ("packages/thing/workshop.toml", "workshop.toml")
+
+
+def test_check_title_is_green_off_a_pull_request_and_off_a_release_branch(
+    rig: tuple[FakeForge, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._release_driver import workflow_release_check_title
+
+    monkeypatch.delenv("GITHUB_EVENT_PATH", raising=False)
+    workflow_release_check_title()
+    assert "not a pull request: no title to check" in capsys.readouterr().out
+    event = tmp_path / "event.json"
+    event.write_text(
+        '{"pull_request": {"title": "feat: t",'
+        ' "head": {"ref": "feat/1-thing", "sha": "a"}}}'
+    )
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event))
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_REF", "refs/pull/1/merge")
+    workflow_release_check_title()
+    assert (
+        "feat/1-thing is not a release branch: nothing to check"
+        in capsys.readouterr().out
+    )

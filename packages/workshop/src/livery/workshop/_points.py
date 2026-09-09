@@ -177,8 +177,7 @@ def _spawn(argv: list[str]) -> int:
     """Run one entry as a child of the runner's own command; its exit code."""
     from livery.footman import run
 
-    result = run(argv, nofail=True)
-    return int(result.code)
+    return run(argv, nofail=True).code
 
 
 def run_point(

@@ -392,6 +392,23 @@ def test_every_leg_records_its_timings_and_the_gate_collects_before_it_decides(
             assert workflow["jobs"]["gate"]["permissions"] == {"contents": "write"}
 
 
+def test_apply_retires_the_workflows_the_emission_folded_away(tmp_path: Path) -> None:
+    # A workspace born before the fold keeps a governance.yml the
+    # emitter no longer owns; the apply deletes it and names it.
+    from livery.workshop._templates import apply_generated
+
+    root = _contract_root(tmp_path, "gitea")
+    stale = root / ".gitea" / "workflows" / "governance.yml"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("name: governance\n")
+    changed = apply_generated(root)
+    assert ".gitea/workflows/governance.yml (retired)" in changed
+    assert not stale.exists()
+    assert (root / ".gitea" / "workflows" / "ci.yml").is_file()
+    # A second apply finds nothing to retire.
+    assert not any("retired" in name for name in apply_generated(root))
+
+
 def test_the_rendered_tasks_mount_the_profiler(tmp_path: Path) -> None:
     # The emitted legs run `fm --profile`; the flag exists only where
     # the tasks file mounts footman.profile, so the render and the

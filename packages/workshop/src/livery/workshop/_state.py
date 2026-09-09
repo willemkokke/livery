@@ -48,6 +48,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import livery.footman as footman
 from livery import toolroom
@@ -111,6 +112,24 @@ class RunContext:
     head_sha: str = ""
 
 
+def event_payload(environ: Mapping[str, str] | None = None) -> dict[str, Any] | None:
+    """The runner's event payload, or ``None`` when there is none to read.
+
+    GitHub and Gitea write the event that started the run to the file
+    ``GITHUB_EVENT_PATH`` names; a payload that is missing or does not
+    parse reads as none, so a caller falls back rather than fails.
+    """
+    env = os.environ if environ is None else environ
+    path = env.get("GITHUB_EVENT_PATH", "")
+    if not path:
+        return None
+    try:
+        payload = json.loads(Path(path).read_text("utf-8"))
+    except (OSError, ValueError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def _event_head_sha(env: Mapping[str, str]) -> str:
     """The pull request's head from the event payload, or the pushed commit.
 
@@ -118,16 +137,11 @@ def _event_head_sha(env: Mapping[str, str]) -> str:
     pushed commit: the lookup then works on a push and misses on a
     pull request, which the collect names rather than fails on.
     """
-    path = env.get("GITHUB_EVENT_PATH", "")
-    if path:
-        try:
-            payload = json.loads(Path(path).read_text("utf-8"))
-        except (OSError, ValueError):
-            payload = None
-        if isinstance(payload, dict):
-            head = (payload.get("pull_request") or {}).get("head") or {}
-            if isinstance(head, dict) and head.get("sha"):
-                return str(head["sha"])
+    payload = event_payload(env)
+    if payload is not None:
+        head = (payload.get("pull_request") or {}).get("head") or {}
+        if isinstance(head, dict) and head.get("sha"):
+            return str(head["sha"])
     return env.get("GITHUB_SHA", "")
 
 
