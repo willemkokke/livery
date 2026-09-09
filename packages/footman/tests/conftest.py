@@ -157,10 +157,15 @@ def _clean_abort_state():
     paths, silently read back empty output. Seen four times in two days
     as machine-dependent flakes; order-dependent, so no single test
     reproduces it. run_plan resets the latch at run start for real runs;
-    this does the same for every test.
+    this does the same for every test, and clears it again afterwards:
+    the worker goes on to run other packages' tests, which spawn bare
+    run() children of their own and have no fixture of this kind, so a
+    latch left by the last footman test on the worker reaped a
+    workshop birth test's `git init` (code -15) under load.
     """
     context.reset_abort()
     yield
+    context.reset_abort()
 
 
 @pytest.hookimpl(wrapper=True)
