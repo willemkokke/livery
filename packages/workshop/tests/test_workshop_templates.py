@@ -267,7 +267,7 @@ def test_the_emitters_call_the_running_brand(
             # env-armed, so not even a module spelling remains.
             # The trace's file name is footman's own, fixed under every
             # brand, so it is the one `fm` a branded emission may carry.
-            assert re.search(r"\bfm\b(?!-profile\.json)", content) is None, path
+            assert re.search(r"\bfm\b(?!-(profile|gate)\.json)", content) is None, path
 
 
 def test_the_default_brand_emits_fm(tmp_path: Path) -> None:
@@ -988,7 +988,7 @@ def test_the_gitea_lane_meters_its_legs_and_unions_them_in_the_gate_job(
     run = next(step for step in check if step.get("name") == "Check")
     assert run["env"]["COVERAGE_PROCESS_START"] == "pyproject.toml"
     upload = next(step for step in check if step.get("name") == "Leg coverage data")
-    assert upload["with"]["path"] == ".coverage"
+    assert upload["with"]["path"].split() == [".coverage", "fm-gate.json"]
     assert upload["with"]["if-no-files-found"] == "error"
     gate = workflow["jobs"]["gate"]["steps"]
     download = next(

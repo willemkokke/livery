@@ -568,11 +568,15 @@ jobs:
         run: >-
           {prog} ci.run --point=gate --job=check
           --os="${{{{ matrix.os }}}}" --python="${{{{ matrix.python }}}}"
+      # The data and the scope the gate ran (fm-gate.json): the union
+      # judges only the packages a leg's scope covered.
       - name: Leg coverage data
         uses: {GITEA_UPLOAD}
         with:
           name: coverage-${{{{ matrix.os }}}}-${{{{ matrix.python }}}}
-          path: .coverage
+          path: |
+            .coverage
+            fm-gate.json
           include-hidden-files: true
           if-no-files-found: error
       # The run as a Chrome trace, one artifact per leg: every task,

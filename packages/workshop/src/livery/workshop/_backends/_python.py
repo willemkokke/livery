@@ -313,14 +313,26 @@ COVERAGE_DATA = "coverage-data"
 
 
 def combine_leg(root: Path) -> None:
-    """Combine the leg's per-process data files into ``.coverage``; refuse on none."""
+    """Combine the leg's per-process data files into ``.coverage``.
+
+    Refuses when a leg that ran its gate left no data, naming the
+    variable that arms the meter; a leg whose gate skipped (a tree
+    already proved, or nothing affected) legitimately measured
+    nothing, and says so instead.
+    """
+    from livery.workshop._verified import NOTHING, VERIFIED, read_marker
+
     parts = sorted(root.glob(".coverage.*"))
+    scope = read_marker(root)["scope"]
     if not parts and not (root / ".coverage").is_file():
-        fail(
-            "this leg left no coverage data: nothing was metered. The leg's"
-            " runner sets COVERAGE_PROCESS_START=pyproject.toml so every"
-            " python starts metered; without it there is nothing to union."
-        )
+        if scope not in (VERIFIED, NOTHING):
+            fail(
+                "this leg left no coverage data: nothing was metered. The leg's"
+                " runner sets COVERAGE_PROCESS_START=pyproject.toml so every"
+                " python starts metered; without it there is nothing to union."
+            )
+        print(f"  coverage: no data, the gate ran {scope!r}; nothing to combine")
+        return
     if parts:
         result = toolroom.coverage.opts(cwd=root, nofail=True, recorded=False)(
             "combine"
