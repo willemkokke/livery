@@ -9,9 +9,10 @@ Phase 2 landed 2026-09-09 in three slices: the profile mount and
 the profiled legs with their trace artifacts (issue #314), the CI
 state store on `refs/workshop/*` (issue #317), and the metrics rows
 with `fm ci.timings` (issue #319, the pull-request lookup fixed in
-#321). Phase 3 began the same day: the points shell landed on the
-gitea emitter (issue #322); the release dispatch, the wheels
-matrix, nightly's adoption, and the kebab-case keys follow.
+#321). Phase 3 began the same day: the points shell (issue #322)
+and the merge-point release dispatch (issue #325) landed on the
+gitea emitter; the wheels matrix, nightly's adoption, and the
+kebab-case keys follow.
 Absorbs #267 (the speed pass), #286 (no logic in YAML), #270 (token
 publishing), #273 (the act names itself), and the structural finding of
 the phase-4 post-mortem (notes/20260906-phase-4-post-mortem.md): the
@@ -798,6 +799,38 @@ nightly).
   shape until the dispatch slice; the wheels matrix, nightly's
   adoption, and the kebab-case keys are the slices after; the
   GitHub emitter keeps its shape until phase 6.
+- The second slice landed 2026-09-09 (issue #325): the merge point
+  dispatches the wave. `fm workflow.release.dispatch`, listed, is
+  the merge point's last job and the recovery gesture by hand: it
+  reads the manifest at HEAD and is green when there is none or when
+  every receipt is on the remote; a wave in flight is reported green
+  with its run id; otherwise it dispatches `release.yml` on the base
+  branch with the commit that stamped the manifest as the `ref`
+  input (both forges dispatch on a branch or tag, never a bare sha,
+  so the input carries the commit) and confirms the run id that
+  appears, or says why not. The merged-but-unpublished recovery
+  inside `workflow.release` dispatches the same way instead of
+  publishing from the machine. The gitea `release.yml` keeps
+  `workflow_dispatch` with the `ref` input as its only trigger, so
+  `train_if` is gone and the gitea lane carries no decision
+  expression at all. The armed engine waits after the merge for a
+  wave run newer than the merge, in any state, and reports done on
+  its id; its own tests pass a zero wave timeout, which reports the
+  merge and names the dispatch verb, because the fake forge has no
+  merge point. Measured on the loop with the receipt deleted first:
+  the merge point's dispatch job dispatched a wave on its own (run
+  1031), the recovery path dispatched another (1032), and both
+  failed at the tag push with "Tag packages/loop-echo/v0.1.0 is
+  protected": the wave pushed its receipt through the checkout's
+  ambient token, and #305's protection binds everyone but the
+  configuring lane, which no wave had met since that protection
+  landed. The gitea release jobs now check out with the provided
+  `FORGE_TOKEN`, the lane on the whitelist, and the next pass cut
+  the receipt through the dispatched wave (run 1038) with the merge
+  point's dispatch job green beside it. Also measured: the wave runs
+  the stamping commit's own lock, so a dispatch at an old squash
+  runs that squash's toolchain, which is the released tree's own and
+  the intended shape.
 - Acceptance: the census in #286 re-run shows only event filters; a
   merged PR creates three run entries, none skipped; drift gate
   covers every workflow file in the repo; a task scheduled through
@@ -1282,3 +1315,12 @@ None. Every ruling raised in this plan was closed in the review of
   from the forge, never from the YAML context. `release.yml` keeps
   its merge trigger until the dispatch slice, so `train_if` is the
   one decision expression left on the gitea lane.
+- 2026-09-09: the wave's receipt push is the lane's. Receipt tags
+  are protected and gitea's one whitelist holds the configuring
+  lane alone, so a wave pushing through the checkout's ambient token
+  is refused; the gitea release jobs check out with the provided
+  `FORGE_TOKEN`, which the token inventory already lists for what
+  the ambient token structurally cannot reach. Measured on the loop
+  the day the receipt was first recut after the protection. GitHub's
+  arm is phase 6's to measure, where the ambient token and rulesets
+  differ.

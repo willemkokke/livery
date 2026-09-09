@@ -801,7 +801,9 @@ def _require_receipt_protected(root: Path, tag: str) -> None:
 
     import livery.toolroom as toolroom
 
-    toolroom.git.opts(cwd=root, nofail=True)("fetch", "origin", "tag", tag)
+    # Forced: a receipt recut by a later wave is a new tag object, and
+    # the workspace may still hold the one an earlier pass fetched.
+    toolroom.git.opts(cwd=root, nofail=True)("fetch", "--force", "origin", "tag", tag)
     denied = toolroom.git.opts(cwd=root, nofail=True)(
         "push", "origin", f":refs/tags/{tag}"
     )
