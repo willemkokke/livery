@@ -273,6 +273,7 @@ def metrics_leg_flow(root: Path, *, job: str, label: str, trace: Path) -> None:
 
 @metrics.task(name="leg")
 def ci_metrics_leg(
+    *,
     job: Annotated[str, doc("the job's name as the forge lists it")],
     label: Annotated[str, doc("the per-run ref segment for this leg")],
     trace: Annotated[Path, doc("the trace the profiled gate wrote")] = Path(
