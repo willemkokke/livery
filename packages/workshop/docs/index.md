@@ -49,7 +49,10 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
   a squash of a branch on its tip, skips the gate in seconds. A
   narrowed leg never stamps, and the release train reads the same
   record before it waits on main's run.
-- `fm submit`: get the branch onto the remote, verified; `--armed`
+- `fm submit`: get the branch onto the remote, verified. Its local
+  gate is the one the CI legs run: the whole workspace, or the
+  affected gate against the base branch when the contract declares
+  `[ci] affected-legs`, and it says which. `--armed`
   lets it land, `--fix` heals mechanical gate findings into the
   branch, and the follow classifies the verdict with stable exit
   codes. `fm submit.merge` lands a green, deliberately-unarmed PR;

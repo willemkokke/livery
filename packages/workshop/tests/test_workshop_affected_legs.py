@@ -94,6 +94,36 @@ def test_a_missing_merge_base_falls_open_to_everything_with_gits_words(
 # --- the happy path ----------------------------------------------------------
 
 
+def test_a_local_affected_gate_narrows_against_the_base_it_is_given(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Outside CI the caller names the base: the submit hands over the
+    # branch its pull request merges into. Without one, main.
+    root = _root(tmp_path, "affected-legs = true\n")
+    monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: root)
+    monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
+    bases: list[str] = []
+
+    def _subset(base: str = "main") -> tuple[()]:
+        bases.append(base)
+        return ()
+
+    monkeypatch.setattr("livery.workshop._quality._affected", _subset)
+    reasons: list[str] = []
+
+    def _reason(base: str) -> str:
+        reasons.append(base)
+        return "the branch changes no files"
+
+    monkeypatch.setattr("livery.workshop._quality._nothing_reason", _reason)
+    _quality.check(affected=True, base="develop")
+    assert bases == ["develop"]
+    assert reasons == ["develop"]
+    assert "nothing affected: the branch changes no files" in capsys.readouterr().out
+    _quality.check(affected=True)
+    assert bases == ["develop", "main"]
+
+
 def test_a_pull_request_with_a_declared_key_narrows_against_its_base(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

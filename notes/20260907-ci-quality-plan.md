@@ -1798,6 +1798,17 @@ None. Every ruling raised in this plan was closed in the review of
   only a resident process would remove; the pwsh completion tests,
   one shell each at pwsh's own price; and the git-heavy workshop
   tests (issue #358).
+- 2026-09-09 (issue #372), an extension of the affected-legs ruling:
+  `fm submit`'s local gate is the gate the CI legs run. With
+  `[ci] affected-legs = true` it narrows to the affected packages
+  against the branch the pull request merges into, and says so;
+  without the key it pays the whole workspace and says that. The
+  self-heal gate after an integrate narrows the same way. `fm check
+  --affected` takes `--base` for the branch it narrows against, main
+  when absent. Measured today on this machine for a change in
+  toolroom and workshop tests: the whole gate 5m17s, the affected
+  gate 3m08s; a submit after `fm check --affected --fix` paid both,
+  and `fm submit --fix --armed` now pays the narrowed one once.
 - 2026-09-09 (issue #375), an extension of the prose class: the
   site's own files at the root, `zensical.toml` and the `docs/` tree,
   affect no package. Only the site build reads them, and it runs on

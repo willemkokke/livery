@@ -245,6 +245,7 @@ def check(
         bool, doc("scope the gate to the branch's affected packages")
     ] = False,
     fix: Forward[bool] = False,
+    base: Annotated[str, doc("the branch --affected narrows against")] = "main",
 ) -> None:
     """Run the gate: format, lint, types, tests, render gate, in parallel.
 
@@ -257,7 +258,9 @@ def check(
     changes can influence (their dependents' closure). A change
     outside the packages configures every gate, so the narrowing
     falls back to everything; ty and pyrefly always check their
-    configured whole either way.
+    configured whole either way. ``--base`` names the branch the
+    narrowing compares against, ``main`` when absent; inside CI a
+    pull request's own base wins.
 
     ``--fix`` refuses inside CI: a runner's checkout is judged,
     never rewritten, because a fix there mutates a copy nobody
@@ -302,13 +305,13 @@ def check(
     if ci_base:
         print(f"  affected-legs: the scoped gate against origin/{ci_base}")
         affected = True
-    subset = _affected(ci_base or "main") if affected else None
+    subset = _affected(ci_base or base) if affected else None
     if affected and subset is not None:
         packages = _packages()
         if root_for_ci is not None and run is not None:
             subset = _with_unstored_suites(root_for_ci, run, packages, subset)
         if not subset:
-            print(f"  nothing affected: {_nothing_reason(ci_base or 'main')}")
+            print(f"  nothing affected: {_nothing_reason(ci_base or base)}")
             if root_for_ci is not None and run is not None:
                 _verified.write_marker(root_for_ci, _verified.NOTHING, leg=run.leg)
             return
