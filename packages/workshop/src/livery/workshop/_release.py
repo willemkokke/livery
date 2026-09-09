@@ -383,8 +383,10 @@ def release_replay(
             f"no member {member!r} under packages/; the members are"
             f" {', '.join(sorted(packages)) or 'none'}"
         )
+    # The target's url is the read index itself, the wave's probe
+    # reads it the same way; the install points uv at the same index.
     target = resolve_registry(root, "python")
-    registry = SimpleRegistry(target.url.rstrip("/") + "/simple", token=target.token)
+    registry = SimpleRegistry(target.url, token=target.token)
     repo = None
     if report or run_context() is not None:
         from livery.workshop._forge_lane import this_repository
@@ -396,7 +398,7 @@ def release_replay(
         package,
         python=python or f"{sys.version_info.major}.{sys.version_info.minor}",
         registry=registry,
-        index=target.url.rstrip("/") + "/simple",
+        index=target.url,
         extras=extras,
         repo=repo,
     )
