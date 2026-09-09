@@ -324,7 +324,9 @@ def test_the_driver_prepares_commits_and_the_engine_lands_it(
         lambda _root, plan, dirs: None,
     )
     members = resolve_set(root, ("core", "tool"))
-    driver = ReleaseDriver(root, fake.repository(OWNER, NAME), rig, members, armed=True)
+    driver = ReleaseDriver(
+        root, fake.repository(OWNER, NAME), rig, members, armed=True, wave_timeout=0
+    )
     run_workflow(driver, fake.repository(OWNER, NAME), rig, current_user="fake-user")
     pr = fake.repository(OWNER, NAME).pr.get(1)
     assert pr is not None and pr.merged
@@ -358,7 +360,9 @@ def test_a_release_already_stamped_on_the_base_reprepares_cleanly(
         lambda _root, plan, dirs: None,
     )
     members = resolve_set(root, ("core",))
-    driver = ReleaseDriver(root, fake.repository(OWNER, NAME), rig, members, armed=True)
+    driver = ReleaseDriver(
+        root, fake.repository(OWNER, NAME), rig, members, armed=True, wave_timeout=0
+    )
     run_workflow(driver, fake.repository(OWNER, NAME), rig, current_user="fake-user")
     # The squash landed the stamps on main; the publish never ran, so
     # a second armed run re-prepares the same release. The merged
@@ -372,7 +376,9 @@ def test_a_release_already_stamped_on_the_base_reprepares_cleanly(
     sha = rig.remote_head("main")
     fake.settle(OWNER, NAME, sha)
     members = resolve_set(root, ("core",))
-    driver = ReleaseDriver(root, fake.repository(OWNER, NAME), rig, members, armed=True)
+    driver = ReleaseDriver(
+        root, fake.repository(OWNER, NAME), rig, members, armed=True, wave_timeout=0
+    )
     run_workflow(driver, fake.repository(OWNER, NAME), rig, current_user="fake-user")
     pr = fake.repository(OWNER, NAME).pr.get(2)
     assert pr is not None

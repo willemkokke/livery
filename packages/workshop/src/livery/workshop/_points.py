@@ -67,9 +67,9 @@ class Entry:
 #: The workshop's own schedule. The gate's check job runs the gate
 #: profiled and records the leg's timing row; its verdict job
 #: collects the run's rows, then judges the jobs it needs. The merge
-#: point adds the deploy and the governance reconcile, which
-#: classifies its own commit and exits fast when no contract path
-#: changed.
+#: point adds the deploy, the governance reconcile, which classifies
+#: its own commit and exits fast when no contract path changed, and
+#: the release dispatch, green unless a merged release is unpublished.
 BUILTIN: tuple[Entry, ...] = (
     Entry("gate", "check", "check", profiled=True),
     Entry("gate", "check", "ci.metrics.leg", ("--job={display}", "--label={label}")),
@@ -80,6 +80,7 @@ BUILTIN: tuple[Entry, ...] = (
     Entry("merge", "deploy", "docs.build"),
     Entry("merge", "deploy", "docs.publish"),
     Entry("merge", "govern", "workflow.configure", ("--if-changed",)),
+    Entry("merge", "dispatch", "workflow.release.dispatch"),
 )
 
 #: A point whose jobs include another point's: the merge point runs

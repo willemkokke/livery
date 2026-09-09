@@ -625,6 +625,22 @@ jobs:
         env:
           FORGE_ADMIN_TOKEN: ${{{{ secrets.FORGE_ADMIN_TOKEN }}}}
         run: {prog} ci.run --point=merge --job=govern
+  # The release wave is dispatched from here, after main's own
+  # verdict: the verb reads the manifest at HEAD and the receipts on
+  # the remote, and is green unless a merged release is unpublished.
+  dispatch:
+    if: github.event_name == 'push'
+    needs: [{context}]
+    runs-on: {first}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The commit that stamped the manifest can be far back.
+          fetch-depth: 0
+{enter}      - name: Dispatch
+        env:
+          FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
+        run: {prog} ci.run --point=merge --job=dispatch
 """
 
 
@@ -634,15 +650,11 @@ def _gitea_release(answers: dict[str, Any], prog: str) -> str:
     enter = _enter_step()
     wheels = _wants_wheel_matrix(answers)
     runners = _csv(list(answers.get("runners", ["ubuntu-latest"])))
-    train_if = """>-
-      github.event.pull_request.merged == true &&
-      startsWith(github.event.pull_request.head.ref, 'workflow/release/')"""
     wheels_job = (
         f"""  # Every declared runner's wheels, built before the wave and
   # collected as artifacts. linux arm waits on a docker-capable
   # runner, the container seam's known constraint.
   wheels:
-    if: {train_if}
     strategy:
       fail-fast: false
       matrix:
@@ -651,12 +663,12 @@ def _gitea_release(answers: dict[str, Any], prog: str) -> str:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{{{ github.event.pull_request.merge_commit_sha }}}}
+          ref: ${{{{ inputs.ref }}}}
           fetch-depth: 0
 {enter}      - name: Build this platform's wheels
         run: >-
           {prog} release.wheels
-          --ref="${{{{ github.event.pull_request.merge_commit_sha }}}}"
+          --ref="${{{{ inputs.ref }}}}"
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-${{{{ matrix.runner }}}}
@@ -680,21 +692,24 @@ def _gitea_release(answers: dict[str, Any], prog: str) -> str:
     prebuilt_flag = " --prebuilt" if wheels else ""
     workflow = f"""name: release
 
-# The merge-triggered train, token publishing (Gitea has no trusted
-# publishing): the wave publishes the squash and cuts receipt tags
-# after the index confirms each member.
+# The wave, dispatched by the merge point at the commit that stamped
+# the release manifest, and by hand as the recovery gesture. Token
+# publishing (Gitea has no trusted publishing): the wave publishes
+# the ref and cuts receipt tags after the index confirms each member.
 on:
-  pull_request:
-    types: [closed]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: the release squash to publish
+        required: true
 
 jobs:
 {wheels_job}  publish:
-    if: {train_if}
 {needs_wheels}    runs-on: {first}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{{{ github.event.pull_request.merge_commit_sha }}}}
+          ref: ${{{{ inputs.ref }}}}
           fetch-depth: 0
 {collect_step}{rung}{enter}      # PYTHON_PUBLISH_INDEX and PYTHON_REGISTRY_URL come from the
       # committed .repo.env through the env cascade; only the secrets
@@ -706,7 +721,7 @@ jobs:
           FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
         run: >-
           {prog} workflow.release.publish{prebuilt_flag}
-          --ref="${{{{ github.event.pull_request.merge_commit_sha }}}}"
+          --ref="${{{{ inputs.ref }}}}"
 """
     publisher = str(answers.get("templates_publisher", ""))
     if not answers.get("templates_artifact") or not publisher:
@@ -724,7 +739,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{{{ github.event.pull_request.merge_commit_sha }}}}
+          ref: ${{{{ inputs.ref }}}}
 {enter}      - name: Publish the template artifact
         env:
           FORGE_TOKEN: ${{{{ secrets.FORGE_TOKEN }}}}
