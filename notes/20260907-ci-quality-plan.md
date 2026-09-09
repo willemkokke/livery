@@ -16,7 +16,9 @@ contract config (issue #329), the kebab-case keys with the one
 contract loader (issue #331), and the wheels matrix with the loop's
 nanobind member (issue #335) landed on the gitea emitter: phase 3
 is complete. Phase 4 began the same day with affected mode in the
-check legs behind `[ci] affected-legs` (issue #338). The
+check legs behind `[ci] affected-legs` (issue #338) and the
+verified-tree record that lets main's run skip a tree its pull
+request already proved (issue #340). The
 entry-points race (#263) has its root cause and fix (the completion
 test healing the real project's environment mid-suite; the dev
 build leaving editables stale).
@@ -1021,7 +1023,21 @@ guessed. The candidate list, from what is already known:
   train's `require_verified_base` reads the same record, so a
   release off a just-merged main starts at once. The record is
   advisory in the safe direction only: a lost stamp reruns the
-  gate, never skips it.
+  gate, never skips it. Landed 2026-09-09 (issue #340):
+  `livery.workshop._verified` is the record, one file per tree id
+  on `workshop/verified` (window 200), stamped by the gate job's
+  `ci.verified.stamp` entry after `ci.verdict`, so only a green run
+  reaches it. Each check leg leaves its scope in `fm-gate.json`
+  beside its trace (`full`, `affected` with the packages,
+  `nothing`, or `verified`), the metrics rows carry it per job,
+  and the stamp says `full` only when every check leg ran the
+  whole gate: a pull request narrowed by `affected-legs` leaves no
+  stamp. `fm check` in CI reads the record before anything else
+  and ends green on a full entry for its own tree, printing the run
+  that proved it; every other answer runs the gate, an unreadable
+  store or a foreign entry with its reason printed. The release
+  train's `require_verified_base` reads the record before it waits
+  on main's run. Proven on the loop the same day: the setup pull request's run ran the full gate and its gate job recorded the tree (run 1121); main's run after the squash printed the record's line and ended its check leg in 0.0 s (run 1122); the narrowed member-only pull request's gate job declined to stamp, naming the leg (run 1123), and main's run after its squash paid the full gate (run 1124).
 - Caching, measured then widened. Today setup-uv restores only uv's
   own cache, one key per leg. That already covers more than it
   looks: every checker rides the lock's dev group, so their installs
@@ -1505,3 +1521,13 @@ None. Every ruling raised in this plan was closed in the review of
   cost under a minute together. The check jobs fetch full history
   rather than a bounded depth, the one shape that cannot miss a
   merge base.
+- 2026-09-09: the verified record carries the legs' scope, stated
+  as the recommended form before the build and not yet ruled. With
+  affected mode on a pull request, its squash's tree equals the
+  tree the narrowed legs checked, so a scope-blind stamp would let
+  main skip a gate nobody ran in full; the leg's marker and the
+  metrics row are the transport, and the stamp verb reads the run's
+  collected row rather than the legs' refs, which the collect step
+  has already dropped. The stamp is a builtin entry after the
+  verdict rather than part of it, so the verdict stays a judgement
+  and the record a consequence.
