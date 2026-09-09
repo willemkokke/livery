@@ -87,7 +87,7 @@ def test_the_mount_rebuilds_whole(tmp_path: Path) -> None:
 def test_the_config_carries_the_contract_and_the_nav(tmp_path: Path) -> None:
     root = _workspace(
         tmp_path,
-        docs_table='[docs]\ntitle = "Acme"\nsite_url = "https://docs.acme.example/home/"\n',
+        docs_table='[docs]\ntitle = "Acme"\nsite-url = "https://docs.acme.example/home/"\n',
     )
     config = zensical_config(root)
     parsed = tomllib.loads(config)
@@ -625,7 +625,7 @@ def test_the_scoped_config_carries_chrome_and_one_section(tmp_path: Path) -> Non
 
     root = _workspace(
         tmp_path,
-        docs_table='[docs]\ntitle = "Acme"\nsite_url = "https://docs.acme.example/home/"\n',
+        docs_table='[docs]\ntitle = "Acme"\nsite-url = "https://docs.acme.example/home/"\n',
     )
     config = scoped_config(root, named_package(root, "core"))
     parsed = toml.loads(config)
@@ -881,14 +881,14 @@ def test_broken_extras_declarations_refuse(tmp_path: Path) -> None:
     from livery.workshop._docs import package_docs_extras
 
     root = _workspace(tmp_path)
-    _declare_generators(root, "core", 'extra_css = "not-a-list"\n')
-    with pytest.raises(BaseException, match="extra_css"):
+    _declare_generators(root, "core", 'extra-css = "not-a-list"\n')
+    with pytest.raises(BaseException, match="extra-css"):
         package_docs_extras(_package(root, "core"))
-    _declare_generators(root, "core", "extra_javascript = [3]\n")
-    with pytest.raises(BaseException, match="extra_javascript"):
+    _declare_generators(root, "core", "extra-javascript = [3]\n")
+    with pytest.raises(BaseException, match="extra-javascript"):
         package_docs_extras(_package(root, "core"))
     _declare_generators(
-        root, "core", 'extra_javascript = [{ path = "a.js", rogue = true }]\n'
+        root, "core", 'extra-javascript = [{ path = "a.js", rogue = true }]\n'
     )
     with pytest.raises(BaseException, match="rogue"):
         package_docs_extras(_package(root, "core"))
@@ -901,8 +901,8 @@ def test_declared_extras_render_at_the_mounted_paths(tmp_path: Path) -> None:
     _declare_generators(
         root,
         "core",
-        'extra_css = ["assets/core.css"]\n'
-        'extra_javascript = [\n    "assets/plain.js",\n'
+        'extra-css = ["assets/core.css"]\n'
+        'extra-javascript = [\n    "assets/plain.js",\n'
         '    { path = "assets/mod.js", type = "module", defer = true },\n]\n',
     )
     config = zensical_config(root)

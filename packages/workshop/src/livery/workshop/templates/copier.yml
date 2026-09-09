@@ -87,7 +87,7 @@ docs_site_url:
   default: ""
   when: false
   help: >-
-    the [docs] site_url from workshop.toml; injected at render time,
+    the [docs] site-url from workshop.toml; injected at render time,
     it wires the runner's task links into the published reference
 
 python_registry:

@@ -662,7 +662,7 @@ def test_contract_config_reads_the_required_context(tmp_path: Path) -> None:
     from livery.workshop._workflow_tasks import contract_config
 
     (tmp_path / "workshop.toml").write_text(
-        '[workspace]\n\n[ci]\nrequired_context = "the-gate"\n'
+        '[workspace]\n\n[ci]\nrequired-context = "the-gate"\n'
     )
     config = contract_config(tmp_path)
     assert config.required_contexts == ("the-gate",)

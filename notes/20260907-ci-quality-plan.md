@@ -11,9 +11,12 @@ state store on `refs/workshop/*` (issue #317), and the metrics rows
 with `fm ci.timings` (issue #319, the pull-request lookup fixed in
 #321). Phase 3 began the same day: the points shell (issue #322),
 the merge-point release dispatch (issue #325), the nightly point
-with the schedule seam's first entry (issue #327), and the matrices
-as contract config (issue #329) landed on the gitea emitter; the
-kebab-case keys and the wheels matrix follow.
+with the schedule seam's first entry (issue #327), the matrices as
+contract config (issue #329), and the kebab-case keys with the one
+contract loader (issue #331) landed on the gitea emitter; the
+wheels matrix follows. The entry-points race (#263) has its root
+cause and fix (the completion test healing the real project's
+environment mid-suite; the dev build leaving editables stale).
 Absorbs #267 (the speed pass), #286 (no logic in YAML), #270 (token
 publishing), #273 (the act names itself), and the structural finding of
 the phase-4 post-mortem (notes/20260906-phase-4-post-mortem.md): the
@@ -749,7 +752,23 @@ nightly).
   keys. The existing snake_case keys (`required_context`,
   `coverage_floor`, `templates_artifact`, and friends) migrate here,
   pre-1.0, rewritten across checkouts by the update wave; new keys
-  are born kebab.
+  are born kebab. Landed 2026-09-09 (issue #331):
+  `livery.workshop._contract` is the one loader, `load_contract`
+  and `parse_contract` refusing an underscore key at any depth and
+  naming its kebab spelling and `fm template.apply`; the six keys
+  (`required-context`, `templates-artifact`, `site-url`,
+  `extra-css`, `extra-javascript`, `coverage-floor`) moved across
+  reads, seeds, templates, tests, docs, and this workspace's own
+  contracts. The migration is textual (`migrate_contracts`: the
+  key of a `key = value` line only, comments and values untouched,
+  verified against the normalised tree before it writes, a key it
+  cannot reach refuses by name) and runs first in
+  `fm template.apply`, in every `workflow.update` flavor, and when
+  a birth resumes over a seeded contract. Two reads stay lenient:
+  the mount-time layers read parses raw (a refusal there would
+  take every command with it, the migration verb included), and a
+  contract read from git history is normalised, since history
+  cannot be rewritten. Proven on the loop the same day: a pass over the loop's checkout, whose contract still spelled `required_context` and whose member spelled `coverage_floor`, printed both migrations at the resumed birth, rendered, and went green on the runner (run ec49a817b12c), the loop whole from gate to receipt.
 - Matrices become contract config with derived defaults (ruled by
   Willem 2026-09-07): `[ci] python-versions` overrides the derived
   floor-plus-newest pair, and a platform-wheel package declares its
@@ -1398,3 +1417,19 @@ None. Every ruling raised in this plan was closed in the review of
   request and its artifact names. The loop declares one python, the
   ruled fast shape for a development workspace. Stated as the
   recommended form before the build; not ruled on yet.
+- 2026-09-09: the contract loader's shape, stated as the recommended
+  form before the build and not yet ruled. One loader refuses an
+  underscore key at any depth on every verb read; the mount-time
+  layers read stays raw and a history read normalises, because a
+  refusal on either would block the migration itself. The
+  migration is a textual rewrite verified against the parsed tree,
+  never a re-serialisation, so comments and formatting survive;
+  the local verb is `fm template.apply` and the wave's driver runs
+  it before the floors read a contract. The `#263` race was found
+  the same day: `test_app_complete_dispatches` healed the real
+  project's environment (`uv sync` through the venv's own uv) while
+  other workers scanned the dist-info directories being rewritten,
+  and the dev build had left every member's editable stale by
+  restoring bytes without timestamps. Both fixed in their own
+  change; the loop-then-gate rule stands, since the dev act still
+  stamps files a concurrent gate would read.

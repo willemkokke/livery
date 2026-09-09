@@ -23,6 +23,7 @@ import livery.footman as footman
 from livery import toolroom
 from livery.footman import fail
 from livery.toolroom import basedpyright, mypy, pyrefly, pytest, ruff, ruff_format, ty
+from livery.workshop._contract import load_contract
 from livery.workshop._packages import Package
 
 #: The whole repo, as CI lints it.
@@ -241,8 +242,8 @@ class _Stamper:
 
 def coverage_floor(package: Package) -> float | None:
     """The committed coverage floor from the package's contract, or None."""
-    contract = tomllib.loads((package.directory / "workshop.toml").read_text("utf-8"))
-    value = (contract.get("qa") or {}).get("coverage_floor")
+    contract = load_contract(package.directory / "workshop.toml")
+    value = (contract.get("qa") or {}).get("coverage-floor")
     return float(value) if value is not None else None
 
 

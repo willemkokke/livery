@@ -31,14 +31,14 @@ def _package(tmp_path: Path, name: str, extra: str = "") -> Package:
 def test_the_floor_comes_from_the_contract(tmp_path: Path) -> None:
     bare = _package(tmp_path, "bare")
     assert _python.coverage_floor(bare) is None
-    floored = _package(tmp_path, "floored", "[qa]\ncoverage_floor = 87\n")
+    floored = _package(tmp_path, "floored", "[qa]\ncoverage-floor = 87\n")
     assert _python.coverage_floor(floored) == 87.0
 
 
 def test_enforcement_grants_the_grace_and_no_more(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    package = _package(tmp_path, "thing", "[qa]\ncoverage_floor = 90\n")
+    package = _package(tmp_path, "thing", "[qa]\ncoverage-floor = 90\n")
     measured = {"packages/thing": 89.6}
     monkeypatch.setattr(_python, "measured_coverage", lambda root, packages: measured)
     _python.enforce_coverage(tmp_path, (package,))  # inside the grace
@@ -51,7 +51,7 @@ def test_enforcement_grants_the_grace_and_no_more(
 def test_a_measuring_parent_suspends_the_local_meter(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    package = _package(tmp_path, "thing", "[qa]\ncoverage_floor = 1\n")
+    package = _package(tmp_path, "thing", "[qa]\ncoverage-floor = 1\n")
     seen: list[tuple[str, ...]] = []
 
     class FakeTool:
@@ -75,7 +75,7 @@ def test_a_measuring_parent_suspends_the_local_meter(
 def test_without_a_parent_the_meter_and_the_preview_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    package = _package(tmp_path, "thing", "[qa]\ncoverage_floor = 1\n")
+    package = _package(tmp_path, "thing", "[qa]\ncoverage-floor = 1\n")
     seen: list[tuple[str, ...]] = []
     enforced: list[Path] = []
 

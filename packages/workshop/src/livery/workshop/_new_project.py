@@ -181,6 +181,10 @@ def new_project(
     contract = root / "workshop.toml"
     if contract.is_file():
         print("  workshop.toml: already seeded")
+        from livery.workshop._contract import migrate_contracts
+
+        for note in migrate_contracts(root):
+            print(f"  migrated: {note}")
     else:
         spelled = ", ".join(f'"{entry}"' for entry in stack)
         lines = [
@@ -198,7 +202,7 @@ def new_project(
             "",
             "[ci]",
             'runners = ["ubuntu-latest"]',
-            'required_context = "gate"',
+            'required-context = "gate"',
         ]
         contract.write_text("\n".join(lines) + "\n", encoding="utf-8")
         print("  workshop.toml: seeded")

@@ -26,6 +26,7 @@ import livery.footman as footman
 from livery import toolroom
 from livery.footman import Arg, ask, doc, fail, group, suggest
 from livery.forge import ForgeError, Repository
+from livery.workshop._contract import load_contract
 from livery.workshop._git_ops import GitOps
 
 _KINDS = ("feat", "fix", "chore", "docs", "refactor")
@@ -58,12 +59,10 @@ def assignee_limit(root: Path) -> int:
     forge, including ones whose native limit is higher; whether the
     forge itself can honour it is ``configure``'s check.
     """
-    import tomllib
-
     contract = root / "workshop.toml"
     if not contract.is_file():
         return 1
-    data = tomllib.loads(contract.read_text("utf-8"))
+    data = load_contract(contract)
     return int(data.get("issues", {}).get("assignees", 1))
 
 

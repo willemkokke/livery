@@ -21,11 +21,11 @@ member, so a tag is a receipt, never a trigger.
 
 from __future__ import annotations
 
-import tomllib
 from pathlib import Path
 from typing import Any
 
 import livery.footman as footman
+from livery.workshop._contract import load_contract
 from livery.workshop._pythons import python_matrix
 
 #: Pinned action shas, one place; version comments ride each use.
@@ -60,7 +60,7 @@ def _facts(root: Path) -> dict[str, Any]:
     from livery.workshop._layers import layer_entries
     from livery.workshop._templates import templates_artifact
 
-    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+    contract = load_contract(root / "workshop.toml")
     ci = contract.get("ci") or {}
     publisher = ""
     for layer, dist in layer_entries(root):
@@ -70,7 +70,7 @@ def _facts(root: Path) -> dict[str, Any]:
     return {
         "forge_kind": str((contract.get("forge") or {}).get("kind", "github")),
         "runners": list(ci.get("runners") or ["ubuntu-latest"]),
-        "required_context": str(ci.get("required_context", "gate")),
+        "required_context": str(ci.get("required-context", "gate")),
         "python_versions": python_matrix(root),
         # The outer uv, the one tool that runs before the lock can
         # speak: pinned to the lock's own uv, so the bootstrap is not

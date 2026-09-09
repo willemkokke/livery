@@ -157,7 +157,7 @@ def llms_files(root: Path) -> tuple[str, str]:
     table = docs_table(root)
     title = str(table.get("title", "")) or _project_name(root)
     description = str(table.get("description", ""))
-    site = str(table.get("site_url", "")) or "/"
+    site = str(table.get("site-url", "")) or "/"
     if not site.endswith("/"):
         site += "/"
     nav = tomllib.loads(zensical_config(root))["project"]["nav"]

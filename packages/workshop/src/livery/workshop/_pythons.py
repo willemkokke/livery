@@ -13,6 +13,7 @@ import tomllib
 from pathlib import Path
 
 from livery.footman import fail
+from livery.workshop._contract import load_contract
 
 #: The oldest Python a workspace being born supports; the floor once
 #: its ``pyproject.toml`` exists and declares one.
@@ -63,7 +64,7 @@ def declared_pythons(root: Path) -> list[str] | None:
     contract = root / "workshop.toml"
     if not contract.is_file():
         return None
-    ci = tomllib.loads(contract.read_text("utf-8")).get("ci") or {}
+    ci = load_contract(contract).get("ci") or {}
     if PYTHONS_KEY not in ci:
         return None
     declared = ci[PYTHONS_KEY]

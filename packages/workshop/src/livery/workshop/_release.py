@@ -478,7 +478,7 @@ def release_templates(
     remote = remote or templates_artifact(root)
     if not remote:
         fail(
-            "this workspace declares no [workspace] templates_artifact:"
+            "this workspace declares no [workspace] templates-artifact:"
             " only a template home publishes; declare the artifact"
             " repository in workshop.toml"
         )

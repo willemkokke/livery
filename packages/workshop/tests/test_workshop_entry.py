@@ -51,7 +51,7 @@ def _contract_root(tmp_path: Path, kind: str, *, lock: str = LOCK) -> Path:
         'owner = "owner"\n'
         "\n[ci]\n"
         'runners = ["ubuntu-latest"]\n'
-        'required_context = "gate"\n'
+        'required-context = "gate"\n'
     )
     (root / "pyproject.toml").write_text(
         '[project]\nname = "scratch"\nrequires-python = ">=3.11"\n'

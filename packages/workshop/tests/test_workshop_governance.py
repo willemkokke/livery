@@ -504,7 +504,7 @@ def _contract_root(
     if url:
         lines.append(f'url = "{url}"')
     labels = ", ".join(f'"{label}"' for label in (runners or ["ubuntu-latest"]))
-    lines += ["", "[ci]", f"runners = [{labels}]", 'required_context = "gate"']
+    lines += ["", "[ci]", f"runners = [{labels}]", 'required-context = "gate"']
     (root / "workshop.toml").write_text("\n".join(lines) + "\n")
     (root / "pyproject.toml").write_text(
         f'[project]\nname = "scratch"\nrequires-python = ">={floor}"\n'

@@ -16,6 +16,7 @@ from typing import Annotated
 import livery.footman as footman
 from livery.footman import doc, fail, group, suggest
 from livery.forge import RepoConfig, Repository
+from livery.workshop._contract import load_contract
 from livery.workshop._git_ops import GitOps
 from livery.workshop._layers import workspace_root
 from livery.workshop._workflow_state import (
@@ -212,13 +213,11 @@ def contract_config(root: Path) -> RepoConfig:
     that half rather than a refusal: governance degrades to the
     codeowners file alone, which is what the forge can honour.
     """
-    import tomllib
-
     from livery.workshop._governance import governance_config
 
-    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+    contract = load_contract(root / "workshop.toml")
     ci = contract.get("ci") or {}
-    context = str(ci.get("required_context") or "gate")
+    context = str(ci.get("required-context") or "gate")
     forge_kind = str((contract.get("forge") or {}).get("kind", ""))
     approvals = governance_config(root)
     return RepoConfig(
@@ -296,15 +295,13 @@ def workflow_configure(
 
 def assert_configuration(root: Path) -> None:
     """The configure flow, root-taking so birth can call it too."""
-    import tomllib
-
     from livery.forge import ForgeError, Unsupported
     from livery.workshop._forge_lane import admin_forge, admin_repository
     from livery.workshop._governance import unknown_owners
 
     repo, admin_var = admin_repository(root)
     forge, _ = admin_forge(root)
-    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+    contract = load_contract(root / "workshop.toml")
     owner = str((contract.get("forge") or {}).get("owner", ""))
     missing = unknown_owners(root, forge, owner)
     if missing:

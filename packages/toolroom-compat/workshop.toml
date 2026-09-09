@@ -24,7 +24,7 @@ baseline = "0.6.2"
 
 [qa]
 # Three forwarding lines; the contract tests are the suite.
-coverage_floor = 100
+coverage-floor = 100
 
 [owners]
 users = ["willemkokke"]

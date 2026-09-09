@@ -25,7 +25,7 @@ def _home(tmp_path: Path) -> Path:
         "\n"
         '[forge]\nkind = "github"\nowner = "acme"\n'
         "\n"
-        '[ci]\nrunners = ["ubuntu-latest"]\nrequired_context = "gate"\n'
+        '[ci]\nrunners = ["ubuntu-latest"]\nrequired-context = "gate"\n'
     )
     (root / "pyproject.toml").write_text(
         '[project]\nname = "home"\nrequires-python = ">=3.11"\n'

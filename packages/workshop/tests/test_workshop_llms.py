@@ -130,7 +130,7 @@ def test_the_files_land_at_the_site_root(tmp_path: Path) -> None:
         _workspace(
             tmp_path,
             docs_table='[docs]\ntitle = "Acme"\n'
-            'site_url = "https://docs.acme.example/home/"\n'
+            'site-url = "https://docs.acme.example/home/"\n'
             'description = "Acme, described."\n',
         )
     )

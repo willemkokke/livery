@@ -35,7 +35,7 @@ def _template_instance(tmp_path: Path) -> Path:
         "\n"
         "[ci]\n"
         'runners = ["ubuntu-latest"]\n'
-        'required_context = "gate"\n'
+        'required-context = "gate"\n'
     )
     return tmp_path
 
@@ -62,7 +62,7 @@ def _contract_root(
     if url:
         lines.append(f'url = "{url}"')
     labels = ", ".join(f'"{label}"' for label in (runners or ["ubuntu-latest"]))
-    lines += ["", "[ci]", f"runners = [{labels}]", 'required_context = "gate"']
+    lines += ["", "[ci]", f"runners = [{labels}]", 'required-context = "gate"']
     (root / "workshop.toml").write_text("\n".join(lines) + "\n")
     (root / "pyproject.toml").write_text(
         f'[project]\nname = "scratch"\nrequires-python = ">={floor}"\n'
@@ -553,7 +553,7 @@ def _instance_from_git_template(tmp_path: Path) -> tuple[Path, Path]:
         'layers = ["livery.workshop"]\n'
         'templates = "templates"\n'
         '\n[forge]\nkind = "github"\nowner = "owner"\n'
-        '\n[ci]\nrunners = ["ubuntu-latest"]\nrequired_context = "gate"\n'
+        '\n[ci]\nrunners = ["ubuntu-latest"]\nrequired-context = "gate"\n'
     )
     # copier update works only in a git-tracked destination, which
     # every real instance is.
@@ -669,7 +669,7 @@ def _wheel_instance(tmp_path: Path, source: str) -> Path:
         'layers = ["livery.workshop"]\n'
         f'templates = "{source}"\n'
         '\n[forge]\nkind = "github"\nowner = "owner"\n'
-        '\n[ci]\nrunners = ["ubuntu-latest"]\nrequired_context = "gate"\n'
+        '\n[ci]\nrunners = ["ubuntu-latest"]\nrequired-context = "gate"\n'
     )
     (root / "pyproject.toml").write_text(
         '[project]\nname = "instance"\nrequires-python = ">=3.11"\n'
@@ -937,3 +937,22 @@ def test_a_declared_registry_renders_into_the_root_pyproject(
     # misplaced insert would hand both to the index table silently.
     assert parsed["tool"]["uv"]["package"] is False
     assert "members" in parsed["tool"]["uv"]["workspace"]
+
+
+def test_the_apply_verb_migrates_underscore_keys_before_the_render(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from livery.workshop._templates import template_apply
+
+    root = _template_instance(tmp_path)
+    contract = root / "workshop.toml"
+    contract.write_text(
+        contract.read_text().replace("required-context", "required_context")
+    )
+    monkeypatch.chdir(root)
+    template_apply()
+    out = capsys.readouterr().out
+    assert "  migrated: workshop.toml: required_context -> required-context" in out
+    assert 'required-context = "gate"' in contract.read_text()

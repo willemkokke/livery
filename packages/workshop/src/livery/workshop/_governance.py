@@ -13,12 +13,12 @@ forge-specific knowledge in their head.
 
 from __future__ import annotations
 
-import tomllib
 from pathlib import Path
 from typing import Any
 
 from livery.footman import fail
 from livery.forge import Codeowners, CodeownersEntry, Forge, RepoConfig
+from livery.workshop._contract import load_contract
 
 
 def _owners_table(contract: dict[str, Any]) -> dict[str, Any]:
@@ -49,7 +49,7 @@ def offline_forge(root: Path) -> Forge:
     """
     from livery.forge import GiteaForge, GithubForge, GitlabForge
 
-    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+    contract = load_contract(root / "workshop.toml")
     table = contract.get("forge") or {}
     kind = str(table.get("kind", ""))
     url = str(table.get("url", ""))
@@ -73,7 +73,7 @@ def governance_entries(root: Path) -> tuple[CodeownersEntry, ...]:
     """
     from livery.workshop._packages import discover_packages
 
-    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+    contract = load_contract(root / "workshop.toml")
     forge_table = contract.get("forge") or {}
     owner = str(forge_table.get("owner", ""))
     if not str(forge_table.get("kind", "")):
@@ -102,9 +102,7 @@ def governance_entries(root: Path) -> tuple[CodeownersEntry, ...]:
     if (root / "packages").is_dir():
         for package in discover_packages(root):
             contract_file = package.directory / "workshop.toml"
-            users, teams, approvals = owners_of(
-                tomllib.loads(contract_file.read_text("utf-8"))
-            )
+            users, teams, approvals = owners_of(load_contract(contract_file))
             if not (users or teams):
                 continue
             entries.append(
