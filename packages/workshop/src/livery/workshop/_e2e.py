@@ -888,16 +888,19 @@ def _prove_verified_skip(root: Path, kind: str) -> None:
 RATCHET_MEMBER = "loop-native"
 
 
-def _prepare_ratchet(root: Path) -> None:
+def _prepare_ratchet(root: Path, kind: str) -> None:
     """Put the ratchet member under auto-ratchet, then lower its mark for the proof.
 
     The member's contract lands through the loop's own gate while it
     still commits a literal floor: that pull request's run records the
-    first mark. Then `fm coverage.accept` lowers the mark to 90 with a
-    reason, so the member-only pull request that follows judges from
-    the accepted row and ratchets the mark back up. A refusal (a mark
-    a pass that did not finish already lowered) is printed and the
-    mark stands; the proof reads the same lines either way.
+    first mark, and main's run after the squash judges it; the pass
+    waits for that run, or the accept below would be consumed there
+    instead of by the member-only pull request. Then
+    `fm coverage.accept` lowers the mark to 90 with a reason, so the
+    pull request that follows judges from the accepted row and
+    ratchets the mark back up. A refusal (a mark a pass that did not
+    finish already lowered) is printed and the mark stands; the proof
+    reads the same lines either way.
     """
     import livery.toolroom as toolroom
     from livery.workshop._git_ops import GitOps
@@ -921,7 +924,13 @@ def _prepare_ratchet(root: Path) -> None:
         toolroom.git.opts(cwd=root, nofail=True)("fetch", "--prune", "origin")
         _loop_fm(root, "submit", "--force", "--armed")
         _align_main(root)
-        print(f"  ratchet member: {RATCHET_MEMBER} landed under auto-ratchet")
+        forge, _ = _dev_forge(kind)
+        repo = forge.repository(E2E_OWNER, E2E_REPO)
+        run, _jobs = _completed_run(repo, GitOps(root).head_sha(), event="push")
+        print(
+            f"  ratchet member: {RATCHET_MEMBER} landed under auto-ratchet;"
+            f" main's run {run.id} judged the first mark"
+        )
     code = _loop_fm(
         root,
         "coverage.accept",
@@ -1340,7 +1349,7 @@ if _WORKSHOP_TESTS.is_dir():
         _merge_setup(forge, sha)
         _prove_verified_skip(root, forge)
         _ensure_members(root)
-        _prepare_ratchet(root)
+        _prepare_ratchet(root, forge)
         _prove_scoped_leg(root, forge)
         _release_act(root, forge)
         print("  the loop is whole: gate, merge, release, receipt")
