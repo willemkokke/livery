@@ -45,6 +45,25 @@ WINDOW = 6
 #: the closure walks.
 ROOT_PINS = ("pyproject.toml", "uv.lock")
 
+#: The workspace's own test directory, a stored unit like a package's
+#: suite. Its tests reach any package, so its identity is the whole
+#: tree, and every leg that runs a suite runs it.
+WORKSPACE_TESTS = "tests"
+
+
+def workspace_suite(root: Path) -> Package | None:
+    """The workspace's own tests as a unit, or ``None`` when it has none."""
+    directory = root / WORKSPACE_TESTS
+    if not directory.is_dir():
+        return None
+    return Package(
+        directory=directory,
+        path=WORKSPACE_TESTS,
+        name="workspace-tests",
+        type="workspace",
+        depends=(),
+    )
+
 
 @dataclass(frozen=True)
 class Stored:
@@ -107,9 +126,14 @@ def closure_id(git: GitOps, packages: tuple[Package, ...], package: Package) -> 
     the suite's run be skipped at all. A root pin the tree lacks
     contributes nothing.
 
+    The workspace's own tests reach any package, so their identity is
+    the whole tree's id.
+
     Raises:
         GitError: When a closure directory is not in ``HEAD``.
     """
+    if package.path == WORKSPACE_TESTS:
+        return git.object_id("HEAD^{tree}")
     parts: list[str] = []
     for member in closure(packages, package):
         parts.append(f"{member.path}={git.object_id(f'HEAD:{member.path}')}")
@@ -122,7 +146,12 @@ def closure_id(git: GitOps, packages: tuple[Package, ...], package: Package) -> 
 
 
 def in_closure(packages: tuple[Package, ...], package: Package, filename: str) -> bool:
-    """Whether *filename* (workspace-relative) belongs to *package*'s closure."""
+    """Whether *filename* (workspace-relative) belongs to *package*'s closure.
+
+    Every file belongs to the workspace tests' closure.
+    """
+    if package.path == WORKSPACE_TESTS:
+        return True
     roots = tuple(member.path + "/" for member in closure(packages, package))
     return filename.replace("\\", "/").startswith(roots)
 

@@ -16,6 +16,11 @@ from livery.workshop._packages import Package
 _FAILURES = (SystemExit, Failed)
 
 
+def _stamped_paths(stamped: list[dict[str, object]]) -> list[str]:
+    """The package paths the store's stand-in recorded, in order."""
+    return [p.path for p in (kw["package"] for kw in stamped) if isinstance(p, Package)]
+
+
 def _record(written: list[dict[str, object]]) -> Callable[..., str]:
     """A stand-in for the store's write: it records the row and reports success."""
 
@@ -227,6 +232,11 @@ def test_a_measuring_parent_runs_one_pooled_process_and_adds_no_meter(
     # One process for every suite, under the leg's own prefix: the
     # plugin names each test's context, and the leg splits the data.
     assert fake.calls == [(("packages/thing/tests", "packages/other/tests"), None)]
+    # The workspace's own tests ride every scoped run once they exist.
+    (tmp_path / "tests").mkdir()
+    fake.calls.clear()
+    _python.run_test(packages=(thing,), root=tmp_path, scoped=True)
+    assert fake.calls == [(("packages/thing/tests", "tests"), None)]
     assert not any("--cov" in args for args, _env in fake.calls)
 
 
@@ -256,6 +266,27 @@ def test_without_a_parent_the_meter_and_the_preview_run(
 
 
 # --- the leg: its refusal, then what it stores --------------------------------
+
+
+def test_the_units_a_leg_ran_come_from_its_marker(tmp_path: Path) -> None:
+    x = _suite(tmp_path, "x")
+    y = _suite(tmp_path, "y")
+    z = _package(tmp_path, "z")  # no suite of its own
+    full = {"scope": "full", "packages": [], "leg": "check-a"}
+    narrowed = {
+        "scope": "affected",
+        "packages": ["packages/y", "packages/z"],
+        "leg": "a",
+    }
+    assert _python.suites_that_ran(full, tmp_path, (x, y, z)) == (x, y)
+    assert _python.suites_that_ran(narrowed, tmp_path, (x, y, z)) == (y,)
+    for scope in ("verified", "nothing", "unknown"):
+        marker = {"scope": scope, "packages": ["packages/x"], "leg": "a"}
+        assert _python.suites_that_ran(marker, tmp_path, (x, y, z)) == ()
+    (tmp_path / "tests").mkdir()
+    ran = _python.suites_that_ran(narrowed, tmp_path, (x, y, z))
+    assert [unit.path for unit in ran] == ["packages/y", "tests"]
+    assert _python.units_of(tmp_path, (x, y, z))[-1].path == "tests"
 
 
 def test_a_leg_with_no_metered_data_refuses_naming_the_meter(tmp_path: Path) -> None:
@@ -289,7 +320,7 @@ def _contextual_part(
 def test_a_leg_stores_each_suite_it_ran_within_its_closure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.workshop._verified import FULL, write_marker
+    from livery.workshop._verified import AFFECTED, FULL, write_marker
 
     x = _suite(tmp_path, "x")
     y = _suite(tmp_path, "y")
@@ -309,7 +340,7 @@ def test_a_leg_stores_each_suite_it_ran_within_its_closure(
         },
     )
     _contextual_part(tmp_path, "host.2.X", {"": {x_source: [4]}})
-    write_marker(tmp_path, FULL, leg="check-a")
+    write_marker(tmp_path, AFFECTED, ("packages/x",), leg="check-a")
     stamped: list[dict[str, object]] = []
 
     def _capture(root: Path, run: object, **kw: object) -> str:
@@ -325,7 +356,7 @@ def test_a_leg_stores_each_suite_it_ran_within_its_closure(
     _python.combine_leg(tmp_path, (x, y))
     out = capsys.readouterr().out
     # Only x's suite ran: its own lines plus the import-time lines of its closure.
-    assert [kw["package"].path for kw in stamped] == ["packages/x"]  # type: ignore[attr-defined]
+    assert _stamped_paths(stamped) == ["packages/x"]
     assert stamped[0]["files"] == {"packages/x/src/livery/x/mod.py": [1, 2, 3, 4]}
     assert (
         "coverage store: packages/x stored for closure kkkkkkkkkkkk on check-a" in out
@@ -333,6 +364,33 @@ def test_a_leg_stores_each_suite_it_ran_within_its_closure(
     assert "packages/y" not in out
     assert (tmp_path / ".coverage").is_file()
     assert not (tmp_path / _python.SUITES_DATA).exists()
+    # A full leg stores every suite, y's from the import-time lines of
+    # its closure alone, and the workspace's own tests as a unit whose
+    # closure is everything.
+    (tmp_path / "tests").mkdir()
+    stamped.clear()
+    _contextual_part(
+        tmp_path,
+        "host.3.X",
+        {
+            "": {x_source: [1], y_source: [1]},
+            "tests/test_all.py::test_it|run": {y_source: [2, 3]},
+        },
+    )
+    write_marker(tmp_path, FULL, leg="check-a")
+    _python.combine_leg(tmp_path, (x, y))
+    out = capsys.readouterr().out
+    assert _stamped_paths(stamped) == [
+        "packages/x",
+        "packages/y",
+        "tests",
+    ]
+    assert stamped[1]["files"] == {"packages/y/src/livery/y/mod.py": [1]}
+    assert stamped[2]["files"] == {
+        "packages/x/src/livery/x/mod.py": [1],
+        "packages/y/src/livery/y/mod.py": [1, 2, 3],
+    }
+    assert "coverage store: tests stored for closure kkkkkkkkkkkk on check-a" in out
 
 
 # --- the union: its refusals, then the reuse ----------------------------------
@@ -438,13 +496,18 @@ def test_a_skipped_leg_reuses_every_suite_from_the_store(
         return _stored({source: [1, 2, 3, 4]}), ""
 
     monkeypatch.setattr(_coverage_store, "find", _find)
+    (tmp_path / "tests").mkdir()  # the workspace's own tests, a unit too
     leg = _leg(tmp_path, "leg-a", "verified", lines={})
     assert _python.combine_union(tmp_path, (x,)) == (x,)
-    assert asked == [("check-a", "packages/x", "k" * 64)]
+    assert asked == [
+        ("check-a", "packages/x", "k" * 64),
+        ("check-a", "tests", "k" * 64),
+    ]
     assert leg.is_dir()  # the union's combine consumed its inputs
     out = capsys.readouterr().out
     assert "coverage: packages/x on check-a: reused from run 7 (1 files)" in out
-    assert "the union of 0 leg(s) and 1 reused suite(s)" in out
+    assert "coverage: tests on check-a: reused from run 7 (1 files)" in out
+    assert "the union of 0 leg(s) and 2 reused suite(s)" in out
     assert _python.measured_coverage(tmp_path, (x,)) == {"packages/x": 100.0}
 
 

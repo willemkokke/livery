@@ -90,7 +90,9 @@ suite and stores each suite's lines on the `workshop/coverage`
 record, keyed by
 the leg, the package, and the identity of the package's dependency
 closure (the tree ids of the package and of every package it
-depends on, plus the root's `pyproject.toml` and `uv.lock`). A leg
+depends on, plus the root's `pyproject.toml` and `uv.lock`). The
+workspace's own `tests/` directory is a unit too, keyed by the whole
+tree, and every leg that runs a suite runs it. A leg
 skips a suite only when the record holds its lines for that
 identity; otherwise the suite runs, and the leg says why. The gate
 job pulls every skipped suite from the record before it judges, so
