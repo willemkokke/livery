@@ -6,6 +6,7 @@ origin, so the refusals are the transport's own words, not a fake's.
 
 from __future__ import annotations
 
+import json
 import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -274,6 +275,44 @@ def test_run_context_reads_each_forge_and_is_none_locally() -> None:
         _state.run_ref(github, "check-ubuntu-3.14")
         == "refs/workshop/run/7/check-ubuntu-3.14"
     )
+
+
+def test_the_run_context_head_falls_back_when_the_payload_is_missing_or_junk(
+    tmp_path: Path,
+) -> None:
+    base = {"GITHUB_ACTIONS": "true", "GITHUB_RUN_ID": "7", "GITHUB_SHA": "a" * 40}
+    missing = _state.run_context({**base, "GITHUB_EVENT_PATH": str(tmp_path / "none")})
+    assert missing is not None and missing.head_sha == "a" * 40
+    junk = tmp_path / "event.json"
+    junk.write_text("{not json")
+    broken = _state.run_context({**base, "GITHUB_EVENT_PATH": str(junk)})
+    assert broken is not None and broken.head_sha == "a" * 40
+    junk.write_text(json.dumps({"pull_request": {"head": {}}}))
+    headless = _state.run_context({**base, "GITHUB_EVENT_PATH": str(junk)})
+    assert headless is not None and headless.head_sha == "a" * 40
+
+
+def test_the_run_context_head_is_the_pull_requests_on_a_pull_request(
+    tmp_path: Path,
+) -> None:
+    # The checkout is the merge commit; the run is filed under the
+    # pull request's head, which only the payload names.
+    event = tmp_path / "event.json"
+    event.write_text(json.dumps({"pull_request": {"head": {"sha": "b" * 40}}}))
+    env = {
+        "GITHUB_ACTIONS": "true",
+        "GITHUB_RUN_ID": "7",
+        "GITHUB_EVENT_NAME": "pull_request",
+        "GITHUB_SHA": "a" * 40,
+        "GITHUB_EVENT_PATH": str(event),
+    }
+    run = _state.run_context(env)
+    assert run is not None and run.head_sha == "b" * 40
+    event.write_text(json.dumps({"after": "a" * 40}))
+    push = _state.run_context({**env, "GITHUB_EVENT_NAME": "push"})
+    assert push is not None and push.head_sha == "a" * 40
+    gitlab = _state.run_context({"GITLAB_CI": "true", "CI_COMMIT_SHA": "c" * 40})
+    assert gitlab is not None and gitlab.head_sha == "c" * 40
 
 
 def test_a_ci_run_may_write_a_ci_only_series(
