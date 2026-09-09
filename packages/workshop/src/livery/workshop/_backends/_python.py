@@ -356,10 +356,22 @@ def run_suites(
     under the leg's plain prefix: it belongs to no package and is
     never reused. A suite that collects no test (pytest exit 5) is
     not red: it measured nothing and stores nothing.
+
+    The metered parent's coverage serialises its own configuration
+    into ``COVERAGE_PROCESS_CONFIG`` for the children it patches, and
+    a child prefers that to the configuration file and its own
+    ``COVERAGE_FILE``; the suite's process gets the file's name
+    alone, so it reads the configuration afresh under its prefix and
+    hands that prefix on to its workers.
     """
     red: list[str] = []
     for package in suites_of(packages):
-        env = {**os.environ, "COVERAGE_FILE": suite_prefix(package)}
+        env = {
+            key: value
+            for key, value in os.environ.items()
+            if key != "COVERAGE_PROCESS_CONFIG"
+        }
+        env["COVERAGE_FILE"] = suite_prefix(package)
         result = pytest.opts(in_process=False, nofail=True, env=env)(
             f"{package.path}/tests", *pytest_args
         )

@@ -95,8 +95,17 @@ def test_a_measuring_parent_runs_each_suite_apart_and_names_the_red_ones(
 
     monkeypatch.setattr(_python, "enforce_coverage", refuse)
     monkeypatch.setenv("COVERAGE_PROCESS_START", "pyproject.toml")
+    monkeypatch.setenv("COVERAGE_PROCESS_CONFIG", "the parent's serialised config")
     with pytest.raises(_FAILURES, match=r"tests failed in packages/other \(exit 1\)"):
         _python.run_test(packages=(thing, other, empty), root=tmp_path)
+    # A suite's process reads the configuration file under its own
+    # prefix, never the parent's serialised configuration.
+    assert all(
+        "COVERAGE_PROCESS_CONFIG" not in env
+        and env.get("COVERAGE_PROCESS_START") == "pyproject.toml"
+        for _args, env in fake.calls
+        if env is not None
+    )
     assert [args for args, _env in fake.calls] == [
         ("packages/thing/tests",),
         ("packages/other/tests",),
