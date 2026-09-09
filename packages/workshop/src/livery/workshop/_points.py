@@ -180,10 +180,14 @@ def effective_point(point: str) -> str:
 
 
 def _spawn(argv: list[str]) -> int:
-    """Run one entry as a child of the runner's own command; its exit code."""
+    """Run one entry as a child of the runner's own command; its exit code.
+
+    Streamed, never captured: the job's log is the run's evidence,
+    and what each verb said belongs there in order, green or red.
+    """
     from livery.footman import run
 
-    return run(argv, nofail=True).code
+    return run(argv, nofail=True, capture=False).code
 
 
 def run_point(

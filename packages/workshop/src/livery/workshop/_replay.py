@@ -171,6 +171,7 @@ def run_tests(venv: Path, tree: Path, member: str, module: str) -> int:
         ],
         cwd=tree,
         nofail=True,
+        capture=False,
     )
     if probe.code != 0:
         print(
@@ -181,6 +182,7 @@ def run_tests(venv: Path, tree: Path, member: str, module: str) -> int:
         [python, "-m", "pytest", f"packages/{member}/tests", "-p", "no:cacheprovider"],
         cwd=tree,
         nofail=True,
+        capture=False,
     ).code
 
 
