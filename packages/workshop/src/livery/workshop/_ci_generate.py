@@ -644,6 +644,48 @@ jobs:
 """
 
 
+def _gitea_nightly(answers: dict[str, Any], prog: str) -> str:
+    """The nightly point's shell: the clock, a dispatch entry, one verb per python.
+
+    What runs is the schedule's business: the shell is green and
+    empty until a ``[[ci.schedule]]`` entry attaches a task to the
+    nightly point, and a person dispatches it by hand to prove one.
+    """
+    pythons = _csv(list(answers.get("python_versions", ["3.11"])), quoted=True)
+    first = next(iter(answers.get("runners", ["ubuntu-latest"])))
+    rung = _rung_step(answers)
+    enter_leg = _enter_step(matrix_python=True)
+    return f"""name: nightly
+
+# The nightly point: the clock and a dispatch entry, one `{prog} ci.run`
+# per python. What runs is [[ci.schedule]] in workshop.toml; the shell
+# is green and empty until an entry attaches a task.
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+jobs:
+  nightly:
+    strategy:
+      fail-fast: false
+      matrix:
+        python: [{pythons}]
+    runs-on: {first}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # A replay checks the tree out at a release tag.
+          fetch-depth: 0
+{rung}{enter_leg}      - name: Nightly
+        env:
+          FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
+        run: >-
+          {prog} ci.run --point=nightly --job=nightly
+          --python="${{{{ matrix.python }}}}"
+"""
+
+
 def _gitea_release(answers: dict[str, Any], prog: str) -> str:
     first = next(iter(answers.get("runners", ["ubuntu-latest"])))
     rung = _rung_step(answers)
@@ -1014,10 +1056,11 @@ def generate(root: Path) -> dict[str, str]:
             files[".github/workflows/docs.yml"] = _github_docs_deploy(facts, prog)
     elif kind == "gitea":
         # The docs deploy and the governance reconcile are merge-point
-        # jobs of ci.yml: two files, whatever the seam.
+        # jobs of ci.yml: three files, whatever the seam.
         files = {
             ".gitea/workflows/ci.yml": _gitea_gate(facts, prog),
             ".gitea/workflows/release.yml": _gitea_release(facts, prog),
+            ".gitea/workflows/nightly.yml": _gitea_nightly(facts, prog),
         }
     else:
         files = {

@@ -147,9 +147,14 @@ def jobs_of(root: Path, point: str) -> tuple[str, ...]:
 
 
 def entries_for(root: Path, point: str, job: str) -> tuple[Entry, ...]:
-    """The entries *job* of *point* runs, in order; refuses an unknown job."""
+    """The entries *job* of *point* runs, in order; refuses an unknown job.
+
+    A point's own name is always a job of it, with nothing scheduled
+    until an entry attaches: the nightly shell exists before its
+    first entry, and runs green and empty until then.
+    """
     jobs = jobs_of(root, point)
-    if job not in jobs:
+    if job not in jobs and job != point:
         fail(
             f"the {point} point has no job {job!r}; its jobs are"
             f" {', '.join(jobs) or 'none'}"

@@ -108,6 +108,9 @@ def test_the_builtin_jobs_of_each_point(tmp_path: Path) -> None:
     )
     assert _points.jobs_of(root, "nightly") == ()
     assert _points.jobs_of(root, "release") == ()
+    # A point's own job exists before its first entry: the shell runs
+    # green and empty until the contract attaches a task.
+    assert _points.entries_for(root, "nightly", "nightly") == ()
 
 
 def test_a_declared_entry_joins_its_point(tmp_path: Path) -> None:
