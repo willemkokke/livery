@@ -70,9 +70,12 @@ high-water mark the gate enforces. The number that is judged is the
 CI union: every leg runs measured (each `fm` child included) and the
 aggregating job combines all platforms before enforcing, so the
 floors are deterministic per change and never depend on one
-machine's view. Coverage stays global under the affected mode: a
-check leg runs each package's suite as its own metered process and
-stores the suite's lines on the `workshop/coverage` record, keyed by
+machine's view. Coverage stays global under the affected mode: in a
+check leg's one measured run every test records under a context
+named by its node id (the workshop's own pytest plugin, quiet
+outside a measured run), and the leg splits the run's data per
+suite and stores each suite's lines on the `workshop/coverage`
+record, keyed by
 the leg, the package, and the identity of the package's dependency
 closure (the tree ids of the package and of every package it
 depends on, plus the root's `pyproject.toml` and `uv.lock`). A leg

@@ -82,14 +82,12 @@ def _suite(tmp_path: Path, name: str) -> Package:
     return package
 
 
-def test_a_measuring_parent_runs_each_suite_apart_and_names_the_red_ones(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+def test_a_measuring_parent_runs_one_pooled_process_and_adds_no_meter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     thing = _suite(tmp_path, "thing")
     other = _suite(tmp_path, "other")
-    empty = _suite(tmp_path, "empty")
-    (tmp_path / "tests").mkdir()
-    fake = _FakePytest({"packages/other/tests": 1, "packages/empty/tests": 5})
+    fake = _FakePytest()
     monkeypatch.setattr(_python, "pytest", fake)
 
     def refuse(*_args: object) -> None:
@@ -97,40 +95,11 @@ def test_a_measuring_parent_runs_each_suite_apart_and_names_the_red_ones(
 
     monkeypatch.setattr(_python, "enforce_coverage", refuse)
     monkeypatch.setenv("COVERAGE_PROCESS_START", "pyproject.toml")
-    monkeypatch.setenv("COVERAGE_PROCESS_CONFIG", "the parent's serialised config")
-    with pytest.raises(_FAILURES, match=r"tests failed in packages/other \(exit 1\)"):
-        _python.run_test(packages=(thing, other, empty), root=tmp_path)
-    # The red suite's own output is printed: its words name the failure.
-    out = capsys.readouterr().out
-    assert "tests packages/other: exit 1\nsuite output (exit 1)" in out
-    # A suite's process reads the configuration file under its own
-    # prefix, never the parent's serialised configuration.
-    assert all(
-        "COVERAGE_PROCESS_CONFIG" not in env
-        and env.get("COVERAGE_PROCESS_START") == "pyproject.toml"
-        for _args, env in fake.calls
-        if env is not None
-    )
-    assert [args for args, _env in fake.calls] == [
-        ("packages/thing/tests",),
-        ("packages/other/tests",),
-        ("packages/empty/tests",),
-        ("tests",),
-    ]
-    prefixes = [env.get("COVERAGE_FILE") if env else None for _args, env in fake.calls]
-    assert prefixes == [
-        ".coverage.suite-livery-thing",
-        ".coverage.suite-livery-other",
-        ".coverage.suite-livery-empty",
-        None,
-    ]
+    _python.run_test(packages=(thing, other), root=tmp_path, scoped=True)
+    # One process for every suite, under the leg's own prefix: the
+    # plugin names each test's context, and the leg splits the data.
+    assert fake.calls == [(("packages/thing/tests", "packages/other/tests"), None)]
     assert not any("--cov" in args for args, _env in fake.calls)
-    assert "tests packages/empty: no tests collected" in out
-    # A scoped run leaves the workspace's own tests alone.
-    fake.calls.clear()
-    fake.codes.clear()
-    _python.run_test(packages=(thing,), root=tmp_path, scoped=True)
-    assert [args for args, _env in fake.calls] == [("packages/thing/tests",)]
 
 
 def test_without_a_parent_the_meter_and_the_preview_run(
@@ -176,13 +145,16 @@ def _in_ci(monkeypatch: pytest.MonkeyPatch, leg: str) -> None:
     monkeypatch.delenv("COVERAGE_PROCESS_START", raising=False)
 
 
-def _parts(tmp_path: Path, package: Package, lines: dict[str, list[int]]) -> None:
+def _contextual_part(
+    tmp_path: Path, suffix: str, recorded: dict[str, dict[str, list[int]]]
+) -> None:
+    """A metered part: *recorded* maps a context ("" for none) to files and lines."""
     from coverage import CoverageData
 
-    data = CoverageData(
-        basename=str(tmp_path / _python.suite_prefix(package)), suffix="host.1.X"
-    )
-    data.add_lines(lines)
+    data = CoverageData(basename=str(tmp_path / ".coverage"), suffix=suffix)
+    for context, lines in recorded.items():
+        data.set_context(context)
+        data.add_lines(lines)
     data.write()
 
 
@@ -193,9 +165,22 @@ def test_a_leg_stores_each_suite_it_ran_within_its_closure(
 
     x = _suite(tmp_path, "x")
     y = _suite(tmp_path, "y")
-    inside = str(_source(tmp_path, "x"))
-    outside = str(_source(tmp_path, "y"))
-    _parts(tmp_path, x, {inside: [1, 2], outside: [1]})
+    x_source = str(_source(tmp_path, "x"))
+    y_source = str(_source(tmp_path, "y"))
+    # Import time (no context) touched both sources; x's test ran x's lines
+    # and, through a shared process, one of y's; y's suite did not run.
+    _contextual_part(
+        tmp_path,
+        "host.1.X",
+        {
+            "": {x_source: [1], y_source: [1]},
+            "packages/x/tests/test_mod.py::test_one|run": {
+                x_source: [2, 3],
+                y_source: [2],
+            },
+        },
+    )
+    _contextual_part(tmp_path, "host.2.X", {"": {x_source: [4]}})
     write_marker(tmp_path, FULL, leg="check-a")
     stamped: list[dict[str, object]] = []
 
@@ -208,35 +193,18 @@ def test_a_leg_stores_each_suite_it_ran_within_its_closure(
     monkeypatch.setattr(
         "livery.workshop._git_ops.GitOps.head_sha", lambda self: "a" * 40
     )
-    # Outside CI the suite is measured, and nothing is stored; the test
-    # forces "outside" since it may itself run on a runner.
-    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
-    monkeypatch.delenv("GITLAB_CI", raising=False)
-    _python.combine_leg(tmp_path, (x, y))
-    out = capsys.readouterr().out
-    assert "coverage store: packages/x measured (1 files); outside CI" in out
-    assert stamped == []
-    assert (tmp_path / ".coverage").is_file()
-    # In CI the suite's lines within its closure are stamped under the leg.
     _in_ci(monkeypatch, "check-a")
-    _parts(tmp_path, x, {inside: [3, 4], outside: [2]})
     _python.combine_leg(tmp_path, (x, y))
     out = capsys.readouterr().out
+    # Only x's suite ran: its own lines plus the import-time lines of its closure.
+    assert [kw["package"].path for kw in stamped] == ["packages/x"]  # type: ignore[attr-defined]
+    assert stamped[0]["files"] == {"packages/x/src/livery/x/mod.py": [1, 2, 3, 4]}
     assert (
         "coverage store: packages/x stored for closure kkkkkkkkkkkk on check-a" in out
     )
-    assert len(stamped) == 1
-    assert stamped[0]["leg"] == "check-a"
-    assert stamped[0]["closure_key"] == "k" * 64
-    # The first call's parts were consumed by the leg's own combine, so
-    # only the second call's lines are here, named workspace-relative.
-    assert stamped[0]["files"] == {"packages/x/src/livery/x/mod.py": [3, 4]}
-    assert "packages/y" not in out.split("stored for closure")[0]
-    # A store that refuses is printed, never fatal.
-    monkeypatch.setattr(_coverage_store, "stamp", lambda root, run, **kw: "nope")
-    _parts(tmp_path, x, {inside: [1]})
-    _python.combine_leg(tmp_path, (x, y))
-    assert "coverage store: packages/x not stored (nope)" in capsys.readouterr().out
+    assert "packages/y" not in out
+    assert (tmp_path / ".coverage").is_file()
+    assert not (tmp_path / _python.SUITES_DATA).exists()
 
 
 # --- the union: its refusals, then the reuse ----------------------------------
