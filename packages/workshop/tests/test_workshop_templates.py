@@ -316,6 +316,45 @@ def test_every_gate_leg_runs_profiled_and_uploads_its_trace(tmp_path: Path) -> N
         assert upload["with"]["name"] == "profile-${{ matrix.os }}-${{ matrix.python }}"
 
 
+def test_every_leg_records_its_timings_and_the_gate_collects_before_it_decides(
+    tmp_path: Path,
+) -> None:
+    # The leg's row rides whatever the gate's verdict, and the gate
+    # job collects every row before its own verdict step, so a red
+    # run's timings are as recorded as a green run's.
+    import yaml
+
+    from livery.workshop._ci_generate import generate
+
+    for kind, path in (
+        ("github", ".github/workflows/ci.yml"),
+        ("gitea", ".gitea/workflows/ci.yml"),
+    ):
+        workflow = yaml.safe_load(generate(_contract_root(tmp_path, kind))[path])
+        legs = [
+            step
+            for step in workflow["jobs"]["check"]["steps"]
+            if "fm ci.metrics.leg" in step.get("run", "")
+        ]
+        assert len(legs) == 1, kind
+        assert legs[0]["if"] == "always()", kind
+        assert (
+            '--job="check (${{ matrix.os }}, ${{ matrix.python }})"' in legs[0]["run"]
+        )
+        assert '--label="check-${{ matrix.os }}-${{ matrix.python }}"' in legs[0]["run"]
+        gate = workflow["jobs"]["gate"]["steps"]
+        names = [step.get("name", "") for step in gate]
+        assert names.index("Collect the run's timings") < names.index("Verdict"), kind
+        collect = gate[names.index("Collect the run's timings")]
+        assert collect["run"] == "fm ci.metrics.collect"
+        assert collect["env"]["FORGE_TOKEN"] == "${{ secrets.GITHUB_TOKEN }}"
+        if kind == "github":
+            # Organisation defaults are read-only; the pushes to the
+            # store's namespace need the grant declared.
+            assert workflow["jobs"]["check"]["permissions"] == {"contents": "write"}
+            assert workflow["jobs"]["gate"]["permissions"] == {"contents": "write"}
+
+
 def test_the_rendered_tasks_mount_the_profiler(tmp_path: Path) -> None:
     # The emitted legs run `fm --profile`; the flag exists only where
     # the tasks file mounts footman.profile, so the render and the

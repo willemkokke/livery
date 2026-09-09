@@ -898,6 +898,14 @@ if _WORKSHOP_TESTS.is_dir():
 
             _authenticate_remote(root, lane_token)
             _align_main(root)
+            # Birth's resume renders from the contract's template
+            # source before the wiring re-points it, and the source a
+            # previous pass named may be a worktree that no longer
+            # exists; this pass's templates are the source, from here.
+            contract = root / "workshop.toml"
+            contract.write_text(
+                _point_templates(contract.read_text("utf-8"), _TEMPLATES), "utf-8"
+            )
         root = _birth(forge, url)
         _authenticate_remote(root, lane_token)
         provision(forge)

@@ -366,6 +366,7 @@ nav = [
             { "livery.workshop._layers" = "_generated/api/workshop/_layers.md" },
             { "livery.workshop._llms" = "_generated/api/workshop/_llms.md" },
             { "livery.workshop._materialise" = "_generated/api/workshop/_materialise.md" },
+            { "livery.workshop._metrics" = "_generated/api/workshop/_metrics.md" },
             { "livery.workshop._new_project" = "_generated/api/workshop/_new_project.md" },
             { "livery.workshop._packages" = "_generated/api/workshop/_packages.md" },
             { "livery.workshop._provenance" = "_generated/api/workshop/_provenance.md" },

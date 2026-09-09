@@ -1072,6 +1072,9 @@ class _GitlabChecks:
                     status=status,
                     conclusion=conclusion,
                     url=str(entry.get("web_url", "")),
+                    # The listing carries the creation only; the start
+                    # and the end live on the pipeline's own page.
+                    created_at=str(entry.get("created_at") or ""),
                 )
             )
         runs.sort(key=lambda run: run.id, reverse=True)
@@ -1104,6 +1107,8 @@ class _GitlabChecks:
                     name=str(entry.get("name", "")),
                     status=status,
                     conclusion=conclusion,
+                    started_at=str(entry.get("started_at") or ""),
+                    completed_at=str(entry.get("finished_at") or ""),
                 )
             )
         return tuple(jobs)

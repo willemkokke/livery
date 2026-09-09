@@ -59,6 +59,7 @@ from livery.forge._types import (
     ScheduleEvent,
     ScheduleEventKind,
     StateFilter,
+    Step,
 )
 
 _CONCLUSIONS: dict[str, Conclusion] = {
@@ -105,6 +106,24 @@ def _resolve_token() -> str:
     except OSError:
         return ""
     return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def _steps(raw: list[dict[str, Any]]) -> tuple[Step, ...]:
+    """A job's steps as the API lists them, each with its times."""
+    steps = []
+    for entry in raw:
+        _, conclusion = _run_state(
+            str(entry.get("status", "")), str(entry.get("conclusion") or "")
+        )
+        steps.append(
+            Step(
+                name=str(entry.get("name", "")),
+                conclusion=conclusion,
+                started_at=str(entry.get("started_at") or ""),
+                completed_at=str(entry.get("completed_at") or ""),
+            )
+        )
+    return tuple(steps)
 
 
 class GithubForge:
@@ -997,6 +1016,15 @@ class _GithubChecks:
                     status=status,
                     conclusion=conclusion,
                     url=str(entry.get("html_url", "")),
+                    created_at=str(entry.get("created_at") or ""),
+                    started_at=str(entry.get("run_started_at") or ""),
+                    # GitHub reports no end for a run; once it is
+                    # complete, its last update is that moment.
+                    completed_at=(
+                        str(entry.get("updated_at") or "")
+                        if status == "completed"
+                        else ""
+                    ),
                 )
             )
         runs.sort(key=lambda run: run.id, reverse=True)
@@ -1024,6 +1052,9 @@ class _GithubChecks:
                     name=str(entry.get("name", "")),
                     status=status,
                     conclusion=conclusion,
+                    started_at=str(entry.get("started_at") or ""),
+                    completed_at=str(entry.get("completed_at") or ""),
+                    steps=_steps(entry.get("steps") or []),
                 )
             )
         return tuple(jobs)

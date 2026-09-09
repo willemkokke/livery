@@ -244,6 +244,11 @@ jobs:
     # Every other event skips release-title, and the skip passes.
     needs: [release-title]
     if: ${{{{ !cancelled() && (needs.release-title.result == 'success' || needs.release-title.result == 'skipped') }}}}
+    # The leg pushes its timing row to the state store's namespace;
+    # the ambient token needs the grant declared, since organisation
+    # defaults are read-only.
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -285,6 +290,16 @@ jobs:
           name: profile-${{{{ matrix.os }}}}-${{{{ matrix.python }}}}
           path: fm-profile.json
           if-no-files-found: ignore
+      # The leg's timing row: the gate's tasks from the trace, put on
+      # the run's per-leg ref for the gate job to collect. It fails
+      # open loudly: a store fault prints its reason and never reddens
+      # the leg.
+      - name: Record the leg's timings
+        if: always()
+        run: >-
+          {prog} ci.metrics.leg
+          --job="check (${{{{ matrix.os }}}}, ${{{{ matrix.python }}}})"
+          --label="check-${{{{ matrix.os }}}}-${{{{ matrix.python }}}}"
 
   # The strict site build: broken links and orphan pages go red
   # here, required through the gate context below, never inside the
@@ -300,17 +315,27 @@ jobs:
   # matrix can grow or shrink without touching repository settings.
   # It also owns the one coverage enforcement: every leg's data,
   # combined across platforms, judged against the committed floors.
+  # And it collects the run's timing rows: every leg's trace half
+  # joined with the forge's own job and step times, one file per run
+  # on the metrics series. The verdict comes last, so a red run's
+  # rows are collected before the job decides.
   {context}:
     if: always()
     needs: [check, docs]
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
+      - uses: {CHECKOUT}
+{setup_uv}{enter}      - name: Collect the run's timings
+        env:
+          FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
+        run: {prog} ci.metrics.collect
       - name: Verdict
         run: |
           test "${{{{ needs.check.result }}}}" = "success"
           test "${{{{ needs.docs.result }}}}" = "success"
-      - uses: {CHECKOUT}
-{setup_uv}{enter}      - name: Combine every leg
+      - name: Combine every leg
         uses: {DOWNLOAD}
         with:
           pattern: coverage-*
@@ -528,6 +553,16 @@ jobs:
           name: profile-${{{{ matrix.os }}}}-${{{{ matrix.python }}}}
           path: fm-profile.json
           if-no-files-found: ignore
+      # The leg's timing row: the gate's tasks from the trace, put on
+      # the run's per-leg ref for the gate job to collect. It fails
+      # open loudly: a store fault prints its reason and never reddens
+      # the leg.
+      - name: Record the leg's timings
+        if: always()
+        run: >-
+          {prog} ci.metrics.leg
+          --job="check (${{{{ matrix.os }}}}, ${{{{ matrix.python }}}})"
+          --label="check-${{{{ matrix.os }}}}-${{{{ matrix.python }}}}"
 
   # The strict site build, required through the gate context below.
   docs:
@@ -539,11 +574,20 @@ jobs:
 
   # The one required context. Branch protection points here, so the
   # matrix can grow or shrink without touching repository settings.
+  # It also collects the run's timing rows: every leg's trace half
+  # joined with the forge's own job and step times, one file per run
+  # on the metrics series. The verdict comes last, so a red run's
+  # rows are collected before the job decides.
   {context}:
     if: always()
     needs: [check, docs]
     runs-on: {first}
     steps:
+      - uses: actions/checkout@v4
+{rung}{enter}      - name: Collect the run's timings
+        env:
+          FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
+        run: {prog} ci.metrics.collect
       - name: Verdict
         run: |
           test "${{{{ needs.check.result }}}}" = "success"

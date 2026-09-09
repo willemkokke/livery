@@ -15,6 +15,11 @@ jobs:
     # Every other event skips release-title, and the skip passes.
     needs: [release-title]
     if: ${{ !cancelled() && (needs.release-title.result == 'success' || needs.release-title.result == 'skipped') }}
+    # The leg pushes its timing row to the state store's namespace;
+    # the ambient token needs the grant declared, since organisation
+    # defaults are read-only.
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -67,6 +72,16 @@ jobs:
           name: profile-${{ matrix.os }}-${{ matrix.python }}
           path: fm-profile.json
           if-no-files-found: ignore
+      # The leg's timing row: the gate's tasks from the trace, put on
+      # the run's per-leg ref for the gate job to collect. It fails
+      # open loudly: a store fault prints its reason and never reddens
+      # the leg.
+      - name: Record the leg's timings
+        if: always()
+        run: >-
+          fm ci.metrics.leg
+          --job="check (${{ matrix.os }}, ${{ matrix.python }})"
+          --label="check-${{ matrix.os }}-${{ matrix.python }}"
 
   # The strict site build: broken links and orphan pages go red
   # here, required through the gate context below, never inside the
@@ -98,21 +113,31 @@ jobs:
   # matrix can grow or shrink without touching repository settings.
   # It also owns the one coverage enforcement: every leg's data,
   # combined across platforms, judged against the committed floors.
+  # And it collects the run's timing rows: every leg's trace half
+  # joined with the forge's own job and step times, one file per run
+  # on the metrics series. The verdict comes last, so a red run's
+  # rows are collected before the job decides.
   gate:
     if: always()
     needs: [check, docs]
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
-      - name: Verdict
-        run: |
-          test "${{ needs.check.result }}" = "success"
-          test "${{ needs.docs.result }}" = "success"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.12.7"
       - name: Enter the workspace
         run: bash setup.sh github
+      - name: Collect the run's timings
+        env:
+          FORGE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: fm ci.metrics.collect
+      - name: Verdict
+        run: |
+          test "${{ needs.check.result }}" = "success"
+          test "${{ needs.docs.result }}" = "success"
       - name: Combine every leg
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:

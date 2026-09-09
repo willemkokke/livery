@@ -560,9 +560,13 @@ def _runs_jobs_log(driver: ForgeDriver) -> None:
     run = for_first[0]
     assert run.status == "completed"
     assert run.conclusion == "failure"
+    assert run.created_at, "a run says when the forge accepted it"
     jobs = repo.checks.jobs(run.id)
     assert jobs, "a run has jobs"
     assert jobs[0].conclusion == "failure"
+    assert jobs[0].started_at and jobs[0].completed_at, "a finished job is timed"
+    for step in jobs[0].steps:
+        assert step.name and step.started_at, "a served step is named and timed"
     assert repo.checks.job_log(jobs[0].id) != ""
 
 

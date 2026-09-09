@@ -268,6 +268,13 @@ class Run:
         conclusion: How the run ended. Empty until ``status`` is
             ``completed``.
         url: The run's page, for printing to a person.
+        created_at: When the forge accepted the run, ISO 8601; the
+            queue wait starts here. Empty when the forge did not say.
+        started_at: When the first job started, the same way. GitLab's
+            pipeline listing does not carry it.
+        completed_at: When the run ended, the same way. GitHub reports
+            no end for a run; its last update stands in once the run
+            is complete.
     """
 
     id: int
@@ -277,6 +284,32 @@ class Run:
     status: RunStatus
     conclusion: Conclusion
     url: str = ""
+    created_at: str = ""
+    started_at: str = ""
+    completed_at: str = ""
+
+
+@dataclass(frozen=True)
+class Step:
+    """One step of a job, as the forge times it.
+
+    GitHub and Gitea time every step, the runner's own setup and
+    teardown included; GitLab runs a job as one script and serves no
+    steps.
+
+    Attributes:
+        name: The step's name as the workflow spells it, or the
+            runner's name for a step it adds itself.
+        conclusion: How the step ended. Empty while it runs.
+        started_at: When it started, ISO 8601. Empty when the forge
+            did not say.
+        completed_at: When it ended, the same way.
+    """
+
+    name: str
+    conclusion: Conclusion
+    started_at: str = ""
+    completed_at: str = ""
 
 
 @dataclass(frozen=True)
@@ -289,12 +322,20 @@ class Job:
         status: Where the job is in its life.
         conclusion: How the job ended. Empty until ``status`` is
             ``completed``.
+        started_at: When the job started on a runner, ISO 8601. Empty
+            until it has, or when the forge did not say.
+        completed_at: When it ended, the same way.
+        steps: The job's steps with their times, in order; empty on a
+            forge that serves none.
     """
 
     id: int
     name: str
     status: RunStatus
     conclusion: Conclusion
+    started_at: str = ""
+    completed_at: str = ""
+    steps: tuple[Step, ...] = ()
 
 
 @dataclass(frozen=True)

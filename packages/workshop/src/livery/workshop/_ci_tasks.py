@@ -8,8 +8,11 @@ cancels what is still moving (the relief for a wedged queue), and
 ``ci.logs`` prints the job logs, the one read that stays here so
 logs reach an agent through fm. ``ci.janitor`` sweeps the CI state
 store (livery.workshop._state): the per-run refs a cancelled run
-left behind, and each series' window. ``doctor`` says who you are,
-which server this is, and what it grants.
+left behind, and each series' window. ``ci.timings`` prints the
+timing rows the gate writes on that store (livery.workshop._metrics);
+the two hidden ``ci.metrics`` verbs are the writers the emitted
+workflows call. ``doctor`` says who you are, which server this is,
+and what it grants.
 """
 
 from __future__ import annotations
@@ -250,6 +253,97 @@ def ci_janitor(
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
     janitor_flow(root, older_than_hours=older_than)
+
+
+metrics = ci.group("metrics", help="The timing rows CI writes", hidden=True)
+
+
+def metrics_leg_flow(root: Path, *, job: str, label: str, trace: Path) -> None:
+    """Put the leg's timing row, or print why it could not."""
+    from livery.workshop._metrics import put_leg
+    from livery.workshop._state import run_context
+
+    run = run_context()
+    if run is None:
+        print("  not a CI run: the leg's timing row is written by CI only")
+        return
+    why = put_leg(root, run, job=job, label=label, trace=trace)
+    print(f"  {job}: {why or f'timing row recorded for run {run.run_id}'}")
+
+
+@metrics.task(name="leg")
+def ci_metrics_leg(
+    *,
+    job: Annotated[str, doc("the job's name as the forge lists it")],
+    label: Annotated[str, doc("the per-run ref segment for this leg")],
+    trace: Annotated[Path, doc("the trace the profiled gate wrote")] = Path(
+        "fm-profile.json"
+    ),
+) -> None:
+    """Record this leg's timings on its per-run ref for the gate job to collect.
+
+    Runs at the end of every check leg, whatever the gate's verdict.
+    Fails open loudly: a missing trace or a store fault prints its
+    reason and the exit stays 0, so a timing row never reddens a leg.
+    """
+    root = workspace_root()
+    if root is None:
+        fail("no workspace: no workshop.toml above the working directory")
+    metrics_leg_flow(root, job=job, label=label, trace=trace)
+
+
+def metrics_collect_flow(root: Path, repo: Repository, git: GitOps) -> None:
+    """Collect the run's rows into the metrics series; print every line."""
+    from livery.workshop._metrics import collect
+    from livery.workshop._state import run_context
+
+    run = run_context()
+    if run is None:
+        print("  not a CI run: the run's timing rows are collected by CI only")
+        return
+    for line in collect(root, repo, run, sha=git.head_sha()):
+        print(line)
+
+
+@metrics.task(name="collect")
+def ci_metrics_collect() -> None:
+    """Join the legs' timing rows with the forge's times into the run's file.
+
+    Runs in the gate job before its verdict. Reads the per-run refs
+    the legs wrote, asks the forge for the run's jobs and their
+    steps, puts the run's file on the metrics series under its
+    window, and drops the per-run refs. Fails open loudly: every
+    reason is printed and the exit stays 0.
+    """
+    repo, git = _resolved()
+    metrics_collect_flow(git.root, repo, git)
+
+
+def timings_flow(root: Path, *, since: int, base: int) -> None:
+    """Print the rendered timings."""
+    from livery.workshop._metrics import render
+
+    for line in render(root, since=since, base=base):
+        print(line)
+
+
+@ci.task(name="timings")
+def ci_timings(
+    since: Annotated[int, doc("the recent runs the movers judge")] = 1,
+    base: Annotated[int, doc("the runs before them the movers compare against")] = 20,
+) -> None:
+    """Print the CI timings: per job and metric the latest, p50, p90, and the movers.
+
+    Reads the metrics series the gate job writes; CI is its only
+    writer, a local run reads. Per job, every metric's latest value
+    and its median and ninetieth percentile over the series' window,
+    then the biggest movers: the recent runs' median against the
+    base runs' median.
+    """
+    root = workspace_root()
+    if root is None:
+        fail("no workspace: no workshop.toml above the working directory")
+    timings_flow(root, since=since, base=base)
 
 
 def doctor_flow(forge: Forge) -> None:

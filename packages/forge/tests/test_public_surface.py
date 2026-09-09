@@ -46,6 +46,7 @@ def test_the_surface_is_declared() -> None:
         "ScheduleEventKind",
         "SimpleRegistry",
         "StateFilter",
+        "Step",
         "Unsupported",
         "__version__",
         "classify_gitea_merge_refusal",

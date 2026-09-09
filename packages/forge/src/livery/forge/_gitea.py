@@ -50,6 +50,7 @@ from livery.forge._types import (
     ScheduleEvent,
     ScheduleEventKind,
     StateFilter,
+    Step,
 )
 
 #: The first Gitea line with run cancellation, this backend's floor for
@@ -119,6 +120,24 @@ def _run_state(raw_status: str, raw_conclusion: str) -> tuple[RunStatus, Conclus
     if raw_status == "running":
         return ("running", "")
     return ("queued", "")
+
+
+def _steps(raw: list[dict[str, Any]]) -> tuple[Step, ...]:
+    """A job's steps as the API lists them, each with its times."""
+    steps = []
+    for entry in raw:
+        _, conclusion = _run_state(
+            str(entry.get("status", "")), str(entry.get("conclusion") or "")
+        )
+        steps.append(
+            Step(
+                name=str(entry.get("name", "")),
+                conclusion=conclusion,
+                started_at=str(entry.get("started_at") or ""),
+                completed_at=str(entry.get("completed_at") or ""),
+            )
+        )
+    return tuple(steps)
 
 
 class GiteaForge:
@@ -880,6 +899,9 @@ class _GiteaChecks:
                     status=status,
                     conclusion=conclusion,
                     url=str(entry.get("html_url", "")),
+                    created_at=str(entry.get("created_at") or ""),
+                    started_at=str(entry.get("started_at") or ""),
+                    completed_at=str(entry.get("completed_at") or ""),
                 )
             )
         runs.sort(key=lambda run: run.id, reverse=True)
@@ -907,6 +929,9 @@ class _GiteaChecks:
                     name=str(entry.get("name", "")),
                     status=status,
                     conclusion=conclusion,
+                    started_at=str(entry.get("started_at") or ""),
+                    completed_at=str(entry.get("completed_at") or ""),
+                    steps=_steps(entry.get("steps") or []),
                 )
             )
         return tuple(jobs)
