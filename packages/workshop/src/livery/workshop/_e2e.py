@@ -403,6 +403,19 @@ def _eat_dev_wheels(root: Path, pins: dict[str, str]) -> str:
             + "[docs]\n"
             + 'publish = "none"\n'
         )
+    if "python-versions" not in contract_text:
+        # The fast shape: one python per point, the loop's whole
+        # matrix; livery's own contract keeps the derived pair.
+        marker = "\n[ci]\n"
+        if marker not in contract_text:
+            fail(
+                "the loop's contract has no [ci] table to declare its"
+                " python on; birth seeds one, so this workspace was not"
+                " born by the loop"
+            )
+        contract_text = contract_text.replace(
+            marker, marker + 'python-versions = ["3.14"]\n', 1
+        )
     if "[[ci.schedule]]" not in contract_text:
         # The schedule seam's first entry: the nightly point replays
         # the member's released wheel, so a dispatched nightly proves

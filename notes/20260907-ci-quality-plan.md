@@ -10,10 +10,10 @@ the profiled legs with their trace artifacts (issue #314), the CI
 state store on `refs/workshop/*` (issue #317), and the metrics rows
 with `fm ci.timings` (issue #319, the pull-request lookup fixed in
 #321). Phase 3 began the same day: the points shell (issue #322),
-the merge-point release dispatch (issue #325), and the nightly
-point with the schedule seam's first entry (issue #327) landed on
-the gitea emitter; the matrices as contract config, the kebab-case
-keys, and the wheels matrix follow.
+the merge-point release dispatch (issue #325), the nightly point
+with the schedule seam's first entry (issue #327), and the matrices
+as contract config (issue #329) landed on the gitea emitter; the
+kebab-case keys and the wheels matrix follow.
 Absorbs #267 (the speed pass), #286 (no logic in YAML), #270 (token
 publishing), #273 (the act names itself), and the structural finding of
 the phase-4 post-mortem (notes/20260906-phase-4-post-mortem.md): the
@@ -867,6 +867,25 @@ nightly).
   does not cover: livery's own `nightly.yml` and its issue script on
   GitHub are swapped in phase 6; the live conformance legs and the
   benchmarks stay later schedule entries.
+- The fourth slice landed 2026-09-09 (issue #329): matrices as
+  contract config. `[ci] python-versions`, born kebab-case,
+  overrides the derived pair the emitted matrices carry; the value
+  must be a non-empty list of minors (`3.14t` spells a free-threaded
+  build), and anything else refuses at the emitter naming the key,
+  so no matrix is emitted with no leg or a python the runner cannot
+  find. The loop's contract declares `["3.14"]`: its next pass ran
+  the gate as one leg (`check (ubuntu-latest, 3.14)` alone) and the
+  dispatched nightly as one job (run 1058, green), while livery's
+  own contract keeps the derived pair and its render is unchanged.
+  Riding along for livery#263: the discovery forensics the branding
+  and docs-plugin tests attach on failure now carry the interpreter,
+  the prefix, `sys.path`, and the `footman.tasks` census as the
+  worker sees them, because every hit today read as an in-process
+  lookup on one worker scanning the wrong world. What this slice
+  does not cover: `[ci] runners` stays as it is; the docs job's
+  tolerance of a workspace with nothing to build is already the
+  seam's `none` publish and the strict build of a minimal tree,
+  which the loop pays in seconds.
 - Acceptance: the census in #286 re-run shows only event filters; a
   merged PR creates three run entries, none skipped; drift gate
   covers every workflow file in the repo; a task scheduled through
@@ -1373,3 +1392,9 @@ None. Every ruling raised in this plan was closed in the review of
   entries absent while the other packages' were present; the
   forensics dumps in those gate logs narrow the search to what that
   worker runs beside the branding tests.
+- 2026-09-09: `[ci] python-versions` is born kebab-case and wins
+  over the derived pair where declared; a free-threaded build is
+  spelled `3.14t` and flows unchanged into the leg's interpreter
+  request and its artifact names. The loop declares one python, the
+  ruled fast shape for a development workspace. Stated as the
+  recommended form before the build; not ruled on yet.

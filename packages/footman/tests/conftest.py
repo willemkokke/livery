@@ -183,11 +183,22 @@ def pytest_runtest_makereport(
         return report
     import os
     import sys
+    from importlib.metadata import entry_points
 
     lines = ["", "--- discovery forensics (livery#263) ---", f"cwd: {os.getcwd()}"]
     for key in sorted(os.environ):
         if any(part in key for part in ("XDG_", "FOOTMAN", "FM_", "ACME")):
             lines.append(f"env {key}={os.environ[key]!r}")
+    # The lookup that fails reads the entry points of whatever
+    # sys.path holds at that moment, in this very process: the path,
+    # the interpreter, and the census as seen from here decide
+    # whether the leak is a rewritten environment or a polluted
+    # import system on this worker.
+    lines.append(f"sys.executable: {sys.executable}")
+    lines.append(f"sys.prefix: {sys.prefix}")
+    lines.extend(f"sys.path[{i}]: {entry}" for i, entry in enumerate(sys.path))
+    census = sorted(ep.name for ep in entry_points(group="footman.tasks"))
+    lines.append(f"footman.tasks entry points now: {', '.join(census) or 'none'}")
     tasks_modules = [
         f"sys.modules[{module_name!r}] <- {getattr(module, '__file__', None)}"
         for module_name, module in sorted(sys.modules.items())

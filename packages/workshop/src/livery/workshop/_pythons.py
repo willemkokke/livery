@@ -12,6 +12,8 @@ import re
 import tomllib
 from pathlib import Path
 
+from livery.footman import fail
+
 #: The oldest Python a workspace being born supports; the floor once
 #: its ``pyproject.toml`` exists and declares one.
 FLOOR_DEFAULT = "3.11"
@@ -44,8 +46,49 @@ def _minor(version: str) -> tuple[int, int]:
     return int(major), int(minor)
 
 
+#: The contract key that overrides the derived matrix, born kebab-case.
+PYTHONS_KEY = "python-versions"
+
+_VERSION_RE = re.compile(r"^\d+\.\d+t?$")
+
+
+def declared_pythons(root: Path) -> list[str] | None:
+    """The contract's ``[ci] python-versions``, or ``None`` when undeclared.
+
+    Refuses a declaration that is not a non-empty list of version
+    strings (``3.14``, or ``3.14t`` for a free-threaded build), naming
+    the key: an empty list would emit a matrix with no leg, and a
+    stray value would reach the runner as a python it cannot find.
+    """
+    contract = root / "workshop.toml"
+    if not contract.is_file():
+        return None
+    ci = tomllib.loads(contract.read_text("utf-8")).get("ci") or {}
+    if PYTHONS_KEY not in ci:
+        return None
+    declared = ci[PYTHONS_KEY]
+    if not isinstance(declared, list) or not declared:
+        fail(f'[ci] {PYTHONS_KEY} must be a non-empty list of versions, like ["3.14"]')
+    for value in declared:
+        if not isinstance(value, str) or not _VERSION_RE.match(value):
+            fail(
+                f"[ci] {PYTHONS_KEY} entry {value!r} is not a python version:"
+                ' spell the minor, like "3.14", or "3.14t" for a free-threaded build'
+            )
+    return [str(value) for value in declared]
+
+
 def python_matrix(root: Path) -> list[str]:
-    """The CI matrix: the floor, and the newest supported minor above it."""
+    """The CI matrix: the contract's declaration, else the floor and the newest minor.
+
+    ``[ci] python-versions`` wins where declared, so a development
+    workspace runs one leg and a production contract keeps the full
+    pair; without it the pair derives, so a new Python reaches every
+    instance through a wheel bump.
+    """
+    declared = declared_pythons(root)
+    if declared is not None:
+        return declared
     floor = python_floor(root)
     if _minor(floor) >= _minor(NEWEST_SUPPORTED):
         return [floor]
