@@ -676,16 +676,6 @@ def workflow_release(
     run_workflow(driver, repo, git)
 
 
-def title_from_event() -> str:
-    """The pull request's title from the runner's event payload, or empty."""
-    from livery.workshop._state import event_payload
-
-    payload = event_payload()
-    if payload is None:
-        return ""
-    return str((payload.get("pull_request") or {}).get("title") or "")
-
-
 @release_group.task(name="check-title", hidden=True)
 def workflow_release_check_title(
     title: Annotated[str, doc("the PR title CI observed")] = "",
@@ -707,20 +697,18 @@ def workflow_release_check_title(
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
-    title = title or title_from_event()
     if not title:
-        print("  not a pull request: no title to check")
-        return
-    from livery.workshop._state import run_context
-
-    run = run_context()
-    if run is not None and not run.ref.startswith("refs/heads/workflow/release/"):
+        # The shell passes no title: the event payload names it, and
+        # names the head branch too. An explicit --title is always
+        # checked, whatever branch the runner is on.
         from livery.workshop._state import event_payload
 
-        payload = event_payload() or {}
-        head_ref = str(
-            ((payload.get("pull_request") or {}).get("head") or {}).get("ref") or ""
-        )
+        pull = (event_payload() or {}).get("pull_request") or {}
+        title = str(pull.get("title") or "")
+        if not title:
+            print("  not a pull request: no title to check")
+            return
+        head_ref = str((pull.get("head") or {}).get("ref") or "")
         if head_ref and not head_ref.startswith("workflow/release/"):
             print(f"  {head_ref} is not a release branch: nothing to check")
             return

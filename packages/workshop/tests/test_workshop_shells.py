@@ -293,7 +293,17 @@ def test_forge_lane_reads_the_contract_and_the_remote(
 
 @pytest.fixture(autouse=True)
 def _outside_ci(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in ("GITHUB_ACTIONS", "GITEA_ACTIONS", "GITLAB_CI", "GITHUB_EVENT_NAME"):
+    for name in (
+        "GITHUB_ACTIONS",
+        "GITEA_ACTIONS",
+        "GITLAB_CI",
+        "GITHUB_EVENT_NAME",
+        "GITHUB_EVENT_PATH",
+        "GITHUB_SHA",
+        "GITHUB_RUN_ID",
+        "GITHUB_REF",
+        "GITHUB_JOB",
+    ):
         monkeypatch.delenv(name, raising=False)
 
 

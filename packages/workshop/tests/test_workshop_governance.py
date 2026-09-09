@@ -512,21 +512,6 @@ def _contract_root(
     return root
 
 
-def test_the_title_comes_from_the_event_payload_or_is_empty(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from livery.workshop._release_driver import title_from_event
-
-    monkeypatch.delenv("GITHUB_EVENT_PATH", raising=False)
-    assert title_from_event() == ""
-    event = tmp_path / "event.json"
-    event.write_text('{"pull_request": {"title": "fix(x): the title"}}')
-    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event))
-    assert title_from_event() == "fix(x): the title"
-    event.write_text('{"after": "abc"}')
-    assert title_from_event() == ""
-
-
 def test_the_release_title_job_receives_the_actual_title(tmp_path: Path) -> None:
     from livery.workshop._ci_generate import generate
 
