@@ -8,17 +8,31 @@ context made of the test's node id and the phase, the shape pytest-cov
 uses, so a leg can split one pooled run's data by the suite each test
 belongs to. Outside a metered run every hook returns at once, and a
 meter that is not collecting is left alone.
+
+Under coverage's sysmon core a line is recorded under the first
+context that reaches it and never again, so a suite's contexts hold
+the lines its tests reached first. The leg's split keeps the union
+complete regardless: a line another suite's test reached first is
+stored with that suite, whose closure holds the file.
 """
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import pytest
 
+#: Coverage's own variable: set, every python starts metered from
+#: interpreter start, and the meter is the one this plugin names
+#: contexts on. A pytest-cov run has its own meter and is left alone.
+ARMED = "COVERAGE_PROCESS_START"
+
 
 def _meter() -> Any | None:
-    """The coverage object process startup began in this process, or None."""
+    """The coverage object process startup began in this metered run, or None."""
+    if not os.environ.get(ARMED):
+        return None
     try:
         import coverage
     except ImportError:

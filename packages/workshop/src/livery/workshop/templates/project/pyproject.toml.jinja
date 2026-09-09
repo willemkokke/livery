@@ -250,6 +250,11 @@ patch = ["subprocess"]
 parallel = true
 relative_files = true
 source = ["{{ namespace_package }}"]
+# The C tracer, not sys.monitoring: the sysmon core records a line
+# under the first context that reaches it and never again, and the
+# check legs split one run's data per suite by context, which needs
+# every context complete.
+core = "ctrace"
 
 [tool.coverage.paths]
 # One identity for a file whichever separator wrote it, so Windows

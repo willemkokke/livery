@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,21 @@ from livery.workshop._backends import _python
 from livery.workshop._packages import Package
 
 _FAILURES = (SystemExit, Failed)
+
+
+def _stamped_paths(stamped: list[dict[str, object]]) -> list[str]:
+    """The package paths the store's stand-in recorded, in order."""
+    return [p.path for p in (kw["package"] for kw in stamped) if isinstance(p, Package)]
+
+
+def _record(written: list[dict[str, object]]) -> Callable[..., str]:
+    """A stand-in for the store's write: it records the row and reports success."""
+
+    def _write(root: Path, **kw: object) -> str:
+        written.append(kw)
+        return ""
+
+    return _write
 
 
 def _package(tmp_path: Path, name: str, extra: str = "") -> Package:
@@ -30,24 +46,141 @@ def _package(tmp_path: Path, name: str, extra: str = "") -> Package:
     )
 
 
-def test_the_floor_comes_from_the_contract(tmp_path: Path) -> None:
+def test_the_floor_policy_comes_from_the_contract_and_refuses_nonsense(
+    tmp_path: Path,
+) -> None:
     bare = _package(tmp_path, "bare")
+    assert _python.coverage_policy(bare) is None
     assert _python.coverage_floor(bare) is None
     floored = _package(tmp_path, "floored", "[qa]\ncoverage-floor = 87\n")
+    assert _python.coverage_policy(floored) == _python.FloorPolicy(87.0, False, 0.5)
     assert _python.coverage_floor(floored) == 87.0
+    ratchet = _package(
+        tmp_path,
+        "ratchet",
+        '[qa]\ncoverage-floor = "auto-ratchet"\ncoverage-epsilon = 1.5\n',
+    )
+    assert _python.coverage_policy(ratchet) == _python.FloorPolicy(None, True, 1.5)
+    assert _python.coverage_floor(ratchet) is None
+    for name, extra, words in (
+        ("odd", '[qa]\ncoverage-floor = "high"\n', "auto-ratchet"),
+        ("tight", '[qa]\ncoverage-floor = 90\ncoverage-epsilon = "tight"\n', "points"),
+        ("negative", "[qa]\ncoverage-floor = 90\ncoverage-epsilon = -1\n", "negative"),
+    ):
+        with pytest.raises(_FAILURES, match=words):
+            _python.coverage_policy(_package(tmp_path, name, extra))
 
 
-def test_enforcement_grants_the_grace_and_no_more(
+def test_enforcement_grants_the_epsilon_and_no_more(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     package = _package(tmp_path, "thing", "[qa]\ncoverage-floor = 90\n")
     measured = {"packages/thing": 89.6}
     monkeypatch.setattr(_python, "measured_coverage", lambda root, packages: measured)
-    _python.enforce_coverage(tmp_path, (package,))  # inside the grace
+    assert _python.enforce_coverage(tmp_path, (package,)) == measured  # inside
     measured["packages/thing"] = 89.4
     with pytest.raises(_FAILURES) as caught:
         _python.enforce_coverage(tmp_path, (package,))
     assert "below the committed floor" in str(caught.value)
+    wide = _package(
+        tmp_path, "wide", "[qa]\ncoverage-floor = 90\ncoverage-epsilon = 2\n"
+    )
+    measured["packages/wide"] = 88.1
+    _python.enforce_coverage(tmp_path, (wide,))  # a declared epsilon widens the floor
+
+
+def _ratchet(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, percent: float
+) -> Package:
+    directory = tmp_path / "packages" / "thing"
+    if directory.is_dir():
+        package = Package(
+            directory=directory,
+            path="packages/thing",
+            name="livery-thing",
+            type="python",
+            depends=(),
+        )
+    else:
+        package = _package(tmp_path, "thing", '[qa]\ncoverage-floor = "auto-ratchet"\n')
+    monkeypatch.setattr(
+        _python, "measured_coverage", lambda root, packages: {"packages/thing": percent}
+    )
+    return package
+
+
+def test_under_auto_ratchet_an_unreadable_store_falls_open_and_writes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop import _coverage_marks
+
+    package = _ratchet(tmp_path, monkeypatch, 50.0)
+    monkeypatch.setattr(_coverage_marks, "marks", lambda root: (None, "remote down"))
+
+    def _never(root: Path, **kw: object) -> str:
+        raise AssertionError("an unread store is never written")
+
+    monkeypatch.setattr(_coverage_marks, "write_mark", _never)
+    _in_ci(monkeypatch, "check-a")
+    assert _python.enforce_coverage(tmp_path, (package,)) == {"packages/thing": 50.0}
+    out = capsys.readouterr().out
+    assert "auto-ratchet: remote down; the gate falls open and records nothing" in out
+
+
+def test_the_first_run_records_the_mark_only_in_ci(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop import _coverage_marks
+
+    package = _ratchet(tmp_path, monkeypatch, 80.0)
+    monkeypatch.setattr(_coverage_marks, "marks", lambda root: ({}, ""))
+    written: list[dict[str, object]] = []
+    monkeypatch.setattr(_coverage_marks, "write_mark", _record(written))
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.delenv("GITLAB_CI", raising=False)
+    _python.enforce_coverage(tmp_path, (package,))
+    out = capsys.readouterr().out
+    assert "no mark yet; this run records it" in out
+    assert "a CI run records the mark; this run does not" in out
+    assert written == []
+    _in_ci(monkeypatch, "check-a")
+    _python.enforce_coverage(tmp_path, (package,))
+    assert "    recorded" in capsys.readouterr().out
+    assert written == [
+        {
+            "package": "packages/thing",
+            "value": 80.0,
+            "kind": "first",
+            "by": "run 7",
+            "ci_only": True,
+        }
+    ]
+
+
+def test_a_clearing_run_ratchets_a_dip_passes_and_a_fall_names_the_accept_verb(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop import _coverage_marks
+
+    mark = _coverage_marks.Mark("packages/thing", 90.0, "first", "run 3", "", "when")
+    monkeypatch.setattr(
+        _coverage_marks, "marks", lambda root: ({mark.package: mark}, "")
+    )
+    written: list[dict[str, object]] = []
+    monkeypatch.setattr(_coverage_marks, "write_mark", _record(written))
+    _in_ci(monkeypatch, "check-a")
+    package = _ratchet(tmp_path, monkeypatch, 90.6)
+    _python.enforce_coverage(tmp_path, (package,))
+    assert "new mark: 90.6%" in capsys.readouterr().out
+    assert [kw["kind"] for kw in written] == ["ratchet"]
+    _ratchet(tmp_path, monkeypatch, 89.6)
+    _python.enforce_coverage(tmp_path, (package,))
+    assert len(written) == 1  # a dip inside epsilon passes and moves nothing
+    _ratchet(tmp_path, monkeypatch, 89.4)
+    with pytest.raises(_FAILURES) as caught:
+        _python.enforce_coverage(tmp_path, (package,))
+    assert "below its mark of 90.0%" in str(caught.value)
+    assert "coverage.accept packages/thing <value> --reason=" in str(caught.value)
 
 
 class _Result:
@@ -99,6 +232,11 @@ def test_a_measuring_parent_runs_one_pooled_process_and_adds_no_meter(
     # One process for every suite, under the leg's own prefix: the
     # plugin names each test's context, and the leg splits the data.
     assert fake.calls == [(("packages/thing/tests", "packages/other/tests"), None)]
+    # The workspace's own tests ride every scoped run once they exist.
+    (tmp_path / "tests").mkdir()
+    fake.calls.clear()
+    _python.run_test(packages=(thing,), root=tmp_path, scoped=True)
+    assert fake.calls == [(("packages/thing/tests", "tests"), None)]
     assert not any("--cov" in args for args, _env in fake.calls)
 
 
@@ -128,6 +266,27 @@ def test_without_a_parent_the_meter_and_the_preview_run(
 
 
 # --- the leg: its refusal, then what it stores --------------------------------
+
+
+def test_the_units_a_leg_ran_come_from_its_marker(tmp_path: Path) -> None:
+    x = _suite(tmp_path, "x")
+    y = _suite(tmp_path, "y")
+    z = _package(tmp_path, "z")  # no suite of its own
+    full = {"scope": "full", "packages": [], "leg": "check-a"}
+    narrowed = {
+        "scope": "affected",
+        "packages": ["packages/y", "packages/z"],
+        "leg": "a",
+    }
+    assert _python.suites_that_ran(full, tmp_path, (x, y, z)) == (x, y)
+    assert _python.suites_that_ran(narrowed, tmp_path, (x, y, z)) == (y,)
+    for scope in ("verified", "nothing", "unknown"):
+        marker = {"scope": scope, "packages": ["packages/x"], "leg": "a"}
+        assert _python.suites_that_ran(marker, tmp_path, (x, y, z)) == ()
+    (tmp_path / "tests").mkdir()
+    ran = _python.suites_that_ran(narrowed, tmp_path, (x, y, z))
+    assert [unit.path for unit in ran] == ["packages/y", "tests"]
+    assert _python.units_of(tmp_path, (x, y, z))[-1].path == "tests"
 
 
 def test_a_leg_with_no_metered_data_refuses_naming_the_meter(tmp_path: Path) -> None:
@@ -161,7 +320,7 @@ def _contextual_part(
 def test_a_leg_stores_each_suite_it_ran_within_its_closure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    from livery.workshop._verified import FULL, write_marker
+    from livery.workshop._verified import AFFECTED, FULL, write_marker
 
     x = _suite(tmp_path, "x")
     y = _suite(tmp_path, "y")
@@ -181,7 +340,7 @@ def test_a_leg_stores_each_suite_it_ran_within_its_closure(
         },
     )
     _contextual_part(tmp_path, "host.2.X", {"": {x_source: [4]}})
-    write_marker(tmp_path, FULL, leg="check-a")
+    write_marker(tmp_path, AFFECTED, ("packages/x",), leg="check-a")
     stamped: list[dict[str, object]] = []
 
     def _capture(root: Path, run: object, **kw: object) -> str:
@@ -197,7 +356,7 @@ def test_a_leg_stores_each_suite_it_ran_within_its_closure(
     _python.combine_leg(tmp_path, (x, y))
     out = capsys.readouterr().out
     # Only x's suite ran: its own lines plus the import-time lines of its closure.
-    assert [kw["package"].path for kw in stamped] == ["packages/x"]  # type: ignore[attr-defined]
+    assert _stamped_paths(stamped) == ["packages/x"]
     assert stamped[0]["files"] == {"packages/x/src/livery/x/mod.py": [1, 2, 3, 4]}
     assert (
         "coverage store: packages/x stored for closure kkkkkkkkkkkk on check-a" in out
@@ -205,6 +364,33 @@ def test_a_leg_stores_each_suite_it_ran_within_its_closure(
     assert "packages/y" not in out
     assert (tmp_path / ".coverage").is_file()
     assert not (tmp_path / _python.SUITES_DATA).exists()
+    # A full leg stores every suite, y's from the import-time lines of
+    # its closure alone, and the workspace's own tests as a unit whose
+    # closure is everything.
+    (tmp_path / "tests").mkdir()
+    stamped.clear()
+    _contextual_part(
+        tmp_path,
+        "host.3.X",
+        {
+            "": {x_source: [1], y_source: [1]},
+            "tests/test_all.py::test_it|run": {y_source: [2, 3]},
+        },
+    )
+    write_marker(tmp_path, FULL, leg="check-a")
+    _python.combine_leg(tmp_path, (x, y))
+    out = capsys.readouterr().out
+    assert _stamped_paths(stamped) == [
+        "packages/x",
+        "packages/y",
+        "tests",
+    ]
+    assert stamped[1]["files"] == {"packages/y/src/livery/y/mod.py": [1]}
+    assert stamped[2]["files"] == {
+        "packages/x/src/livery/x/mod.py": [1],
+        "packages/y/src/livery/y/mod.py": [1, 2, 3],
+    }
+    assert "coverage store: tests stored for closure kkkkkkkkkkkk on check-a" in out
 
 
 # --- the union: its refusals, then the reuse ----------------------------------
@@ -310,13 +496,18 @@ def test_a_skipped_leg_reuses_every_suite_from_the_store(
         return _stored({source: [1, 2, 3, 4]}), ""
 
     monkeypatch.setattr(_coverage_store, "find", _find)
+    (tmp_path / "tests").mkdir()  # the workspace's own tests, a unit too
     leg = _leg(tmp_path, "leg-a", "verified", lines={})
     assert _python.combine_union(tmp_path, (x,)) == (x,)
-    assert asked == [("check-a", "packages/x", "k" * 64)]
+    assert asked == [
+        ("check-a", "packages/x", "k" * 64),
+        ("check-a", "tests", "k" * 64),
+    ]
     assert leg.is_dir()  # the union's combine consumed its inputs
     out = capsys.readouterr().out
     assert "coverage: packages/x on check-a: reused from run 7 (1 files)" in out
-    assert "the union of 0 leg(s) and 1 reused suite(s)" in out
+    assert "coverage: tests on check-a: reused from run 7 (1 files)" in out
+    assert "the union of 0 leg(s) and 2 reused suite(s)" in out
     assert _python.measured_coverage(tmp_path, (x,)) == {"packages/x": 100.0}
 
 

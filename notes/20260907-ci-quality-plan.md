@@ -1066,7 +1066,36 @@ guessed. The candidate list, from what is already known:
   skipped suite's stored measurement without running its tests. A
   local gate that cannot reach origin falls open loudly; CI stays
   the gate of record. The decrease verb and the refusal paths are
-  built and tested before the ratchet's happy path.
+  built and tested before the ratchet's happy path. Landed
+  2026-09-09 (issue #350): `[qa] coverage-floor` takes a number or
+  `"auto-ratchet"`, `coverage-epsilon` the tolerance (0.5 when
+  absent) in both modes; the marks live as dated rows on
+  `workshop/coverage/marks`, a ref under the store's own prefix
+  because the per-suite refs of #345 occupy `workshop/coverage/…`
+  and git allows no ref at the prefix itself; the gate job's union
+  judges the mark, records the first, ratchets a clear rise (a CI
+  run writes, a local run says it would), and falls open with its
+  reason on an unreadable store; `fm coverage.accept <package>
+  <value> --reason` writes the accepted row and refuses without a
+  reason, above the mark, for a committed floor, or on an unread
+  store. The union's percentages ride the run's row (the union
+  entry moved before the collect entry) and `fm ci.timings` renders
+  them per package. The loop keeps loop-native under auto-ratchet
+  and lowers its mark to 90 with a reason before the member-only
+  pull request, which judges the accepted row and ratchets the mark
+  back up; main's run after it judges the ratchet's own row.
+  Proven on the loop 2026-09-09, read from the runs' logs by
+  `fm ci.e2e` itself: the member's landing under the mode recorded
+  the first mark (run 1175, "no mark yet; this run records it");
+  the pass accepted the mark down to 90 with a reason; the
+  member-only pull request's gate job judged the accepted row
+  ("mark 90.0% accept by Willem Kokke, floor 89.5%", the reason
+  printed) and ratcheted to 100 ("new mark: 100.0%"); main's run
+  1184 after it judged the ratchet's own row ("mark 100.0% ratchet
+  by run"), with main's run 1182 after the setup squash reusing
+  both suites from the store as before. The first pass had the
+  accept land before main's run after the switch, which consumed
+  it; the pass now waits for that run before lowering the mark.
 - The prose class: the gate job always runs and classifies the diff
   itself (fm verb, no YAML logic); a diff confined to `notes/` and
   named prose paths pays markdown lint and the render check only,
@@ -1670,3 +1699,41 @@ None. Every ruling raised in this plan was closed in the review of
   there means a leg that skipped without the store, or a store
   trimmed in between, and either deserves a name, not a quiet
   widening.
+- 2026-09-09: the ratchet's marks live on `workshop/coverage/marks`,
+  not the ruled `workshop/coverage`, stated before the build and
+  not yet ruled: the per-suite store took `workshop/coverage/<leg>/
+  <package>` two slices earlier, and git allows no ref at a prefix
+  that other refs live under, so the marks sit beside the suites
+  under the one prefix. Two small extensions of the ruling: an
+  accept refuses at the current mark as well as above it (a row
+  that changes nothing is noise on the record), and the first run
+  under the mode records the mark and never judges, hse's rule,
+  since a floor nobody set cannot be fallen below. A row names
+  its writer: the run id for the ratchet, the git identity for an
+  accept. The plugin that names test contexts acts only under
+  `COVERAGE_PROCESS_START` after the local `fm test` (pytest-cov's
+  own workers) was found switching contexts it had no business
+  with; under coverage's sysmon core on 3.14 a line is recorded
+  under the first context that reaches it, which the closure
+  filter absorbs, and the loop's reuse runs judging both members
+  at exactly 100 percent is the measurement that the union stays
+  complete.
+  Reversed 2026-09-09 (issue #361) after main's run on GitHub after
+  the port's squash went red: a suite whose tests reach no line
+  that collection had not already reached leaves no context of its
+  own under sysmon, so the leg read it as not run and stored
+  nothing, and main's reuse missed it. The units a leg ran now come
+  from its scope marker, never from the contexts; the legs measure
+  with the C tracer (`core = "ctrace"` in the rendered coverage
+  config), so every context holds every line its tests reached and
+  a reused suite's data is whole; and the workspace's own `tests/`
+  directory is a unit keyed by the whole tree, run by every leg
+  that runs a suite and reused by a skipped one, so a reused union
+  carries the lines only those tests reach.
+  Proven on the loop 2026-09-09, read from the runs' logs by
+  `fm ci.e2e` itself: main's run 1188 after the setup squash skipped
+  the gate and its union reused both members' suites and the
+  workspace's tests from the store (three reused units); the
+  member-only pull request's leg stored loop-echo's suite and the
+  workspace's tests, and its union reused loop-native; main's full
+  run 1190 stored all three units and judged both members.

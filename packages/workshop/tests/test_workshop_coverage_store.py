@@ -253,3 +253,28 @@ def test_a_stamp_is_found_by_its_closure_newest_first_within_the_window(
         None,
         "",
     )
+
+
+# --- the workspace's own tests, a unit keyed by the whole tree -----------------
+
+
+def test_the_workspace_tests_are_a_unit_keyed_by_the_tree(work: Path) -> None:
+    from livery.workshop._packages import Package
+
+    base, top = _packages(work)
+    assert _coverage_store.workspace_suite(work / "nowhere") is None
+    (work / "tests").mkdir()
+    unit = _coverage_store.workspace_suite(work)
+    assert unit is not None and unit.path == "tests" and unit.name == "workspace-tests"
+    git = GitOps(work)
+    assert _coverage_store.closure_id(git, (base, top), unit) == git.object_id(
+        "HEAD^{tree}"
+    )
+    # Any file is the unit's to store: its tests reach every package.
+    assert _coverage_store.in_closure(
+        (base, top), unit, "packages/base/src/base/mod.py"
+    )
+    assert _coverage_store.in_closure((base, top), unit, "tests/test_x.py")
+    # Its ref stands beside the packages' under the one prefix.
+    assert _coverage_store.suite_ref(LEG, unit).endswith("/workspace-tests")
+    assert isinstance(unit, Package)

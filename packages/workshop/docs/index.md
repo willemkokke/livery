@@ -65,8 +65,20 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
 
 ## Coverage floors
 
-Each package's `workshop.toml` may declare `[qa] coverage-floor`, the
-high-water mark the gate enforces. The number that is judged is the
+Each package's `workshop.toml` may declare `[qa] coverage-floor`: a
+percentage the gate enforces, or the mode `"auto-ratchet"`, under
+which the floor is the mark recorded on the `workshop/coverage/marks`
+record. Both modes pass at the floor minus the package's
+`coverage-epsilon` (percentage points, 0.5 when absent). Under
+auto-ratchet the first gated run records the mark, a run that clears
+it by more than epsilon raises it, and a record that cannot be read
+falls open with its reason and writes nothing. Lowering a mark is a
+person's act: `fm coverage.accept <package> <value> --reason=<why>`
+writes a dated row naming who and why, and refuses without a reason,
+at or above the current mark, or for a package with a committed
+floor. Every gated run also records the union's percentage per
+package beside its timing rows, and `fm ci.timings` renders the
+trend. The number that is judged is the
 CI union: every leg runs measured (each `fm` child included) and the
 aggregating job combines all platforms before enforcing, so the
 floors are deterministic per change and never depend on one
@@ -78,15 +90,18 @@ suite and stores each suite's lines on the `workshop/coverage`
 record, keyed by
 the leg, the package, and the identity of the package's dependency
 closure (the tree ids of the package and of every package it
-depends on, plus the root's `pyproject.toml` and `uv.lock`). A leg
+depends on, plus the root's `pyproject.toml` and `uv.lock`). The
+workspace's own `tests/` directory is a unit too, keyed by the whole
+tree, and every leg that runs a suite runs it. A leg
 skips a suite only when the record holds its lines for that
 identity; otherwise the suite runs, and the leg says why. The gate
 job pulls every skipped suite from the record before it judges, so
 the union is the same global union a full run produces; a suite the
 record cannot supply is red by name, never a smaller union. A local
 `fm test` prints its own lower-biased
-preview beside the floor, for information. Raise a floor as the
-suite grows; lower it only deliberately, in a reviewed change. The
+preview beside the floor, for information. Raise a committed floor
+as the suite grows; lower it only deliberately, in a reviewed change
+or an accepted row. The
 release legs publish a further, informational union that includes
 the live-only code.
 

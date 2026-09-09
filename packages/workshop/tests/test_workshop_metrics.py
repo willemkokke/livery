@@ -356,3 +356,53 @@ def test_render_skips_other_schemas_and_renders_percentiles_and_movers(
     assert "movers: the last 2 run(s) against the 5 before" in text
     # Recent median (runs 9, 10 -> 9.0s) against the base median (runs 4-8 -> 6.0s).
     assert "    +3.0s  gate: wall_ms (6.0s -> 9.0s)" in lines
+
+
+# --- the coverage row: folded into the run's file, rendered as a trend ---------
+
+
+def test_collect_folds_the_coverage_row_the_gate_left(
+    work: Path, tmp_path: Path
+) -> None:
+    fake = FakeForge()
+    fake.create_repo("owner", "repo")
+    repo = fake.repository("owner", "repo")
+    trace = _trace(tmp_path / "t.json", tasks={"check": 100.0})
+    assert _metrics.put_leg(work, RUN, job=JOB, label="check-a", trace=trace) == ""
+    assert _metrics.read_coverage_row(work) is None
+    (work / _metrics.COVERAGE_ROW).write_text("not json")
+    assert _metrics.read_coverage_row(work) is None
+    line = _metrics.write_coverage_row(
+        work, {"packages/x": 91.234, "packages/y": 100.0}
+    )
+    assert line == "coverage row: 2 package(s) for the run's record"
+    lines = _metrics.collect(work, repo, RUN, sha="b" * 40)
+    assert "  coverage: 2 package(s) recorded on the run" in lines
+    rows = _state.read(work, _metrics.SERIES.ref).files
+    assert rows is not None
+    entry = json.loads(rows[_metrics.run_file(RUN.run_id)])
+    assert entry["coverage"] == {"packages/x": 91.23, "packages/y": 100.0}
+
+
+def test_render_shows_the_coverage_rows_when_any_run_carries_one(work: Path) -> None:
+    files = {}
+    for n in range(1, 4):
+        entry = {
+            "schema": _metrics.SCHEMA,
+            "run": str(n),
+            "sha": "a" * 40,
+            "jobs": {"gate": {"wall_ms": 1000.0 * n}},
+        }
+        if n > 1:
+            entry["coverage"] = {"packages/x": 90.0 + n, "packages/y": 100.0}
+        files[_metrics.run_file(str(n))] = json.dumps(entry)
+    assert _state.put(work, _metrics.SERIES.ref, files, message="rows") == ""
+    lines = _metrics.render(work)
+    assert "  coverage" in lines
+    x = next(line for line in lines if line.strip().startswith("packages/x"))
+    assert x.split() == ["packages/x", "93.0%", "92.0%", "93.0%"]
+    y = next(line for line in lines if line.strip().startswith("packages/y"))
+    assert y.split() == ["packages/y", "100.0%", "100.0%", "100.0%"]
+    bare = {_metrics.run_file("9"): json.dumps({"schema": _metrics.SCHEMA, "jobs": {}})}
+    assert _state.put(work, _metrics.SERIES.ref, bare, message="bare") == ""
+    assert "  coverage" in _metrics.render(work)  # older rows still carry it

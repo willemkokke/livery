@@ -221,15 +221,35 @@ def _shipped(subdir: str, name: str) -> bool:
     return False
 
 
-def classify(root: Path, relative: Path) -> Provenance:
+def emitted_paths(root: Path) -> frozenset[str]:
+    """The paths the workshop emitters write for *root*, the owners file included.
+
+    One emission is a full render of every workflow, the site
+    configuration, and the entry script; a caller classifying many
+    paths computes this once and hands it to
+    [livery.workshop._provenance.classify][].
+    """
+    from livery.workshop._ci_generate import generate
+    from livery.workshop._governance import codeowners_file
+
+    generated = set(generate(root))
+    owners = codeowners_file(root)
+    if owners is not None:
+        generated.add(owners.path)
+    return frozenset(generated)
+
+
+def classify(
+    root: Path, relative: Path, *, emitted: frozenset[str] | None = None
+) -> Provenance:
     """The provenance of *relative* inside *root*; "yours" when no channel claims it.
 
     *relative* is taken lexically, never resolved: a materialised
     link classifies as the delivered entry it is, not as the wheel
-    path it points into.
+    path it points into. *emitted* is the emitters' path set from
+    [livery.workshop._provenance.emitted_paths][]; a caller with many
+    paths passes one set rather than paying an emission per path.
     """
-    from livery.workshop._ci_generate import generate
-    from livery.workshop._governance import codeowners_file
     from livery.workshop._templates import PROJECT_SEEDS, template_source
 
     prog = footman.prog()
@@ -239,10 +259,7 @@ def classify(root: Path, relative: Path) -> Provenance:
     if delivered is not None:
         return delivered
 
-    generated = set(generate(root))
-    owners = codeowners_file(root)
-    if owners is not None:
-        generated.add(owners.path)
+    generated = emitted_paths(root) if emitted is None else emitted
     if posix in generated:
         return Provenance(
             "generated",

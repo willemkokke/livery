@@ -17,7 +17,9 @@ import os
 import sys
 import tempfile
 import tomllib
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import livery.footman as footman
 from livery import toolroom
@@ -240,11 +242,63 @@ class _Stamper:
         return changed
 
 
+@dataclass(frozen=True)
+class FloorPolicy:
+    """How a package's coverage is judged: a committed floor, or the ratchet.
+
+    Attributes:
+        floor: The committed percentage, or ``None`` under auto-ratchet.
+        ratchet: Whether the mark on the store is the floor.
+        epsilon: The tolerance in percentage points, in both modes.
+    """
+
+    floor: float | None
+    ratchet: bool
+    epsilon: float
+
+
+def coverage_policy(package: Package) -> FloorPolicy | None:
+    """The package's ``[qa] coverage-floor`` policy, or ``None`` when it has none.
+
+    The floor is a percentage, or the mode ``"auto-ratchet"``; anything
+    else refuses by name. ``coverage-epsilon`` is a number of
+    percentage points, 0.5 when absent; a negative or non-numeric one
+    refuses.
+    """
+    from livery.workshop._coverage_marks import AUTO_RATCHET, DEFAULT_EPSILON
+
+    qa = load_contract(package.directory / "workshop.toml").get("qa") or {}
+    raw = qa.get("coverage-floor")
+    if raw is None:
+        return None
+    raw_epsilon = qa.get("coverage-epsilon", DEFAULT_EPSILON)
+    if isinstance(raw_epsilon, bool) or not isinstance(raw_epsilon, int | float):
+        fail(
+            f"{package.path}: [qa] coverage-epsilon is a number of percentage"
+            f" points; found {raw_epsilon!r}"
+        )
+    epsilon = float(raw_epsilon)
+    if epsilon < 0:
+        fail(f"{package.path}: [qa] coverage-epsilon must not be negative")
+    if raw == AUTO_RATCHET:
+        return FloorPolicy(None, True, epsilon)
+    if isinstance(raw, bool) or not isinstance(raw, int | float):
+        fail(
+            f"{package.path}: [qa] coverage-floor is a percentage or"
+            f' "{AUTO_RATCHET}"; found {raw!r}'
+        )
+    return FloorPolicy(float(raw), False, epsilon)
+
+
 def coverage_floor(package: Package) -> float | None:
-    """The committed coverage floor from the package's contract, or None."""
-    contract = load_contract(package.directory / "workshop.toml")
-    value = (contract.get("qa") or {}).get("coverage-floor")
-    return float(value) if value is not None else None
+    """The committed coverage floor from the package's contract, or None.
+
+    ``None`` under auto-ratchet too, whose floor is the mark on the
+    store; [livery.workshop._backends._python.coverage_policy][] tells
+    the two apart.
+    """
+    policy = coverage_policy(package)
+    return None if policy is None else policy.floor
 
 
 def measured_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, float]:
@@ -280,14 +334,6 @@ def measured_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, fl
     }
 
 
-#: How far below its floor a package may measure before the gate
-#: fails. A refactor that deletes a few covered lines moves the
-#: percentage by noise, and a hundredth of a percent is not a
-#: coverage regression; the floor stays the declared high-water mark
-#: and the grace absorbs the measurement jitter.
-COVERAGE_GRACE = 0.5
-
-
 def report_coverage(root: Path, packages: tuple[Package, ...]) -> None:
     """Print each package's local coverage beside its floor, no verdict.
 
@@ -298,14 +344,16 @@ def report_coverage(root: Path, packages: tuple[Package, ...]) -> None:
     """
     measured = measured_coverage(root, packages)
     for package in packages:
-        floor = coverage_floor(package)
-        if floor is None:
+        policy = coverage_policy(package)
+        if policy is None:
             continue
         percent = measured.get(package.path, 0.0)
-        print(
-            f"  coverage {package.path}: {percent:.1f}% here"
-            f" (floor {floor:.1f}% judges the CI union)"
+        judged = (
+            "the mark on the store judges the CI union"
+            if policy.ratchet
+            else f"floor {policy.floor:.1f}% judges the CI union"
         )
+        print(f"  coverage {package.path}: {percent:.1f}% here ({judged})")
 
 
 #: Where the gate job collects every leg's coverage artifact.
@@ -335,6 +383,14 @@ def suites_of(packages: tuple[Package, ...]) -> tuple[Package, ...]:
     )
 
 
+def units_of(root: Path, packages: tuple[Package, ...]) -> tuple[Package, ...]:
+    """The stored units: every package's suite, then the workspace's own tests."""
+    from livery.workshop._coverage_store import workspace_suite
+
+    unit = workspace_suite(root)
+    return suites_of(packages) + ((unit,) if unit is not None else ())
+
+
 def suite_lines_by_context(
     data: Path, packages: tuple[Package, ...], package: Package, *, root: Path
 ) -> dict[str, list[int]]:
@@ -352,12 +408,16 @@ def suite_lines_by_context(
 
     from coverage import CoverageData
 
-    from livery.workshop._coverage_store import in_closure
+    from livery.workshop._coverage_store import WORKSPACE_TESTS, in_closure
 
     measured = CoverageData(basename=str(data))
     measured.read()
     files: dict[str, list[int]] = {}
-    own = rf"^{re.escape(package.path)}/tests/"
+    own = (
+        rf"^{re.escape(package.path)}/"
+        if package.path == WORKSPACE_TESTS
+        else rf"^{re.escape(package.path)}/tests/"
+    )
     for query in ([own], [r"^$"]):
         measured.set_query_contexts(query)
         for filename in measured.measured_files():
@@ -371,18 +431,31 @@ def suite_lines_by_context(
     return files
 
 
-def suites_that_ran(data: Path, packages: tuple[Package, ...]) -> tuple[Package, ...]:
-    """The suites with at least one test context in the leg's data."""
-    from coverage import CoverageData
+def suites_that_ran(
+    marker: dict[str, Any], root: Path, packages: tuple[Package, ...]
+) -> tuple[Package, ...]:
+    """The units the leg ran, by its scope marker.
 
-    measured = CoverageData(basename=str(data))
-    measured.read()
-    contexts = measured.measured_contexts()
-    return tuple(
-        package
-        for package in suites_of(packages)
-        if any(context.startswith(f"{package.path}/tests/") for context in contexts)
-    )
+    Every suite after a full gate, the named packages' suites after a
+    narrowed one, none after a skip; the workspace's own tests
+    whenever any suite ran, since every leg that runs a suite runs
+    them. The marker decides, never the data's contexts: a suite whose
+    tests reach no line that collection had not already reached leaves
+    no context of its own under a first-hit tracer, and still ran.
+    """
+    from livery.workshop._coverage_store import workspace_suite
+    from livery.workshop._verified import AFFECTED, FULL
+
+    scope = marker["scope"]
+    if scope == FULL:
+        ran = suites_of(packages)
+    elif scope == AFFECTED:
+        named = set(marker["packages"])
+        ran = tuple(package for package in suites_of(packages) if package.path in named)
+    else:
+        return ()
+    unit = workspace_suite(root)
+    return ran + ((unit,) if unit is not None else ())
 
 
 def _relative(filename: str, root: Path) -> str | None:
@@ -400,16 +473,19 @@ def _relative(filename: str, root: Path) -> str | None:
 SUITES_DATA = "coverage-suites.db"
 
 
-def store_suites(root: Path, packages: tuple[Package, ...], *, leg: str) -> None:
-    """Split the leg's data per suite and stamp each suite on the coverage store.
+def store_suites(
+    root: Path, packages: tuple[Package, ...], *, marker: dict[str, Any]
+) -> None:
+    """Split the leg's data per unit and stamp each unit on the coverage store.
 
     The leg's parts combine into `SUITES_DATA` first (kept apart from
-    the upload); each suite with a test context is split out and its
-    lines within its closure are stamped under *leg*'s label and the
-    suite's closure identity. Only a CI run stamps; a refusal from the
-    store is printed, never fatal, since the next leg that misses the
-    suite runs it fresh.
+    the upload); each unit the marker says ran is split out and its
+    lines within its closure are stamped under the marker's leg label
+    and the unit's closure identity. Only a CI run stamps; a refusal
+    from the store is printed, never fatal, since the next leg that
+    misses the unit runs it fresh.
     """
+    leg = marker["leg"]
     from coverage import CoverageData
 
     from livery.workshop._coverage_store import closure_id, stamp
@@ -427,7 +503,7 @@ def store_suites(root: Path, packages: tuple[Package, ...], *, leg: str) -> None
     combined.write()
     run = run_context()
     git = GitOps(root)
-    for package in suites_that_ran(root / SUITES_DATA, packages):
+    for package in suites_that_ran(marker, root, packages):
         files = suite_lines_by_context(root / SUITES_DATA, packages, package, root=root)
         if run is None:
             print(
@@ -481,7 +557,7 @@ def combine_leg(root: Path, packages: tuple[Package, ...]) -> None:
             )
         print(f"  coverage: no data, the gate ran {scope!r}; nothing to combine")
         return
-    store_suites(root, packages, leg=marker["leg"])
+    store_suites(root, packages, marker=marker)
     if parts:
         result = toolroom.coverage.opts(
             cwd=root, env=_unmetered(), nofail=True, recorded=False
@@ -518,6 +594,7 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
         The judged packages, in *packages* order; empty when nothing
         ran and nothing was reused, and then no union file is written.
     """
+    from livery.workshop._coverage_store import WORKSPACE_TESTS
     from livery.workshop._verified import (
         AFFECTED,
         FULL,
@@ -564,6 +641,7 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
             judged.update(package.path for package in packages)
         else:
             judged.update(marker["packages"])
+        judged.add(WORKSPACE_TESTS)
     reused = _reuse_suites(root, packages, judged, labels)
     collected.extend(reused)
     unjudged = [package.path for package in packages if package.path not in judged]
@@ -598,12 +676,13 @@ def _reuse_suites(
     judged: set[str],
     labels: list[tuple[Path, str]],
 ) -> list[Path]:
-    """Pull every suite no leg ran from the store, one data file per leg.
+    """Pull every unit no leg ran from the store, one data file per leg.
 
-    Extends *judged* to every package once each suite is accounted
+    The units are the packages' suites and the workspace's own tests.
+    Extends *judged* to every package once each unit is accounted
     for. Refuses by name when a leg has no label to read the store by,
     when the store cannot be read, and when it holds no entry for a
-    suite's closure on a leg.
+    unit's closure on a leg.
     """
     from coverage import CoverageData
 
@@ -611,9 +690,9 @@ def _reuse_suites(
     from livery.workshop._git_ops import GitOps
     from livery.workshop._verified import MARKER
 
-    pending = [package for package in suites_of(packages) if package.path not in judged]
+    pending = [unit for unit in units_of(root, packages) if unit.path not in judged]
     if not pending:
-        # Every suite ran: the union is complete, and the packages
+        # Every unit ran: the union is complete, and the packages
         # without a suite of their own are judged on it too.
         judged.update(package.path for package in packages)
         return []
@@ -653,34 +732,89 @@ def _reuse_suites(
     return written
 
 
-def enforce_coverage(root: Path, packages: tuple[Package, ...]) -> None:
-    """Fail any package measurably below its committed floor.
+def enforce_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, float]:
+    """Fail any package measurably below its floor; the measured percentages.
 
-    Prints each verdict with the floor and the grace, so the numbers
-    on screen are the numbers enforced.
+    A committed floor passes at the floor minus the package's epsilon.
+    Under auto-ratchet the floor is the mark on the store minus
+    epsilon: a run with no mark records one and passes, a run that
+    clears the mark by more than epsilon raises it (a CI run writes;
+    a local run says it would), and a store that cannot be read falls
+    open with its reason and writes nothing. Every verdict prints with
+    its numbers, so the numbers on screen are the numbers enforced.
     """
+    from livery.workshop import _coverage_marks
+    from livery.workshop._state import run_context
+
     measured = measured_coverage(root, packages)
-    problems = []
+    policies = {package.path: coverage_policy(package) for package in packages}
+    ratcheted = [
+        p for p in packages if (policies[p.path] or FloorPolicy(None, False, 0)).ratchet
+    ]
+    current: dict[str, _coverage_marks.Mark] | None = {}
+    marks_why = ""
+    if ratcheted:
+        current, marks_why = _coverage_marks.marks(root)
+    run = run_context()
+    problems: list[str] = []
     for package in packages:
-        floor = coverage_floor(package)
-        if floor is None:
+        policy = policies[package.path]
+        if policy is None:
             continue
         percent = measured.get(package.path, 0.0)
-        print(
-            f"  coverage {package.path}: {percent:.1f}%"
-            f" (floor {floor:.1f}%, grace {COVERAGE_GRACE}%)"
-        )
-        if percent < floor - COVERAGE_GRACE:
-            problems.append(
-                f"{package.path}: {percent:.1f}% is below the committed"
-                f" floor of {floor:.1f}% by more than the {COVERAGE_GRACE}% grace"
+        if not policy.ratchet:
+            assert policy.floor is not None
+            print(
+                f"  coverage {package.path}: {percent:.1f}%"
+                f" (floor {policy.floor:.1f}%, epsilon {policy.epsilon}%)"
             )
+            if percent < policy.floor - policy.epsilon:
+                problems.append(
+                    f"{package.path}: {percent:.1f}% is below the committed"
+                    f" floor of {policy.floor:.1f}% by more than the"
+                    f" {policy.epsilon}% epsilon"
+                )
+            continue
+        if current is None:
+            print(
+                f"  coverage {package.path}: {percent:.1f}% (auto-ratchet:"
+                f" {marks_why}; the gate falls open and records nothing)"
+            )
+            continue
+        (verdict,) = _coverage_marks.judge(
+            {package.path: percent}, current, {package.path: policy.epsilon}
+        )
+        print(_coverage_marks.render(verdict))
+        if not verdict.ok:
+            assert verdict.mark is not None
+            problems.append(
+                f"{package.path}: {percent:.1f}% is below its mark of"
+                f" {verdict.mark.value:.1f}% by more than the {policy.epsilon}%"
+                f" epsilon; raise the code, or lower the mark deliberately with"
+                f" `{footman.prog()} coverage.accept {package.path} <value>"
+                " --reason=...`"
+            )
+            continue
+        if verdict.raises:
+            if run is None:
+                print("    (a CI run records the mark; this run does not)")
+                continue
+            why = _coverage_marks.write_mark(
+                root,
+                package=package.path,
+                value=percent,
+                kind="first" if verdict.mark is None else "ratchet",
+                by=f"run {run.run_id}",
+                ci_only=True,
+            )
+            print(f"    {'recorded' if not why else 'not recorded: ' + why}")
     if problems:
         fail(
-            "coverage fell below the high-water marks:\n  "
+            "coverage fell below the floors:\n  "
             + "\n  ".join(problems)
-            + "\n  raise the code, or lower a floor deliberately in workshop.toml"
+            + "\n  raise the code, or lower a floor deliberately"
         )
+    return measured
 
 
 def scoped_rewrite(subset: tuple[Package, ...]) -> None:
@@ -751,11 +885,16 @@ def run_test(
         return
     dirs: tuple[str, ...] = ()
     if scoped:
+        # The workspace's own tests ride every scoped run: they reach
+        # any package, so no narrowing excuses them, and the leg stores
+        # them as a unit keyed by the whole tree.
+        from livery.workshop._coverage_store import WORKSPACE_TESTS
+
         dirs = tuple(
             f"{package.path}/tests"
             for package in packages
             if (package.directory / "tests").is_dir()
-        )
+        ) + ((WORKSPACE_TESTS,) if (root / WORKSPACE_TESTS).is_dir() else ())
     if os.environ.get("COVERAGE_PROCESS_START"):
         # Coverage's own subprocess variable: when it is set, every
         # python this venv starts is already metered from interpreter

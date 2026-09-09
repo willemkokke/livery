@@ -10,7 +10,9 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from livery.workshop._provenance import PROJECT_RENDERED, classify
+import pytest
+
+from livery.workshop._provenance import PROJECT_RENDERED, classify, emitted_paths
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATES = ROOT / "packages/workshop/src/livery/workshop/templates"
@@ -24,8 +26,11 @@ def _tracked() -> list[Path]:
 
 
 def test_every_tracked_file_classifies() -> None:
+    # One emission for the whole tree: classifying hundreds of paths
+    # must not render the workflows hundreds of times.
+    emitted = emitted_paths(ROOT)
     for path in _tracked():
-        answer = classify(ROOT, path)
+        answer = classify(ROOT, path, emitted=emitted)
         assert answer.channel and answer.source and answer.edit, path
 
 
@@ -52,8 +57,9 @@ def test_the_channels_land_where_the_workspace_knows_them() -> None:
             "fragments/interaction-voice.md"
         ): "layer content",
     }
+    emitted = emitted_paths(ROOT)
     for path, channel in expect.items():
-        assert classify(ROOT, Path(path)).channel == channel, path
+        assert classify(ROOT, Path(path), emitted=emitted).channel == channel, path
 
 
 def test_the_rendered_list_matches_the_template_tree() -> None:
@@ -71,3 +77,21 @@ def test_the_rendered_list_matches_the_template_tree() -> None:
             continue  # the answers file: receipts, its own header
         names.add(relative)
     assert names == set(PROJECT_RENDERED) | set(PROJECT_SEEDS)
+
+
+def test_a_precomputed_emission_renders_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Judging hundreds of paths must not render the workflows hundreds
+    # of times: with the emitters' set in hand, classify never emits.
+    from livery.workshop import _ci_generate
+
+    def _never(root: Path) -> dict[str, str]:
+        raise AssertionError("the emission was precomputed; classify must not render")
+
+    monkeypatch.setattr(_ci_generate, "generate", _never)
+    emitted = frozenset({".github/workflows/ci.yml"})
+    assert classify(ROOT, Path("workshop.toml"), emitted=emitted).channel == "contract"
+    assert classify(
+        ROOT, Path(".github/workflows/ci.yml"), emitted=emitted
+    ).channel == ("generated")
