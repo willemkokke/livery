@@ -308,6 +308,58 @@ def report_coverage(root: Path, packages: tuple[Package, ...]) -> None:
         )
 
 
+#: Where the gate job collects every leg's coverage artifact.
+COVERAGE_DATA = "coverage-data"
+
+
+def combine_leg(root: Path) -> None:
+    """Combine the leg's per-process data files into ``.coverage``; refuse on none."""
+    parts = sorted(root.glob(".coverage.*"))
+    if not parts and not (root / ".coverage").is_file():
+        fail(
+            "this leg left no coverage data: nothing was metered. The leg's"
+            " runner sets COVERAGE_PROCESS_START=pyproject.toml so every"
+            " python starts metered; without it there is nothing to union."
+        )
+    if parts:
+        result = toolroom.coverage.opts(cwd=root, nofail=True, recorded=False)(
+            "combine"
+        )
+        if result.code != 0:
+            fail(
+                f"coverage combine exited {result.code}:\n"
+                f"{result.stdout}{result.stderr}"
+            )
+    print(f"  coverage: {len(parts)} data file(s) combined into .coverage")
+
+
+def combine_union(root: Path) -> None:
+    """Combine every collected leg's ``.coverage`` into the union; refuse on none."""
+    collected = sorted((root / COVERAGE_DATA).glob("*/.coverage"))
+    if not collected:
+        fail(
+            f"no leg's coverage data under {COVERAGE_DATA}/: the check legs"
+            " upload theirs as coverage-<os>-<python> artifacts, and the gate"
+            " job collects them before this union. A missing upload is a red"
+            " leg, never a smaller union."
+        )
+    scrubbed = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(("COVERAGE_", "COV_CORE_"))
+    }
+    result = toolroom.coverage.opts(
+        cwd=root, env=scrubbed, nofail=True, recorded=False
+    )("combine", *(str(path) for path in collected))
+    if result.code != 0:
+        fail(f"coverage combine exited {result.code}:\n{result.stdout}{result.stderr}")
+    report = toolroom.coverage.opts(
+        cwd=root, env=scrubbed, nofail=True, recorded=False
+    )("report", "--sort=cover")
+    print(report.stdout.rstrip())
+    print(f"  coverage: the union of {len(collected)} leg(s)")
+
+
 def enforce_coverage(root: Path, packages: tuple[Package, ...]) -> None:
     """Fail any package measurably below its committed floor.
 

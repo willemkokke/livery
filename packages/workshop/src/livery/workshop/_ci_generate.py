@@ -42,6 +42,8 @@ DOWNLOAD = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c #
 #: a runner that carries the inputs sees it exit 0 (measured on the
 #: loop's runner).
 GITEA_UPLOAD = "christopherhx/gitea-upload-artifact@v4"
+#: The matching download fork, for the gate job's union of the legs.
+GITEA_DOWNLOAD = "christopherhx/gitea-download-artifact@v4"
 
 
 def _facts(root: Path) -> dict[str, Any]:
@@ -556,9 +558,23 @@ jobs:
       # act_runner host mode: no setup actions. The entry script
       # installs the lock's pinned uv itself where the host has none.
 {rung}{enter_leg}      - name: Check
+        env:
+          # Coverage's own subprocess contract: every python this venv
+          # starts is metered from interpreter start, so the whole
+          # {prog} invocation measures with no wrapper; the leg's data
+          # is combined by the check job's own entries and judged once,
+          # on the union, in the gate job.
+          COVERAGE_PROCESS_START: pyproject.toml
         run: >-
           {prog} ci.run --point=gate --job=check
           --os="${{{{ matrix.os }}}}" --python="${{{{ matrix.python }}}}"
+      - name: Leg coverage data
+        uses: {GITEA_UPLOAD}
+        with:
+          name: coverage-${{{{ matrix.os }}}}-${{{{ matrix.python }}}}
+          path: .coverage
+          include-hidden-files: true
+          if-no-files-found: error
       # The run as a Chrome trace, one artifact per leg: every task,
       # step, lane wait, and pytest test as slices. Observational, so
       # it runs on a red gate too (the run worth reading) and its own
@@ -593,6 +609,13 @@ jobs:
     runs-on: {first}
     steps:
       - uses: actions/checkout@v4
+      # Every leg's coverage data, for the union the gate's own
+      # entries combine and judge against the committed floors.
+      - name: Collect every leg's coverage data
+        uses: {GITEA_DOWNLOAD}
+        with:
+          pattern: coverage-*
+          path: coverage-data
 {rung}{enter}      - name: Verdict
         env:
           FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}

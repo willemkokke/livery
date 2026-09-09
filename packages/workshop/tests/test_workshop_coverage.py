@@ -95,3 +95,40 @@ def test_without_a_parent_the_meter_and_the_preview_run(
     assert any(arg == "--cov" for arg in seen[0])
     assert "packages/thing/tests" not in seen[0]  # no tests dir exists
     assert enforced == [tmp_path]
+
+
+def test_a_leg_with_no_metered_data_refuses_naming_the_meter(tmp_path: Path) -> None:
+    with pytest.raises(BaseException, match="COVERAGE_PROCESS_START"):
+        _python.combine_leg(tmp_path)
+
+
+def test_a_union_with_no_collected_leg_refuses_naming_the_directory(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(BaseException, match="coverage-data"):
+        _python.combine_union(tmp_path)
+    (tmp_path / "coverage-data" / "leg-a").mkdir(parents=True)
+    with pytest.raises(BaseException, match="no leg's coverage data"):
+        _python.combine_union(tmp_path)
+
+
+def test_the_union_of_two_legs_covers_what_each_left_uncovered(tmp_path: Path) -> None:
+    from coverage import CoverageData
+
+    package = _package(tmp_path, "x", "[qa]\ncoverage-floor = 95\n")
+    source = tmp_path / "packages" / "x" / "src" / "livery" / "x" / "mod.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("a = 1\nb = 2\nc = 3\nd = 4\n")
+    for leg, lines in (("leg-a", [1, 2]), ("leg-b", [3, 4])):
+        folder = tmp_path / "coverage-data" / leg
+        folder.mkdir(parents=True)
+        data = CoverageData(basename=str(folder / ".coverage"))
+        data.add_lines({str(source): lines})
+        data.write()
+    _python.combine_union(tmp_path)
+    assert (tmp_path / ".coverage").is_file()
+    measured = _python.measured_coverage(tmp_path, (package,))
+    assert measured == {"packages/x": 100.0}
+    _python.enforce_coverage(
+        tmp_path, (package,)
+    )  # each leg alone: 50%; the union: 100%

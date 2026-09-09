@@ -369,7 +369,8 @@ def test_the_gitea_shell_is_one_verb_per_job_and_only_event_filters(
         for step in job["steps"]:
             if "if" in step:
                 assert step["if"] == "always()", (name, step)
-    assert "fm ci.run --point=gate --job=check" in jobs["check"]["steps"][-2]["run"]
+    check_step = next(s for s in jobs["check"]["steps"] if s.get("name") == "Check")
+    assert "fm ci.run --point=gate --job=check" in check_step["run"]
     assert jobs["gate"]["if"] == "always()"
     assert jobs["deploy"]["if"] == "github.event_name == 'push'"
     assert jobs["govern"]["if"] == "github.event_name == 'push'"
@@ -972,3 +973,27 @@ def test_the_check_jobs_fetch_history_for_the_merge_base(tmp_path: Path) -> None
         workflow = yaml.safe_load(generate(root)[path])
         checkout = workflow["jobs"]["check"]["steps"][0]
         assert checkout["with"]["fetch-depth"] == 0, kind
+
+
+def test_the_gitea_lane_meters_its_legs_and_unions_them_in_the_gate_job(
+    tmp_path: Path,
+) -> None:
+    import yaml
+
+    from livery.workshop._ci_generate import generate
+
+    root = _contract_root(tmp_path, "gitea")
+    workflow = yaml.safe_load(generate(root)[".gitea/workflows/ci.yml"])
+    check = workflow["jobs"]["check"]["steps"]
+    run = next(step for step in check if step.get("name") == "Check")
+    assert run["env"]["COVERAGE_PROCESS_START"] == "pyproject.toml"
+    upload = next(step for step in check if step.get("name") == "Leg coverage data")
+    assert upload["with"]["path"] == ".coverage"
+    assert upload["with"]["if-no-files-found"] == "error"
+    gate = workflow["jobs"]["gate"]["steps"]
+    download = next(
+        step for step in gate if step.get("name") == "Collect every leg's coverage data"
+    )
+    assert download["with"] == {"pattern": "coverage-*", "path": "coverage-data"}
+    # The union is a gate entry, never a YAML line: the shell stays plumbing.
+    assert "coverage combine" not in generate(root)[".gitea/workflows/ci.yml"]
