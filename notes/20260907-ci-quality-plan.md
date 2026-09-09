@@ -15,9 +15,11 @@ with the schedule seam's first entry (issue #327), the matrices as
 contract config (issue #329), the kebab-case keys with the one
 contract loader (issue #331), and the wheels matrix with the loop's
 nanobind member (issue #335) landed on the gitea emitter: phase 3
-is complete. The entry-points race (#263) has its root cause and
-fix (the completion test healing the real project's environment
-mid-suite; the dev build leaving editables stale).
+is complete. Phase 4 began the same day with affected mode in the
+check legs behind `[ci] affected-legs` (issue #338). The
+entry-points race (#263) has its root cause and fix (the completion
+test healing the real project's environment mid-suite; the dev
+build leaving editables stale).
 Absorbs #267 (the speed pass), #286 (no logic in YAML), #270 (token
 publishing), #273 (the act names itself), and the structural finding of
 the phase-4 post-mortem (notes/20260906-phase-4-post-mortem.md): the
@@ -939,7 +941,24 @@ guessed. The candidate list, from what is already known:
 - Affected mode in CI: the check legs run the scoped gate against
   the merge base. The render and provenance gates, skipped in scoped
   mode today, get an explicit home (the gate job, or unskipped when
-  workflow-owning files are touched).
+  workflow-owning files are touched). Landed 2026-09-09 (issue
+  #338): a workspace declares `[ci] affected-legs = true` (default
+  false) and its check legs run `fm check` in affected mode against
+  the pull request's base branch, read from the event payload as the
+  run context's `base_ref`; a push to the merge point pays the full
+  gate until the verified-tree record exists. The check jobs fetch
+  history for the merge base. Every fallback prints its reason: no
+  run context, an undeclared key, a non pull request event, a
+  payload without a base, a merge base git cannot compute; a
+  non-boolean key refuses. The render gate and the provenance check
+  are the gate job's builtin entries now. The loop's contract
+  declares the key; livery's keeps the full legs until coverage
+  reuse lands. The loop's other pull requests all touch the root
+  (new.package wires the workspace, the release stamps the
+  manifest) and pay the full gate by the affected rule, so every
+  pass now lands a member-only pull request and reads its check
+  leg's log, failing unless the leg says it narrowed to that
+  member. Proven on the loop the same day: the member-only pull request's check leg printed the narrowing against main and `affected: packages/loop-echo`, and the pass read both back; the root-touching pull requests and the merge point's push printed why they paid the full gate; the gate job ran the render gate and the provenance check on every run; the loop stayed whole from gate to receipt.
 - Coverage stays global under affected, ruled by Willem 2026-09-07,
   through the CI state store: when a suite runs, its combined
   coverage data is stamped on `workshop/coverage`, keyed by the suite's
@@ -1474,3 +1493,15 @@ None. Every ruling raised in this plan was closed in the review of
   toolchain reason has no re-run with the fixed toolchain, since the
   dispatch pins the stamping commit; re-stamping the merged version
   on a fresh release branch would be the gesture, not yet ruled.
+- 2026-09-09: affected mode in CI is opt-in by contract,
+  `[ci] affected-legs`, stated as the recommended form before the
+  build and not yet ruled. The decision lives in the `check` verb,
+  which reads the run context and the contract, so the shell stays
+  plumbing; the key defaults to false because the GitHub lane's
+  coverage union needs coverage reuse first, and the loop is the
+  one workspace declaring it. The render gate and the provenance
+  check moved to the gate job rather than being unskipped on a path
+  classification, since that job runs once per run and the two
+  cost under a minute together. The check jobs fetch full history
+  rather than a bounded depth, the one shape that cannot miss a
+  merge base.
