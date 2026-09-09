@@ -21,8 +21,9 @@ verified-tree record that lets main's run skip a tree its pull
 request already proved (issue #340), and the coverage union on the
 gitea lane, judging only the packages the legs' scopes covered,
 with `fm ci.e2e` proving its three shapes from the runs' logs
-(issue #342, first step; the second step, per-suite measurements
-judged from the record, is issue #345). The
+(issue #342, first step) and the per-suite coverage store that
+lets a narrowed leg skip a suite and the gate reuse its lines
+(issue #345). The
 entry-points race (#263) has its root cause and fix (the completion
 test healing the real project's environment mid-suite; the dev
 build leaving editables stale).
@@ -996,7 +997,31 @@ guessed. The candidate list, from what is already known:
   the gate and its union judged nothing, naming both members
   unjudged; the member-only pull request's union judged loop-echo
   alone and named loop-native unjudged; main's full run 1154 after it
-  judged both members at 100%.
+  judged both members at 100%. Decided and landed 2026-09-09 (issue
+  #345, the second step): under the parent meter each suite runs as
+  its own process with its own data-file prefix, so a suite's lines
+  are separable by construction; `fm coverage.leg` combines each
+  suite apart and stamps its lines within its closure on
+  `workshop/coverage/<leg>/<package>`, keyed by the identity of the
+  closure (the tree ids of the package and of every package it
+  depends on, plus the root's `pyproject.toml` and `uv.lock`); the
+  check leg consults the store when it narrows and runs any suite
+  the store cannot supply for this leg, saying why; the gate job
+  pulls every skipped suite from the store into the union and
+  refuses a miss by name. The job runner names the leg in
+  `WORKSHOP_LEG` for every entry it spawns, the key of the leg's
+  rows and stamps.
+  Proven on the loop 2026-09-09, read from the runs' logs by
+  `fm ci.e2e` itself: main's run 1162 after the setup squash skipped
+  the gate and its union reused both members' suites from the
+  store; the member-only pull request's leg narrowed to loop-echo,
+  stored its suite, and its union reused loop-native from the
+  store, both floors judged; main's full run 1164 after it stored
+  both suites and judged both. The first pass found coverage's
+  subprocess patch handing a child the parent's serialised
+  configuration (`COVERAGE_PROCESS_CONFIG`), which the child
+  prefers to its own `COVERAGE_FILE`; the suite's process gets the
+  file's name alone.
 - Coverage over time, and the floor mode declared per package
   (ruled by Willem 2026-09-07). A per-package percentage row lands
   beside the timing rows on every gated run, so the reader renders
@@ -1566,3 +1591,24 @@ None. Every ruling raised in this plan was closed in the review of
   newest run, and follows it. Stated, not ruled: a head pushed
   from elsewhere is followed and named rather than refused, since
   the follow's contract is the pull request, not a sha.
+- 2026-09-09: per-suite coverage data comes from one metered
+  process per suite rather than from coverage's dynamic contexts,
+  stated as the recommended form before the build and not yet
+  ruled. A context names the test function, not the suite, and
+  the lines run at import time carry no context at all, so a
+  split by context would attribute a module's import-time lines
+  to nobody; a process per suite owns its imports by
+  construction. The cost is one pytest start per suite on a
+  metered leg (the local `fm test` keeps its one pooled run); the
+  metrics rows measure it, and running the suite processes
+  concurrently is the answer if it shows. The stored unit is the
+  suite's lines within its closure's files, as JSON on the state
+  store rather than the data file itself: exact, small, and
+  readable by the next reader without coverage's own format. The
+  root's lock and manifest are part of every closure identity,
+  since a pin change is a dependency change for every suite. A
+  miss at the gate is red rather than a fresh run, because the
+  leg already consulted the store before it narrowed: a miss
+  there means a leg that skipped without the store, or a store
+  trimmed in between, and either deserves a name, not a quiet
+  widening.

@@ -7,8 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from livery.workshop import _quality
+from livery.workshop import _coverage_store, _quality
+from livery.workshop._git_ops import GitError
+from livery.workshop._packages import Package
 from livery.workshop._state import RunContext
+from livery.workshop._verified import read_marker
 
 
 def _root(tmp_path: Path, ci: str) -> Path:
@@ -20,8 +23,25 @@ def _root(tmp_path: Path, ci: str) -> Path:
     return tmp_path
 
 
-def _run(event: str, base: str) -> RunContext:
-    return RunContext("gitea", "7", event, "refs/pull/3/merge", "a" * 40, base)
+def _run(event: str, base: str, leg: str = "check-a") -> RunContext:
+    return RunContext("gitea", "7", event, "refs/pull/3/merge", "a" * 40, base, leg=leg)
+
+
+def _member(root: Path, name: str, *, suite: bool = True) -> Package:
+    directory = root / "packages" / name
+    directory.mkdir(parents=True)
+    (directory / "workshop.toml").write_text(
+        f'type = "python"\nname = "livery-{name}"\n'
+    )
+    if suite:
+        (directory / "tests").mkdir()
+    return Package(
+        directory=directory,
+        path=f"packages/{name}",
+        name=f"livery-{name}",
+        type="python",
+        depends=(),
+    )
 
 
 def _refusal(action: Callable[[], object]) -> str:
@@ -97,3 +117,75 @@ def test_a_pull_request_with_a_declared_key_narrows_against_its_base(
     assert bases == ["develop"]
     assert "affected-legs: the scoped gate against origin/develop" in out
     assert "nothing affected" in out
+
+
+# --- the coverage store decides which skipped suites run anyway ---------------
+
+
+def test_a_leg_without_a_label_or_an_identity_runs_every_suite(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = _root(tmp_path, "affected-legs = true\n")
+    x, y = _member(root, "x"), _member(root, "y")
+    z = _member(root, "z", suite=False)
+    monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
+    monkeypatch.setattr(_coverage_store, "find", lambda root, **kw: (None, ""))
+    widened = _quality._with_unstored_suites(
+        root, _run("pull_request", "main", ""), (x, y, z), (x,)
+    )
+    assert widened == (x, y)  # z has no suite to run
+    assert (
+        "packages/y runs, nothing to reuse (this leg has no label)"
+        in capsys.readouterr().out
+    )
+
+    def _no_identity(git: object, ps: object, p: object) -> str:
+        raise GitError("HEAD:packages/y is not in HEAD")
+
+    monkeypatch.setattr(_coverage_store, "closure_id", _no_identity)
+    widened = _quality._with_unstored_suites(
+        root, _run("pull_request", "main"), (x, y, z), (x,)
+    )
+    assert widened == (x, y)
+    assert "its closure has no identity" in capsys.readouterr().out
+
+
+def test_a_suite_the_store_holds_stays_skipped_and_a_miss_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = _root(tmp_path, "affected-legs = true\n")
+    x, y, z = _member(root, "x"), _member(root, "y"), _member(root, "z")
+    monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: root)
+    monkeypatch.setattr("livery.workshop._quality._packages", lambda: (x, y, z))
+    monkeypatch.setattr(
+        "livery.workshop._state.run_context", lambda: _run("pull_request", "main")
+    )
+    monkeypatch.setattr("livery.workshop._quality._affected", lambda base="main": (x,))
+    monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
+    stored = _coverage_store.Stored(
+        "check-a", "packages/y", "k" * 64, "5", "a" * 40, {}
+    )
+
+    def _find(
+        root: Path, *, leg: str, package: Package, closure_key: str
+    ) -> tuple[_coverage_store.Stored | None, str]:
+        assert leg == "check-a" and closure_key == "k" * 64
+        return (stored, "") if package.path == "packages/y" else (None, "remote down")
+
+    monkeypatch.setattr(_coverage_store, "find", _find)
+    gated: list[tuple[str, ...]] = []
+    monkeypatch.setattr(
+        "livery.workshop._quality._scoped_check",
+        lambda subset, *, fix=False: gated.append(tuple(p.path for p in subset)),
+    )
+    _quality.check()
+    out = capsys.readouterr().out
+    assert gated == [("packages/x", "packages/z")]
+    assert "coverage store: packages/z runs, nothing to reuse (remote down)" in out
+    assert "packages/y runs" not in out
+    assert "affected: packages/x, packages/z" in out
+    assert read_marker(root) == {
+        "scope": "affected",
+        "packages": ["packages/x", "packages/z"],
+        "leg": "check-a",
+    }

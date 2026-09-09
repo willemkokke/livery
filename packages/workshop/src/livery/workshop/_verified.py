@@ -70,28 +70,39 @@ def tree_id(git: GitOps, ref: str = "HEAD") -> str:
     return git._run("rev-parse", f"{ref}^{{tree}}").strip()
 
 
-def write_marker(root: Path, scope: str, packages: tuple[str, ...] = ()) -> None:
-    """Leave the leg's scope beside its trace for the metrics row and the stamp."""
+def write_marker(
+    root: Path, scope: str, packages: tuple[str, ...] = (), *, leg: str = ""
+) -> None:
+    """Leave the leg's scope, the suites it ran, and its label beside its trace.
+
+    The metrics row, the stamp, and the coverage union read it back:
+    *packages* are the suites the leg ran under a narrowed scope, and
+    *leg* the label the store keys the leg's measurements by.
+    """
     (root / MARKER).write_text(
-        json.dumps({"scope": scope, "packages": list(packages)}, sort_keys=True),
+        json.dumps(
+            {"scope": scope, "packages": list(packages), "leg": leg}, sort_keys=True
+        ),
         encoding="utf-8",
     )
 
 
 def read_marker(root: Path) -> dict[str, Any]:
     """The leg's scope marker, or ``{"scope": "unknown"}`` when it left none."""
+    unknown: dict[str, Any] = {"scope": "unknown", "packages": [], "leg": ""}
     path = root / MARKER
     if not path.is_file():
-        return {"scope": "unknown", "packages": []}
+        return unknown
     try:
         loaded = json.loads(path.read_text("utf-8"))
     except (OSError, ValueError):
-        return {"scope": "unknown", "packages": []}
+        return unknown
     if not isinstance(loaded, dict):
-        return {"scope": "unknown", "packages": []}
+        return unknown
     return {
         "scope": str(loaded.get("scope", "unknown")),
         "packages": [str(p) for p in loaded.get("packages", []) or []],
+        "leg": str(loaded.get("leg", "") or ""),
     }
 
 

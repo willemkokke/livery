@@ -42,6 +42,14 @@ class GitOps:
         out = self._run("rev-parse", "--abbrev-ref", "HEAD").strip()
         return "" if out == "HEAD" else out
 
+    def object_id(self, spec: str) -> str:
+        """The object id *spec* names (``HEAD:packages/forge`` is a tree id).
+
+        Raises:
+            GitError: When *spec* names nothing.
+        """
+        return self._run("rev-parse", "--verify", "--quiet", spec).strip()
+
     def head_sha(self) -> str:
         """The commit HEAD points at."""
         return self._run("rev-parse", "HEAD").strip()

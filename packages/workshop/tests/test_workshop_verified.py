@@ -199,7 +199,11 @@ def test_the_marker_reaches_the_legs_row(work: Path) -> None:
     assert _verified.read_marker(work) == {
         "scope": "affected",
         "packages": ["packages/x"],
+        "leg": "",
     }
+    _verified.write_marker(work, _verified.FULL, leg="check-a")
+    assert _verified.read_marker(work)["leg"] == "check-a"
+    _verified.write_marker(work, _verified.AFFECTED, ("packages/x",))
     trace = _trace(work / "fm-profile.json")
     assert (
         _metrics.put_leg(work, RUN, job="check (a)", label="check-a", trace=trace) == ""
@@ -207,4 +211,8 @@ def test_the_marker_reaches_the_legs_row(work: Path) -> None:
     found = _state.read(work, _state.run_ref(RUN, "check-a"))
     assert found.files is not None
     row = json.loads(found.files[_metrics.ROW_FILE])
-    assert row["scope"] == {"scope": "affected", "packages": ["packages/x"]}
+    assert row["scope"] == {
+        "scope": "affected",
+        "packages": ["packages/x"],
+        "leg": "",
+    }
