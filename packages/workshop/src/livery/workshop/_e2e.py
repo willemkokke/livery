@@ -14,6 +14,7 @@ carry it at all.
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -32,6 +33,13 @@ E2E_REPO = "ci-e2e-loop"
 #: this file is src/livery/workshop/_e2e.py, so the package directory
 #: holding tests/ is three parents up.
 _WORKSHOP_TESTS = Path(__file__).resolve().parents[3] / "tests"
+
+#: The template source the loop renders from: this package's own
+#: tree, so the loop tests the templates being edited.
+_TEMPLATES = Path(__file__).parent / "templates"
+
+#: The members whose dev wheels the loop eats, in the act's order.
+DEV_MEMBERS = ("workshop", "forge", "toolroom", "footman")
 
 
 def _dev_forge(kind: str) -> tuple[Forge, str]:
@@ -161,16 +169,49 @@ def _loop_home() -> Path:
     return data_dir() / "workshop-e2e"
 
 
-def _publish_dev_wheels(kind: str) -> None:
-    """Publish the workspace's dev wheels to the loop's registry.
+def _dev_pins(root: Path, head: str) -> dict[str, str]:
+    """The dev versions this pass built, by distribution name.
+
+    Read from the newest wheel in each member's ``dist``, which the
+    dev act just filled, and checked against *head*: a dev version's
+    local segment is ``<branch>.<sha>.<date>``, ``.dirty`` appended
+    for a tree no commit describes, so a wheel a previous pass left
+    behind can never pin the loop. Refuses, naming the member, when
+    a dist holds no wheel or its newest wheel is another commit's.
+    """
+    pins: dict[str, str] = {}
+    for member in DEV_MEMBERS:
+        dist = root / "packages" / member / "dist"
+        wheels = sorted(dist.glob("*.whl"), key=lambda wheel: wheel.stat().st_mtime)
+        if not wheels:
+            fail(f"no dev wheel in {dist}: the dev act built nothing for {member}")
+        name, version = wheels[-1].name.split("-", 2)[:2]
+        local = version.partition("+")[2].split(".")
+        if local and local[-1] == "dirty":
+            local.pop()
+        sha = local[-2] if len(local) >= 2 else ""
+        if not sha or not head.startswith(sha):
+            fail(
+                f"the newest wheel in {dist} is {wheels[-1].name}, built from"
+                f" {sha or 'no commit'}, not from HEAD {head[:12]}: the dev"
+                f" act did not build this pass's {member}"
+            )
+        pins[name.replace("_", "-")] = version
+    return pins
+
+
+def _publish_dev_wheels(kind: str) -> dict[str, str]:
+    """Publish the workspace's dev wheels to the loop's registry; the pins.
 
     The loop installs the workshop being edited, so every pass
     publishes fresh dev wheels first: a lock pinned to an older dev
     version would test yesterday's code with today's templates. The
     dev act is idempotent at a given commit, and a re-publish of the
-    same version walks past.
+    same version walks past. Returns the published versions by
+    distribution name, for the loop's lock to pin exactly.
     """
     from livery.footman import run
+    from livery.workshop._git_ops import GitOps
     from livery.workshop._layers import workspace_root
 
     root = workspace_root()
@@ -178,7 +219,7 @@ def _publish_dev_wheels(kind: str) -> None:
         fail("no workspace: no workshop.toml above the working directory")
     _, token = _dev_forge(kind)
     run(
-        ["fm", "--yes", "workflow.release", "workshop", "forge", "toolroom", "footman"],
+        ["fm", "--yes", "workflow.release", *DEV_MEMBERS],
         cwd=root,
         # The whole environment, extended: env= replaces, and a bare
         # pair would strip PATH from under the child fm.
@@ -188,7 +229,9 @@ def _publish_dev_wheels(kind: str) -> None:
             "UV_PUBLISH_TOKEN": token,
         },
     )
+    pins = _dev_pins(root, GitOps(root).head_sha())
     print("  dev wheels: published to the loop's registry")
+    return pins
 
 
 def _birth(kind: str, url: str) -> Path:
@@ -205,14 +248,13 @@ def _birth(kind: str, url: str) -> Path:
 
     home = _loop_home()
     home.mkdir(parents=True, exist_ok=True)
-    templates = Path(__file__).parent / "templates"
     with contextlib.chdir(home):
         new_project(
             E2E_REPO,
             forge=kind,
             owner=E2E_OWNER,
             url=ALIAS_URL,
-            templates=str(templates),
+            templates=str(_TEMPLATES),
             description="The workshop's local CI loop. Scratch; recreated freely.",
         )
     return home / E2E_REPO
@@ -239,18 +281,64 @@ def _authenticate_remote(root: Path, token: str) -> None:
         fail(f"git remote set-url exited {result.code}")
 
 
-def _eat_dev_wheels(root: Path) -> str:
-    """Point the workspace at the dev wheels; the pushed head sha.
+_TEMPLATES_LINE = re.compile(r'^templates = ".*"$', re.MULTILINE)
 
-    The registry joins the contract, the template renders it into
-    uv's config, and the lock goes: the in-container sync then
-    resolves the workshop's own dev wheels fresh, so the installed
-    workshop matches the emitter that rendered the workflows.
-    Measured necessity: a released workshop predating the emitted
-    verbs fails the docs job with "no task named".
-    Idempotent: an already-wired workspace pushes nothing.
+
+def _point_templates(contract: str, templates: Path) -> str:
+    """The contract text with its template source set to *templates*.
+
+    Birth seeds the source once, from the worktree that births; every
+    later pass runs from whichever worktree invokes it, and a render
+    from the birthing worktree's templates would test that tree's
+    files under this tree's wheels. Refuses when the contract names
+    no source at all, because birth always seeds one.
+    """
+    match = _TEMPLATES_LINE.search(contract)
+    if match is None:
+        fail(
+            "the loop's contract names no template source; birth seeds"
+            " one, so this workspace was not born by the loop"
+        )
+    return (
+        contract[: match.start()]
+        + f'templates = "{templates}"'
+        + contract[match.end() :]
+    )
+
+
+def _lock_pins(root: Path, pins: dict[str, str]) -> None:
+    """Lock the loop onto exactly the dev wheels this pass published.
+
+    The dev number counts commits since the release tag, so a longer
+    branch publishes a higher number and a lock left to upgrade
+    freely keeps resolving that branch's wheels (measured: the loop
+    ran one branch's emitter under another branch's wheels). The
+    pins name the four versions outright; everything else keeps its
+    locked version.
     """
     import livery.toolroom as toolroom
+
+    args = [f"--upgrade-package={name}=={version}" for name, version in pins.items()]
+    result = toolroom.uv.opts(cwd=root, nofail=True)("lock", *args)
+    if result.code != 0:
+        fail(
+            f"uv lock in the loop workspace exited {result.code}:"
+            f"\n{result.stdout}{result.stderr}"
+        )
+
+
+def _eat_dev_wheels(root: Path, pins: dict[str, str]) -> str:
+    """Point the workspace at this pass's dev wheels; the pushed head sha.
+
+    The registry joins the contract, the lock pins the wheels the
+    pass just published, and only then does the workspace re-render
+    through its own fm, so the files the runner executes come from
+    the templates and the emitter under test. Measured necessity: a
+    released workshop predating the emitted verbs fails the docs job
+    with "no task named", and a render before the re-lock ships the
+    previous pass's workflows. Idempotent: an already-wired workspace
+    pushes nothing.
+    """
     from livery.workshop._git_ops import GitOps
     from livery.workshop._new_project import _SETUP_BRANCH
 
@@ -284,8 +372,6 @@ def _eat_dev_wheels(root: Path) -> str:
     # mkdocs 2.0.dev3 from PyPI and the docs job lost
     # mkdocs.exceptions. The heal below removes any mode an earlier
     # pass declared.
-    import re
-
     if "[registries.python]" not in contract_text:
         contract_text = (
             contract_text.rstrip("\n")
@@ -317,23 +403,19 @@ def _eat_dev_wheels(root: Path) -> str:
             + "[docs]\n"
             + 'publish = "none"\n'
         )
+    contract_text = _point_templates(contract_text, _TEMPLATES)
     if contract_text != original:
         contract_file.write_text(contract_text, "utf-8")
-    # The loop tracks the worktree's templates live, so each pass
-    # re-applies the render before judging cleanliness: worktree
-    # edits reach the loop's rendered files here, not as drift reds
-    # inside the loop's own gate.
-    _loop_fm(root, "template.apply")
     pyproject = root / "pyproject.toml"
     text = pyproject.read_text("utf-8")
     marker = "[[tool.uv.index]]"
     if marker not in text:
-        # Bootstrap only: a stale venv's workshop renders the old
-        # template, which does not read [registries]. The edit holds
-        # until the re-lock below installs the dev workshop; from
-        # then on the template itself renders the wiring and this
-        # branch never fires again. The index table lands before the
-        # next table header, inside [tool.uv].
+        # Bootstrap only: birth's pyproject predates the registry in
+        # the contract, and the lock below must already read the loop
+        # index to find the dev wheels. The re-render after the lock
+        # replaces this edit with the template's own wiring, and from
+        # then on this branch never fires again. The index table
+        # lands before the next table header, inside [tool.uv].
         next_table = "\n[tool.uv.workspace]"
         wired = text.replace(
             next_table,
@@ -347,23 +429,15 @@ def _eat_dev_wheels(root: Path) -> str:
                 " and this wiring must follow it"
             )
         pyproject.write_text(wired, "utf-8")
-    # Re-lock when the tree moved or the lock is absent: birth's
-    # resume re-renders pyproject (a dirty tree), and the wiring
-    # above dirties it too, so the lock is rebuilt exactly when it
-    # could be stale. A clean, locked workspace relocks nothing,
-    # which keeps the re-run a true no-op. The alias makes the
-    # compose hostname true on the host, so the lock's URL holds
-    # on both sides.
-    # Always relock: every pass publishes fresh dev wheels, and a
-    # lock pinning the previous pass's version would keep installing
-    # yesterday's bytes (measured: the loop stayed red on a bug the
-    # worktree had already fixed). An unchanged worktree republishes
-    # the same version, the lock re-resolves identically, and the
-    # cleanliness check below still yields the no-op.
-
-    result = toolroom.uv.opts(cwd=root, nofail=True)("lock", "--upgrade")
-    if result.code != 0:
-        fail(f"uv lock in the loop workspace exited {result.code}")
+    # Lock first, render second: the loop's fm syncs its venv from
+    # the lock, so the render runs the workshop this pass published,
+    # and the workflows it emits are the emitter under test. The
+    # render may rewrite pyproject (the registry wiring, the roster),
+    # so the lock settles on the same pins once more afterwards; an
+    # unchanged pyproject makes that a no-op.
+    _lock_pins(root, pins)
+    _loop_fm(root, "template.apply")
+    _lock_pins(root, pins)
     # Cleanliness is the truth, not this run's edits: a resumed
     # half-wired workspace still commits and pushes here.
     if git.is_clean():
@@ -812,7 +886,7 @@ if _WORKSHOP_TESTS.is_dir():
         url = os.environ.get("GITEA_URL", "")
         _require_host_alias()
         _, lane_token = _dev_forge(forge)
-        _publish_dev_wheels(forge)
+        pins = _publish_dev_wheels(forge)
         root = _loop_home() / E2E_REPO
         if (root / ".git").is_dir():
             # A resumed birth pushes before it returns, so an
@@ -827,7 +901,7 @@ if _WORKSHOP_TESTS.is_dir():
         root = _birth(forge, url)
         _authenticate_remote(root, lane_token)
         provision(forge)
-        sha = _eat_dev_wheels(root)
+        sha = _eat_dev_wheels(root, pins)
         print(f"  watching {sha[:12]} on the runner")
         _watch(forge, url, sha)
         print("  green: the loop's gate ran on the real runner")

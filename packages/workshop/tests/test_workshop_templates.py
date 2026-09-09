@@ -265,7 +265,9 @@ def test_the_emitters_call_the_running_brand(
             assert spoken, path
             # No emitted word spells fm under a brand: the meter is
             # env-armed, so not even a module spelling remains.
-            assert re.search(r"\bfm\b", content) is None, path
+            # The trace's file name is footman's own, fixed under every
+            # brand, so it is the one `fm` a branded emission may carry.
+            assert re.search(r"\bfm\b(?!-profile\.json)", content) is None, path
 
 
 def test_the_default_brand_emits_fm(tmp_path: Path) -> None:
@@ -273,6 +275,59 @@ def test_the_default_brand_emits_fm(tmp_path: Path) -> None:
 
     gate = generate(_contract_root(tmp_path, "github"))[".github/workflows/ci.yml"]
     assert "fm coverage.enforce" in gate
+
+
+def test_every_gate_leg_runs_profiled_and_uploads_its_trace(tmp_path: Path) -> None:
+    # Each check leg runs the gate under --profile and uploads the
+    # trace, one artifact per leg. The upload is observational, which
+    # two rules pin: it runs on a red gate too, and its own exit never
+    # decides the leg, because the gitea lane's action exits 1 after a
+    # successful upload. The input it exits over rides along for the
+    # day the runner carries it.
+    import yaml
+
+    from livery.workshop._ci_generate import generate
+
+    lanes = (
+        ("github", ".github/workflows/ci.yml", "actions/upload-artifact@"),
+        ("gitea", ".gitea/workflows/ci.yml", "christopherhx/gitea-upload-artifact@"),
+    )
+    for kind, path, action in lanes:
+        check = yaml.safe_load(generate(_contract_root(tmp_path, kind))[path])
+        steps = check["jobs"]["check"]["steps"]
+        gates = [
+            step
+            for step in steps
+            if "fm --profile=fm-profile.json check" in step.get("run", "")
+        ]
+        assert len(gates) == 1, kind
+        uploads = [
+            step
+            for step in steps
+            if step.get("with", {}).get("path") == "fm-profile.json"
+        ]
+        assert len(uploads) == 1, kind
+        (upload,) = uploads
+        assert steps.index(upload) > steps.index(gates[0]), kind
+        assert upload["uses"].startswith(action), kind
+        assert upload["if"] == "always()", kind
+        assert upload["continue-on-error"] is True, kind
+        assert upload["with"]["if-no-files-found"] == "ignore", kind
+        assert upload["with"]["name"] == "profile-${{ matrix.os }}-${{ matrix.python }}"
+
+
+def test_the_rendered_tasks_mount_the_profiler(tmp_path: Path) -> None:
+    # The emitted legs run `fm --profile`; the flag exists only where
+    # the tasks file mounts footman.profile, so the render and the
+    # emitter move together, and the trace a local run writes is
+    # ignored like the coverage data beside it.
+    rendered = _render_kind(tmp_path, "github")
+    tasks = (rendered / "tasks.py").read_text()
+    layer = tasks.index('plugin("livery.workshop")')
+    profiler = tasks.index('plugin("footman.profile")')
+    mount = tasks.index("mount_layers()")
+    assert layer < profiler < mount
+    assert "fm-profile.json" in (rendered / ".gitignore").read_text()
 
 
 def test_the_rendered_prose_spells_the_brand(tmp_path: Path) -> None:

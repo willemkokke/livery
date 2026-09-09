@@ -5,7 +5,9 @@ Phase 1's substrate landed 2026-09-07 (issue #289): the loop is
 whole, gate to receipt; the evidence lives in the phase's
 acceptance bullet, and the one open line there names what rides
 the wheels-matrix work instead.
-Nothing is started; phase 1 begins on Willem's go.
+Phase 2's first slice, the profile mount and the profiled legs
+with their trace artifacts, landed 2026-09-09 (issue #314); the
+state store and the metrics rows follow.
 Absorbs #267 (the speed pass), #286 (no logic in YAML), #270 (token
 publishing), #273 (the act names itself), and the structural finding of
 the phase-4 post-mortem (notes/20260906-phase-4-post-mortem.md): the
@@ -397,11 +399,32 @@ uploads arrive with the phase-6 port, and the Windows gate
 investigation waits there too, since no local Windows runner
 exists.
 
-- Mount `footman.profile` in the workspace (hse's tolerant mount
-  pattern), so `fm --profile <verb>` works everywhere including CI.
+- Mount `footman.profile` in the workspace, so `fm --profile <verb>`
+  works everywhere including CI. Landed 2026-09-09 (issue #314): the
+  project template mounts it beside the base layer, as a hard mount
+  rather than hse's tolerant one (ruled by Willem 2026-09-09: pre-
+  release, and every released footman already carries the entry
+  point). The overhead is below the machine's noise floor, measured
+  by alternating profiled and plain runs: a trivial verb medians
+  0.18 s against 0.19 s over five runs each, the toolroom suite's
+  three pairs differ by under 1.5 s in both directions on 15 s to
+  28 s runs, and the full affected gate's trace of 11568 events
+  (2.2 MB) costs the writer 16 ms. The pytest side appends one
+  record per test phase in memory and dumps one fragment per xdist
+  worker at session end, so nothing is paid per test.
 - Every CI leg runs its gate profiled and uploads the trace as an
   artifact, one per leg, `if-no-files-found: ignore` (hse's two
-  hard-won upload rules ported with their reasons).
+  hard-won upload rules ported with their reasons). Landed
+  2026-09-09 on both gate emitters: the check leg runs
+  `fm --profile=fm-profile.json check`, and the upload step is
+  observational, `if: always()` (a red gate is the run worth
+  reading) and `continue-on-error: true` (the step's own exit never
+  decides the leg). The gitea lane uses
+  `christopherhx/gitea-upload-artifact@v4`, because an act_runner
+  that delivers dashed inputs empty breaks upstream's v4 before it
+  uploads anything; the loop's runner carries them, and there the
+  fork uploads and exits 0, measured. The upload step costs 0.66 s
+  per leg on the loop's runner.
 - Generalise hse's stamp transport into workshop as the CI state
   store, ruled by Willem 2026-09-07: refs in a dedicated namespace
   outside `refs/heads`, `refs/workshop/*` (ruled by Willem
@@ -445,9 +468,11 @@ exists.
   nightly point may write benchmarks later), so a years-long,
   kilobyte-rows series coexists with a ten-run trace window and a
   new series is a new key, never a migration.
-- Traces stay local files for now: in the loop the trace already
-  sits in the working directory, so it needs no transport at all.
-  Only the metrics rows ride the ref. The blob story
+- Traces stay local files for now, and only the metrics rows ride
+  the ref. Measured 2026-09-09: the loop's act_runner sweeps the
+  job's working directory after the job, so the per-leg artifact is
+  the trace's only retrievable copy on the runner; the loop
+  repository's artifacts API lists and serves it. The blob story
   (`workshop/profiles`, gzip, windows, whether refs replace artifact
   uploads outright) is deferred to phase 6, where a remote runner
   first makes it real; ref transport remains the ruled default
@@ -455,10 +480,31 @@ exists.
 - A reading verb (working name `fm ci.timings`): per-verb, per-leg
   trend, p50/p90, biggest movers since a base. This is the ledger
   #267's "measure the loop end to end" asks for.
-- Acceptance: a trace retrievable for every leg of one run; the
-  metrics ref carrying rows from at least two runs; the reading verb
-  rendering them; the transport's refusal paths tested before its
-  happy path (fallbacks first), the windowed rewrite included.
+- Acceptance: a trace retrievable for every leg of one run (met
+  2026-09-09: one `fm ci.e2e` pass left `profile-ubuntu-latest-3.11`
+  and `-3.14` on the loop repository for the setup-branch run and
+  again for main's run after the merge, each a trace with every
+  task's duration and the member's tests in three phases, and the
+  emitter test pins the profiled invocation and the two upload
+  rules); the metrics ref carrying rows from at least two runs; the
+  reading verb rendering them; the transport's refusal paths tested
+  before its happy path (fallbacks first), the windowed rewrite
+  included.
+- Found and fixed on the way (2026-09-09): the loop had been testing
+  the #289 branch's wheels on every pass since that branch landed.
+  A dev version's number counts commits since the release tag, so
+  the longest branch publishes the highest number and the loop's
+  `uv lock --upgrade` kept resolving it; the contract's template
+  source stayed at the birthing worktree's path; and the render ran
+  through the loop's venv before the re-lock, one pass behind the
+  emitter. The loop now pins its lock to the four versions the pass
+  published (read from the wheels the dev act leaves in each
+  member's dist, checked against HEAD's sha, refusing a stale one),
+  points the template source at the invoking worktree each pass,
+  and renders after the lock. The parts of the loop that run
+  in-process always ran the invoking worktree's code, which is why
+  the passes stayed green. The dirty-tree duplicate (livery#297)
+  stays open.
 
 ### Phase 3: fewest workflows, dumbest YAML, CI as points
 
@@ -1093,3 +1139,13 @@ None. Every ruling raised in this plan was closed in the review of
   status, and a required context nothing reports refuses with the
   name mismatch rather than waiting forever. Recording Gitea's real
   405 bodies as cassettes by staging them stays open work.
+- 2026-09-09, ruled by Willem: the profile mount is a hard mount.
+  hse tolerates a footman without the plugin because a tasks file
+  that fails to import takes every verb down, the sync that would
+  cure the skew included; here every released footman carries the
+  entry point and the workspace is pre-release, so the guard covers
+  nothing. Also ruled the same day: a small finding met during
+  other work is fixed in the current change, and an issue is filed
+  only with a stated reason not to (the rendered tasks.py docstring
+  contradicting the drift gate was fixed in #314 and #315 closed by
+  it).
