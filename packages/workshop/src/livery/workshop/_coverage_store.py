@@ -127,14 +127,24 @@ def closure_id(git: GitOps, packages: tuple[Package, ...], package: Package) -> 
     contributes nothing.
 
     The workspace's own tests reach any package, so their identity is
-    the whole tree's id.
+    every package's tree, their own directory's tree, and the root
+    pins: prose leaves it untouched, and a root configuration change
+    forces a full run anyway, which stores the unit afresh.
 
     Raises:
         GitError: When a closure directory is not in ``HEAD``.
     """
-    if package.path == WORKSPACE_TESTS:
-        return git.object_id("HEAD^{tree}")
     parts: list[str] = []
+    if package.path == WORKSPACE_TESTS:
+        for member in sorted(packages, key=lambda item: item.path):
+            parts.append(f"{member.path}={git.object_id(f'HEAD:{member.path}')}")
+        parts.append(f"{WORKSPACE_TESTS}={git.object_id(f'HEAD:{WORKSPACE_TESTS}')}")
+        for pin in ROOT_PINS:
+            try:
+                parts.append(f"{pin}={git.object_id(f'HEAD:{pin}')}")
+            except GitError:
+                continue
+        return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
     for member in closure(packages, package):
         parts.append(f"{member.path}={git.object_id(f'HEAD:{member.path}')}")
     for pin in ROOT_PINS:

@@ -1101,7 +1101,23 @@ guessed. The candidate list, from what is already known:
   named prose paths pays markdown lint and the render check only,
   still reporting the one required context. Fixes the
   affected-returns-None hole for prose by construction; a mixed diff
-  pays full price.
+  pays full price. Landed 2026-09-09 (issue #366): the affected
+  classifier reads a path under `notes/` or a markdown file
+  anywhere as prose that affects no package, so a diff confined to
+  prose affects nothing; the check leg says so and skips, the gate
+  job runs the render and provenance checks, reuses every unit
+  from the coverage store, judges the floors, and gives the
+  verdict. There is no markdown lint yet; the site build judges
+  the words on every run. A mixed diff narrows to its packages.
+  Proven on the loop 2026-09-09, read from the runs' logs by
+  `fm ci.e2e` itself: a note-only pull request's check leg said
+  "nothing affected: only prose changed (1 file(s) under notes/ or
+  markdown); the gate skips" and ran nothing, and its gate job
+  reused both members' suites and the workspace's tests from the
+  store and judged both floors (run 1204). The first pass had the
+  workspace tests unit missed there, since its key was the whole
+  tree and a note is part of the tree; the key is now the packages'
+  trees, the tests directory's tree, and the root pins.
 - The post-merge rerun disappears when the squash changed nothing:
   the gate stamps `workshop/verified` with the tree id it proved green,
   and every run's classifier checks its own tree against the record
@@ -1213,7 +1229,10 @@ for what cannot exist locally:
   day (issue #353): `[ci] affected-legs = true` in livery's
   contract, so a pull request's legs narrow and the gate job
   reuses the skipped suites; the first member-only pull request
-  after it is the proof of the narrowing. The port's first run
+  after it is the proof of the narrowing: the prose class (issue
+  #366), a workshop-only change, whose legs narrowed to workshop
+  and reused the other suites from the store. The
+  port's first run
   found the Windows legs red with 37 failing workshop tests that
   every earlier run had carried too: the old step ran two commands
   under pwsh, which fails a step only on the last command's exit,

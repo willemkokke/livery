@@ -36,7 +36,10 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
   the render gate, in parallel. `--affected` narrows the gate to the
   packages the branch's changes can influence (their dependents'
   closure over the `[[depends]]` graph); a change outside the
-  packages runs everything. A workspace that declares
+  packages runs everything, except prose: a file under `notes/` or
+  a markdown file anywhere affects no package, so a diff confined
+  to prose runs no gate and the site build judges the words. A
+  workspace that declares
   `[ci] affected-legs = true` has its CI check legs run that scoped
   gate against the pull request's base branch; the gate job runs
   the render gate and the provenance check on every run, and after
