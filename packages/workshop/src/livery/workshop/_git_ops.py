@@ -173,12 +173,16 @@ class GitOps:
 
         The committed half diffs against the merge base with
         ``origin/<base>``; the uncommitted half comes from the status
-        listing, renames counted on both sides.
+        listing, renames counted on both sides and untracked files
+        named one by one (a collapsed directory reads as neither
+        prose nor package).
         """
         merge_base = self._run("merge-base", "HEAD", f"origin/{base}").strip()
         committed = self._run("diff", "--name-only", merge_base, "HEAD").splitlines()
         pending: list[str] = []
-        for line in self._run("status", "--porcelain").splitlines():
+        for line in self._run(
+            "status", "--porcelain", "--untracked-files=all"
+        ).splitlines():
             pending.extend(part for part in line[3:].split(" -> ") if part)
         return sorted({path for path in committed + pending if path})
 
