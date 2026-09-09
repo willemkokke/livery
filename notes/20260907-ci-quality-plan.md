@@ -1531,3 +1531,17 @@ None. Every ruling raised in this plan was closed in the review of
   has already dropped. The stamp is a builtin entry after the
   verdict rather than part of it, so the verdict stays a judgement
   and the record a consequence.
+- 2026-09-09, ruled by Willem: a cancelled run names the run that
+  superseded it, and the watchers follow the successor ("a very
+  good feature to add for human and agent alike, saves an
+  investigation"). Landed the same day (issue #343):
+  `livery.workshop._runs.successor` finds the twin for the same
+  head or, given the watched branch, the run for the pull
+  request's moved head; `fm ci.verdict` keeps a cancelled job red
+  and names its successor; the loop's watcher no longer passes a
+  cancelled run quietly (a hidden fallback it had) and reads a
+  green twin's verdict instead; the submit's CI wait announces a
+  moved head, says whether it is this clone's own push, names the
+  newest run, and follows it. Stated, not ruled: a head pushed
+  from elsewhere is followed and named rather than refused, since
+  the follow's contract is the pull request, not a sha.
