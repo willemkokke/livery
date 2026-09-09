@@ -47,8 +47,13 @@ def test_custom_version_defaults_to_footman_when_omitted(capsys):
     assert capsys.readouterr().out.strip() == f"Acme {__version__}"
 
 
-def test_app_complete_dispatches(capsys):
-    # the --complete hot path returns cleanly even with nothing cached
+def test_app_complete_dispatches(capsys, tmp_path, monkeypatch):
+    # The --complete hot path returns cleanly even with nothing cached.
+    # From a directory outside any locked project: inside this
+    # repository the path heals the project environment (uv sync
+    # against the real venv), which re-installs a stale editable under
+    # the other xdist workers' entry-point scans.
+    monkeypatch.chdir(tmp_path)
     assert App().run(["--complete", "--", ""]) == 0
 
 

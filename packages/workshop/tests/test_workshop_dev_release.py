@@ -275,6 +275,7 @@ def test_a_failing_build_restores_the_dirty_tree_from_snapshots(
     pyproject.write_text(dirty)
     version = dev_version(root, git, discover_packages(root)[0], stamp="20260901")
     assert version.endswith(".dirty")
+    stamped_at = pyproject.stat().st_mtime_ns
 
     def _boom(*_args: object, **_kwargs: object) -> Path:
         raise Failed("uv build exploded")
@@ -283,6 +284,9 @@ def test_a_failing_build_restores_the_dirty_tree_from_snapshots(
     with pytest.raises(_FAILURES):
         build_dev(root, DevPlan(discover_packages(root)[0], version))
     assert pyproject.read_text() == dirty
+    # The timestamp too: uv judges the editable install by it, and a
+    # touched pyproject makes the next sync re-install the package.
+    assert pyproject.stat().st_mtime_ns == stamped_at
 
 
 def test_the_branch_routes_the_act(
@@ -359,6 +363,7 @@ def test_the_real_build_splices_the_readme_and_restores_the_tree(
         for p in sorted(member.rglob("*"))
         if p.is_file() and "dist" not in p.parts
     }
+    stamps = {p: p.stat().st_mtime_ns for p in before}
     dist = build_dev(root, DevPlan(packages[0], version))
     wheel = next(iter(dist.glob("*.whl")))
     # Two commits since the tag (the readme, the growth); uv
@@ -374,3 +379,4 @@ def test_the_real_build_splices_the_readme_and_restores_the_tree(
         if p.is_file() and "dist" not in p.parts
     }
     assert before == after  # byte-identical tree, the excerpt only in the wheel
+    assert {p: p.stat().st_mtime_ns for p in before} == stamps  # and unmoved
