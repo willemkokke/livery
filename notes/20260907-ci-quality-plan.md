@@ -1174,7 +1174,16 @@ for what cannot exist locally:
   point's own jobs (deploy, governance, dispatch) keep their
   GitHub workflows until the rest of the port. Declaring
   `[ci] affected-legs` for livery follows as its own change, and
-  carries the port's evidence from GitHub.
+  carries the port's evidence from GitHub. The port's first run
+  found the Windows legs red with 37 failing workshop tests that
+  every earlier run had carried too: the old step ran two commands
+  under pwsh, which fails a step only on the last command's exit,
+  and the coverage combine was last, so the legs had gated nothing
+  (issue #357 holds the failures). Ruled by Willem 2026-09-09:
+  "drop windows-latest for now"; the runner leaves livery's
+  `[ci] runners` until the suite is green there, and its legs,
+  the slowest by far (a test task of 600 to 800 s against 210 s on
+  ubuntu), leave the pull request's wall time with it.
 - #270 executes (ruled 2026-09-07): token publishing is the
   default. The pypi environment gains `UV_PUBLISH_TOKEN` and the
   id-token plumbing leaves the default emission. Trusted publishing

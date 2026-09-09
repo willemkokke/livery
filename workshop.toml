@@ -31,7 +31,10 @@ teams = []
 approvals = 0
 
 [ci]
-runners = ["ubuntu-latest", "macos-latest", "windows-latest"]
+# windows-latest is out of the gate until the suite is green there
+# (livery#357): its legs had passed with failing tests masked by the
+# shell, and were the slowest legs by far.
+runners = ["ubuntu-latest", "macos-latest"]
 # The one status name branch protection requires, spelled by contract
 # so each forge's CI renders it rather than anyone retyping it.
 required-context = "gate"
