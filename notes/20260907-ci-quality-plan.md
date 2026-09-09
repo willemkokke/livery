@@ -1718,6 +1718,21 @@ None. Every ruling raised in this plan was closed in the review of
   there means a leg that skipped without the store, or a store
   trimmed in between, and either deserves a name, not a quiet
   widening.
+- 2026-09-09, ruled by Willem: the nanobind wheel build test runs
+  at the nightly point only, for now ("just do nightly only"); and a
+  standard for every point, "to make sure a test only runs there,
+  or there as well". Stated as the recommended form and built the
+  same day (issue #367): a test declares its points with
+  `only_at(*points)` (there and nowhere else) or `also_at(*points)`
+  (there as well as the default ones); the default set is the gate
+  and the merge, so a nightly runs exactly what is declared for it,
+  a choice stated, not ruled, and one line to widen if the nightly
+  should carry the whole suite too. The job runner names the point
+  to every child beside the leg label, the workshop's pytest plugin
+  selects, and the check verb pays in full at the nightly point,
+  the verified record and the narrowing set aside. The GitHub lane
+  gained the nightly shell the gitea lane had, since nightly only
+  would otherwise have meant never on the lane livery lives on.
 - 2026-09-09: the ratchet's marks live on `workshop/coverage/marks`,
   not the ruled `workshop/coverage`, stated before the build and
   not yet ruled: the per-suite store took `workshop/coverage/<leg>/

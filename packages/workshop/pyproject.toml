@@ -51,6 +51,9 @@ dependencies = [
 # so the leg splits one run's data per suite; elsewhere it is quiet.
 [project.entry-points.pytest11]
 livery-workshop-contexts = "livery.workshop._pytest_contexts"
+# A test declares the CI points it runs at; the point in the job
+# runner's environment selects.
+livery-workshop-points = "livery.workshop._pytest_points"
 
 [project.urls]
 Repository = "https://github.com/willemkokke/livery"

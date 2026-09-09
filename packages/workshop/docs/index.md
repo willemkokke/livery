@@ -66,6 +66,19 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
   released tags, content, render, then the submit flow. Nothing
   changed means nothing happens.
 
+## Where a test runs
+
+A test declares the CI points it runs at. Without a marker it runs
+at the default points, the gate (a pull request's legs) and the
+merge (main's run). `@pytest.mark.only_at("nightly")` runs it at the
+named points and nowhere else; `@pytest.mark.also_at("release")`
+adds points to the default ones. The job runner names the point to
+every child it spawns, and the workshop's pytest plugin deselects
+the rest; a local `fm test` selects for the gate, and
+`fm test -- --workshop-point nightly` selects for a point on demand.
+The nightly point runs the whole check with its own tests selected
+in, and never skips on the verified record or narrows.
+
 ## Coverage floors
 
 Each package's `workshop.toml` may declare `[qa] coverage-floor`: a
