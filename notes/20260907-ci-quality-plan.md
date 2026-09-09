@@ -12,11 +12,12 @@ with `fm ci.timings` (issue #319, the pull-request lookup fixed in
 #321). Phase 3 began the same day: the points shell (issue #322),
 the merge-point release dispatch (issue #325), the nightly point
 with the schedule seam's first entry (issue #327), the matrices as
-contract config (issue #329), and the kebab-case keys with the one
-contract loader (issue #331) landed on the gitea emitter; the
-wheels matrix follows. The entry-points race (#263) has its root
-cause and fix (the completion test healing the real project's
-environment mid-suite; the dev build leaving editables stale).
+contract config (issue #329), the kebab-case keys with the one
+contract loader (issue #331), and the wheels matrix with the loop's
+nanobind member (issue #335) landed on the gitea emitter: phase 3
+is complete. The entry-points race (#263) has its root cause and
+fix (the completion test healing the real project's environment
+mid-suite; the dev build leaving editables stale).
 Absorbs #267 (the speed pass), #286 (no logic in YAML), #270 (token
 publishing), #273 (the act names itself), and the structural finding of
 the phase-4 post-mortem (notes/20260906-phase-4-post-mortem.md): the
@@ -384,9 +385,9 @@ YAML, on a real runner, against a real index, from one command.
   naming the job (measured live: "ci.yml: docs (failure)", submit
   exit 13). (release-legs.yml, which this supersedes, is deleted in
   the phase-6 file swap.)
-- Open in this phase: the dummy platform-wheel member and its linux
-  wheel leg in the loop have not run yet; they land with the
-  wheels-matrix mechanics rather than blocking the substrate.
+- Closed 2026-09-09 (issue #335): the loop's nanobind member and its
+  linux wheel leg run on every pass; the evidence is in phase 3's
+  wheels bullet.
 - Open in this phase: the GitHub arm of receipt-tag protection
   (livery#305) is implemented and fake-verified; its first live
   application, `workflow.configure` against the livery repository
@@ -747,6 +748,21 @@ nightly).
   platforms are more entries in the same key on real forges; a
   silent wheel-less release for a nanobind member was exactly a
   hidden fallback, and now the fallback has a test forcing it.
+  Landed 2026-09-09 (issue #335): `_facts()` carries the member
+  roster from `discover_packages` and `wheel_runners`, the union of
+  the platform-wheel members' `[ci] wheel-platforms` (runner labels,
+  declared in the member's own contract; a platform-wheel member
+  without the key, an empty or malformed list, or the key on a pure
+  member refuses at the emitter naming the key); both release
+  emitters take the wheels matrix from it, and the nanobind seed
+  declares the three hosted labels. `fm release.wheels` builds the
+  python matrix's interpreters (`cp314-*`, `cp314t-*` for a
+  free-threaded build) instead of every CPython, both linux libc
+  flavours kept; the local one-wheel narrowing skips the flavour the
+  host cannot install, read from the interpreter's build triple. The
+  loop's runner carries the docker CLI, a C++ toolchain, cmake, and
+  the host's docker socket, and `fm forge.dev.up` rebuilds the image
+  on a Dockerfile change. Proven on a fresh loop the same day: the nanobind member landed through the loop's gate, the runner compiling its editable install, and the release set of both members ran the wheels leg through the socket, cibuildwheel building the member's `cp314` manylinux_2_28 and musllinux_1_2 aarch64 wheels (14 s on warm images, 5m02s cold), the publish job collecting the artifact and publishing, serving, and tagging both members, receipts protected (run 1088).
 - Contract keys are kebab-case (ruled by Willem 2026-09-07), and
   the contract loader gains a consistency check refusing underscore
   keys. The existing snake_case keys (`required_context`,
@@ -1433,3 +1449,28 @@ None. Every ruling raised in this plan was closed in the review of
   restoring bytes without timestamps. Both fixed in their own
   change; the loop-then-gate rule stands, since the dev act still
   stamps files a concurrent gate would read.
+- 2026-09-09, ruled by Willem: cibuildwheel on the loop runs through
+  the host's docker socket, exposed to the act_runner container,
+  "as realistic as possible": the rehearsal builds through the same
+  container path a hosted linux runner uses, manylinux and musllinux
+  images pulled by the host daemon, the project copied in over the
+  daemon. The native-build alternative (a platform-tagged wheel from
+  `uv build` with no repair) was stated and not taken. Stated with
+  it, not ruled: `wheel-platforms` entries are runner labels, the
+  same vocabulary as `[ci] runners`, so the loop declares its one
+  label and a hosted forge the three; and the wheels leg builds the
+  python matrix's interpreters rather than every CPython. The first
+  wave through the socket built both linux wheels and then failed on
+  footman's guard: the verb set its build set through `os.environ`,
+  which footman scopes to the task and refuses as a write meant to
+  travel sideways; the verb sets it on its task context now, the
+  one spelling every build child inherits on purpose. The fix could
+  not reach the loop's merged release: the recovery arm dispatches
+  the wave at the stamping commit, whose lock pins the old dev
+  wheels, so the loop was reset from nothing (issue #336 files the
+  verb for it) and the recovery arm now follows the wave it
+  dispatched instead of polling the registry blind. The general
+  gap stands and is #336's second paragraph: a wave red for a
+  toolchain reason has no re-run with the fixed toolchain, since the
+  dispatch pins the stamping commit; re-stamping the merged version
+  on a fresh release branch would be the gesture, not yet ruled.
