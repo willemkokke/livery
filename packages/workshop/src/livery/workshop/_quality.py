@@ -363,9 +363,9 @@ def _current_point() -> str:
 
 
 def _nothing_reason(base: str) -> str:
-    """Why nothing is affected: only prose changed, or nothing changed at all."""
+    """Why nothing is affected: only prose and site files changed, or nothing."""
     from livery.workshop._git_ops import GitError, GitOps
-    from livery.workshop._graph import is_prose
+    from livery.workshop._graph import is_prose, is_site
 
     root = workspace_root()
     if root is None:
@@ -374,11 +374,12 @@ def _nothing_reason(base: str) -> str:
         changed = GitOps(root).changed_paths(base)
     except GitError:
         return "the branch changes no files"
-    prose = [path for path in changed if is_prose(path)]
-    if changed and len(prose) == len(changed):
+    quiet = [path for path in changed if is_prose(path) or is_site(path)]
+    if changed and len(quiet) == len(changed):
         return (
-            f"only prose changed ({len(prose)} file(s) under notes/ or markdown);"
-            " the gate skips, the site build judges the words"
+            f"only prose and site files changed ({len(quiet)} file(s) under"
+            " notes/, markdown, the root docs/ tree, or zensical.toml); the gate"
+            " skips, the site build judges them"
         )
     return "the branch changes no files"
 
