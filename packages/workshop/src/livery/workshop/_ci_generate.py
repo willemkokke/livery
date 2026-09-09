@@ -33,6 +33,15 @@ CHECKOUT = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1"
 SETUP_UV = "astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1"
 UPLOAD = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1"
 DOWNLOAD = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1"
+#: The upload action the gitea lane runs. An act_runner that delivers
+#: dashed action inputs empty breaks upstream's v4, which reads
+#: `include-hidden-files` with a throwing getter and aborts before
+#: uploading anything. This v4.0-era fork predates that input: it
+#: uploads on such a runner too, exiting 1 over the empty
+#: `if-no-files-found`, which the step's continue-on-error absorbs;
+#: a runner that carries the inputs sees it exit 0 (measured on the
+#: loop's runner).
+GITEA_UPLOAD = "christopherhx/gitea-upload-artifact@v4"
 
 
 def _facts(root: Path) -> dict[str, Any]:
@@ -255,7 +264,7 @@ jobs:
           # once, on the merged union, in the gate job below.
           COVERAGE_PROCESS_START: pyproject.toml
         run: |
-          {prog} check
+          {prog} --profile=fm-profile.json check
           coverage combine
       - name: Leg coverage data
         uses: {UPLOAD}
@@ -264,6 +273,18 @@ jobs:
           path: .coverage
           include-hidden-files: true
           if-no-files-found: error
+      # The run as a Chrome trace, one artifact per leg: every task,
+      # step, lane wait, and pytest test as slices. Observational, so
+      # it runs on a red gate too (the run worth reading) and its own
+      # exit never decides the leg.
+      - name: Upload the run profile
+        if: always()
+        continue-on-error: true
+        uses: {UPLOAD}
+        with:
+          name: profile-${{{{ matrix.os }}}}-${{{{ matrix.python }}}}
+          path: fm-profile.json
+          if-no-files-found: ignore
 
   # The strict site build: broken links and orphan pages go red
   # here, required through the gate context below, never inside the
@@ -491,7 +512,22 @@ jobs:
       # act_runner host mode: no setup actions. The entry script
       # installs the lock's pinned uv itself where the host has none.
 {rung}{enter_leg}      - name: Gate
-        run: {prog} check
+        run: {prog} --profile=fm-profile.json check
+      # The run as a Chrome trace, one artifact per leg: every task,
+      # step, lane wait, and pytest test as slices. Observational, so
+      # it runs on a red gate too (the run worth reading) and its own
+      # exit never decides the leg: an act_runner that delivers dashed
+      # inputs empty makes the action exit 1 after a successful
+      # upload, one that carries them lets it exit 0, and the gate's
+      # verdict is the leg's either way.
+      - name: Upload the run profile
+        if: always()
+        continue-on-error: true
+        uses: {GITEA_UPLOAD}
+        with:
+          name: profile-${{{{ matrix.os }}}}-${{{{ matrix.python }}}}
+          path: fm-profile.json
+          if-no-files-found: ignore
 
   # The strict site build, required through the gate context below.
   docs:

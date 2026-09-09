@@ -46,7 +46,7 @@ jobs:
           # once, on the merged union, in the gate job below.
           COVERAGE_PROCESS_START: pyproject.toml
         run: |
-          fm check
+          fm --profile=fm-profile.json check
           coverage combine
       - name: Leg coverage data
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -55,6 +55,18 @@ jobs:
           path: .coverage
           include-hidden-files: true
           if-no-files-found: error
+      # The run as a Chrome trace, one artifact per leg: every task,
+      # step, lane wait, and pytest test as slices. Observational, so
+      # it runs on a red gate too (the run worth reading) and its own
+      # exit never decides the leg.
+      - name: Upload the run profile
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: profile-${{ matrix.os }}-${{ matrix.python }}
+          path: fm-profile.json
+          if-no-files-found: ignore
 
   # The strict site build: broken links and orphan pages go red
   # here, required through the gate context below, never inside the

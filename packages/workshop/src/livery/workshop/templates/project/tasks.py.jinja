@@ -4,14 +4,21 @@
 """The dev loop: the workspace's layers, mounted.
 
 Run with ``{{ runner_prog }} <task>``. ``{{ runner_prog }} check`` is the whole local gate;
-CI runs the same command. The tree comes from the mounted layers; the
-template seeds this file once and never rewrites it, so anything a
-repository adds below the mount lines is its own.
+CI runs the same command. The tree comes from the mounted layers, and
+the render owns this file: the gate keeps it matching the template, so
+a workspace adds tasks through the layers its contract names, never by
+editing this file.
 """
 
 from livery.footman import plugin
 
 plugin("{{ layer_imports[0] }}")
+
+# `{{ runner_prog }} --profile <task>` writes the run as a Chrome trace: a
+# track per worker, a slice per task with its steps and lane waits,
+# every pytest test its own slice. Mounted in every workspace so any
+# run, a CI leg included, can be profiled with one flag.
+plugin("footman.profile")
 
 # Every further layer the contract names mounts here, each under its
 # own identity, so a task's provenance names its real provider.
