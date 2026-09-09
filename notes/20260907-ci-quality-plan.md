@@ -1774,7 +1774,6 @@ None. Every ruling raised in this plan was closed in the review of
   member-only pull request's leg stored loop-echo's suite and the
   workspace's tests, and its union reused loop-native; main's full
   run 1190 stored all three units and judged both members.
-
 - 2026-09-09, ruled by Willem ("I want all the quick wins", "all in one
   pr, to save CI time", "updated numbers for before and after"): the
   remaining costs on the ubuntu leg's profile, after the provenance
