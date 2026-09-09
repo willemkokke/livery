@@ -9,10 +9,11 @@ Phase 2 landed 2026-09-09 in three slices: the profile mount and
 the profiled legs with their trace artifacts (issue #314), the CI
 state store on `refs/workshop/*` (issue #317), and the metrics rows
 with `fm ci.timings` (issue #319, the pull-request lookup fixed in
-#321). Phase 3 began the same day: the points shell (issue #322)
-and the merge-point release dispatch (issue #325) landed on the
-gitea emitter; the wheels matrix, nightly's adoption, and the
-kebab-case keys follow.
+#321). Phase 3 began the same day: the points shell (issue #322),
+the merge-point release dispatch (issue #325), and the nightly
+point with the schedule seam's first entry (issue #327) landed on
+the gitea emitter; the matrices as contract config, the kebab-case
+keys, and the wheels matrix follow.
 Absorbs #267 (the speed pass), #286 (no logic in YAML), #270 (token
 publishing), #273 (the act names itself), and the structural finding of
 the phase-4 post-mortem (notes/20260906-phase-4-post-mortem.md): the
@@ -831,6 +832,41 @@ nightly).
   the stamping commit's own lock, so a dispatch at an old squash
   runs that squash's toolchain, which is the released tree's own and
   the intended shape.
+- The third slice landed 2026-09-09 (issue #327): the nightly point
+  and the schedule seam's first entry. The gitea emitter gains
+  `nightly.yml`, the clock and a dispatch entry, one `fm ci.run
+  --point=nightly --job=nightly` per python, no condition; a point's
+  own job exists before its first entry, so the shell runs green and
+  empty until the contract attaches a task. `fm release.replay`,
+  listed, replays a member's latest released wheel the way a
+  consumer meets it: the newest final version the registry serves,
+  a temporary worktree at the receipt tag, a plain environment
+  outside the workspace with the wheel and its extras installed from
+  the index, the import proven to come from site-packages, then the
+  member's tests; a red replay files or extends the marker issue
+  through the forge, searching first, inside CI or with `--report`,
+  then fails. Its refusals come first and its two heavy steps are
+  injectable, so the orchestration is tested without an index or an
+  interpreter. The loop's contract attaches the replay to its
+  nightly point through `[[ci.schedule]]` with `{python}` formatted
+  in, and a nightly dispatched by hand proved phase 3's acceptance
+  line: run 1053 on both pythons ran the replay as a `workshop.toml`
+  entry through `ci.run`, imported `ci_e2e_loop.loop_echo` from the
+  plain environment's site-packages, passed its two tests, and said
+  so in the job's log. Two findings on the way: the registry
+  target's `url` is the read index itself, and a first dispatch
+  (run 1043) refused with "no released version" because the verb
+  had appended `/simple` a second time; and a green job's log showed
+  only the parent's lines, because the runner's children were
+  captured and printed on failure alone, so `ci.run` streams its
+  entries and the replay streams its probe and tests (run 1048 was
+  green and silent, 1053 green and legible). One gap noticed: no
+  verb dispatches a workflow by hand; the proof used the forge
+  protocol directly, and `fm ci.dispatch` belongs in the recovery
+  vocabulary beside `workflow.release.dispatch`. What this slice
+  does not cover: livery's own `nightly.yml` and its issue script on
+  GitHub are swapped in phase 6; the live conformance legs and the
+  benchmarks stay later schedule entries.
 - Acceptance: the census in #286 re-run shows only event filters; a
   merged PR creates three run entries, none skipped; drift gate
   covers every workflow file in the repo; a task scheduled through
@@ -1324,3 +1360,16 @@ None. Every ruling raised in this plan was closed in the review of
   the day the receipt was first recut after the protection. GitHub's
   arm is phase 6's to measure, where the ambient token and rulesets
   differ.
+- 2026-09-09: the nightly point's shape, stated as the recommended
+  form before the build and not yet ruled. A point's own job is
+  always a job of it, empty until an entry attaches, so the nightly
+  shell exists before its first task. `ci.run` streams each entry
+  and the replay streams its probe and tests: the job's log is the
+  run's evidence and belongs there in order, green or red. The
+  replay reads the registry target's `url` as the index it is, the
+  way the wave's probe does. Seen three times today in one
+  worktree's gates, always on the xdist worker `gw8`: the
+  entry-points race of livery#263, footman's own `footman.tasks`
+  entries absent while the other packages' were present; the
+  forensics dumps in those gate logs narrow the search to what that
+  worker runs beside the branding tests.

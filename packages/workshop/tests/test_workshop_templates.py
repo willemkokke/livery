@@ -331,7 +331,22 @@ def test_the_gitea_shell_is_one_verb_per_job_and_only_event_filters(
     from livery.workshop._ci_generate import generate
 
     files = generate(_contract_root(tmp_path, "gitea"))
-    assert set(files) >= {".gitea/workflows/ci.yml", ".gitea/workflows/release.yml"}
+    assert set(files) >= {
+        ".gitea/workflows/ci.yml",
+        ".gitea/workflows/release.yml",
+        ".gitea/workflows/nightly.yml",
+    }
+    # The nightly point's shell: the clock, a dispatch entry, one verb
+    # per python, no condition, nothing else.
+    nightly = yaml.safe_load(files[".gitea/workflows/nightly.yml"])
+    assert sorted(nightly[True] if True in nightly else nightly["on"]) == [
+        "schedule",
+        "workflow_dispatch",
+    ]
+    (job,) = nightly["jobs"].values()
+    verbs = [step["run"] for step in job["steps"] if "ci.run" in step.get("run", "")]
+    assert len(verbs) == 1 and "--point=nightly --job=nightly" in verbs[0]
+    assert "if" not in job and job["steps"][0]["with"]["fetch-depth"] == 0
     assert ".gitea/workflows/governance.yml" not in files
     assert ".gitea/workflows/docs.yml" not in files
     workflow = yaml.safe_load(files[".gitea/workflows/ci.yml"])

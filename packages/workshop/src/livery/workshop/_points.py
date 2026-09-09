@@ -147,9 +147,14 @@ def jobs_of(root: Path, point: str) -> tuple[str, ...]:
 
 
 def entries_for(root: Path, point: str, job: str) -> tuple[Entry, ...]:
-    """The entries *job* of *point* runs, in order; refuses an unknown job."""
+    """The entries *job* of *point* runs, in order; refuses an unknown job.
+
+    A point's own name is always a job of it, with nothing scheduled
+    until an entry attaches: the nightly shell exists before its
+    first entry, and runs green and empty until then.
+    """
     jobs = jobs_of(root, point)
-    if job not in jobs:
+    if job not in jobs and job != point:
         fail(
             f"the {point} point has no job {job!r}; its jobs are"
             f" {', '.join(jobs) or 'none'}"
@@ -175,10 +180,14 @@ def effective_point(point: str) -> str:
 
 
 def _spawn(argv: list[str]) -> int:
-    """Run one entry as a child of the runner's own command; its exit code."""
+    """Run one entry as a child of the runner's own command; its exit code.
+
+    Streamed, never captured: the job's log is the run's evidence,
+    and what each verb said belongs there in order, green or red.
+    """
     from livery.footman import run
 
-    return run(argv, nofail=True).code
+    return run(argv, nofail=True, capture=False).code
 
 
 def run_point(

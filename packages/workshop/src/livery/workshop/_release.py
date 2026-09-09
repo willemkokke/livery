@@ -347,6 +347,63 @@ def _replace_tree(clone: Path, templates: Path) -> None:
     shutil.copytree(templates, clone, dirs_exist_ok=True)
 
 
+@release.task(name="replay")
+def release_replay(
+    member: Annotated[str, doc("the member's directory under packages/")],
+    *,
+    python: Annotated[
+        str, doc("the interpreter version for the plain environment")
+    ] = "",
+    extras: Annotated[str, doc("extras to install with the wheel, comma-joined")] = "",
+    report: Annotated[
+        bool, doc("file or extend the marker issue on red; the default inside CI")
+    ] = False,
+) -> None:
+    """Replay a member's latest released wheel against its own tests.
+
+    The pairing a consumer gets: the wheel the registry serves,
+    installed into a plain environment beside the tests at the
+    release tag, imported from site-packages. The nightly point
+    schedules it through ``[[ci.schedule]]``; by hand it answers the
+    same. A red replay fails, and inside CI (or with ``--report``)
+    files or extends the marker issue through the forge first.
+    """
+    import sys
+
+    from livery.forge import SimpleRegistry
+    from livery.workshop._registries import resolve_registry
+    from livery.workshop._replay import replay_flow
+    from livery.workshop._state import run_context
+
+    root = _root()
+    packages = {p.directory.name: p for p in discover_packages(root)}
+    package = packages.get(member)
+    if package is None:
+        fail(
+            f"no member {member!r} under packages/; the members are"
+            f" {', '.join(sorted(packages)) or 'none'}"
+        )
+    # The target's url is the read index itself, the wave's probe
+    # reads it the same way; the install points uv at the same index.
+    target = resolve_registry(root, "python")
+    registry = SimpleRegistry(target.url, token=target.token)
+    repo = None
+    if report or run_context() is not None:
+        from livery.workshop._forge_lane import this_repository
+
+        repo = this_repository(root)
+    replay_flow(
+        root,
+        GitOps(root),
+        package,
+        python=python or f"{sys.version_info.major}.{sys.version_info.minor}",
+        registry=registry,
+        index=target.url,
+        extras=extras,
+        repo=repo,
+    )
+
+
 @release.task(name="wheels", hidden=True)
 def release_wheels(
     ref: Annotated[str, doc("the release squash; empty means HEAD")] = "",

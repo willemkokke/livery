@@ -403,6 +403,18 @@ def _eat_dev_wheels(root: Path, pins: dict[str, str]) -> str:
             + "[docs]\n"
             + 'publish = "none"\n'
         )
+    if "[[ci.schedule]]" not in contract_text:
+        # The schedule seam's first entry: the nightly point replays
+        # the member's released wheel, so a dispatched nightly proves
+        # a task scheduled through the contract with no YAML change.
+        contract_text = (
+            contract_text.rstrip("\n")
+            + "\n\n# The nightly point replays the released member.\n"
+            + "[[ci.schedule]]\n"
+            + 'point = "nightly"\n'
+            + 'task = "release.replay"\n'
+            + 'args = ["loop-echo", "--python={python}"]\n'
+        )
     contract_text = _point_templates(contract_text, _TEMPLATES)
     if contract_text != original:
         contract_file.write_text(contract_text, "utf-8")
