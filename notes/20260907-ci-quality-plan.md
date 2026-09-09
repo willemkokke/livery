@@ -1021,7 +1021,23 @@ guessed. The candidate list, from what is already known:
   subprocess patch handing a child the parent's serialised
   configuration (`COVERAGE_PROCESS_CONFIG`), which the child
   prefers to its own `COVERAGE_FILE`; the suite's process gets the
-  file's name alone.
+  file's name alone. Landed 2026-09-09 (issue #349): the split moved
+  from one process per suite to one pooled run whose tests record
+  under contexts named by their node ids, through the workshop's
+  own pytest plugin on the `pytest11` entry point (quiet outside a
+  metered run); `fm coverage.leg` splits the leg's data per suite
+  from the suite's own contexts plus the import-time lines (no
+  context) within its closure. The first metered GitHub run had
+  measured the serial suites' cost: the test task 248 s against a
+  p50 of 214 s on ubuntu 3.14, 500 s against 457 s on ubuntu 3.11,
+  445 s against 317 s on macos 3.14.
+  Proven on the loop 2026-09-09, read from the runs' logs by
+  `fm ci.e2e` itself, with the legs' stamps now split by context:
+  main's run 1168 after the setup squash skipped the gate and its
+  union reused both members' suites from the store; the member-only
+  pull request's leg stored loop-echo's suite from its contexts and
+  its union reused loop-native; main's full run 1170 stored both
+  suites and judged both.
 - Coverage over time, and the floor mode declared per package
   (ruled by Willem 2026-09-07). A per-package percentage row lands
   beside the timing rows on every gated run, so the reader renders
@@ -1616,7 +1632,15 @@ None. Every ruling raised in this plan was closed in the review of
   construction. The cost is one pytest start per suite on a
   metered leg (the local `fm test` keeps its one pooled run); the
   metrics rows measure it, and running the suite processes
-  concurrently is the answer if it shows. The stored unit is the
+  concurrently is the answer if it shows. Reversed the same day
+  (issue #349) once the first metered GitHub run measured the
+  cost (10 to 40 percent on three of four legs): the workshop's
+  own pytest plugin names each test's context by node id, which
+  carries the suite's path, and the import-time lines are
+  attributed by closure, the files the suite's key already names;
+  one pooled run, no extra process, the same stored unit. Stated,
+  not ruled, under Willem's 2026-09-09 steer: as much local as
+  possible, without lots of extra work. The stored unit is the
   suite's lines within its closure's files, as JSON on the state
   store rather than the data file itself: exact, small, and
   readable by the next reader without coverage's own format. The

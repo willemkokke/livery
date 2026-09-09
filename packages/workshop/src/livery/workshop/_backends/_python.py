@@ -335,79 +335,21 @@ def suites_of(packages: tuple[Package, ...]) -> tuple[Package, ...]:
     )
 
 
-def suite_prefix(package: Package) -> str:
-    """The data-file prefix *package*'s suite writes its metered parts under."""
-    from livery.workshop._coverage_store import slug
-
-    return f".coverage.suite-{slug(package.name)}"
-
-
-def run_suites(
-    packages: tuple[Package, ...],
-    root: Path,
-    pytest_args: tuple[str, ...],
-    *,
-    scoped: bool,
-) -> None:
-    """Run each suite as its own metered process; the red ones are named at the end.
-
-    A suite's processes write under `suite_prefix`, the workspace's
-    own ``tests/`` directory (run last, and only by a whole gate)
-    under the leg's plain prefix: it belongs to no package and is
-    never reused. A suite that collects no test (pytest exit 5) is
-    not red: it measured nothing and stores nothing.
-
-    The metered parent's coverage serialises its own configuration
-    into ``COVERAGE_PROCESS_CONFIG`` for the children it patches, and
-    a child prefers that to the configuration file and its own
-    ``COVERAGE_FILE``; the suite's process gets the file's name
-    alone, so it reads the configuration afresh under its prefix and
-    hands that prefix on to its workers.
-    """
-    red: list[str] = []
-    for package in suites_of(packages):
-        env = {
-            key: value
-            for key, value in os.environ.items()
-            if key != "COVERAGE_PROCESS_CONFIG"
-        }
-        env["COVERAGE_FILE"] = suite_prefix(package)
-        result = pytest.opts(in_process=False, nofail=True, env=env)(
-            f"{package.path}/tests", *pytest_args
-        )
-        if result.code == 5:
-            print(f"  tests {package.path}: no tests collected")
-        elif result.code != 0:
-            _report_red_suite(package.path, result.code, result.stdout, result.stderr)
-            red.append(f"{package.path} (exit {result.code})")
-    if not scoped and (root / "tests").is_dir():
-        result = pytest.opts(in_process=False, nofail=True)("tests", *pytest_args)
-        if result.code not in (0, 5):
-            _report_red_suite("tests", result.code, result.stdout, result.stderr)
-            red.append(f"tests (exit {result.code})")
-    if red:
-        fail("tests failed in " + ", ".join(red))
-
-
-def _report_red_suite(name: str, code: int, stdout: str, stderr: str) -> None:
-    """Print a red suite's output: the failing tests are named there."""
-    print(f"  tests {name}: exit {code}")
-    text = (stdout + stderr).rstrip()
-    if text:
-        print(text)
-
-
-def suite_lines(
+def suite_lines_by_context(
     data: Path, packages: tuple[Package, ...], package: Package, *, root: Path
 ) -> dict[str, list[int]]:
-    """The lines *package*'s combined suite data holds, for its closure's files.
+    """The lines *package*'s suite recorded in the leg's data, for its closure's files.
 
-    The names are workspace-relative, whichever way the meter stored
-    them, so a stored suite reads the same on every leg. Files outside
-    the closure are not the suite's to store: a suite reaches them
-    only through the leg's shared processes, and their identity is
-    not part of the suite's key.
+    Two sources make the suite's lines: the contexts of its own tests
+    (the node ids under ``<package>/tests/``, as the workshop's pytest
+    plugin names them), and the lines recorded under no context at all,
+    which run at import time before any test and belong to whichever
+    suites' closures hold their files. Files outside the closure are
+    not the suite's to store. The names are workspace-relative,
+    whichever way the meter stored them.
     """
+    import re
+
     from coverage import CoverageData
 
     from livery.workshop._coverage_store import in_closure
@@ -415,48 +357,78 @@ def suite_lines(
     measured = CoverageData(basename=str(data))
     measured.read()
     files: dict[str, list[int]] = {}
-    for filename in measured.measured_files():
-        name = filename.replace("\\", "/")
-        if Path(name).is_absolute():
-            try:
-                name = Path(name).relative_to(root).as_posix()
-            except ValueError:
+    own = rf"^{re.escape(package.path)}/tests/"
+    for query in ([own], [r"^$"]):
+        measured.set_query_contexts(query)
+        for filename in measured.measured_files():
+            name = _relative(filename, root)
+            if name is None or not in_closure(packages, package, name):
                 continue
-        if not in_closure(packages, package, name):
-            continue
-        lines = measured.lines(filename) or []
-        if lines:
-            files[name] = sorted(lines)
+            lines = measured.lines(filename) or []
+            if lines:
+                files[name] = sorted(set(files.get(name, [])) | set(lines))
+    measured.set_query_contexts(None)
     return files
 
 
-def store_suites(root: Path, packages: tuple[Package, ...], *, leg: str) -> None:
-    """Combine each suite that ran and stamp its lines on the coverage store.
+def suites_that_ran(data: Path, packages: tuple[Package, ...]) -> tuple[Package, ...]:
+    """The suites with at least one test context in the leg's data."""
+    from coverage import CoverageData
 
-    Only a CI run stamps, under *leg*'s label and the suite's closure
-    identity; a refusal from the store is printed, never fatal, since
-    the next leg that misses the suite runs it fresh. The parts stay
-    for the leg's own combine.
+    measured = CoverageData(basename=str(data))
+    measured.read()
+    contexts = measured.measured_contexts()
+    return tuple(
+        package
+        for package in suites_of(packages)
+        if any(context.startswith(f"{package.path}/tests/") for context in contexts)
+    )
+
+
+def _relative(filename: str, root: Path) -> str | None:
+    name = filename.replace("\\", "/")
+    if Path(name).is_absolute():
+        try:
+            return Path(name).relative_to(root).as_posix()
+        except ValueError:
+            return None
+    return name
+
+
+#: The leg's own combined data, read for the split and never uploaded:
+#: named outside the ``.coverage.*`` glob the leg's combine consumes.
+SUITES_DATA = "coverage-suites.db"
+
+
+def store_suites(root: Path, packages: tuple[Package, ...], *, leg: str) -> None:
+    """Split the leg's data per suite and stamp each suite on the coverage store.
+
+    The leg's parts combine into `SUITES_DATA` first (kept apart from
+    the upload); each suite with a test context is split out and its
+    lines within its closure are stamped under *leg*'s label and the
+    suite's closure identity. Only a CI run stamps; a refusal from the
+    store is printed, never fatal, since the next leg that misses the
+    suite runs it fresh.
     """
+    from coverage import CoverageData
+
     from livery.workshop._coverage_store import closure_id, stamp
     from livery.workshop._git_ops import GitOps
     from livery.workshop._state import run_context
 
+    parts = sorted(root.glob(".coverage.*"))
+    if not parts:
+        return
+    combined = CoverageData(basename=str(root / SUITES_DATA))
+    for part in parts:
+        piece = CoverageData(basename=str(part))
+        piece.read()
+        combined.update(piece)
+    combined.write()
     run = run_context()
     git = GitOps(root)
-    for package in suites_of(packages):
-        prefix = suite_prefix(package)
-        if not any(root.glob(f"{prefix}.*")):
-            continue
-        result = toolroom.coverage.opts(
-            cwd=root, env=_unmetered(), nofail=True, recorded=False
-        )("combine", "--keep", f"--data-file={prefix}")
-        if result.code != 0:
-            fail(
-                f"coverage combine for {package.path} exited {result.code}:\n"
-                f"{result.stdout}{result.stderr}"
-            )
-        files = suite_lines(root / prefix, packages, package, root=root)
+    for package in suites_that_ran(root / SUITES_DATA, packages):
+        files = suite_lines_by_context(root / SUITES_DATA, packages, package, root=root)
         if run is None:
             print(
                 f"  coverage store: {package.path} measured ({len(files)} files);"
@@ -480,6 +452,7 @@ def store_suites(root: Path, packages: tuple[Package, ...], *, leg: str) -> None
                 f"  coverage store: {package.path} stored for closure {key[:12]}"
                 f" on {leg} ({len(files)} files)"
             )
+    (root / SUITES_DATA).unlink(missing_ok=True)
 
 
 def combine_leg(root: Path, packages: tuple[Package, ...]) -> None:
@@ -788,10 +761,10 @@ def run_test(
         # python this venv starts is already metered from interpreter
         # start (the CI gate arms it), so the run adds no second
         # meter and the enforcement happens once, on the merged
-        # union, in the aggregating job. Each suite runs as its own
-        # process under its own data-file prefix, so the leg can
-        # combine and store a suite's lines apart from the others.
-        run_suites(packages, root, pytest_args, scoped=scoped)
+        # union, in the aggregating job. The workshop's pytest plugin
+        # names each test's context in that run, and the leg splits
+        # the one run's data per suite afterwards.
+        pytest.opts(in_process=False)(*dirs, *pytest_args)
         return
     # Bare --cov: the measured source is [tool.coverage.run] source,
     # the namespace the render derived, never a spelled module.
