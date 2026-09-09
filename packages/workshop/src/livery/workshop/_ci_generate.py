@@ -665,6 +665,10 @@ def _gitea_release(answers: dict[str, Any], prog: str) -> str:
         with:
           ref: ${{{{ inputs.ref }}}}
           fetch-depth: 0
+          # The receipt push rides this checkout's credential. Receipt
+          # tags are protected, and the lane is the one identity on the
+          # whitelist; the ambient token is bound like everyone else.
+          token: ${{{{ secrets.FORGE_TOKEN }}}}
 {enter}      - name: Build this platform's wheels
         run: >-
           {prog} release.wheels
@@ -711,6 +715,10 @@ jobs:
         with:
           ref: ${{{{ inputs.ref }}}}
           fetch-depth: 0
+          # The receipt push rides this checkout's credential. Receipt
+          # tags are protected, and the lane is the one identity on the
+          # whitelist; the ambient token is bound like everyone else.
+          token: ${{{{ secrets.FORGE_TOKEN }}}}
 {collect_step}{rung}{enter}      # PYTHON_PUBLISH_INDEX and PYTHON_REGISTRY_URL come from the
       # committed .repo.env through the env cascade; only the secrets
       # are mounted here. Gitea's automatic token serves the wave's
@@ -740,6 +748,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{{{ inputs.ref }}}}
+          token: ${{{{ secrets.FORGE_TOKEN }}}}
 {enter}      - name: Publish the template artifact
         env:
           FORGE_TOKEN: ${{{{ secrets.FORGE_TOKEN }}}}

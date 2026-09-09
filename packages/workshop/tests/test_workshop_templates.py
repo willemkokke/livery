@@ -371,6 +371,11 @@ def test_the_gitea_shell_is_one_verb_per_job_and_only_event_filters(
     assert "if" not in release["jobs"]["publish"]
     assert "${{ inputs.ref }}" in files[".gitea/workflows/release.yml"]
     assert "merge_commit_sha" not in files[".gitea/workflows/release.yml"]
+    # The wave's receipt push is the lane's: receipt tags are protected
+    # and the ambient token is bound (measured on the loop).
+    for step in release["jobs"]["publish"]["steps"]:
+        if step.get("uses", "").startswith("actions/checkout"):
+            assert step["with"]["token"] == "${{ secrets.FORGE_TOKEN }}"
 
 
 def test_every_leg_records_its_timings_and_the_gate_collects_before_it_decides(
