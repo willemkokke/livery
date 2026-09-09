@@ -1230,8 +1230,11 @@ for what cannot exist locally:
   contract, so a pull request's legs narrow and the gate job
   reuses the skipped suites; the first member-only pull request
   after it is the proof of the narrowing: the prose class (issue
-  #366), a workshop-only change, whose legs narrowed to workshop
-  and reused the other suites from the store. The
+  #366), a workshop-only change: its four legs said `affected:
+  packages/workshop`, ran and stored workshop alone, and finished in
+  1m40s to 3m30s against the 4 to 9 minutes of a full leg, and its
+  gate job unioned the four legs with twenty reused suites and
+  judged every floor (run 34405936213). The
   port's first run
   found the Windows legs red with 37 failing workshop tests that
   every earlier run had carried too: the old step ran two commands
@@ -1771,3 +1774,27 @@ None. Every ruling raised in this plan was closed in the review of
   member-only pull request's leg stored loop-echo's suite and the
   workspace's tests, and its union reused loop-native; main's full
   run 1190 stored all three units and judged both members.
+- 2026-09-09, ruled by Willem ("I want all the quick wins", "all in one
+  pr, to save CI time", "updated numbers for before and after"): the
+  remaining costs on the ubuntu leg's profile, after the provenance
+  fix (issue #362) and the nightly-only wheel build (issue #367), in
+  one change (issue #369). toolroom's list task reads the tools'
+  versions in threads, so the table waits for the slowest tool
+  instead of the sum (the product verb, not only its tests), and the
+  driver-version check probes the same way; the monorepo's
+  whole-workspace render test is dropped, since the gate's render
+  check proves the same property on every leg; and footman's
+  playground probes share one jedi cache per test process instead of
+  a cold cache in a fresh directory each, which a worker's
+  one-probe-at-a-time keeps free of the race the per-probe cache
+  existed for. Measured on one machine on a quiet run, the same
+  selection on main and on the branch: the two list tests 9.5 s to
+  1.6 s each, the driver-version check 1.7 s to 0.6 s, the render
+  test 6.3 s to none, the two playground tests that re-parsed most
+  6.0 s to 2.8 s and 4.9 s to 2.5 s, the other four heavy playground
+  tests 3.6 to 5.8 s before against 3.9 to 4.8 s after, the
+  selection's total 79 s to 49 s. Left where they are: the playground
+  probes' floor, a Python start and jedi's import per probe, which
+  only a resident process would remove; the pwsh completion tests,
+  one shell each at pwsh's own price; and the git-heavy workshop
+  tests (issue #358).

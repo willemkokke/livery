@@ -272,6 +272,13 @@ def _js_source() -> str:
     return (DOCS / "assets" / "playground.js").read_text(encoding="utf-8")
 
 
+def _jedi_cache() -> str:
+    """One parso cache per test process, warm across that process's probes."""
+    cache = Path(tempfile.gettempdir()) / f"fm-playground-jedi-{os.getpid()}"
+    cache.mkdir(exist_ok=True)
+    return str(cache)
+
+
 def _js_bootstrap() -> str:
     """The driver: the text of the top-level `const BOOTSTRAP = \\`…\\`;`."""
     match = re.search(r"^const BOOTSTRAP = `(.*?)`;$", _js_source(), re.S | re.M)
@@ -514,7 +521,7 @@ def _playground_complete(tmp_path: Path, files: dict[str, str], line: str) -> li
         text=True,
         timeout=120,
         cwd=work,
-        env={**os.environ, "_FM_PLAYGROUND_SIM": "1"},
+        env={**os.environ, "_FM_PLAYGROUND_SIM": "1", "_FM_JEDI_CACHE": _jedi_cache()},
         check=False,
     )
     assert out.returncode == 0, out.stderr
@@ -613,11 +620,14 @@ def _editor_complete(
     probe.write_text(
         _js_bootstrap()
         + "\nimport sys\nfrom pathlib import Path as _P\n"
-        # A private parso cache per probe: concurrent probes sharing the
-        # default cache dir race its non-atomic pickle writes (EOFError on
-        # Windows CI). The page is one process and keeps the default.
+        # A parso cache per worker: concurrent probes sharing one cache
+        # dir race its non-atomic pickle writes (EOFError on Windows CI),
+        # and a worker runs one probe at a time, so its own cache warms
+        # across its tests instead of starting cold in every fresh cwd.
+        # The page is one process and keeps the default.
         + "import jedi.settings\n"
-        + "jedi.settings.cache_directory = str(_P.cwd() / 'jedi-cache')\n"
+        + "import os as _os\n"
+        + "jedi.settings.cache_directory = _os.environ['_FM_JEDI_CACHE']\n"
         + "a = sys.argv\n"
         + "src = _P(a[2]).read_text(encoding='utf-8')\n"
         + "print(_fm_editor_complete(a[1], src, a[3], a[4]))\n",
@@ -632,7 +642,7 @@ def _editor_complete(
         text=True,
         timeout=120,
         cwd=work,
-        env={**os.environ, "_FM_PLAYGROUND_SIM": "1"},
+        env={**os.environ, "_FM_PLAYGROUND_SIM": "1", "_FM_JEDI_CACHE": _jedi_cache()},
         check=False,
     )
     assert out.returncode == 0, out.stderr
@@ -709,9 +719,10 @@ def _editor_help(
     probe.write_text(
         _js_bootstrap()
         + "\nimport sys\nfrom pathlib import Path as _P\n"
-        # Same private parso cache as `_editor_complete`, same race.
+        # The worker's parso cache, as `_editor_complete` explains.
         + "import jedi.settings\n"
-        + "jedi.settings.cache_directory = str(_P.cwd() / 'jedi-cache')\n"
+        + "import os as _os\n"
+        + "jedi.settings.cache_directory = _os.environ['_FM_JEDI_CACHE']\n"
         + "a = sys.argv\n"
         + "src = _P(a[2]).read_text(encoding='utf-8')\n"
         + "print(_fm_editor_help(a[1], src, a[3], a[4]))\n",
@@ -726,7 +737,7 @@ def _editor_help(
         text=True,
         timeout=120,
         cwd=work,
-        env={**os.environ, "_FM_PLAYGROUND_SIM": "1"},
+        env={**os.environ, "_FM_PLAYGROUND_SIM": "1", "_FM_JEDI_CACHE": _jedi_cache()},
         check=False,
     )
     assert out.returncode == 0, out.stderr
@@ -845,9 +856,10 @@ def _editor_sighelp(
     probe.write_text(
         _js_bootstrap()
         + "\nimport sys\nfrom pathlib import Path as _P\n"
-        # Same private parso cache as `_editor_complete`, same race.
+        # The worker's parso cache, as `_editor_complete` explains.
         + "import jedi.settings\n"
-        + "jedi.settings.cache_directory = str(_P.cwd() / 'jedi-cache')\n"
+        + "import os as _os\n"
+        + "jedi.settings.cache_directory = _os.environ['_FM_JEDI_CACHE']\n"
         + "a = sys.argv\n"
         + "src = _P(a[2]).read_text(encoding='utf-8')\n"
         + "print(_fm_editor_sighelp(a[1], src, a[3], a[4]))\n",
@@ -862,7 +874,7 @@ def _editor_sighelp(
         text=True,
         timeout=120,
         cwd=work,
-        env={**os.environ, "_FM_PLAYGROUND_SIM": "1"},
+        env={**os.environ, "_FM_PLAYGROUND_SIM": "1", "_FM_JEDI_CACHE": _jedi_cache()},
         check=False,
     )
     assert out.returncode == 0, out.stderr
