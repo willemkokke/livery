@@ -23,7 +23,7 @@ from livery.footman import fail
 from livery.workshop._ci_tasks import ci
 
 if TYPE_CHECKING:
-    from livery.forge import Forge
+    from livery.forge import Forge, Repository, Run
 
 #: The seeded organisation and the loop's one scratch repository.
 E2E_OWNER = "livery"
@@ -524,6 +524,57 @@ def _watch_latest(kind: str, workflow: str, *, timeout: float = 900.0) -> None:
         time.sleep(5)
 
 
+def judge_runs(
+    repo: Repository, runs: tuple[Run, ...], *, branch: str = ""
+) -> list[str]:
+    """One line per run; red fails with every red run named.
+
+    A failed run is red. A cancelled run is red too, unless a twin
+    for the same head took over and completed green, in which case
+    the twin's verdict stands and the line says so; a successor for a
+    moved head means the watched sha is no longer the branch's and is
+    named as red, since the loop watches a sha of its own. A
+    cancellation nobody took over stays red rather than quietly
+    passing.
+    """
+    from livery.workshop._runs import successor
+
+    lines: list[str] = []
+    failed: list[str] = []
+    for run in runs:
+        verdict: str = run.conclusion or run.status
+        if run.conclusion == "cancelled":
+            found = successor(repo, run, branch=branch)
+            if found is None:
+                verdict = "cancelled; no newer run for its head is known"
+                failed.append(run.workflow)
+            elif found.same_head and found.run.conclusion == "success":
+                verdict = (
+                    f"cancelled, superseded by run {found.run.id} for the same"
+                    " head (success)"
+                )
+            elif found.same_head:
+                verdict = (
+                    f"cancelled, superseded by run {found.run.id} for the same head"
+                    f" ({found.run.conclusion or found.run.status})"
+                )
+                failed.append(run.workflow)
+            else:
+                verdict = (
+                    f"cancelled, superseded by run {found.run.id} for the moved head"
+                    f" {found.run.head_sha[:12]}; the watched sha is no longer"
+                    " the branch's"
+                )
+                failed.append(run.workflow)
+        elif run.conclusion == "failure":
+            failed.append(run.workflow)
+        lines.append(f"  {run.workflow:14} {verdict}")
+    if failed:
+        names = ", ".join(failed)
+        fail(f"red runs on the loop: {names}; logs: {repo.web_url()}/actions")
+    return lines
+
+
 def _watch(
     kind: str,
     url: str,
@@ -531,6 +582,7 @@ def _watch(
     *,
     timeout: float = 900.0,
     require: tuple[str, ...] = (),
+    branch: str = "",
 ) -> None:
     """Follow *sha*'s runs to their verdicts; red fails verbatim.
 
@@ -561,15 +613,8 @@ def _watch(
                 f"{waited}: {repo.web_url()}/actions"
             )
         time.sleep(5)
-    failed = []
-    for run in runs:
-        verdict = run.conclusion or run.status
-        print(f"  {run.workflow:14} {verdict}")
-        if run.conclusion == "failure":
-            failed.append(run)
-    if failed:
-        names = ", ".join(r.workflow for r in failed)
-        fail(f"red runs on the loop: {names}; logs: {repo.web_url()}/actions")
+    for line in judge_runs(repo, runs, branch=branch):
+        print(line)
 
 
 def _align_main(root: Path) -> None:
@@ -1086,7 +1131,9 @@ if _WORKSHOP_TESTS.is_dir():
         provision(forge)
         sha = _eat_dev_wheels(root, pins)
         print(f"  watching {sha[:12]} on the runner")
-        _watch(forge, url, sha)
+        from livery.workshop._new_project import _SETUP_BRANCH
+
+        _watch(forge, url, sha, branch=_SETUP_BRANCH)
         print("  green: the loop's gate ran on the real runner")
         _merge_setup(forge, sha)
         _ensure_members(root)

@@ -32,7 +32,7 @@ from typing import Annotated, ParamSpec
 
 import livery.footman as footman
 from livery.footman import doc, fail, group
-from livery.forge import ForgeError, Repository
+from livery.forge import ForgeError, Repository, Unsupported
 from livery.workshop._contract import load_contract, normalise_keys
 from livery.workshop._conventional import TITLE_RE, TYPES
 from livery.workshop._git_ops import GitError, GitOps
@@ -124,21 +124,30 @@ def _refuse_unreported_contexts(repo: Repository, number: int) -> None:
         )
 
 
-def _wait_for_verdict(repo: Repository, number: int) -> None:
+def _wait_for_verdict(repo: Repository, number: int, *, local_head: str = "") -> None:
     """Wait until *number*'s head has a completed combined verdict.
 
     No inner deadline: merge means merge as soon as possible, so a
     running CI is followed to its verdict and the task's own timeout
     is the backstop. Progress prints on state changes and every
-    minute, so a long wait stays visible.
+    minute, so a long wait stays visible. A head that moves during
+    the wait is followed, and the move is said: the old and new
+    heads, whether the new one is *local_head* (this clone's own
+    push) or arrived from elsewhere, and the newest run for it, so
+    the cancelled run it leaves behind needs no investigation.
     """
     pr = repo.pr.get(number)
     if pr is None:
         return
+    head = pr.head_sha
     last = ""
     quiet_since = time.monotonic()
     while True:
-        state = repo.checks.status(pr.head_sha).state
+        current = repo.pr.get(number)
+        if current is not None and current.head_sha and current.head_sha != head:
+            print(_head_moved_line(repo, number, head, current.head_sha, local_head))
+            head = current.head_sha
+        state = repo.checks.status(head).state
         if state not in ("pending", "none"):
             return
         if state != last or time.monotonic() - quiet_since >= 60:
@@ -146,6 +155,30 @@ def _wait_for_verdict(repo: Repository, number: int) -> None:
             quiet_since = time.monotonic()
             print(f"  waiting: checks are {state} for PR #{number}")
         time.sleep(_HOLD_POLL)
+
+
+def _head_moved_line(
+    repo: Repository, number: int, old: str, new: str, local_head: str
+) -> str:
+    """The one line for a pull request whose head moved under the watch."""
+    if local_head and new == local_head:
+        whose = "this clone's own push"
+    elif local_head:
+        whose = "pushed from elsewhere, not this clone's HEAD"
+    else:
+        whose = "a newer push"
+    try:
+        runs = repo.checks.runs(head_sha=new)
+    except (ForgeError, Unsupported):
+        runs = ()
+    newest = max(runs, key=lambda run: run.id, default=None)
+    run_words = (
+        f"; following run {newest.id}" if newest is not None else "; following it"
+    )
+    return (
+        f"  PR #{number}: the head moved from {old[:12]} to {new[:12]}"
+        f" ({whose}){run_words}"
+    )
 
 
 def _follow_merge_state(
@@ -171,6 +204,7 @@ def _follow_merge_state(
 
     settling_checked = False
     last_state = ""
+    local_head = str(kwargs.pop("local_head", "") or "")
     while True:
         try:
             act(*args, **kwargs)
@@ -199,7 +233,7 @@ def _follow_merge_state(
                     last_state = hold.state
                     print(f"  waiting: {hold.message}")
                 if hold.state == "ci-running":
-                    _wait_for_verdict(repo, number)
+                    _wait_for_verdict(repo, number, local_head=local_head)
                 else:
                     time.sleep(_HOLD_POLL)
                 continue
@@ -920,7 +954,7 @@ def merge_flow(repo: Repository, git: GitOps, branch: str, *, title: str = "") -
     pr = repo.pr.find_by_head(branch)
     if pr is None:
         fail(f"no open pull request for {branch}")
-    _wait_for_verdict(repo, pr.number)
+    _wait_for_verdict(repo, pr.number, local_head=git.head_sha())
     status = repo.checks.status(pr.head_sha)
     if status.state == "failure":
         fail(
