@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from livery.forge._errors import ForgeError, Unsupported
@@ -43,6 +44,7 @@ from livery.forge._types import (
     Run,
     ScheduleEvent,
     StateFilter,
+    Step,
 )
 from livery.forge.testing._conformance import Outcome
 
@@ -120,6 +122,12 @@ class _IssueState:
     comments: list[str] = field(default_factory=list)
 
 
+def _stamp(seconds: int) -> str:
+    """An ISO 8601 moment *seconds* into the fake's day."""
+    moment = datetime(2026, 1, 1, tzinfo=UTC) + timedelta(seconds=seconds)
+    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 @dataclass
 class _RunState:
     id: int
@@ -131,6 +139,10 @@ class _RunState:
     job_id: int
     outcome: Outcome = "success"
     log: str = ""
+    created_at: str = ""
+    started_at: str = ""
+    completed_at: str = ""
+    steps: tuple[Step, ...] = ()
 
 
 @dataclass
@@ -377,6 +389,13 @@ class FakeForge:
             run_state.status = "completed"
             run_state.conclusion = conclusion
             run_state.log = f"job {run_state.job_id} concluded {conclusion}"
+            # The settled run is timed like a real one: queued three
+            # seconds, then a thirty-second job of one step.
+            run_state.started_at = _stamp(run_state.id * 60 + 3)
+            run_state.completed_at = _stamp(run_state.id * 60 + 33)
+            run_state.steps = (
+                Step("gate", conclusion, run_state.started_at, run_state.completed_at),
+            )
         self._settle(state)
 
     def comment_bodies(
@@ -413,6 +432,9 @@ class FakeForge:
             conclusion="",
             job_id=self._next_job,
             outcome=outcome,
+            # Deterministic times, a minute apart per run: a forge
+            # says when it accepted a run, so the fake does too.
+            created_at=_stamp(self._next_run * 60),
         )
         self._next_run += 1
         self._next_job += 1
@@ -899,6 +921,9 @@ class _FakeChecks:
                 status=run.status,
                 conclusion=run.conclusion,
                 url=f"fake://{self._owner}/{self._name}/runs/{run.id}",
+                created_at=run.created_at,
+                started_at=run.started_at,
+                completed_at=run.completed_at,
             )
             for run in selected
         )
@@ -912,6 +937,9 @@ class _FakeChecks:
                 name="gate",
                 status=run_state.status,
                 conclusion=run_state.conclusion,
+                started_at=run_state.started_at,
+                completed_at=run_state.completed_at,
+                steps=run_state.steps,
             ),
         )
 
