@@ -8,10 +8,15 @@ reads the current tree, rebuilds it with the kept entries plus the
 new ones, and pushes a fresh root commit over the old one, so a
 window needs no history and a reader never sees a torn tree.
 
-Reach for [livery.workshop._state.put][] to write, `read` to read,
-and `sweep` for the janitor. Every failure is a printed reason,
-never a boolean: a stamp is best-effort by contract, so the only way
-its failure is ever noticed is by being printed.
+A [livery.workshop._state.Series][] declares one ref's rows: reach
+for its `rows` and `row` to read and its `put` to write. The store
+parses, stamps the schema and the time, applies the window, and
+refuses what the declaration forbids, so no caller does any of
+that itself. The bare `read` and `put` move files that are not
+rows (a per-run half, a coverage entry), and `sweep` is the
+janitor. Every failure is a printed reason, never a boolean: a
+stamp is best-effort by contract, so the only way its failure is
+ever noticed is by being printed.
 
 The rules, ported from hse's stamp transport:
 
@@ -44,7 +49,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -72,26 +77,182 @@ ATTEMPTS = 3
 #: rows and stamps.
 LEG_VARIABLE = "WORKSHOP_LEG"
 
+#: How a window ranks the files it keeps: a key from a file's name
+#: and text, the newest sorting last.
+Order = Callable[[str, str], tuple[str, str]]
+
+
+@dataclass(frozen=True)
+class Row:
+    """One row of a series: the file it came from and its fields.
+
+    Attributes:
+        name: The file's name on the ref.
+        data: The row's fields, ``schema`` and ``when`` included.
+    """
+
+    name: str
+    data: dict[str, Any]
+
+    @property
+    def when(self) -> str:
+        """When the store stamped the row, ISO 8601; empty when it never did."""
+        return str(self.data.get("when", "") or "")
+
+
+@dataclass(frozen=True)
+class Rows:
+    """What a series read found: the rows, what it skipped, and whether it could answer.
+
+    Attributes:
+        rows: The rows of the series' schema, newest first.
+        skipped: One line per file that is not such a row, naming the
+            file and why.
+        failed: Whether the transport could not answer for a ref that
+            exists, or reach the remote at all. An absent ref reads as
+            no rows and no failure.
+        reason: Why it could not answer, in the store's one wording.
+    """
+
+    rows: tuple[Row, ...]
+    skipped: tuple[str, ...] = ()
+    failed: bool = False
+    reason: str = ""
+
 
 @dataclass(frozen=True)
 class Series:
-    """A shared ref's declaration: its window and who may write it.
+    """A shared ref's declaration: its rows' schema, its window, and who may write it.
+
+    A series is one ref holding JSON rows of one schema, one file per
+    row. `rows` and `row` read, `put` writes; the store stamps the
+    schema and the time, keeps the window, and refuses what the
+    declaration forbids, so a caller never parses a row, checks a
+    schema, or trims a ref itself.
 
     Attributes:
         name: The ref's name under the namespace.
-        window: The newest files kept, by name, after every write;
-            ``None`` keeps everything.
+        window: The newest rows kept after every write, by the time
+            the store stamped them; ``None`` keeps everything.
         ci_only: Whether only a CI run may write it. Local runs read.
+        schema: The rows' schema. A reader skips a row of another
+            version and names it; a new field is the same version, a
+            changed meaning is the next.
     """
 
     name: str
     window: int | None = None
     ci_only: bool = True
+    schema: int = 1
 
     @property
     def ref(self) -> str:
         """The full ref name."""
         return NAMESPACE + self.name
+
+    def rows(self, root: Path) -> Rows:
+        """Every row of the series, newest first, with what was skipped and why.
+
+        An absent ref is no rows and no failure. A ref the transport
+        could not read is a failure with its reason, so every caller
+        falls open the same way. A file that does not parse or is of
+        another schema is skipped and named, and the rest stand.
+        """
+        found = read(root, self.ref)
+        if found.files is None:
+            return Rows((), failed=found.failed, reason=self._unreadable(found))
+        rows: list[Row] = []
+        skipped: list[str] = []
+        for name in sorted(found.files):
+            data, why = _parse(self, found.files[name])
+            if data is None:
+                skipped.append(f"{name}: {why}; skipped")
+            else:
+                rows.append(Row(name, data))
+        rows.sort(key=_newest, reverse=True)
+        return Rows(tuple(rows), tuple(skipped))
+
+    def row(self, root: Path, name: str) -> tuple[Row | None, str]:
+        """The row in the file *name*.
+
+        ``(None, "")`` when the ref or the file is absent, and
+        ``(None, reason)`` when the ref could not be read or the file
+        is not a row of the schema.
+        """
+        found = read(root, self.ref)
+        if found.files is None:
+            return None, self._unreadable(found)
+        text = found.files.get(name)
+        if text is None:
+            return None, ""
+        data, why = _parse(self, text)
+        if data is None:
+            return None, f"{name}: {why}"
+        return Row(name, data), ""
+
+    def put(
+        self, root: Path, rows: Mapping[str, Mapping[str, Any]], *, message: str
+    ) -> str:
+        """Write *rows* by file name, stamped; ``""`` or the reason.
+
+        Every row is written with the schema and the time stamped on
+        it, and the stamp wins over a ``schema`` or ``when`` the row
+        carries.
+
+        The window keeps the newest rows by their stamps, so a series
+        keyed by something other than time (a tree id) keeps its
+        newest too. A write the declaration forbids is refused with
+        the rule; the transport's refusals come back as they are.
+        """
+        stamp = datetime.now(UTC).isoformat(timespec="microseconds")
+        files = {
+            name: json.dumps(
+                {**row, "schema": self.schema, "when": stamp}, sort_keys=True
+            )
+            for name, row in rows.items()
+        }
+        # The transport's put: a class body is no scope for its methods.
+        return put(
+            root,
+            self.ref,
+            files,
+            message=message,
+            window=self.window,
+            ci_only=self.ci_only,
+            order=_by_when,
+        )
+
+    def _unreadable(self, found: Read) -> str:
+        if not found.failed:
+            return ""
+        return f"the {self.name} series could not be read: {found.reason}"
+
+
+def _parse(series: Series, text: str) -> tuple[dict[str, Any] | None, str]:
+    """A file's row of *series*' schema, or ``(None, why)`` in one wording."""
+    try:
+        loaded: Any = json.loads(text)
+    except ValueError:
+        return None, "does not parse"
+    seen = loaded.get("schema") if isinstance(loaded, dict) else None
+    if seen != series.schema:
+        version = "none" if seen is None else str(seen)
+        return None, f"schema {version}, this reader speaks {series.schema}"
+    return loaded, ""
+
+
+def _by_when(name: str, text: str) -> tuple[str, str]:
+    """A window's rank for a file: its stamp then its name; unstamped is oldest."""
+    try:
+        loaded: Any = json.loads(text)
+    except ValueError:
+        return "", name
+    when = loaded.get("when") if isinstance(loaded, dict) else None
+    return (when if isinstance(when, str) else ""), name
+
+
+def _newest(row: Row) -> tuple[str, str]:
+    return row.when, row.name
 
 
 @dataclass(frozen=True)
@@ -348,12 +509,14 @@ def put(
     message: str,
     window: int | None = None,
     ci_only: bool = False,
+    order: Order | None = None,
     attempts: int = ATTEMPTS,
 ) -> str:
     """Write *files* onto *ref*, keeping what it already holds; ``""`` or the reason.
 
     The tree is the ref's current files with *files* laid over them,
-    trimmed to the newest *window* names when one is given. The push
+    trimmed to the newest *window* files when one is given, ranked by
+    *order* or, without one, by name. The push
     is a compare-and-swap on the sha the read returned: a ref another
     writer moved in between refuses the push, and the write re-reads,
     merges, and retries up to *attempts* times. *ci_only* refuses a
@@ -374,7 +537,7 @@ def put(
             )
         merged = {**(current.files or {}), **files}
         if window is not None and len(merged) > window:
-            merged = {name: merged[name] for name in sorted(merged)[-window:]}
+            merged = _trim(merged, window, order)
         commit, why = _build_commit(root, merged, message)
         if why:
             return why
@@ -386,6 +549,16 @@ def put(
             return f"push refused: {_words(pushed)}"
         return _readback(root, ref, commit)
     return f"gave up on {ref} after {attempts} attempts: another writer kept moving it"
+
+
+def _trim(files: dict[str, str], window: int, order: Order | None) -> dict[str, str]:
+    """The newest *window* of *files* by *order*, or by name without one."""
+    if order is None:
+        kept = sorted(files)[-window:]
+    else:
+        ranked = sorted((order(name, text), name) for name, text in files.items())
+        kept = [name for _, name in ranked[-window:]]
+    return {name: files[name] for name in kept}
 
 
 def _readback(root: Path, ref: str, wanted: str) -> str:
@@ -477,6 +650,7 @@ def sweep(
             {},
             message=f"{declared.name}: window of {declared.window} enforced",
             window=declared.window,
+            order=_by_when,
         )
         lines.append(
             f"  {declared.ref}: {len(current.files)} files trimmed to"

@@ -21,20 +21,18 @@ to decide a run.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from livery.workshop._coverage_store import slug
-from livery.workshop._state import Series, put, read
+from livery.workshop._state import Series
 
-#: The marks: one file per row, the newest kept per package by the window.
+#: The marks: one row per write, the newest kept by the window; anyone
+#: may write, since an accept is a person's act, and the ratchet's
+#: writer guards its own rule that only a CI run raises a mark.
 SERIES = Series("coverage/marks", window=400, ci_only=False)
-
-#: The row shape; another schema reads as no mark, named.
-SCHEMA = 1
 
 #: The floor value that selects the mode.
 AUTO_RATCHET = "auto-ratchet"
@@ -107,35 +105,34 @@ def marks(root: Path) -> tuple[dict[str, Mark] | None, str]:
 
     An empty store is ``({}, "")``: the first run writes. A read the
     transport could not answer returns its reason, and a caller that
-    would write refuses on it. A row that does not parse or is of
-    another schema is skipped, so one bad row disables nothing.
+    would write refuses on it. A row that does not parse, is of
+    another schema, or lacks a mark's fields is skipped, so one bad
+    row disables nothing. The newest row per package is its mark.
     """
-    found = read(root, SERIES.ref)
-    if found.files is None:
-        if found.failed:
-            return None, f"the marks could not be read: {found.reason}"
-        return {}, ""
+    found = SERIES.rows(root)
+    if found.failed:
+        return None, found.reason
     current: dict[str, Mark] = {}
-    for name in sorted(found.files):
-        try:
-            row: Any = json.loads(found.files[name])
-        except ValueError:
-            continue
-        if not isinstance(row, dict) or row.get("schema") != SCHEMA:
-            continue
-        try:
-            mark = Mark(
-                package=str(row["package"]),
-                value=float(row["value"]),
-                kind=str(row.get("kind", "")),
-                by=str(row.get("by", "")),
-                reason=str(row.get("reason", "")),
-                when=str(row.get("when", "")),
-            )
-        except (KeyError, TypeError, ValueError):
-            continue
-        current[mark.package] = mark
+    for row in found.rows:
+        mark = _mark(row.data)
+        if mark is not None:
+            current.setdefault(mark.package, mark)
     return current, ""
+
+
+def _mark(data: dict[str, Any]) -> Mark | None:
+    """The mark a row sets, or ``None`` when its fields are not a mark's."""
+    try:
+        return Mark(
+            package=str(data["package"]),
+            value=float(data["value"]),
+            kind=str(data.get("kind", "")),
+            by=str(data.get("by", "")),
+            reason=str(data.get("reason", "")),
+            when=str(data.get("when", "")),
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 def write_mark(
@@ -146,26 +143,19 @@ def write_mark(
     kind: str,
     by: str,
     reason: str = "",
-    ci_only: bool,
 ) -> str:
     """Append one row setting *package*'s mark; ``""`` or why it was not written."""
-    now = datetime.now(UTC)
     row = {
-        "schema": SCHEMA,
         "package": package,
         "value": round(value, 2),
         "kind": kind,
         "by": by,
         "reason": reason,
-        "when": now.isoformat(timespec="seconds"),
     }
-    return put(
+    return SERIES.put(
         root,
-        SERIES.ref,
-        {_row_name(now, package): json.dumps(row, sort_keys=True)},
+        {_row_name(datetime.now(UTC), package): row},
         message=f"coverage mark: {package} {kind} {value:.2f} by {by}",
-        window=SERIES.window,
-        ci_only=ci_only,
     )
 
 

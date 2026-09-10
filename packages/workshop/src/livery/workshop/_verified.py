@@ -27,18 +27,14 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from livery.workshop._git_ops import GitError, GitOps
-from livery.workshop._state import RunContext, Series, put, read
+from livery.workshop._state import RunContext, Series
 
-#: The series: one file per tree id, the newest kept.
+#: The series: one row per tree id, the newest kept.
 SERIES = Series("verified", window=200)
-
-#: The record's schema; a reader ignores an entry of another version.
-SCHEMA = 1
 
 #: The marker a check leg leaves beside its trace, naming the scope
 #: its gate ran, for the leg's metrics row and the gate job's stamp.
@@ -122,23 +118,14 @@ def read_marker(root: Path) -> dict[str, Any]:
 def record(root: Path, tree: str) -> tuple[Verified | None, str]:
     """The entry for *tree*, or ``(None, reason)``; an absent entry has no reason.
 
-    A read the transport could not answer falls open with its words:
+    A read the transport could not answer falls open with its words,
+    and so does an entry that is not a row of the record's schema:
     the gate runs, and the line says why the record did not decide.
     """
-    found = read(root, SERIES.ref)
-    if found.files is None:
-        return None, (
-            f"the record could not be read: {found.reason}" if found.failed else ""
-        )
-    text = found.files.get(tree)
-    if text is None:
-        return None, ""
-    try:
-        entry = json.loads(text)
-    except ValueError:
-        return None, f"the entry for {tree[:12]} does not parse"
-    if not isinstance(entry, dict) or entry.get("schema") != SCHEMA:
-        return None, f"the entry for {tree[:12]} is of another schema"
+    row, why = SERIES.row(root, tree)
+    if row is None:
+        return None, why
+    entry = row.data
     return (
         Verified(
             tree=tree,
@@ -169,27 +156,22 @@ def stamp(
     the record; a composed row names that base and its run.
     """
     entry: dict[str, object] = {
-        "schema": SCHEMA,
         "tree": tree,
         "run": run.run_id,
         "sha": sha,
         "forge": run.forge,
         "scope": FULL,
         "legs": list(legs),
-        "when": datetime.now(UTC).isoformat(timespec="seconds"),
     }
     basis = ""
     if base is not None:
         entry["base_tree"] = base.tree
         entry["base_run"] = base.run
         basis = f" on top of {base.tree[:12]}"
-    return put(
+    return SERIES.put(
         root,
-        SERIES.ref,
-        {tree: json.dumps(entry, sort_keys=True)},
+        {tree: entry},
         message=f"verified: tree {tree[:12]} by run {run.run_id}{basis}",
-        window=SERIES.window,
-        ci_only=True,
     )
 
 
@@ -208,18 +190,14 @@ def stamp_from_metrics(root: Path, run: RunContext, *, sha: str) -> str:
     from livery.workshop._metrics import SERIES as METRICS
     from livery.workshop._metrics import run_file
 
-    found = read(root, METRICS.ref)
-    if found.files is None:
-        why = found.reason if found.failed else "no metrics series yet"
-        return f"  verified: no stamp, the run's rows could not be read ({why})"
-    text = found.files.get(run_file(run.run_id))
-    if text is None:
+    row, why = METRICS.row(root, run_file(run.run_id))
+    if why:
+        return f"  verified: no stamp, {why}"
+    if row is None:
         return f"  verified: no stamp, run {run.run_id} left no row"
-    try:
-        entry = json.loads(text)
-    except ValueError:
-        return f"  verified: no stamp, run {run.run_id}'s row does not parse"
-    jobs = entry.get("jobs", {}) if isinstance(entry, dict) else {}
+    jobs = row.data.get("jobs", {})
+    if not isinstance(jobs, dict):
+        jobs = {}
     legs = tuple(sorted(name for name in jobs if name.startswith("check")))
     if not legs:
         return "  verified: no stamp, the run had no check leg"

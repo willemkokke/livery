@@ -610,7 +610,6 @@ def coverage_accept(
         kind="accept",
         by=who,
         reason=reason.strip(),
-        ci_only=False,
     )
     if written:
         fail(f"the mark was not written: {written}")

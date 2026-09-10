@@ -152,7 +152,6 @@ def test_the_first_run_records_the_mark_only_in_ci(
             "value": 80.0,
             "kind": "first",
             "by": "run 7",
-            "ci_only": True,
         }
     ]
 

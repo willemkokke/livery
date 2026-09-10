@@ -116,7 +116,6 @@ def test_a_lowering_writes_a_reasoned_row_naming_who(
             "kind": "accept",
             "by": "willem",
             "reason": "a module moved out",
-            "ci_only": False,
         }
     ]
     out = capsys.readouterr().out

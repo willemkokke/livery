@@ -356,6 +356,87 @@ def test_a_ci_run_may_write_a_ci_only_series(
     assert _state.put(work, REF, {"a.json": "1"}, message="one", ci_only=True) == ""
 
 
+# --- the row layer: refusals first --------------------------------------------
+
+ROWS = _state.Series("rows", window=3, ci_only=False, schema=2)
+
+
+def test_an_absent_series_reads_as_no_rows_and_no_failure(
+    repos: tuple[Path, Path],
+) -> None:
+    _, work = repos
+    assert ROWS.rows(work) == _state.Rows(())
+    assert ROWS.row(work, "any") == (None, "")
+
+
+def test_an_unreachable_series_names_itself_and_the_reason(
+    repos: tuple[Path, Path], tmp_path: Path
+) -> None:
+    _, work = repos
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    found = ROWS.rows(work)
+    assert found.failed and found.rows == () and found.skipped == ()
+    assert found.reason.startswith("the rows series could not be read: ")
+    assert ROWS.row(work, "any") == (None, found.reason)
+
+
+def test_a_file_that_is_not_a_row_is_skipped_and_named(
+    repos: tuple[Path, Path],
+) -> None:
+    _, work = repos
+    files = {
+        "a": "{not json",
+        "b": json.dumps({"schema": 1}),
+        "c": json.dumps([1, 2]),
+        "d": json.dumps({"schema": 2, "x": 1}),
+    }
+    assert _state.put(work, ROWS.ref, files, message="junk") == ""
+    found = ROWS.rows(work)
+    assert found.skipped == (
+        "a: does not parse; skipped",
+        "b: schema 1, this reader speaks 2; skipped",
+        "c: schema none, this reader speaks 2; skipped",
+    )
+    assert found.rows == (_state.Row("d", {"schema": 2, "x": 1}),)
+    assert not found.failed and found.reason == ""
+    assert ROWS.row(work, "a") == (None, "a: does not parse")
+    assert ROWS.row(work, "b") == (None, "b: schema 1, this reader speaks 2")
+    assert ROWS.row(work, "d") == (_state.Row("d", {"schema": 2, "x": 1}), "")
+
+
+def test_a_ci_only_series_refuses_a_local_put_by_its_rule(
+    repos: tuple[Path, Path],
+) -> None:
+    _, work = repos
+    guarded = _state.Series("guarded")
+    why = guarded.put(work, {"a": {}}, message="a")
+    assert "only a CI run writes this series; local runs read" in why
+    assert guarded.rows(work) == _state.Rows(())
+
+
+def test_put_stamps_the_schema_and_the_time_over_what_a_row_carries(
+    repos: tuple[Path, Path],
+) -> None:
+    _, work = repos
+    assert ROWS.put(work, {"first": {"x": 1}}, message="one") == ""
+    late = {"second": {"schema": 99, "when": "never"}}
+    assert ROWS.put(work, late, message="two") == ""
+    found = ROWS.rows(work)
+    assert [row.name for row in found.rows] == ["second", "first"]
+    assert all(row.data["schema"] == 2 for row in found.rows)
+    assert found.rows[0].when > found.rows[1].when > "2026"
+
+
+def test_the_window_keeps_the_newest_rows_by_their_stamps_not_their_names(
+    repos: tuple[Path, Path],
+) -> None:
+    _, work = repos
+    # The newest row has the smallest name: a name order would evict it.
+    for name in ("zz", "mm", "aa", "00"):
+        assert ROWS.put(work, {name: {}}, message=name) == ""
+    assert [row.name for row in ROWS.rows(work).rows] == ["00", "aa", "mm"]
+
+
 # --- the janitor -------------------------------------------------------------
 
 
@@ -398,6 +479,19 @@ def test_sweep_enforces_a_series_window(repos: tuple[Path, Path]) -> None:
         "run-0003.json": "3",
     }
     assert f"  {series.ref}: within its window of 2" in _state.sweep(work, (series,))
+
+
+def test_sweep_trims_a_series_by_its_rows_stamps(repos: tuple[Path, Path]) -> None:
+    _, work = repos
+    series = _state.Series("trees", window=1, ci_only=False)
+    # The newest row has the smallest name: a name order would evict it.
+    files = {
+        "aa": json.dumps({"schema": 1, "when": "2026-01-02T00:00:00+00:00"}),
+        "zz": json.dumps({"schema": 1, "when": "2026-01-01T00:00:00+00:00"}),
+    }
+    assert _state.put(work, series.ref, files, message="two") == ""
+    assert f"  {series.ref}: 2 files trimmed to 1" in _state.sweep(work, (series,))
+    assert [row.name for row in series.rows(work).rows] == ["aa"]
 
 
 def test_sweep_names_a_remote_it_cannot_list(
