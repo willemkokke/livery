@@ -98,8 +98,8 @@ forge kind (`[forge] kind`); each is bound by its owner.
 **The quality gate is a set of checks, grouped by role.** A
 *check* is one tool's judgment: ruff's format pass, mypy on
 linux, the render drift comparison. A *role* is what a check is
-an implementation of: `format`, `lint`, `types`, `test`, and the
-workspace roles such as `render`. The *gate* (`fm check`) is the
+an implementation of: `format`, `lint`, `types`, `build`,
+`test`, and the workspace roles such as `render`. The *gate* (`fm check`) is the
 conjunction: every applicable check green, the exit code the
 verdict. Kinds gate on roles, never on tools: a C++ kind says
 "format applies", and whether format means ruff or clang-format
@@ -256,12 +256,36 @@ contract 7 land against the current implementation and survive
 the swap unchanged. `CiContract.check_verbs` validates against
 registered roles, refusing unknown names with the vocabulary.
 
+One of the eight is not a check but a router: `fm kindcheck`
+(`_quality.py`) reads each kind's `CiContract.kind_verbs` and
+calls the kind backend's `check` per package. Under the registry
+the walk is the router, so the router retires: the `kindcheck`
+task, `run_kind_checks`, `CiContract.kind_verbs`, and
+`Backend.check` all go, and the python and python-nanobind
+backends lose their no-op `check`. What the router dispatched
+becomes check records the cpp-conan kind registers, scope
+per-package, narrowing by package subset: `configure` and
+`build` under a `build` role, `ctest` under `test`. The `build`
+role joins the design section's role list. A kind contributes
+checks the same way a layer does, through `register_check`, so
+the second list on the kind contract has no reason to exist.
+The gate output for a cpp-conan package changes from one
+`kindcheck` line to one line per check; the skip-by-name lines
+for the roles that do not apply stay as they are. Adding this
+before phase 2 would build a second interim shape, so it lands
+inside the swap.
+
 **Acceptance**
 
 - The pinning tests pass before and after the swap, proven by
   running them at both commits.
 - `fm check` output names the same members and skips as
-  before, and `--affected` narrows identically.
+  before, and `--affected` narrows identically. The one named
+  change: a cpp-conan package prints `configure`, `build`, and
+  `ctest` as three per-package checks instead of one `kindcheck`
+  line, proven by the conformance workspace's gate output.
+- `grep -rn 'kindcheck\|kind_verbs\|run_kind_checks'
+  packages/workshop/src` finds nothing.
 - A test registers a fake check and sees it run, narrow, and
   skip by name.
 
@@ -444,6 +468,14 @@ the kit cannot drift from the enforcement.
 - 2026-09-05, documentation splits three ways (from the
   discussion): extraction is the kind's, policy is the layer's,
   assembly is the core's.
+- 2026-09-10, `kindcheck` retires inside phase 2 (Willem): the
+  task is a router over `kind_verbs` and `Backend.check`, the
+  kind hierarchy plan's pre-registry way for a kind to supply
+  per-package checks. The registry walk is that router, so the
+  task, the second list on the kind contract, and the protocol
+  slot go together, and cpp-conan registers its three checks
+  under `build` and `test`. Not a separate change: doing it first
+  would build an interim shape the swap then replaces.
 - 2026-09-05, phase 1 waits for nothing (Willem): #218 and #220
   are closed, `fm issue.list` shows only #195 (docs content
   pass) open, so the kind rename starts when the plan is
