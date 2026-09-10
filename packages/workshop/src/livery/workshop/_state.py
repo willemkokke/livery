@@ -1,4 +1,4 @@
-"""The CI state store: text files on ``refs/workshop/*`` refs.
+"""The state store: JSON rows on git refs, on the remote and in the checkout.
 
 State that CI runs keep across runs (timing rows, verified trees,
 coverage marks) lives as files on git refs in a namespace outside
@@ -16,9 +16,17 @@ that itself. A [livery.workshop._state.Keyed][] family declares one
 series per key (a leg and a package; a run and a leg) and lists the
 keys the remote holds. The bare `read` and `put` are the transport
 underneath, and `sweep` is the janitor. Every failure is a printed
-reason, never a boolean: a
-stamp is best-effort by contract, so the only way its failure is
-ever noticed is by being printed.
+reason, never a boolean: a stamp is best-effort by contract, so the
+only way its failure is ever noticed is by being printed.
+
+A series declared ``local`` lives under ``refs/workshop-local/`` in
+the checkout's own git directory instead of on the remote. No refspec
+names that namespace, so a fetch never brings it and a push never
+carries it, and a mirror push of ``refs/workshop/*`` cannot carry it
+either; the checkout's worktrees share it, and a fresh clone starts
+empty. Its rows are read and written the same way. Only the transport
+differs: git's own ``update-ref`` with the old value, in place of a
+push with a lease.
 
 The rules, ported from hse's stamp transport:
 
@@ -65,6 +73,12 @@ from livery import toolroom
 #: push trigger on any forge, so a store write can never start a
 #: workflow, whatever the token.
 NAMESPACE = "refs/workshop/"
+
+#: Every local series lives under this prefix, in the checkout's own
+#: git directory: no refspec names it, so a fetch never brings it and
+#: a push never carries it, and a mirror push of ``refs/workshop/*``
+#: cannot carry it either. Worktrees share it; a fresh clone is empty.
+LOCAL_NAMESPACE = "refs/workshop-local/"
 
 #: The per-run refs' prefix, for the janitor's orphan rule: one ref
 #: per leg, written by that leg alone, read and deleted by the run's
@@ -164,17 +178,29 @@ class Series:
         schema: The rows' schema. A reader skips a row of another
             version and names it; a new field is the same version, a
             changed meaning is the next.
+        local: Whether the series lives in the checkout's git directory
+            under ``refs/workshop-local/`` instead of on the remote:
+            never fetched or pushed, shared by the worktrees, written
+            by local runs, so ``ci_only`` must be false.
     """
 
     name: str
     window: int | None = None
     ci_only: bool = True
     schema: int = 1
+    local: bool = False
+
+    def __post_init__(self) -> None:
+        if self.local and self.ci_only:
+            raise ValueError(
+                f"{self.name}: a local series is written by local runs; declare"
+                " it ci_only=False"
+            )
 
     @property
     def ref(self) -> str:
-        """The full ref name."""
-        return NAMESPACE + self.name
+        """The full ref name, under the local namespace for a local series."""
+        return (LOCAL_NAMESPACE if self.local else NAMESPACE) + self.name
 
     def rows(self, root: Path) -> Rows:
         """Every row of the series, newest first, with what was skipped and why.
@@ -271,6 +297,8 @@ class Keyed:
         window: Every series' window; ``None`` keeps everything.
         ci_only: Whether only a CI run may write the family.
         schema: The rows' schema, shared by every series.
+        local: Whether every series of the family is local, as for a
+            [livery.workshop._state.Series][].
     """
 
     name: str
@@ -278,11 +306,19 @@ class Keyed:
     window: int | None = None
     ci_only: bool = True
     schema: int = 1
+    local: bool = False
+
+    def __post_init__(self) -> None:
+        if self.local and self.ci_only:
+            raise ValueError(
+                f"{self.name}: a local family is written by local runs; declare"
+                " it ci_only=False"
+            )
 
     @property
     def prefix(self) -> str:
         """The refs' common prefix, ending in a slash."""
-        return f"{NAMESPACE}{self.name}/"
+        return f"{LOCAL_NAMESPACE if self.local else NAMESPACE}{self.name}/"
 
     def series(self, *key: str) -> Series:
         """The series of one *key*, one part per declared key name.
@@ -300,6 +336,7 @@ class Keyed:
             window=self.window,
             ci_only=self.ci_only,
             schema=self.schema,
+            local=self.local,
         )
 
     def listed(self, root: Path, *head: str) -> list[tuple[str, ...]] | None:
@@ -499,29 +536,43 @@ def _ref_exists(root: Path, ref: str) -> tuple[bool | None, str]:
 
 
 def read(root: Path, ref: str) -> Read:
-    """Read *ref*'s files from origin, saying whether a miss is absence or failure.
+    """Read *ref*'s files, saying whether a miss is absence or failure.
 
-    The fetch lands in ``FETCH_HEAD`` and creates no local ref, so a
-    checkout accrues only unreachable objects git's own gc prunes. A
-    failed fetch is a failure only when the ref is there: a ref that
-    does not exist also fails the fetch, and that is the ordinary
-    first-run case. A remote that cannot answer the probe either
-    counts as failed: an unreachable forge must never read as "there
-    was never a stamp".
+    A remote ref is fetched from origin: the fetch lands in
+    ``FETCH_HEAD`` and creates no local ref, so a checkout accrues
+    only unreachable objects git's own gc prunes. A failed fetch is a
+    failure only when the ref is there: a ref that does not exist
+    also fails the fetch, and that is the ordinary first-run case. A
+    remote that cannot answer the probe either counts as failed: an
+    unreachable forge must never read as "there was never a stamp".
+    A local ref is read from the checkout's own git directory: a
+    missing ref is absence, and anything else git refuses is a
+    failure with git's words.
     """
+    if ref.startswith(LOCAL_NAMESPACE):
+        verified = _git(root, "rev-parse", "--verify", "--quiet", ref)
+        if verified.code == 1 and not verified.stderr.strip():
+            return Read(None, None, failed=False)
+        if verified.code != 0:
+            return Read(None, None, failed=True, reason=_words(verified))
+        return _tree_files(root, verified.stdout.strip())
     fetched = _git(root, "fetch", "--quiet", "origin", ref)
     if fetched.code != 0:
         exists, why = _ref_exists(root, ref)
         if exists is False:
             return Read(None, None, failed=False)
         return Read(None, None, failed=True, reason=why or _words(fetched))
-    sha = _git(root, "rev-parse", "FETCH_HEAD").stdout.strip()
-    listed = _git(root, "ls-tree", "--name-only", "FETCH_HEAD")
+    return _tree_files(root, _git(root, "rev-parse", "FETCH_HEAD").stdout.strip())
+
+
+def _tree_files(root: Path, sha: str) -> Read:
+    """The files of the root commit *sha*, or a failure with git's words."""
+    listed = _git(root, "ls-tree", "--name-only", sha)
     if listed.code != 0:
         return Read(None, sha, failed=True, reason=_words(listed))
     files: dict[str, str] = {}
     for name in listed.stdout.split():
-        shown = _git(root, "show", f"FETCH_HEAD:{name}")
+        shown = _git(root, "show", f"{sha}:{name}")
         if shown.code != 0:
             return Read(None, sha, failed=True, reason=_words(shown))
         files[name] = shown.stdout
@@ -529,8 +580,13 @@ def read(root: Path, ref: str) -> Read:
 
 
 def list_refs(root: Path, prefix: str) -> dict[str, str] | None:
-    """The remote's refs under *prefix* by sha; ``None`` when it cannot answer."""
-    listed = _git(root, "ls-remote", "origin", prefix + "*")
+    """The refs under *prefix* by sha, remote or local; ``None`` when unlistable."""
+    if prefix.startswith(LOCAL_NAMESPACE):
+        listed = _git(
+            root, "for-each-ref", "--format=%(objectname)%09%(refname)", prefix
+        )
+    else:
+        listed = _git(root, "ls-remote", "origin", prefix + "*")
     if listed.code != 0:
         return None
     refs: dict[str, str] = {}
@@ -579,10 +635,18 @@ def _build_commit(root: Path, files: dict[str, str], message: str) -> tuple[str,
     return commit.stdout.strip(), ""
 
 
-def _stale(pushed: toolroom.Result) -> bool:
-    """Whether a refused push lost the lease rather than failing outright."""
-    words = pushed.stderr + pushed.stdout
-    return "stale info" in words or "[rejected]" in words
+def _stale(refused: toolroom.Result) -> bool:
+    """Whether a refused write lost its compare-and-swap rather than failing outright.
+
+    A push with a lease says ``stale info`` or ``[rejected]``; an
+    ``update-ref`` with an old value says what the ref is at ``but
+    expected``, or that the reference ``already exists``.
+    """
+    words = refused.stderr + refused.stdout
+    return any(
+        mark in words
+        for mark in ("stale info", "[rejected]", "but expected", "already exists")
+    )
 
 
 def put(
@@ -607,8 +671,11 @@ def put(
     write from outside CI, naming the rule. Every refusal is the
     returned reason; nothing here raises or prints.
     """
-    if not ref.startswith(NAMESPACE):
-        return f"refusing {ref}: the state store writes only under {NAMESPACE}"
+    if not ref.startswith((NAMESPACE, LOCAL_NAMESPACE)):
+        return (
+            f"refusing {ref}: the state store writes only under {NAMESPACE}"
+            f" and {LOCAL_NAMESPACE}"
+        )
     if ci_only and run_context() is None:
         return f"refusing {ref}: only a CI run writes this series; local runs read"
     for _ in range(attempts):
@@ -625,6 +692,15 @@ def put(
         commit, why = _build_commit(root, merged, message)
         if why:
             return why
+        if ref.startswith(LOCAL_NAMESPACE):
+            # git's own compare-and-swap: the old value is the sha the
+            # read returned, or empty for a ref that must not exist yet.
+            moved = _git(root, "update-ref", ref, commit, current.sha or "")
+            if moved.code != 0:
+                if _stale(moved):
+                    continue
+                return f"update refused: {_words(moved)}"
+            return _readback(root, ref, commit)
         lease = f"--force-with-lease={ref}:{current.sha or ''}"
         pushed = _git(root, "push", "--quiet", lease, "origin", f"{commit}:{ref}")
         if pushed.code != 0:
@@ -646,28 +722,42 @@ def _trim(files: dict[str, str], window: int, order: Order | None) -> dict[str, 
 
 
 def _readback(root: Path, ref: str, wanted: str) -> str:
-    """Read the ref back after the push: a push that reports success can lie."""
-    check = _git(root, "ls-remote", "origin", ref)
-    if check.code != 0:
-        return f"readback failed: {_words(check)}"
-    if not check.stdout.strip():
-        return f"push reported success but {ref} is absent from the remote"
-    seen = check.stdout.split()[0]
+    """Read the ref back after the write: a push that reports success can lie."""
+    if ref.startswith(LOCAL_NAMESPACE):
+        act = "update"
+        check = _git(root, "rev-parse", "--verify", "--quiet", ref)
+        if check.code != 0:
+            return f"readback failed: {_words(check) if check.stderr else 'absent'}"
+        seen = check.stdout.strip()
+    else:
+        act = "push"
+        check = _git(root, "ls-remote", "origin", ref)
+        if check.code != 0:
+            return f"readback failed: {_words(check)}"
+        if not check.stdout.strip():
+            return f"push reported success but {ref} is absent from the remote"
+        seen = check.stdout.split()[0]
     if seen != wanted:
         return (
-            f"push reported success but {ref} reads {seen[:12]}, wanted {wanted[:12]}"
+            f"{act} reported success but {ref} reads {seen[:12]}, wanted {wanted[:12]}"
         )
     return ""
 
 
 def drop(root: Path, ref: str) -> str:
-    """Delete *ref* on origin; ``""`` when it is gone, the reason otherwise.
+    """Delete *ref*, on origin or in the checkout; ``""`` when gone, else the reason.
 
     A ref that is already absent counts as gone: the janitor re-runs
     as its own recovery, and a second sweep must find nothing to do.
     """
-    if not ref.startswith(NAMESPACE):
-        return f"refusing {ref}: the state store deletes only under {NAMESPACE}"
+    if not ref.startswith((NAMESPACE, LOCAL_NAMESPACE)):
+        return (
+            f"refusing {ref}: the state store deletes only under {NAMESPACE}"
+            f" and {LOCAL_NAMESPACE}"
+        )
+    if ref.startswith(LOCAL_NAMESPACE):
+        deleted = _git(root, "update-ref", "-d", ref)
+        return "" if deleted.code == 0 else f"delete refused: {_words(deleted)}"
     deleted = _git(root, "push", "--quiet", "origin", f":{ref}")
     if deleted.code == 0:
         return ""

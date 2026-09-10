@@ -64,7 +64,7 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
   `[ci] affected-legs`, and it says which; when a green `fm check` on
   this machine already proved the same tree at a covering scope
   within the week, it skips that gate and names the check, from a
-  record in the runner's data directory that never leaves the
+  record in the checkout's git directory that never leaves the
   machine. `--armed`
   lets it land, `--fix` heals mechanical gate findings into the
   branch, and the follow classifies the verdict with stable exit
@@ -82,9 +82,9 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
 - `fm maintenance.sweep` sweeps the runner's directories: footman's
   cache, then what the workshop leaves in the data directory, the
   worktrees of closed issues and merged branches (also
-  `fm issue.sweep`, which `fm issue.start` runs first), the
-  diagnostics and the gate record beyond their bounds, and files no
-  code writes any more; anything holding work stays and is named,
+  `fm issue.sweep`, which `fm issue.start` runs first), and files
+  and folders no code writes any more; anything holding work stays
+  and is named,
   the config directory is reported and never touched, and
   `--dry-run` says what would go. The daily collector child runs
   the offline rules unattended.

@@ -469,6 +469,89 @@ def test_a_family_lists_its_keys_and_leaves_other_refs_out(
     assert FAMILY.listed(work, "a") == [("a", "x"), ("a", "y")]
 
 
+# --- the local scope: refusals first ------------------------------------------
+
+LOCAL = _state.Series("local-rows", window=2, ci_only=False, local=True)
+
+
+def test_a_local_series_declared_ci_only_is_refused() -> None:
+    with pytest.raises(ValueError, match="written by local runs"):
+        _state.Series("x", local=True)
+    with pytest.raises(ValueError, match="written by local runs"):
+        _state.Keyed("x", ("k",), local=True)
+
+
+def test_a_local_read_outside_a_repository_is_a_failure_with_git_words(
+    tmp_path: Path,
+) -> None:
+    found = LOCAL.rows(tmp_path)
+    assert found.failed and "not a git repository" in found.reason
+    assert "could not be read" in LOCAL.put(tmp_path, {"r": {}}, message="m")
+
+
+def test_a_local_put_never_reaches_the_remote_and_a_fresh_clone_starts_empty(
+    repos: tuple[Path, Path], tmp_path: Path
+) -> None:
+    origin, work = repos
+    assert LOCAL.ref == "refs/workshop-local/local-rows"
+    assert LOCAL.put(work, {"r": {"x": 1}}, message="local") == ""
+    _git(work, "push", "-q", "origin", "main")
+    assert "workshop-local" not in _git(work, "ls-remote", "origin")
+    assert LOCAL.rows(_clone(tmp_path, "fresh", origin)) == _state.Rows(())
+    assert [row.name for row in LOCAL.rows(work).rows] == ["r"]
+
+
+def test_worktrees_share_the_local_series_and_the_window_holds(
+    repos: tuple[Path, Path], tmp_path: Path
+) -> None:
+    _, work = repos
+    tree = tmp_path / "tree"
+    _git(work, "worktree", "add", "-q", "-b", "side", str(tree))
+    assert LOCAL.put(tree, {"from-tree": {}}, message="t") == ""
+    assert [row.name for row in LOCAL.rows(work).rows] == ["from-tree"]
+    assert LOCAL.put(work, {"from-work": {}}, message="w") == ""
+    assert LOCAL.put(work, {"newest": {}}, message="n") == ""
+    assert [row.name for row in LOCAL.rows(tree).rows] == ["newest", "from-work"]
+
+
+def test_a_local_write_that_lost_the_race_re_reads_and_wins(
+    repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, work = repos
+    ref = _state.LOCAL_NAMESPACE + "race"
+    assert _state.put(work, ref, {"a": "{}"}, message="a") == ""
+    real_read = _state.read
+    raced = {"done": False}
+
+    def read_then_race(root: Path, name: str) -> _state.Read:
+        found = real_read(root, name)
+        if not raced["done"]:
+            raced["done"] = True
+            assert _state.put(work, ref, {"b": "{}"}, message="b") == ""
+        return found
+
+    monkeypatch.setattr(_state, "read", read_then_race)
+    assert _state.put(work, ref, {"c": "{}"}, message="c") == ""
+    assert set(real_read(work, ref).files or {}) == {"a", "b", "c"}
+
+
+def test_a_local_drop_is_idempotent_and_a_local_family_lists_its_keys(
+    repos: tuple[Path, Path],
+) -> None:
+    _, work = repos
+    family = _state.Keyed("local-family", ("a", "b"), ci_only=False, local=True)
+    assert family.listed(work) == []
+    for key in (("x", "y"), ("x", "z")):
+        assert family.series(*key).put(work, {"r": {}}, message="m") == ""
+    assert family.listed(work) == [("x", "y"), ("x", "z")]
+    assert family.listed(work, "x") == [("x", "y"), ("x", "z")]
+    ref = family.series("x", "y").ref
+    assert ref == "refs/workshop-local/local-family/x/y"
+    assert _state.drop(work, ref) == ""
+    assert _state.drop(work, ref) == ""
+    assert family.listed(work) == [("x", "z")]
+
+
 # --- the janitor -------------------------------------------------------------
 
 
