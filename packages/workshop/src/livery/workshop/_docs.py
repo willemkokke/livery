@@ -1385,6 +1385,11 @@ def render_python_coverage(root: Path) -> list[str]:
             "-d",
             f"packages/{name}/htmlcov",
         )
+        if result.code != 0 and "No data to report" in result.stdout + result.stderr:
+            # A package the data never touched, a unit the store could
+            # not supply, say: its page states the absence.
+            print(f"  coverage: {name}: no measured data; its page states the absence")
+            continue
         if result.code != 0:
             fail(
                 f"coverage html for {name} exited {result.code}:\n"
@@ -1496,17 +1501,26 @@ def docs_publish() -> None:
 
 
 def _stored_legs(root: Path) -> tuple[list[Path], list[str]]:
-    """Inside CI, the stored units for every check leg; the files and the misses.
+    """In the merge point's deploy job, the stored units for every check leg.
 
-    Outside CI nothing is pulled: a machine's build renders the local
-    data a gate run left, or states the absence.
+    Returns the files and the misses. Anywhere else nothing is pulled:
+    a pull request's docs job builds without the legs' data by design,
+    and a machine's build renders the local data a gate run left, or
+    states the absence.
     """
+    import os
+
     from livery.workshop._backends import _python
     from livery.workshop._git_ops import GitError
     from livery.workshop._points import check_legs
-    from livery.workshop._state import run_context
+    from livery.workshop._pytest_points import POINT_VARIABLE
+    from livery.workshop._state import LEG_VARIABLE, run_context
 
-    if run_context() is None:
+    deploying = (
+        os.environ.get(POINT_VARIABLE) == "merge"
+        and os.environ.get(LEG_VARIABLE) == "deploy"
+    )
+    if run_context() is None or not deploying:
         return [], []
     try:
         return _python.stored_union(

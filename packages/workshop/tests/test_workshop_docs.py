@@ -1059,11 +1059,50 @@ def test_the_pages_read_the_store_inside_ci_when_the_legs_left_no_data(
         "livery.workshop._docs._stored_legs",
         lambda root: ([stored], ["packages/other on check-a"]),
     )
+    # A declared package the data never touched states the absence.
+    _declare_generators(
+        root, "bare", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
+    )
     assert _docs.render_python_coverage(root) == ["core"]
     out = capsys.readouterr().out
     assert "packages/other on check-a: not in the store; the pages render" in out
     assert "the pages read 1 stored unit file(s)" in out
+    assert "bare: no measured data; its page states the absence" in out
     assert (root / "packages" / "core" / "htmlcov" / "index.html").is_file()
+    assert not (root / "packages" / "bare" / "htmlcov").exists()
+
+
+def test_the_store_is_pulled_only_in_the_merge_points_deploy_job(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _docs
+    from livery.workshop._backends import _python
+
+    root = _workspace(tmp_path)
+    calls: list[tuple[list[str], Path]] = []
+
+    def _pull(
+        root_: Path, packages: object, labels: list[str], into: Path
+    ) -> tuple[list[Path], list[str]]:
+        calls.append((labels, into))
+        return [into / "x.coverage"], ["packages/bare on check-a"]
+
+    monkeypatch.setattr(_python, "stored_union", _pull)
+    monkeypatch.setattr("livery.workshop._points.check_legs", lambda root: ["check-a"])
+    monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
+    monkeypatch.setenv("WORKSHOP_POINT", "merge")
+    monkeypatch.setenv("WORKSHOP_LEG", "deploy")
+    assert _docs._stored_legs(root) == ([], [])
+    monkeypatch.setattr("livery.workshop._state.run_context", lambda: object())
+    monkeypatch.setenv("WORKSHOP_POINT", "gate")
+    monkeypatch.setenv("WORKSHOP_LEG", "docs")
+    assert _docs._stored_legs(root) == ([], [])
+    monkeypatch.setenv("WORKSHOP_POINT", "merge")
+    monkeypatch.setenv("WORKSHOP_LEG", "deploy")
+    files, misses = _docs._stored_legs(root)
+    assert files == [root / "coverage-data" / "x.coverage"]
+    assert misses == ["packages/bare on check-a"]
+    assert calls == [(["check-a"], root / "coverage-data")]
 
 
 def test_a_present_report_copies_whole_and_iframes(tmp_path: Path) -> None:
