@@ -1875,3 +1875,30 @@ None. Every ruling raised in this plan was closed in the review of
   the member-only pull request's gate job carried the title check's
   line, and the pass was whole (main's runs 1225 and 1227 skipped on
   composed rows).
+- 2026-09-10 (issue #395), ruled by Willem ("1 and 2 first, then new
+  numbers") after a profile of the workshop suite, the long pole of
+  every check leg and every local gate: 784 tests, 2038 s summed
+  across workers, 94 tests over 5 s. Two cost classes, not one. The
+  rigs of the git-driven files built a bare origin, a clone, commits,
+  and a push per test, 30 to 60 git processes each: 105 s of the
+  submit file's 181 s was fixture setup. The template-driven files
+  ran copier in a child process for every rendered instance, 17 s to
+  48 s for the heavy tests. Two changes: the workshop tests' conftest
+  gains `seeds`, which builds a rig once per session per xdist worker
+  and copies it into the test's directory with every clone's remote
+  re-pointed at the copy (a copy's push never reaches the seed or
+  another copy, pinned), and the six rigs use it; and `render()`
+  keeps a per-process memo of its renders keyed by the template's
+  path, ref, data, and every template file's path, size, and mtime,
+  so the same inputs copy the first render and an edited template
+  renders again (pinned). Measured on this machine, the whole suite
+  profiled before and after: summed 2038 s to 1320 s, wall 2m57s to
+  1m56s; templates 255 s to 159 s, release driver 232 s to 158 s,
+  update 229 s to 146 s, submit 181 s to 103 s, new project 122 s to
+  85 s, issue 87 s to 48 s, workflow 63 s to 36 s, publish 61 s to
+  37 s. The before run also carried the nightly-only wheel build
+  (113 s), since the main checkout's venv had not been synced after
+  the points plugin landed (#356's shape); without it the summed
+  figures are 1925 s to 1298 s. The real-build tests stay at the gate
+  until their move to the nightly point is ruled, since it lowers the
+  gate's union.

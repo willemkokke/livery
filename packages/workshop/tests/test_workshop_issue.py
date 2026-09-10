@@ -21,6 +21,7 @@ from livery.workshop._issue_tasks import (
     worktree_path,
 )
 from livery.workshop._shell import default_kind, shell_launch_plan, shell_prepare
+from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
 
@@ -49,9 +50,9 @@ def _instance(tmp_path: Path) -> Path:
 
 @pytest.fixture()
 def rig(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> tuple[Path, FakeForge, GitOps]:
-    root = _instance(tmp_path)
+    root = seeds("issue", _instance) / "ws"
     fake = FakeForge()
     fake.create_repo("willemkokke", "livery", private=True, description="t")
     repo = fake.repository("willemkokke", "livery")

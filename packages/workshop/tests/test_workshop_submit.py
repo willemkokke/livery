@@ -39,6 +39,7 @@ from livery.workshop._verdict import (
     classify,
     follow,
 )
+from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
 
 OWNER, NAME = "willemkokke", "livery"
 
@@ -81,14 +82,13 @@ class SubmitGit(GitOps):
             self.fake.settle(OWNER, NAME, sha)
 
 
-@pytest.fixture
-def rig(tmp_path: Path) -> tuple[FakeForge, SubmitGit]:
-    """A bare origin, a clone on a feature branch, and the fake."""
-    origin = tmp_path / "origin.git"
+def _seed(base: Path) -> None:
+    """A bare origin and a clone on a feature branch, built once per session."""
+    origin = base / "origin.git"
     origin.mkdir()
     _git(origin, "init", "--bare", "--initial-branch=main")
-    clone = tmp_path / "clone"
-    _git(tmp_path, "clone", str(origin), "clone")
+    clone = base / "clone"
+    _git(base, "clone", str(origin), "clone")
     _git(clone, "config", "user.email", "test@livery.local")
     _git(clone, "config", "user.name", "Livery Test")
     (clone / "seed.txt").write_text("seed\n")
@@ -99,9 +99,15 @@ def rig(tmp_path: Path) -> tuple[FakeForge, SubmitGit]:
     (clone / "work.txt").write_text("work\n")
     _git(clone, "add", ".")
     _git(clone, "commit", "-m", "feat: the first change")
+
+
+@pytest.fixture
+def rig(seeds: Seeds, tmp_path: Path) -> tuple[FakeForge, SubmitGit]:
+    """A bare origin, a clone on a feature branch, and the fake."""
+    seeds("submit", _seed)
     fake = FakeForge()
     fake.create_repo(OWNER, NAME, private=True, description="test")
-    return fake, SubmitGit(clone, fake)
+    return fake, SubmitGit(tmp_path / "clone", fake)
 
 
 def _repo(fake: FakeForge):

@@ -24,6 +24,7 @@ from livery.workshop._publish import (
     probe_until_served,
     publish_release,
 )
+from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
 
@@ -104,14 +105,13 @@ def _squash(root: Path, members: tuple[str, ...], *, mined_at: str = "") -> str:
     ).stdout.strip()
 
 
-@pytest.fixture
-def train(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """A squashed release of a diamond: base, two legs, an apex."""
-    origin = tmp_path / "origin.git"
+def _seed(base: Path) -> None:
+    """The diamond workspace, base, two legs, an apex, built once per session."""
+    origin = base / "origin.git"
     origin.mkdir()
     _git(origin, "init", "--bare", "--initial-branch=main")
-    root = tmp_path / "ws"
-    _git(tmp_path, "clone", str(origin), "ws")
+    root = base / "ws"
+    _git(base, "clone", str(origin), "ws")
     _git(root, "config", "user.email", "t@livery.local")
     _git(root, "config", "user.name", "T")
     (root / "workshop.toml").write_text("[workspace]\n")
@@ -122,6 +122,12 @@ def train(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "chore: seed")
     _git(root, "push", "-u", "origin", "main")
+
+
+@pytest.fixture
+def train(seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """A squashed release of a diamond: base, two legs, an apex."""
+    root = seeds("publish", _seed) / "ws"
     git = GitOps(root)
     registry = LedgerRegistry()
     starts: dict[str, float] = {}

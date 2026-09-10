@@ -148,6 +148,42 @@ def test_a_receipt_without_package_dir_renders_the_right_paths(
     assert package_drift(root) == []
 
 
+def test_a_render_is_made_once_per_input_and_again_after_an_edit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import time
+
+    from livery import toolroom
+    from livery.workshop._templates import render
+
+    template = tmp_path / "template"
+    template.mkdir()
+    (template / "copier.yml").write_text("name:\n  type: str\n  default: x\n")
+    (template / "{{ name }}.txt.jinja").write_text("hello {{ name }}\n")
+    render(template, tmp_path / "one", {"name": "a"})
+    assert (tmp_path / "one" / "a.txt").read_text() == "hello a\n"
+    # The same inputs again: a copy of the first render, no copier run.
+    real = toolroom.copier
+
+    def _never(*args: object, **kwargs: object) -> object:
+        raise AssertionError("copier ran for inputs already rendered")
+
+    monkeypatch.setattr(toolroom, "copier", _never)
+    render(template, tmp_path / "two", {"name": "a"})
+    assert (tmp_path / "two" / "a.txt").read_text() == "hello a\n"
+    # Other data renders; an edited template renders again, however
+    # recent the last render was.
+    with pytest.raises(AssertionError, match="copier ran"):
+        render(template, tmp_path / "three", {"name": "b"})
+    time.sleep(0.01)
+    (template / "{{ name }}.txt.jinja").write_text("hi {{ name }}\n")
+    with pytest.raises(AssertionError, match="copier ran"):
+        render(template, tmp_path / "four", {"name": "a"})
+    monkeypatch.setattr(toolroom, "copier", real)
+    render(template, tmp_path / "four", {"name": "a"})
+    assert (tmp_path / "four" / "a.txt").read_text() == "hi a\n"
+
+
 def test_apply_settles_and_drift_names_the_file(tmp_path: Path) -> None:
     root = _template_instance(tmp_path)
     changed = apply_project(root)

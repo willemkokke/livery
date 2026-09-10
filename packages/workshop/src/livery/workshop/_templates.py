@@ -18,7 +18,10 @@ re-applying the ``project`` render.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -289,6 +292,46 @@ def package_injections(root: Path) -> dict[str, Any]:
     }
 
 
+#: Renders this process made, by their inputs: a second render of the
+#: same template, ref, and data copies the first. A local template
+#: directory's key carries every file's path, size, and mtime, so an
+#: edit between two renders renders again.
+_RENDERS: dict[str, Path] = {}
+_RENDER_HOME: tempfile.TemporaryDirectory[str] | None = None
+
+
+def _render_key(template_dir: Path | str, ref: str | None, data: dict[str, Any]) -> str:
+    """The inputs of one render, hashed; a local directory by its files' state."""
+    digest = hashlib.sha256()
+    for part in (
+        str(template_dir),
+        ref or "",
+        json.dumps(data, sort_keys=True, default=str),
+    ):
+        digest.update(part.encode("utf-8"))
+        digest.update(b"\0")
+    directory = Path(str(template_dir))
+    if ref is None and directory.is_dir():
+        for path in sorted(directory.rglob("*")):
+            if not path.is_file() or ".git" in path.parts:
+                continue
+            stat = path.stat()
+            digest.update(
+                f"{path.relative_to(directory)}\0{stat.st_size}\0{stat.st_mtime_ns}\0".encode()
+            )
+    return digest.hexdigest()
+
+
+def _remember(key: str, destination: Path) -> None:
+    """Keep a copy of the render at *destination* for this process's later renders."""
+    global _RENDER_HOME
+    if _RENDER_HOME is None:
+        _RENDER_HOME = tempfile.TemporaryDirectory(prefix="workshop-renders-")
+    kept = Path(_RENDER_HOME.name) / key
+    shutil.copytree(destination, kept, symlinks=True)
+    _RENDERS[key] = kept
+
+
 def render(
     template_dir: Path | str,
     destination: Path,
@@ -309,6 +352,12 @@ def render(
     modified to ``copier update``, whose merge then drops real
     template changes.
     """
+    fresh = not destination.exists() or not any(destination.iterdir())
+    key = _render_key(template_dir, ref, data)
+    kept = _RENDERS.get(key)
+    if kept is not None and fresh:
+        shutil.copytree(kept, destination, dirs_exist_ok=True, symlinks=True)
+        return
     if ref is not None:
         _probe_ref(str(template_dir), ref)
     with tempfile.NamedTemporaryFile("w", suffix=".yml", delete=False) as handle:
@@ -332,6 +381,8 @@ def render(
         Path(data_file).unlink(missing_ok=True)
     if result.code != 0:
         _taught_render_failure(str(template_dir), ref, data, result)
+    if fresh:
+        _remember(key, destination)
 
 
 def _probe_ref(source: str, ref: str) -> None:
