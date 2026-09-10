@@ -397,21 +397,27 @@ def test_the_bundle_records_a_sections_own_error_as_data(
     assert bundle["verdict"]["exit_code"] == EXIT_DISARMED
 
 
-def test_record_writes_prunes_and_never_raises(
-    rig: tuple[FakeForge, GitOps], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+def test_record_writes_within_the_window_and_never_raises(
+    rig: tuple[FakeForge, GitOps], tmp_path: Path
 ) -> None:
-    fake, _git_seam = rig
+    from livery.workshop._diagnostics import SERIES
+
+    fake, git = rig
     repo = _repo(fake)
-    monkeypatch.setattr("livery.footman.data_dir", lambda: tmp_path / "home")
     for index in range(23):
-        path = record(
+        name, why = record(
+            git.root,
             repo,
             Verdict("stalled", 16, f"n{index}"),
             branch=f"feat/{index}-x",
         )
-        assert path is not None
-    bundles = list((tmp_path / "home" / "diagnostics").glob("*.json"))
-    assert len(bundles) == 20  # newest KEEP kept, older pruned
+        assert why == "" and name.endswith(f"-feat-{index}-x-stalled")
+    assert len(SERIES.rows(git.root).rows) == 20  # newest KEEP kept, older gone
+    # Even writing failed: a root that is no repository is a reason, not a raise.
+    nowhere = tmp_path / "nowhere"
+    nowhere.mkdir()
+    name, why = record(nowhere, repo, Verdict("stalled", 16, "n"), branch="feat/1-x")
+    assert name == "" and "could not be read" in why
 
 
 # --- the follower's two-poll confirmation ---
@@ -440,11 +446,12 @@ def test_a_one_poll_blocker_blip_does_not_end_the_watch(
 
 
 def test_closed_is_definitive_on_a_single_read(
-    rig: tuple[FakeForge, GitOps], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    rig: tuple[FakeForge, GitOps], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from livery.workshop._diagnostics import SERIES
+
     fake, git = rig
     repo = _repo(fake)
-    monkeypatch.setattr("livery.footman.data_dir", lambda: tmp_path / "home")
     monkeypatch.setattr(
         "livery.workshop._verdict.classify",
         lambda *a, **k: Verdict("closed", 12, "closed unmerged", 1),
@@ -452,8 +459,9 @@ def test_closed_is_definitive_on_a_single_read(
     with pytest.raises(SystemExit) as caught:
         follow(repo, "feat/1-x", git, interval=0, timeout=5)
     assert caught.value.code == 12
-    # And the non-merged ending wrote its bundle.
-    assert list((tmp_path / "home" / "diagnostics").glob("*.json"))
+    # And the non-merged ending wrote its bundle to the local series.
+    (bundle,) = SERIES.rows(git.root).rows
+    assert bundle.name.endswith("-feat-1-x-closed")
 
 
 # --- the engine with a stub driver ---

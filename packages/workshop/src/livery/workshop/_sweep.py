@@ -1,8 +1,9 @@
 """What the workshop leaves in the runner's directories, and the sweep that bounds it.
 
 The runner's data directory holds the workshop's durable state: the
-issue worktrees under ``worktrees/<repo>/``, the verdict diagnostics,
-the local gate record, and the loop's workspace. footman's collector
+issue worktrees under ``worktrees/<repo>/`` and the loop's workspace;
+the rows the workshop keeps live in the checkouts' git directories,
+bounded by the state store. footman's collector
 never touches it, by design. This module is the workshop's sweeper,
 registered under footman's ``footman.sweepers`` entry point and run by
 ``fm maintenance.sweep``, by the daily collector child unattended, and,
@@ -19,9 +20,8 @@ The rules, each saying what went or why it stayed:
   uncommitted changes or unpushed commits stays and is named, and so is
   a tree whose issue is open or whose forge cannot be asked. This rule
   asks the forge, so it runs on demand only.
-- The diagnostics keep their newest twenty; the gate record keeps the
-  rows within its age and count; a registry no code writes any more
-  (``checkouts.txt``) goes.
+- A file or folder no code writes any more (`LEFTOVERS`) goes when
+  met.
 - The config directory is reported, never touched: anything beside the
   user's config, tasks file, and shared env file is named. The loop's
   workspace is reported by size and kept.
@@ -39,11 +39,10 @@ from livery.workshop._git_ops import GitError, GitOps
 
 #: The workshop's homes under the data directory.
 WORKTREES = "worktrees"
-DIAGNOSTICS = "diagnostics"
 LOOP = "workshop-e2e"
 
-#: Files no code writes any more; they go when met.
-LEFTOVERS = ("checkouts.txt",)
+#: Files and folders no code writes any more; they go when met.
+LEFTOVERS = ("checkouts.txt", "diagnostics", "livery-workshop")
 
 #: What the config directory is for; anything else is reported.
 CONFIG_OWN = ("config.toml", ".repo.shared.env", "__pycache__")
@@ -62,8 +61,6 @@ def sweep(
     lines = sweep_worktrees(
         data_dir / WORKTREES, dry_run=dry_run, unattended=unattended
     )
-    lines += sweep_diagnostics(data_dir / DIAGNOSTICS, dry_run=dry_run)
-    lines += sweep_gate_record(data_dir, dry_run=dry_run, now=now)
     lines += sweep_leftovers(data_dir, dry_run=dry_run)
     if not unattended:
         lines += report_config(config_dir)
@@ -179,66 +176,15 @@ def sweep_worktrees(home: Path, *, dry_run: bool, unattended: bool) -> list[str]
 # --- the rest of the data directory --------------------------------------------
 
 
-def sweep_diagnostics(home: Path, *, dry_run: bool) -> list[str]:
-    """Keep the newest bundles, as the writer does; the lines."""
-    from livery.workshop._diagnostics import KEEP
-
-    if not home.is_dir():
-        return []
-    bundles = sorted(p for p in home.iterdir() if p.suffix == ".json")
-    stale = bundles[:-KEEP] if len(bundles) > KEEP else []
-    if not stale:
-        return [f"diagnostics: {len(bundles)} bundle(s), within {KEEP}"]
-    if not dry_run:
-        for path in stale:
-            path.unlink(missing_ok=True)
-    verb = "would remove" if dry_run else "removed"
-    return [f"diagnostics: {verb} {len(stale)} bundle(s) beyond the newest {KEEP}"]
-
-
-def sweep_gate_record(data_dir: Path, *, dry_run: bool, now: datetime) -> list[str]:
-    """Drop the gate record's rows past their age or count; the lines."""
-    import json
-
-    from livery.workshop import _gate_record
-
-    path = data_dir / "livery-workshop" / _gate_record.FILE
-    if not path.is_file():
-        return []
-    try:
-        loaded = json.loads(path.read_text("utf-8"))
-    except (OSError, ValueError):
-        if not dry_run:
-            path.unlink(missing_ok=True)
-        return [
-            "gate record: unreadable; removed"
-            if not dry_run
-            else "gate record: unreadable; would remove"
-        ]
-    rows = loaded if isinstance(loaded, list) else []
-    fresh = [
-        row
-        for row in rows
-        if isinstance(row, dict)
-        and (when := _gate_record._moment(str(row.get("when", "")))) is not None
-        and now - when <= _gate_record.MAX_AGE
-    ][-_gate_record.KEEP :]
-    dropped = len(rows) - len(fresh)
-    if dropped <= 0:
-        return [f"gate record: {len(rows)} row(s), within age and count"]
-    if not dry_run:
-        path.write_text(json.dumps(fresh, indent=1, sort_keys=True), "utf-8")
-    verb = "would drop" if dry_run else "dropped"
-    return [f"gate record: {verb} {dropped} row(s) past the age or count bound"]
-
-
 def sweep_leftovers(data_dir: Path, *, dry_run: bool) -> list[str]:
-    """Remove files no code writes any more; the lines."""
+    """Remove files and folders no code writes any more; the lines."""
     lines: list[str] = []
     for name in LEFTOVERS:
         path = data_dir / name
         if path.exists():
-            if not dry_run:
+            if not dry_run and path.is_dir():
+                shutil.rmtree(path, ignore_errors=True)
+            elif not dry_run:
                 path.unlink()
             verb = "would remove" if dry_run else "removed"
             lines.append(f"{name}: no code writes it any more; {verb}")

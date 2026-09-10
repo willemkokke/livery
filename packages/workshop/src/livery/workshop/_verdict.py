@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 import livery.footman as footman
 from livery.forge import ForgeError, Repository
@@ -326,7 +327,7 @@ def follow(
             if verdict.state != "closed" and confirm_streak < _CONFIRM_POLLS:
                 time.sleep(interval)
                 continue
-            _record_ending(repo, verdict, branch)
+            _record_ending(repo, verdict, branch, git.root)
             raise SystemExit(verdict.exit_code)
         confirm_streak = 0
         if verdict.state == "in-flight" and verdict.detail.startswith("green"):
@@ -335,15 +336,17 @@ def follow(
             green_polls = 0
         if time.monotonic() >= deadline:
             print(f"  still in flight after {timeout:.0f}s")
-            _record_ending(repo, verdict, branch)
+            _record_ending(repo, verdict, branch, git.root)
             raise SystemExit(EXIT_TIMEOUT)
         time.sleep(interval)
 
 
-def _record_ending(repo: Repository, verdict: Verdict, branch: str) -> None:
+def _record_ending(repo: Repository, verdict: Verdict, branch: str, root: Path) -> None:
     """Write the diagnostic bundle for a non-merged ending; best effort."""
-    from livery.workshop._diagnostics import record
+    from livery.workshop._diagnostics import SERIES, record
 
-    path = record(repo, verdict, branch=branch)
-    if path is not None:
-        print(f"  diagnostics: {path}")
+    name, why = record(root, repo, verdict, branch=branch)
+    if name:
+        print(f"  diagnostics: {name} on {SERIES.ref}")
+    else:
+        print(f"  diagnostics: not recorded ({why})")

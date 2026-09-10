@@ -99,7 +99,7 @@ store, and the daily child runs the local part alone, unattended. A
 keyed ref the current matrix still produces is never dropped, and
 every line says what went and why the rest stayed.
 
-**Local scope.** A local series lives under `refs/workshop/local/` in
+**Local scope.** A local series lives under `refs/workshop-local/` in
 the checkout's git directory: never fetched, never pushed, shared by
 the checkout's worktrees, empty in a fresh clone. The remote namespace
 never lands locally (a read fetches into `FETCH_HEAD` and creates no
@@ -147,7 +147,14 @@ change.
 3. **Local scope.** The gate record and the diagnostics as local
    series; the data-directory files and their bounds-on-write gone;
    the pin that a local series never pushes and that a fresh clone
-   starts empty.
+   starts empty. Landed 2026-09-10, #411: the transport dispatches on
+   the namespace, a local ref read with `rev-parse` and `ls-tree`,
+   written with `update-ref` and the old value as the compare-and-swap,
+   listed with `for-each-ref`; `_gate_record.SERIES` and
+   `_diagnostics.SERIES` are the two local series, and the sweeper
+   removes their old homes in the data directory as leftovers. The
+   record's age bound stays applied on read until slice 4's janitor
+   ages rows.
 4. **One janitor** (#404 folded in). Every declared series enumerated
    for windows, orphans, and age; `ci.janitor`, `maintenance.sweep`,
    and `issue.sweep` folded into `fm janitor`, which sweeps the scope
@@ -210,9 +217,10 @@ once the timing rows carry a fortnight of legs at the gate's Python.
   per leg with the packages as files. The per-key shape keeps writes
   small and concurrent legs apart; the per-leg shape halves the ref
   count.
-- Whether the local namespace is `refs/workshop/local/` or a namespace
-  of its own, `refs/workshop-local/`, which a mirror push of
-  `refs/workshop/*` could never carry.
+- The local namespace: slice 3 took `refs/workshop-local/`, a
+  namespace of its own that a mirror push of `refs/workshop/*` can
+  never carry, over `refs/workshop/local/`. One constant to flip if
+  ruled otherwise.
 
 ## Decision record
 

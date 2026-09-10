@@ -1,42 +1,42 @@
-"""The local gate record: trees this machine's own ``fm check`` proved green.
+"""The local gate record: trees this checkout's own ``fm check`` proved green.
 
 ``fm submit`` runs the gate before it pushes. When the tree it would
-gate is one a green ``fm check`` already proved on this machine, at a
-scope that covers what the submit would run, the submit skips its gate
-and says which check proved the tree and when. The record lives in the
-runner's data directory, is written only by a green local gate on a
-clean committed tree, is read only by the submit's gate, and never
-leaves the machine: the ``workshop/verified`` record on the forge stays
-CI's evidence, and CI never reads or writes this one.
+gate is one a green ``fm check`` already proved here, at a scope that
+covers what the submit would run, the submit skips its gate and says
+which check proved the tree and when. The record is a local series of
+the state store ([livery.workshop._state][]): it lives in the
+checkout's git directory, shared by its worktrees, is written only by
+a green local gate on a clean committed tree, is read only by the
+submit's gate, and never leaves the machine. The ``workshop/verified``
+record on the forge stays CI's evidence, and CI never reads or writes
+this one.
 
 A row names the tree id, the scope (``full``, or ``affected`` with the
 packages the gate ran and the base tree the narrowing compared
-against), when it was written, and the checkout. The record bounds
-itself: a write keeps the newest `KEEP` rows, and a row older than
-`MAX_AGE` proves nothing, since the tree id covers the pins in
-``uv.lock`` but not the machine's Python or tools, which drift under
-the same tree.
+against), and the checkout; the store stamps when it was written. The
+window keeps the newest `KEEP` rows, and a row older than `MAX_AGE`
+proves nothing, since the tree id covers the pins in ``uv.lock`` but
+not the machine's Python or tools, which drift under the same tree.
 """
 
 from __future__ import annotations
 
-import json
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import livery.footman as footman
+from livery.workshop import _state
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._verified import tree_id
 
-#: Rows a write keeps, newest last.
+#: Rows the window keeps.
 KEEP = 200
 
 #: How long a row proves its tree.
 MAX_AGE = timedelta(days=7)
 
-#: The record's file, under the workshop's own folder in the data directory.
-FILE = "gate-record.json"
+#: The record: a local series, one row per tree, scope, and base.
+SERIES = _state.Series("gate-record", window=KEEP, ci_only=False, local=True)
 
 #: The scopes a row records.
 FULL = "full"
@@ -52,7 +52,7 @@ class Row:
         scope: ``full``, or ``affected`` for a narrowed gate.
         packages: The packages a narrowed gate ran; empty for ``full``.
         base_tree: The tree a narrowed gate compared against; empty for ``full``.
-        when: When the gate finished, ISO 8601 in UTC.
+        when: When the store wrote the row, ISO 8601 in UTC.
         root: The checkout the gate ran in, for a reader.
     """
 
@@ -64,37 +64,36 @@ class Row:
     root: str
 
 
-def record_path() -> Path:
-    """Where the record lives: the workshop's folder in the runner's data directory."""
-    return footman.data_dir() / "livery-workshop" / FILE
+def rows(root: Path) -> tuple[tuple[Row, ...], str]:
+    """Every row, newest first, or ``((), reason)`` when the record cannot be read.
 
-
-def read_rows() -> tuple[tuple[Row, ...], str]:
-    """Every row, oldest first, or ``((), reason)`` when the file cannot be read."""
-    path = record_path()
-    if not path.is_file():
-        return (), ""
-    try:
-        loaded = json.loads(path.read_text("utf-8"))
-    except (OSError, ValueError) as error:
-        return (), f"the gate record at {path} could not be read ({error})"
-    if not isinstance(loaded, list):
-        return (), f"the gate record at {path} is not a list of rows"
-    rows: list[Row] = []
-    for item in loaded:
-        if not isinstance(item, dict) or not isinstance(item.get("tree"), str):
+    A row without a tree is not a proof and is left out; the store
+    already skipped what does not parse or is of another schema.
+    """
+    found = SERIES.rows(root)
+    if found.failed:
+        return (), found.reason
+    kept: list[Row] = []
+    for item in found.rows:
+        tree = item.data.get("tree")
+        if not isinstance(tree, str):
             continue
-        rows.append(
+        kept.append(
             Row(
-                tree=item["tree"],
-                scope=str(item.get("scope", "")),
-                packages=tuple(str(p) for p in item.get("packages", []) or []),
-                base_tree=str(item.get("base_tree", "")),
-                when=str(item.get("when", "")),
-                root=str(item.get("root", "")),
+                tree=tree,
+                scope=str(item.data.get("scope", "")),
+                packages=tuple(str(p) for p in item.data.get("packages", []) or []),
+                base_tree=str(item.data.get("base_tree", "")),
+                when=item.when,
+                root=str(item.data.get("root", "")),
             )
         )
-    return tuple(rows), ""
+    return tuple(kept), ""
+
+
+def _name(tree: str, scope: str, base_tree: str) -> str:
+    """The row's file: tree, scope, and base, so a repeat replaces its predecessor."""
+    return f"{tree}--{scope}" + (f"--{base_tree}" if base_tree else "")
 
 
 def _base_tree(git: GitOps, base: str) -> str:
@@ -121,8 +120,8 @@ def remember(
     *packages* is the subset a narrowed gate ran, or None for the
     whole workspace. A dirty tree records nothing: the gate proved the
     working tree, and the id names HEAD's. A row of the same tree,
-    scope, and base replaces its predecessor; the newest `KEEP` rows
-    are kept.
+    scope, and base replaces its predecessor; the window keeps the
+    newest `KEEP` rows.
     """
     if not git.is_clean():
         return "  gate record: the tree has uncommitted changes; nothing recorded"
@@ -131,31 +130,22 @@ def remember(
         base_tree = _base_tree(git, base) if packages is not None else ""
     except GitError as error:
         return f"  gate record: no tree id ({error}); nothing recorded"
-    row = Row(
-        tree=tree,
-        scope=FULL if packages is None else AFFECTED,
-        packages=tuple(packages or ()),
-        base_tree=base_tree,
-        when=datetime.now(UTC).isoformat(timespec="seconds"),
-        root=str(root),
+    scope = FULL if packages is None else AFFECTED
+    row = {
+        "tree": tree,
+        "scope": scope,
+        "packages": list(packages or ()),
+        "base_tree": base_tree,
+        "root": str(root),
+    }
+    why = SERIES.put(
+        root,
+        {_name(tree, scope, base_tree): row},
+        message=f"gate record: tree {tree[:12]} proved green ({scope})",
     )
-    rows, _why = read_rows()
-    kept = [
-        r
-        for r in rows
-        if (r.tree, r.scope, r.base_tree) != (row.tree, row.scope, row.base_tree)
-    ]
-    kept.append(row)
-    kept = kept[-KEEP:]
-    path = record_path()
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps([asdict(r) for r in kept], indent=1, sort_keys=True), "utf-8"
-        )
-    except OSError as error:
-        return f"  gate record: {path} could not be written ({error}); nothing recorded"
-    return f"  gate record: tree {tree[:12]} recorded as proved green ({row.scope})"
+    if why:
+        return f"  gate record: {why}; nothing recorded"
+    return f"  gate record: tree {tree[:12]} recorded as proved green ({scope})"
 
 
 def covering(
@@ -178,7 +168,7 @@ def covering(
         tree = tree_id(git)
     except GitError as error:
         return None, f"no tree id ({error})"
-    rows, why = read_rows()
+    found, why = rows(git.root)
     if why:
         return None, why
     base_tree = ""
@@ -189,7 +179,7 @@ def covering(
             base_tree = ""
     moment = now or datetime.now(UTC)
     best: Row | None = None
-    for row in rows:
+    for row in found:
         if row.tree != tree:
             continue
         when = _moment(row.when)

@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import subprocess
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -149,41 +148,12 @@ def test_a_closed_clean_pushed_tree_goes_through_its_checkouts_git(
 
 
 def test_the_rest_of_the_data_directory_is_bounded_or_reported(tmp_path: Path) -> None:
-    from livery.workshop import _gate_record
-    from livery.workshop._diagnostics import KEEP
-
     data = tmp_path / "data"
-    diagnostics = data / "diagnostics"
-    diagnostics.mkdir(parents=True)
-    for n in range(KEEP + 3):
-        (diagnostics / f"2026090{n // 10}T{n % 10:02d}0000Z-x.json").write_text("{}")
-    now = datetime.now(UTC)
-    record = data / "livery-workshop" / _gate_record.FILE
-    record.parent.mkdir(parents=True)
-    old = (now - timedelta(days=9)).isoformat(timespec="seconds")
-    fresh = now.isoformat(timespec="seconds")
-    record.write_text(
-        json.dumps(
-            [
-                {
-                    "tree": "a",
-                    "scope": "full",
-                    "packages": [],
-                    "base_tree": "",
-                    "when": old,
-                    "root": "",
-                },
-                {
-                    "tree": "b",
-                    "scope": "full",
-                    "packages": [],
-                    "base_tree": "",
-                    "when": fresh,
-                    "root": "",
-                },
-            ]
-        )
-    )
+    # The homes of rows the workshop no longer keeps on the machine.
+    (data / "diagnostics").mkdir(parents=True)
+    (data / "diagnostics" / "20260901T000000Z-x.json").write_text("{}")
+    (data / "livery-workshop").mkdir()
+    (data / "livery-workshop" / "gate-record.json").write_text("[]")
     (data / "checkouts.txt").write_text("/gone/path\n")
     config = tmp_path / "config"
     config.mkdir()
@@ -196,22 +166,18 @@ def test_the_rest_of_the_data_directory_is_bounded_or_reported(tmp_path: Path) -
         "data_dir": data,
         "cache_dir": tmp_path / "cache",
         "config_dir": config,
-        "now": now,
+        "now": datetime.now(UTC),
     }
     # A dry run first: it says, and changes nothing.
     said = _sweep.sweep(dry_run=True, unattended=False, **facts)
-    assert f"diagnostics: would remove 3 bundle(s) beyond the newest {KEEP}" in said
-    assert "gate record: would drop 1 row(s) past the age or count bound" in said
-    assert "checkouts.txt: no code writes it any more; would remove" in said
-    assert len(list(diagnostics.iterdir())) == KEEP + 3
-    assert (data / "checkouts.txt").exists()
-    # Then for real: bounded, the config directory reported only, the loop kept.
+    for name in ("checkouts.txt", "diagnostics", "livery-workshop"):
+        assert f"{name}: no code writes it any more; would remove" in said
+        assert (data / name).exists()
+    # Then for real: gone, the config directory reported only, the loop kept.
     done = _sweep.sweep(dry_run=False, unattended=False, **facts)
-    assert f"diagnostics: removed 3 bundle(s) beyond the newest {KEEP}" in done
-    assert len(list(diagnostics.iterdir())) == KEEP
-    assert "gate record: dropped 1 row(s) past the age or count bound" in done
-    assert [row["tree"] for row in json.loads(record.read_text())] == ["b"]
-    assert not (data / "checkouts.txt").exists()
+    for name in ("checkouts.txt", "diagnostics", "livery-workshop"):
+        assert f"{name}: no code writes it any more; removed" in done
+        assert not (data / name).exists()
     assert (
         "config: birth-e2e is not the config, the tasks file, or the shared env;"
         " yours to remove" in done
