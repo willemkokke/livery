@@ -156,6 +156,12 @@ def test_a_green_local_gate_records_and_a_red_one_does_not(
     monkeypatch.setattr(
         "livery.workshop._quality._affected", lambda base="main": (thing,)
     )
+    # The local narrowed gate renders and checks provenance too; the
+    # toy root has neither, so both stand in.
+    monkeypatch.setattr("livery.workshop._quality.template_check", lambda: None)
+    monkeypatch.setattr(
+        "livery.workshop._provenance.provenance_check", lambda fix=False: None
+    )
 
     def _red(subset: object, *, fix: bool = False) -> None:
         raise Failed("the gate is red")

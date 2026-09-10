@@ -79,6 +79,7 @@ def test_the_testing_surface_is_declared() -> None:
         "ReplayOpener",
         "Scenario",
         "UrlOpener",
+        "shared_env_path",
     ]
 
 

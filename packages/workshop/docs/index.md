@@ -150,6 +150,21 @@ or an accepted row. The
 release legs publish a further, informational union that includes
 the live-only code.
 
+## Where a test lives
+
+Every pytest under a workshop venv runs apart from the machine's live
+runner state. The workshop's isolation plugin points footman's data,
+cache, and config directories at a fresh temporary home for the
+session, before the first test and for every child process a test
+starts, so a test neither reads the developer's config, tokens,
+worktrees, and caches nor writes into them; a variable the outer
+environment already set is kept. The one deliberate exception is a
+live test reading the dev containers' credentials through
+`livery.forge.testing.shared_env_path`, which skips without the file.
+The plugin also guards the process-global task registry: a test that
+leaves tasks there fails at its teardown naming them, and the next
+test never inherits them.
+
 The forge lane belongs to `livery.forge`; the workshop orchestrates
 local, git, and forge steps and never hands a raw forge verb to a
 user.

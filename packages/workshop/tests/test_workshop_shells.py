@@ -234,10 +234,12 @@ def test_coverage_enforce_reads_the_workspace(
 def test_the_layers_task_prints_the_walk(
     rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
+    from livery.footman import registry
     from livery.workshop._tasks import layers
 
     _, _root = rig
-    layers()
+    with registry.capture():
+        layers()
     out = capsys.readouterr().out
     assert "no workspace" in out or "instance's own files" in out
 

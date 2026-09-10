@@ -28,6 +28,14 @@ def test_outside_a_workspace_there_are_no_layers(tmp_path: Path) -> None:
 
 
 def test_the_workshop_never_mounts_itself() -> None:
+    from livery.footman import registry
+
+    # The mount lands in a captured tree, never the process global.
+    with registry.capture():
+        _the_workshop_never_mounts_itself()
+
+
+def _the_workshop_never_mounts_itself() -> None:
     # The walk skips this package (importing it IS the base layer
     # arriving) and grafts only the further layers the contract names.
     assert mount_layers(ROOT) == ("livery.forge", "livery.toolroom", "livery.footman")

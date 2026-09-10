@@ -21,6 +21,7 @@ from livery.forge.testing import (
     RecordingOpener,
     ReplayOpener,
     Scenario,
+    shared_env_path,
 )
 
 CASSETTES = Path(__file__).parent / "cassettes" / "gitlab"
@@ -37,14 +38,12 @@ def _dev_env() -> dict[str, str]:
     Under `fm` the cascade already exported them; a bare pytest run
     reads the shared env file the containers were seeded into.
     """
-    import livery.footman as footman
-
     pairs = {
         key: os.environ[key]
         for key in ("GITEA_URL", "GITEA_TOKEN", "GITLAB_URL", "GITLAB_TOKEN")
         if os.environ.get(key)
     }
-    shared = footman.config_dir() / ".repo.shared.env"
+    shared = shared_env_path()
     if shared.is_file():
         for line in shared.read_text().splitlines():
             if "=" in line and not line.startswith("#"):

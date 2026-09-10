@@ -57,6 +57,9 @@ dependencies = [
 # so the leg splits one run's data per suite; elsewhere it is quiet.
 [project.entry-points.pytest11]
 livery-workshop-contexts = "livery.workshop._pytest_contexts"
+# Every test runs apart from the machine's live runner state, and
+# the global task registry is guarded per test.
+livery-workshop-isolation = "livery.workshop._pytest_isolation"
 # A test declares the CI points it runs at; the point in the job
 # runner's environment selects.
 livery-workshop-points = "livery.workshop._pytest_points"

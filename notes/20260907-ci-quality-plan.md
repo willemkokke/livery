@@ -1954,6 +1954,36 @@ None. Every ruling raised in this plan was closed in the review of
   worktree. Not covered: moving the workshop's state under
   `data_dir() / "livery-workshop" /` (its own decision) and
   `.claude/worktrees/` inside the checkout.
+- 2026-09-10 (issues #389 and #394), ruled by Willem ("take them all
+  in the order you wanted", and "clarify 3 that the live configuration
+  state of footman (or anything else in this repo) does not leak into
+  the test suite at all"): the workshop ships a third pytest plugin,
+  `livery-workshop-isolation`. At configure it points footman's data,
+  cache, and config directories (stock and branded spellings) at a
+  fresh temporary home for the session, before the first test and
+  for every child a test starts, keeping a variable the outer
+  environment already set; at unconfigure it drops what it set. The
+  evidence was the runner's home on 2026-09-10: worktrees from a
+  test's pytest directory, a checkout registry of pytest paths, a
+  test rig's diagnostics bundle, a birth checkout in the config
+  directory. The one live read left is the dev containers'
+  credentials, through `livery.forge.testing.shared_env_path`, which
+  names the real file by design and skips without it; the
+  conformance tests use it. The same plugin guards the process-global
+  task registry, which is #394, the leak that failed a later footman
+  test on one xdist worker twice today (runs 34459027268 and
+  34486749562) and made a pytester session refuse a second `lint`.
+  The cause was collection: a workshop test module imports
+  `_quality`, whose module-level `@task` decorators register the
+  whole surface into `registry.root`, so footman's tests in the same
+  worker met a root that was not theirs. The rule the plugin
+  enforces: a production module's tasks reach the registry only
+  through `plugin()` or `include()`, never through a test's import,
+  at collection or inside a test; what a test file itself registers
+  and leaves fails that test at teardown, naming the tasks. footman's
+  own suite, whose subject is registration, hands the root back after
+  every test in its conftest, and the two workshop tests that mounted
+  the layers into the root now mount into a captured tree.
 - 2026-09-10 (issue #385), ruled by Willem ("take them all in the
   order you wanted"): the check legs run the newest Python of a
   derived matrix, and the nightly point runs the whole matrix, floor
