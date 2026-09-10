@@ -363,17 +363,10 @@ def test_the_store_shells_outside_ci(
     _ci_tasks.ci_metrics_leg(job="check (a, b)", label="check-a-b")
     _ci_tasks.ci_metrics_collect()
     _ci_tasks.ci_timings()
-    _ci_tasks.ci_janitor()
     out = capsys.readouterr().out
     assert "not a CI run: the leg's timing row is written by CI only" in out
     assert "not a CI run: the run's timing rows are collected by CI only" in out
     assert "no timing rows yet" in out
-    assert (
-        "refs/workshop/run/*" in out
-        or "kept" in out
-        or "within its window" in out
-        or out
-    )
 
 
 def test_configure_if_changed_classifies_its_own_commit(

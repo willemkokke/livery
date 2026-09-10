@@ -47,7 +47,7 @@ dependencies = [
 "livery.workshop" = "livery.workshop._tasks"
 
 # The runner's sweep: what the workshop leaves in the data directory
-# is the workshop's to bound, run by `fm maintenance.sweep` and the
+# is the workshop's to bound, run by `fm janitor` and the
 # daily collector child.
 [project.entry-points."footman.sweepers"]
 "livery.workshop" = "livery.workshop._sweep:sweep"

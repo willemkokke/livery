@@ -268,6 +268,28 @@ def test_a_stamp_is_found_by_its_closure_newest_first_within_the_window(
     )
 
 
+def test_the_current_keys_are_every_check_leg_with_every_unit_or_none(
+    work: Path,
+) -> None:
+    # No contract at the root: the keys cannot be told, and the janitor
+    # drops nothing.
+    assert _coverage_store.current_keys(work) is None
+    (work / "workshop.toml").write_text(
+        '[ci]\nrunners = ["ubuntu-latest", "macos-latest"]\n'
+        'python-versions = ["3.14"]\n'
+    )
+    for name in ("base", "top"):
+        (work / "packages" / name / "pyproject.toml").write_text(
+            f'[project]\nname = "livery-{name}"\nversion = "0"\n'
+        )
+    assert _coverage_store.current_keys(work) == {
+        ("check-ubuntu-latest-3-14", "livery-base"),
+        ("check-ubuntu-latest-3-14", "livery-top"),
+        ("check-macos-latest-3-14", "livery-base"),
+        ("check-macos-latest-3-14", "livery-top"),
+    }
+
+
 # --- the workspace's own tests, a unit keyed by the whole tree -----------------
 
 

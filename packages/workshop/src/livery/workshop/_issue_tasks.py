@@ -570,27 +570,6 @@ def _remove_local(root: Path, git: GitOps, branch: str) -> list[str]:
     return removed
 
 
-@issue.task(name="sweep")
-def issue_sweep(
-    dry_run: Annotated[bool, doc("say what would go, remove nothing")] = False,
-) -> None:
-    """Remove the worktrees of closed issues and merged branches; name the rest.
-
-    The same refusal ``issue.close`` uses decides: a tree with
-    uncommitted changes or unpushed commits stays and is named, and so
-    does an open issue's. ``issue.start`` runs this before it opens a
-    worktree. Idempotent: a second sweep finds nothing to do.
-    """
-    from livery.workshop._sweep import sweep_worktrees
-
-    root = _workspace()
-    lines = sweep_worktrees(worktree_home(root), dry_run=dry_run, unattended=False)
-    for line in lines:
-        print(f"  {line}")
-    if not lines:
-        print(f"  {worktree_home(root)}: no worktrees")
-
-
 @issue.task(name="close", interactive=True)
 def issue_close(
     ref: Annotated[Arg[str], ask(), suggest(_open_numbers, strict=False)] = "",

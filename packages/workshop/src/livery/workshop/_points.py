@@ -100,6 +100,10 @@ BUILTIN: tuple[Entry, ...] = (
     Entry("merge", "deploy", "docs.publish"),
     Entry("merge", "govern", "workflow.configure", ("--if-changed",)),
     Entry("merge", "dispatch", "workflow.release.dispatch"),
+    # The janitor after the stamp, on the merge point alone: every
+    # merge tidies the remote store, and a pull request's run writes
+    # nothing it does not own.
+    Entry("merge", "gate", "janitor"),
     # The clock's point: the whole check, with the tests that declare
     # the nightly point selected in, on every python of the matrix.
     Entry("nightly", "nightly", "check", profiled=True),
@@ -186,6 +190,22 @@ def entries_for(root: Path, point: str, job: str) -> tuple[Entry, ...]:
         for entry in schedule(root)
         if entry.point in (INHERITS.get(point), point) and entry.job == job
     )
+
+
+def check_legs(root: Path) -> list[str]:
+    """The labels of the check legs the gate produces, ``check-<os>-<python>`` each.
+
+    One per runner the contract names (``[ci] runners``, ubuntu-latest
+    without it) and Python the gate runs
+    ([livery.workshop._pythons.gate_pythons][]), spelled as `run_point`
+    names a matrix job's leg.
+    """
+    from livery.workshop._pythons import gate_pythons
+
+    contract = load_contract(root / "workshop.toml")
+    runners = list((contract.get("ci") or {}).get("runners") or ["ubuntu-latest"])
+    pythons = gate_pythons(root)
+    return [f"check-{runner}-{python}" for runner in runners for python in pythons]
 
 
 def effective_point(point: str) -> str:

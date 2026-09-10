@@ -94,17 +94,18 @@ runner claims, and what is therefore yours:
 
 ### Sweeping what a plugin leaves
 
-`fm maintenance.sweep` runs the cache collector on demand and then every
-sweeper an installed package registers under the `footman.sweepers`
-entry-point group, printing each line of what went or why it stayed;
-`--dry-run` says what would go and removes nothing. A sweeper is a
-callable taking the keyword arguments `data_dir`, `cache_dir`,
-`config_dir`, `dry_run`, `unattended`, and `now` and returning the lines
-it wants printed. `unattended` is true when the daily collector child
-runs it with nobody watching: keep to what is quick, offline, and
-certain there, and leave the rules that ask a forge for the on-demand
-run. A sweeper that raises is named and the rest still run. A sweeper
-touches its own package's files and nobody else's.
+`fm janitor` runs the cache collector on demand and then every sweeper
+an installed package registers under the `footman.sweepers` entry-point
+group, printing each line of what went or why it stayed; `--dry-run`
+says what would go and removes nothing. A sweeper is a callable taking
+the keyword arguments `data_dir`, `cache_dir`, `config_dir`, `dry_run`,
+`unattended`, and `now` and returning the lines it wants printed.
+`unattended` is true when nobody is watching: the daily collector child
+runs it so, and so does a run with no terminal on stdin or under
+`--no-input`; keep to what is quick, offline, and certain there, and
+leave the rules that ask a forge for the attended run. A sweeper that
+raises is named and the rest still run. A sweeper touches its own
+package's files and nobody else's.
 
 The safe convention is **one subfolder named after your distribution** —
 `data_dir() / "acme-devkit" / …` — which cannot collide with a future

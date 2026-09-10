@@ -24,7 +24,7 @@ from __future__ import annotations
 import json
 import math
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -44,8 +44,11 @@ SCHEMA = 1
 SERIES = Series("metrics", window=300, schema=SCHEMA)
 
 #: The per-run family: one series per run and check leg, holding the
-#: leg's half of its row until the run's gate job collects it.
-RUNS = Keyed("run", ("run", "leg"), schema=SCHEMA)
+#: leg's half of its row until the run's gate job collects it. A half
+#: older than six hours outlived a run that was cancelled or died
+#: before its gate job could collect, and the janitor drops it: no
+#: run lasts that long, and the forge has no run-by-id lookup to ask.
+RUNS = Keyed("run", ("run", "leg"), schema=SCHEMA, stale_after=timedelta(hours=6))
 
 #: The one file a leg puts on its per-run ref.
 ROW_FILE = "row.json"

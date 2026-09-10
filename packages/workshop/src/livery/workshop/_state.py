@@ -60,7 +60,7 @@ import json
 import os
 import re
 import tempfile
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -182,6 +182,8 @@ class Series:
             under ``refs/workshop-local/`` instead of on the remote:
             never fetched or pushed, shared by the worktrees, written
             by local runs, so ``ci_only`` must be false.
+        age: How long a row stays before the janitor drops it, by the
+            store's stamp; ``None`` keeps rows for the window alone.
     """
 
     name: str
@@ -189,6 +191,7 @@ class Series:
     ci_only: bool = True
     schema: int = 1
     local: bool = False
+    age: timedelta | None = None
 
     def __post_init__(self) -> None:
         if self.local and self.ci_only:
@@ -299,6 +302,12 @@ class Keyed:
         schema: The rows' schema, shared by every series.
         local: Whether every series of the family is local, as for a
             [livery.workshop._state.Series][].
+        stale_after: How long a key's ref may live, by its commit
+            time, before the janitor drops it as an orphan; ``None``
+            never drops by age.
+        current: The keys the world still produces, from the checkout
+            root, or ``None`` when it cannot tell; a listed key outside
+            them is an orphan the janitor drops. ``None`` drops none.
     """
 
     name: str
@@ -307,6 +316,8 @@ class Keyed:
     ci_only: bool = True
     schema: int = 1
     local: bool = False
+    stale_after: timedelta | None = None
+    current: Callable[[Path], set[tuple[str, ...]] | None] | None = None
 
     def __post_init__(self) -> None:
         if self.local and self.ci_only:
@@ -658,13 +669,14 @@ def put(
     window: int | None = None,
     ci_only: bool = False,
     order: Order | None = None,
+    remove: Iterable[str] = (),
     attempts: int = ATTEMPTS,
 ) -> str:
     """Write *files* onto *ref*, keeping what it already holds; ``""`` or the reason.
 
-    The tree is the ref's current files with *files* laid over them,
-    trimmed to the newest *window* files when one is given, ranked by
-    *order* or, without one, by name. The push
+    The tree is the ref's current files, less *remove*, with *files*
+    laid over them, trimmed to the newest *window* files when one is
+    given, ranked by *order* or, without one, by name. The push
     is a compare-and-swap on the sha the read returned: a ref another
     writer moved in between refuses the push, and the write re-reads,
     merges, and retries up to *attempts* times. *ci_only* refuses a
@@ -686,7 +698,12 @@ def put(
                 f" read ({current.reason}), and a write from an unread state"
                 " would erase what it holds"
             )
-        merged = {**(current.files or {}), **files}
+        gone = set(remove)
+        merged = {
+            name: text
+            for name, text in (current.files or {}).items()
+            if name not in gone
+        } | files
         if window is not None and len(merged) > window:
             merged = _trim(merged, window, order)
         commit, why = _build_commit(root, merged, message)
@@ -768,11 +785,14 @@ def drop(root: Path, ref: str) -> str:
 
 
 def _commit_time(root: Path, ref: str) -> datetime | None:
-    """When *ref*'s commit was made, read after a fetch; ``None`` when unreadable."""
-    fetched = _git(root, "fetch", "--quiet", "origin", ref)
-    if fetched.code != 0:
-        return None
-    stamp = _git(root, "log", "-1", "--format=%ct", "FETCH_HEAD").stdout.strip()
+    """When *ref*'s commit was made, remote refs fetched; ``None`` when unreadable."""
+    at = ref
+    if not ref.startswith(LOCAL_NAMESPACE):
+        fetched = _git(root, "fetch", "--quiet", "origin", ref)
+        if fetched.code != 0:
+            return None
+        at = "FETCH_HEAD"
+    stamp = _git(root, "log", "-1", "--format=%ct", at).stdout.strip()
     if not stamp.isdigit():
         return None
     return datetime.fromtimestamp(int(stamp), tz=UTC)
@@ -780,57 +800,134 @@ def _commit_time(root: Path, ref: str) -> datetime | None:
 
 def sweep(
     root: Path,
-    series: tuple[Series, ...] = (),
+    declared: tuple[Series | Keyed, ...],
     *,
-    older_than: timedelta = timedelta(hours=6),
+    remote: bool,
+    dry_run: bool = False,
     now: datetime | None = None,
 ) -> list[str]:
-    """The janitor: drop orphaned per-run refs, enforce the windows; what it did.
+    """The store's janitor: every series bounded, every orphan dropped; the lines.
 
-    A per-run ref outlives its run only when the run was cancelled or
-    died before its gate job read and deleted it, so any per-run ref
-    older than *older_than* is an orphan: no run lasts that long, and
-    the forge has no run-by-id lookup to ask. Each declared series is
-    re-put empty under its window, which trims a ref that grew past it.
-    Every line names what happened; a failure is a line, never a raise.
+    The scope is the run's: the local series always, the remote ones
+    only under *remote*, which a caller sets inside CI, since a local
+    run never writes the remote store. A series is trimmed to its
+    window, and the rows older than the age it declares go. A
+    family's keys are listed and each key's series is bounded the
+    same way, after its orphans go: a key whose ref is older than the
+    family's ``stale_after``, or one the family's ``current`` keys no
+    longer include. A family that cannot be listed, or whose current
+    keys cannot be told, drops nothing and says so. Under *dry_run*
+    every line says what would go and nothing is written. Every line
+    names what happened; a failure is a line, never a raise, and a
+    second sweep finds nothing to do.
     """
     moment = now or datetime.now(UTC)
     lines: list[str] = []
-    refs = list_refs(root, RUN_PREFIX)
-    if refs is None:
-        lines.append(f"  {RUN_PREFIX}*: the remote could not be listed; nothing swept")
-    else:
-        for ref in sorted(refs):
-            made = _commit_time(root, ref)
-            if made is None:
-                lines.append(f"  {ref}: unreadable; kept")
-                continue
-            age = moment - made
-            if age < older_than:
-                lines.append(f"  {ref}: {_hours(age)} old; kept")
-                continue
-            why = drop(root, ref)
-            lines.append(f"  {ref}: {_hours(age)} old; {why or 'dropped'}")
-    for declared in series:
-        if declared.window is None:
-            continue
-        current = read(root, declared.ref)
-        if current.files is None or len(current.files) <= declared.window:
-            lines.append(f"  {declared.ref}: within its window of {declared.window}")
-            continue
-        why = put(
-            root,
-            declared.ref,
-            {},
-            message=f"{declared.name}: window of {declared.window} enforced",
-            window=declared.window,
-            order=_by_when,
-        )
-        lines.append(
-            f"  {declared.ref}: {len(current.files)} files trimmed to"
-            f" {declared.window}" + (f"; {why}" if why else "")
-        )
+    skipped = False
+    for item in declared:
+        if not item.local and not remote:
+            skipped = True
+        elif isinstance(item, Series):
+            lines += _sweep_series(root, item, dry_run=dry_run, now=moment)
+        else:
+            lines += _sweep_family(root, item, dry_run=dry_run, now=moment)
+    if skipped:
+        lines.append("  remote series: swept inside CI, never from a machine")
     return lines
+
+
+def _sweep_series(
+    root: Path, series: Series, *, dry_run: bool, now: datetime
+) -> list[str]:
+    """Trim *series* to its window and drop its aged rows; the lines."""
+    found = series.rows(root)
+    if found.failed:
+        return [f"  {series.ref}: {found.reason}; nothing swept"]
+    aged = [row.name for row in found.rows if _older(row.when, series.age, now)]
+    held = len(found.rows) + len(found.skipped) - len(aged)
+    over = max(0, held - series.window) if series.window is not None else 0
+    if not aged and not over:
+        return [f"  {series.ref}: {len(found.rows)} row(s), within its bounds"]
+    verb = "would drop" if dry_run else "dropped"
+    lines: list[str] = []
+    if aged and series.age is not None:
+        lines.append(
+            f"  {series.ref}: {verb} {len(aged)} row(s) older than {_span(series.age)}"
+        )
+    if over:
+        lines.append(
+            f"  {series.ref}: {verb} {over} file(s) beyond its window"
+            f" of {series.window}"
+        )
+    if dry_run:
+        return lines
+    why = put(
+        root,
+        series.ref,
+        {},
+        message=f"{series.name}: swept",
+        window=series.window,
+        ci_only=not series.local,
+        order=_by_when,
+        remove=aged,
+    )
+    if why:
+        lines.append(f"  {series.ref}: {why}")
+    return lines
+
+
+def _sweep_family(
+    root: Path, family: Keyed, *, dry_run: bool, now: datetime
+) -> list[str]:
+    """Drop *family*'s orphans and bound each key's series; the lines."""
+    keys = family.listed(root)
+    if keys is None:
+        return [f"  {family.prefix}*: could not be listed; nothing swept"]
+    lines: list[str] = []
+    current = family.current(root) if family.current is not None else None
+    if family.current is not None and current is None:
+        lines.append(
+            f"  {family.prefix}*: the current keys could not be told; no orphan dropped"
+        )
+    verb = "would drop" if dry_run else "dropped"
+    for key in keys:
+        series = family.series(*key)
+        reason = ""
+        if family.stale_after is not None:
+            made = _commit_time(root, series.ref)
+            if made is None:
+                lines.append(f"  {series.ref}: unreadable; kept")
+                continue
+            age = now - made
+            if age > family.stale_after:
+                reason = f"{_hours(age)} old, past {_span(family.stale_after)}"
+        if not reason and current is not None and key not in current:
+            reason = f"no current {' and '.join(family.keys)} produces it"
+        if reason:
+            why = "" if dry_run else drop(root, series.ref)
+            lines.append(f"  {series.ref}: {reason}; {why or verb}")
+            continue
+        lines += _sweep_series(root, series, dry_run=dry_run, now=now)
+    return lines
+
+
+def _older(when: str, age: timedelta | None, now: datetime) -> bool:
+    """Whether a row stamped *when* is older than *age*; an unstamped row never is."""
+    if age is None or not when:
+        return False
+    try:
+        moment = datetime.fromisoformat(when)
+    except ValueError:
+        return False
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    return now - moment > age
+
+
+def _span(age: timedelta) -> str:
+    """*age* in days when it is a day or more, in hours otherwise."""
+    days = age.total_seconds() / 86400
+    return f"{days:.0f} day(s)" if days >= 1 else _hours(age)
 
 
 def _hours(age: timedelta) -> str:

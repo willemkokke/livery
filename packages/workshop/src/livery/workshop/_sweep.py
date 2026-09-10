@@ -1,14 +1,15 @@
 """What the workshop leaves in the runner's directories, and the sweep that bounds it.
 
 The runner's data directory holds the workshop's durable state: the
-issue worktrees under ``worktrees/<repo>/`` and the loop's workspace;
-the rows the workshop keeps live in the checkouts' git directories,
-bounded by the state store. footman's collector
-never touches it, by design. This module is the workshop's sweeper,
-registered under footman's ``footman.sweepers`` entry point and run by
-``fm maintenance.sweep``, by the daily collector child unattended, and,
-for the worktrees alone, by ``fm issue.sweep`` and every
-``fm issue.start``.
+issue worktrees under ``worktrees/<repo>/`` and the loop's workspace.
+footman's collector never touches it, by design. This module is the
+workshop's sweeper, registered under footman's ``footman.sweepers``
+entry point and run by ``fm janitor``, by the daily collector child
+unattended, and, for the worktrees alone, by every ``fm issue.start``.
+It also runs the state store's own janitor over every series the
+workshop keeps ([livery.workshop._series][]), in the scope the run
+has: the checkout's local series on a machine, the remote series too
+inside CI.
 
 The rules, each saying what went or why it stayed:
 
@@ -22,6 +23,8 @@ The rules, each saying what went or why it stayed:
   asks the forge, so it runs on demand only.
 - A file or folder no code writes any more (`LEFTOVERS`) goes when
   met.
+- Every declared series of the state store is bounded, windows,
+  ages, and orphans, as [livery.workshop._state.sweep][] says.
 - The config directory is reported, never touched: anything beside the
   user's config, tasks file, and shared env file is named. The loop's
   workspace is reported by size and kept.
@@ -55,13 +58,22 @@ def sweep(
     dry_run: bool,
     unattended: bool,
     now: datetime,
-    **_: Any,
+    **facts: Any,
 ) -> list[str]:
-    """The workshop's sweep, footman's sweeper contract; the lines to print."""
+    """The workshop's sweep, footman's sweeper contract; the lines to print.
+
+    The state store's series are the checkout's: the one above the
+    working directory, or the ``root`` among *facts* when one is
+    given, ``None`` for no checkout at all.
+    """
+    from livery.workshop._layers import workspace_root
+
+    root = facts["root"] if "root" in facts else workspace_root()
     lines = sweep_worktrees(
         data_dir / WORKTREES, dry_run=dry_run, unattended=unattended
     )
     lines += sweep_leftovers(data_dir, dry_run=dry_run)
+    lines += sweep_store(root, dry_run=dry_run, now=now)
     if not unattended:
         lines += report_config(config_dir)
         lines += report_loop(data_dir / LOOP)
@@ -174,6 +186,20 @@ def sweep_worktrees(home: Path, *, dry_run: bool, unattended: bool) -> list[str]
 
 
 # --- the rest of the data directory --------------------------------------------
+
+
+def sweep_store(root: Path | None, *, dry_run: bool, now: datetime) -> list[str]:
+    """Bound every declared series of the state store in the run's scope; the lines."""
+    from livery.workshop._series import DECLARED
+    from livery.workshop._state import run_context
+    from livery.workshop._state import sweep as sweep_series
+
+    if root is None:
+        return ["state store: no checkout here; nothing swept"]
+    lines = sweep_series(
+        root, DECLARED, remote=run_context() is not None, dry_run=dry_run, now=now
+    )
+    return [f"state store: {line.strip()}" for line in lines]
 
 
 def sweep_leftovers(data_dir: Path, *, dry_run: bool) -> list[str]:

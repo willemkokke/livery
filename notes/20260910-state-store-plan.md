@@ -162,6 +162,15 @@ change.
    where the merge point's gate job runs it after the collect. The
    daily child runs the local part; `fm issue.start` keeps running the
    worktree rule first. A local run never writes the remote store.
+   Landed 2026-09-10, #413: `fm janitor` is footman's `maintenance`
+   family renamed, its default task the sweep, unattended when stdin
+   is no terminal or `--no-input` is set; the workshop's sweeper runs
+   the store's janitor (`_state.sweep`) over `_series.DECLARED`; a
+   series declares an `age`, a family a `stale_after` and its
+   `current` keys; the coverage family's current keys are every check
+   leg of the contract's runners and gate Pythons with every stored
+   unit. `fm ci.janitor` and `fm issue.sweep` are gone, and the merge
+   point's gate job runs `janitor` after the stamp.
 5. **Reading by hand.** `fm store.ls` and `fm store.show`, read-only,
    through the same reader; the coverage pages the deploy publishes
    rendered from the store's union through that reader (#386 folded
