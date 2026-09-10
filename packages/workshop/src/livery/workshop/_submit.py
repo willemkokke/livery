@@ -22,6 +22,7 @@ is derived here.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import time
@@ -767,13 +768,30 @@ def _gate(fix: bool = False, *, root: Path, base: str = "main") -> None:
     contract declares ``[ci] affected-legs``, the affected packages
     against *base*, the branch the pull request merges into, so the
     submit proves what CI verifies and pays for nothing more. Says
-    which one it runs and why. *fix* runs format and lint in their
+    which one it runs and why, and skips it when this machine's own
+    ``fm check`` already proved the same tree at a covering scope
+    (`livery.workshop._gate_record`). *fix* runs format and lint in their
     fix modes, so mechanical findings heal instead of failing; the
     caller folds any rewrites into the branch before pushing.
     """
+    from livery.workshop._gate_record import covering
     from livery.workshop._quality import affected_legs, check
 
-    if affected_legs(root):
+    narrowed = affected_legs(root)
+    git = GitOps(root)
+    if narrowed:
+        with contextlib.suppress(GitError):
+            git.fetch()
+    row, why = covering(git, affected=narrowed, base=base)
+    if row is not None:
+        print(
+            f"  gate: tree {row.tree[:12]} proved green by fm check at {row.when}"
+            f" ({row.scope}); skipping"
+        )
+        return
+    if why:
+        print(f"  gate: {why}; running the gate")
+    if narrowed:
         print(f"  gate: the affected gate against origin/{base}, as the CI legs run it")
         check(affected=True, fix=fix, base=base)
         return

@@ -327,6 +327,21 @@ def check(
                     leg=run.leg,
                 )
             _scoped_check(subset, fix=fix)
+            # The render and provenance checks are the gate job's in CI,
+            # once per run; a local narrowed gate runs them too, since a
+            # new module changes the generated site configuration and the
+            # drift would otherwise surface only in CI's gate job.
+            if run is None:
+                from livery.workshop._provenance import provenance_check
+
+                template_check()
+                provenance_check()
+            _remember_local(
+                root_for_ci,
+                run,
+                packages=tuple(package.path for package in subset),
+                base=ci_base or base,
+            )
             return
     # The marker is a CI leg's fact for its metrics row and the stamp;
     # a local run leaves none, since an untracked root file would read
@@ -345,6 +360,7 @@ def check(
             test()
             kindcheck()
             template_check()
+        _remember_local(root_for_ci, run, packages=None, base=base)
         return
     with parallel():
         format()
@@ -355,6 +371,23 @@ def check(
         kindcheck()
         template_check()
         provenance_check()
+    _remember_local(root_for_ci, run, packages=None, base=base)
+
+
+def _remember_local(
+    root: Path | None,
+    run: RunContext | None,
+    *,
+    packages: tuple[str, ...] | None,
+    base: str,
+) -> None:
+    """Record a green local gate on this machine's gate record; CI never writes it."""
+    if root is None or run is not None:
+        return
+    from livery.workshop import _gate_record
+    from livery.workshop._git_ops import GitOps
+
+    print(_gate_record.remember(root, GitOps(root), packages=packages, base=base))
 
 
 def _current_point() -> str:

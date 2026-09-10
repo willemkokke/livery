@@ -373,6 +373,7 @@ nav = [
             { "livery.workshop._env_tasks" = "_generated/api/workshop/_env_tasks.md" },
             { "livery.workshop._envfile" = "_generated/api/workshop/_envfile.md" },
             { "livery.workshop._forge_lane" = "_generated/api/workshop/_forge_lane.md" },
+            { "livery.workshop._gate_record" = "_generated/api/workshop/_gate_record.md" },
             { "livery.workshop._git_ops" = "_generated/api/workshop/_git_ops.md" },
             { "livery.workshop._governance" = "_generated/api/workshop/_governance.md" },
             { "livery.workshop._graph" = "_generated/api/workshop/_graph.md" },
