@@ -100,7 +100,10 @@ person's act: `fm coverage.accept <package> <value> --reason=<why>`
 writes a dated row naming who and why, and refuses without a reason,
 at or above the current mark, or for a package with a committed
 floor. Every gated run also records the union's percentage per
-package beside its timing rows, and `fm ci.timings` renders the
+package beside its timing rows; every job of the run is recorded,
+the legs with their traces and the rest with the forge's times, and
+the run's own wall from its start to the collection, so the floor
+the legs never touch has a row. `fm ci.timings` renders the
 trend. The number that is judged is the
 CI union: every leg runs measured (each `fm` child included) and the
 aggregating job combines all platforms before enforcing, so the

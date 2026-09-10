@@ -40,7 +40,7 @@ from livery.workshop._state import (
 )
 
 if TYPE_CHECKING:
-    from livery.forge import Repository
+    from livery.forge import Job, Repository
 
 #: The rows' schema. A reader skips a row of another version and
 #: names it; a new field is the same version, a changed meaning is
@@ -197,6 +197,29 @@ def run_file(run_id: str) -> str:
     return f"{int(run_id):020d}.json" if run_id.isdigit() else f"{run_id}.json"
 
 
+def _forge_row(job: Job, *, created: str, now: str) -> dict[str, Any]:
+    """A job's times as the forge reports them, for a job that left no trace.
+
+    The docs build, the gate job itself, and the merge point's jobs
+    have no leg row; their queue and wall times come from the forge
+    alone. A job still running when the gate job collects (the gate
+    job is always one) is measured to *now* and marked incomplete; a
+    job the forge has not started carries no times.
+    """
+    started = job.started_at
+    return {
+        "conclusion": job.conclusion,
+        "status": job.status,
+        "complete": bool(job.completed_at),
+        "queued_ms": _between(created, started) if started else None,
+        "wall_ms": _between(started, job.completed_at or now) if started else None,
+        "steps": [
+            {"name": step.name, "ms": _between(step.started_at, step.completed_at)}
+            for step in job.steps
+        ],
+    }
+
+
 def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[str]:
     """Join the legs' halves with the forge's times into the run's file; what happened.
 
@@ -208,7 +231,9 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
     is looked up under the head the runner's event names, because a
     pull request's checkout is a merge commit the forge never files
     a run under; *sha* is the checkout, the fallback and the row's
-    own record.
+    own record. Every job the forge lists is recorded, the legs with
+    their traces, the others with their forge times alone, and the
+    run's own wall from its start to this collection.
     """
     lines: list[str] = []
     prefix = f"{RUN_PREFIX}{run.run_id}/"
@@ -292,6 +317,16 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
                 for step in job.steps
             ]
         entry["jobs"][name] = row
+    for name, job in sorted(jobs.items()):
+        if name not in entry["jobs"]:
+            entry["jobs"][name] = _forge_row(
+                job, created=entry["created_at"], now=entry["collected_at"]
+            )
+    entry["run_wall_ms"] = (
+        _between(entry["started_at"], entry["collected_at"])
+        if entry["started_at"]
+        else None
+    )
     coverage = read_coverage_row(root)
     if coverage is not None:
         entry["coverage"] = coverage
@@ -324,8 +359,15 @@ def _percentile(values: list[float], fraction: float) -> float:
 
 
 def _metrics(entry: dict[str, Any]) -> dict[str, dict[str, float]]:
-    """Every numeric metric of a run's file, by job then metric name."""
+    """Every numeric metric of a run's file, by job then metric name.
+
+    The run's own wall, start to collection, renders as the ``run``
+    group, so the floor the legs never touch has a row of its own.
+    """
     out: dict[str, dict[str, float]] = {}
+    wall = entry.get("run_wall_ms")
+    if isinstance(wall, int | float):
+        out["run"] = {"wall_ms": float(wall)}
     for name, row in sorted(entry.get("jobs", {}).items()):
         metrics: dict[str, float] = {}
         for key in ("queued_ms", "wall_ms", "total_ms"):
