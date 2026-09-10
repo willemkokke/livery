@@ -148,8 +148,10 @@ def test_a_closed_clean_pushed_tree_goes_through_its_checkouts_git(
 
 
 def test_the_store_is_swept_in_the_checkouts_local_scope(
-    checkout: Path, tmp_path: Path
+    checkout: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # On a desk and on a runner alike: the test's checkout is a machine's.
+    monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
     facts: dict[str, Any] = {
         "data_dir": tmp_path / "data",
         "cache_dir": tmp_path / "cache",
