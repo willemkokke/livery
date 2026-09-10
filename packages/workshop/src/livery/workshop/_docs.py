@@ -1336,15 +1336,23 @@ def render_python_coverage(root: Path) -> list[str]:
     package declaring an ``htmlcov`` report gets its tree rendered
     from the workspace's measured data, scoped to its own files. The
     data is the CI union (``coverage-data/*/.coverage*`` downloaded
-    by the emitted docs job) when present, else the local
-    ``.coverage`` a gate run left; with neither, nothing renders and
-    the coverage page states the absence.
+    by the emitted docs job) when present; inside CI without it, the
+    units the store holds for every check leg, so a run whose legs
+    skipped on the verified record still publishes the union the
+    gate judged; else the local ``.coverage`` a gate run left. With
+    none, nothing renders and the coverage page states the absence.
     """
     import tempfile
 
     from livery.workshop._kinds import is_python_kind
 
     legs = sorted(root.glob("coverage-data/*/.coverage*"))
+    if not legs:
+        legs, misses = _stored_legs(root)
+        for miss in misses:
+            print(f"  coverage: {miss}: not in the store; the pages render without it")
+        if legs:
+            print(f"  coverage: the pages read {len(legs)} stored unit file(s)")
     if legs:
         with tempfile.TemporaryDirectory() as scratch:
             copies = []
@@ -1485,6 +1493,27 @@ def docs_publish() -> None:
         print("  pages seam: the forge's own workflow deploys; nothing to do here")
     else:
         print("  publish seam is none: skipping by declaration")
+
+
+def _stored_legs(root: Path) -> tuple[list[Path], list[str]]:
+    """Inside CI, the stored units for every check leg; the files and the misses.
+
+    Outside CI nothing is pulled: a machine's build renders the local
+    data a gate run left, or states the absence.
+    """
+    from livery.workshop._backends import _python
+    from livery.workshop._git_ops import GitError
+    from livery.workshop._points import check_legs
+    from livery.workshop._state import run_context
+
+    if run_context() is None:
+        return [], []
+    try:
+        return _python.stored_union(
+            root, discover_packages(root), check_legs(root), root / "coverage-data"
+        )
+    except GitError as error:
+        return [], [f"the units' closures ({error})"]
 
 
 @docs_group.task(name="python-coverage")

@@ -1032,6 +1032,40 @@ def test_a_missing_report_states_the_absence_and_stays_green(
     assert "iframe" not in page
 
 
+def test_the_pages_read_the_store_inside_ci_when_the_legs_left_no_data(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from coverage import CoverageData
+
+    from livery.workshop import _docs
+
+    root = _workspace(tmp_path)
+    _declare_generators(
+        root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
+    )
+    source = root / "packages" / "core" / "src" / "core" / "mod.py"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text("a = 1\nb = 2\n")
+    # Outside CI nothing is pulled: no data, nothing rendered.
+    monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
+    assert _docs.render_python_coverage(root) == []
+    # Inside CI the store's units stand in for the legs' data.
+    stored = root / "coverage-data" / "check-a" / "reuse-core.coverage"
+    stored.parent.mkdir(parents=True)
+    data = CoverageData(basename=str(stored))
+    data.add_lines({str(source): [1]})
+    data.write()
+    monkeypatch.setattr(
+        "livery.workshop._docs._stored_legs",
+        lambda root: ([stored], ["packages/other on check-a"]),
+    )
+    assert _docs.render_python_coverage(root) == ["core"]
+    out = capsys.readouterr().out
+    assert "packages/other on check-a: not in the store; the pages render" in out
+    assert "the pages read 1 stored unit file(s)" in out
+    assert (root / "packages" / "core" / "htmlcov" / "index.html").is_file()
+
+
 def test_a_present_report_copies_whole_and_iframes(tmp_path: Path) -> None:
     from livery.workshop._docs import generate_coverage_pages, mount_package_docs
 

@@ -403,6 +403,7 @@ nav = [
             { "livery.workshop._series" = "_generated/api/workshop/_series.md" },
             { "livery.workshop._shell" = "_generated/api/workshop/_shell.md" },
             { "livery.workshop._state" = "_generated/api/workshop/_state.md" },
+            { "livery.workshop._store_tasks" = "_generated/api/workshop/_store_tasks.md" },
             { "livery.workshop._submit" = "_generated/api/workshop/_submit.md" },
             { "livery.workshop._sweep" = "_generated/api/workshop/_sweep.md" },
             { "livery.workshop._sync" = "_generated/api/workshop/_sync.md" },

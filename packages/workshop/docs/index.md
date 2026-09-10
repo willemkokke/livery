@@ -112,46 +112,70 @@ in, and never skips on the verified record or narrows.
 
 Each package's `workshop.toml` may declare `[qa] coverage-floor`: a
 percentage the gate enforces, or the mode `"auto-ratchet"`, under
-which the floor is the mark recorded on the `workshop/coverage/marks`
-record. Both modes pass at the floor minus the package's
-`coverage-epsilon` (percentage points, 0.5 when absent). Under
-auto-ratchet the first gated run records the mark, a run that clears
-it by more than epsilon raises it, and a record that cannot be read
-falls open with its reason and writes nothing. Lowering a mark is a
-person's act: `fm coverage.accept <package> <value> --reason=<why>`
-writes a dated row naming who and why, and refuses without a reason,
-at or above the current mark, or for a package with a committed
-floor. Every gated run also records the union's percentage per
-package beside its timing rows; every job of the run is recorded,
-the legs with their traces and the rest with the forge's times, and
-the run's own wall from its start to the collection, so the floor
-the legs never touch has a row. `fm ci.timings` renders the
-trend. The number that is judged is the
-CI union: every leg runs measured (each `fm` child included) and the
-aggregating job combines all platforms before enforcing, so the
-floors are deterministic per change and never depend on one
-machine's view. Coverage stays global under the affected mode: in a
-check leg's one measured run every test records under a context
-named by its node id (the workshop's own pytest plugin, quiet
-outside a measured run), and the leg splits the run's data per
-suite and stores each suite's lines on the `workshop/coverage`
-record, keyed by
-the leg, the package, and the identity of the package's dependency
-closure (the tree ids of the package and of every package it
-depends on, plus the root's `pyproject.toml` and `uv.lock`). The
-workspace's own `tests/` directory is a unit too, keyed by the whole
-tree, and every leg that runs a suite runs it. A leg
-skips a suite only when the record holds its lines for that
-identity; otherwise the suite runs, and the leg says why. The gate
-job pulls every skipped suite from the record before it judges, so
-the union is the same global union a full run produces; a suite the
-record cannot supply is red by name, never a smaller union. A local
-`fm test` prints its own lower-biased
-preview beside the floor, for information. Raise a committed floor
-as the suite grows; lower it only deliberately, in a reviewed change
-or an accepted row. The
-release legs publish a further, informational union that includes
-the live-only code.
+which the floor is the package's mark on the state store. Both modes
+pass at the floor minus the package's `coverage-epsilon` (percentage
+points, 0.5 when absent). Under auto-ratchet the first gated run
+records the mark, a run that clears it by more than epsilon raises
+it, and a store that cannot be read falls open with its reason and
+writes nothing. Lowering a mark is a person's act:
+`fm coverage.accept <package> <value> --reason=<why>` writes a row
+naming who and why, and refuses without a reason, at or above the
+current mark, or for a package with a committed floor. The number
+that is judged is the CI union: every leg runs measured (each `fm`
+child included) and the gate job combines all platforms before
+enforcing, so the floors are deterministic per change and never
+depend on one machine's view. Coverage stays global under the
+affected mode: in a check leg's one measured run every test records
+under a context named by its node id (the workshop's own pytest
+plugin, quiet outside a measured run), the leg splits the run's data
+per suite and stores each suite's lines on the store, keyed by the
+leg, the package, and the identity of the package's dependency
+closure (the tree ids of the package and of every package it depends
+on, plus the root's `pyproject.toml` and `uv.lock`), and a leg skips
+a suite only when the store holds its lines for that identity;
+otherwise the suite runs, and the leg says why. The workspace's own
+`tests/` directory is a unit too, keyed by the whole tree, and every
+leg that runs a suite runs it. The gate job pulls every skipped suite
+from the store before it judges, so the union is the same global
+union a full run produces; a suite the store cannot supply is red by
+name, never a smaller union. A local `fm test` prints its own
+lower-biased preview beside the floor, for information. Raise a
+committed floor as the suite grows; lower it only deliberately, in a
+reviewed change or an accepted row. The release legs publish a
+further, informational union that includes the live-only code.
+
+## The state store
+
+Every row the workshop keeps across runs is a row of the state
+store: JSON files on git refs, `refs/workshop/*` on the remote and
+`refs/workshop-local/*` in the checkout's git directory. A default
+clone or fetch never downloads the remote namespace, no refspec
+names the local one, and every row carries the schema the store
+stamped and the time it wrote it. The remote series are written by
+CI only, `fm coverage.accept` the one exception; a local run reads
+them and writes only the local ones, which the checkout's worktrees
+share and a fresh clone starts without.
+
+| series | a row is | window | writer |
+| --- | --- | --- | --- |
+| `metrics` | one run: every job's times, the run's wall, the union's percentages | 300 | the gate job |
+| `run/<id>/<leg>` | a check leg's half of its timing row, until the gate job collects it | none | the leg |
+| `verified` | a tree a green gate proved, with its scope and the base it composed on | 200 | the gate job |
+| `coverage/<leg>/<package>` | a suite's measured lines for one closure identity | 6 | the leg |
+| `coverage/marks` | a package's coverage mark and who set it | 400 | the gate job, `fm coverage.accept` |
+| `gate-record` (local) | a tree this checkout's `fm check` proved green | 200, 7 days | a green local gate |
+| `diagnostics` (local) | the follow classifier's inputs for an unmerged ending | 20 | every unmerged follow |
+
+`fm store.ls` lists them with what each holds; `fm store.show
+<series>` prints a series' rows newest first through the same reader
+the verdicts use, `--key=<leg>,<package>` for one series of a family
+and `--json` for the rows as they are. `fm ci.timings` renders the
+`metrics` series: per job and metric the latest, p50, and p90 over
+the window, then the movers. `fm janitor` bounds every series in the
+scope it runs in, windows, ages, and orphans, the remote ones from
+the merge point's gate job after every green run. The deploy renders
+the site's coverage pages from the run's legs' data, and when the
+legs skipped on the verified record, from the store's union.
 
 ## Where a test lives
 

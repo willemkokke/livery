@@ -337,13 +337,26 @@ class Keyed:
         Raises:
             ValueError: When *key* has another number of parts.
         """
+        return self.at(*(slug(part) for part in key))
+
+    def at(self, *key: str) -> Series:
+        """The series of a *key* as its ref spells it, every part verbatim.
+
+        `listed` returns keys as their refs spell them, and a key
+        written before the family made its parts ref-safe may spell a
+        part another way; `series` would re-spell it and name a ref
+        that does not exist. A listed key comes back through here.
+
+        Raises:
+            ValueError: When *key* has another number of parts.
+        """
         if len(key) != len(self.keys):
             raise ValueError(
                 f"{self.name} is keyed by {', '.join(self.keys)}; got"
                 f" {len(key)} part(s)"
             )
         return Series(
-            "/".join((self.name, *(slug(part) for part in key))),
+            "/".join((self.name, *key)),
             window=self.window,
             ci_only=self.ci_only,
             schema=self.schema,
@@ -891,7 +904,7 @@ def _sweep_family(
         )
     verb = "would drop" if dry_run else "dropped"
     for key in keys:
-        series = family.series(*key)
+        series = family.at(*key)
         reason = ""
         if family.stale_after is not None:
             made = _commit_time(root, series.ref)
