@@ -12,9 +12,11 @@ A [livery.workshop._state.Series][] declares one ref's rows: reach
 for its `rows` and `row` to read and its `put` to write. The store
 parses, stamps the schema and the time, applies the window, and
 refuses what the declaration forbids, so no caller does any of
-that itself. The bare `read` and `put` move files that are not
-rows (a per-run half, a coverage entry), and `sweep` is the
-janitor. Every failure is a printed reason, never a boolean: a
+that itself. A [livery.workshop._state.Keyed][] family declares one
+series per key (a leg and a package; a run and a leg) and lists the
+keys the remote holds. The bare `read` and `put` are the transport
+underneath, and `sweep` is the janitor. Every failure is a printed
+reason, never a boolean: a
 stamp is best-effort by contract, so the only way its failure is
 ever noticed is by being printed.
 
@@ -48,6 +50,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -63,9 +66,11 @@ from livery import toolroom
 #: workflow, whatever the token.
 NAMESPACE = "refs/workshop/"
 
-#: The per-run refs: one per leg, written by that leg alone, read and
-#: deleted by the run's gate job, swept by the janitor when a run is
-#: cancelled before its gate could.
+#: The per-run refs' prefix, for the janitor's orphan rule: one ref
+#: per leg, written by that leg alone, read and deleted by the run's
+#: gate job, swept here when a run is cancelled before its gate could.
+#: The family itself is declared where its rows mean something,
+#: [livery.workshop._metrics.RUNS][].
 RUN_PREFIX = NAMESPACE + "run/"
 
 #: How many times a compare-and-swap write re-reads and retries after
@@ -80,6 +85,27 @@ LEG_VARIABLE = "WORKSHOP_LEG"
 #: How a window ranks the files it keeps: a key from a file's name
 #: and text, the newest sorting last.
 Order = Callable[[str, str], tuple[str, str]]
+
+
+def slug(name: str) -> str:
+    """*name* as a ref-safe and file-safe token: every other character is a dash."""
+    return re.sub(r"[^A-Za-z0-9_-]", "-", name)
+
+
+@dataclass(frozen=True)
+class Skipped:
+    """A file a read passed over: its name and why.
+
+    Attributes:
+        name: The file's name on the ref.
+        why: Why it is not a row, in the store's one wording.
+    """
+
+    name: str
+    why: str
+
+    def __str__(self) -> str:
+        return f"{self.name}: {self.why}; skipped"
 
 
 @dataclass(frozen=True)
@@ -106,8 +132,8 @@ class Rows:
 
     Attributes:
         rows: The rows of the series' schema, newest first.
-        skipped: One line per file that is not such a row, naming the
-            file and why.
+        skipped: One entry per file that is not such a row, naming the
+            file and why; printing one gives the line.
         failed: Whether the transport could not answer for a ref that
             exists, or reach the remote at all. An absent ref reads as
             no rows and no failure.
@@ -115,7 +141,7 @@ class Rows:
     """
 
     rows: tuple[Row, ...]
-    skipped: tuple[str, ...] = ()
+    skipped: tuple[Skipped, ...] = ()
     failed: bool = False
     reason: str = ""
 
@@ -162,11 +188,11 @@ class Series:
         if found.files is None:
             return Rows((), failed=found.failed, reason=self._unreadable(found))
         rows: list[Row] = []
-        skipped: list[str] = []
+        skipped: list[Skipped] = []
         for name in sorted(found.files):
             data, why = _parse(self, found.files[name])
             if data is None:
-                skipped.append(f"{name}: {why}; skipped")
+                skipped.append(Skipped(name, why))
             else:
                 rows.append(Row(name, data))
         rows.sort(key=_newest, reverse=True)
@@ -226,6 +252,69 @@ class Series:
         if not found.failed:
             return ""
         return f"the {self.name} series could not be read: {found.reason}"
+
+
+@dataclass(frozen=True)
+class Keyed:
+    """A family of series under one prefix, one ref per key.
+
+    The coverage store keeps one series per leg and package, the
+    per-run halves one per run and leg. A family declares its key
+    parts once: `series` makes the series of one key, with every
+    part made ref-safe, and `listed` reads the keys the remote
+    holds, so no caller spells a ref of the family itself.
+
+    Attributes:
+        name: The family's name under the namespace (``coverage``).
+        keys: The names of the key's parts, in ref order
+            (``("leg", "package")``).
+        window: Every series' window; ``None`` keeps everything.
+        ci_only: Whether only a CI run may write the family.
+        schema: The rows' schema, shared by every series.
+    """
+
+    name: str
+    keys: tuple[str, ...]
+    window: int | None = None
+    ci_only: bool = True
+    schema: int = 1
+
+    @property
+    def prefix(self) -> str:
+        """The refs' common prefix, ending in a slash."""
+        return f"{NAMESPACE}{self.name}/"
+
+    def series(self, *key: str) -> Series:
+        """The series of one *key*, one part per declared key name.
+
+        Raises:
+            ValueError: When *key* has another number of parts.
+        """
+        if len(key) != len(self.keys):
+            raise ValueError(
+                f"{self.name} is keyed by {', '.join(self.keys)}; got"
+                f" {len(key)} part(s)"
+            )
+        return Series(
+            "/".join((self.name, *(slug(part) for part in key))),
+            window=self.window,
+            ci_only=self.ci_only,
+            schema=self.schema,
+        )
+
+    def listed(self, root: Path, *head: str) -> list[tuple[str, ...]] | None:
+        """The keys the remote holds under the leading parts *head*.
+
+        ``None`` when the remote cannot be listed. A ref under the
+        prefix with another number of parts is not the family's and
+        is left out.
+        """
+        prefix = self.prefix + "".join(slug(part) + "/" for part in head)
+        refs = list_refs(root, prefix)
+        if refs is None:
+            return None
+        keys = [tuple(name[len(self.prefix) :].split("/")) for name in refs]
+        return sorted(key for key in keys if len(key) == len(self.keys))
 
 
 def _parse(series: Series, text: str) -> tuple[dict[str, Any] | None, str]:
@@ -360,11 +449,6 @@ def run_context(environ: dict[str, str] | None = None) -> RunContext | None:
             env.get(LEG_VARIABLE, ""),
         )
     return None
-
-
-def run_ref(run: RunContext, leg: str) -> str:
-    """The per-run ref one leg of *run* writes."""
-    return f"{RUN_PREFIX}{run.run_id}/{leg}"
 
 
 def identity() -> tuple[str, str]:

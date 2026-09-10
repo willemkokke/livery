@@ -686,8 +686,9 @@ def _reuse_suites(
     """
     from coverage import CoverageData
 
-    from livery.workshop._coverage_store import closure_id, find, slug
+    from livery.workshop._coverage_store import closure_id, find
     from livery.workshop._git_ops import GitOps
+    from livery.workshop._state import slug
     from livery.workshop._verified import MARKER
 
     pending = [unit for unit in units_of(root, packages) if unit.path not in judged]

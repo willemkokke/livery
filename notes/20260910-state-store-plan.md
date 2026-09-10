@@ -136,7 +136,14 @@ change.
 2. **Keyed series.** The coverage store and the per-run halves declared
    as keyed series; `coverage.leg`, `coverage.union`, and
    `ci.metrics.collect` read and write through the store. The coverage
-   entry's shape stays.
+   entry's shape stays. Landed 2026-09-10, #409: `Keyed` in
+   `_state.py` declares a family's key parts once, makes the series of
+   one key with every part made ref-safe, and lists the keys the
+   remote holds; `_coverage_store.COVERAGE` and `_metrics.RUNS` are
+   the two families. The per-run refs now spell the leg the way the
+   coverage refs do, dots to dashes. A newest entry for a closure that
+   is not a row stays a named reason rather than a silent miss, so the
+   leg runs the suite fresh and its stamp replaces the entry.
 3. **Local scope.** The gate record and the diagnostics as local
    series; the data-directory files and their bounds-on-write gone;
    the pin that a local series never pushes and that a fresh clone

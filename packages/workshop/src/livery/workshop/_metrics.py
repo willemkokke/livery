@@ -28,16 +28,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from livery.workshop._state import (
-    RUN_PREFIX,
-    RunContext,
-    Series,
-    drop,
-    list_refs,
-    put,
-    read,
-    run_ref,
-)
+from livery.workshop._state import Keyed, RunContext, Series, drop
 
 if TYPE_CHECKING:
     from livery.forge import Job, Repository
@@ -52,12 +43,21 @@ SCHEMA = 1
 #: under a megabyte and a quarter's trend in reach.
 SERIES = Series("metrics", window=300, schema=SCHEMA)
 
+#: The per-run family: one series per run and check leg, holding the
+#: leg's half of its row until the run's gate job collects it.
+RUNS = Keyed("run", ("run", "leg"), schema=SCHEMA)
+
 #: The one file a leg puts on its per-run ref.
 ROW_FILE = "row.json"
 
 #: The union's per-package percentages, left by the gate job's
 #: coverage entry for the collect entry to fold into the run's file.
 COVERAGE_ROW = "fm-coverage.json"
+
+
+def run_ref(run: RunContext, leg: str) -> str:
+    """The per-run ref one *leg* of *run* writes."""
+    return RUNS.series(run.run_id, leg).ref
 
 
 def write_coverage_row(root: Path, measured: dict[str, float]) -> str:
@@ -147,7 +147,6 @@ def leg_row(trace: Path, *, job: str) -> tuple[dict[str, Any] | None, str]:
         return None, f"the trace at {trace} records no task: nothing to row"
     total = round((max(ends) - min(begins)) / 1000.0, 1) if begins else 0.0
     return {
-        "schema": SCHEMA,
         "job": job,
         "total_ms": total,
         "tasks": dict(sorted(tasks.items())),
@@ -166,12 +165,8 @@ def put_leg(root: Path, run: RunContext, *, job: str, label: str, trace: Path) -
     # The scope the gate ran, from the marker it left beside the
     # trace: the stamp after the verdict reads it back per leg.
     row["scope"] = read_marker(trace.parent if trace.is_absolute() else root)
-    return put(
-        root,
-        run_ref(run, label),
-        {ROW_FILE: json.dumps(row, sort_keys=True)},
-        message=f"metrics: {job} of run {run.run_id}",
-        ci_only=True,
+    return RUNS.series(run.run_id, label).put(
+        root, {ROW_FILE: row}, message=f"metrics: {job} of run {run.run_id}"
     )
 
 
@@ -236,29 +231,25 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
     run's own wall from its start to this collection.
     """
     lines: list[str] = []
-    prefix = f"{RUN_PREFIX}{run.run_id}/"
-    refs = list_refs(root, prefix)
-    if refs is None:
-        return [f"  {prefix}*: the remote could not be listed; nothing collected"]
+    keys = RUNS.listed(root, run.run_id)
+    if keys is None:
+        return [
+            f"  {RUNS.prefix}{run.run_id}/*: the remote could not be listed;"
+            " nothing collected"
+        ]
     halves: dict[str, dict[str, Any]] = {}
-    for ref in sorted(refs):
-        found = read(root, ref)
-        if found.files is None:
-            why = f"unreadable: {found.reason}" if found.failed else "empty"
-            lines.append(f"  {ref}: {why}; skipped")
+    refs: list[str] = []
+    for key in keys:
+        series = RUNS.series(*key)
+        refs.append(series.ref)
+        found, why = series.row(root, ROW_FILE)
+        if why:
+            lines.append(f"  {series.ref}: {why}; skipped")
             continue
-        try:
-            half = json.loads(found.files.get(ROW_FILE, ""))
-        except ValueError:
-            lines.append(f"  {ref}: {ROW_FILE} does not parse; skipped")
+        if found is None:
+            lines.append(f"  {series.ref}: empty; skipped")
             continue
-        if not isinstance(half, dict) or half.get("schema") != SCHEMA:
-            version = half.get("schema") if isinstance(half, dict) else "none"
-            lines.append(
-                f"  {ref}: schema {version}, this reader speaks {SCHEMA}; skipped"
-            )
-            continue
-        halves[str(half.get("job", ref.rsplit("/", 1)[-1]))] = half
+        halves[str(found.data.get("job", key[-1]))] = found.data
     if not halves:
         lines.append(f"  run {run.run_id}: no leg left a row; nothing collected")
         return lines
