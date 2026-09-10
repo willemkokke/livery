@@ -9,9 +9,7 @@ cancels what is still moving (the relief for a wedged queue), and
 logs reach an agent through fm. ``ci.run`` runs one job of a point
 (livery.workshop._points), the one verb the emitted shells call;
 ``ci.verdict`` is the gate job's judgement of the jobs it needs.
-``ci.janitor`` sweeps the CI state store (livery.workshop._state):
-the per-run refs a cancelled run left behind, and each series'
-window. ``ci.timings`` prints the timing rows the gate writes on
+``ci.timings`` prints the timing rows the gate writes on
 that store (livery.workshop._metrics); the two hidden ``ci.metrics``
 verbs are the writers ``ci.run`` schedules. ``doctor`` says who you
 are, which server this is, and what it grants.
@@ -226,36 +224,6 @@ def ci_logs(
     """Print the head commit's job logs, failed jobs by default."""
     repo, git = _resolved()
     logs_flow(repo, git, lines=lines, failed_only=failed_only)
-
-
-def janitor_flow(root: Path, *, older_than_hours: float) -> None:
-    """Sweep the state store and print every line of what happened."""
-    from datetime import timedelta
-
-    from livery.workshop._state import sweep
-
-    for line in sweep(root, older_than=timedelta(hours=older_than_hours)):
-        print(line)
-
-
-@ci.task(name="janitor")
-def ci_janitor(
-    older_than: Annotated[
-        float, doc("hours a per-run ref may live before it counts as orphaned")
-    ] = 6.0,
-) -> None:
-    """Sweep the CI state store: orphaned per-run refs, and the windows.
-
-    A per-run ref outlives its run only when the run was cancelled or
-    died before its gate job could read and delete it; any older than
-    ``--older-than`` hours is dropped. Every declared series is
-    trimmed to its window. Idempotent: re-running is the recovery
-    procedure, and a second sweep finds nothing to do.
-    """
-    root = workspace_root()
-    if root is None:
-        fail("no workspace: no workshop.toml above the working directory")
-    janitor_flow(root, older_than_hours=older_than)
 
 
 @ci.task(name="run")

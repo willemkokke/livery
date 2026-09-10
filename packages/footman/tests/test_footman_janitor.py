@@ -1,4 +1,4 @@
-"""The maintenance family: footman's collect, then every plugin's sweeper."""
+"""The janitor: footman's collect, then every plugin's sweeper."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from livery.footman import _gc
-from livery.footman.tasks import maintenance
+from livery.footman.tasks import janitor
 
 
 def test_a_raising_or_unloadable_sweeper_never_stops_the_rest(
@@ -27,7 +27,7 @@ def test_a_raising_or_unloadable_sweeper_never_stops_the_rest(
         raise RuntimeError("the sweeper broke")
 
     monkeypatch.setattr(
-        maintenance,
+        janitor,
         "_sweepers",
         lambda: [
             ("acme.bad", bad),
@@ -35,16 +35,12 @@ def test_a_raising_or_unloadable_sweeper_never_stops_the_rest(
             ("acme.gone", "ImportError: no module"),
         ],
     )
+    monkeypatch.setattr(janitor._paths, "footman_cache_dir", lambda: tmp_path / "cache")
+    monkeypatch.setattr(janitor._paths, "footman_data_dir", lambda: tmp_path / "data")
     monkeypatch.setattr(
-        maintenance._paths, "footman_cache_dir", lambda: tmp_path / "cache"
+        janitor._paths, "footman_config_dir", lambda: tmp_path / "config"
     )
-    monkeypatch.setattr(
-        maintenance._paths, "footman_data_dir", lambda: tmp_path / "data"
-    )
-    monkeypatch.setattr(
-        maintenance._paths, "footman_config_dir", lambda: tmp_path / "config"
-    )
-    lines = maintenance.run_sweepers(dry_run=True, unattended=False)
+    lines = janitor.run_sweepers(dry_run=True, unattended=False)
     assert lines[0].startswith("  cache: ") and "nothing removed" in lines[0]
     assert (
         "  acme.bad: raised RuntimeError: the sweeper broke;"
@@ -72,13 +68,11 @@ def test_the_daily_child_runs_the_sweepers_unattended_and_silently(
 
     cache = tmp_path / "cache"
     cache.mkdir()
-    monkeypatch.setattr(maintenance, "_sweepers", lambda: [("acme", sweeper)])
-    monkeypatch.setattr(maintenance._paths, "footman_cache_dir", lambda: cache)
+    monkeypatch.setattr(janitor, "_sweepers", lambda: [("acme", sweeper)])
+    monkeypatch.setattr(janitor._paths, "footman_cache_dir", lambda: cache)
+    monkeypatch.setattr(janitor._paths, "footman_data_dir", lambda: tmp_path / "data")
     monkeypatch.setattr(
-        maintenance._paths, "footman_data_dir", lambda: tmp_path / "data"
-    )
-    monkeypatch.setattr(
-        maintenance._paths, "footman_config_dir", lambda: tmp_path / "config"
+        janitor._paths, "footman_config_dir", lambda: tmp_path / "config"
     )
     monkeypatch.setattr(sys, "argv", ["gc", str(cache), ""])
     _gc.main()
@@ -92,13 +86,35 @@ def test_a_sweep_without_sweepers_still_collects_the_cache(
 ) -> None:
     cache = tmp_path / "cache"
     cache.mkdir()
-    monkeypatch.setattr(maintenance, "_sweepers", list)
-    monkeypatch.setattr(maintenance._paths, "footman_cache_dir", lambda: cache)
+    monkeypatch.setattr(janitor, "_sweepers", list)
+    monkeypatch.setattr(janitor._paths, "footman_cache_dir", lambda: cache)
+    monkeypatch.setattr(janitor._paths, "footman_data_dir", lambda: tmp_path / "data")
     monkeypatch.setattr(
-        maintenance._paths, "footman_data_dir", lambda: tmp_path / "data"
+        janitor._paths, "footman_config_dir", lambda: tmp_path / "config"
     )
-    monkeypatch.setattr(
-        maintenance._paths, "footman_config_dir", lambda: tmp_path / "config"
-    )
-    lines = maintenance.run_sweepers(dry_run=False, unattended=False)
+    lines = janitor.run_sweepers(dry_run=False, unattended=False)
     assert lines == [f"  cache: 0 file(s) collected from {cache}"]
+
+
+def test_unattended_is_no_terminal_or_no_input(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    from livery.footman import context
+
+    class _Stdin:
+        def __init__(self, tty: bool) -> None:
+            self.tty = tty
+
+        def isatty(self) -> bool:
+            return self.tty
+
+    monkeypatch.setattr(context, "current", lambda: SimpleNamespace(no_input=False))
+    monkeypatch.setattr(sys, "stdin", _Stdin(tty=True))
+    assert janitor.unattended() is False
+    monkeypatch.setattr(sys, "stdin", _Stdin(tty=False))
+    assert janitor.unattended() is True
+    monkeypatch.setattr(context, "current", lambda: SimpleNamespace(no_input=True))
+    monkeypatch.setattr(sys, "stdin", _Stdin(tty=True))
+    assert janitor.unattended() is True

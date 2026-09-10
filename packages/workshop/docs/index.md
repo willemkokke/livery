@@ -79,15 +79,18 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
 - `fm release.prepare` and `fm release.verify` run the path-tag
   train (`packages/<pkg>/v<semver>`); a workshop release also
   publishes the template snapshot, tagged in lockstep.
-- `fm maintenance.sweep` sweeps the runner's directories: footman's
-  cache, then what the workshop leaves in the data directory, the
-  worktrees of closed issues and merged branches (also
-  `fm issue.sweep`, which `fm issue.start` runs first), and files
-  and folders no code writes any more; anything holding work stays
-  and is named,
-  the config directory is reported and never touched, and
-  `--dry-run` says what would go. The daily collector child runs
-  the offline rules unattended.
+- `fm janitor` sweeps the runner's directories and the state store:
+  footman's cache, then what the workshop leaves in the data
+  directory (the worktrees of closed issues and merged branches,
+  which `fm issue.start` sweeps first, and files and folders no code
+  writes any more), then every series the workshop keeps, in the
+  scope the run has: the checkout's local series on a machine, the
+  remote series too inside CI, where the merge point's gate job runs
+  it after every green run. Windows are enforced, aged rows and
+  orphaned refs go, anything holding work stays and is named, the
+  config directory is reported and never touched, and `--dry-run`
+  says what would go. A run with no terminal on stdin, the daily
+  collector child and a CI job, keeps to the offline rules.
 - `fm update` brings an instance up to date: floors to the latest
   released tags, content, render, then the submit flow. Nothing
   changed means nothing happens.

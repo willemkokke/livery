@@ -27,7 +27,7 @@ from pathlib import Path
 
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._packages import Package
-from livery.workshop._state import Keyed, RunContext
+from livery.workshop._state import Keyed, RunContext, slug
 
 #: The entry shape; another schema reads as a miss, named.
 SCHEMA = 1
@@ -36,10 +36,6 @@ SCHEMA = 1
 #: with every commit that touches it, so the store holds the recent
 #: history of one branch's tips, not an archive.
 WINDOW = 6
-
-#: The family: one series per check leg and suite, its entries named
-#: by their moment and closure.
-COVERAGE = Keyed("coverage", ("leg", "package"), window=WINDOW, schema=SCHEMA)
 
 #: The root files whose identity every suite's key carries: a pin
 #: change is a dependency change for every suite, whichever package
@@ -64,6 +60,35 @@ def workspace_suite(root: Path) -> Package | None:
         type="workspace",
         depends=(),
     )
+
+
+def current_keys(root: Path) -> set[tuple[str, ...]] | None:
+    """The keys the current matrix produces: each check leg with each stored unit.
+
+    The janitor drops a ref outside this set, so a leg the matrix no
+    longer produces, or a unit that no longer exists, stops holding
+    entries. ``None`` when the contract or the packages cannot be
+    read, and then nothing is dropped.
+    """
+    from livery.workshop._backends._python import units_of
+    from livery.workshop._packages import discover_packages
+    from livery.workshop._points import check_legs
+
+    try:
+        packages = discover_packages(root)
+        legs = check_legs(root)
+        units = units_of(root, packages)
+    except (Exception, SystemExit):
+        return None
+    return {(slug(leg), slug(unit.name)) for leg in legs for unit in units}
+
+
+#: The family: one series per check leg and suite, its entries named
+#: by their moment and closure; a series of a leg or unit the current
+#: matrix no longer produces is the janitor's to drop.
+COVERAGE = Keyed(
+    "coverage", ("leg", "package"), window=WINDOW, schema=SCHEMA, current=current_keys
+)
 
 
 @dataclass(frozen=True)

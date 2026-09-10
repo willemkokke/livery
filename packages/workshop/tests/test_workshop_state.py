@@ -552,72 +552,141 @@ def test_a_local_drop_is_idempotent_and_a_local_family_lists_its_keys(
     assert family.listed(work) == [("x", "z")]
 
 
-# --- the janitor -------------------------------------------------------------
+# --- the janitor: refusals first ------------------------------------------------
+
+HALVES = _state.Keyed("run", ("run", "leg"), stale_after=timedelta(hours=6))
+BOUNDED = _state.Series(
+    "bounded", window=3, ci_only=False, local=True, age=timedelta(days=7)
+)
 
 
-def test_sweep_drops_only_stale_run_refs_and_says_so(
-    repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+def _stamped(when: datetime) -> str:
+    return json.dumps({"schema": 1, "when": when.isoformat()})
+
+
+def _unknown(root: Path) -> set[tuple[str, ...]] | None:
+    return None
+
+
+def _only_a_x(root: Path) -> set[tuple[str, ...]] | None:
+    keys: set[tuple[str, ...]] = {("a", "x")}
+    return keys
+
+
+def test_the_janitor_never_touches_a_remote_series_from_a_machine(
+    repos: tuple[Path, Path],
 ) -> None:
     _, work = repos
-    old = _state.RUN_PREFIX + "11/check-a"
-    young = _state.RUN_PREFIX + "12/check-a"
-    monkeypatch.setenv("GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z")
-    monkeypatch.setenv("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
-    assert _state.put(work, old, {"row.json": "1"}, message="old") == ""
-    monkeypatch.delenv("GIT_COMMITTER_DATE")
-    monkeypatch.delenv("GIT_AUTHOR_DATE")
-    assert _state.put(work, young, {"row.json": "2"}, message="young") == ""
-    lines = _state.sweep(work, older_than=timedelta(hours=6))
-    assert any(
-        line.startswith(f"  {old}:") and line.endswith("dropped") for line in lines
-    )
-    assert any(
-        line.startswith(f"  {young}:") and line.endswith("kept") for line in lines
-    )
-    assert _state.read(work, old).files is None
-    assert _state.read(work, young).files == {"row.json": "2"}
-    # Re-running is the recovery procedure: the second sweep finds
-    # nothing stale and drops nothing.
-    again = _state.sweep(work, older_than=timedelta(hours=6))
-    assert not any(line.endswith("dropped") for line in again)
+    remote = _state.Series("remote-rows", window=1, ci_only=False)
+    files = {f"r{n}": _stamped(datetime(2026, 1, n, tzinfo=UTC)) for n in range(1, 4)}
+    assert _state.put(work, remote.ref, files, message="three") == ""
+    lines = _state.sweep(work, (remote, HALVES), remote=False)
+    assert lines == ["  remote series: swept inside CI, never from a machine"]
+    assert len(_state.read(work, remote.ref).files or {}) == 3
 
 
-def test_sweep_enforces_a_series_window(repos: tuple[Path, Path]) -> None:
-    _, work = repos
-    series = _state.Series("metrics", window=2)
-    rows = {f"run-{n:04d}.json": str(n) for n in range(4)}
-    assert _state.put(work, series.ref, rows, message="four") == ""
-    lines = _state.sweep(work, (series,))
-    assert f"  {series.ref}: 4 files trimmed to 2" in lines
-    assert _state.read(work, series.ref).files == {
-        "run-0002.json": "2",
-        "run-0003.json": "3",
-    }
-    assert f"  {series.ref}: within its window of 2" in _state.sweep(work, (series,))
-
-
-def test_sweep_trims_a_series_by_its_rows_stamps(repos: tuple[Path, Path]) -> None:
-    _, work = repos
-    series = _state.Series("trees", window=1, ci_only=False)
-    # The newest row has the smallest name: a name order would evict it.
-    files = {
-        "aa": json.dumps({"schema": 1, "when": "2026-01-02T00:00:00+00:00"}),
-        "zz": json.dumps({"schema": 1, "when": "2026-01-01T00:00:00+00:00"}),
-    }
-    assert _state.put(work, series.ref, files, message="two") == ""
-    assert f"  {series.ref}: 2 files trimmed to 1" in _state.sweep(work, (series,))
-    assert [row.name for row in series.rows(work).rows] == ["aa"]
-
-
-def test_sweep_names_a_remote_it_cannot_list(
+def test_a_family_that_cannot_be_listed_drops_nothing_and_says_so(
     repos: tuple[Path, Path], tmp_path: Path
 ) -> None:
     _, work = repos
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    lines = _state.sweep(work, now=datetime.now(UTC))
-    assert lines == [
-        f"  {_state.RUN_PREFIX}*: the remote could not be listed; nothing swept"
+    lines = _state.sweep(work, (HALVES,), remote=True)
+    assert lines == [f"  {_state.RUN_PREFIX}*: could not be listed; nothing swept"]
+
+
+def test_a_family_whose_current_keys_cannot_be_told_drops_no_orphan(
+    repos: tuple[Path, Path],
+) -> None:
+    _, work = repos
+    family = _state.Keyed("fam", ("leg", "unit"), ci_only=False, current=_unknown)
+    assert family.series("a", "x").put(work, {"r": {}}, message="m") == ""
+    lines = _state.sweep(work, (family,), remote=True)
+    assert lines[0] == (
+        f"  {family.prefix}*: the current keys could not be told; no orphan dropped"
+    )
+    assert family.listed(work) == [("a", "x")]
+
+
+def test_the_janitor_drops_stale_halves_and_keeps_young_ones(
+    repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, work = repos
+    old, young = HALVES.series("11", "check-a"), HALVES.series("12", "check-a")
+    half = json.dumps({"schema": 1, "job": "check"})
+    monkeypatch.setenv("GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z")
+    monkeypatch.setenv("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
+    assert _state.put(work, old.ref, {"row.json": half}, message="old") == ""
+    monkeypatch.delenv("GIT_COMMITTER_DATE")
+    monkeypatch.delenv("GIT_AUTHOR_DATE")
+    assert _state.put(work, young.ref, {"row.json": half}, message="young") == ""
+    said = _state.sweep(work, (HALVES,), remote=True, dry_run=True)
+    assert any(
+        line.startswith(f"  {old.ref}: ")
+        and line.endswith("old, past 6.0h; would drop")
+        for line in said
+    )
+    assert _state.read(work, old.ref).files == {"row.json": half}
+    lines = _state.sweep(work, (HALVES,), remote=True)
+    assert any(
+        line.startswith(f"  {old.ref}: ") and line.endswith("; dropped")
+        for line in lines
+    )
+    assert f"  {young.ref}: 1 row(s), within its bounds" in lines
+    assert _state.read(work, old.ref).files is None
+    assert _state.read(work, young.ref).files == {"row.json": half}
+    # Re-running is the recovery procedure: the second sweep drops nothing.
+    again = _state.sweep(work, (HALVES,), remote=True)
+    assert not any(line.endswith("dropped") for line in again)
+
+
+def test_the_janitor_trims_a_window_and_ages_rows_and_a_dry_run_only_says(
+    repos: tuple[Path, Path],
+) -> None:
+    _, work = repos
+    now = datetime.now(UTC)
+    files = {
+        "old1": _stamped(now - timedelta(days=9)),
+        "old2": _stamped(now - timedelta(days=8)),
+        "n4": _stamped(now - timedelta(hours=4)),
+        "n3": _stamped(now - timedelta(hours=3)),
+        "n2": _stamped(now - timedelta(hours=2)),
+        "n1": _stamped(now - timedelta(hours=1)),
+    }
+    assert _state.put(work, BOUNDED.ref, files, message="six") == ""
+    said = _state.sweep(work, (BOUNDED,), remote=False, dry_run=True)
+    assert said == [
+        f"  {BOUNDED.ref}: would drop 2 row(s) older than 7 day(s)",
+        f"  {BOUNDED.ref}: would drop 1 file(s) beyond its window of 3",
     ]
+    assert set(_state.read(work, BOUNDED.ref).files or {}) == set(files)
+    done = _state.sweep(work, (BOUNDED,), remote=False)
+    assert done == [
+        f"  {BOUNDED.ref}: dropped 2 row(s) older than 7 day(s)",
+        f"  {BOUNDED.ref}: dropped 1 file(s) beyond its window of 3",
+    ]
+    assert set(_state.read(work, BOUNDED.ref).files or {}) == {"n1", "n2", "n3"}
+    assert _state.sweep(work, (BOUNDED,), remote=False) == [
+        f"  {BOUNDED.ref}: 3 row(s), within its bounds"
+    ]
+
+
+def test_the_janitor_drops_a_key_no_current_producer_makes_and_keeps_the_rest(
+    repos: tuple[Path, Path],
+) -> None:
+    _, work = repos
+    family = _state.Keyed(
+        "cov", ("leg", "unit"), window=2, ci_only=False, current=_only_a_x
+    )
+    for key in (("a", "x"), ("b", "x")):
+        assert family.series(*key).put(work, {"r": {}}, message="m") == ""
+    gone = family.series("b", "x").ref
+    said = _state.sweep(work, (family,), remote=True, dry_run=True)
+    assert f"  {gone}: no current leg and unit produces it; would drop" in said
+    assert family.listed(work) == [("a", "x"), ("b", "x")]
+    done = _state.sweep(work, (family,), remote=True)
+    assert f"  {gone}: no current leg and unit produces it; dropped" in done
+    assert f"  {family.series('a', 'x').ref}: 1 row(s), within its bounds" in done
+    assert family.listed(work) == [("a", "x")]
 
 
 def test_the_run_context_base_is_the_pull_requests_and_empty_otherwise(

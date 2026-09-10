@@ -222,3 +222,27 @@ def test_the_nightly_point_runs_the_whole_check(
 
     _points.run_point(root, "nightly", "nightly", python="3.14", spawn=green)
     assert seen == [(["hse", "--profile=fm-profile.json", "check"], "nightly")]
+
+
+def test_the_merge_points_gate_job_ends_with_the_janitor_and_the_gates_does_not(
+    tmp_path: Path,
+) -> None:
+    root = _root(tmp_path)
+    merge = [entry.task for entry in _points.entries_for(root, "merge", "gate")]
+    assert merge[-2:] == ["ci.verified.stamp", "janitor"]
+    gate = [entry.task for entry in _points.entries_for(root, "gate", "gate")]
+    assert "janitor" not in gate and gate[-1] == "ci.verified.stamp"
+
+
+def test_the_check_legs_are_one_per_runner_and_gate_python(tmp_path: Path) -> None:
+    root = _root(
+        tmp_path,
+        '\n[ci]\nrunners = ["ubuntu-latest", "macos-latest"]\n'
+        'python-versions = ["3.13", "3.14"]\n',
+    )
+    assert _points.check_legs(root) == [
+        "check-ubuntu-latest-3.13",
+        "check-ubuntu-latest-3.14",
+        "check-macos-latest-3.13",
+        "check-macos-latest-3.14",
+    ]

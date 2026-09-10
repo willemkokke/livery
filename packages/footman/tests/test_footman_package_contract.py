@@ -40,7 +40,7 @@ def test_the_entry_names_keep_their_ecosystem_spelling() -> None:
         "footman.docs",
         "footman.env_files",
         "footman.self",
-        "footman.maintenance",
+        "footman.janitor",
         "footman.profile",
         "livery.footman",
     }
@@ -51,4 +51,4 @@ def test_the_entry_names_keep_their_ecosystem_spelling() -> None:
 def test_the_stock_builtin_is_self_only() -> None:
     from livery import footman
 
-    assert footman.BUILTIN == ("footman.self", "footman.maintenance")
+    assert footman.BUILTIN == ("footman.self", "footman.janitor")

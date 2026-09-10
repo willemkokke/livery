@@ -147,6 +147,25 @@ def test_a_closed_clean_pushed_tree_goes_through_its_checkouts_git(
     assert _sweep.sweep_worktrees(home, dry_run=False, unattended=False) == []
 
 
+def test_the_store_is_swept_in_the_checkouts_local_scope(
+    checkout: Path, tmp_path: Path
+) -> None:
+    facts: dict[str, Any] = {
+        "data_dir": tmp_path / "data",
+        "cache_dir": tmp_path / "cache",
+        "config_dir": tmp_path / "config",
+        "now": datetime.now(UTC),
+        "root": checkout,
+    }
+    lines = _sweep.sweep(dry_run=False, unattended=True, **facts)
+    for name in ("gate-record", "diagnostics"):
+        assert (
+            f"state store: refs/workshop-local/{name}: 0 row(s), within its bounds"
+            in lines
+        )
+    assert "state store: remote series: swept inside CI, never from a machine" in lines
+
+
 def test_the_rest_of_the_data_directory_is_bounded_or_reported(tmp_path: Path) -> None:
     data = tmp_path / "data"
     # The homes of rows the workshop no longer keeps on the machine.
@@ -167,9 +186,11 @@ def test_the_rest_of_the_data_directory_is_bounded_or_reported(tmp_path: Path) -
         "cache_dir": tmp_path / "cache",
         "config_dir": config,
         "now": datetime.now(UTC),
+        "root": None,
     }
     # A dry run first: it says, and changes nothing.
     said = _sweep.sweep(dry_run=True, unattended=False, **facts)
+    assert "state store: no checkout here; nothing swept" in said
     for name in ("checkouts.txt", "diagnostics", "livery-workshop"):
         assert f"{name}: no code writes it any more; would remove" in said
         assert (data / name).exists()

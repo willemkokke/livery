@@ -127,7 +127,7 @@ if TYPE_CHECKING:
 
 __version__ = "0.52.2"
 
-BUILTIN = ("footman.self", "footman.maintenance")
+BUILTIN = ("footman.self", "footman.janitor")
 """Stock footman's built-in task providers — what a project-less `fm` offers.
 
 Named here, beside `main()`, because BOTH doors need it: the `App` the
