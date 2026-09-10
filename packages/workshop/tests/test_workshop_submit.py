@@ -1039,6 +1039,35 @@ def test_the_gate_pays_the_whole_workspace_without_the_contract_key(
     assert "gate: the whole workspace" in capsys.readouterr().out
 
 
+def test_the_gate_skips_a_tree_this_machines_check_proved(
+    rig: tuple[FakeForge, SubmitGit],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from livery.workshop import _gate_record
+
+    fake, git = rig
+    monkeypatch.setattr("livery.footman.data_dir", lambda: git.root.parent / "home")
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr("livery.workshop._quality.check", _recording_check(calls))
+    _declare(git, "[workspace]\n\n[ci]\naffected-legs = true\n")
+    # No row: the gate runs. A full row for this tree: the gate is
+    # skipped, with and without --fix, and the line names the check.
+    _submit(fake, git, gate=True, armed=False, follow_to_verdict=False)
+    assert len(calls) == 1
+    assert "recorded" in _gate_record.remember(git.root, git, packages=None)
+    calls.clear()
+    _submit(fake, git, gate=True, fix=True, armed=False, follow_to_verdict=False)
+    assert calls == []
+    assert "proved green by fm check at" in capsys.readouterr().out
+    # A new commit is another tree: the gate runs again.
+    (git.root / "more.txt").write_text("more\n")
+    _git(git.root, "add", ".")
+    _git(git.root, "commit", "-m", "feat: more")
+    _submit(fake, git, gate=True, armed=False, follow_to_verdict=False)
+    assert len(calls) == 1
+
+
 def test_the_gate_narrows_against_the_base_when_the_legs_do(
     rig: tuple[FakeForge, SubmitGit],
     monkeypatch: pytest.MonkeyPatch,
