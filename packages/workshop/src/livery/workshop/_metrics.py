@@ -50,7 +50,7 @@ SCHEMA = 1
 #: The series the gate job writes: one file per run, the newest 300
 #: kept. Three hundred runs at a few kilobytes each keeps the tree
 #: under a megabyte and a quarter's trend in reach.
-SERIES = Series("metrics", window=300)
+SERIES = Series("metrics", window=300, schema=SCHEMA)
 
 #: The one file a leg puts on its per-run ref.
 ROW_FILE = "row.json"
@@ -284,7 +284,6 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
             " the rows carry their trace halves alone"
         )
     entry: dict[str, Any] = {
-        "schema": SCHEMA,
         "forge": run.forge,
         "run": run.run_id,
         "workflow": forge_run.workflow if forge_run else "",
@@ -331,13 +330,10 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
     if coverage is not None:
         entry["coverage"] = coverage
         lines.append(f"  coverage: {len(coverage)} package(s) recorded on the run")
-    why = put(
+    why = SERIES.put(
         root,
-        SERIES.ref,
-        {run_file(run.run_id): json.dumps(entry, sort_keys=True)},
+        {run_file(run.run_id): entry},
         message=f"metrics: run {run.run_id} at {sha[:12]}",
-        window=SERIES.window,
-        ci_only=True,
     )
     if why:
         lines.append(f"  {SERIES.ref}: {why}; the per-run refs stay for a re-run")
@@ -396,26 +392,14 @@ def render(
     the base median. Nothing yet, an unreadable series, and a row of
     another schema each say so.
     """
-    found = read(root, SERIES.ref)
+    found = SERIES.rows(root)
     if found.failed:
-        return [f"  {SERIES.ref}: could not be read ({found.reason})"]
-    if not found.files:
+        return [f"  {found.reason}"]
+    if not found.rows and not found.skipped:
         return ["  no timing rows yet: the gate job writes one per run"]
-    entries: list[dict[str, Any]] = []
-    lines: list[str] = []
-    for name in sorted(found.files):
-        try:
-            entry = json.loads(found.files[name])
-        except ValueError:
-            lines.append(f"  {name}: does not parse; skipped")
-            continue
-        if not isinstance(entry, dict) or entry.get("schema") != SCHEMA:
-            version = entry.get("schema") if isinstance(entry, dict) else "none"
-            lines.append(
-                f"  {name}: schema {version}, this reader speaks {SCHEMA}; skipped"
-            )
-            continue
-        entries.append(entry)
+    lines = [f"  {line}" for line in found.skipped]
+    # Oldest first: the trend reads the newest run at the end.
+    entries = [row.data for row in reversed(found.rows)]
     if not entries:
         lines.append("  no readable timing rows")
         return lines

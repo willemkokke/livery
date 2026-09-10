@@ -405,7 +405,7 @@ def test_render_says_nothing_yet_on_an_empty_series(work: Path) -> None:
 def test_render_names_an_unreadable_series(work: Path, tmp_path: Path) -> None:
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
     (line,) = _metrics.render(work)
-    assert line.startswith(f"  {_metrics.SERIES.ref}: could not be read")
+    assert line.startswith("  the metrics series could not be read: ")
 
 
 def _entry(run: int, *, wall: float, check: float) -> str:

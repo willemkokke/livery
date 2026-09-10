@@ -39,15 +39,11 @@ def test_an_empty_store_has_no_marks_and_no_reason(work: Path) -> None:
     assert _coverage_marks.marks(work) == ({}, "")
 
 
-def test_an_unreadable_store_names_its_reason(
-    work: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(
-        "livery.workshop._coverage_marks.read",
-        lambda root, ref: _state.Read(None, None, True, "remote down"),
-    )
+def test_an_unreadable_store_names_its_reason(work: Path, tmp_path: Path) -> None:
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
     current, why = _coverage_marks.marks(work)
-    assert current is None and "remote down" in why
+    assert current is None
+    assert why.startswith("the coverage/marks series could not be read: ")
 
 
 def test_a_bad_row_is_skipped_and_the_others_stand(work: Path) -> None:
@@ -69,7 +65,7 @@ def test_a_bad_row_is_skipped_and_the_others_stand(work: Path) -> None:
     )
     assert (
         _coverage_marks.write_mark(
-            work, package="packages/x", value=91.25, kind="first", by="7", ci_only=False
+            work, package="packages/x", value=91.25, kind="first", by="7"
         )
         == ""
     )
@@ -147,13 +143,12 @@ def test_the_newest_row_per_package_is_the_mark(work: Path) -> None:
                 kind=kind,
                 by="7" if kind != "accept" else "willem",
                 reason="a reason" if kind == "accept" else "",
-                ci_only=False,
             )
             == ""
         )
     assert (
         _coverage_marks.write_mark(
-            work, package="packages/y", value=50.0, kind="first", by="8", ci_only=False
+            work, package="packages/y", value=50.0, kind="first", by="8"
         )
         == ""
     )

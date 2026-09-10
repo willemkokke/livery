@@ -89,7 +89,7 @@ def test_an_unreadable_store_and_a_foreign_entry_name_their_reason(
     found, why = _verified.record(work, tree)
     assert found is None and "does not parse" in why
     found, why = _verified.record(work, "other")
-    assert found is None and "another schema" in why
+    assert found is None and "this reader speaks" in why
     shutil.rmtree(tmp_path / "origin.git")
     found, why = _verified.record(work, tree)
     assert found is None and "could not be read" in why
@@ -106,7 +106,7 @@ def test_the_stamp_refuses_outside_ci(
 
 def test_a_narrowed_leg_or_a_missing_row_leaves_the_tree_unstamped(work: Path) -> None:
     line = _verified.stamp_from_metrics(work, RUN, sha="a" * 40)
-    assert line.startswith("  verified: no stamp") and "no metrics series" in line
+    assert line == f"  verified: no stamp, run {RUN.run_id} left no row"
     narrowed = {
         "schema": _metrics.SCHEMA,
         "jobs": {

@@ -805,7 +805,6 @@ def enforce_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, flo
                 value=percent,
                 kind="first" if verdict.mark is None else "ratchet",
                 by=f"run {run.run_id}",
-                ci_only=True,
             )
             print(f"    {'recorded' if not why else 'not recorded: ' + why}")
     if problems:
