@@ -327,6 +327,15 @@ def check(
                     leg=run.leg,
                 )
             _scoped_check(subset, fix=fix)
+            # The render and provenance checks are the gate job's in CI,
+            # once per run; a local narrowed gate runs them too, since a
+            # new module changes the generated site configuration and the
+            # drift would otherwise surface only in CI's gate job.
+            if run is None:
+                from livery.workshop._provenance import provenance_check
+
+                template_check()
+                provenance_check()
             _remember_local(
                 root_for_ci,
                 run,
