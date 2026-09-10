@@ -70,3 +70,34 @@ def test_the_emitted_matrices_follow_the_declaration(tmp_path: Path) -> None:
     assert ci["jobs"]["check"]["strategy"]["matrix"]["python"] == ["3.14"]
     nightly = yaml.safe_load(files[".gitea/workflows/nightly.yml"])
     assert nightly["jobs"]["nightly"]["strategy"]["matrix"]["python"] == ["3.14"]
+
+
+def test_a_derived_pair_runs_its_newest_at_the_gate_and_the_pair_at_night(
+    tmp_path: Path,
+) -> None:
+    import yaml
+
+    from livery.workshop._ci_generate import generate
+
+    # Refusal first: a declared list runs at the gate as declared, on
+    # both shells; the contract chose.
+    (tmp_path / "declared").mkdir()
+    (tmp_path / "derived").mkdir()
+    declared = _root(tmp_path / "declared", 'python-versions = ["3.11", "3.14"]\n')
+    assert _pythons.gate_pythons(declared) == ["3.11", "3.14"]
+    # Derived from the floor: the newest at the gate, the pair at night.
+    root = _root(tmp_path / "derived")
+    assert _pythons.python_matrix(root) == ["3.11", "3.14"]
+    assert _pythons.gate_pythons(root) == ["3.14"]
+    for kind, home in (("gitea", ".gitea"), ("github", ".github")):
+        (root / "workshop.toml").write_text(
+            (root / "workshop.toml")
+            .read_text()
+            .replace('kind = "gitea"', f'kind = "{kind}"')
+        )
+        files = generate(root)
+        ci = yaml.safe_load(files[f"{home}/workflows/ci.yml"])
+        assert ci["jobs"]["check"]["strategy"]["matrix"]["python"] == ["3.14"], kind
+        nightly = yaml.safe_load(files[f"{home}/workflows/nightly.yml"])
+        matrix = nightly["jobs"]["nightly"]["strategy"]["matrix"]["python"]
+        assert matrix == ["3.11", "3.14"], kind

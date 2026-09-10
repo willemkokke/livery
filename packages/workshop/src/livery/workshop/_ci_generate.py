@@ -26,7 +26,7 @@ from typing import Any
 
 import livery.footman as footman
 from livery.workshop._contract import load_contract
-from livery.workshop._pythons import python_matrix
+from livery.workshop._pythons import gate_pythons, python_matrix
 
 #: Pinned action shas, one place; version comments ride each use.
 CHECKOUT = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1"
@@ -79,6 +79,7 @@ def _facts(root: Path) -> dict[str, Any]:
         "runners": list(ci.get("runners") or ["ubuntu-latest"]),
         "required_context": str(ci.get("required-context", "gate")),
         "python_versions": python_matrix(root),
+        "gate_pythons": gate_pythons(root),
         # The outer uv, the one tool that runs before the lock can
         # speak: pinned to the lock's own uv, so the bootstrap is not
         # the one unpinned link. Empty without a lock, and the
@@ -214,7 +215,8 @@ def _csv(values: list[Any], *, quoted: bool = False) -> str:
 def _github_gate(answers: dict[str, Any], prog: str) -> str:
     context = answers.get("required_context", "gate")
     runners = _csv(list(answers.get("runners", ["ubuntu-latest"])))
-    pythons = _csv(list(answers.get("python_versions", ["3.11"])), quoted=True)
+    # The check legs run the gate's Pythons; the nightly runs the matrix.
+    pythons = _csv(list(answers.get("gate_pythons", ["3.11"])), quoted=True)
     setup_uv = _setup_uv_step(answers)
     setup_uv_leg = _setup_uv_step(
         answers, cache_suffix="${{ matrix.os }}-${{ matrix.python }}"
@@ -599,7 +601,8 @@ def _gitea_gate(answers: dict[str, Any], prog: str) -> str:
     """
     context = answers.get("required_context", "gate")
     runners = _csv(list(answers.get("runners", ["ubuntu-latest"])))
-    pythons = _csv(list(answers.get("python_versions", ["3.11"])), quoted=True)
+    # The check legs run the gate's Pythons; the nightly runs the matrix.
+    pythons = _csv(list(answers.get("gate_pythons", ["3.11"])), quoted=True)
     first = next(iter(answers.get("runners", ["ubuntu-latest"])))
     rung = _rung_step(answers)
     requirements = _docs_requirements_step(answers)
