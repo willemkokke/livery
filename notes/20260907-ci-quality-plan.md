@@ -1870,4 +1870,8 @@ None. Every ruling raised in this plan was closed in the review of
   it, and now the gate job does, so the docstring says that. Measured
   before, from the metrics series: main's runs with every leg under a
   minute took 214 s to 298 s, a narrowed pull request's run outlived
-  its slowest leg by 209 s to 284 s.
+  its slowest leg by 209 s to 284 s. Proven on the loop 2026-09-10:
+  the workspace re-rendered its Gitea shell from these templates,
+  the member-only pull request's gate job carried the title check's
+  line, and the pass was whole (main's runs 1225 and 1227 skipped on
+  composed rows).
