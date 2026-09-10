@@ -108,6 +108,18 @@ nothing. A local series' `put` never pushes, by construction and by a
 test. The gate record and the diagnostics move onto it, and the data
 directory keeps no rows of the workshop's.
 
+**Main's coverage.** The coverage store is keyed by main: one record
+per check leg, `coverage/main/<leg>`, one row per unit with the unit's
+closure identity and its reached lines, written by the merge point's
+gate job from the union it judged and replaced in place at every
+merge; a pull request's run never writes it. A leg's own measurements
+ride its per-run ref beside its timing half, and the collect drops
+them with the ref. A leg skips a suite when main's record on that leg
+holds the unit at the same closure identity. The gate job's union is
+the per-run refs plus the carry from main's record; the deploy renders
+the site's coverage pages from main's record alone. No artifacts: the
+store is the one transport.
+
 **What does not change.** The rows' meanings, the verdicts, the union,
 the skips, the CI-only rule, the windows, and the printed lines the
 loop's proofs read (`reused from run`, `not recorded:`,
@@ -204,8 +216,34 @@ change.
    leg in one day). `fm test` prints the package's summed time beside
    its mark, and `fm ci.timings` gains the marks as rows and movers.
 
+7. **The coverage store keyed by main** (#417). One record per check
+   leg, `coverage/main/<leg>`, one row per unit with its closure
+   identity and its lines, written by the merge point's gate job from
+   the union it judged: fresh rows for the suites the legs ran, the
+   previous record's rows carried for the rest, units that no longer
+   exist removed, replaced in place at every merge. The legs' own
+   measurements ride their per-run refs beside the timing halves and
+   go with them at the collect. A leg skips a suite when main's record
+   on that leg holds the unit at the same closure identity, one read
+   per leg. The gate job's union is the per-run refs plus the carry;
+   the deploy renders the pages from main's record alone. The artifact
+   upload and download steps leave both shells, with the Gitea artifact
+   actions and the `coverage-data/` handling; the closure-keyed refs,
+   their window, and the family's current-keys rule go. Refusals
+   first: a leg that ran a suite and could not put its lines on its
+   per-run ref is red, as a missing upload is today; a unit that
+   neither the run nor main's record supplies is red by name, never a
+   smaller union; a pull request's run that would write main's record
+   is refused by the writer rule. What it costs: reuse only through
+   main, so a follow-up branch sharing a closure with another unmerged
+   branch reruns that suite, and a branch behind main reruns the
+   suites main changed since; the submit integrates first, so both are
+   rare. Sizes: about 370 KB per leg for the record, the same per leg
+   on a per-run ref while a run is in flight.
+
 Slices 1 to 3 are a day together; 4 and 5 another; 6 a day of its own,
-once the timing rows carry a fortnight of legs at the gate's Python.
+once the timing rows carry a fortnight of legs at the gate's Python; 7
+a day, before 6 or after it.
 
 ## Acceptance
 
@@ -224,6 +262,8 @@ once the timing rows carry a fortnight of legs at the gate's Python.
 - A package's suite over its speed mark by the margin for two runs is
   red, one noisy run is a warning naming the culprits, and
   `fm ci.timings` shows the marks beside the timings.
+- The shells upload and download no artifacts, and the deploy's pages
+  after any merge are the union that merge's gate judged.
 
 ## Open rulings
 
@@ -232,10 +272,9 @@ once the timing rows carry a fortnight of legs at the gate's Python.
   `_state.py`, where the transport already was, and slice 5 named
   the verbs `store.ls` and `store.show`; the module's rename is one
   commit when ruled.
-- Whether coverage entries keep one ref per leg and package, or one ref
-  per leg with the packages as files. The per-key shape keeps writes
-  small and concurrent legs apart; the per-leg shape halves the ref
-  count.
+- Resolved 2026-09-11: coverage keeps one record per leg with the
+  units as rows, main's, replaced in place at every merge; the
+  closure-keyed refs go with slice 7.
 - The local namespace: slice 3 took `refs/workshop-local/`, a
   namespace of its own that a mirror push of `refs/workshop/*` can
   never carry, over `refs/workshop/local/`. One constant to flip if
@@ -258,3 +297,11 @@ once the timing rows carry a fortnight of legs at the gate's Python.
   21:37 UTC: 83 metrics rows, 25 verified rows, 14 coverage refs,
   no marks, and 8 orphaned halves kept as unreadable because their
   legs are spelled with a dot; #415 drops them on the next merge.
+- 2026-09-11, Willem: the coverage store is keyed by main, one record
+  per leg replaced in place at every merge ("would storing the main
+  coverage as a separate series with window 1 so it always gets
+  overwritten make sense? To reduce special cases"); the per-run
+  lines ride the per-run ref, and the artifacts go. Filed as #417,
+  slice 7. Measured the same day: one stored entry is 8 KB to 108 KB
+  per unit, about 370 KB per leg per full run. The gate measures
+  lines, not branches; a switch to branches is a ruling of its own.
