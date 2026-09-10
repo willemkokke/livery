@@ -88,6 +88,7 @@ footman = "livery.footman.pytest_plugin"
 "livery.footman" = "livery.footman._docsgen"
 "footman.env_files" = "livery.footman.env_files"
 "footman.self" = "livery.footman.tasks.self_:tasks"
+"footman.maintenance" = "livery.footman.tasks.maintenance:tasks"
 "footman.profile" = "livery.footman.profile"
 
 [tool.uv.build-backend]

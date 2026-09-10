@@ -73,6 +73,15 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
 - `fm release.prepare` and `fm release.verify` run the path-tag
   train (`packages/<pkg>/v<semver>`); a workshop release also
   publishes the template snapshot, tagged in lockstep.
+- `fm maintenance.sweep` sweeps the runner's directories: footman's
+  cache, then what the workshop leaves in the data directory, the
+  worktrees of closed issues and merged branches (also
+  `fm issue.sweep`, which `fm issue.start` runs first), the
+  diagnostics and the gate record beyond their bounds, and files no
+  code writes any more; anything holding work stays and is named,
+  the config directory is reported and never touched, and
+  `--dry-run` says what would go. The daily collector child runs
+  the offline rules unattended.
 - `fm update` brings an instance up to date: floors to the latest
   released tags, content, render, then the submit flow. Nothing
   changed means nothing happens.

@@ -46,6 +46,12 @@ dependencies = [
 [project.entry-points."footman.builtin"]
 "livery.workshop" = "livery.workshop._tasks"
 
+# The runner's sweep: what the workshop leaves in the data directory
+# is the workshop's to bound, run by `fm maintenance.sweep` and the
+# daily collector child.
+[project.entry-points."footman.sweepers"]
+"livery.workshop" = "livery.workshop._sweep:sweep"
+
 # Every pytest this venv starts carries the context plugin: in a
 # metered CI leg it names each test's coverage context by node id,
 # so the leg splits one run's data per suite; elsewhere it is quiet.

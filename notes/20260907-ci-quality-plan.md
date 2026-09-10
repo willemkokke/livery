@@ -1933,3 +1933,24 @@ None. Every ruling raised in this plan was closed in the review of
   write; the sweeper (#390) drops it. A `--fix` gate that rewrote
   files leaves the tree dirty and so records nothing; the next check
   on the committed result does.
+- 2026-09-10 (issue #390, with #333 folded in), ruled by Willem
+  ("take them all in the order you wanted"): footman's cache
+  collector becomes a surface plugins sweep through. footman gains
+  the `maintenance` family, a built-in beside `self`:
+  `fm maintenance.sweep` runs the collector on demand and then every
+  sweeper registered under the `footman.sweepers` entry-point group,
+  each called with the directories, `dry_run`, `unattended`, and the
+  clock, returning its lines; one that raises is named and the rest
+  still run, and the daily collector child runs them all unattended
+  and silently after its own collect. The workshop registers its
+  sweeper: a worktree whose checkout is gone goes (offline, so
+  unattended too); a worktree whose issue is closed or whose branch
+  merged goes when it holds nothing only local, decided by the
+  refusal `issue.close` uses, and asks the forge, so on demand only;
+  the diagnostics and the gate record are re-bounded; `checkouts.txt`
+  goes; the config directory is reported, never touched; the loop's
+  workspace is reported by size and kept. `fm issue.sweep` runs the
+  worktree rule alone, and `fm issue.start` runs it before it opens a
+  worktree. Not covered: moving the workshop's state under
+  `data_dir() / "livery-workshop" /` (its own decision) and
+  `.claude/worktrees/` inside the checkout.
