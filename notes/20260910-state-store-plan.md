@@ -177,7 +177,16 @@ change.
    in), so a run that skipped every leg still publishes current pages;
    the docs' scattered descriptions of the record, the store, the
    marks, and the timings become one section, "The state store", in
-   `packages/workshop/docs/index.md`.
+   `packages/workshop/docs/index.md`. Landed 2026-09-10, #415:
+   `fm store.ls` and `fm store.show` in `_store_tasks.py`, over
+   `_series.DECLARED`; the deploy's pages pull every stored unit for
+   every check leg inside CI when the legs left no data
+   (`_python.stored_union`, a miss named and rendered around); the
+   docs section. The verbs are named `store`, the module stays
+   `_state.py` until the name is ruled. One fix rode along: a listed
+   key goes back to its ref verbatim (`Keyed.at`), since the halves
+   written before slice 2 spell the leg with a dot and the first
+   remote sweep kept them as unreadable.
 6. **The speed ratchet.** A `speed/marks` series beside the coverage
    marks, written by the gate job: per check leg and package, the
    summed test time the leg's row already records, which unlike the
@@ -220,8 +229,9 @@ once the timing rows carry a fortnight of legs at the gate's Python.
 
 - The module's and the verbs' names: `store` here; `state` and
   `series` are the alternatives. Slice 1 built the row layer in
-  `_state.py`, where the transport already was; the rename is one
-  commit, before slice 5 names the verbs.
+  `_state.py`, where the transport already was, and slice 5 named
+  the verbs `store.ls` and `store.show`; the module's rename is one
+  commit when ruled.
 - Whether coverage entries keep one ref per leg and package, or one ref
   per leg with the packages as files. The per-key shape keeps writes
   small and concurrent legs apart; the per-leg shape halves the ref
@@ -243,3 +253,8 @@ once the timing rows carry a fortnight of legs at the gate's Python.
   pages after a skipped run) fold into this plan. The test speed
   ratchet is slice 6 of this plan rather than an issue of its own:
   "definitely slice, why make more admin".
+- 2026-09-10: slices 1 to 5 landed the same day (#407, #409, #411,
+  #413, #415). The first remote sweep, on main's run after #414 at
+  21:37 UTC: 83 metrics rows, 25 verified rows, 14 coverage refs,
+  no marks, and 8 orphaned halves kept as unreadable because their
+  legs are spelled with a dot; #415 drops them on the next merge.

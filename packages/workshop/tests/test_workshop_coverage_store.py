@@ -290,6 +290,37 @@ def test_the_current_keys_are_every_check_leg_with_every_unit_or_none(
     }
 
 
+def test_the_stored_union_pulls_every_unit_and_names_the_misses(
+    work: Path, tmp_path: Path
+) -> None:
+    from livery.workshop._backends._python import stored_union
+
+    base, top = _packages(work)
+    git = GitOps(work)
+    packages = (base, top)
+    for package in packages:
+        assert (
+            _coverage_store.stamp(
+                work,
+                RUN,
+                leg=LEG,
+                package=package,
+                closure_key=_coverage_store.closure_id(git, packages, package),
+                sha="b" * 40,
+                files={f"{package.path}/src/x.py": [1, 2]},
+            )
+            == ""
+        )
+    into = tmp_path / "pages"
+    files, misses = stored_union(work, packages, [LEG, "check-other"], into)
+    assert sorted(path.name for path in files) == [
+        "reuse-livery-base.coverage",
+        "reuse-livery-top.coverage",
+    ]
+    assert all(path.parent == into / LEG for path in files)
+    assert misses == ["packages/base on check-other", "packages/top on check-other"]
+
+
 # --- the workspace's own tests, a unit keyed by the whole tree -----------------
 
 

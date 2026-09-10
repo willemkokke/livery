@@ -619,7 +619,19 @@ def test_the_janitor_drops_stale_halves_and_keeps_young_ones(
     monkeypatch.delenv("GIT_COMMITTER_DATE")
     monkeypatch.delenv("GIT_AUTHOR_DATE")
     assert _state.put(work, young.ref, {"row.json": half}, message="young") == ""
+    # A half spelled before the family made its parts ref-safe is
+    # listed as its ref spells it and dropped by that ref.
+    dotted = _state.RUN_PREFIX + "10/check-a-3.14"
+    monkeypatch.setenv("GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z")
+    monkeypatch.setenv("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
+    assert _state.put(work, dotted, {"row.json": half}, message="dotted") == ""
+    monkeypatch.delenv("GIT_COMMITTER_DATE")
+    monkeypatch.delenv("GIT_AUTHOR_DATE")
+    assert HALVES.at("10", "check-a-3.14").ref == dotted
     said = _state.sweep(work, (HALVES,), remote=True, dry_run=True)
+    assert any(
+        line.startswith(f"  {dotted}: ") and "would drop" in line for line in said
+    )
     assert any(
         line.startswith(f"  {old.ref}: ")
         and line.endswith("old, past 6.0h; would drop")
@@ -633,6 +645,7 @@ def test_the_janitor_drops_stale_halves_and_keeps_young_ones(
     )
     assert f"  {young.ref}: 1 row(s), within its bounds" in lines
     assert _state.read(work, old.ref).files is None
+    assert _state.read(work, dotted).files is None
     assert _state.read(work, young.ref).files == {"row.json": half}
     # Re-running is the recovery procedure: the second sweep drops nothing.
     again = _state.sweep(work, (HALVES,), remote=True)

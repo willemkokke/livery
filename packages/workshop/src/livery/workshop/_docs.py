@@ -1336,15 +1336,23 @@ def render_python_coverage(root: Path) -> list[str]:
     package declaring an ``htmlcov`` report gets its tree rendered
     from the workspace's measured data, scoped to its own files. The
     data is the CI union (``coverage-data/*/.coverage*`` downloaded
-    by the emitted docs job) when present, else the local
-    ``.coverage`` a gate run left; with neither, nothing renders and
-    the coverage page states the absence.
+    by the emitted docs job) when present; inside CI without it, the
+    units the store holds for every check leg, so a run whose legs
+    skipped on the verified record still publishes the union the
+    gate judged; else the local ``.coverage`` a gate run left. With
+    none, nothing renders and the coverage page states the absence.
     """
     import tempfile
 
     from livery.workshop._kinds import is_python_kind
 
     legs = sorted(root.glob("coverage-data/*/.coverage*"))
+    if not legs:
+        legs, misses = _stored_legs(root)
+        for miss in misses:
+            print(f"  coverage: {miss}: not in the store; the pages render without it")
+        if legs:
+            print(f"  coverage: the pages read {len(legs)} stored unit file(s)")
     if legs:
         with tempfile.TemporaryDirectory() as scratch:
             copies = []
@@ -1377,6 +1385,11 @@ def render_python_coverage(root: Path) -> list[str]:
             "-d",
             f"packages/{name}/htmlcov",
         )
+        if result.code != 0 and "No data to report" in result.stdout + result.stderr:
+            # A package the data never touched, a unit the store could
+            # not supply, say: its page states the absence.
+            print(f"  coverage: {name}: no measured data; its page states the absence")
+            continue
         if result.code != 0:
             fail(
                 f"coverage html for {name} exited {result.code}:\n"
@@ -1485,6 +1498,36 @@ def docs_publish() -> None:
         print("  pages seam: the forge's own workflow deploys; nothing to do here")
     else:
         print("  publish seam is none: skipping by declaration")
+
+
+def _stored_legs(root: Path) -> tuple[list[Path], list[str]]:
+    """In the merge point's deploy job, the stored units for every check leg.
+
+    Returns the files and the misses. Anywhere else nothing is pulled:
+    a pull request's docs job builds without the legs' data by design,
+    and a machine's build renders the local data a gate run left, or
+    states the absence.
+    """
+    import os
+
+    from livery.workshop._backends import _python
+    from livery.workshop._git_ops import GitError
+    from livery.workshop._points import check_legs
+    from livery.workshop._pytest_points import POINT_VARIABLE
+    from livery.workshop._state import LEG_VARIABLE, run_context
+
+    deploying = (
+        os.environ.get(POINT_VARIABLE) == "merge"
+        and os.environ.get(LEG_VARIABLE) == "deploy"
+    )
+    if run_context() is None or not deploying:
+        return [], []
+    try:
+        return _python.stored_union(
+            root, discover_packages(root), check_legs(root), root / "coverage-data"
+        )
+    except GitError as error:
+        return [], [f"the units' closures ({error})"]
 
 
 @docs_group.task(name="python-coverage")

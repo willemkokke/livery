@@ -684,11 +684,8 @@ def _reuse_suites(
     when the store cannot be read, and when it holds no entry for a
     unit's closure on a leg.
     """
-    from coverage import CoverageData
-
-    from livery.workshop._coverage_store import closure_id, find
+    from livery.workshop._coverage_store import closure_id
     from livery.workshop._git_ops import GitOps
-    from livery.workshop._state import slug
     from livery.workshop._verified import MARKER
 
     pending = [unit for unit in units_of(root, packages) if unit.path not in judged]
@@ -708,10 +705,8 @@ def _reuse_suites(
                 " the job runner sets WORKSHOP_LEG for every leg"
             )
         for package in pending:
-            found, why = find(
-                root, leg=label, package=package, closure_key=keys[package.path]
-            )
-            if found is None:
+            path, why = _pull_unit(root, package, keys[package.path], leg, label)
+            if path is None:
                 fail(
                     f"leg {leg.name}: no stored suite for {package.path} at"
                     f" closure {keys[package.path][:12]} on {label}"
@@ -720,17 +715,71 @@ def _reuse_suites(
                     " without the store, or the store was trimmed since;"
                     " a run of the full gate stores it again."
                 )
-            path = leg / f"reuse-{slug(package.name)}.coverage"
-            data = CoverageData(basename=str(path))
-            data.add_lines(dict(found.files))
-            data.write()
             written.append(path)
-            print(
-                f"  coverage: {package.path} on {label}: reused from run"
-                f" {found.run} ({len(found.files)} files)"
-            )
     judged.update(package.path for package in packages)
     return written
+
+
+def _pull_unit(
+    root: Path, package: Package, key: str, leg: Path, label: str
+) -> tuple[Path | None, str]:
+    """Write one stored unit's lines under *leg*; the file, or why not.
+
+    The unit is *package*'s suite at closure *key* as *label*
+    measured it. ``(None, "")`` is a plain miss; ``(None, reason)``
+    a store that could not be read or an entry that is not a row.
+    """
+    from coverage import CoverageData
+
+    from livery.workshop._coverage_store import find
+    from livery.workshop._state import slug
+
+    found, why = find(root, leg=label, package=package, closure_key=key)
+    if found is None:
+        return None, why
+    path = leg / f"reuse-{slug(package.name)}.coverage"
+    data = CoverageData(basename=str(path))
+    data.add_lines(dict(found.files))
+    data.write()
+    print(
+        f"  coverage: {package.path} on {label}: reused from run"
+        f" {found.run} ({len(found.files)} files)"
+    )
+    return path, ""
+
+
+def stored_union(
+    root: Path, packages: tuple[Package, ...], labels: list[str], into: Path
+) -> tuple[list[Path], list[str]]:
+    """Every stored unit on each leg in *labels*, under *into*; files and misses.
+
+    The site's coverage pages read this when the run's legs left no
+    data: a run whose legs skipped on the verified record still
+    publishes the union the gate judged. A unit the store cannot
+    supply on a leg is a named miss, never a refusal: the pages render
+    what there is.
+
+    Raises:
+        GitError: When a unit's closure is not in ``HEAD``.
+    """
+    from livery.workshop._coverage_store import closure_id
+    from livery.workshop._git_ops import GitOps
+
+    git = GitOps(root)
+    units = units_of(root, packages)
+    keys = {unit.path: closure_id(git, packages, unit) for unit in units}
+    written: list[Path] = []
+    misses: list[str] = []
+    for label in labels:
+        leg = into / label
+        leg.mkdir(parents=True, exist_ok=True)
+        for unit in units:
+            path, why = _pull_unit(root, unit, keys[unit.path], leg, label)
+            if path is None:
+                misses.append(f"{unit.path} on {label}" + (f" ({why})" if why else ""))
+            else:
+                written.append(path)
+    return written, misses
 
 
 def enforce_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, float]:
