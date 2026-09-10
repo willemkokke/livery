@@ -267,6 +267,98 @@ def test_collect_joins_the_forge_times_and_drops_the_halves(
     assert _state.list_refs(work, _state.RUN_PREFIX) == {}
 
 
+def test_collect_records_every_job_and_the_runs_wall(
+    work: Path, tmp_path: Path
+) -> None:
+    from typing import Any, cast
+
+    from livery.forge import Repository
+    from livery.forge._types import Job, Run
+
+    sha = "d" * 40
+    run = _state.RunContext("gitea", "77", "push", "refs/heads/main")
+    forge_run = Run(
+        id=77,
+        workflow="ci.yml",
+        head_sha=sha,
+        event="push",
+        status="running",
+        conclusion="",
+        created_at="2026-09-10T10:00:00Z",
+        started_at="2026-09-10T10:00:05Z",
+    )
+    jobs = (
+        Job(
+            1,
+            "check (a)",
+            "completed",
+            "success",
+            "2026-09-10T10:00:10Z",
+            "2026-09-10T10:02:10Z",
+            (),
+        ),
+        Job(
+            2,
+            "docs",
+            "completed",
+            "success",
+            "2026-09-10T10:00:12Z",
+            "2026-09-10T10:03:12Z",
+            (Step("Docs", "success", "2026-09-10T10:01:00Z", "2026-09-10T10:03:00Z"),),
+        ),
+        Job(3, "gate", "running", "", "2026-09-10T10:03:20Z", "", ()),
+        Job(4, "deploy", "queued", "", "", "", ()),
+    )
+
+    class _Checks:
+        def runs(self, *, head_sha: str = "", event: str = "") -> tuple[Run, ...]:
+            return (forge_run,)
+
+        def jobs(self, run_id: int) -> tuple[Job, ...]:
+            return jobs
+
+    class _Repo:
+        checks = _Checks()
+
+    trace = _trace(tmp_path / "t.json", tasks={"check": 4100.0})
+    assert (
+        _metrics.put_leg(work, run, job="check (a)", label="check-a", trace=trace) == ""
+    )
+    lines = _metrics.collect(work, cast(Repository, cast(Any, _Repo())), run, sha=sha)
+    assert f"  {_metrics.SERIES.ref}: run 77 recorded, 4 job(s)" in lines
+    rows = _state.read(work, _metrics.SERIES.ref).files
+    assert rows is not None
+    entry = json.loads(rows[_metrics.run_file("77")])
+    # Refusals first: a job the forge has not started carries no times
+    # and breaks nothing; the gate job, still running while it collects,
+    # is measured to the collection and marked incomplete.
+    deploy = entry["jobs"]["deploy"]
+    assert deploy["wall_ms"] is None and deploy["queued_ms"] is None
+    assert deploy["complete"] is False and deploy["status"] == "queued"
+    gate = entry["jobs"]["gate"]
+    assert gate["complete"] is False
+    assert gate["wall_ms"] == _metrics._between(
+        "2026-09-10T10:03:20Z", entry["collected_at"]
+    )
+    # A job without a leg row has the forge's times; the leg keeps its trace.
+    docs = entry["jobs"]["docs"]
+    assert docs["queued_ms"] == 12000.0 and docs["wall_ms"] == 180000.0
+    assert docs["steps"] == [{"name": "Docs", "ms": 120000.0}] and docs["complete"]
+    assert entry["jobs"]["check (a)"]["tasks"] == {"check": 4100.0}
+    assert entry["jobs"]["check (a)"]["wall_ms"] == 120000.0
+    # The run's own wall: its start to this collection.
+    assert entry["run_wall_ms"] == _metrics._between(
+        "2026-09-10T10:00:05Z", entry["collected_at"]
+    )
+    # Rendered as the run group beside the jobs that carry numbers; a
+    # job without times renders no group, and an older row without the
+    # field renders no run group and nothing breaks.
+    text = "\n".join(_metrics.render(work))
+    assert "\n  run\n" in text and "\n  docs\n" in text and "\n  gate\n" in text
+    assert "\n  deploy\n" not in text
+    assert _metrics._metrics({"jobs": {}}) == {}
+
+
 def test_collect_finds_a_pull_requests_run_under_the_events_head(
     work: Path, tmp_path: Path
 ) -> None:

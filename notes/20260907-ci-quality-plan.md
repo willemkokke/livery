@@ -1902,3 +1902,16 @@ None. Every ruling raised in this plan was closed in the review of
   figures are 1925 s to 1298 s. The real-build tests stay at the gate
   until their move to the nightly point is ruled, since it lowers the
   gate's union.
+- 2026-09-10 (issue #377), ruled by Willem ("377, leave macOS"): the
+  timings recorded the check legs only, so the part of a run no
+  narrowing touches was invisible: main's runs with every leg under a
+  minute took 214 s to 298 s and nothing in the record said where.
+  The collect step now records every job the forge lists, the legs
+  with their traces and the others (the docs build, the gate job
+  itself, the merge point's jobs) with the forge's queue and wall
+  times and steps; the gate job, still running while it collects, is
+  measured to the collection and marked incomplete, and a job not yet
+  started carries no times. The run's own wall, start to collection,
+  rides the row as `run_wall_ms` and renders as the `run` group, so
+  `fm ci.timings` shows the floor and its movers. macOS stays in the
+  matrix, ruled the same day.
