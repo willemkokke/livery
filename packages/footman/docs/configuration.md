@@ -92,6 +92,20 @@ runner claims, and what is therefore yours:
 | `data_dir()` | `builtins-<key>.json` (the discovered built-in list, one per Python environment) | any other name |
 | `config_dir()` | nothing — footman only ever *reads* `config.toml` and the tasks file here | your own files, though footman will not read them |
 
+### Sweeping what a plugin leaves
+
+`fm maintenance.sweep` runs the cache collector on demand and then every
+sweeper an installed package registers under the `footman.sweepers`
+entry-point group, printing each line of what went or why it stayed;
+`--dry-run` says what would go and removes nothing. A sweeper is a
+callable taking the keyword arguments `data_dir`, `cache_dir`,
+`config_dir`, `dry_run`, `unattended`, and `now` and returning the lines
+it wants printed. `unattended` is true when the daily collector child
+runs it with nobody watching: keep to what is quick, offline, and
+certain there, and leave the rules that ask a forge for the on-demand
+run. A sweeper that raises is named and the rest still run. A sweeper
+touches its own package's files and nobody else's.
+
 The safe convention is **one subfolder named after your distribution** —
 `data_dir() / "acme-devkit" / …` — which cannot collide with a future
 reserved name, since anything footman adds will be a file or folder named
