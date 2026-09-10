@@ -5,6 +5,9 @@ Each family is its own `footman.tasks` entry point, mounted with `plugin()`
 
 * `footman.docs`  → `livery.footman.tasks.docs:tasks` — task-documentation
   generation (`fm docs …`). The end-user-facing family.
+* `footman.maintenance` → `livery.footman.tasks.maintenance:tasks` — the
+  runner's directories swept on demand, footman's cache and every
+  plugin's state (`fm maintenance.sweep`); a built-in, like `self`.
 
 Where a family lands is the consumer's call — `into=` mounts it
 wherever you want. Nothing here is imported by a bare `import footman`, or on the

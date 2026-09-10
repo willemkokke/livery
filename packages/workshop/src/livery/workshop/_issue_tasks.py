@@ -89,6 +89,11 @@ def branch_name(kind: str, number: int, title: str) -> str:
     return f"{kind}/{number}-{_slug(title)}"
 
 
+def worktree_home(root: Path) -> Path:
+    """Where this repository's issue worktrees live under the runner's home."""
+    return footman.data_dir() / "worktrees" / root.name
+
+
 def worktree_path(root: Path, number: int, title: str) -> Path:
     """Where the issue's worktree lives: under the runner's home.
 
@@ -98,9 +103,7 @@ def worktree_path(root: Path, number: int, title: str) -> Path:
     runner's own data directory, asked of footman: a footman plugin
     owns no home of its own.
     """
-    import livery.footman as footman
-
-    return footman.data_dir() / "worktrees" / root.name / f"{number}-{_slug(title)}"
+    return worktree_home(root) / f"{number}-{_slug(title)}"
 
 
 def _open_numbers() -> list[str]:
@@ -360,6 +363,14 @@ def issue_start(
     git.fetch()
 
     if worktree:
+        # The home is swept before it grows: the worktrees of closed
+        # issues go, anything holding work stays and is named.
+        from livery.workshop._sweep import sweep_worktrees
+
+        for line in sweep_worktrees(
+            worktree_home(root), dry_run=False, unattended=False
+        ):
+            print(f"  {line}")
         path = worktree_path(root, work.number, work.title)
         if path.is_dir() or git.local_branch_exists(branch):
             # Re-running start is its recovery: the work is already
@@ -557,6 +568,27 @@ def _remove_local(root: Path, git: GitOps, branch: str) -> list[str]:
         git.delete_local_branch(branch)
         removed.append("the local branch")
     return removed
+
+
+@issue.task(name="sweep")
+def issue_sweep(
+    dry_run: Annotated[bool, doc("say what would go, remove nothing")] = False,
+) -> None:
+    """Remove the worktrees of closed issues and merged branches; name the rest.
+
+    The same refusal ``issue.close`` uses decides: a tree with
+    uncommitted changes or unpushed commits stays and is named, and so
+    does an open issue's. ``issue.start`` runs this before it opens a
+    worktree. Idempotent: a second sweep finds nothing to do.
+    """
+    from livery.workshop._sweep import sweep_worktrees
+
+    root = _workspace()
+    lines = sweep_worktrees(worktree_home(root), dry_run=dry_run, unattended=False)
+    for line in lines:
+        print(f"  {line}")
+    if not lines:
+        print(f"  {worktree_home(root)}: no worktrees")
 
 
 @issue.task(name="close", interactive=True)
