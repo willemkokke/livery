@@ -1915,3 +1915,21 @@ None. Every ruling raised in this plan was closed in the review of
   rides the row as `run_wall_ms` and renders as the `run` group, so
   `fm ci.timings` shows the floor and its movers. macOS stays in the
   matrix, ruled the same day.
+- 2026-09-10 (issue #380), ruled by Willem ("Yes, take them all in
+  the order you wanted"): the submit's gate skips a tree this
+  machine's own `fm check` already proved green. A green local gate
+  on a clean committed tree records HEAD's tree id, its scope (full,
+  or affected with the packages and the base tree the narrowing
+  compared against), and the time, in `gate-record.json` under the
+  workshop's folder in the runner's data directory; the submit's
+  gate reads it first and skips when a row of this tree covers the
+  gate it would run (a full row any gate, an affected row an
+  affected gate against the same base tree), naming the check and
+  when. Refusals: a dirty tree records nothing and proves nothing, a
+  red gate records nothing, a row older than seven days proves
+  nothing, an unreadable record runs the gate and is replaced by the
+  next green one, CI never writes or reads it, and `fm check` itself
+  never skips. The record bounds itself to the newest 200 rows on
+  write; the sweeper (#390) drops it. A `--fix` gate that rewrote
+  files leaves the tree dirty and so records nothing; the next check
+  on the committed result does.

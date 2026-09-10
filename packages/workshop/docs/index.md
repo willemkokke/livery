@@ -55,7 +55,11 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
 - `fm submit`: get the branch onto the remote, verified. Its local
   gate is the one the CI legs run: the whole workspace, or the
   affected gate against the base branch when the contract declares
-  `[ci] affected-legs`, and it says which. `--armed`
+  `[ci] affected-legs`, and it says which; when a green `fm check` on
+  this machine already proved the same tree at a covering scope
+  within the week, it skips that gate and names the check, from a
+  record in the runner's data directory that never leaves the
+  machine. `--armed`
   lets it land, `--fix` heals mechanical gate findings into the
   branch, and the follow classifies the verdict with stable exit
   codes. `fm submit.merge` lands a green, deliberately-unarmed PR;
