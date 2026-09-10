@@ -512,41 +512,41 @@ def _contract_root(
     return root
 
 
-def test_the_release_title_job_receives_the_actual_title(tmp_path: Path) -> None:
+def test_the_title_check_is_the_gate_jobs_first_entry(tmp_path: Path) -> None:
     from livery.workshop._ci_generate import generate
+    from livery.workshop._points import entries_for
 
+    # No shell has a title job: the legs start at once, and the gate
+    # job checks the title first, from the event payload, before the
+    # union and the verdict. Its checkout has the history the
+    # comparison against origin/main needs.
     for kind in ("github", "gitea"):
-        gate = generate(_contract_root(tmp_path, kind))[f".{kind}/workflows/ci.yml"]
-        job = gate.split("release-title:")[1]
-        # The points shell passes no title on either lane: the verb
-        # reads it from the event payload, and off a pull request or a
-        # release branch it is green, so the job carries no condition.
-        assert "fm ci.run --point=gate --job=release-title" in job
-        assert "TITLE" not in job
-        assert "    if:" not in job.split("steps:")[0]
+        root = _contract_root(tmp_path, kind)
+        gate = generate(root)[f".{kind}/workflows/ci.yml"]
+        assert "release-title" not in gate and "TITLE" not in gate
         assert "${ github" not in gate
-        # check-title diffs against origin/main: full history needed.
+        job = gate.split("  gate:")[1].split("  deploy:")[0]
         assert "fetch-depth: 0" in job
-        # The entry step provisions; the verb then runs bare.
-        assert "setup.sh github" in job
-        assert "uv run" not in job
+        first = entries_for(root, "gate", "gate")[0]
+        assert first.task == "workflow.release.check-title"
 
 
 def test_governance_jobs_are_runnable_where_they_land(tmp_path: Path) -> None:
     from livery.workshop._ci_generate import generate
 
     github = generate(_contract_root(tmp_path, "github"))
-    gov = github[".github/workflows/governance.yml"]
-    # The entry step provisions and persists; the verb runs bare.
+    # GitHub folds governance into ci.yml's merge point like gitea:
+    # the govern job runs on the push alone, and the admin secret is
+    # mounted there and nowhere else, in no other file either.
+    assert ".github/workflows/governance.yml" not in github
+    ci = github[".github/workflows/ci.yml"]
+    gov = ci.split("  govern:")[1].split("  dispatch:")[0]
     assert "setup.sh github" in gov
-    assert "fm workflow.configure" in gov
+    assert "fm ci.run --point=merge --job=govern" in gov
     assert "uv run" not in gov
-    # The admin secret is mounted in the governance job and nowhere
-    # else.
-    for path, content in github.items():
-        if "governance" not in path:
-            assert "FORGE_ADMIN_TOKEN" not in content
     assert "FORGE_ADMIN_TOKEN" in gov
+    for path, content in github.items():
+        assert "FORGE_ADMIN_TOKEN" not in content.replace(gov, ""), path
 
     gitea = generate(_contract_root(tmp_path, "gitea", runners=["host-linux"]))
     # The gitea lane folds governance into ci.yml's merge point: the
@@ -564,9 +564,6 @@ def test_governance_jobs_are_runnable_where_they_land(tmp_path: Path) -> None:
     assert "setup.sh github" in gov
     assert "runs-on: host-linux" in gov
     assert "setup-uv" not in gov
-    title_job = gitea[".gitea/workflows/ci.yml"].split("release-title:")[1]
-    assert "runs-on: host-linux" in title_job
-    assert "setup.sh github" in title_job
 
     gitlab = generate(_contract_root(tmp_path, "gitlab", floor="3.12"))
     section = gitlab[".gitlab-ci.yml"].split("governance-apply:")[1]

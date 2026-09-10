@@ -77,6 +77,12 @@ BUILTIN: tuple[Entry, ...] = (
     Entry("gate", "check", "ci.metrics.leg", ("--job={display}", "--label={label}")),
     Entry("gate", "check", "coverage.leg"),
     Entry("gate", "docs", "docs.build"),
+    # The title check first: it reads the pull request's title from
+    # the event payload, is green off a release branch, and refuses a
+    # release title the changelogs do not match before anything else
+    # is judged. It runs here so the legs never wait for a job of
+    # its own.
+    Entry("gate", "gate", "workflow.release.check-title"),
     # The render gate and the provenance check live here, not in the
     # check legs: a scoped leg skips them, and this job runs once on
     # every run, whatever the legs narrowed to.
@@ -86,11 +92,10 @@ BUILTIN: tuple[Entry, ...] = (
     # the run's row beside the timings.
     Entry("gate", "gate", "coverage.union"),
     Entry("gate", "gate", "ci.metrics.collect"),
-    Entry("gate", "gate", "ci.verdict", ("--needs=check,docs,release-title",)),
+    Entry("gate", "gate", "ci.verdict", ("--needs=check,docs",)),
     # After a green verdict only: a red verdict fails the job before
     # this entry, so the record never names a tree a run proved red.
     Entry("gate", "gate", "ci.verified.stamp"),
-    Entry("gate", "release-title", "workflow.release.check-title"),
     Entry("merge", "deploy", "docs.build"),
     Entry("merge", "deploy", "docs.publish"),
     Entry("merge", "govern", "workflow.configure", ("--if-changed",)),

@@ -95,13 +95,12 @@ def test_a_red_entry_fails_the_job_and_stops(tmp_path: Path) -> None:
 
 def test_the_builtin_jobs_of_each_point(tmp_path: Path) -> None:
     root = _root(tmp_path)
-    assert _points.jobs_of(root, "gate") == ("check", "docs", "gate", "release-title")
+    assert _points.jobs_of(root, "gate") == ("check", "docs", "gate")
     # The merge point inherits the gate's jobs and adds its own.
     assert _points.jobs_of(root, "merge") == (
         "check",
         "docs",
         "gate",
-        "release-title",
         "deploy",
         "govern",
         "dispatch",
@@ -175,11 +174,12 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
     # The render gate and the provenance check live in the gate job,
     # the one place a scoped leg cannot skip them.
     assert seen == [
+        ["hse", "workflow.release.check-title"],
         ["hse", "template.check"],
         ["hse", "provenance"],
         ["hse", "coverage.union"],
         ["hse", "ci.metrics.collect"],
-        ["hse", "ci.verdict", "--needs=check,docs,release-title"],
+        ["hse", "ci.verdict", "--needs=check,docs"],
         ["hse", "ci.verified.stamp"],
     ]
 

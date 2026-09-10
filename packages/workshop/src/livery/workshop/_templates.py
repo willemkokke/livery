@@ -489,6 +489,12 @@ def project_drift(root: Path) -> list[str]:
             )
         elif _lf(path.read_bytes()) != _lf(content.encode()):
             drift.append(f"{relative_generated}: differs from its generation")
+    from livery.workshop._ci_generate import retired_files
+
+    for path in retired_files(root):
+        drift.append(
+            f"{path.relative_to(root)}: retired, still present; the apply deletes it"
+        )
     return drift
 
 

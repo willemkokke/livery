@@ -1031,6 +1031,7 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
             "coverage: the union of 1 leg(s) and 1 reused suite(s)",
             "recorded as proved green by run",
             " on top of tree ",
+            "is not a release branch: nothing to check",
         ),
         forbidden=("unjudged this run", "not recorded:"),
     )

@@ -56,7 +56,11 @@ def _facts(root: Path) -> dict[str, Any]:
     answers hold identity alone.
     """
     from livery.workshop._compose import layer_template_tree
-    from livery.workshop._docs import docs_coverage_declared, docs_requirements
+    from livery.workshop._docs import (
+        docs_coverage_declared,
+        docs_requirements,
+        publish_seam,
+    )
     from livery.workshop._entry import locked_uv_version
     from livery.workshop._envfile import parse_env_file
     from livery.workshop._layers import layer_entries
@@ -90,6 +94,7 @@ def _facts(root: Path) -> dict[str, Any]:
         # then consume the check legs' coverage artifacts, so the
         # declaring packages' generators can render their trees.
         "docs_coverage": docs_coverage_declared(root),
+        "publish_seam": publish_seam(root),
         # The committed .repo.env's keys: the offline, deterministic
         # list of which secrets the rung step may carry into a job.
         "env_keys": sorted(parse_env_file(root / ".repo.env")),
@@ -217,15 +222,9 @@ def _github_gate(answers: dict[str, Any], prog: str) -> str:
     setup_uv_docs = _setup_uv_step(answers, cache_suffix="docs")
     requirements = _docs_requirements_step(answers)
     coverage_declared = bool(answers.get("docs_coverage"))
-    # The explicit condition keeps docs alive past a skipped ancestor:
-    # release-title is skipped on every non-release event, and GitHub
-    # propagates a skip through default conditions transitively.
-    docs_needs = (
-        "    needs: [check]\n"
-        "    if: ${{ !cancelled() && needs.check.result == 'success' }}\n"
-        if coverage_declared
-        else ""
-    )
+    # The deploy renders the site's coverage pages from the run's own
+    # legs; it plumbs their data only when a package declares a
+    # report. A pull request's docs job builds without them.
     coverage_step = (
         f"""      - name: Coverage artifacts for the site
         uses: {DOWNLOAD}
@@ -234,6 +233,35 @@ def _github_gate(answers: dict[str, Any], prog: str) -> str:
           path: coverage-data
 """
         if coverage_declared
+        else ""
+    )
+    # The pages seam is the forge's own act: the grant, the
+    # environment, and the two pages actions after the verb; another
+    # seam runs the verb alone, which publishes or says why not.
+    pages = answers.get("publish_seam", "pages") == "pages"
+    deploy_grant = (
+        """    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+"""
+        if pages
+        else ""
+    )
+    pages_steps = (
+        """      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
+"""
+        if pages
         else ""
     )
     enter = _enter_step()
@@ -247,9 +275,6 @@ on:
 
 jobs:
   check:
-    # The title check answers in seconds and is green off a release
-    # branch; the matrix waits for it so a refused title burns no legs.
-    needs: [release-title]
     # The leg pushes its timing row to the state store's namespace;
     # the ambient token needs the grant declared, since organisation
     # defaults are read-only.
@@ -309,10 +334,10 @@ jobs:
   # here, required through the gate context below, never inside the
   # local check.
   docs:
-{docs_needs}    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: {CHECKOUT}
-{setup_uv_docs}{requirements}{coverage_step}{enter}      - name: Docs
+{setup_uv_docs}{requirements}{enter}      - name: Docs
         run: {prog} ci.run --point=gate --job=docs
 
   # The one required context. Branch protection points here, so the
@@ -345,16 +370,54 @@ jobs:
         env:
           FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
         run: {prog} ci.run --point=gate --job=gate
-  release-title:
+
+  # The merge point's own jobs, on the push alone: the site's deploy
+  # through the contract's seam, the repository settings reconciled
+  # when the merge changed a contract or the owners file, and the
+  # release wave dispatched when a merged release is unpublished.
+  deploy:
+    if: github.event_name == 'push'
+    needs: [{context}]
+    runs-on: ubuntu-latest
+{deploy_grant}    steps:
+      - uses: {CHECKOUT}
+        with:
+          # The release view reads the receipt tags; a shallow
+          # tagless clone renders its no-tags fallback page instead.
+          fetch-tags: true
+{setup_uv_docs}{requirements}{coverage_step}{enter}      - name: Deploy
+        env:
+          FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
+        run: {prog} ci.run --point=merge --job=deploy
+{pages_steps}  govern:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: {CHECKOUT}
         with:
-          # check-title compares against origin/main, which a shallow
-          # checkout does not have.
+          # The commit's own file list decides whether anything is
+          # governed; a depth of one would read a squash as a root.
+          fetch-depth: 2
+{setup_uv}{enter}      - name: Govern
+        env:
+          FORGE_ADMIN_TOKEN: ${{{{ secrets.FORGE_ADMIN_TOKEN }}}}
+        run: {prog} ci.run --point=merge --job=govern
+  # The release wave is dispatched from here, after main's own
+  # verdict: the verb reads the manifest at HEAD and the receipts on
+  # the remote, and is green unless a merged release is unpublished.
+  dispatch:
+    if: github.event_name == 'push'
+    needs: [{context}]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: {CHECKOUT}
+        with:
+          # The commit that stamped the manifest can be far back.
           fetch-depth: 0
-{setup_uv}{enter}      - name: Release title
-        run: {prog} ci.run --point=gate --job=release-title
+{setup_uv}{enter}      - name: Dispatch
+        env:
+          FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
+        run: {prog} ci.run --point=merge --job=dispatch
 """
 
 
@@ -414,17 +477,12 @@ def _github_release(answers: dict[str, Any], prog: str) -> str:
     publisher = str(answers.get("templates_publisher", ""))
     wheel_labels = _wheel_runners(answers)
     wheels = bool(wheel_labels)
-    train_if = """>-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.pull_request.merged == true &&
-       startsWith(github.event.pull_request.head.ref, 'workflow/release/'))"""
     wheels_job = (
         f"""  # Every platform's wheels, built before the wave: the matrix
   # feeds the publish job through artifacts, so one release ships
   # the complete set. linux arm waits on a docker-capable arm
   # runner, the container seam's known constraint.
   wheels:
-    if: {train_if}
     strategy:
       fail-fast: false
       matrix:
@@ -433,12 +491,12 @@ def _github_release(answers: dict[str, Any], prog: str) -> str:
     steps:
       - uses: {CHECKOUT}
         with:
-          ref: ${{{{ inputs.ref || github.event.pull_request.merge_commit_sha }}}}
+          ref: ${{{{ inputs.ref }}}}
           fetch-depth: 0
 {setup_uv}{enter}      - name: Build this platform's wheels
         run: >-
           {prog} release.wheels
-          --ref="${{{{ inputs.ref || github.event.pull_request.merge_commit_sha }}}}"
+          --ref="${{{{ inputs.ref }}}}"
       - uses: {UPLOAD}
         with:
           name: wheels-${{{{ matrix.os }}}}
@@ -464,22 +522,19 @@ def _github_release(answers: dict[str, Any], prog: str) -> str:
 
 # The train: a workflow.release PR merges, this publishes its squash,
 # and the receipt tags are cut only after the index confirms each
-# member. A tag is a receipt, never a trigger. workflow_dispatch with
-# --ref is the recovery entry when a publish died mid-wave.
+# member. A tag is a receipt, never a trigger: the merge point's
+# dispatch job starts the wave at the release squash, and a hand
+# dispatch with --ref is the recovery entry when a publish died
+# mid-wave.
 on:
-  pull_request:
-    types: [closed]
-    branches: [main]
   workflow_dispatch:
     inputs:
       ref:
-        description: the release squash to publish (recovery)
-        required: false
-        default: ""
+        description: the release squash to publish
+        required: true
 
 jobs:
 {wheels_job}  publish:
-    if: {train_if}
 {needs_wheels}    runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -490,7 +545,7 @@ jobs:
     steps:
       - uses: {CHECKOUT}
         with:
-          ref: ${{{{ inputs.ref || github.event.pull_request.merge_commit_sha }}}}
+          ref: ${{{{ inputs.ref }}}}
           fetch-depth: 0
 {setup_uv}{collect_step}{rung}{enter}      # The ambient job token suffices here: the wave reads the forge
       # and pushes receipt tags, and a tag is never a trigger, so the
@@ -501,7 +556,7 @@ jobs:
           FORGE_TOKEN: ${{{{ github.token }}}}
         run: >-
           {prog} workflow.release.publish{prebuilt_flag}
-          --ref="${{{{ inputs.ref || github.event.pull_request.merge_commit_sha }}}}"
+          --ref="${{{{ inputs.ref }}}}"
 """
     if not answers.get("templates_artifact") or not publisher:
         return workflow
@@ -519,7 +574,7 @@ jobs:
     steps:
       - uses: {CHECKOUT}
         with:
-          ref: ${{{{ inputs.ref || github.event.pull_request.merge_commit_sha }}}}
+          ref: ${{{{ inputs.ref }}}}
 {setup_uv}{enter}      - name: Deploy key
         run: |
           mkdir -p ~/.ssh
@@ -564,9 +619,6 @@ on:
 
 jobs:
   check:
-    # The title check answers in seconds and is green off a release
-    # branch; the matrix waits for it so a refused title burns no legs.
-    needs: [release-title]
     strategy:
       fail-fast: false
       matrix:
@@ -652,16 +704,6 @@ jobs:
         env:
           FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
         run: {prog} ci.run --point=gate --job=gate
-  release-title:
-    runs-on: {first}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          # check-title compares against origin/main, which a shallow
-          # checkout does not have.
-          fetch-depth: 0
-{enter}      - name: Release title
-        run: {prog} ci.run --point=gate --job=release-title
 
   # The merge point's own jobs, on the push alone: the site's deploy
   # through the contract's seam, and the repository settings
@@ -964,33 +1006,6 @@ _CODEOWNERS_PATH = {
 }
 
 
-def _github_governance(answers: dict[str, Any], prog: str) -> str:
-    """The post-merge configure job: only governance paths spawn it.
-
-    The admin secret is mounted here and nowhere else; a failed
-    apply is a visible red job on main.
-    """
-    setup_uv = _setup_uv_step(answers)
-    enter = _enter_step()
-    return f"""name: governance
-on:
-  push:
-    branches: [main]
-    paths:
-      - workshop.toml
-      - packages/*/workshop.toml
-      - {_CODEOWNERS_PATH["github"]}
-jobs:
-  apply:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: {CHECKOUT}
-{setup_uv}{enter}      - run: {prog} workflow.configure
-        env:
-          FORGE_ADMIN_TOKEN: ${{{{ secrets.FORGE_ADMIN_TOKEN }}}}
-"""
-
-
 def _gitlab_governance(answers: dict[str, Any], prog: str) -> str:
     """GitLab's spelling: a pipeline job on the same pinned image."""
     python = next(iter(answers.get("python_versions", ["3.11"])))
@@ -1013,83 +1028,6 @@ governance-apply:
 """
 
 
-def _github_docs_deploy(answers: dict[str, Any], prog: str) -> str:
-    setup_uv = _setup_uv_step(answers)
-    requirements = _docs_requirements_step(answers)
-    enter = _enter_step()
-    coverage_declared = bool(answers.get("docs_coverage"))
-    if coverage_declared:
-        # The deploy consumes exactly its commit's merged coverage, so
-        # it runs after that commit's ci completes instead of on the
-        # push itself; a dispatch still deploys (its build states the
-        # absence on the coverage pages).
-        trigger = """on:
-  workflow_run:
-    workflows: [ci]
-    types: [completed]
-    branches: [main]
-  workflow_dispatch:
-"""
-        deploy_if = (
-            "    if: github.event_name == 'workflow_dispatch' ||"
-            " github.event.workflow_run.conclusion == 'success'\n"
-        )
-        checkout_ref = """        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-          # The release view reads the receipt tags; a shallow
-          # tagless clone renders its no-tags fallback page instead.
-          fetch-tags: true
-"""
-        coverage_step = f"""      - name: Coverage artifacts for the site
-        if: github.event_name == 'workflow_run'
-        uses: {DOWNLOAD}
-        with:
-          pattern: coverage-*
-          path: coverage-data
-          run-id: ${{{{ github.event.workflow_run.id }}}}
-          github-token: ${{{{ github.token }}}}
-"""
-    else:
-        trigger = """on:
-  push:
-    branches: [main]
-  workflow_dispatch:
-"""
-        deploy_if = ""
-        checkout_ref = "        with:\n          fetch-tags: true\n"
-        coverage_step = ""
-    return f"""name: docs
-
-# The pages seam: build on main, upload, deploy. What ships is the
-# same strict build the required CI job verified.
-{trigger}
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: false
-
-jobs:
-  deploy:
-{deploy_if}    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{{{ steps.deployment.outputs.page_url }}}}
-    steps:
-      - uses: {CHECKOUT}
-{checkout_ref}{setup_uv}{requirements}{coverage_step}{enter}      - name: Build the site, strict
-        run: {prog} docs.build
-      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
-        with:
-          path: site
-      - id: deployment
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
-"""
-
-
 def generate(root: Path) -> dict[str, str]:
     """Every generated CI file for *root*'s forge kind, by path.
 
@@ -1101,7 +1039,7 @@ def generate(root: Path) -> dict[str, str]:
     and a member layer ships the tree; an ordinary instance's
     release has no templates to publish.
     """
-    from livery.workshop._docs import publish_seam, zensical_config
+    from livery.workshop._docs import zensical_config
     from livery.workshop._entry import entry_script
     from livery.workshop._provenance import generated_header
 
@@ -1110,16 +1048,12 @@ def generate(root: Path) -> dict[str, str]:
     kind = str(facts["forge_kind"])
     header = generated_header("#")
     site = {"zensical.toml": zensical_config(root)}
-    seam = publish_seam(root)
     if kind == "github":
         files = {
             ".github/workflows/ci.yml": _github_gate(facts, prog),
             ".github/workflows/release.yml": _github_release(facts, prog),
             ".github/workflows/nightly.yml": _github_nightly(facts, prog),
-            ".github/workflows/governance.yml": _github_governance(facts, prog),
         }
-        if seam == "pages":
-            files[".github/workflows/docs.yml"] = _github_docs_deploy(facts, prog)
     elif kind == "gitea":
         # The docs deploy and the governance reconcile are merge-point
         # jobs of ci.yml: three files, whatever the seam.
@@ -1158,6 +1092,9 @@ def generated_files(root: Path) -> dict[Path, str]:
 RETIRED = (
     ".gitea/workflows/governance.yml",
     ".gitea/workflows/docs.yml",
+    ".github/workflows/governance.yml",
+    ".github/workflows/docs.yml",
+    ".github/workflows/release-legs.yml",
 )
 
 

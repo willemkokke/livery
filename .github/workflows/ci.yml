@@ -10,9 +10,6 @@ on:
 
 jobs:
   check:
-    # The title check answers in seconds and is green off a release
-    # branch; the matrix waits for it so a refused title burns no legs.
-    needs: [release-title]
     # The leg pushes its timing row to the state store's namespace;
     # the ambient token needs the grant declared, since organisation
     # defaults are read-only.
@@ -83,8 +80,6 @@ jobs:
   # here, required through the gate context below, never inside the
   # local check.
   docs:
-    needs: [check]
-    if: ${{ !cancelled() && needs.check.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -95,11 +90,6 @@ jobs:
           # every leg but the first fail its save with a
           # reservation warning.
           cache-suffix: docs
-      - name: Coverage artifacts for the site
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: coverage-*
-          path: coverage-data
       - name: Enter the workspace
         run: bash setup.sh github
       - name: Docs
@@ -140,18 +130,90 @@ jobs:
         env:
           FORGE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: fm ci.run --point=gate --job=gate
-  release-title:
+
+  # The merge point's own jobs, on the push alone: the site's deploy
+  # through the contract's seam, the repository settings reconciled
+  # when the merge changed a contract or the owners file, and the
+  # release wave dispatched when a merged release is unpublished.
+  deploy:
+    if: github.event_name == 'push'
+    needs: [gate]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The release view reads the receipt tags; a shallow
+          # tagless clone renders its no-tags fallback page instead.
+          fetch-tags: true
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.7"
+          # One cache identity per leg: a shared key makes
+          # every leg but the first fail its save with a
+          # reservation warning.
+          cache-suffix: docs
+      - name: Coverage artifacts for the site
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: coverage-*
+          path: coverage-data
+      - name: Enter the workspace
+        run: bash setup.sh github
+      - name: Deploy
+        env:
+          FORGE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: fm ci.run --point=merge --job=deploy
+      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
+  govern:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # check-title compares against origin/main, which a shallow
-          # checkout does not have.
+          # The commit's own file list decides whether anything is
+          # governed; a depth of one would read a squash as a root.
+          fetch-depth: 2
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.7"
+      - name: Enter the workspace
+        run: bash setup.sh github
+      - name: Govern
+        env:
+          FORGE_ADMIN_TOKEN: ${{ secrets.FORGE_ADMIN_TOKEN }}
+        run: fm ci.run --point=merge --job=govern
+  # The release wave is dispatched from here, after main's own
+  # verdict: the verb reads the manifest at HEAD and the receipts on
+  # the remote, and is green unless a merged release is unpublished.
+  dispatch:
+    if: github.event_name == 'push'
+    needs: [gate]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The commit that stamped the manifest can be far back.
           fetch-depth: 0
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.12.7"
       - name: Enter the workspace
         run: bash setup.sh github
-      - name: Release title
-        run: fm ci.run --point=gate --job=release-title
+      - name: Dispatch
+        env:
+          FORGE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: fm ci.run --point=merge --job=dispatch

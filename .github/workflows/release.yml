@@ -5,25 +5,19 @@ name: release
 
 # The train: a workflow.release PR merges, this publishes its squash,
 # and the receipt tags are cut only after the index confirms each
-# member. A tag is a receipt, never a trigger. workflow_dispatch with
-# --ref is the recovery entry when a publish died mid-wave.
+# member. A tag is a receipt, never a trigger: the merge point's
+# dispatch job starts the wave at the release squash, and a hand
+# dispatch with --ref is the recovery entry when a publish died
+# mid-wave.
 on:
-  pull_request:
-    types: [closed]
-    branches: [main]
   workflow_dispatch:
     inputs:
       ref:
-        description: the release squash to publish (recovery)
-        required: false
-        default: ""
+        description: the release squash to publish
+        required: true
 
 jobs:
   publish:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.pull_request.merged == true &&
-       startsWith(github.event.pull_request.head.ref, 'workflow/release/'))
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -34,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.ref || github.event.pull_request.merge_commit_sha }}
+          ref: ${{ inputs.ref }}
           fetch-depth: 0
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
@@ -50,7 +44,7 @@ jobs:
           FORGE_TOKEN: ${{ github.token }}
         run: >-
           fm workflow.release.publish
-          --ref="${{ inputs.ref || github.event.pull_request.merge_commit_sha }}"
+          --ref="${{ inputs.ref }}"
 
   # The home's release aftermath: the (composed) template artifact,
   # tagged in lockstep with the publishing layer's receipt.
@@ -61,7 +55,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.ref || github.event.pull_request.merge_commit_sha }}
+          ref: ${{ inputs.ref }}
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.12.7"

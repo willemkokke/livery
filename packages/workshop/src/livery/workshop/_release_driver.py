@@ -872,10 +872,10 @@ def workflow_release_check_title(
 
     The publish wave discovers a release from the squash's changed
     changelogs; the title is presentation. This job keeps the two
-    consistent, so a title that no longer names what the changelogs
-    prepared is refused here, in a non-required CI job, before it
-    can mislead a reader. Not a required context: a red here wants a
-    human look, never a parked merge. Without ``--title`` the title
+    consistent: the gate job runs this first, so a title that no
+    longer names what the changelogs prepared is refused before the
+    union and the verdict, and the merge waits for a person to fix
+    the title. Without ``--title`` the title
     comes from the runner's event payload; a run that is not a pull
     request, or a pull request off a release branch, is green here
     and says so.
