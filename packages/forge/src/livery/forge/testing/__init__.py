@@ -17,6 +17,8 @@ forge.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from livery.forge.testing._cassette import (
     FORMAT,
     REDACTED,
@@ -53,4 +55,20 @@ __all__ = [
     "ReplayOpener",
     "Scenario",
     "UrlOpener",
+    "shared_env_path",
 ]
+
+
+def shared_env_path() -> Path:
+    """The machine's own shared env file: the one live read a test may make.
+
+    The dev containers' credentials live there. A test that needs them
+    names this file by design and skips without it; every other read of
+    the runner's directories goes through footman, which the workshop's
+    test isolation points at a temporary directory for the session.
+    """
+    import os
+    from pathlib import Path
+
+    home = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    return Path(home) / "footman" / ".repo.shared.env"
