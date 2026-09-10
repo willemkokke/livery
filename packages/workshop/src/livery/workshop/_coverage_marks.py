@@ -26,8 +26,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from livery.workshop._coverage_store import slug
-from livery.workshop._state import Series
+from livery.workshop._state import Series, slug
 
 #: The marks: one row per write, the newest kept by the window; anyone
 #: may write, since an accept is a person's act, and the ratchet's

@@ -287,10 +287,6 @@ def test_run_context_reads_each_forge_and_is_none_locally() -> None:
         }
     )
     assert gitlab == _state.RunContext("gitlab", "42", "push", "main")
-    assert (
-        _state.run_ref(github, "check-ubuntu-3.14")
-        == "refs/workshop/run/7/check-ubuntu-3.14"
-    )
 
 
 def test_the_run_context_head_falls_back_when_the_payload_is_missing_or_junk(
@@ -392,7 +388,8 @@ def test_a_file_that_is_not_a_row_is_skipped_and_named(
     }
     assert _state.put(work, ROWS.ref, files, message="junk") == ""
     found = ROWS.rows(work)
-    assert found.skipped == (
+    assert found.skipped[0] == _state.Skipped("a", "does not parse")
+    assert tuple(str(item) for item in found.skipped) == (
         "a: does not parse; skipped",
         "b: schema 1, this reader speaks 2; skipped",
         "c: schema none, this reader speaks 2; skipped",
@@ -435,6 +432,41 @@ def test_the_window_keeps_the_newest_rows_by_their_stamps_not_their_names(
     for name in ("zz", "mm", "aa", "00"):
         assert ROWS.put(work, {name: {}}, message=name) == ""
     assert [row.name for row in ROWS.rows(work).rows] == ["00", "aa", "mm"]
+
+
+# --- keyed families: refusals first -------------------------------------------
+
+FAMILY = _state.Keyed("family", ("leg", "package"), window=2, ci_only=False)
+
+
+def test_a_family_refuses_a_key_of_the_wrong_arity_and_makes_safe_refs() -> None:
+    with pytest.raises(ValueError, match="keyed by leg, package; got 1 part"):
+        FAMILY.series("one")
+    series = FAMILY.series("check-ubuntu-3.14", "livery/forge")
+    assert series.ref == "refs/workshop/family/check-ubuntu-3-14/livery-forge"
+    assert series.window == 2 and not series.ci_only and series.schema == 1
+
+
+def test_a_family_that_cannot_be_listed_says_so(
+    repos: tuple[Path, Path], tmp_path: Path
+) -> None:
+    _, work = repos
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    assert FAMILY.listed(work) is None
+
+
+def test_a_family_lists_its_keys_and_leaves_other_refs_out(
+    repos: tuple[Path, Path],
+) -> None:
+    _, work = repos
+    assert FAMILY.listed(work) == []
+    for leg, package in (("b", "y"), ("a", "x"), ("a", "y")):
+        assert FAMILY.series(leg, package).put(work, {"r": {}}, message="m") == ""
+    # A ref of another arity under the prefix (the marks beside the
+    # coverage families) is not the family's.
+    assert _state.put(work, FAMILY.prefix + "marks", {"m": "1"}, message="s") == ""
+    assert FAMILY.listed(work) == [("a", "x"), ("a", "y"), ("b", "y")]
+    assert FAMILY.listed(work, "a") == [("a", "x"), ("a", "y")]
 
 
 # --- the janitor -------------------------------------------------------------

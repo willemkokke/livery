@@ -21,16 +21,13 @@ suite's closure, the files whose identity the key names. Reach for
 from __future__ import annotations
 
 import hashlib
-import json
-import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._packages import Package
-from livery.workshop._state import NAMESPACE, RunContext, put, read
+from livery.workshop._state import Keyed, RunContext
 
 #: The entry shape; another schema reads as a miss, named.
 SCHEMA = 1
@@ -39,6 +36,10 @@ SCHEMA = 1
 #: with every commit that touches it, so the store holds the recent
 #: history of one branch's tips, not an archive.
 WINDOW = 6
+
+#: The family: one series per check leg and suite, its entries named
+#: by their moment and closure.
+COVERAGE = Keyed("coverage", ("leg", "package"), window=WINDOW, schema=SCHEMA)
 
 #: The root files whose identity every suite's key carries: a pin
 #: change is a dependency change for every suite, whichever package
@@ -86,14 +87,9 @@ class Stored:
     files: dict[str, list[int]]
 
 
-def slug(name: str) -> str:
-    """*name* as a file-name and ref-name safe token."""
-    return re.sub(r"[^A-Za-z0-9_-]", "-", name)
-
-
 def suite_ref(leg: str, package: Package) -> str:
     """The ref holding *package*'s suite data as measured on *leg*."""
-    return f"{NAMESPACE}coverage/{slug(leg)}/{slug(package.name)}"
+    return COVERAGE.series(leg, package.name).ref
 
 
 def closure(packages: tuple[Package, ...], package: Package) -> tuple[Package, ...]:
@@ -169,7 +165,7 @@ def in_closure(packages: tuple[Package, ...], package: Package, filename: str) -
 def _entry_name(when: datetime, closure_key: str) -> str:
     """The entry's file name: its moment to the microsecond, then its closure.
 
-    The window keeps the newest names in sort order, so the moment
+    A read picks the newest entry for a closure by name, so the moment
     leads and is fine enough that two stamps never share a name.
     """
     return f"{when.strftime('%Y%m%dT%H%M%S.%fZ')}--{closure_key}"
@@ -193,25 +189,19 @@ def stamp(
     """
     if not leg:
         return "refusing: the leg has no label, so the measurement has no key"
-    now = datetime.now(UTC)
     entry = {
-        "schema": SCHEMA,
         "leg": leg,
         "package": package.path,
         "closure": closure_key,
         "run": run.run_id,
         "sha": sha,
         "forge": run.forge,
-        "when": now.isoformat(timespec="microseconds"),
         "files": {name: sorted(lines) for name, lines in sorted(files.items())},
     }
-    return put(
+    return COVERAGE.series(leg, package.name).put(
         root,
-        suite_ref(leg, package),
-        {_entry_name(now, closure_key): json.dumps(entry, sort_keys=True)},
+        {_entry_name(datetime.now(UTC), closure_key): entry},
         message=f"coverage: {package.path} on {leg} by run {run.run_id}",
-        window=WINDOW,
-        ci_only=True,
     )
 
 
@@ -227,24 +217,24 @@ def find(
     """
     if not leg:
         return None, ""
-    found = read(root, suite_ref(leg, package))
-    if found.files is None:
-        return None, (
-            f"the store could not be read: {found.reason}" if found.failed else ""
-        )
-    names = sorted(name for name in found.files if name.endswith(f"--{closure_key}"))
-    if not names:
+    found = COVERAGE.series(leg, package.name).rows(root)
+    if found.failed:
+        return None, found.reason
+    suffix = f"--{closure_key}"
+    rows = {row.name: row.data for row in found.rows if row.name.endswith(suffix)}
+    bad = {item.name: item.why for item in found.skipped if item.name.endswith(suffix)}
+    if not rows and not bad:
         return None, ""
-    text = found.files[names[-1]]
-    try:
-        entry: Any = json.loads(text)
-    except ValueError:
-        return None, f"the entry {names[-1]} does not parse"
-    if not isinstance(entry, dict) or entry.get("schema") != SCHEMA:
-        return None, f"the entry {names[-1]} is of another schema"
+    # The names lead with the moment, so the newest entry sorts last.
+    # A newest entry that is not a row is a reason, never a miss: the
+    # leg runs the suite fresh and its stamp replaces the entry.
+    newest = max([*rows, *bad])
+    if newest in bad:
+        return None, f"the entry {newest}: {bad[newest]}"
+    entry = rows[newest]
     raw = entry.get("files")
     if not isinstance(raw, dict):
-        return None, f"the entry {names[-1]} carries no files"
+        return None, f"the entry {newest} carries no files"
     files = {
         str(name): [int(line) for line in lines]
         for name, lines in raw.items()

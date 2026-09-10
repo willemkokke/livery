@@ -158,7 +158,7 @@ def test_the_leg_row_reads_tasks_waits_and_packages(tmp_path: Path) -> None:
     )
     row, why = _metrics.leg_row(trace, job=JOB)
     assert why == "" and row is not None
-    assert row["schema"] == _metrics.SCHEMA and row["job"] == JOB
+    assert row["job"] == JOB and "schema" not in row
     assert row["tasks"] == {"check": 4640.0, "check/test/test": 2030.0}
     assert row["waits_ms"] == {"serial": 250.0}
     # Every phase counts toward the package's time; only calls count tests.
@@ -170,6 +170,15 @@ def test_the_leg_row_reads_tasks_waits_and_packages(tmp_path: Path) -> None:
 
 
 # --- the collect: refusals first ----------------------------------------------
+
+
+def test_the_per_run_family_spells_the_janitors_prefix_and_safe_refs() -> None:
+    assert _metrics.RUNS.prefix == _state.RUN_PREFIX
+    run = _state.RunContext("github", "7", "push", "refs/heads/main")
+    assert (
+        _metrics.run_ref(run, "check-ubuntu-3.14")
+        == "refs/workshop/run/7/check-ubuntu-3-14"
+    )
 
 
 def test_collect_says_so_when_no_leg_left_a_row(work: Path) -> None:
@@ -185,7 +194,7 @@ def test_collect_skips_a_row_of_another_schema_and_names_it(work: Path) -> None:
     fake = FakeForge()
     fake.create_repo("owner", "repo")
     repo = fake.repository("owner", "repo")
-    ref = _state.run_ref(RUN, "check-a")
+    ref = _metrics.run_ref(RUN, "check-a")
     assert (
         _state.put(
             work,
@@ -196,10 +205,10 @@ def test_collect_skips_a_row_of_another_schema_and_names_it(work: Path) -> None:
         == ""
     )
     lines = _metrics.collect(work, repo, RUN, sha="a" * 40)
-    assert any(
-        line.startswith(f"  {ref}: schema 99, this reader speaks {_metrics.SCHEMA}")
-        for line in lines
-    )
+    assert (
+        f"  {ref}: {_metrics.ROW_FILE}: schema 99, this reader speaks"
+        f" {_metrics.SCHEMA}; skipped"
+    ) in lines
     assert lines[-1] == f"  run {RUN.run_id}: no leg left a row; nothing collected"
     # The skipped half is kept: nothing landed, so nothing is dropped.
     assert _state.read(work, ref).files is not None
@@ -252,7 +261,7 @@ def test_collect_joins_the_forge_times_and_drops_the_halves(
     assert _metrics.put_leg(work, run, job="gate", label="gate", trace=trace) == ""
     lines = _metrics.collect(work, repo, run, sha=sha)
     assert f"  {_metrics.SERIES.ref}: run {run.run_id} recorded, 1 job(s)" in lines
-    assert f"  {_state.run_ref(run, 'gate')}: dropped" in lines
+    assert f"  {_metrics.run_ref(run, 'gate')}: dropped" in lines
     rows = _state.read(work, _metrics.SERIES.ref).files
     assert rows is not None
     entry = json.loads(rows[_metrics.run_file(run.run_id)])

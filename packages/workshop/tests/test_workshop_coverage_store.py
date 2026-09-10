@@ -119,7 +119,7 @@ def test_the_stamp_refuses_outside_ci(
 
 
 def test_an_unreadable_store_and_a_foreign_entry_name_their_reason(
-    work: Path, monkeypatch: pytest.MonkeyPatch
+    work: Path, tmp_path: Path
 ) -> None:
     base, _top = _packages(work)
     ref = _coverage_store.suite_ref(LEG, base)
@@ -133,7 +133,7 @@ def test_an_unreadable_store_and_a_foreign_entry_name_their_reason(
         == ""
     )
     found, why = _coverage_store.find(work, leg=LEG, package=base, closure_key="a" * 64)
-    assert found is None and "another schema" in why
+    assert found is None and "this reader speaks" in why
     assert (
         _state.put(
             work, ref, {"20260102T000000Z--" + "a" * 64: "not json"}, message="garbled"
@@ -142,12 +142,25 @@ def test_an_unreadable_store_and_a_foreign_entry_name_their_reason(
     )
     found, why = _coverage_store.find(work, leg=LEG, package=base, closure_key="a" * 64)
     assert found is None and "does not parse" in why
-    monkeypatch.setattr(
-        "livery.workshop._coverage_store.read",
-        lambda root, ref: _state.Read(None, None, True, "remote down"),
+    # A good stamp is newer than both and wins; a garbled entry newer
+    # still is a reason again, never a silent fall-back to the stamp.
+    why = _coverage_store.stamp(
+        work, RUN, leg=LEG, package=base, closure_key="a" * 64, sha="b" * 40, files={}
+    )
+    assert why == ""
+    found, why = _coverage_store.find(work, leg=LEG, package=base, closure_key="a" * 64)
+    assert why == "" and found is not None and found.run == RUN.run_id
+    assert (
+        _state.put(
+            work, ref, {"20991231T000000Z--" + "a" * 64: "not json"}, message="newer"
+        )
+        == ""
     )
     found, why = _coverage_store.find(work, leg=LEG, package=base, closure_key="a" * 64)
-    assert found is None and "remote down" in why
+    assert found is None and "does not parse" in why
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    found, why = _coverage_store.find(work, leg=LEG, package=base, closure_key="a" * 64)
+    assert found is None and "could not be read" in why
 
 
 def test_the_closure_id_refuses_a_directory_head_lacks(work: Path) -> None:

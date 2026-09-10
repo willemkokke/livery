@@ -211,7 +211,7 @@ def test_the_marker_reaches_the_legs_row(work: Path) -> None:
     assert (
         _metrics.put_leg(work, RUN, job="check (a)", label="check-a", trace=trace) == ""
     )
-    found = _state.read(work, _state.run_ref(RUN, "check-a"))
+    found = _state.read(work, _metrics.run_ref(RUN, "check-a"))
     assert found.files is not None
     row = json.loads(found.files[_metrics.ROW_FILE])
     assert row["scope"] == {
