@@ -124,6 +124,26 @@ def _isolated_data_home(tmp_path_factory, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _root_restored():
+    """Every test hands the global registry back the way it found it.
+
+    Registration into the root is this suite's subject: tests import
+    modules that register, mount providers, and run inner sessions
+    whose files register at collection. The workshop's isolation
+    plugin fails a test that leaves tasks behind, so the leftovers
+    are handed back here, before that guard looks.
+    """
+    from livery.footman import registry
+
+    tasks, groups = dict(registry.root.tasks), dict(registry.root.groups)
+    yield
+    registry.root.tasks.clear()
+    registry.root.tasks.update(tasks)
+    registry.root.groups.clear()
+    registry.root.groups.update(groups)
+
+
+@pytest.fixture(autouse=True)
 def _stock_brand_locations():
     """Every test starts reading stock footman's locations.
 
