@@ -385,13 +385,24 @@ def test_the_deploy_emitters_follow_the_seam(tmp_path: Path) -> None:
         '[workspace]\n[forge]\nkind = "github"\nowner = "acme"\n'
     )
     files = generate(root)
-    assert ".github/workflows/docs.yml" in files
-    assert "deploy-pages" in files[".github/workflows/docs.yml"]
+    # GitHub folds the deploy into ci.yml's merge point: the pages
+    # seam adds the pages actions after the verb; another seam runs
+    # the verb alone, which publishes through the seam or says why not.
+    assert ".github/workflows/docs.yml" not in files
+    deploy = files[".github/workflows/ci.yml"].split("  deploy:")[1]
+    deploy = deploy.split("  govern:")[0]
+    assert "fm ci.run --point=merge --job=deploy" in deploy
+    assert "deploy-pages" in deploy and "github-pages" in deploy
     (root / "workshop.toml").write_text(
         '[workspace]\n[docs]\npublish = "none"\n'
         '[forge]\nkind = "github"\nowner = "acme"\n'
     )
-    assert ".github/workflows/docs.yml" not in generate(root)
+    files = generate(root)
+    assert ".github/workflows/docs.yml" not in files
+    deploy = files[".github/workflows/ci.yml"].split("  deploy:")[1]
+    deploy = deploy.split("  govern:")[0]
+    assert "fm ci.run --point=merge --job=deploy" in deploy
+    assert "deploy-pages" not in deploy and "github-pages" not in deploy
     (root / "workshop.toml").write_text(
         '[workspace]\n[forge]\nkind = "gitea"\nowner = "acme"\n'
     )
@@ -1089,7 +1100,7 @@ def test_the_emitted_plumbing_follows_the_declaration(tmp_path: Path) -> None:
     )
     assert "coverage-data" not in bare_docs_job
     assert "needs:" not in bare_docs_job
-    assert "workflow_run" not in files[".github/workflows/docs.yml"]
+    assert ".github/workflows/docs.yml" not in files
     _declare_generators(
         root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
     )
@@ -1100,12 +1111,11 @@ def test_the_emitted_plumbing_follows_the_declaration(tmp_path: Path) -> None:
     files = generate(root)
     gate = files[".github/workflows/ci.yml"]
     docs_job = gate.split("  docs:")[1].split("  gate:")[0]
-    # The docs job waits on the matrix and downloads its legs' data.
-    assert "needs: [check]" in docs_job
-    assert "pattern: coverage-*" in docs_job
-    deploy = files[".github/workflows/docs.yml"]
-    # The deploy runs after its commit's ci and downloads that run's
-    # artifacts natively; a dispatch still deploys.
-    assert "workflow_run" in deploy
-    assert "run-id: ${{ github.event.workflow_run.id }}" in deploy
-    assert "workflow_dispatch" in deploy
+    # The pull request's docs job builds beside the legs and never
+    # waits for their data: nobody reads a pull request's coverage
+    # page. The deploy on main renders the pages from the run's own
+    # legs, downloaded in the same run.
+    assert "needs:" not in docs_job and "coverage-*" not in docs_job
+    deploy = gate.split("  deploy:")[1].split("  govern:")[0]
+    assert "pattern: coverage-*" in deploy
+    assert "workflow_run" not in gate and "run-id:" not in gate

@@ -1846,3 +1846,32 @@ None. Every ruling raised in this plan was closed in the review of
   skipped the gate with the union reusing every unit; the note-only
   pull request's run 1217 composed too, and main's run 1218 after
   its squash skipped.
+- 2026-09-10 (issue #384), the GitHub half of the governance and
+  docs fold ruled 2026-09-07, and two orderings that cost every pull
+  request wall time: the GitHub `ci.yml` is now the shell the Gitea
+  one is. The merge point's `deploy`, `govern`, and `dispatch` jobs
+  run inside it behind the push filter: `govern` the only job that
+  mounts the admin secret, `deploy` carrying the pages grant, the
+  environment, and the two pages actions after the verb for the
+  pages seam and the verb alone for any other, rendering the coverage
+  pages from the run's own legs; `dispatch` starting the release wave,
+  whose `release.yml` is dispatch-only on GitHub too (the closed pull
+  request trigger and its decision expression are gone). The title
+  check is the gate job's first entry on both shells, so the legs
+  start at once instead of waiting a minute for a job that is green
+  off a release branch; the pull request's docs job builds beside the
+  legs, since nobody reads a pull request's coverage page. The
+  emitted file target on GitHub is three (ci, release, nightly):
+  `RETIRED` names GitHub's `governance.yml` and `docs.yml`, and
+  `release-legs.yml`, which the release redesign had stopped
+  emitting without ever deleting, and `fm template.check` now refuses
+  a retired file that is still present. The title verb's docstring
+  called it a non-required context; the verdict has always required
+  it, and now the gate job does, so the docstring says that. Measured
+  before, from the metrics series: main's runs with every leg under a
+  minute took 214 s to 298 s, a narrowed pull request's run outlived
+  its slowest leg by 209 s to 284 s. Proven on the loop 2026-09-10:
+  the workspace re-rendered its Gitea shell from these templates,
+  the member-only pull request's gate job carried the title check's
+  line, and the pass was whole (main's runs 1225 and 1227 skipped on
+  composed rows).

@@ -194,7 +194,9 @@ def test_each_forge_kind_generates_a_ci_definition_that_lints(
     release = yaml.safe_load(files[".github/workflows/release.yml"])
     assert "publish" in release["jobs"]
     # The trigger is the merge, never a tag: tags are receipts.
-    assert "pull_request" in release[True] or "pull_request" in release["on"]
+    trigger = release[True] if True in release else release["on"]
+    # The wave is dispatch-only: the merge point starts it.
+    assert list(trigger) == ["workflow_dispatch"]
 
     files = generate(_contract_root(tmp_path, "gitea", url="https://forge.example.com"))
     ci = yaml.safe_load(files[".gitea/workflows/ci.yml"])
@@ -342,15 +344,7 @@ def test_the_gitea_shell_is_one_verb_per_job_and_only_event_filters(
     assert ".gitea/workflows/docs.yml" not in files
     workflow = yaml.safe_load(files[".gitea/workflows/ci.yml"])
     jobs = workflow["jobs"]
-    assert list(jobs) == [
-        "check",
-        "docs",
-        "gate",
-        "release-title",
-        "deploy",
-        "govern",
-        "dispatch",
-    ]
+    assert list(jobs) == ["check", "docs", "gate", "deploy", "govern", "dispatch"]
     for name, job in jobs.items():
         runs = [step["run"] for step in job["steps"] if "run" in step]
         # One verb per job: the entry script, then ci.run, nothing else.
@@ -366,7 +360,8 @@ def test_the_gitea_shell_is_one_verb_per_job_and_only_event_filters(
     assert jobs["gate"]["steps"][0]["with"]["fetch-depth"] == 0
     assert jobs["deploy"]["if"] == "github.event_name == 'push'"
     assert jobs["govern"]["if"] == "github.event_name == 'push'"
-    assert "if" not in jobs["check"] and "if" not in jobs["release-title"]
+    assert "if" not in jobs["check"] and "if" not in jobs["docs"]
+    assert "needs" not in jobs["check"] and "needs" not in jobs["docs"]
     assert jobs["govern"]["steps"][0]["with"]["fetch-depth"] == 2
     assert jobs["dispatch"]["if"] == "github.event_name == 'push'"
     assert jobs["dispatch"]["needs"] == ["gate"]
@@ -379,6 +374,13 @@ def test_the_gitea_shell_is_one_verb_per_job_and_only_event_filters(
     assert "if" not in release["jobs"]["publish"]
     assert "${{ inputs.ref }}" in files[".gitea/workflows/release.yml"]
     assert "merge_commit_sha" not in files[".gitea/workflows/release.yml"]
+    # The GitHub wave is dispatch-only too: the merge point dispatches
+    # it, so a closed pull request is no trigger and no decision.
+    gh_files = generate(_contract_root(tmp_path, "github"))
+    gh_release = gh_files[".github/workflows/release.yml"]
+    assert "merge_commit_sha" not in gh_release
+    assert "pull_request" not in gh_release and "startsWith(" not in gh_release
+    assert "${{ inputs.ref }}" in gh_release
     # The wave's receipt push is the lane's: receipt tags are protected
     # and the ambient token is bound (measured on the loop).
     for step in release["jobs"]["publish"]["steps"]:
@@ -401,7 +403,9 @@ def test_the_github_shell_is_one_verb_per_job_for_the_gate_point(
     files = generate(_contract_root(tmp_path, "github"))
     workflow = yaml.safe_load(files[".github/workflows/ci.yml"])
     jobs = workflow["jobs"]
-    assert list(jobs) == ["check", "docs", "gate", "release-title"]
+    assert list(jobs) == ["check", "docs", "gate", "deploy", "govern", "dispatch"]
+    assert ".github/workflows/governance.yml" not in files
+    assert ".github/workflows/docs.yml" not in files
     # The nightly point's shell: the clock, a dispatch, one verb per
     # python, no condition; the tests that declare the point ride it.
     nightly = yaml.safe_load(files[".github/workflows/nightly.yml"])
@@ -418,12 +422,18 @@ def test_the_github_shell_is_one_verb_per_job_for_the_gate_point(
         verbs = [run for run in runs if "ci.run" in run]
         assert len(verbs) == 1, name
         assert all("setup.sh" in run or "ci.run" in run for run in runs), (name, runs)
-        assert "if" not in job or (name == "gate" and job["if"] == "always()"), name
+        assert (
+            "if" not in job
+            or (name == "gate" and job["if"] == "always()")
+            or job["if"] == "github.event_name == 'push'"
+        ), name
         for step in job["steps"]:
             if "if" in step:
                 assert step["if"] == "always()", (name, step)
     check = jobs["check"]
-    assert check["needs"] == ["release-title"]
+    # The legs start at once: the title check is the gate job's
+    # first entry, and the docs build runs beside the legs.
+    assert "needs" not in check and "needs" not in jobs["docs"]
     check_step = next(s for s in check["steps"] if s.get("name") == "Check")
     assert "fm ci.run --point=gate --job=check" in check_step["run"]
     assert (
@@ -450,10 +460,31 @@ def test_the_github_shell_is_one_verb_per_job_for_the_gate_point(
     # namespace need the grant declared on both writers.
     assert check["permissions"] == {"contents": "write"}
     assert gate["permissions"] == {"contents": "write"}
-    title = jobs["release-title"]
-    assert title["steps"][0]["with"]["fetch-depth"] == 0
-    assert "fm ci.run --point=gate --job=release-title" in title["steps"][-1]["run"]
     assert jobs["docs"]["steps"][-1]["run"] == "fm ci.run --point=gate --job=docs"
+    # The merge point's jobs, on the push alone, as the Gitea shell
+    # has them: the admin secret in govern and nowhere else, the
+    # pages grant and environment on deploy and nowhere else.
+    for name in ("deploy", "govern", "dispatch"):
+        assert jobs[name]["if"] == "github.event_name == 'push'", name
+    assert jobs["deploy"]["needs"] == ["gate"]
+    assert jobs["dispatch"]["needs"] == ["gate"]
+    assert jobs["govern"]["steps"][0]["with"]["fetch-depth"] == 2
+    text = files[".github/workflows/ci.yml"]
+    govern = text.split("  govern:")[1].split("  dispatch:")[0]
+    assert "FORGE_ADMIN_TOKEN" in govern
+    assert "FORGE_ADMIN_TOKEN" not in text.replace(govern, "")
+    deploy = jobs["deploy"]
+    assert deploy["permissions"] == {
+        "contents": "read",
+        "pages": "write",
+        "id-token": "write",
+    }
+    assert deploy["environment"]["name"] == "github-pages"
+    assert deploy["concurrency"] == {"group": "pages", "cancel-in-progress": False}
+    uses = [step.get("uses", "") for step in deploy["steps"]]
+    assert any(u.startswith("actions/upload-pages-artifact") for u in uses)
+    assert uses[-1].startswith("actions/deploy-pages")
+    assert "pages" not in str(jobs["gate"].get("permissions"))
 
 
 def test_apply_retires_the_workflows_the_emission_folded_away(tmp_path: Path) -> None:
@@ -471,6 +502,27 @@ def test_apply_retires_the_workflows_the_emission_folded_away(tmp_path: Path) ->
     assert (root / ".gitea" / "workflows" / "ci.yml").is_file()
     # A second apply finds nothing to retire.
     assert not any("retired" in name for name in apply_generated(root))
+    # The GitHub fold retires its governance and docs workflows, and
+    # the release legs the release redesign left behind; a retired
+    # file still present is drift the render check names.
+    from livery.workshop._templates import project_drift
+
+    root = _template_instance(tmp_path)
+    apply_project(root)
+    (root / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
+    for name in ("governance.yml", "docs.yml", "release-legs.yml"):
+        (root / ".github" / "workflows" / name).write_text(f"name: {name}\n")
+    apply_generated(root)
+    for name in ("governance.yml", "docs.yml", "release-legs.yml"):
+        (root / ".github" / "workflows" / name).write_text(f"name: {name}\n")
+    drift = project_drift(root)
+    for name in ("governance.yml", "docs.yml", "release-legs.yml"):
+        assert f".github/workflows/{name}: retired, still present" in "\n".join(drift)
+    changed = apply_generated(root)
+    for name in ("governance.yml", "docs.yml", "release-legs.yml"):
+        assert f".github/workflows/{name} (retired)" in changed
+        assert not (root / ".github" / "workflows" / name).exists()
+    assert not [line for line in project_drift(root) if "retired" in line]
 
 
 def test_the_rendered_tasks_mount_the_profiler(tmp_path: Path) -> None:
