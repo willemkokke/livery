@@ -40,6 +40,7 @@ def test_the_entry_names_keep_their_ecosystem_spelling() -> None:
         "footman.docs",
         "footman.env_files",
         "footman.self",
+        "footman.maintenance",
         "footman.profile",
         "livery.footman",
     }

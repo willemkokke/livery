@@ -267,7 +267,12 @@ def report_loop(home: Path) -> list[str]:
     if not home.is_dir():
         return []
     total = sum(p.stat().st_size for p in home.rglob("*") if p.is_file())
-    return [f"loop workspace: {total / 1e6:.0f} MB at {home}; kept for `fm ci.e2e`"]
+    import livery.footman as footman
+
+    return [
+        f"loop workspace: {total / 1e6:.0f} MB at {home};"
+        f" kept for `{footman.prog()} ci.e2e`"
+    ]
 
 
 def lines_of(items: Iterable[str]) -> list[str]:
