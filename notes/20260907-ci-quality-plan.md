@@ -1954,3 +1954,15 @@ None. Every ruling raised in this plan was closed in the review of
   worktree. Not covered: moving the workshop's state under
   `data_dir() / "livery-workshop" /` (its own decision) and
   `.claude/worktrees/` inside the checkout.
+- 2026-09-10 (issue #385), ruled by Willem ("take them all in the
+  order you wanted"): the check legs run the newest Python of a
+  derived matrix, and the nightly point runs the whole matrix, floor
+  included. The legs run in parallel, so the floor's leg added runner
+  minutes and no wall time to every pull request; at night it costs
+  minutes nobody waits for, and a floor-only failure reaches a person
+  the next morning through the nightly's verdict (a verb to read it
+  is #392). A declared `[ci] python-versions` runs at the gate as
+  declared, since the contract chose. livery's `ci.yml` re-renders
+  with one Python per runner; lines only the floor's interpreter
+  reaches leave the gate's union, which the floors absorb or an
+  accept names.

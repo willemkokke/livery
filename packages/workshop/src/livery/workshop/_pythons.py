@@ -79,6 +79,21 @@ def declared_pythons(root: Path) -> list[str] | None:
     return [str(value) for value in declared]
 
 
+def gate_pythons(root: Path) -> list[str]:
+    """The Pythons the gate point's check legs run: the newest of a derived matrix.
+
+    The legs run in parallel, so a second Python adds runner minutes
+    and no wall time; the floor's leg runs at the nightly point, where
+    the whole matrix runs, and a floor-only failure reaches a person
+    the next morning. A declared ``[ci] python-versions`` runs at the
+    gate as declared: the contract chose.
+    """
+    declared = declared_pythons(root)
+    if declared is not None:
+        return declared
+    return python_matrix(root)[-1:]
+
+
 def python_matrix(root: Path) -> list[str]:
     """The CI matrix: the contract's declaration, else the floor and the newest minor.
 

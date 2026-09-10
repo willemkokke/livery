@@ -52,6 +52,12 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
   that base tree's, so their verdicts carry over, and the row names
   the base. Without such a base a narrowed run stamps nothing. The
   release train reads the same record before it waits on main's run.
+- The check legs run on every runner the contract names, with the
+  newest Python of a derived matrix; the nightly point runs the whole
+  matrix, floor included, so the floor's legs cost runner minutes at
+  night and no pull request time, and a floor-only failure reaches a
+  person the next morning. A declared `[ci] python-versions` runs at
+  the gate as declared.
 - `fm submit`: get the branch onto the remote, verified. Its local
   gate is the one the CI legs run: the whole workspace, or the
   affected gate against the base branch when the contract declares
