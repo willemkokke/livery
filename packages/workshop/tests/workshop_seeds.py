@@ -14,7 +14,9 @@ read the workspace as one program.
 
 from __future__ import annotations
 
+import os
 import shutil
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -42,11 +44,11 @@ def copy_seed(home: Path, key: str, build: Build, destination: Path) -> Path:
         # leaves nothing behind for the next test to mistake for a seed.
         seed.mkdir()
         try:
-            build(seed)
+            _without_auto_maintenance(build, seed)
         except BaseException:
             shutil.rmtree(seed, ignore_errors=True)
             raise
-    shutil.copytree(seed, destination, dirs_exist_ok=True, symlinks=True)
+    _copy(seed, destination)
     for config in destination.rglob("config"):
         bare = (config.parent / "HEAD").is_file()
         if config.parent.name != ".git" and not bare:
@@ -55,6 +57,48 @@ def copy_seed(home: Path, key: str, build: Build, destination: Path) -> Path:
         if str(seed) in text:
             config.write_text(text.replace(str(seed), str(destination)), "utf-8")
     return destination
+
+
+def _without_auto_maintenance(build: Build, seed: Path) -> None:
+    """Run *build* with git's automatic gc and maintenance off.
+
+    A commit or push may detach `git gc --auto`, which rewrites the
+    object store while the first copy reads it (seen on a macOS
+    runner: `objects/maintenance.lock` vanished mid-copy). The
+    variables reach every git the build spawns and nothing after it.
+    """
+    added = {
+        "GIT_CONFIG_COUNT": "2",
+        "GIT_CONFIG_KEY_0": "gc.auto",
+        "GIT_CONFIG_VALUE_0": "0",
+        "GIT_CONFIG_KEY_1": "maintenance.auto",
+        "GIT_CONFIG_VALUE_1": "false",
+    }
+    before = {key: os.environ.get(key) for key in added}
+    os.environ.update(added)
+    try:
+        build(seed)
+    finally:
+        for key, value in before.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
+def _copy(seed: Path, destination: Path) -> None:
+    """Copy the seed, lock files left out, retried once over a git still writing."""
+    ignore = shutil.ignore_patterns("*.lock")
+    for attempt in range(3):
+        try:
+            shutil.copytree(
+                seed, destination, dirs_exist_ok=True, symlinks=True, ignore=ignore
+            )
+            return
+        except shutil.Error:
+            if attempt == 2:
+                raise
+            time.sleep(0.5)
 
 
 @pytest.fixture(scope="session")
