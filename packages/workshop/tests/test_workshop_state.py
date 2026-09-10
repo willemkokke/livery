@@ -15,6 +15,7 @@ from types import SimpleNamespace
 import pytest
 
 from livery.workshop import _state
+from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
 
 REF = _state.NAMESPACE + "metrics"
 
@@ -34,17 +35,22 @@ def _clone(tmp_path: Path, name: str, origin: Path) -> Path:
     return work
 
 
-@pytest.fixture
-def repos(tmp_path: Path) -> tuple[Path, Path]:
-    """A bare origin with one commit on main, and a working clone of it."""
-    origin = tmp_path / "origin.git"
-    _git(tmp_path, "init", "-q", "--bare", "--initial-branch=main", str(origin))
-    work = _clone(tmp_path, "work", origin)
+def _seed(base: Path) -> None:
+    """A bare origin with one commit on main and a clone, built once per session."""
+    origin = base / "origin.git"
+    _git(base, "init", "-q", "--bare", "--initial-branch=main", str(origin))
+    work = _clone(base, "work", origin)
     (work / "README.md").write_text("the repository\n")
     _git(work, "add", "README.md")
     _git(work, "commit", "-qm", "init")
     _git(work, "push", "-q", "-u", "origin", "main")
-    return origin, work
+
+
+@pytest.fixture
+def repos(seeds: Seeds, tmp_path: Path) -> tuple[Path, Path]:
+    """A bare origin with one commit on main, and a working clone of it."""
+    seeds("state", _seed)
+    return tmp_path / "origin.git", tmp_path / "work"
 
 
 @pytest.fixture(autouse=True)

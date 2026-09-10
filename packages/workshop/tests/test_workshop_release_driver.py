@@ -30,6 +30,7 @@ from livery.workshop._release_driver import (
     rollback_prepare,
 )
 from livery.workshop._workflow_engine import run_workflow
+from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[3]
 _FAILURES = (SystemExit, Failed)
@@ -101,13 +102,13 @@ def _member(root: Path, name: str, *, floor_on: str = "") -> None:
     (directory / "cliff.toml").write_text(_cliff_config(name))
 
 
-@pytest.fixture
-def workspace(tmp_path: Path) -> tuple[FakeForge, GitOps, Path]:
-    origin = tmp_path / "origin.git"
+def _seed(base: Path) -> None:
+    """Two members, tagged and pushed, built once per session."""
+    origin = base / "origin.git"
     origin.mkdir()
     _git(origin, "init", "--bare", "--initial-branch=main")
-    root = tmp_path / "ws"
-    _git(tmp_path, "clone", str(origin), "ws")
+    root = base / "ws"
+    _git(base, "clone", str(origin), "ws")
     _git(root, "config", "user.email", "t@livery.local")
     _git(root, "config", "user.name", "T")
     (root / "workshop.toml").write_text("[workspace]\n")
@@ -118,6 +119,11 @@ def workspace(tmp_path: Path) -> tuple[FakeForge, GitOps, Path]:
     _git(root, "tag", "packages/core/v0.2.0")
     _git(root, "tag", "packages/tool/v0.2.0")
     _git(root, "push", "-u", "origin", "main")
+
+
+@pytest.fixture
+def workspace(seeds: Seeds, tmp_path: Path) -> tuple[FakeForge, GitOps, Path]:
+    root = seeds("release-driver", _seed) / "ws"
     fake = FakeForge()
     fake.create_repo(OWNER, NAME, private=True, description="t")
     return fake, GitOps(root), root

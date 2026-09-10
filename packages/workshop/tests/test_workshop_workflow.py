@@ -39,6 +39,7 @@ from livery.workshop._workflow_state import (
     workflow_states,
 )
 from livery.workshop._workflow_tasks import abort_policy
+from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
 
@@ -275,22 +276,27 @@ def _git(cwd: Path, *args: str) -> None:
     subprocess.run(["git", *args], cwd=cwd, capture_output=True, check=True)
 
 
-@pytest.fixture
-def rig(tmp_path: Path) -> tuple[FakeForge, GitOps]:
-    origin = tmp_path / "origin.git"
+def _seed(base: Path) -> None:
+    """A bare origin and a clone with one commit, built once per session."""
+    origin = base / "origin.git"
     origin.mkdir()
     _git(origin, "init", "--bare", "--initial-branch=main")
-    clone = tmp_path / "clone"
-    _git(tmp_path, "clone", str(origin), "clone")
+    clone = base / "clone"
+    _git(base, "clone", str(origin), "clone")
     _git(clone, "config", "user.email", "t@livery.local")
     _git(clone, "config", "user.name", "T")
     (clone / "seed.txt").write_text("seed\n")
     _git(clone, "add", ".")
     _git(clone, "commit", "-m", "chore: seed")
     _git(clone, "push", "-u", "origin", "main")
+
+
+@pytest.fixture
+def rig(seeds: Seeds, tmp_path: Path) -> tuple[FakeForge, GitOps]:
+    seeds("workflow", _seed)
     fake = FakeForge()
     fake.create_repo(OWNER, NAME, private=True, description="t")
-    return fake, GitOps(clone)
+    return fake, GitOps(tmp_path / "clone")
 
 
 def _repo(fake: FakeForge):
@@ -507,21 +513,11 @@ class _StubDriver:
 
 
 @pytest.fixture
-def engine_rig(tmp_path: Path) -> tuple[FakeForge, _EngineGit]:
-    origin = tmp_path / "origin.git"
-    origin.mkdir()
-    _git(origin, "init", "--bare", "--initial-branch=main")
-    clone = tmp_path / "clone"
-    _git(tmp_path, "clone", str(origin), "clone")
-    _git(clone, "config", "user.email", "t@livery.local")
-    _git(clone, "config", "user.name", "T")
-    (clone / "seed.txt").write_text("seed\n")
-    _git(clone, "add", ".")
-    _git(clone, "commit", "-m", "chore: seed")
-    _git(clone, "push", "-u", "origin", "main")
+def engine_rig(seeds: Seeds, tmp_path: Path) -> tuple[FakeForge, _EngineGit]:
+    seeds("workflow", _seed)
     fake = FakeForge()
     fake.create_repo(OWNER, NAME, private=True, description="t")
-    return fake, _EngineGit(clone, fake)
+    return fake, _EngineGit(tmp_path / "clone", fake)
 
 
 def test_the_engine_starts_submits_and_runs_on_merged(
