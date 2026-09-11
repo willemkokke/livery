@@ -296,7 +296,13 @@ change.
 10. **The workspace tests as a unit of the affected engine** (#424). A
     change under `tests/` runs the workspace tests with format, lint,
     and the type checkers over that directory, not the whole gate.
-    Ruled 2026-09-11, after slice 9.
+    Ruled 2026-09-11, after slice 9. Landed 2026-09-11, #424: the
+    engine answers the workspace suite as a package of its own for a
+    change under `tests/`, the scoped gate takes its directory for
+    the style and type verbs and runs it as the one suite, the kind
+    checks and the floors leave it out, and the loop proves it on a
+    tests-only pull request (`affected: tests`, `the union of 1
+    leg(s) and 2 reused suite(s)`).
 
 Slices 1 to 3 are a day together; 4 and 5 another; 6 a day of its own,
 once the timing rows carry a fortnight of legs at the gate's Python; 7
@@ -384,3 +390,10 @@ a day, before 6 or after it.
   of the issue. Filed as #425, slice 8. Branch coverage (#423) and the
   workspace tests as a unit of the engine (#424) follow, in that
   order.
+- 2026-09-11, taken by default in #424: the check counts packages
+  only when it decides whether the gate is narrowed. The workspace
+  tests ride the subset as a unit beside the packages, and a subset
+  of every package plus that unit is the whole gate, which runs those
+  tests anyway; comparing the subset's length with the packages'
+  would have run the full gate for a widened subset, and inside a
+  test that is pytest spawning pytest.

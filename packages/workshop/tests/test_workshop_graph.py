@@ -69,6 +69,40 @@ def test_a_leaf_change_affects_only_its_closure(tmp_path: Path) -> None:
     assert [p.path for p in affected] == ["packages/mid", "packages/top"]
 
 
+def test_a_workspace_tests_change_affects_that_unit_alone(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = _workspace(tmp_path)
+    # Refusals first: the directory changed and gone is a root change,
+    # since the unit cannot run.
+    (root / "tests").mkdir()
+    (root / "tests" / "test_all.py").write_text("def test_it():\n    pass\n")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "test: the workspace tests")
+    _git(root, "push", "origin", "feat/change:main")
+    _git(root, "fetch", "origin")
+    (root / "tests" / "test_all.py").unlink()
+    (root / "tests").rmdir()
+    assert affected_packages(root, GitOps(root)) is None
+    assert "tests/: changed and gone; everything runs" in capsys.readouterr().out
+    # A change under the directory affects the workspace tests alone,
+    # answered as a package of their own.
+    (root / "tests").mkdir()
+    (root / "tests" / "test_all.py").write_text("def test_it():\n    assert True\n")
+    affected = affected_packages(root, GitOps(root))
+    assert affected is not None
+    assert [p.path for p in affected] == ["tests"]
+    assert affected[0].name == "workspace-tests"
+    # With a package change the closure comes first and the unit last.
+    (root / "packages" / "mid" / "thing.py").write_text("x = 2\n")
+    affected = affected_packages(root, GitOps(root))
+    assert affected is not None
+    assert [p.path for p in affected] == ["packages/mid", "packages/top", "tests"]
+    # A root file beside it still widens to everything.
+    (root / "tasks.py").write_text("# touched\n")
+    assert affected_packages(root, GitOps(root)) is None
+
+
 def test_a_root_change_affects_everything(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     (root / "workshop.toml").write_text("[workspace]\n# touched\n")

@@ -36,10 +36,13 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
   the render gate, in parallel. `--affected` narrows the gate to the
   packages the branch's changes can influence (their dependents'
   closure over the `[[depends]]` graph); a change outside the
-  packages runs everything, except prose and the site's own files:
-  a file under `notes/`, a markdown file anywhere, the root `docs/`
-  tree, or the root `zensical.toml` affects no package, so a diff
-  confined to them runs no gate and the site build judges them. A
+  packages runs everything, with two exceptions. Prose and the site's
+  own files, a file under `notes/`, a markdown file anywhere, the root
+  `docs/` tree, or the root `zensical.toml`, affect no package, so a
+  diff confined to them runs no gate and the site build judges them.
+  The workspace's own `tests/` directory is a unit of its own: a
+  change under it formats, lints, type-checks, and runs those tests
+  alone, and the record supplies every package's suite. A
   workspace that declares
   `[ci] affected-legs = true` has its CI check legs run that scoped
   gate against the pull request's base branch; the gate job runs

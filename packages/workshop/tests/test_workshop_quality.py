@@ -79,6 +79,38 @@ def test_the_scoped_gate_runs_every_verb(
     ]
 
 
+def test_the_workspace_tests_are_a_unit_of_the_scoped_gate_with_no_kind(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._coverage_store import workspace_suite
+
+    ran, calls = _record(monkeypatch, tmp_path)
+    (tmp_path / "tests").mkdir()
+    unit = workspace_suite(tmp_path)
+    assert unit is not None
+    _quality._scoped_check((unit,))
+    # Style and types over the directory itself, the tests run as the
+    # one suite, no type-completeness, and no kind check for it.
+    by_verb = {c["verb"]: c for c in calls}
+    assert by_verb["format"]["paths"] == ("tests",)
+    assert by_verb["lint"]["paths"] == ("tests",)
+    assert by_verb["typecheck"]["paths"] == ("tests",)
+    assert by_verb["typecomplete"]["args"] == ((),)
+    assert by_verb["test"]["packages"] == (unit,)
+    assert by_verb["test"]["scoped"] is True
+    assert by_verb["kindcheck"]["args"] == ((), tmp_path)
+    # Beside a package, the unit rides along and the package keeps its
+    # own paths.
+    ran.clear()
+    calls.clear()
+    package = _package(tmp_path)
+    _quality._scoped_check((package, unit))
+    by_verb = {c["verb"]: c for c in calls}
+    assert by_verb["format"]["paths"] == ("packages/one/tests", "tests")
+    assert by_verb["test"]["packages"] == (package, unit)
+    assert by_verb["kindcheck"]["args"] == ((package,), tmp_path)
+
+
 def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
