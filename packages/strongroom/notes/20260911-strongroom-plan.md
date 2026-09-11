@@ -1,8 +1,9 @@
 # Strongroom in a vacuum: the store standard and its core
 
-Status: executing; Willem's go 2026-09-11. Phase 1 built 2026-09-11
-(issue #434): the package, the spec's formats with their vectors,
-and the Python formats; see the decision record.
+Status: executing; Willem's go 2026-09-11. Phase 1 landed 2026-09-11
+(issue #434, PR #436): the package, the spec's formats with their
+vectors, and the Python formats. Phase 2 built 2026-09-11 (issue
+#440): the local store, objects and refs; see the decision record.
 Scoped by Willem the same day: strongroom alone, no change to
 toolroom, footman, or the workshop. This note lives in
 `packages/strongroom/notes/`, beside the package it plans. This plan executes steps 0, 2
@@ -436,6 +437,22 @@ Acceptance:
   `dependencies = []` for the contract test to pin. The total-path
   budget is stated in the spec and enforced in phase 2, where a
   whole tree is first published.
+- 2026-09-11, phase 2 built (issue #440). Choices at the cut: the
+  verified mark lives in the local index as a size per object, so an
+  access checks size and an object landed by copy is hashed in full
+  once; a scratch name carries the writer's process id and a counter,
+  because two processes landing the same digest through one scratch
+  name interleave their writes (found by the concurrent-landing test);
+  a monotone ref's creation is unchecked and only a move must
+  fast-forward; the write-once class treats a repeat of the same
+  digest as done and returns the existing record; a ref whose record
+  disagrees is reported as tampered whether the cause was an edit or
+  an update that died between its two replaces; the lock's staleness
+  proof is a dead holder, an age past the bound, or a torn lock file,
+  and no liveness probe is sent on Windows because `os.kill` there
+  terminates. Behaviour cases live under `spec/conformance/refs.json`,
+  run by a harness in the tests until phase 6 moves it into the
+  package.
 - 2026-09-11, Willem: the materialiser's whole strategy ladder is
   implemented and tested in this plan, not the copy rung alone. The
   agent's reading of "implement and test the whole rung"; correct it

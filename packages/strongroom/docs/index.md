@@ -37,5 +37,24 @@ validation:
 - `Version` is provenance over a tree, with a subject-shaped producer.
 - `RefRecord` and `Tombstone` are the two records beside names.
 
-The store itself (objects, refs, tiers, the lifecycle, the
-materialiser) builds on these formats in later releases.
+## The local store
+
+`Store.create` writes the root manifest and `Store.open` reads it,
+refusing another layout version or algorithm. `land` streams bytes
+through the digest into a scratch file and moves them into place,
+verifying against an expected digest when one is given; landing is
+idempotent, and two processes landing the same bytes both succeed.
+`path` hands over a read-only path, checking size on every access and
+hashing in full an object this store never verified; `scrub` hashes
+everything and removes what does not match its name.
+
+`set_ref` moves a ref by compare-and-swap under a per-ref lock and
+writes the record beside it; `ref` reads it back and reports a ref
+whose record disagrees as tampered. Every namespace is declared at
+open with its mutation class, and the store enforces the class
+without reading the namespace's meaning: write-once, monotone
+(fast-forward over versions), or volatile. `pins` and `pending` are
+the store's own.
+
+Tiers and sources, the lifecycle and the materialiser build on these
+in later releases.

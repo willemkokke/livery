@@ -34,13 +34,16 @@ bytes are held (whole file, packed, chunked, encrypted) is a backend
 property and never in the name; this layout version stores whole
 files only.
 
-Landing: the bytes stream through the digest into a scratch file
-beside the destination, named `<rest>.part`, and are moved into place
-with an atomic replace. Two writers of the same digest land identical
-bytes; the second replace is harmless, so object writes need no lock.
-A landing whose destination already exists with the right digest
-succeeds without writing. A replace that fails because a reader holds
-the destination open is success when the destination verifies.
+Landing: the bytes stream through the digest into a scratch file and
+are moved into place with an atomic replace. When the digest is known
+in advance the scratch sits beside the destination; otherwise it sits
+under `objects/<algorithm>/`. A scratch name ends in `.part` and
+carries a token unique to its writer, so two writers of the same
+digest never share one scratch. Both land identical bytes; the second
+replace is harmless, so object writes need no lock. A landing whose
+destination already exists with the right digest succeeds without
+writing. A replace that fails because a reader holds the destination
+open is success when the destination verifies.
 
 Landed and verified are two facts. Which objects a tier has verified
 itself is the implementation's local state, not a format. Size is
@@ -64,11 +67,26 @@ suffix. Namespaces are hierarchical, so write capability scopes per
 subtree; the store owns `pins/` and `pending/` and interprets no other
 ([namespaces.md](namespaces.md)).
 
-A ref update writes both files through scratch and replace under a
-per-ref lock, `<path...>.lock`, created exclusively. A lock is broken
-only on provable staleness, and the compare-and-swap still decides the
-winner afterwards, so a wrongly broken lock costs a retry and never a
-torn record.
+A ref update writes the record and then the ref, each through scratch
+and replace, under a per-ref lock, `<path...>.lock`, created
+exclusively. A lock is broken only on provable staleness (its holder
+has exited, or it is older than the stale bound, or its content is
+torn), and the compare-and-swap still decides the winner afterwards,
+so a wrongly broken lock costs a retry and never a torn record. A
+reader that finds the ref and its record disagreeing reports the pair
+as tampered: an out-of-band edit, or an update that died between the
+two replaces, and either way not a value to trust.
+
+A ref path's components are portable names ([tree.md](tree.md)), and
+none ends in `.record`, `.lock`, `.tombstone` or `.part`.
+
+## The local index
+
+`index/` is the implementation's own and not a format. This
+implementation keeps a verified mark per object under
+`index/verified/<algorithm>/<xx>/<rest>` holding the size it hashed,
+so an access checks size cheaply and an object landed by copy is
+hashed in full on first access.
 
 ## Scratch
 
