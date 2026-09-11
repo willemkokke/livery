@@ -466,13 +466,25 @@ def publish_release(
                 )
             else:
                 art_url, art_token, art_local = index_url, token, False
-            published = backend_for(package).publish_artifact(
-                package,
-                version=version,
-                publish_url=art_url,
-                token=art_token,
-                local=art_local,
-            )
+            # A version the index already serves is walked past before
+            # any upload: a re-run after a died receipt, from CI or
+            # from a machine without a publish credential, must reach
+            # the tag. The duplicate rejection below stays as the
+            # second net for two waves racing.
+            if version in registry_for(package).versions(package.name):
+                print(
+                    f"  {package.name} v{version}: already served; walking"
+                    " past the upload"
+                )
+                published = False
+            else:
+                published = backend_for(package).publish_artifact(
+                    package,
+                    version=version,
+                    publish_url=art_url,
+                    token=art_token,
+                    local=art_local,
+                )
             probe_until_served(
                 registry_for(package),
                 package.name,

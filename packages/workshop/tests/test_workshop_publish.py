@@ -220,6 +220,30 @@ def test_discovery_reads_members_from_the_squash_content(train) -> None:
     ]
 
 
+def test_a_version_the_index_already_serves_is_walked_past_before_upload(
+    train, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The recovery first: a died receipt re-run must reach the tag
+    # without repeating an upload it may not be able to make.
+    root, git, registry, spans = train
+    registry.serve("livery-base", "0.3.0")
+    sha = _squash(root, ("base", "left"))
+    receipts = publish_release(
+        root, git, lambda _p: registry, ref=sha, index_url="https://idx.example/"
+    )
+    by_name = {r.package.directory.name: r for r in receipts}
+    assert by_name["base"].published is False
+    assert by_name["left"].published is True
+    assert "base" not in spans  # no upload ran for it
+    assert "livery-base v0.3.0: already served; walking past the upload" in (
+        capsys.readouterr().out
+    )
+    tags = subprocess.run(
+        ["git", "tag", "--list", "packages/*"], cwd=root, capture_output=True, text=True
+    ).stdout.split()
+    assert "packages/base/v0.3.0" in tags and "packages/left/v0.3.0" in tags
+
+
 def test_pending_release_wave_sees_only_an_unwaved_squash(train) -> None:
     # The fallbacks first: plain history answers None, and a squash
     # whose receipts are all cut answers None; only missing receipts
