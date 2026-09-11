@@ -58,11 +58,17 @@ def test_provisioning_creates_then_reuses_and_writes_the_secret(
     assert f"reusing {_e2e.E2E_OWNER}/{_e2e.E2E_REPO}" in capsys.readouterr().out
 
 
-def test_the_registration_gate_sees_this_source_checkout() -> None:
-    # The verb registers only beside the workshop's own tests: the
-    # path arithmetic must find this very suite.
-    assert _e2e._WORKSHOP_TESTS.is_dir()
-    assert (_e2e._WORKSHOP_TESTS / "test_workshop_e2e.py").is_file()
+def test_the_registration_gate_sees_only_a_source_checkout() -> None:
+    # The verb registers only beside the workshop's own tests: from
+    # this source checkout the path arithmetic finds this very suite,
+    # and from an installed wheel (the release legs) it finds no tests
+    # directory at all, which is what keeps the verb off an instance.
+    here = Path(__file__).resolve().parent
+    if here == _e2e._WORKSHOP_TESTS:
+        assert (_e2e._WORKSHOP_TESTS / "test_workshop_e2e.py").is_file()
+    else:
+        assert "site-packages" in str(_e2e._WORKSHOP_TESTS.parents[1])
+        assert not _e2e._WORKSHOP_TESTS.is_dir()
 
 
 def test_a_hostless_alias_teaches_the_one_liner(

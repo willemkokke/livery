@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Annotated
 
 import livery.footman as footman
-import toolroom
+from livery import toolroom
 from livery.footman import doc, fail, group
 
 forge = group("forge", help="livery.forge development")
