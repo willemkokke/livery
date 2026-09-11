@@ -18,6 +18,7 @@ from livery.forge.testing import FakeForge
 from livery.workshop._git_ops import GitOps
 from livery.workshop._graph import order_topologically
 from livery.workshop._packages import Package, discover_packages
+from livery.workshop._pythons import scripts_dir
 from livery.workshop._release_driver import (
     MemberPlan,
     ReleaseDriver,
@@ -653,15 +654,15 @@ def test_the_leg_env_leads_with_its_own_venv_and_drops_the_workspaces(
     monkeypatch.setenv(
         "PATH",
         os.pathsep.join(
-            [str(root / ".venv" / "bin"), "/usr/bin", str(root / ".venv2")]
+            [str(scripts_dir(root / ".venv")), "/usr/bin", str(root / ".venv2")]
         ),
     )
     monkeypatch.setenv("COVERAGE_PROCESS_START", str(root / "pyproject.toml"))
     monkeypatch.setenv("VIRTUAL_ENV", str(root / ".venv"))
     env = _leg_env(root, venv)
     entries = env["PATH"].split(os.pathsep)
-    assert entries[0] == str(venv / "bin")  # the leg's own tools answer first
-    assert str(root / ".venv" / "bin") not in entries  # the workspace's drop out
+    assert entries[0] == str(scripts_dir(venv))  # the leg's own tools answer first
+    assert str(scripts_dir(root / ".venv")) not in entries  # the workspace's drop out
     assert "/usr/bin" in entries  # the system stays
     assert str(root / ".venv2") in entries  # only the venv prefix is scrubbed
     assert env["VIRTUAL_ENV"] == str(venv)

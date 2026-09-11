@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import stat
 import subprocess
 from pathlib import Path
 
@@ -72,6 +73,14 @@ def test_an_absent_record_and_an_unknown_tree_are_quiet(work: Path) -> None:
     assert _verified.record(work, "f" * 40) == (None, "")
 
 
+def _rmtree(path: Path) -> None:
+    """Remove *path* whole; git's pack files are read-only, which Windows honours."""
+    for entry in path.rglob("*"):
+        if entry.is_file():
+            entry.chmod(entry.stat().st_mode | stat.S_IWRITE)
+    shutil.rmtree(path)
+
+
 def test_an_unreadable_store_and_a_foreign_entry_name_their_reason(
     work: Path, tmp_path: Path
 ) -> None:
@@ -90,7 +99,7 @@ def test_an_unreadable_store_and_a_foreign_entry_name_their_reason(
     assert found is None and "does not parse" in why
     found, why = _verified.record(work, "other")
     assert found is None and "this reader speaks" in why
-    shutil.rmtree(tmp_path / "origin.git")
+    _rmtree(tmp_path / "origin.git")
     found, why = _verified.record(work, tree)
     assert found is None and "could not be read" in why
 

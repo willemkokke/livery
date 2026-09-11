@@ -46,6 +46,21 @@ def test_an_unknown_point_names_the_four(tmp_path: Path) -> None:
         _points.jobs_of(_root(tmp_path), "stage")
 
 
+def test_each_point_names_its_workflow_and_events() -> None:
+    from livery.workshop._points import DISPATCHABLE, EVENTS, POINTS, workflow_of
+    from livery.workshop._release_driver import RELEASE_WORKFLOW
+
+    with pytest.raises(_FAILURES) as caught:
+        workflow_of("weekly")
+    assert "not a point" in str(caught.value)
+    assert workflow_of("gate") == workflow_of("merge") == "ci.yml"
+    assert workflow_of("nightly") == "nightly.yml"
+    assert workflow_of("release") == RELEASE_WORKFLOW
+    assert set(EVENTS) == set(POINTS)
+    assert EVENTS["nightly"] == ("schedule", "workflow_dispatch")
+    assert DISPATCHABLE == ("nightly",)
+
+
 def test_an_unknown_job_names_the_points_jobs(tmp_path: Path) -> None:
     with pytest.raises(
         _FAILURES,

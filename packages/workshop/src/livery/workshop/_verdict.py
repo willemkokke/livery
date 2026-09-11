@@ -45,8 +45,54 @@ EXIT_BEHIND = 17
 #: none has started: the state a script waits on.
 EXIT_PENDING = 18
 
-#: Consecutive unreadable polls before the watch gives up with 15.
+#: Consecutive unreadable polls before a watch gives up with 15.
 _UNREACHABLE_BUDGET = 5
+
+
+class Transient:
+    """A bounded run of unreadable polls: each printed once, the budget ends it.
+
+    A transport error during a poll is a retry, not a verdict: the
+    server dropped a connection, answered 5xx, or timed out, and the
+    next poll may answer. `note` prints the error with its place in
+    the run and returns True when the run has reached the budget;
+    `reset` is the answered poll that ends the run. `giving_up` is
+    the last line a watcher prints before exiting 15.
+
+    Attributes:
+        budget: The consecutive failures the watcher tolerates.
+        interval: The seconds between polls, for the line that says
+            how long the forge was unreachable.
+        count: The failures in the current run.
+        last: The last error's words.
+    """
+
+    def __init__(self, *, budget: int = _UNREACHABLE_BUDGET, interval: float = 15):
+        self.budget = budget
+        self.interval = interval
+        self.count = 0
+        self.last = ""
+
+    def note(self, error: ForgeError) -> bool:
+        """Print *error* as one failure of the run; True when the run is spent."""
+        self.count += 1
+        self.last = str(error)
+        print(f"  forge unreachable ({self.count}/{self.budget}): {error}")
+        return self.count >= self.budget
+
+    def reset(self) -> None:
+        """An answered poll ends the run."""
+        self.count = 0
+
+    def giving_up(self, subject: str) -> str:
+        """The line for a spent budget: how long, the last error, and *subject*."""
+        seconds = self.budget * self.interval
+        return (
+            f"  giving up: the forge was unreachable for {self.budget} consecutive"
+            f" polls ({seconds:.0f}s at {self.interval:.0f}s); last error:"
+            f" {self.last}; {subject}"
+        )
+
 
 #: Green-and-armed polls the watch grants the server to merge before
 #: probing for behind/conflicts and calling the evaluation lost.
@@ -303,11 +349,14 @@ def follow(
 
     Returns the ``merged`` verdict on success. Every terminal blocker
     (10-13, 16, 17) raises SystemExit carrying its code, after
-    printing the detail; the deadline raises 14 and an unreadable
-    forge past the transient budget raises 15.
+    printing the detail; the deadline raises 14. A transport error
+    during a poll is a retry: printed once, polled through at the
+    interval, and only a run of them that reaches the budget
+    (livery.workshop._verdict.Transient) raises 15, naming the last
+    error and the pull request.
     """
     deadline = time.monotonic() + timeout
-    unreachable = 0
+    transient = Transient(interval=interval)
     green_polls = 0
     confirm_streak = 0
     last_state = ""
@@ -316,13 +365,12 @@ def follow(
             grace_spent = green_polls >= _MERGE_GRACE_POLLS
             verdict = classify(repo, branch, git, grace_spent=grace_spent)
         except ForgeError as exc:
-            unreachable += 1
-            print(f"  forge unreachable ({unreachable}/{_UNREACHABLE_BUDGET}): {exc}")
-            if unreachable >= _UNREACHABLE_BUDGET:
+            if transient.note(exc):
+                print(transient.giving_up(_pull_request_words(repo, branch)))
                 raise SystemExit(EXIT_UNREACHABLE) from None
             time.sleep(interval)
             continue
-        unreachable = 0
+        transient.reset()
         if verdict.state != last_state:
             print(f"  {verdict.state}: {verdict.detail}")
             last_state = verdict.state
@@ -356,6 +404,17 @@ def follow(
             _record_ending(repo, verdict, branch, git.root)
             raise SystemExit(EXIT_TIMEOUT)
         time.sleep(interval)
+
+
+def _pull_request_words(repo: Repository, branch: str) -> str:
+    """The pull request to look at, or the branch when the forge cannot say."""
+    try:
+        pr = repo.pr.find_by_head(branch, state="all")
+    except ForgeError:
+        pr = None
+    if pr is None:
+        return f"the pull request for {branch} could not be read"
+    return f"the pull request: PR #{pr.number} {pr.url}"
 
 
 def _record_ending(repo: Repository, verdict: Verdict, branch: str, root: Path) -> None:

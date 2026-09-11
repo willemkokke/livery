@@ -254,6 +254,7 @@ nav = [
             { "ci" = [
                 { "Overview" = "_generated/packages/workshop/_generated/tasks/ci/index.md" },
                 { "cancel" = "_generated/packages/workshop/_generated/tasks/ci/cancel.md" },
+                { "dispatch" = "_generated/packages/workshop/_generated/tasks/ci/dispatch.md" },
                 { "e2e" = "_generated/packages/workshop/_generated/tasks/ci/e2e.md" },
                 { "logs" = "_generated/packages/workshop/_generated/tasks/ci/logs.md" },
                 { "metrics.collect" = "_generated/packages/workshop/_generated/tasks/ci/metrics/collect.md" },

@@ -1,0 +1,10 @@
+# Rendered by the template channel ({{ template_source_label }}, project kind);
+# the gate keeps it matching its render. Edit the source and
+# run `{{ runner_prog }} template.apply`; an edit here is drift.
+# Every change appends to a plan note's decision record, so two
+# changes in flight land at the same tail. A union merge takes both
+# sides' lines there instead of stopping the integrate on a conflict;
+# two edits of one existing line land both lines too, so a merged
+# note is read once before it ships.
+notes/*.md merge=union
+notes/**/*.md merge=union

@@ -142,12 +142,11 @@ def venv_bin(root: Path) -> Path:
     """The venv's executables directory: ``Scripts`` on Windows, ``bin`` elsewhere.
 
     The emission runs on the machine it enters, so the running
-    platform is the right answer.
+    platform is the right answer ([livery.workshop._pythons.scripts_dir][]).
     """
-    import sys
+    from livery.workshop._pythons import scripts_dir
 
-    name = "Scripts" if sys.platform == "win32" else "bin"
-    return root / ".venv" / name
+    return scripts_dir(root / ".venv")
 
 
 def workspace_delta(root: Path, cwd: Path) -> EnvDelta:

@@ -87,12 +87,29 @@ class Faults:
             livery.forge.Checks.status answer as if nothing had
             reported for the commit, as a forge does in the window
             after a push before statuses appear.
+        drop_connections: The next N calls to
+            livery.forge.Checks.status or livery.forge.Checks.runs
+            raise livery.forge.ForgeError with no status, as the
+            client does when the server closes the connection
+            without a response mid-poll. The next call answers.
     """
 
     lose_arm_schedule: int = 0
     merge_405_window: int = 0
     wedge_status_queue: bool = False
     slow_status_reads: int = 0
+    drop_connections: int = 0
+
+    def drop(self, endpoint: str) -> None:
+        """Raise the dropped-connection error while `drop_connections` is armed."""
+        if self.drop_connections > 0:
+            self.drop_connections -= 1
+            raise ForgeError(
+                f"server unreachable on GET {endpoint}: Remote end closed"
+                " connection without response",
+                method="GET",
+                endpoint=endpoint,
+            )
 
 
 @dataclass
@@ -909,6 +926,9 @@ class _FakeChecks:
     def status(self, sha: str) -> CombinedStatus:
         """The combined verdict for *sha*, faults applied."""
         state = self._state()
+        self._fake.faults.drop(
+            f"/repos/{self._owner}/{self._name}/commits/{sha}/status"
+        )
         if self._fake.faults.slow_status_reads > 0:
             self._fake.faults.slow_status_reads -= 1
             return CombinedStatus(state="none", contexts=0)
@@ -917,6 +937,7 @@ class _FakeChecks:
     def runs(self, *, head_sha: str = "", event: str = "") -> tuple[Run, ...]:
         """The repository's runs, newest first."""
         state = self._state()
+        self._fake.faults.drop(f"/repos/{self._owner}/{self._name}/actions/runs")
         selected = [
             run
             for run in state.runs.values()

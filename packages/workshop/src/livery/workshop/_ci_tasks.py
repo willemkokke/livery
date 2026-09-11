@@ -8,7 +8,10 @@ cancels what is still moving (the relief for a wedged queue),
 ``ci.status`` says where the head commit's runs stand and exits that
 state's code, so a script can wait on main after a merge, and
 ``ci.logs`` prints the job logs, the one read that stays here so
-logs reach an agent through fm. ``ci.run`` runs one job of a point
+logs reach an agent through fm; both read the newest run of a point
+instead under ``--point``, which is how the nightly's verdict reaches
+a person. ``ci.dispatch`` starts a point that has a dispatch entry
+(the nightly) and follows it to its verdict. ``ci.run`` runs one job of a point
 (livery.workshop._points), the one verb the emitted shells call;
 ``ci.verdict`` is the gate job's judgement of the jobs it needs.
 ``ci.timings`` prints the timing rows the gate writes on
@@ -23,7 +26,15 @@ from pathlib import Path
 from typing import Annotated
 
 from livery.footman import doc, fail, group, task
-from livery.forge import Capability, Forge, ForgeError, Job, Repository, Run
+from livery.forge import (
+    Capability,
+    Forge,
+    ForgeError,
+    Job,
+    Repository,
+    Run,
+    Unsupported,
+)
 from livery.workshop._contract import load_contract
 from livery.workshop._git_ops import GitOps
 from livery.workshop._layers import workspace_root
@@ -31,6 +42,8 @@ from livery.workshop._verdict import (
     EXIT_CI_FAILED,
     EXIT_PENDING,
     EXIT_TIMEOUT,
+    EXIT_UNREACHABLE,
+    Transient,
     classify,
     follow,
 )
@@ -192,6 +205,191 @@ def ci_cancel(
 _GREEN = ("success", "skipped", "neutral")
 
 
+def point_runs(repo: Repository, point: str) -> tuple[Run, ...]:
+    """The runs of *point*'s workflow, newest first, whatever commit they checked.
+
+    Read by the point's events so the listing stays short on a forge
+    with a long history, then kept by the workflow's file name
+    (GitHub lists the path, Gitea the file; the basename is the
+    comparison). A forge that names no workflow on a run (GitLab)
+    answers by event alone.
+    """
+    from livery.workshop._points import EVENTS, workflow_of
+
+    workflow = workflow_of(point)
+    found: dict[int, Run] = {}
+    for event in EVENTS[point]:
+        for run in repo.checks.runs(event=event):
+            if not run.workflow or run.workflow.rsplit("/", 1)[-1] == workflow:
+                found[run.id] = run
+    return tuple(sorted(found.values(), key=lambda run: run.id, reverse=True))
+
+
+def _run_line(run: Run) -> str:
+    """One run: workflow, conclusion or status, event, commit, page."""
+    return (
+        f"  {run.workflow:14} {run.conclusion or run.status:12}"
+        f" {run.event:17} {run.head_sha[:10]} {run.url}"
+    )
+
+
+def follow_run(
+    repo: Repository,
+    point: str,
+    run: Run,
+    *,
+    interval: float = 15,
+    timeout: float = 1800,
+) -> int:
+    """Follow *run* of *point* to its verdict; return that state's exit.
+
+    Progress prints on state changes and every minute. Green is 0;
+    red is 13 with the red jobs named; a wait that runs out is 14; a
+    forge unreachable past the transient budget is 15.
+    """
+    import time
+
+    deadline = time.monotonic() + timeout
+    transient = Transient(interval=interval)
+    last = ""
+    quiet_since = time.monotonic()
+    while True:
+        try:
+            current = next((r for r in point_runs(repo, point) if r.id == run.id), run)
+        except ForgeError as exc:
+            if transient.note(exc):
+                print(transient.giving_up(f"{point} run {run.id} {run.url}"))
+                return EXIT_UNREACHABLE
+            time.sleep(interval)
+            continue
+        transient.reset()
+        if current.status == "completed":
+            word, code = runs_state((current,))
+            print(
+                f"  {word}: {point} run {current.id} {current.conclusion} {current.url}"
+            )
+            if code:
+                for job in repo.checks.jobs(current.id):
+                    if job.conclusion not in _GREEN:
+                        print(f"    {job.name}: {job.conclusion or job.status}")
+            return code
+        if current.status != last or time.monotonic() - quiet_since >= 60:
+            last = current.status
+            quiet_since = time.monotonic()
+            print(f"  waiting: {point} run {current.id} is {current.status}")
+        if time.monotonic() >= deadline:
+            print(f"  still {current.status} after {timeout:.0f}s; {current.url}")
+            return EXIT_TIMEOUT
+        time.sleep(interval)
+
+
+def dispatch_flow(
+    repo: Repository,
+    *,
+    point: str,
+    ref: str,
+    follow: bool = True,
+    interval: float = 15,
+    timeout: float = 1800,
+    register_timeout: float = 60,
+) -> int:
+    """Start *point* on *ref* by hand; follow it to its verdict; return the exit.
+
+    Refuses a point without a dispatch entry, naming what starts it
+    instead. The dispatch is confirmed by the run that appears: one
+    the forge accepted but never listed within *register_timeout* is
+    reported with the verb that reads it later, exit 14. Without
+    *follow* the run is named and the exit is 18 while it moves.
+    """
+    import time
+
+    from livery.workshop._points import DISPATCHABLE, POINTS, workflow_of
+
+    if point not in POINTS:
+        fail(f"{point!r} is not a point; the points are {', '.join(POINTS)}")
+    if point not in DISPATCHABLE:
+        if point == "release":
+            fail(
+                "the release point has no dispatch entry of its own: the merge"
+                f" point dispatches the wave, and `{footman_prog()}"
+                " workflow.release.dispatch` does by hand"
+            )
+        fail(
+            f"the {point} point has no dispatch entry: it runs on its own event"
+            f" (a pull request, a push to main); `{footman_prog()} ci.dispatch`"
+            f" starts {', '.join(DISPATCHABLE)}"
+        )
+    workflow = workflow_of(point)
+    seen = {run.id for run in point_runs(repo, point)}
+    try:
+        repo.checks.dispatch(workflow, ref=ref)
+    except Unsupported as exc:
+        fail(f"this forge cannot dispatch a workflow: {exc}")
+    except ForgeError as exc:
+        fail(f"the forge refused the {point} dispatch on {ref}: {exc}")
+    print(f"  dispatched the {point} point on {ref} ({workflow})")
+    deadline = time.monotonic() + register_timeout
+    while True:
+        new = [run for run in point_runs(repo, point) if run.id not in seen]
+        if new:
+            run = new[0]
+            break
+        if time.monotonic() >= deadline:
+            print(
+                f"  the dispatch was accepted but no {point} run appeared within"
+                f" {register_timeout:.0f}s; `{footman_prog()} ci.status"
+                f" --point={point}` reads one that appears later"
+            )
+            return EXIT_TIMEOUT
+        time.sleep(interval)
+    print(f"  {point}: run {run.id} {run.url}")
+    if not follow:
+        return runs_state((run,))[1]
+    return follow_run(repo, point, run, interval=interval, timeout=timeout)
+
+
+def footman_prog() -> str:
+    """The runner's name, for a remedy in a message."""
+    import livery.footman as footman
+
+    return footman.prog()
+
+
+@ci.task(name="dispatch")
+def ci_dispatch(
+    point: Annotated[
+        str, doc("the point to start; nightly is the one with an entry")
+    ] = "nightly",
+    ref: Annotated[str, doc("the branch or tag the run checks out")] = "main",
+    follow: Annotated[bool, doc("wait for the run's verdict")] = True,
+    interval: Annotated[int, doc("poll seconds")] = 15,
+    timeout: Annotated[int, doc("deadline seconds for the verdict")] = 1800,
+) -> None:
+    """Start a point on the forge by hand and follow it to its verdict.
+
+    The nightly is the point with a dispatch entry: the clock's run
+    waits for nobody, and this verb starts the same run now, on
+    *ref*, so a failure only the nightly meets (a floor Python, a
+    replay) is reproduced on demand. Exits green 0, red 13 with the
+    red jobs named, a run that never registered or a wait that runs
+    out 14, a forge unreachable for five polls in a row 15, and,
+    with ``--no-follow``, 18 while the run moves. The gate and the
+    merge point run on their own events, and the release wave is the
+    merge point's to dispatch.
+    """
+    repo, _git = _resolved()
+    code = dispatch_flow(
+        repo,
+        point=point,
+        ref=ref,
+        follow=follow,
+        interval=interval,
+        timeout=timeout,
+    )
+    if code:
+        raise SystemExit(code)
+
+
 def runs_state(runs: tuple[Run, ...]) -> tuple[str, int]:
     """The one word for *runs* together and its exit: green 0, pending 18, red 13.
 
@@ -214,27 +412,54 @@ def runs_status_flow(
     wait: bool = False,
     interval: float = 15,
     timeout: float = 1800,
+    point: str = "",
 ) -> int:
     """Print the head commit's runs and their state; return that state's exit.
 
-    One line per run, workflow, status or conclusion, and page, then
-    the word for all of them. With *wait* the read repeats every
-    *interval* seconds while the state is pending, until *timeout*,
-    which exits 14.
+    One line per run, workflow, status or conclusion, event, commit,
+    and page, then the word for all of them. With *point* the one run
+    read is the newest of that point's workflow, whatever commit it
+    checked: the nightly's verdict, which no commit of a branch
+    carries. With *wait* the read repeats every *interval* seconds
+    while the state is pending, until *timeout*, which exits 14; a
+    transport error under *wait* is a retry, and a run of them that
+    reaches the budget exits 15. Without *wait* an unreadable forge
+    is the caller's error.
     """
     import time
 
-    sha = _head_sha(repo, git)
+    sha = ""
+    if point:
+        subject = f"the {point} point"
+        nothing = f"no {point} runs yet"
+    else:
+        sha = _head_sha(repo, git)
+        subject = sha[:10]
+        nothing = f"no runs yet for {sha[:10]}"
     deadline = time.monotonic() + timeout
+    transient = Transient(interval=interval)
     while True:
-        runs = repo.checks.runs(head_sha=sha)
+        try:
+            if point:
+                runs = point_runs(repo, point)[:1]
+            else:
+                runs = repo.checks.runs(head_sha=sha)
+        except ForgeError as exc:
+            if not wait:
+                raise
+            if transient.note(exc):
+                print(transient.giving_up(f"the runs for {subject}"))
+                return EXIT_UNREACHABLE
+            time.sleep(interval)
+            continue
+        transient.reset()
         for run in runs:
-            print(f"  {run.workflow:14} {run.conclusion or run.status:12} {run.url}")
+            print(_run_line(run))
         word, code = runs_state(runs)
         if not runs:
-            print(f"  no runs yet for {sha[:10]}")
+            print(f"  {nothing}")
         if code != EXIT_PENDING or not wait:
-            print(f"  {word}: {len(runs)} run(s) for {sha[:10]}")
+            print(f"  {word}: {len(runs)} run(s) for {subject}")
             return code
         if time.monotonic() >= deadline:
             print(f"  still pending after {timeout:.0f}s")
@@ -247,32 +472,50 @@ def ci_status(
     wait: Annotated[bool, doc("poll until the runs are no longer pending")] = False,
     interval: Annotated[int, doc("poll seconds under --wait")] = 15,
     timeout: Annotated[int, doc("deadline seconds under --wait")] = 1800,
+    point: Annotated[str, doc("read the newest run of this point instead")] = "",
 ) -> None:
     """Say where the head commit's runs stand; exit that state's code.
 
-    Green exits 0, red 13, pending 18, and a wait that runs out 14,
+    Green exits 0, red 13, pending 18, a wait that runs out 14, and
+    a forge unreachable for five polls in a row under the wait 15,
     so a script can ask whether main's push has finished after a
     merge. The head is the pull request's when the branch has one,
     else the local HEAD, so on main after a pull it is the merge.
+    ``--point=nightly`` reads the newest nightly run instead, by
+    workflow rather than by commit, so a failure only the nightly
+    meets reaches a person here.
     """
     repo, git = _resolved()
-    code = runs_status_flow(repo, git, wait=wait, interval=interval, timeout=timeout)
+    code = runs_status_flow(
+        repo, git, wait=wait, interval=interval, timeout=timeout, point=point
+    )
     if code:
         raise SystemExit(code)
 
 
 def logs_flow(
-    repo: Repository, git: GitOps, *, lines: int = 80, failed_only: bool = True
+    repo: Repository,
+    git: GitOps,
+    *,
+    lines: int = 80,
+    failed_only: bool = True,
+    point: str = "",
 ) -> None:
     """Print the head commit's job logs, failed jobs first and by default.
 
     The tail of each log, newest run first, so a red branch explains
-    itself without leaving the terminal.
+    itself without leaving the terminal. With *point* the one run
+    read is the newest of that point's workflow.
     """
-    sha = _head_sha(repo, git)
-    runs = repo.checks.runs(head_sha=sha)
+    if point:
+        runs = point_runs(repo, point)[:1]
+        subject = f"the {point} point"
+    else:
+        sha = _head_sha(repo, git)
+        runs = repo.checks.runs(head_sha=sha)
+        subject = sha[:10]
     if not runs:
-        print(f"  no runs for {sha[:10]}")
+        print(f"  no {point} runs" if point else f"  no runs for {subject}")
         return
     printed = 0
     for run in runs:
@@ -294,17 +537,21 @@ def logs_flow(
             printed += 1
     if not printed:
         which = "failed " if failed_only else ""
-        print(f"  no {which}jobs for {sha[:10]}")
+        print(f"  no {which}jobs for {subject}")
 
 
 @ci.task(name="logs")
 def ci_logs(
     lines: Annotated[int, doc("log lines per job, from the tail")] = 80,
     failed_only: Annotated[bool, doc("only jobs that did not succeed")] = True,
+    point: Annotated[str, doc("read the newest run of this point instead")] = "",
 ) -> None:
-    """Print the head commit's job logs, failed jobs by default."""
+    """Print the head commit's job logs, failed jobs by default.
+
+    ``--point=nightly`` prints the newest nightly run's logs instead.
+    """
     repo, git = _resolved()
-    logs_flow(repo, git, lines=lines, failed_only=failed_only)
+    logs_flow(repo, git, lines=lines, failed_only=failed_only, point=point)
 
 
 @ci.task(name="run")

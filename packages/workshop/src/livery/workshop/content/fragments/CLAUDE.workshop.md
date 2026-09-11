@@ -69,7 +69,10 @@ with `origin/main`.
   train receipt.
 - Notes in `notes/` describe current state; decisions carry dates in
   each note's decision record. A note is updated in the same change
-  as the code it describes, or it is wrong.
+  as the code it describes, or it is wrong. Two changes that both
+  append to a note merge by union (the rendered `.gitattributes`),
+  so an integrate never stops on a note; the merged note is read
+  once before it ships, since two edits of one line land both.
 
 ## Commits and tags
 

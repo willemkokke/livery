@@ -9,11 +9,27 @@ through a wheel bump, never an instance edit.
 from __future__ import annotations
 
 import re
+import sys
 import tomllib
 from pathlib import Path
 
 from livery.footman import fail
 from livery.workshop._contract import load_contract
+
+
+def scripts_dir(venv: Path) -> Path:
+    """*venv*'s executables directory: ``Scripts`` on Windows, ``bin`` elsewhere.
+
+    The running platform decides: a venv is used on the machine that
+    made it.
+    """
+    return venv / ("Scripts" if sys.platform == "win32" else "bin")
+
+
+def venv_python(venv: Path) -> Path:
+    """*venv*'s interpreter: ``python.exe`` under `scripts_dir` on Windows."""
+    return scripts_dir(venv) / ("python.exe" if sys.platform == "win32" else "python")
+
 
 #: The oldest Python a workspace being born supports; the floor once
 #: its ``pyproject.toml`` exists and declares one.

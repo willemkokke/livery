@@ -16,7 +16,7 @@ from typing import Any, cast
 import pytest
 
 from livery.footman import Failed
-from livery.forge import StateFilter
+from livery.forge import ForgeError, StateFilter
 from livery.forge.testing import FakeForge, Outcome
 from livery.workshop._ci_tasks import cancel_flow, doctor_flow, rerun_flow, status_flow
 from livery.workshop._git_ops import GitOps
@@ -34,6 +34,7 @@ from livery.workshop._verdict import (
     EXIT_CI_FAILED,
     EXIT_CONFLICTS,
     EXIT_DISARMED,
+    EXIT_PENDING,
     EXIT_STALLED,
     EXIT_TIMEOUT,
     classify,
@@ -483,6 +484,133 @@ def test_ci_status_reads_the_heads_runs_and_exits_by_state(
     assert "green: 2 run(s)" in capsys.readouterr().out
 
 
+def test_ci_dispatch_refuses_points_without_a_dispatch_entry(
+    rig: tuple[FakeForge, SubmitGit],
+) -> None:
+    from livery.workshop._ci_tasks import dispatch_flow
+
+    fake, _git = rig
+    repo = _repo(fake)
+    for point in ("gate", "merge"):
+        with pytest.raises(_FAILURES) as caught:
+            dispatch_flow(repo, point=point, ref="main")
+        assert "no dispatch entry" in str(caught.value)
+        assert "on its own event" in str(caught.value)
+    with pytest.raises(_FAILURES) as caught:
+        dispatch_flow(repo, point="release", ref="main")
+    assert "workflow.release.dispatch" in str(caught.value)
+    with pytest.raises(_FAILURES) as caught:
+        dispatch_flow(repo, point="weekly", ref="main")
+    assert "not a point" in str(caught.value)
+    assert not repo.checks.runs()
+
+
+def test_ci_dispatch_reports_a_forge_refusal_and_a_run_that_never_registers(
+    rig: tuple[FakeForge, SubmitGit],
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.workshop._ci_tasks import dispatch_flow
+
+    fake, _git = rig
+    repo = _repo(fake)
+    # A ref the forge does not have: its refusal is the message.
+    with pytest.raises(_FAILURES) as caught:
+        dispatch_flow(repo, point="nightly", ref="nowhere")
+    assert "refused the nightly dispatch" in str(caught.value)
+    assert "nowhere" in str(caught.value)
+    # An accepted dispatch that never shows a run is reported, exit 14.
+    monkeypatch.setattr(repo.checks, "dispatch", lambda *a, **k: None)
+    code = dispatch_flow(
+        repo, point="nightly", ref="main", interval=0, register_timeout=0
+    )
+    assert code == EXIT_TIMEOUT
+    out = capsys.readouterr().out
+    assert "no nightly run appeared within 0s" in out
+    assert "ci.status --point=nightly" in out
+
+
+def test_ci_dispatch_starts_the_nightly_and_follows_it_to_its_verdict(
+    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop._ci_tasks import dispatch_flow, follow_run, point_runs
+
+    fake, _git = rig
+    repo = _repo(fake)
+    main = fake.push(OWNER, NAME, "main", outcome="success")
+    # Started, registered, and left running: exit 18 without the follow.
+    code = dispatch_flow(repo, point="nightly", ref="main", follow=False)
+    assert code == EXIT_PENDING
+    out = capsys.readouterr().out
+    assert "dispatched the nightly point on main (nightly.yml)" in out
+    run = point_runs(repo, "nightly")[0]
+    assert run.event == "workflow_dispatch" and run.head_sha == main
+    assert f"nightly: run {run.id}" in out
+    # Followed to red: the red job is named and the exit is 13.
+    fake.set_outcome(OWNER, NAME, main, "failure")
+    fake.settle(OWNER, NAME, main)
+    assert follow_run(repo, "nightly", run, interval=0, timeout=1) == EXIT_CI_FAILED
+    out = capsys.readouterr().out
+    assert f"red: nightly run {run.id} failure" in out and "gate: failure" in out
+    # A second dispatch, followed inline to green, is 0.
+    fake.faults.drop_connections = 0
+    second = dispatch_flow(repo, point="nightly", ref="main", follow=False)
+    assert second == EXIT_PENDING
+    newest = point_runs(repo, "nightly")[0]
+    assert newest.id != run.id
+    fake.settle(OWNER, NAME, main)
+    assert follow_run(repo, "nightly", newest, interval=0, timeout=1) == 0
+    assert f"green: nightly run {newest.id} success" in capsys.readouterr().out
+
+
+def test_ci_dispatch_follow_waits_out_a_running_run_then_times_out(
+    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop._ci_tasks import dispatch_flow, follow_run, point_runs
+    from livery.workshop._verdict import EXIT_UNREACHABLE
+
+    fake, _git = rig
+    repo = _repo(fake)
+    fake.push(OWNER, NAME, "main", outcome="success")
+    assert dispatch_flow(repo, point="nightly", ref="main", follow=False) == 18
+    run = point_runs(repo, "nightly")[0]
+    assert follow_run(repo, "nightly", run, interval=0, timeout=0) == EXIT_TIMEOUT
+    out = capsys.readouterr().out
+    assert f"waiting: nightly run {run.id} is queued" in out
+    assert "still queued after 0s" in out
+    fake.faults.drop_connections = 50
+    assert follow_run(repo, "nightly", run, interval=0, timeout=1) == EXIT_UNREACHABLE
+    assert "giving up" in capsys.readouterr().out
+
+
+def test_ci_status_and_logs_read_the_newest_run_of_a_point(
+    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop._ci_tasks import dispatch_flow, logs_flow, runs_status_flow
+
+    fake, git = rig
+    repo = _repo(fake)
+    assert runs_status_flow(repo, git, point="nightly") == EXIT_PENDING
+    assert "no nightly runs yet" in capsys.readouterr().out
+    logs_flow(repo, git, point="nightly", failed_only=False)
+    assert "no nightly runs" in capsys.readouterr().out
+    main = fake.push(OWNER, NAME, "main", outcome="success")
+    # A gate run on a pull request is not the nightly's.
+    fake.push(OWNER, NAME, git.current_branch(), outcome="failure", sha=git.head_sha())
+    fake.settle(OWNER, NAME, git.head_sha())
+    dispatch_flow(repo, point="nightly", ref="main", follow=False)
+    capsys.readouterr()
+    assert runs_status_flow(repo, git, point="nightly") == EXIT_PENDING
+    fake.settle(OWNER, NAME, main)
+    assert runs_status_flow(repo, git, point="nightly") == 0
+    out = capsys.readouterr().out
+    assert "nightly.yml" in out and "workflow_dispatch" in out and main[:10] in out
+    assert "green: 1 run(s) for the nightly point" in out
+    logs_flow(repo, git, point="nightly", failed_only=False)
+    out = capsys.readouterr().out
+    assert "nightly.yml / gate: success" in out
+
+
 def test_a_pull_request_the_forge_never_runs_classifies_as_conflicts_at_once(
     rig: tuple[FakeForge, SubmitGit],
 ) -> None:
@@ -768,6 +896,68 @@ def test_follow_returns_the_merged_verdict(rig: tuple[FakeForge, SubmitGit]) -> 
     number = _submit(fake, git, armed=True)
     verdict = follow(_repo(fake), "feat/1-first", git, interval=0, timeout=1)
     assert verdict.state == "merged" and verdict.pr_number == number
+
+
+def test_the_follow_polls_through_dropped_connections(
+    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A transport error mid-poll is a retry, not a verdict: the watch
+    # prints each one once and reads the verdict on the next answer
+    # (an unarmed, green pull request: parked, exit 11).
+    fake, git = rig
+    _submit(fake, git, armed=False, follow_to_verdict=False)
+    fake.faults.drop_connections = 2
+    with pytest.raises(SystemExit) as caught:
+        follow(_repo(fake), "feat/1-first", git, interval=0, timeout=1)
+    assert caught.value.code == EXIT_DISARMED
+    out = capsys.readouterr().out
+    assert "forge unreachable (1/5)" in out and "forge unreachable (2/5)" in out
+    assert "giving up" not in out and "parked unarmed" in out
+
+
+def test_the_follow_gives_up_after_the_transient_budget_naming_the_pull_request(
+    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop._verdict import EXIT_UNREACHABLE
+
+    fake, git = rig
+    number = _submit(fake, git, armed=False, follow_to_verdict=False)
+    fake.faults.drop_connections = 50
+    with pytest.raises(SystemExit) as caught:
+        follow(_repo(fake), "feat/1-first", git, interval=0, timeout=1)
+    assert caught.value.code == EXIT_UNREACHABLE
+    out = capsys.readouterr().out
+    assert "forge unreachable (5/5)" in out
+    assert "giving up" in out and "5 consecutive" in out
+    assert "Remote end closed connection" in out
+    assert f"fake://{OWNER}/{NAME}/pulls/{number}" in out
+
+
+def test_ci_status_wait_polls_through_dropped_connections_then_gives_up(
+    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop._ci_tasks import runs_status_flow
+    from livery.workshop._verdict import EXIT_UNREACHABLE
+
+    fake, git = rig
+    repo = _repo(fake)
+    sha = git.head_sha()
+    fake.push(OWNER, NAME, git.current_branch(), outcome="success", sha=sha)
+    fake.settle(OWNER, NAME, sha)
+    # Without --wait a single unreadable poll is the caller's error.
+    fake.faults.drop_connections = 1
+    with pytest.raises(ForgeError):
+        runs_status_flow(repo, git)
+    fake.faults.drop_connections = 2
+    assert runs_status_flow(repo, git, wait=True, interval=0, timeout=5) == 0
+    out = capsys.readouterr().out
+    assert "forge unreachable (2/5)" in out and "green: 1 run(s)" in out
+    fake.faults.drop_connections = 50
+    assert (
+        runs_status_flow(repo, git, wait=True, interval=0, timeout=5)
+        == EXIT_UNREACHABLE
+    )
+    assert "giving up" in capsys.readouterr().out
 
 
 def test_a_merge_in_flight_wins_over_a_stale_arming_read(

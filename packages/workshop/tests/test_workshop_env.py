@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,7 @@ from livery.workshop._env_tasks import (
     emit_lines,
     github_persist,
     tool_profile,
+    venv_bin,
     workspace_delta,
 )
 from livery.workshop._envfile import (
@@ -174,7 +176,7 @@ def test_the_workspace_delta_carries_the_cascade_and_the_venv(
     delta = workspace_delta(tmp_path, tmp_path)
     assert delta.values["SOME_FLAG"] == "on"
     assert delta.values["VIRTUAL_ENV"] == str(tmp_path / ".venv")
-    assert delta.paths == (str(tmp_path / ".venv" / "bin"),)
+    assert delta.paths == (str(venv_bin(tmp_path)),)
 
 
 def test_the_agent_delta_selects_by_membership_secrets_included(
@@ -438,6 +440,9 @@ def test_a_non_ascii_untracked_path_is_planned_and_removed(
 _SHIM = Path(__file__).resolve().parents[3] / ".claude" / "hooks" / "fm-hook.sh"
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="the hook shim is a POSIX shell script"
+)
 def test_the_shim_turns_infrastructure_failure_into_a_pass(
     tmp_path: Path,
 ) -> None:
@@ -454,6 +459,9 @@ def test_the_shim_turns_infrastructure_failure_into_a_pass(
     assert result.returncode == 0
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="the hook shim is a POSIX shell script"
+)
 def test_the_shim_propagates_only_the_hooks_own_refusal(tmp_path: Path) -> None:
     for code, expected in ((2, 2), (1, 0), (3, 0)):
         fake = tmp_path / "fm"
@@ -627,7 +635,7 @@ def test_emit_appends_the_dialects_own_completion_hook(
         "livery.workshop._layers.workspace_root", lambda start=None: tmp_path
     )
     monkeypatch.chdir(tmp_path)
-    posix = _env_tasks.env_emit("")
+    posix = _env_tasks.env_emit("posix")
     assert "case $-" in posix  # the interactive guard
     pwsh = _env_tasks.env_emit("pwsh")
     assert "MenuComplete" in pwsh and "case $-" not in pwsh

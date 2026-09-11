@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from livery.workshop._contract import toml_string
 from livery.workshop._registries import RegistryTarget, resolve_registry
 
 _FAILURES = (BaseException,)
@@ -75,7 +76,7 @@ def test_a_folder_declaration_is_first_class(tmp_path: Path) -> None:
     share = tmp_path / "share" / "registry"
     root = _workspace(
         tmp_path,
-        f'[workspace]\n[registries]\nconan = "{share}"\n',
+        f"[workspace]\n[registries]\nconan = {toml_string(str(share))}\n",
     )
     target = resolve_registry(root, "conan")
     assert target.local and target.url == str(share)
