@@ -41,6 +41,9 @@ EXIT_TIMEOUT = 14
 EXIT_UNREACHABLE = 15
 EXIT_STALLED = 16
 EXIT_BEHIND = 17
+#: ``ci.status``'s exit while the head's runs are still moving, or
+#: none has started: the state a script waits on.
+EXIT_PENDING = 18
 
 #: Consecutive unreadable polls before the watch gives up with 15.
 _UNREACHABLE_BUDGET = 5
@@ -139,6 +142,20 @@ def classify(
         failing = _failing_job(repo, pr.head_sha)
         detail = failing or "CI is red"
         return Verdict("ci-failed", EXIT_CI_FAILED, detail, pr.number)
+    if status.state == "none":
+        # A pull request whose merge ref the forge cannot build gets no
+        # run at all, so its status stays none for as long as anyone
+        # waits. The conflict probe decides at once instead: exit 10,
+        # and the self-heal integrates and re-submits.
+        git.fetch()
+        if git.conflicts_with_base(pr.base_branch):
+            return Verdict(
+                "conflicts",
+                EXIT_CONFLICTS,
+                f"PR #{pr.number} conflicts with {pr.base_branch}, so the forge"
+                " runs nothing for it",
+                pr.number,
+            )
     if status.state in ("pending", "none"):
         return Verdict(
             "in-flight", 0, f"CI {status.state} for {pr.head_sha[:10]}", pr.number

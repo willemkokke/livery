@@ -38,7 +38,7 @@ coverage = [
 # deliberately. The e2e loop verb's orchestration is proven by the
 # live loop against the local forge, not by unit tests, so the
 # metered suite counts it uncovered, and the floor allows for it.
-coverage-floor = 84
+coverage-floor = 83
 
 # Who reviews this package; the codeowners file renders from
 # these declarations.

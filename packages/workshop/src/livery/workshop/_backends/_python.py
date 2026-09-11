@@ -830,6 +830,16 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
             " that names no branch has no record of its own"
         )
         return tuple(packages)
+    # Two runs of one branch overlap when a push follows a push: the
+    # older run's gate job can finish last, and its rows would replace
+    # the newer run's. Only the run of the branch's current head writes.
+    moved, head = _moved_on(git, run, target)
+    if moved:
+        print(
+            f"  coverage record: {target}'s head moved on to {moved[:12]} since"
+            f" this run's {head[:12]}; not written, the newer run writes"
+        )
+        return tuple(packages)
     for label, fresh, carried, own in writes:
         stale = own.stale(keys)
         # The rows carried from another record are copied in; the
@@ -876,6 +886,24 @@ def _read_record(root: Path, held: dict[str, Record], base: str, label: str) -> 
         for skipped in held[base].skipped:
             print(f"  coverage: {base}/{label}: {skipped}")
     return held[base]
+
+
+def _moved_on(git: GitOps, run: RunContext, branch: str) -> tuple[str, str]:
+    """*branch*'s head on origin and this run's, when they differ; empty otherwise.
+
+    This run's head is the pull request's on a pull request and the
+    checkout on a push. Empty too when origin cannot be asked: an
+    answer the run cannot get never withholds a write on its own.
+    """
+    from livery.workshop._git_ops import GitError
+
+    try:
+        head = run.head_sha if run.event == "pull_request" else git.head_sha()
+        git.fetch()
+        current = git.remote_head(branch)
+    except GitError:
+        return "", ""
+    return (current, head) if current and current != head else ("", "")
 
 
 def _record_bases(

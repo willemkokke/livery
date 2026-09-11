@@ -222,7 +222,7 @@ def test_a_suite_the_store_holds_stays_skipped_and_a_miss_runs(
     assert reads == [("check-a", "main")]  # no branch on this run: main's alone
     assert (
         "coverage store: packages/z runs, nothing to reuse (on this leg main's"
-        " record holds it at another closure)" in out
+        " record holds it at closure jjjjjjjjjjjj, not kkkkkkkkkkkk)" in out
     )
     assert "packages/y runs" not in out
     assert "affected: packages/x, packages/z" in out

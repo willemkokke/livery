@@ -529,6 +529,7 @@ def _union(
         lambda root, *, leg, base="main": by_base.get(base, _coverage_store.Record({})),
     )
     monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
+    monkeypatch.setattr(_python, "_moved_on", lambda git, run, branch: ("", ""))
     row = _verified.Verified("t", "5", "a" * 40, "full", ("check-a",), branch=proved)
     monkeypatch.setattr(_verified, "tree_id", lambda git, ref="HEAD": "t")
     monkeypatch.setattr(_verified, "record", lambda root, tree: (row, ""))
@@ -805,6 +806,39 @@ def test_mains_run_copies_the_merged_branchs_record_and_drops_the_stale(
     assert (
         "coverage record: main/check-a not written (push refused: down)"
         in capsys.readouterr().out
+    )
+
+
+def test_a_run_whose_branch_moved_on_judges_but_never_writes_the_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    x = _suite(tmp_path, "x")
+    source = str(_source(tmp_path, "x"))
+    _in_ci(monkeypatch, "gate")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
+    monkeypatch.setenv("GITHUB_HEAD_REF", "feat/x")
+    monkeypatch.setenv("GITHUB_SHA", "a" * 40)
+    leg = _leg(
+        "check-a",
+        "full",
+        units={"packages/x": _unit("packages/x", {source: [1, 2, 3, 4]})},
+    )
+    written = _union(monkeypatch, [leg])
+    asked: list[str] = []
+
+    def _elsewhere(git: object, run: object, branch: str) -> tuple[str, str]:
+        asked.append(branch)
+        return "b" * 40, "a" * 40
+
+    monkeypatch.setattr(_python, "_moved_on", _elsewhere)
+    assert _python.combine_union(tmp_path, (x,)) == (x,)
+    out = capsys.readouterr().out
+    assert "the union of 1 leg(s) and 0 reused suite(s)" in out
+    assert asked == ["feat/x"]
+    assert written == []
+    assert (
+        "coverage record: feat/x's head moved on to bbbbbbbbbbbb since this run's"
+        " aaaaaaaaaaaa; not written, the newer run writes" in out
     )
 
 

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from livery.footman import Failed
 from livery.workshop._docs import (
     NAV_BEGIN,
     NAV_END,
@@ -16,6 +17,8 @@ from livery.workshop._docs import (
     zensical_config,
 )
 from livery.workshop._packages import discover_packages
+
+_FAILURES = (SystemExit, Failed)
 
 
 def _workspace(tmp_path: Path, *, docs_table: str = "") -> Path:
@@ -1070,6 +1073,20 @@ def test_the_pages_read_the_store_inside_ci_when_the_legs_left_no_data(
     assert "bare: no measured data; its page states the absence" in out
     assert (root / "packages" / "core" / "htmlcov" / "index.html").is_file()
     assert not (root / "packages" / "bare" / "htmlcov").exists()
+
+
+def test_a_build_that_left_no_site_is_red(tmp_path: Path) -> None:
+    from livery.workshop._docs import require_site
+
+    with pytest.raises(
+        _FAILURES, match=r"left no .*site/index\.html: nothing to publish"
+    ):
+        require_site(tmp_path)
+    (tmp_path / "site").mkdir()
+    with pytest.raises(_FAILURES, match="nothing to publish"):
+        require_site(tmp_path)
+    (tmp_path / "site" / "index.html").write_text("<html></html>")
+    require_site(tmp_path)
 
 
 def test_the_store_is_pulled_only_in_the_merge_points_deploy_job(

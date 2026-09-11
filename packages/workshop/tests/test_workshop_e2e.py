@@ -164,14 +164,129 @@ def _proof_rig() -> tuple[FakeForge, Repository]:
     return fake, repo
 
 
-def test_a_red_run_fails_the_proof_naming_its_page() -> None:
+def test_a_red_run_is_re_run_once_and_red_twice_is_the_verdict(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake, repo = _proof_rig()
+    monkeypatch.setattr(_e2e, "_dev_forge", lambda kind: (fake, "t"))
+    fake.push(_e2e.E2E_OWNER, _e2e.E2E_REPO, "main", outcome="failure", sha=_SHA)
+    fake.settle(_e2e.E2E_OWNER, _e2e.E2E_REPO, _SHA)
+    # The retry re-queues the failed run and names it; a green run is
+    # left alone.
+    runs = repo.checks.runs(head_sha=_SHA)
+    assert _e2e._retry_red_once(repo, runs) == ["ci.yml"]
+    assert repo.checks.runs(head_sha=_SHA)[0].status == "queued"
+    assert "re-running ci.yml" in capsys.readouterr().out
+    assert _e2e._retry_red_once(repo, repo.checks.runs(head_sha=_SHA)) == []
+    # Watched: the second attempt passes, and the watch ends green.
+    real = _e2e._retry_red_once
+
+    def _flaky(repo_: object, runs_: tuple[object, ...]) -> list[str]:
+        retried = real(repo, repo.checks.runs(head_sha=_SHA))
+        fake.set_outcome(_e2e.E2E_OWNER, _e2e.E2E_REPO, _SHA, "success")
+        fake.settle(_e2e.E2E_OWNER, _e2e.E2E_REPO, _SHA)
+        return retried
+
+    fake.settle(_e2e.E2E_OWNER, _e2e.E2E_REPO, _SHA)  # the queued attempt, red
+    monkeypatch.setattr(_e2e, "_retry_red_once", _flaky)
+    _e2e._watch("gitea", "url", _SHA, timeout=5, interval=0)
+    assert "ci.yml         success" in capsys.readouterr().out
+    # Red twice is the verdict: the second attempt fails too.
+    fake.push(_e2e.E2E_OWNER, _e2e.E2E_REPO, "main", outcome="failure", sha="e" * 40)
+    fake.settle(_e2e.E2E_OWNER, _e2e.E2E_REPO, "e" * 40)
+
+    def _still_red(repo_: object, runs_: tuple[object, ...]) -> list[str]:
+        retried = real(repo, repo.checks.runs(head_sha="e" * 40))
+        fake.settle(_e2e.E2E_OWNER, _e2e.E2E_REPO, "e" * 40)
+        return retried
+
+    monkeypatch.setattr(_e2e, "_retry_red_once", _still_red)
+    with pytest.raises(_FAILURES, match=r"red runs on the loop: ci\.yml"):
+        _e2e._watch("gitea", "url", "e" * 40, timeout=5, interval=0)
+
+
+def test_starting_over_refuses_unpushed_commits_then_deletes_everything(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import subprocess
+
+    fake, repo = _proof_rig()
+    root = tmp_path / _e2e.E2E_REPO
+    origin = tmp_path / "origin.git"
+    subprocess.run(
+        ["git", "init", "-q", "--bare", "--initial-branch=main", str(origin)],
+        check=True,
+    )
+    subprocess.run(["git", "clone", "-q", str(origin), str(root)], check=True)
+    for key, value in (("user.name", "t"), ("user.email", "t@livery.local")):
+        subprocess.run(["git", "-C", str(root), "config", key, value], check=True)
+    (root / "a.txt").write_text("a\n")
+    subprocess.run(["git", "-C", str(root), "add", "a.txt"], check=True)
+    subprocess.run(["git", "-C", str(root), "commit", "-qm", "feat: a"], check=True)
+    purged: list[tuple[str, str]] = []
+
+    def _purge(
+        base: str, owner: str, *, token: str, kind: str = "pypi", api: object = None
+    ) -> list[str]:
+        purged.append((base + "/" + owner, token))
+        return ["loop-echo==0.1.0"]
+
+    monkeypatch.setattr("livery.forge._registry.purge_packages", _purge)
+    # Refusal first: a commit origin has not seen would be lost.
+    with pytest.raises(_FAILURES, match="holds commits its origin has not seen"):
+        _e2e.start_over(fake, "t", root, url="http://gitea")
+    assert repo.pr is not None and purged == []
+    subprocess.run(
+        ["git", "-C", str(root), "push", "-q", "-u", "origin", "main"], check=True
+    )
+    lines = _e2e.start_over(fake, "t", root, url="http://gitea")
+    assert fake.get_repo(_e2e.E2E_OWNER, _e2e.E2E_REPO) is None
+    assert purged == [("http://gitea/" + _e2e.E2E_OWNER, "t")]
+    assert not root.exists()
+    assert lines == [
+        f"  deleted {_e2e.E2E_OWNER}/{_e2e.E2E_REPO} on the dev forge",
+        "  purged 1 release(s) from the registry: loop-echo==0.1.0",
+        f"  removed {root}",
+    ]
+    # A second reset finds nothing and says the same: the recovery procedure.
+    lines = _e2e.start_over(fake, "t", root, url="http://gitea")
+    assert lines[0].startswith("  deleted") and len(lines) == 2
+
+
+def test_a_red_run_is_re_run_once_and_then_fails_the_proof_naming_its_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     fake, repo = _proof_rig()
     fake.push(_e2e.E2E_OWNER, _e2e.E2E_REPO, "main", outcome="failure", sha=_SHA)
     fake.settle(_e2e.E2E_OWNER, _e2e.E2E_REPO, _SHA)
+    real = _e2e._retry_red_once
+    retries: list[int] = []
+
+    def _still_red(repo_: object, runs_: tuple[object, ...]) -> list[str]:
+        retried = real(repo, repo.checks.runs(head_sha=_SHA))
+        retries.append(len(retried))
+        fake.settle(_e2e.E2E_OWNER, _e2e.E2E_REPO, _SHA)  # the attempt, red again
+        return retried
+
+    monkeypatch.setattr(_e2e, "_retry_red_once", _still_red)
     with pytest.raises(_FAILURES) as caught:
-        _e2e._completed_run(repo, _SHA, event="push")
+        _e2e._completed_run(repo, _SHA, event="push", interval=0)
+    assert retries == [1]
     assert "ended failure" in str(caught.value)
     assert "/actions/runs/" in str(caught.value)
+    # A second attempt that passes is the proof's run.
+    fake.push(_e2e.E2E_OWNER, _e2e.E2E_REPO, "main", outcome="failure", sha="e" * 40)
+    fake.settle(_e2e.E2E_OWNER, _e2e.E2E_REPO, "e" * 40)
+
+    def _then_green(repo_: object, runs_: tuple[object, ...]) -> list[str]:
+        retried = real(repo, repo.checks.runs(head_sha="e" * 40))
+        fake.set_outcome(_e2e.E2E_OWNER, _e2e.E2E_REPO, "e" * 40, "success")
+        fake.settle(_e2e.E2E_OWNER, _e2e.E2E_REPO, "e" * 40)
+        return retried
+
+    monkeypatch.setattr(_e2e, "_retry_red_once", _then_green)
+    run, _jobs = _e2e._completed_run(repo, "e" * 40, event="push", interval=0)
+    assert run.conclusion == "success"
 
 
 def test_a_proof_waits_only_until_its_deadline_and_reads_its_event_alone() -> None:

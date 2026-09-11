@@ -248,6 +248,55 @@ def _publish_dev_wheels(kind: str) -> dict[str, str]:
     return pins
 
 
+def start_over(lane: Forge, token: str, root: Path, *, url: str) -> list[str]:
+    """Delete the loop's repository, its registry releases, and *root*; the lines.
+
+    Refuses while *root* holds commits its origin has not seen, since
+    the repository they would land in is about to go. A repository or
+    a release already gone is not an error: the next birth wants them
+    absent, and a re-run of the reset is the recovery procedure.
+    """
+    import shutil
+
+    from livery.forge._registry import purge_packages
+
+    if (root / ".git").is_dir():
+        unpushed = _unpushed_commits(root)
+        if unpushed:
+            listed = "\n".join(f"    {line}" for line in unpushed)
+            fail(
+                f"{root} holds commits its origin has not seen:\n{listed}\n"
+                "  push or discard them before starting over"
+            )
+    lines: list[str] = []
+    lane.delete_repo(E2E_OWNER, E2E_REPO)
+    lines.append(f"  deleted {E2E_OWNER}/{E2E_REPO} on the dev forge")
+    purged = purge_packages(url, E2E_OWNER, token=token)
+    lines.append(
+        f"  purged {len(purged)} release(s) from the registry"
+        + (f": {', '.join(purged)}" if purged else "")
+    )
+    if root.exists():
+        shutil.rmtree(root)
+        lines.append(f"  removed {root}")
+    return lines
+
+
+def _unpushed_commits(root: Path) -> list[str]:
+    """The commits on any local branch of *root* that its origin does not hold."""
+    import livery.toolroom as toolroom
+
+    fetched = toolroom.git.opts(cwd=root, nofail=True, recorded=False)(
+        "fetch", "--quiet", "origin"
+    )
+    if fetched.code != 0:
+        return []  # no reachable origin: nothing there could hold them anyway
+    listed = toolroom.git.opts(cwd=root, nofail=True, recorded=False)(
+        "log", "--oneline", "--branches", "--not", "--remotes=origin"
+    )
+    return [line for line in listed.stdout.splitlines() if line.strip()]
+
+
 def _birth(kind: str, url: str) -> Path:
     """Birth or resume the loop's workspace; the root it lives at.
 
@@ -575,6 +624,24 @@ def judge_runs(
     return lines
 
 
+def _retry_red_once(repo: Repository, runs: tuple[Run, ...]) -> list[str]:
+    """Re-run the failed jobs of every red run in *runs*; the runs re-queued.
+
+    The loop's runner has failed a job on a build that left nothing
+    and passed the same job on the re-run, so a red run gets one more
+    attempt before it is judged. Returns the workflows re-run, empty
+    when nothing was red.
+    """
+    retried: list[str] = []
+    for run in runs:
+        if run.conclusion != "failure":
+            continue
+        repo.checks.rerun(run.id, failed_only=True)
+        print(f"  re-running {run.workflow} (run {run.id}) once: it ended failure")
+        retried.append(run.workflow)
+    return retried
+
+
 def _watch(
     kind: str,
     url: str,
@@ -583,19 +650,23 @@ def _watch(
     timeout: float = 900.0,
     require: tuple[str, ...] = (),
     branch: str = "",
+    interval: float = 5.0,
 ) -> None:
-    """Follow *sha*'s runs to their verdicts; red fails verbatim.
+    """Follow *sha*'s runs to their verdicts; red fails verbatim after one re-run.
 
     *require* names workflows that must appear before the wait ends:
     a workflow triggered by the push registers its run a beat after
     the others, and a watch that settles on the early arrivals would
     call the commit green while the required one is still unstarted.
+    A run that ended failure is re-run once and followed again; red
+    twice is the verdict.
     """
     import time
 
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
     deadline = time.monotonic() + timeout
+    retried = False
     while True:
         runs = repo.checks.runs(head_sha=sha)
         present = {run.workflow for run in runs}
@@ -604,7 +675,9 @@ def _watch(
             and all(r.status == "completed" for r in runs)
             and all(name in present for name in require)
         ):
-            break
+            if retried or not _retry_red_once(repo, runs):
+                break
+            retried = True
         if time.monotonic() >= deadline:
             missing = ", ".join(sorted(set(require) - present))
             waited = f"; never appeared: {missing}" if missing else ""
@@ -612,7 +685,7 @@ def _watch(
                 f"the loop's runs did not complete within {timeout:.0f}s"
                 f"{waited}: {repo.web_url()}/actions"
             )
-        time.sleep(5)
+        time.sleep(interval)
     for line in judge_runs(repo, runs, branch=branch):
         print(line)
 
@@ -775,19 +848,27 @@ def _ensure_members(root: Path) -> None:
 
 
 def _completed_run(
-    repo: Repository, sha: str, *, event: str, timeout: float = 900.0
+    repo: Repository,
+    sha: str,
+    *,
+    event: str,
+    timeout: float = 900.0,
+    interval: float = 5.0,
 ) -> tuple[Run, tuple[Job, ...]]:
     """The newest completed ``ci.yml`` run of *sha* for *event*, with its jobs.
 
-    Waits for the run to register and complete; a red run fails
-    verbatim, naming its page. The jobs carry their names, the check
-    legs by their matrix display (``check (ubuntu-latest, 3.14)``),
-    so a reader looks for the prefix it needs; the logs are read per
-    job on demand, since a job the run skipped has none to serve.
+    Waits for the run to register and complete; a run that ended
+    failure is re-run once and waited for again, and a red run then
+    fails verbatim, naming its page. The jobs carry their names, the
+    check legs by their matrix display (``check (ubuntu-latest,
+    3.14)``), so a reader looks for the prefix it needs; the logs are
+    read per job on demand, since a job the run skipped has none to
+    serve.
     """
     import time
 
     deadline = time.monotonic() + timeout
+    retried = False
     while True:
         runs = [
             run
@@ -796,13 +877,15 @@ def _completed_run(
         ]
         run = max(runs, key=lambda run: run.id, default=None)
         if run is not None and run.status == "completed":
-            break
+            if retried or not _retry_red_once(repo, (run,)):
+                break
+            retried = True
         if time.monotonic() >= deadline:
             fail(
                 f"no completed {event} run for {sha[:10]} within {timeout:.0f}s:"
                 f" {repo.web_url()}/actions"
             )
-        time.sleep(5)
+        time.sleep(interval)
     if run.conclusion != "success":
         fail(
             f"run {run.id} ({event}, {sha[:10]}) ended {run.conclusion}:"
@@ -1499,7 +1582,7 @@ if _WORKSHOP_TESTS.is_dir():
     # serial: the driver births into and pushes from its own
     # directories, so it owns the process globals for the run.
     @ci.task(name="e2e", serial=True)
-    def e2e(forge: str = "gitea") -> None:
+    def e2e(forge: str = "gitea", fresh: bool = False) -> None:
         """Exercise the CI and release story on the local forge.
 
         Births or resumes the loop's workspace through
@@ -1509,15 +1592,22 @@ if _WORKSHOP_TESTS.is_dir():
         workflow runs to their verdicts on the real runner. Re-running
         is the recovery procedure at every step. The release act into
         the local registry follows in this phase; the verb always says
-        exactly what it covers.
+        exactly what it covers. ``--fresh`` starts over from nothing:
+        the loop's repository on the dev forge, its releases in the
+        forge's registry, and the local workspace go, then the pass
+        births everything anew. It refuses while the workspace holds
+        commits the forge has not seen.
         """
         import os
 
         url = os.environ.get("GITEA_URL", "")
         _require_host_alias()
-        _, lane_token = _dev_forge(forge)
-        pins = _publish_dev_wheels(forge)
+        lane, lane_token = _dev_forge(forge)
         root = _loop_home() / E2E_REPO
+        if fresh:
+            for line in start_over(lane, lane_token, root, url=url):
+                print(line)
+        pins = _publish_dev_wheels(forge)
         if (root / ".git").is_dir():
             # A resumed birth pushes before it returns, so an
             # existing workspace authenticates first; birth resets

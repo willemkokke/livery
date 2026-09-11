@@ -641,26 +641,6 @@ def push_and_pr(
     # fail non-fast-forward.
     pr = repo.pr.find_by_head(plan.branch)
     if pr is None:
-        # A defaulted title is trustworthy only when it is unambiguous:
-        # one commit ahead, its subject is the intent. More, and
-        # whichever commit is HEAD would name the pull request - a
-        # guess dressed as a default, so it refuses instead (the
-        # recurring mis-title hse lived with). Re-submits never enter
-        # this branch, where the default is inert anyway.
-        if not plan.title_given:
-            subjects = [
-                subject
-                for subject in git.subjects_ahead(plan.base)
-                if not subject.startswith("Merge ")
-            ]
-            if len(subjects) > 1:
-                listed = "\n".join(f"    - {subject}" for subject in subjects)
-                fail(
-                    f"the branch is {len(subjects)} commits ahead, so no"
-                    " commit subject can default the PR title:\n"
-                    f"{listed}\n"
-                    '  pass the intent: --title="type(scope): subject"'
-                )
         _push(git, plan.branch, force=force)
         pr = repo.pr.open(plan.branch, plan.base, plan.title, body)
         print(f"  opened PR #{pr.number}: {pr.title}")
@@ -680,6 +660,33 @@ def push_and_pr(
         )
         print(f"  armed: PR #{pr.number} merges when green")
     return pr.number
+
+
+def refuse_ambiguous_title(git: GitOps, plan: Plan) -> None:
+    """Refuse a defaulted title on a branch more than one commit ahead.
+
+    A defaulted title is trustworthy only when it is unambiguous: one
+    commit ahead, its subject is the intent. More, and whichever
+    commit is HEAD would name the pull request, a guess dressed as a
+    default, so it refuses instead, listing the subjects. A given
+    title never refuses, and a pull request that already exists keeps
+    its title, so the caller asks only on a first open.
+    """
+    if plan.title_given:
+        return
+    subjects = [
+        subject
+        for subject in git.subjects_ahead(plan.base)
+        if not subject.startswith("Merge ")
+    ]
+    if len(subjects) > 1:
+        listed = "\n".join(f"    - {subject}" for subject in subjects)
+        fail(
+            f"the branch is {len(subjects)} commits ahead, so no"
+            " commit subject can default the PR title:\n"
+            f"{listed}\n"
+            '  pass the intent: --title="type(scope): subject"'
+        )
 
 
 def submit_flow(
@@ -706,14 +713,24 @@ def submit_flow(
     same flow against livery.forge.testing.FakeForge and a temporary
     repository.
     """
+    # Every refusal the arguments decide comes before the gate: the
+    # branch's name, the title's shape, and whether a title can
+    # default at all. A person never pays minutes of gate for a flag
+    # they could have passed, and the title is decided from the
+    # branch as it is, before a fold adds a commit of its own.
+    git.fetch()
+    plan = prepare(git, title=title, body=body, base=base)
+    # A first open only: a pull request that exists, open, merged, or
+    # closed, keeps its title, and the merged and closed cases get
+    # their own refusals further on.
+    if repo.pr.find_by_head(plan.branch, state="all") is None:
+        refuse_ambiguous_title(git, plan)
     if gate:
         _gate(fix, root=git.root, base=base)
         if fix and not git.is_clean():
             _fold_fixes(git, base)
     else:
         print("  gate skipped (--no-gate): CI is now the first verifier")
-    git.fetch()
-    plan = prepare(git, title=title, body=body, base=base)
     _heal_context_rename(repo, git, plan, fix=fix)
     linked = resolve_closes(repo, plan.branch, closes)
     if linked is not None:
