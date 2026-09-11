@@ -763,13 +763,18 @@ def test_mains_run_copies_the_merged_branchs_record_and_drops_the_stale(
     branch = _coverage_store.Record(
         {"packages/y": _unit("packages/y", {y_source: [1, 2, 3, 4]}, run="5")}
     )
+    # Main's own row of x is of an older shape: skipped, and replaced by
+    # the fresh row of the same name rather than counted as removed.
     held = _coverage_store.Record(
         {
             "packages/y": _unit("packages/y", {}, run="3", closure="j" * 64),
             "packages/gone": _unit("packages/gone", {}, run="3"),
             "tests": _unit("tests", {y_source: [2]}, run="5"),
         },
-        skipped=(Skipped("junk.json", "does not parse"),),
+        skipped=(
+            Skipped("junk.json", "does not parse"),
+            Skipped("packages-x.json", "schema 1, this reader speaks 2"),
+        ),
     )
     written = _union(
         monkeypatch, [leg], held=held, records={"feat/x": branch}, proved="feat/x"
@@ -787,7 +792,7 @@ def test_mains_run_copies_the_merged_branchs_record_and_drops_the_stale(
             "main",
             "check-a",
             ["packages/x", "packages/y", "tests"],
-            ["junk.json", "packages-gone.json"],
+            ["junk.json", "packages-gone.json", "packages-x.json"],
         )
     ]
     assert "coverage record: main/check-a: 2 fresh, 1 carried, 2 removed" in out

@@ -683,6 +683,7 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
         Unit,
         closure_id,
         put_record,
+        row_name,
         run_legs,
     )
     from livery.workshop._git_ops import GitOps
@@ -818,11 +819,14 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
     for label, fresh, carried, own in writes:
         stale = own.stale(keys)
         # The rows carried from another record are copied in; the
-        # target's own carried rows already stand.
+        # target's own carried rows already stand. A stale row a new
+        # row replaces by name (a row of an older shape, say) is
+        # replaced, not removed: only the rest go.
         rows = dict(fresh)
         rows.update(
             {path: row for path, (base, row) in carried.items() if base != target}
         )
+        removed = [name for name in stale if name not in {row_name(p) for p in rows}]
         if not rows and not stale:
             print(
                 f"  coverage record: {target}/{label}: unchanged, {len(carried)}"
@@ -838,7 +842,7 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
             continue
         print(
             f"  coverage record: {target}/{label}: {len(fresh)} fresh,"
-            f" {len(carried)} carried, {len(stale)} removed"
+            f" {len(carried)} carried, {len(removed)} removed"
         )
     return tuple(packages)
 
