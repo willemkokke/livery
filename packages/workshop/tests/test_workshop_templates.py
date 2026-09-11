@@ -475,7 +475,13 @@ def test_the_github_shell_is_one_verb_per_job_for_the_gate_point(
     assert (
         '--os="${{ matrix.os }}" --python="${{ matrix.python }}"' in check_step["run"]
     )
-    assert check_step["env"] == {"COVERAGE_PROCESS_START": "pyproject.toml"}
+    # The gate's own process is never metered: the test runner arms the
+    # meter in pytest's environment, so the shell sets no variable.
+    assert "env" not in check_step
+    assert (
+        "COVERAGE_PROCESS_START"
+        not in generate(_contract_root(tmp_path, "github"))[".github/workflows/ci.yml"]
+    )
     assert not [s for s in check["steps"] if "ci.metrics.leg" in s.get("run", "")]
     # The leg's measured suites ride its per-run ref on the state
     # store: no artifact carries coverage, on the leg or in the gate
@@ -601,7 +607,7 @@ def test_the_rendered_answers_never_store_the_brand(tmp_path: Path) -> None:
     # instance to the CLI that happened to render it.
     assert "runner_prog" not in stored
     # The meter comment rides the brand too.
-    assert "Every hse child" in (destination / "pyproject.toml").read_text()
+    assert "# hse child a test spawns" in (destination / "pyproject.toml").read_text()
 
 
 def test_the_shell_and_completion_lines_run_the_brand() -> None:
@@ -1100,7 +1106,7 @@ def test_the_gitea_lane_meters_its_legs_and_unions_them_in_the_gate_job(
     workflow = yaml.safe_load(generate(root)[".gitea/workflows/ci.yml"])
     check = workflow["jobs"]["check"]["steps"]
     run = next(step for step in check if step.get("name") == "Check")
-    assert run["env"]["COVERAGE_PROCESS_START"] == "pyproject.toml"
+    assert "env" not in run  # the test runner arms the meter, never the shell
     # No artifact carries coverage: the leg's measured suites ride its
     # per-run ref, and the gate job reads them from the store.
     artifacts = [step for step in check if "artifact" in step.get("uses", "")]

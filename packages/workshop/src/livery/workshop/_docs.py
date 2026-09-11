@@ -1339,9 +1339,9 @@ def render_python_coverage(root: Path) -> list[str]:
     from livery.workshop._backends._python import _unmetered
     from livery.workshop._kinds import is_python_kind
 
-    # The coverage CLI on named files: under a metered gate the
-    # ambient COVERAGE_* variables would re-point it at the outer
-    # run's live data file, and the page would find no union.
+    # The coverage CLI on named files: ambient COVERAGE_* variables
+    # from a metered shell would re-point it at that process's live
+    # data file, and the page would find no union.
     unmetered = _unmetered()
     legs, misses = _stored_legs(root)
     for miss in misses:

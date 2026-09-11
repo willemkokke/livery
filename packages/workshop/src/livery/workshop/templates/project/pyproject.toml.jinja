@@ -66,7 +66,8 @@ dev = [
     "coverage[toml]>=7.10",
     # Installs the .pth that arms coverage.process_startup() in every
     # python the venv starts when COVERAGE_PROCESS_START is set: how
-    # the CI gate meters the whole invocation without wrapping it.
+    # the CI test runner meters pytest and every process the tests
+    # start without wrapping them.
     "coverage-enable-subprocess>=1.0",
     # Parallelise the suite across cores (`-n auto`, wired into addopts).
     "pytest-xdist>=3.6",
@@ -241,11 +242,14 @@ unnecessary-type-conversion = "error"
 "*" = "error"
 
 [tool.coverage.run]
-# Every {{ runner_prog }} child measures: the CI gate arms
-# COVERAGE_PROCESS_START, the installed .pth starts the meter in
-# every python, and the patch cascades through the task shells, the
-# out-of-process pytest, and its workers. Parallel data files merge
-# per leg, then across legs in the aggregating gate job.
+# The tests measure, and every process they start, every
+# {{ runner_prog }} child a test spawns included: inside CI the test
+# runner arms COVERAGE_PROCESS_START in pytest's environment, the
+# installed .pth starts the meter in every python under it, and the
+# patch cascades through the workers. The gate's own driver is never
+# metered, so a line counts only when a test reached it. Parallel
+# data files merge per leg, then across legs in the aggregating
+# gate job.
 patch = ["subprocess"]
 parallel = true
 relative_files = true

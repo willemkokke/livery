@@ -548,8 +548,8 @@ coverage = group("coverage", help="The measured union and its floors")
 def coverage_leg() -> None:
     """Put this leg's measured suites on its per-run ref, and combine its data.
 
-    Runs at the end of a check leg that metered from interpreter
-    start: the run left one data file per process; each suite the
+    Runs at the end of a check leg whose tests ran metered: the run
+    left one data file per process; each suite the
     leg ran is split out and put on the leg's per-run ref with the
     scope the gate ran, and the parts combine into one ``.coverage``.
     Refuses when a leg that ran its gate left no data, naming the

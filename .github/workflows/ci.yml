@@ -39,16 +39,12 @@ jobs:
           UV_PYTHON: ${{ matrix.python }}
         run: bash setup.sh github
       - name: Check
-        env:
-          # Coverage's own subprocess contract: the .pth the
-          # coverage-enable-subprocess dev dependency installs calls
-          # coverage.process_startup() in every python this venv
-          # starts, armed by this variable, so the whole fm
-          # invocation meters from interpreter start; the leg's
-          # measured suites ride its per-run ref on the state store,
-          # and the gate job below unions them with main's record
-          # and judges once.
-          COVERAGE_PROCESS_START: pyproject.toml
+        # The tests run metered, and only they: the test runner arms
+        # coverage's process-start variable in pytest's environment,
+        # so the tests and every process they start record, and the
+        # gate's own driver does not. The leg's measured suites ride
+        # its per-run ref on the state store, and the gate job below
+        # unions them with main's record and judges once.
         run: >-
           fm ci.run --point=gate --job=check
           --os="${{ matrix.os }}" --python="${{ matrix.python }}"

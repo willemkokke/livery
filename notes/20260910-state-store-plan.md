@@ -333,3 +333,11 @@ a day, before 6 or after it.
   record without fresh rows after every merge and the next run red
   by name; the cost is the changed package's suite and the workspace
   tests rerun once on main after each merge.
+- 2026-09-11, Willem: the gate's own driver is not measured. Coverage
+  is what the tests execute, every process a test starts included;
+  the test runner arms the meter in pytest's environment inside CI
+  and the shells set nothing. The driver's path differs by scope, so
+  measuring it made workshop's number move with the scope (86.12 % on
+  a full run against 85.90 % on a measured run of the same tree,
+  #421). Ruled after "should we not measure the runner itself
+  everywhere?"; landed the same day.

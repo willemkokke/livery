@@ -2,8 +2,9 @@
 
 Registered through livery-workshop's ``pytest11`` entry point, so every
 pytest this venv starts carries it. It acts only when coverage's
-process startup is measuring the process (a CI check leg arms
-``COVERAGE_PROCESS_START``): each phase of a test records under a
+process startup is measuring the process (inside a CI check leg the
+test runner arms ``COVERAGE_PROCESS_START`` in pytest's environment,
+and in the gate's own never): each phase of a test records under a
 context made of the test's node id and the phase, the shape pytest-cov
 uses, so a leg can split one pooled run's data by the suite each test
 belongs to. Outside a metered run every hook returns at once, and a
@@ -23,8 +24,9 @@ from typing import Any
 
 import pytest
 
-#: Coverage's own variable: set, every python starts metered from
-#: interpreter start, and the meter is the one this plugin names
+#: Coverage's own variable: set in pytest's environment by the test
+#: runner inside CI, so pytest and every python it starts are metered
+#: from interpreter start, and the meter is the one this plugin names
 #: contexts on. A pytest-cov run has its own meter and is left alone.
 ARMED = "COVERAGE_PROCESS_START"
 
