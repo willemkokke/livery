@@ -32,7 +32,7 @@
         {"op": "put", "data": "{\"entries\":[]}", "as": "T"},
         {"op": "version", "tree": "T", "parents": [], "as": "V1"},
         {"op": "version", "tree": "T", "parents": ["V1"], "as": "V2"},
-        {"op": "version", "tree": "T", "parents": [], "as": "ROOT2"},
+        {"op": "version", "tree": "T", "parents": [], "message": "a second root", "as": "ROOT2"},
         {"op": "put", "data": "not a version", "as": "BLOB"},
         {"op": "set", "namespace": "datasets", "path": "corpus/main", "digest": "V1", "previous": null, "expect": "ok"},
         {"op": "set", "namespace": "datasets", "path": "corpus/main", "digest": "ROOT2", "previous": "V1", "expect": "not-fast-forward"},

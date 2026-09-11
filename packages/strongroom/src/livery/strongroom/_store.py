@@ -24,6 +24,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import IO, Literal
 
+import livery.strongroom._lifecycle as lifecycle
 from livery.strongroom._canonical import FormatError, Value, canonical
 from livery.strongroom._digest import Algorithm, Digest, registered
 from livery.strongroom._errors import (
@@ -39,7 +40,21 @@ from livery.strongroom._errors import (
     WriteOnceRefused,
 )
 from livery.strongroom._fields import Subject, expect_int, expect_object, expect_str
-from livery.strongroom._records import RefRecord
+from livery.strongroom._lifecycle import (
+    PENDING,
+    Pending,
+    SweepReport,
+    drop_ref,
+    erase,
+    pin,
+    publish_begin,
+    publish_commit,
+    reachable_from,
+    retire,
+    sweep,
+    unpin,
+)
+from livery.strongroom._records import RefRecord, Tombstone
 from livery.strongroom._sources import (
     FolderSource,
     HttpSource,
@@ -479,7 +494,7 @@ class Store:
         state = self.state(digest)
         if state == "erased":
             scratch.unlink()
-            raise ErasedObject(f"{digest} was erased here; a tombstone stands")
+            raise self._erased(digest)
         if state == "present":
             scratch.unlink()
             return Landed(digest, size, written=False)
@@ -519,7 +534,7 @@ class Store:
         state = self.state(digest)
         path = self.object_path(digest)
         if state == "erased":
-            raise ErasedObject(f"{digest} was erased here; a tombstone stands")
+            raise self._erased(digest)
         if state == "absent":
             raise MissingObject(f"{digest} is not in the store at {self.root}")
         size = self.verified_size(digest)
@@ -528,7 +543,7 @@ class Store:
         else:
             actual = path.stat().st_size
             if actual != size:
-                self._evict(digest)
+                self.evict(digest)
                 raise IntegrityError(
                     f"{digest} is {actual} bytes on disk and was verified at"
                     f" {size}; the object is removed"
@@ -555,7 +570,7 @@ class Store:
             raise MissingObject(f"{digest} is not in the store at {self.root}")
         actual = self._hash_file(path)
         if actual != digest:
-            self._evict(digest)
+            self.evict(digest)
             raise IntegrityError(
                 f"{digest} holds bytes named {actual}; the object is removed"
             )
@@ -601,10 +616,6 @@ class Store:
         mark.parent.mkdir(parents=True, exist_ok=True)
         _write_atomically(mark, str(size).encode("ascii"))
 
-    def _evict(self, digest: Digest) -> None:
-        self.object_path(digest).unlink(missing_ok=True)
-        self._mark(digest).unlink(missing_ok=True)
-
     def _hash_file(self, path: Path) -> Digest:
         hasher = self.algorithm.constructor(b"")
         with path.open("rb") as handle:
@@ -640,7 +651,7 @@ class Store:
         """
         state = self.state(digest)
         if state == "erased":
-            raise ErasedObject(f"{digest} was erased here; a tombstone stands")
+            raise self._erased(digest)
         if state == "present":
             return self.path(digest)
         passed_over: OriginHint | None = None
@@ -786,6 +797,215 @@ class Store:
     def _reference_mark(self, digest: Digest) -> Path:
         algorithm, fanout, rest = digest.path_parts
         return self.root / "index" / "referenced" / algorithm / fanout / rest
+
+    # Tombstones.
+
+    def tombstone(self, digest: Digest) -> Tombstone | None:
+        """The tombstone under the object's path, or None when there is none.
+
+        Raises:
+            IntegrityError: when the file under the tombstone's name is
+                not a tombstone.
+        """
+        path = self.object_path(digest)
+        try:
+            data = path.with_name(path.name + _TOMBSTONE).read_bytes()
+        except FileNotFoundError:
+            return None
+        try:
+            return Tombstone.decode(data)
+        except FormatError as error:
+            raise IntegrityError(f"tombstone of {digest}: {error}") from None
+
+    def write_tombstone(self, stone: Tombstone) -> None:
+        """Write *stone* under its object's path, in this tier."""
+        path = self.object_path(stone.digest)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _write_atomically(path.with_name(path.name + _TOMBSTONE), stone.encode())
+
+    def evict(self, digest: Digest) -> None:
+        """Remove the object's bytes and its marks; the name is untouched."""
+        self.object_path(digest).unlink(missing_ok=True)
+        self._mark(digest).unlink(missing_ok=True)
+        self._reference_mark(digest).unlink(missing_ok=True)
+
+    def clock(self) -> str:
+        """The current instant, from the clock the store was opened with."""
+        return self._clock()
+
+    def _erased(self, digest: Digest) -> ErasedObject:
+        # A tombstone that vanished between the state check and this
+        # read is a torn state; the refusal stands without its reason.
+        stone = self.tombstone(digest)
+        detail = (
+            "a tombstone stands"
+            if stone is None
+            else f"erased at {stone.at} by {stone.authority.value}: {stone.reason}"
+        )
+        return ErasedObject(f"{digest}: {detail}")
+
+    # The lifecycle. The bodies live in `_lifecycle`.
+
+    def publish_begin(
+        self, target: Digest, *, by: Subject, lease: float = 3600.0
+    ) -> Pending:
+        """Begin a publish: root *target* under `pending/<id>` first.
+
+        The pending ref is a root while it exists, so a sweep during the
+        publish keeps every object the target names. Nothing removes a
+        pending ref on a clock; a crashed publish is retired
+        deliberately with [livery.strongroom.Store.retire][].
+
+        Args:
+            target: the tree or version to publish; present here.
+            by: who publishes.
+            lease: seconds the publish expects to take; recorded in the
+                pending ref's record for whoever retires it.
+
+        Returns:
+            The pending publish.
+
+        Raises:
+            MissingObject: when *target* is not present here.
+        """
+        return publish_begin(self, target, by=by, lease=lease)
+
+    def publish_commit(
+        self,
+        pending_id: str,
+        namespace: str,
+        path: str,
+        *,
+        previous: Digest | None,
+        by: Subject,
+        receipt: Digest | None = None,
+        meta: dict[str, Value] | None = None,
+    ) -> RefRecord:
+        """Commit a publish: move the real ref, then drop the pending one.
+
+        The move obeys the namespace's mutation class exactly as
+        [livery.strongroom.Store.set_ref][] does.
+
+        Raises:
+            NoSuchPending: when `pending/<pending_id>` does not exist.
+            RefConflict: when the real ref does not name *previous*, or
+                its class refuses the move.
+        """
+        return publish_commit(
+            self,
+            pending_id,
+            namespace,
+            path,
+            previous=previous,
+            by=by,
+            receipt=receipt,
+            meta=meta,
+        )
+
+    def retire(self, pending_id: str) -> Digest:
+        """Drop a pending ref deliberately, for a publish that will not commit.
+
+        Returns:
+            What the pending ref named.
+
+        Raises:
+            NoSuchPending: when it does not exist.
+        """
+        return retire(self, pending_id)
+
+    def pendings(self) -> list[str]:
+        """Every pending publish's id, sorted."""
+        return self.refs(PENDING)
+
+    def drop_ref(self, namespace: str, path: str, *, previous: Digest) -> None:
+        """Remove a volatile ref and its record by compare-and-swap.
+
+        Raises:
+            RefProtected: when the namespace is write-once or monotone.
+            RefConflict: when the ref does not name *previous*.
+        """
+        drop_ref(self, namespace, path, previous=previous)
+
+    def pin(self, name: str, digest: Digest, *, by: Subject) -> RefRecord:
+        """Root *digest* under `pins/<name>`, replacing an earlier pin of that name."""
+        return pin(self, name, digest, by=by)
+
+    def unpin(self, name: str) -> Digest:
+        """Drop `pins/<name>` under the maintenance lease, never beside a sweep.
+
+        Returns:
+            What the pin named.
+
+        Raises:
+            RefConflict: when the pin does not exist.
+            LockTimeout: when a sweep holds the lease past the timeout.
+        """
+        return unpin(self, name)
+
+    def erase(
+        self, digest: Digest, *, by: Subject, reason: str, receipt: Digest | None = None
+    ) -> Tombstone:
+        """Erase the object's bytes and keep the fact as a tombstone.
+
+        The name stays valid in every tree that carries it; a path to
+        the object raises naming this tombstone's reason; landing the
+        bytes again is refused while the tombstone stands. An absent
+        object may be erased too, which refuses its future landing.
+        """
+        return erase(self, digest, by=by, reason=reason, receipt=receipt)
+
+    def reachable(self, digest: Digest) -> Iterator[Digest]:
+        """Every object reachable from *digest*, itself included.
+
+        Structured formats are read by shape, never by namespace: a
+        version yields its tree, parents, receipt and attachments, a
+        tree its entries, anything else nothing. An absent or erased
+        digest is yielded and not walked.
+        """
+        return reachable_from(self, digest)
+
+    def roots(self) -> list[Digest]:
+        """Every root: what every ref on disk names, in every namespace.
+
+        Namespaces are read from disk, not from the declaration at
+        open, so a consumer's refs root its objects whoever opened the
+        store. A ref file that is not a digest roots nothing.
+        """
+        found: list[Digest] = []
+        base = self.root / "refs"
+        for path in sorted(base.rglob("*")):
+            if not path.is_file() or path.name.endswith(_RESERVED_SUFFIXES):
+                continue
+            try:
+                found.append(Digest.parse(path.read_text("ascii").strip()))
+            except (FormatError, UnicodeDecodeError):
+                continue
+        return found
+
+    def sweep(self, *, scratch_age: float = 86400.0) -> SweepReport:
+        """Remove every object no root reaches, and old scratch.
+
+        Runs under the maintenance lease. Pending refs are read again
+        immediately before deleting, so a publish that began during the
+        sweep roots its objects. Tombstones are never removed.
+
+        Args:
+            scratch_age: seconds after which an orphaned `.part` file
+                is removed; the one age rule.
+
+        Returns:
+            The report.
+
+        Raises:
+            LockTimeout: when another maintenance holds the lease past
+                the timeout.
+        """
+        return sweep(self, scratch_age=scratch_age, hook=lifecycle.after_mark)
+
+    @contextlib.contextmanager
+    def _maintenance(self) -> Generator[None]:
+        with self._locked(self.root / "index" / "maintenance"):
+            yield
 
     # Refs.
 

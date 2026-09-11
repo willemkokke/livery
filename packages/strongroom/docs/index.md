@@ -70,4 +70,18 @@ an origin, and a miss names the URL that would have satisfied it.
 `fill` lands a set of objects into a folder, which then serves as a
 source: a mirror built by the store.
 
-The lifecycle and the materialiser build on these in later releases.
+## The lifecycle
+
+`publish_begin` roots a target under `pending/<id>` before anything
+else, `publish_commit` moves the real ref under its class and drops
+the pending ref, and `retire` drops one deliberately; nothing removes
+a pending ref on a clock. `sweep` marks from every ref on disk, pins
+and pending refs included, reading each object by shape (a version,
+a tree, or a leaf) rather than by namespace, reads the pending refs
+again immediately before deleting, and removes the unreached and old
+scratch under an exclusive maintenance lease that `unpin` shares.
+`erase` writes a tombstone under the object's path and deletes the
+bytes: the name stays valid in every tree that carries it, a path to
+it fails naming the reason, and landing it again is refused.
+
+The materialiser builds on these in a later release.

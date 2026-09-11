@@ -52,3 +52,11 @@ class RefTampered(StoreError):
 
 class LockTimeout(StoreError):
     """A live lock on the ref was not released within the timeout."""
+
+
+class NoSuchPending(StoreError):
+    """The named pending publish does not exist: retired, committed, or never begun."""
+
+
+class RefProtected(StoreError):
+    """The ref's mutation class does not allow dropping it."""

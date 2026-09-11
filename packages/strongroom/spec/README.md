@@ -20,6 +20,7 @@ Bytes, each with golden vectors under `vectors/`:
 | [records.md](records.md) | the ref record and the tombstone |
 | [layout.md](layout.md) | the on-disk layout, the root manifest, and the HTTP mapping |
 | [sources.md](sources.md) | sources and tiers: the read path, verification, offline, and fill |
+| [lifecycle.md](lifecycle.md) | roots, marking by shape, the sweep, the pending publish, erasure |
 | [namespaces.md](namespaces.md) | the two ref namespaces the store owns and the conventions it publishes |
 
 A vector file has cases and refusals. A case pins the canonical bytes
