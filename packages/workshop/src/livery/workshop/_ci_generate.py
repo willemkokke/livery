@@ -530,14 +530,18 @@ jobs:
     outputs:
       members: ${{{{ steps.wave.outputs.members }}}}
     steps:
+      # The receipt push carries FORGE_TOKEN where the repository has
+      # one: the ambient job token may not push a ref whose commit
+      # carries a workflow file that differs from the tip's, and a
+      # squash a later change moved past is exactly that. A tag is
+      # never a trigger, so the suppressed-workflow-events limit
+      # cannot bite either way.
       - uses: {CHECKOUT}
         with:
           ref: ${{{{ inputs.ref }}}}
           fetch-depth: 0
-{setup_uv}{collect_step}{rung}{enter}{pin}      # The ambient job token suffices here: the wave reads the forge
-      # and pushes receipt tags, and a tag is never a trigger, so the
-      # suppressed-workflow-events limit cannot bite by construction.
-      - name: Publish the wave
+          token: ${{{{ secrets.FORGE_TOKEN || github.token }}}}
+{setup_uv}{collect_step}{rung}{enter}{pin}      - name: Publish the wave
         id: wave
         env:
           FORGE_TOKEN: ${{{{ github.token }}}}
