@@ -6,8 +6,10 @@ vectors, and the Python formats. Phase 2 landed 2026-09-11 (issue
 #440, PR #443): the local store, objects and refs. Phase 3 landed
 2026-09-11 (issue #444, PR #445): sources and tiers, fill and
 offline. Phase 4 landed 2026-09-11 (issue #446, PR #447): the
-lifecycle. Phase 5 built 2026-09-11 (issue #448): the materialiser,
-the whole ladder, prefetch and shed; see the decision record.
+lifecycle. Phase 5 landed 2026-09-11 (issue #448, PR #449): the
+materialiser, the whole ladder, prefetch and shed. Phase 6 built
+2026-09-11 (issue #450): the harness in the package and the docs;
+the first release waits on the PyPI pending publisher (open item 3).
 Scoped by Willem the same day: strongroom alone, no change to
 toolroom, footman, or the workshop. This note lives in
 `packages/strongroom/notes/`, beside the package it plans. This plan executes steps 0, 2
@@ -526,6 +528,27 @@ Acceptance:
   one whose directory is gone; `shed` keeps objects a live view
   reaches through a hardlink or a link and checks holding by
   existence, a HEAD, or an origin hint's own digest.
+- 2026-09-11, phase 6 built (issue #450). The harness moved into the
+  package as `_conformance`, without pytest: `run_scenario` drives
+  any `StoreLike` and reaches the seams through `Hooks`, with
+  `PythonHooks` for this store; a failed step raises
+  `ConformanceFailure` naming the scenario, the step and what was
+  found, and the harness's own refusals are tested first. The docs
+  gained three pages: the standard and how to run the suite, the
+  API walk, the platforms. The first release is the train's act from
+  main, `fm workflow.release strongroom`, after the package lands;
+  trusted publishing is registered per project name on PyPI out of
+  band, so the tag waits for Willem to add the pending publisher for
+  `livery-strongroom`. `livery-strongroom` was free on PyPI when
+  checked this day.
+- 2026-09-11, Willem asked whether `publish_begin` and
+  `publish_commit` extend to a transaction over a group of moves.
+  Answered: not today, one ref per commit; a tree is already one
+  atomic move for any group of content; a journal in the pending
+  record applied under the maintenance lease with replay on open
+  would make a group of ref moves all-or-nothing under one authority,
+  and a root object per namespace would add snapshot visibility.
+  Proposed as a phase 7 if a consumer needs it. Awaiting ruling.
 - 2026-09-11, Willem: the materialiser's whole strategy ladder is
   implemented and tested in this plan, not the copy rung alone. The
   agent's reading of "implement and test the whole rung"; correct it
@@ -541,11 +564,13 @@ Acceptance:
    does not support `FICLONE`. The success path is proven on macOS;
    whether a Linux leg on a btrfs or XFS loop mount is worth its cost
    is decided when phase 5 lands. Owner: the agent, at phase 5.
-3. **`livery-strongroom` on PyPI.** The store note checked
-   `strongroom` free on 2026-08-28; the distribution name is checked
-   at the first release, and a taken name is recorded as debt the
-   same day per the workshop's release rule. Owner: the agent, at
-   phase 6.
+3. **The first release's PyPI side.** `livery-strongroom` and
+   `strongroom` were both free on PyPI on 2026-09-11. Trusted
+   publishing is registered per project name out of band: a pending
+   publisher for `livery-strongroom` (repository `willemkokke/livery`,
+   workflow `release.yml`, environment `pypi`) must exist on pypi.org
+   before `fm workflow.release strongroom` can publish. Owner:
+   Willem; the release runs the moment it exists.
 4. **The toolroom note amendment.** `packages/toolroom/notes/
    20260827-pinned-tool-store.md` still puts the bytes engine in
    `toolroom.store`. The store note asks for the amendment; it waits

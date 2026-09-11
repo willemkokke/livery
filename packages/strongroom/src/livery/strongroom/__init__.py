@@ -33,12 +33,26 @@ publish, [livery.strongroom.Store.sweep][] for reachability, and
 is [livery.strongroom.Store.view][], [livery.strongroom.Store.collect][]
 and [livery.strongroom.Store.drop_view][]: the only route from a digest
 to a path, by the cheapest safe rung, under a doctrine about what may
-be removed.
+be removed. [livery.strongroom.run_scenario][] runs the conformance
+scenarios under `spec/conformance` against any implementation of the
+same API, and [livery.strongroom.PythonHooks][] reaches this one's
+seams.
 """
 
 from __future__ import annotations
 
 from livery.strongroom._canonical import FormatError, Value, canonical
+from livery.strongroom._conformance import (
+    REFUSALS,
+    ConformanceFailure,
+    Hooks,
+    LockHolder,
+    PythonHooks,
+    Scenario,
+    StoreLike,
+    load_scenarios,
+    run_scenario,
+)
 from livery.strongroom._digest import (
     ALGORITHMS,
     SHA256,
@@ -125,10 +139,12 @@ __all__ = [
     "PATH_BUDGET",
     "PENDING",
     "PINS",
+    "REFUSALS",
     "RUNGS",
     "SHA256",
     "Algorithm",
     "Clock",
+    "ConformanceFailure",
     "Digest",
     "DropReport",
     "Entry",
@@ -140,10 +156,12 @@ __all__ = [
     "FormatError",
     "HashConstructor",
     "Hasher",
+    "Hooks",
     "HttpSource",
     "IntegrityError",
     "Landed",
     "Link",
+    "LockHolder",
     "LockTimeout",
     "MadeRung",
     "Manifest",
@@ -157,17 +175,20 @@ __all__ = [
     "OriginHint",
     "Pending",
     "Progress",
+    "PythonHooks",
     "RefConflict",
     "RefProtected",
     "RefRecord",
     "RefTampered",
     "Rung",
     "RungUnavailable",
+    "Scenario",
     "ScrubReport",
     "ShedReport",
     "Source",
     "Store",
     "StoreError",
+    "StoreLike",
     "Subject",
     "SubjectKind",
     "SweepReport",
@@ -188,7 +209,9 @@ __all__ = [
     "digest_of",
     "digest_stream",
     "fetch_url",
+    "load_scenarios",
     "now",
+    "run_scenario",
     "silent",
 ]
 

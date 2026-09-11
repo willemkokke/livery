@@ -6,4 +6,7 @@
 # `# nav:begin <name>` / `# nav:end <name>` marker pair.
 nav = [
     { "Index" = "index.md" },
+    { "Using the store" = "store.md" },
+    { "The standard" = "standard.md" },
+    { "Platforms" = "platforms.md" },
 ]

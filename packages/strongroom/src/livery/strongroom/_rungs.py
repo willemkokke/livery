@@ -86,12 +86,22 @@ def hardlink(source: Path, destination: Path) -> None:
         raise RungUnavailable(error.errno, f"link: {error.strerror}") from None
 
 
-def symlink(target: str | Path, destination: Path, *, directory: bool = False) -> None:
-    """A symlink to *target*, relative when given so; a junction's place on Windows."""
+def _symlink(target: str | Path, destination: Path, *, directory: bool = False) -> None:
     try:
         os.symlink(target, destination, target_is_directory=directory)
     except OSError as error:
         raise RungUnavailable(error.errno, f"symlink: {error.strerror}") from None
+
+
+Symlink = Callable[..., None]
+"""The shape of the symlink seam: target, destination, and `directory` by keyword."""
+
+symlink: Symlink = _symlink
+"""A symlink to the target, relative when given so; a junction's place on Windows.
+
+A variable, not a function, so the conformance harness can stand a
+refusing platform in its place and put it back.
+"""
 
 
 def copy(source: Path, destination: Path) -> None:

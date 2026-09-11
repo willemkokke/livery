@@ -17,11 +17,12 @@ library, and takes no runtime dependency.
 
 The store is a standard implementable in any language, and the
 Python package is its reference implementation. The standard is the
-`spec/` directory beside the package: the digest grammar and its
-registry, canonical JSON, the tree, the version, the ref record and
-the tombstone, the on-disk layout, and the ref namespaces. Each format
-has golden vectors under `spec/vectors/`, and the package's tests run
-every one of them.
+`spec/` directory beside the package, with golden vectors for every
+format and behaviour scenarios the package's own harness runs against
+any implementation of the same API. [The standard](standard.md) says
+where each part lives and how to run the suite; [Using the
+store](store.md) walks the API; [Platforms](platforms.md) says which
+rung a view reaches where, and what is proven on which runner.
 
 ## What this release carries
 
