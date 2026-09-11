@@ -367,8 +367,10 @@ def issue_start(
         # issues go, anything holding work stays and is named.
         from livery.workshop._sweep import sweep_worktrees
 
+        # The sweep walks <home>/<repo>/<tree>: the home above this
+        # repository's own directory, as the janitor passes it.
         for line in sweep_worktrees(
-            worktree_home(root), dry_run=False, unattended=False
+            worktree_home(root).parent, dry_run=False, unattended=False
         ):
             print(f"  {line}")
         path = worktree_path(root, work.number, work.title)

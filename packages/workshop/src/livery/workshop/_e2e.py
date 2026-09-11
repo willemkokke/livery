@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -256,8 +257,6 @@ def start_over(lane: Forge, token: str, root: Path, *, url: str) -> list[str]:
     a release already gone is not an error: the next birth wants them
     absent, and a re-run of the reset is the recovery procedure.
     """
-    import shutil
-
     from livery.forge._registry import purge_packages
 
     if (root / ".git").is_dir():
@@ -277,9 +276,19 @@ def start_over(lane: Forge, token: str, root: Path, *, url: str) -> list[str]:
         + (f": {', '.join(purged)}" if purged else "")
     )
     if root.exists():
-        shutil.rmtree(root)
+        _rmtree(root)
         lines.append(f"  removed {root}")
     return lines
+
+
+def _rmtree(path: Path) -> None:
+    """Remove *path* whole; git's pack files are read-only, which Windows honours."""
+    import stat
+
+    for entry in path.rglob("*"):
+        if entry.is_file() and not entry.is_symlink():
+            entry.chmod(entry.stat().st_mode | stat.S_IWRITE)
+    shutil.rmtree(path)
 
 
 def _unpushed_commits(root: Path) -> list[str]:

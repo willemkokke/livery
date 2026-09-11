@@ -978,7 +978,9 @@ def test_a_credentialled_source_never_reaches_a_rendered_byte(
     assert redacted_source("http://user:secret@host/o/r.git") == "http://host/o/r.git"
     assert redacted_source("git+file:///tmp/repo") == "git+file:///tmp/repo"
     repo = _template_repo(tmp_path)
-    root = _wheel_instance(tmp_path, f"git+file://user:sekrit@{repo}")
+    root = _wheel_instance(
+        tmp_path, f"git+file://user:sekrit@/{repo.as_posix().lstrip('/')}"
+    )
     monkeypatch.setattr(
         "livery.workshop._templates.workspace_root", lambda start=None: root
     )
