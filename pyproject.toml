@@ -270,6 +270,10 @@ unnecessary-type-conversion = "error"
 patch = ["subprocess"]
 parallel = true
 relative_files = true
+# Branches as well as statements: a conditional's untaken arm is
+# uncovered, where line coverage shows the conditional as covered
+# once its line ran. The floors judge the combined figure.
+branch = true
 source = ["livery"]
 # The C tracer, not sys.monitoring: the sysmon core records a line
 # under the first context that reaches it and never again, and the

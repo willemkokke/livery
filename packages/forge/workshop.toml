@@ -13,9 +13,10 @@ build = "uv build --package livery-forge"
 # contracts test enforces it.
 
 [qa]
-# The coverage high-water mark the gate enforces; raise it as the
-# suite grows, lower it only deliberately.
-coverage-floor = 90
+# The coverage high-water mark the gate enforces, statements and
+# branches together; raise it as the suite grows, lower it only
+# deliberately.
+coverage-floor = 87
 
 # Who reviews this package; the codeowners file renders from
 # these declarations.

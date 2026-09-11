@@ -308,7 +308,12 @@ def coverage_floor(package: Package) -> float | None:
 
 
 def measured_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, float]:
-    """Per-package line coverage from the run's ``.coverage`` data."""
+    """Per-package coverage from the run's ``.coverage`` data, statements and branches.
+
+    A package's percentage is the statements and branches of its
+    files the data reached, over all of them, the figure coverage.py
+    reports as a file's total; a package with none to reach is 100.
+    """
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as handle:
         report = handle.name
     # The data read is *root*'s, by contract. Under a metered gate the
@@ -331,8 +336,12 @@ def measured_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, fl
         for package in packages:
             if filename.startswith(f"{package.path}/src/"):
                 summary = entry.get("summary", {})
-                totals[package.path][0] += int(summary.get("covered_lines", 0))
-                totals[package.path][1] += int(summary.get("num_statements", 0))
+                totals[package.path][0] += int(summary.get("covered_lines", 0)) + int(
+                    summary.get("covered_branches", 0)
+                )
+                totals[package.path][1] += int(summary.get("num_statements", 0)) + int(
+                    summary.get("num_branches", 0)
+                )
                 break
     return {
         path: (100.0 * covered / statements if statements else 100.0)
@@ -400,18 +409,19 @@ def units_of(root: Path, packages: tuple[Package, ...]) -> tuple[Package, ...]:
     return suites_of(packages) + ((unit,) if unit is not None else ())
 
 
-def suite_lines_by_context(
+def suite_arcs_by_context(
     data: Path, packages: tuple[Package, ...], package: Package, *, root: Path
-) -> dict[str, list[int]]:
-    """The lines *package*'s suite recorded in the leg's data, for its closure's files.
+) -> dict[str, list[tuple[int, int]]]:
+    """The arcs *package*'s suite recorded in the leg's data, for its closure's files.
 
-    Two sources make the suite's lines: the contexts of its own tests
+    Two sources make the suite's arcs: the contexts of its own tests
     (the node ids under ``<package>/tests/``, as the workshop's pytest
-    plugin names them), and the lines recorded under no context at all,
+    plugin names them), and the arcs recorded under no context at all,
     which run at import time before any test and belong to whichever
     suites' closures hold their files. Files outside the closure are
     not the suite's to store. The names are workspace-relative,
-    whichever way the meter stored them.
+    whichever way the meter stored them. An arc is a pair of line
+    numbers, so the row carries statements and branches alike.
     """
     import re
 
@@ -421,7 +431,7 @@ def suite_lines_by_context(
 
     measured = CoverageData(basename=str(data))
     measured.read()
-    files: dict[str, list[int]] = {}
+    files: dict[str, list[tuple[int, int]]] = {}
     own = (
         rf"^{re.escape(package.path)}/"
         if package.path == WORKSPACE_TESTS
@@ -433,9 +443,10 @@ def suite_lines_by_context(
             name = _relative(filename, root)
             if name is None or not in_closure(packages, package, name):
                 continue
-            lines = measured.lines(filename) or []
-            if lines:
-                files[name] = sorted(set(files.get(name, [])) | set(lines))
+            arcs = measured.arcs(filename) or []
+            if arcs:
+                found = {(a, b) for a, b in arcs}
+                files[name] = sorted(set(files.get(name, [])) | found)
     measured.set_query_contexts(None)
     return files
 
@@ -552,7 +563,7 @@ def store_suites(
     git = GitOps(root)
     measured: dict[str, Unit] = {}
     for package in suites_that_ran(marker, root, packages):
-        files = suite_lines_by_context(root / SUITES_DATA, packages, package, root=root)
+        files = suite_arcs_by_context(root / SUITES_DATA, packages, package, root=root)
         if run is None:
             print(
                 f"  coverage store: {package.path} measured ({len(files)} files);"
@@ -616,14 +627,18 @@ def combine_leg(root: Path, packages: tuple[Package, ...]) -> None:
     print(f"  coverage: {len(parts)} data file(s) combined into .coverage")
 
 
-def _write_unit(folder: Path, name: str, files: dict[str, list[int]]) -> Path:
-    """One unit's lines as a coverage data file under *folder*; the path."""
+def _write_unit(
+    folder: Path, name: str, files: dict[str, list[tuple[int, int]]]
+) -> Path:
+    """One unit's arcs as a coverage data file under *folder*; the path."""
     from coverage import CoverageData
 
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / name
     data = CoverageData(basename=str(path))
-    data.add_lines(dict(files))
+    data.add_arcs(
+        {file: {(arc[0], arc[1]) for arc in arcs} for file, arcs in files.items()}
+    )
     data.write()
     return path
 
@@ -668,6 +683,7 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
         Unit,
         closure_id,
         put_record,
+        row_name,
         run_legs,
     )
     from livery.workshop._git_ops import GitOps
@@ -803,11 +819,14 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
     for label, fresh, carried, own in writes:
         stale = own.stale(keys)
         # The rows carried from another record are copied in; the
-        # target's own carried rows already stand.
+        # target's own carried rows already stand. A stale row a new
+        # row replaces by name (a row of an older shape, say) is
+        # replaced, not removed: only the rest go.
         rows = dict(fresh)
         rows.update(
             {path: row for path, (base, row) in carried.items() if base != target}
         )
+        removed = [name for name in stale if name not in {row_name(p) for p in rows}]
         if not rows and not stale:
             print(
                 f"  coverage record: {target}/{label}: unchanged, {len(carried)}"
@@ -823,7 +842,7 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
             continue
         print(
             f"  coverage record: {target}/{label}: {len(fresh)} fresh,"
-            f" {len(carried)} carried, {len(stale)} removed"
+            f" {len(carried)} carried, {len(removed)} removed"
         )
     return tuple(packages)
 

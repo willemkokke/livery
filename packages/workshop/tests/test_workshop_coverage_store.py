@@ -88,7 +88,7 @@ def _unit(
     *,
     closure: str = "a" * 64,
     run: str = "1013",
-    files: dict[str, list[int]] | None = None,
+    files: dict[str, list[tuple[int, int]]] | None = None,
 ) -> _coverage_store.Unit:
     return _coverage_store.Unit(path, closure, run, "b" * 40, files or {})
 
@@ -171,8 +171,15 @@ def test_a_row_that_is_not_a_unit_is_skipped_named_and_stale(work: Path) -> None
     ref = _coverage_store.record_ref(LEG)
     rows = {
         "odd.json": json.dumps({"schema": 99}),
-        "bare.json": json.dumps({"schema": 1, "unit": "packages/x"}),
+        "bare.json": json.dumps(
+            {"schema": _coverage_store.SCHEMA, "unit": "packages/x"}
+        ),
         "junk.json": "not json",
+        # A row of lines, written before the record held arcs: another
+        # schema, so the unit is a miss and is measured afresh.
+        "packages-base.json": json.dumps(
+            {"schema": 1, "unit": "packages/base", "files": {"a.py": [1, 2]}}
+        ),
     }
     assert _state.put(work, ref, rows, message="foreign") == ""
     held = _coverage_store.recorded(work, leg=LEG)
@@ -180,9 +187,15 @@ def test_a_row_that_is_not_a_unit_is_skipped_named_and_stale(work: Path) -> None
     assert sorted(str(item) for item in held.skipped) == [
         "bare.json: carries no unit; skipped",
         "junk.json: does not parse; skipped",
-        "odd.json: schema 99, this reader speaks 1; skipped",
+        "odd.json: schema 99, this reader speaks 2; skipped",
+        "packages-base.json: schema 1, this reader speaks 2; skipped",
     ]
-    assert sorted(held.stale(())) == ["bare.json", "junk.json", "odd.json"]
+    assert sorted(held.stale(())) == [
+        "bare.json",
+        "junk.json",
+        "odd.json",
+        "packages-base.json",
+    ]
 
 
 def test_a_per_run_ref_without_the_file_or_with_a_foreign_one_is_named(
@@ -261,7 +274,10 @@ def test_the_closure_id_follows_the_closure_and_the_root_pins(work: Path) -> Non
 def test_a_legs_lines_ride_its_per_run_ref_and_go_with_it(work: Path) -> None:
     from livery.workshop import _metrics
 
-    unit = _unit("packages/base", files={"packages/base/src/base/mod.py": [3, 1, 2]})
+    unit = _unit(
+        "packages/base",
+        files={"packages/base/src/base/mod.py": [(3, -1), (-1, 1), (1, 3)]},
+    )
     why = _coverage_store.put_run(
         work,
         RUN,
@@ -290,7 +306,7 @@ def test_a_legs_lines_ride_its_per_run_ref_and_go_with_it(work: Path) -> None:
             "a" * 64,
             "1013",
             "b" * 40,
-            {"packages/base/src/base/mod.py": [1, 2, 3]},
+            {"packages/base/src/base/mod.py": [(-1, 1), (1, 3), (3, -1)]},
         )
     }
     # Another run's refs are another run's; the lines go with the ref.
@@ -306,7 +322,7 @@ def test_the_record_is_replaced_in_place_fresh_over_carried_stale_removed(
     series = _coverage_store.RECORD.series(_coverage_store.MAIN, LEG)
     assert series.ref == _coverage_store.record_ref(LEG)
     assert series.ref == _state.NAMESPACE + "coverage/main/" + _state.slug(LEG)
-    base = _unit("packages/base", run="1", files={"packages/base/src/b.py": [1]})
+    base = _unit("packages/base", run="1", files={"packages/base/src/b.py": [(-1, 1)]})
     top = _unit("packages/top", closure="c" * 64, run="1")
     ghost = _unit("packages/ghost", run="1")
     fresh = {"packages/base": base, "packages/top": top, "packages/ghost": ghost}
@@ -410,8 +426,12 @@ def test_the_stored_union_pulls_every_recorded_unit_and_names_the_misses(
     from livery.workshop._backends._python import stored_union
 
     fresh = {
-        "packages/base": _unit("packages/base", files={"packages/base/src/x.py": [1]}),
-        "packages/top": _unit("packages/top", files={"packages/top/src/x.py": [1, 2]}),
+        "packages/base": _unit(
+            "packages/base", files={"packages/base/src/x.py": [(-1, 1), (1, -1)]}
+        ),
+        "packages/top": _unit(
+            "packages/top", files={"packages/top/src/x.py": [(-1, 1), (1, 2), (2, -1)]}
+        ),
     }
     assert _coverage_store.put_record(work, RUN, leg=LEG, fresh=fresh) == ""
     into = tmp_path / "pages"

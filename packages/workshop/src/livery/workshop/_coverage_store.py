@@ -1,14 +1,14 @@
-"""The coverage record: main's and each branch's lines per leg, and the lines in flight.
+"""The coverage record: main's and each branch's arcs per leg, and the arcs in flight.
 
 Coverage stays global under the affected mode. A record holds, per
 check leg, one row per unit (a package's test suite, or the
-workspace's own tests): the lines the suite reached within its
+workspace's own tests): the arcs the suite reached within its
 closure, and the identity of the closure it was measured at. Main has
 a record, and so does every branch with a pull request run, under the
 same family with the branch as the base part. A check leg skips a
 suite when its branch's record or main's holds the unit at the suite's
 current closure identity, and runs it otherwise. A leg that ran a
-suite puts the suite's lines on its per-run ref, beside its timing
+suite puts the suite's arcs on its per-run ref, beside its timing
 half, with the scope its gate ran; the run's gate job unions the
 per-run refs with the rows it carries from the records, judges the
 floors on that union, and writes the union back: a pull request's run
@@ -49,8 +49,11 @@ from livery.workshop._state import (
     slug,
 )
 
-#: The rows' shape; a row of another schema is skipped and named.
-SCHEMA = 1
+#: The rows' shape: 2 holds arcs, pairs of line numbers, so a package
+#: is judged on its statements and its branches together. A row of
+#: another schema is skipped and named, so a row of lines written
+#: before is a miss and the unit is measured afresh.
+SCHEMA = 2
 
 #: The record every leg reads last and main's run alone writes: the
 #: measurement of main's tree. A branch's record has the branch's
@@ -125,21 +128,24 @@ RECORD = Keyed("coverage", ("base", "leg"), schema=SCHEMA, current=current_keys)
 
 @dataclass(frozen=True)
 class Unit:
-    """One unit's measurement: the lines its suite reached within its closure.
+    """One unit's measurement: the arcs its suite reached within its closure.
 
     Attributes:
         path: The unit's path (``packages/forge``, or ``tests``).
         closure: The closure identity the measurement is keyed by.
         run: The run that measured it.
         sha: The commit that run checked out.
-        files: Measured lines per file, relative to the workspace root.
+        files: Measured arcs per file, relative to the workspace root:
+            pairs of line numbers as coverage.py records them, a
+            negative number an entry or an exit, so a file's
+            statements and branches are both in the row.
     """
 
     path: str
     closure: str
     run: str
     sha: str
-    files: dict[str, list[int]]
+    files: dict[str, list[tuple[int, int]]]
 
 
 @dataclass(frozen=True)
@@ -278,7 +284,10 @@ def _unit_fields(unit: Unit) -> dict[str, Any]:
         "closure": unit.closure,
         "run": unit.run,
         "sha": unit.sha,
-        "files": {name: sorted(lines) for name, lines in sorted(unit.files.items())},
+        "files": {
+            name: [list(arc) for arc in sorted(arcs)]
+            for name, arcs in sorted(unit.files.items())
+        },
     }
 
 
@@ -298,9 +307,13 @@ def _parse_unit(raw: Any, *, path: str = "") -> Unit | None:
         run=str(raw.get("run", "")),
         sha=str(raw.get("sha", "")),
         files={
-            str(name): [int(line) for line in lines]
-            for name, lines in files.items()
-            if isinstance(lines, list)
+            str(name): sorted(
+                (int(arc[0]), int(arc[1]))
+                for arc in arcs
+                if isinstance(arc, list | tuple) and len(arc) == 2
+            )
+            for name, arcs in files.items()
+            if isinstance(arcs, list)
         },
     )
 
