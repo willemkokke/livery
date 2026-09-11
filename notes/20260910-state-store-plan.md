@@ -284,7 +284,14 @@ change.
 9. **Branch coverage** (#423). `branch = true` in the rendered
    configuration, rows of arcs, the combined figure judged everywhere,
    forge's and workshop's floors re-based in the same change. Ruled
-   2026-09-11, after slice 8.
+   2026-09-11, after slice 8. Landed 2026-09-11, #423: `branch =
+   true` in the rendered configuration, the record's schema 2 with
+   arcs as pairs of line numbers (a row of lines is skipped and the
+   unit measured afresh, so the switch migrates itself at the first
+   run), `suite_arcs_by_context` and the pull writing arcs, the
+   union's percentage the statements and branches together. Floors:
+   forge 90 to 87, workshop 85 to 84, from one local run (87.1 and
+   84.0 combined); the loop's members hold no branch and stay at 100.
 
 10. **The workspace tests as a unit of the affected engine** (#424). A
     change under `tests/` runs the workspace tests with format, lint,

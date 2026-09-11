@@ -33,12 +33,12 @@ coverage = [
 ]
 
 [qa]
-# The coverage high-water mark the gate enforces; raise it as the
-# suite grows, lower it only deliberately. Lowered from 87 with the
-# e2e loop verb: its orchestration is proven by the live loop
-# against the local forge, not by unit tests, and unit-metered
-# coverage counts it uncovered.
-coverage-floor = 85
+# The coverage high-water mark the gate enforces, statements and
+# branches together; raise it as the suite grows, lower it only
+# deliberately. The e2e loop verb's orchestration is proven by the
+# live loop against the local forge, not by unit tests, so the
+# metered suite counts it uncovered, and the floor allows for it.
+coverage-floor = 84
 
 # Who reviews this package; the codeowners file renders from
 # these declarations.

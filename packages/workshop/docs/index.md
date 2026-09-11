@@ -111,7 +111,8 @@ in, and never skips on the verified record or narrows.
 ## Coverage floors
 
 Each package's `workshop.toml` may declare `[qa] coverage-floor`: a
-percentage the gate enforces, or the mode `"auto-ratchet"`, under
+percentage of statements and branches the gate enforces, or the mode
+`"auto-ratchet"`, under
 which the floor is the package's mark on the state store. Both modes
 pass at the floor minus the package's `coverage-epsilon` (percentage
 points, 0.5 when absent). Under auto-ratchet the first gated run
@@ -134,7 +135,7 @@ state store, with the identity of the suite's dependency closure
 (the tree ids of the package and of every package it depends on,
 plus the root's `pyproject.toml` and `uv.lock`). Main has a
 coverage record, and so does every branch with a pull request run:
-per check leg, one row per suite, the lines the last run judged and
+per check leg, one row per suite, the arcs the last run judged and
 the closure each was measured at. A leg skips a suite only when its
 branch's record or main's holds it at the suite's current closure;
 otherwise the suite runs, and the leg says why. The workspace's own
@@ -172,7 +173,7 @@ share and a fresh clone starts without.
 | `metrics` | one run: every job's times, the run's wall, the union's percentages | 300 | the gate job |
 | `run/<id>/<leg>` | a check leg's half of its timing row, and the suites it measured with the scope it ran, until the gate job collects it | none | the leg |
 | `verified` | a tree a green gate proved, with its scope and the base it composed on | 200 | the gate job |
-| `coverage/<base>/<leg>` | a record on one leg, main's or a branch's: one row per suite, the lines its last run judged at the closure each was measured at, replaced in place; a branch's goes with the branch | none | main's gate job at a merge; a branch's own pull request runs |
+| `coverage/<base>/<leg>` | a record on one leg, main's or a branch's: one row per suite, the arcs its last run judged at the closure each was measured at, replaced in place; a branch's goes with the branch | none | main's gate job at a merge; a branch's own pull request runs |
 | `coverage/marks` | a package's coverage mark and who set it | 400 | the gate job, `fm coverage.accept` |
 | `gate-record` (local) | a tree this checkout's `fm check` proved green | 200, 7 days | a green local gate |
 | `diagnostics` (local) | the follow classifier's inputs for an unmerged ending | 20 | every unmerged follow |

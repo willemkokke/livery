@@ -1053,7 +1053,7 @@ def test_the_pages_read_the_store_inside_ci_when_the_legs_left_no_data(
     stored = root / "coverage-data" / "check-a" / "reuse-core.coverage"
     stored.parent.mkdir(parents=True)
     data = CoverageData(basename=str(stored))
-    data.add_lines({str(source): [1]})
+    data.add_arcs({str(source): {(-1, 1), (1, 2), (2, -1)}})
     data.write()
     monkeypatch.setattr(
         "livery.workshop._docs._stored_legs",

@@ -317,16 +317,28 @@ def _in_ci(monkeypatch: pytest.MonkeyPatch, leg: str) -> None:
     monkeypatch.delenv("COVERAGE_PROCESS_START", raising=False)
 
 
+def _arcs(lines: list[int]) -> list[tuple[int, int]]:
+    """The arcs of one straight run through *lines*: the entry, each step, the exit."""
+    from itertools import pairwise
+
+    return sorted(pairwise([-1, *lines, -1]))
+
+
+def _merged(*runs: list[int]) -> list[tuple[int, int]]:
+    """The arcs of several straight runs, as one row holds them."""
+    return sorted(set().union(*(set(_arcs(lines)) for lines in runs)))
+
+
 def _contextual_part(
     tmp_path: Path, suffix: str, recorded: dict[str, dict[str, list[int]]]
 ) -> None:
-    """A metered part: *recorded* maps a context ("" for none) to files and lines."""
+    """A metered part: *recorded* maps a context ("" for none) to lines run per file."""
     from coverage import CoverageData
 
     data = CoverageData(basename=str(tmp_path / ".coverage"), suffix=suffix)
-    for context, lines in recorded.items():
+    for context, files in recorded.items():
         data.set_context(context)
-        data.add_lines(lines)
+        data.add_arcs({file: set(_arcs(lines)) for file, lines in files.items()})
     data.write()
 
 
@@ -374,7 +386,7 @@ def test_a_leg_puts_each_suite_it_ran_within_its_closure(
     assert put[0]["leg"] == "check-a" and put[0]["scope"] == "affected"
     assert put[0]["packages"] == ("packages/x",)
     unit = _units(put[0])["packages/x"]
-    assert unit.files == {"packages/x/src/livery/x/mod.py": [1, 2, 3, 4]}
+    assert unit.files == {"packages/x/src/livery/x/mod.py": _merged([1], [2, 3], [4])}
     assert unit.closure == "k" * 64 and unit.run == "7" and unit.sha == "a" * 40
     assert (
         "coverage store: packages/x stored for closure kkkkkkkkkkkk on check-a" in out
@@ -401,10 +413,10 @@ def test_a_leg_puts_each_suite_it_ran_within_its_closure(
     out = capsys.readouterr().out
     units = _units(put[0])
     assert sorted(units) == ["packages/x", "packages/y", "tests"]
-    assert units["packages/y"].files == {"packages/y/src/livery/y/mod.py": [1]}
+    assert units["packages/y"].files == {"packages/y/src/livery/y/mod.py": _arcs([1])}
     assert units["tests"].files == {
-        "packages/x/src/livery/x/mod.py": [1],
-        "packages/y/src/livery/y/mod.py": [1, 2, 3],
+        "packages/x/src/livery/x/mod.py": _arcs([1]),
+        "packages/y/src/livery/y/mod.py": _merged([1], [2, 3]),
     }
     assert "coverage store: tests stored for closure kkkkkkkkkkkk on check-a" in out
 
@@ -481,7 +493,9 @@ def _leg(
 def _unit(
     path: str, files: dict[str, list[int]], *, run: str = "7", closure: str = "k" * 64
 ) -> _coverage_store.Unit:
-    return _coverage_store.Unit(path, closure, run, "a" * 40, files)
+    """A unit whose files hold the arcs of one straight run through the lines given."""
+    arcs = {file: _arcs(lines) for file, lines in files.items()}
+    return _coverage_store.Unit(path, closure, run, "a" * 40, arcs)
 
 
 def _source(tmp_path: Path, name: str) -> Path:
