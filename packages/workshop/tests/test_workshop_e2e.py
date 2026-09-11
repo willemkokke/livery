@@ -67,7 +67,7 @@ def test_the_registration_gate_sees_only_a_source_checkout() -> None:
     if here == _e2e._WORKSHOP_TESTS:
         assert (_e2e._WORKSHOP_TESTS / "test_workshop_e2e.py").is_file()
     else:
-        assert "site-packages" in str(_e2e._WORKSHOP_TESTS.parents[1])
+        assert "site-packages" in str(Path(_e2e.__file__).resolve())
         assert not _e2e._WORKSHOP_TESTS.is_dir()
 
 
