@@ -16,6 +16,12 @@ two objects with structure, and [livery.strongroom.RefRecord][] and
 [livery.strongroom.Tombstone][] for the two records beside names. The
 standard they implement is the `spec/` directory beside this package,
 with the golden vectors the tests run.
+
+[livery.strongroom.Store][] is the local store over those formats:
+objects landed by digest and verified, refs moved by compare-and-swap
+under a per-ref lock with a record beside each, and a mutation class
+per namespace. Its refusals are the classes under
+[livery.strongroom.StoreError][].
 """
 
 from __future__ import annotations
@@ -31,8 +37,36 @@ from livery.strongroom._digest import (
     digest_of,
     digest_stream,
 )
+from livery.strongroom._errors import (
+    ErasedObject,
+    IntegrityError,
+    LockTimeout,
+    ManifestError,
+    MissingObject,
+    NotFastForward,
+    RefConflict,
+    RefTampered,
+    StoreError,
+    UnknownNamespace,
+    WriteOnceRefused,
+)
 from livery.strongroom._fields import Subject, SubjectKind, check_timestamp
 from livery.strongroom._records import RefRecord, Tombstone
+from livery.strongroom._store import (
+    LAYOUT_VERSION,
+    MANIFEST_NAME,
+    MUTATION_CLASSES,
+    OWNED,
+    Clock,
+    Landed,
+    Manifest,
+    MutationClass,
+    Namespace,
+    ObjectState,
+    ScrubReport,
+    Store,
+    now,
+)
 from livery.strongroom._tree import (
     NAME_BUDGET,
     Entry,
@@ -46,23 +80,46 @@ from livery.strongroom._version import Version
 
 __all__ = [
     "ALGORITHMS",
+    "LAYOUT_VERSION",
+    "MANIFEST_NAME",
+    "MUTATION_CLASSES",
     "NAME_BUDGET",
+    "OWNED",
     "SHA256",
     "Algorithm",
+    "Clock",
     "Digest",
     "Entry",
     "EntryKind",
+    "ErasedObject",
     "FormatError",
     "HashConstructor",
     "Hasher",
+    "IntegrityError",
+    "Landed",
     "Link",
+    "LockTimeout",
+    "Manifest",
+    "ManifestError",
+    "MissingObject",
+    "MutationClass",
+    "Namespace",
+    "NotFastForward",
+    "ObjectState",
+    "RefConflict",
     "RefRecord",
+    "RefTampered",
+    "ScrubReport",
+    "Store",
+    "StoreError",
     "Subject",
     "SubjectKind",
     "Tombstone",
     "Tree",
+    "UnknownNamespace",
     "Value",
     "Version",
+    "WriteOnceRefused",
     "__version__",
     "canonical",
     "check_name",
@@ -70,6 +127,7 @@ __all__ = [
     "check_timestamp",
     "digest_of",
     "digest_stream",
+    "now",
 ]
 
 __version__ = "0.0.0"

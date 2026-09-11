@@ -1,0 +1,84 @@
+{
+  "scenarios": [
+    {
+      "id": "volatile-compare-and-swap",
+      "namespaces": [{"name": "urls", "mutation": "volatile"}],
+      "steps": [
+        {"op": "put", "data": "a", "as": "A"},
+        {"op": "put", "data": "b", "as": "B"},
+        {"op": "set", "namespace": "urls", "path": "x", "digest": "A", "previous": null, "expect": "ok"},
+        {"op": "set", "namespace": "urls", "path": "x", "digest": "B", "previous": null, "expect": "conflict"},
+        {"op": "set", "namespace": "urls", "path": "x", "digest": "B", "previous": "A", "expect": "ok"},
+        {"op": "set", "namespace": "urls", "path": "x", "digest": "A", "previous": "A", "expect": "conflict"},
+        {"op": "ref", "namespace": "urls", "path": "x", "expect": "B"}
+      ]
+    },
+    {
+      "id": "write-once-refuses-a-second-digest",
+      "namespaces": [{"name": "tools", "mutation": "write-once"}],
+      "steps": [
+        {"op": "put", "data": "a", "as": "A"},
+        {"op": "put", "data": "b", "as": "B"},
+        {"op": "set", "namespace": "tools", "path": "bun@1", "digest": "A", "previous": null, "expect": "ok"},
+        {"op": "set", "namespace": "tools", "path": "bun@1", "digest": "B", "previous": "A", "expect": "write-once-refused"},
+        {"op": "set", "namespace": "tools", "path": "bun@1", "digest": "A", "previous": "A", "expect": "ok"},
+        {"op": "ref", "namespace": "tools", "path": "bun@1", "expect": "A"}
+      ]
+    },
+    {
+      "id": "monotone-fast-forward",
+      "namespaces": [{"name": "datasets", "mutation": "monotone"}],
+      "steps": [
+        {"op": "put", "data": "{\"entries\":[]}", "as": "T"},
+        {"op": "version", "tree": "T", "parents": [], "as": "V1"},
+        {"op": "version", "tree": "T", "parents": ["V1"], "as": "V2"},
+        {"op": "version", "tree": "T", "parents": [], "as": "ROOT2"},
+        {"op": "put", "data": "not a version", "as": "BLOB"},
+        {"op": "set", "namespace": "datasets", "path": "corpus/main", "digest": "V1", "previous": null, "expect": "ok"},
+        {"op": "set", "namespace": "datasets", "path": "corpus/main", "digest": "ROOT2", "previous": "V1", "expect": "not-fast-forward"},
+        {"op": "set", "namespace": "datasets", "path": "corpus/main", "digest": "BLOB", "previous": "V1", "expect": "not-fast-forward"},
+        {"op": "set", "namespace": "datasets", "path": "corpus/main", "digest": "V2", "previous": "V1", "expect": "ok"},
+        {"op": "ref", "namespace": "datasets", "path": "corpus/main", "expect": "V2"}
+      ]
+    },
+    {
+      "id": "lock-broken-only-on-provable-staleness",
+      "namespaces": [{"name": "urls", "mutation": "volatile"}],
+      "steps": [
+        {"op": "put", "data": "a", "as": "A"},
+        {"op": "put", "data": "b", "as": "B"},
+        {"op": "lock", "namespace": "urls", "path": "x", "holder": "live"},
+        {"op": "set", "namespace": "urls", "path": "x", "digest": "A", "previous": null, "expect": "lock-timeout"},
+        {"op": "unlock", "namespace": "urls", "path": "x"},
+        {"op": "lock", "namespace": "urls", "path": "x", "holder": "dead"},
+        {"op": "set", "namespace": "urls", "path": "x", "digest": "A", "previous": null, "expect": "ok"},
+        {"op": "lock", "namespace": "urls", "path": "x", "holder": "expired"},
+        {"op": "set", "namespace": "urls", "path": "x", "digest": "B", "previous": null, "expect": "conflict"},
+        {"op": "set", "namespace": "urls", "path": "x", "digest": "B", "previous": "A", "expect": "ok"},
+        {"op": "ref", "namespace": "urls", "path": "x", "expect": "B"}
+      ]
+    },
+    {
+      "id": "an-out-of-band-edit-is-visible",
+      "namespaces": [{"name": "urls", "mutation": "volatile"}],
+      "steps": [
+        {"op": "put", "data": "a", "as": "A"},
+        {"op": "put", "data": "b", "as": "B"},
+        {"op": "set", "namespace": "urls", "path": "x", "digest": "A", "previous": null, "expect": "ok"},
+        {"op": "tamper", "namespace": "urls", "path": "x", "digest": "B"},
+        {"op": "ref", "namespace": "urls", "path": "x", "expect": "tampered"},
+        {"op": "set", "namespace": "urls", "path": "x", "digest": "B", "previous": "A", "expect": "tampered"}
+      ]
+    },
+    {
+      "id": "an-undeclared-namespace-is-refused",
+      "namespaces": [],
+      "steps": [
+        {"op": "put", "data": "a", "as": "A"},
+        {"op": "set", "namespace": "tools", "path": "x", "digest": "A", "previous": null, "expect": "unknown-namespace"},
+        {"op": "set", "namespace": "pins", "path": "x", "digest": "A", "previous": null, "expect": "ok"},
+        {"op": "set", "namespace": "pending", "path": "x", "digest": "A", "previous": null, "expect": "ok"}
+      ]
+    }
+  ]
+}

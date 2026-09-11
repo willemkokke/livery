@@ -1,0 +1,794 @@
+"""The local store: objects landed by digest, refs moved by compare-and-swap.
+
+A store is a directory with a root manifest, an `objects/` tree, a
+`refs/` tree and a local index. Objects are immutable and idempotent
+to land; refs are the only mutable thing, and every move writes a
+record beside the ref under a per-ref lock. The layout is the one in
+`spec/layout.md`; the index under `index/` is this implementation's
+own and not a format.
+
+Reach for [livery.strongroom.Store][]: `create` or `open`, then `land`
+and `path` for objects, `ref` and `set_ref` for names.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import json
+import os
+import time
+from collections.abc import Callable, Generator, Iterable, Iterator
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from io import BytesIO
+from pathlib import Path
+from typing import IO, Literal
+
+from livery.strongroom._canonical import FormatError, Value, canonical
+from livery.strongroom._digest import Algorithm, Digest, registered
+from livery.strongroom._errors import (
+    ErasedObject,
+    IntegrityError,
+    LockTimeout,
+    ManifestError,
+    MissingObject,
+    NotFastForward,
+    RefConflict,
+    RefTampered,
+    UnknownNamespace,
+    WriteOnceRefused,
+)
+from livery.strongroom._fields import Subject, expect_int, expect_object, expect_str
+from livery.strongroom._records import RefRecord
+from livery.strongroom._tree import check_name
+from livery.strongroom._version import Version
+
+MANIFEST_NAME = "strongroom.json"
+"""The root manifest's file name."""
+
+LAYOUT_VERSION = 1
+"""The layout this implementation speaks."""
+
+MutationClass = Literal["write-once", "monotone", "volatile"]
+"""How a namespace's refs may move; see `spec/namespaces.md`."""
+
+ObjectState = Literal["present", "absent", "erased"]
+"""The three states an object name can be in."""
+
+MUTATION_CLASSES: tuple[MutationClass, ...] = ("write-once", "monotone", "volatile")
+
+Clock = Callable[[], str]
+"""Returns the current instant as an RFC 3339 UTC string."""
+
+_RECORD = ".record"
+_LOCK = ".lock"
+_TOMBSTONE = ".tombstone"
+_PART = ".part"
+_RESERVED_SUFFIXES = (_RECORD, _LOCK, _TOMBSTONE, _PART)
+_CHUNK = 1 << 20
+_LOCK_POLL = 0.02
+
+
+def now() -> str:
+    """The current instant, RFC 3339 in UTC to the second."""
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _replace(source: Path, destination: Path) -> None:
+    # The one seam the Windows case needs: a replace over a destination
+    # a reader holds open fails there, and landing treats it as success
+    # when the destination verifies. Tests fake this function.
+    os.replace(source, destination)
+
+
+def _pid_alive_posix(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _pid_alive_unknown(pid: int) -> bool:
+    # Windows' os.kill terminates the process for any signal it does
+    # not special-case, so a liveness probe is never sent there; a lock
+    # is stale by age alone.
+    return True
+
+
+_PID_ALIVE: Callable[[int], bool] = {"posix": _pid_alive_posix}.get(
+    os.name, _pid_alive_unknown
+)
+
+
+@dataclass(frozen=True)
+class Manifest:
+    """The root manifest: which layout and which algorithm this store speaks.
+
+    Attributes:
+        layout: the layout version.
+        algorithm: the one algorithm of this address space.
+    """
+
+    layout: int
+    algorithm: str
+
+    def encode(self) -> bytes:
+        """The manifest's canonical JSON bytes."""
+        return canonical({"layout": self.layout, "algorithm": self.algorithm})
+
+    @classmethod
+    def decode(cls, data: bytes) -> Manifest:
+        """Decode a manifest, refusing bytes that are not one.
+
+        Args:
+            data: the manifest file's bytes.
+
+        Returns:
+            The manifest.
+
+        Raises:
+            ManifestError: when the bytes are not a manifest.
+        """
+        try:
+            value: Value = json.loads(data)
+            fields = expect_object(value, ("layout", "algorithm"), where="manifest")
+            return cls(
+                expect_int(fields["layout"], where="manifest.layout"),
+                expect_str(fields["algorithm"], where="manifest.algorithm"),
+            )
+        except ValueError as error:
+            raise ManifestError(f"{MANIFEST_NAME} is not a manifest: {error}") from None
+
+
+@dataclass(frozen=True)
+class Namespace:
+    """A ref namespace and its mutation class.
+
+    Attributes:
+        name: the namespace, lowercase letters, digits and dashes.
+        mutation: how its refs may move.
+    """
+
+    name: str
+    mutation: MutationClass
+
+    def __post_init__(self) -> None:
+        if not self.name or self.name.strip("abcdefghijklmnopqrstuvwxyz0123456789-"):
+            raise ValueError(
+                f"namespace {self.name!r} is not lowercase letters, digits and dashes"
+            )
+        if self.mutation not in MUTATION_CLASSES:
+            known = ", ".join(MUTATION_CLASSES)
+            raise ValueError(
+                f"namespace {self.name!r} mutation {self.mutation!r} is not"
+                f" one of {known}"
+            )
+
+
+OWNED: tuple[Namespace, ...] = (
+    Namespace("pins", "volatile"),
+    Namespace("pending", "volatile"),
+)
+"""The two namespaces the store declares itself; see `spec/namespaces.md`."""
+
+
+@dataclass(frozen=True)
+class Landed:
+    """What a landing produced.
+
+    Attributes:
+        digest: the object's name.
+        size: its byte count.
+        written: whether the bytes were written now; false when the
+            object already existed, which is success without a write.
+    """
+
+    digest: Digest
+    size: int
+    written: bool
+
+
+@dataclass(frozen=True)
+class ScrubReport:
+    """What a scrub found.
+
+    Attributes:
+        verified: every object whose bytes matched its name.
+        corrupt: every object that did not; each is removed with its
+            mark, so the next fill lands it again.
+    """
+
+    verified: tuple[Digest, ...] = field(default_factory=tuple)
+    corrupt: tuple[Digest, ...] = field(default_factory=tuple)
+
+
+class Store:
+    """A local store: `objects/` by digest, `refs/` by name.
+
+    Open one with [livery.strongroom.Store.create][] or
+    [livery.strongroom.Store.open][]. Every namespace a caller will
+    write is declared at open with its mutation class; `pins/` and
+    `pending/` are declared by the store.
+
+    Attributes:
+        root: the store's directory.
+        algorithm: the address space's algorithm.
+        namespaces: every declared namespace by name.
+    """
+
+    root: Path
+    algorithm: Algorithm
+    namespaces: dict[str, Namespace]
+
+    def __init__(
+        self,
+        root: Path,
+        algorithm: Algorithm,
+        namespaces: Iterable[Namespace],
+        *,
+        clock: Clock,
+        lock_stale: float,
+        lock_timeout: float,
+    ) -> None:
+        self.root = root
+        self.algorithm = algorithm
+        self.namespaces = {owned.name: owned for owned in OWNED}
+        for namespace in namespaces:
+            declared = self.namespaces.get(namespace.name)
+            if declared is not None and declared != namespace:
+                raise ValueError(
+                    f"namespace {namespace.name!r} is already declared"
+                    f" {declared.mutation}, not {namespace.mutation}"
+                )
+            self.namespaces[namespace.name] = namespace
+        self._clock = clock
+        self._lock_stale = lock_stale
+        self._lock_timeout = lock_timeout
+
+    # Creation and opening.
+
+    @classmethod
+    def create(
+        cls,
+        root: Path,
+        *,
+        algorithm: str = "sha256",
+        namespaces: Iterable[Namespace] = (),
+        clock: Clock = now,
+        lock_stale: float = 600.0,
+        lock_timeout: float = 30.0,
+    ) -> Store:
+        """Create a store at *root* and open it.
+
+        Args:
+            root: the directory; created when missing.
+            algorithm: a registry entry's name.
+            namespaces: the caller's namespaces, each with its class.
+            clock: the instant source for records.
+            lock_stale: seconds after which a lock whose holder cannot
+                be proven alive is broken.
+            lock_timeout: seconds to wait for a live lock.
+
+        Returns:
+            The open store.
+
+        Raises:
+            ManifestError: when *root* already holds a manifest.
+            FormatError: when the algorithm is not registered.
+        """
+        entry = registered(algorithm)
+        root.mkdir(parents=True, exist_ok=True)
+        manifest = root / MANIFEST_NAME
+        if manifest.exists():
+            raise ManifestError(f"{root} is already a store: {MANIFEST_NAME} exists")
+        _write_atomically(manifest, Manifest(LAYOUT_VERSION, entry.name).encode())
+        for child in ("objects", "refs", "index"):
+            (root / child).mkdir(exist_ok=True)
+        return cls.open(
+            root,
+            namespaces=namespaces,
+            clock=clock,
+            lock_stale=lock_stale,
+            lock_timeout=lock_timeout,
+        )
+
+    @classmethod
+    def open(
+        cls,
+        root: Path,
+        *,
+        namespaces: Iterable[Namespace] = (),
+        clock: Clock = now,
+        lock_stale: float = 600.0,
+        lock_timeout: float = 30.0,
+    ) -> Store:
+        """Open the store at *root*.
+
+        Args:
+            root: the store's directory.
+            namespaces: the caller's namespaces, each with its class.
+            clock: the instant source for records.
+            lock_stale: seconds after which a lock whose holder cannot
+                be proven alive is broken.
+            lock_timeout: seconds to wait for a live lock.
+
+        Returns:
+            The store.
+
+        Raises:
+            ManifestError: when the manifest is missing or malformed,
+                or names a layout or an algorithm this implementation
+                does not speak.
+            ValueError: when a namespace is declared twice with
+                different classes.
+        """
+        path = root / MANIFEST_NAME
+        try:
+            manifest = Manifest.decode(path.read_bytes())
+        except FileNotFoundError:
+            raise ManifestError(f"{root} is not a store: no {MANIFEST_NAME}") from None
+        if manifest.layout != LAYOUT_VERSION:
+            raise ManifestError(
+                f"{root} is layout {manifest.layout}; this implementation"
+                f" speaks layout {LAYOUT_VERSION}"
+            )
+        try:
+            entry = registered(manifest.algorithm)
+        except FormatError as error:
+            raise ManifestError(f"{root}: {error}") from None
+        return cls(
+            root,
+            entry,
+            namespaces,
+            clock=clock,
+            lock_stale=lock_stale,
+            lock_timeout=lock_timeout,
+        )
+
+    # Objects.
+
+    def object_path(self, digest: Digest) -> Path:
+        """The path an object of *digest* lives at, present or not.
+
+        Raises:
+            IntegrityError: when the digest is of another algorithm
+                than this store's; one address space, one algorithm.
+        """
+        if digest.algorithm != self.algorithm.name:
+            raise IntegrityError(
+                f"{digest} is a {digest.algorithm} name; this store's"
+                f" address space is {self.algorithm.name}"
+            )
+        algorithm, fanout, rest = digest.path_parts
+        return self.root / "objects" / algorithm / fanout / rest
+
+    def state(self, digest: Digest) -> ObjectState:
+        """Whether *digest* is present, absent, or erased here."""
+        path = self.object_path(digest)
+        if path.with_name(path.name + _TOMBSTONE).exists():
+            return "erased"
+        if path.exists():
+            return "present"
+        return "absent"
+
+    def land(
+        self, source: IO[bytes] | bytes, *, expected: Digest | None = None
+    ) -> Landed:
+        """Land bytes as an object, verifying them on the way in.
+
+        The bytes stream through the digest into a `.part` scratch file
+        and are moved into place atomically. Landing is idempotent: an
+        object that already exists is success without a write. Two
+        writers of the same digest land identical bytes, so no lock is
+        taken.
+
+        Args:
+            source: the bytes, or a binary stream read to its end.
+            expected: the digest the bytes must have, when known. A
+                mismatch removes the scratch and raises.
+
+        Returns:
+            The landing.
+
+        Raises:
+            IntegrityError: when *expected* is given and the bytes do
+                not match it.
+            ErasedObject: when the object was erased here; its
+                tombstone stands until a sweep decides otherwise.
+        """
+        stream = BytesIO(source) if isinstance(source, bytes) else source
+        if expected is not None:
+            destination = self.object_path(expected)
+            scratch = _scratch_beside(destination)
+        else:
+            scratch = _scratch_beside(
+                self.root / "objects" / self.algorithm.name / "incoming"
+            )
+        scratch.parent.mkdir(parents=True, exist_ok=True)
+        hasher = self.algorithm.constructor(b"")
+        size = 0
+        with scratch.open("wb") as handle:
+            while chunk := stream.read(_CHUNK):
+                hasher.update(chunk)
+                size += len(chunk)
+                handle.write(chunk)
+        digest = Digest(self.algorithm.name, hasher.hexdigest())
+        if expected is not None and digest != expected:
+            scratch.unlink()
+            raise IntegrityError(
+                f"landing expected {expected} and the bytes are {digest};"
+                " nothing was kept"
+            )
+        destination = self.object_path(digest)
+        state = self.state(digest)
+        if state == "erased":
+            scratch.unlink()
+            raise ErasedObject(f"{digest} was erased here; a tombstone stands")
+        if state == "present":
+            scratch.unlink()
+            return Landed(digest, size, written=False)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            _replace(scratch, destination)
+        except PermissionError:
+            # A reader holds the destination open (Windows). The bytes
+            # are the same by name, so the landing succeeded if the
+            # destination verifies.
+            scratch.unlink()
+            if not destination.exists() or self._hash_file(destination) != digest:
+                raise
+            self._write_mark(digest, size)
+            return Landed(digest, size, written=False)
+        self._write_mark(digest, size)
+        return Landed(digest, size, written=True)
+
+    def put(self, data: bytes) -> Digest:
+        """Land *data* and return its name."""
+        return self.land(data).digest
+
+    def path(self, digest: Digest) -> Path:
+        """A read-only path to the object, verified on first access.
+
+        Size is checked against the verified mark on every access; an
+        object without a mark (landed by copy, not by this store) is
+        hashed in full and marked.
+
+        Raises:
+            MissingObject: when the object is absent.
+            ErasedObject: when the object was erased.
+            IntegrityError: when the bytes do not match the name; the
+                object and its mark are removed so a fill lands it
+                again.
+        """
+        state = self.state(digest)
+        path = self.object_path(digest)
+        if state == "erased":
+            raise ErasedObject(f"{digest} was erased here; a tombstone stands")
+        if state == "absent":
+            raise MissingObject(f"{digest} is not in the store at {self.root}")
+        size = self.verified_size(digest)
+        if size is None:
+            self.verify(digest)
+        else:
+            actual = path.stat().st_size
+            if actual != size:
+                self._evict(digest)
+                raise IntegrityError(
+                    f"{digest} is {actual} bytes on disk and was verified at"
+                    f" {size}; the object is removed"
+                )
+        return path
+
+    def read(self, digest: Digest) -> bytes:
+        """The object's bytes, through [livery.strongroom.Store.path][]."""
+        return self.path(digest).read_bytes()
+
+    def verify(self, digest: Digest) -> int:
+        """Hash the object in full and mark it verified.
+
+        Returns:
+            The object's size.
+
+        Raises:
+            MissingObject: when the object is absent.
+            IntegrityError: when the bytes do not match; the object and
+                its mark are removed.
+        """
+        path = self.object_path(digest)
+        if not path.exists():
+            raise MissingObject(f"{digest} is not in the store at {self.root}")
+        actual = self._hash_file(path)
+        if actual != digest:
+            self._evict(digest)
+            raise IntegrityError(
+                f"{digest} holds bytes named {actual}; the object is removed"
+            )
+        size = path.stat().st_size
+        self._write_mark(digest, size)
+        return size
+
+    def verified_size(self, digest: Digest) -> int | None:
+        """The size this store verified the object at, or None if never."""
+        try:
+            return int(self._mark(digest).read_text("ascii"))
+        except FileNotFoundError:
+            return None
+
+    def objects(self) -> Iterator[Digest]:
+        """Every object present here, in no particular order."""
+        objects = self.root / "objects" / self.algorithm.name
+        for fanout in sorted(objects.glob("??")):
+            for path in sorted(fanout.iterdir()):
+                if path.name.endswith(_RESERVED_SUFFIXES):
+                    continue
+                yield Digest(self.algorithm.name, fanout.name + path.name)
+
+    def scrub(self) -> ScrubReport:
+        """Hash every object and remove the ones that do not match."""
+        verified: list[Digest] = []
+        corrupt: list[Digest] = []
+        for digest in list(self.objects()):
+            try:
+                self.verify(digest)
+            except IntegrityError:
+                corrupt.append(digest)
+            else:
+                verified.append(digest)
+        return ScrubReport(tuple(verified), tuple(corrupt))
+
+    def _mark(self, digest: Digest) -> Path:
+        algorithm, fanout, rest = digest.path_parts
+        return self.root / "index" / "verified" / algorithm / fanout / rest
+
+    def _write_mark(self, digest: Digest, size: int) -> None:
+        mark = self._mark(digest)
+        mark.parent.mkdir(parents=True, exist_ok=True)
+        _write_atomically(mark, str(size).encode("ascii"))
+
+    def _evict(self, digest: Digest) -> None:
+        self.object_path(digest).unlink(missing_ok=True)
+        self._mark(digest).unlink(missing_ok=True)
+
+    def _hash_file(self, path: Path) -> Digest:
+        hasher = self.algorithm.constructor(b"")
+        with path.open("rb") as handle:
+            while chunk := handle.read(_CHUNK):
+                hasher.update(chunk)
+        return Digest(self.algorithm.name, hasher.hexdigest())
+
+    # Refs.
+
+    def ref_path(self, namespace: str, path: str) -> Path:
+        """The file a ref lives at, present or not.
+
+        Args:
+            namespace: a declared namespace.
+            path: the ref's path within it, forward-slashed; each
+                component is a portable name and none ends in a
+                reserved suffix.
+
+        Raises:
+            UnknownNamespace: when the namespace was not declared.
+            FormatError: when a path component breaks a rule.
+        """
+        self._namespace(namespace)
+        parts = path.split("/")
+        for part in parts:
+            check_name(part)
+            if part.endswith(_RESERVED_SUFFIXES):
+                raise FormatError(
+                    f"ref path component {part!r} ends in a reserved suffix"
+                )
+        return self.root.joinpath("refs", namespace, *parts)
+
+    def ref(self, namespace: str, path: str) -> Digest | None:
+        """What the ref names, or None when it does not exist.
+
+        Raises:
+            RefTampered: when the ref and its record disagree, or the
+                record is missing or malformed.
+        """
+        found = self._read_ref(namespace, path)
+        return None if found is None else found[0]
+
+    def _read_ref(self, namespace: str, path: str) -> tuple[Digest, RefRecord] | None:
+        target = self.ref_path(namespace, path)
+        try:
+            text = target.read_text("ascii")
+        except FileNotFoundError:
+            return None
+        record = self.record(namespace, path)
+        try:
+            digest = Digest.parse(text.strip())
+        except FormatError as error:
+            raise RefTampered(
+                f"ref {namespace}/{path} is not a digest: {error}"
+            ) from None
+        if record is None or record.digest != digest:
+            found = "no record" if record is None else f"record names {record.digest}"
+            raise RefTampered(
+                f"ref {namespace}/{path} names {digest} but {found}; an"
+                " out-of-band edit or a torn update"
+            )
+        return digest, record
+
+    def _namespace(self, namespace: str) -> Namespace:
+        declared = self.namespaces.get(namespace)
+        if declared is None:
+            known = ", ".join(sorted(self.namespaces))
+            raise UnknownNamespace(
+                f"namespace {namespace!r} was not declared at open (declared: {known})"
+            )
+        return declared
+
+    def record(self, namespace: str, path: str) -> RefRecord | None:
+        """The record beside the ref, or None when there is none.
+
+        Raises:
+            RefTampered: when the record's bytes are not a record.
+        """
+        target = self.ref_path(namespace, path)
+        try:
+            data = target.with_name(target.name + _RECORD).read_bytes()
+        except FileNotFoundError:
+            return None
+        try:
+            return RefRecord.decode(data)
+        except FormatError as error:
+            raise RefTampered(f"record of {namespace}/{path}: {error}") from None
+
+    def refs(self, namespace: str) -> list[str]:
+        """Every ref path in the namespace, sorted."""
+        self._namespace(namespace)
+        base = self.root / "refs" / namespace
+        found: list[str] = []
+        for path in base.rglob("*"):
+            if path.is_file() and not path.name.endswith(_RESERVED_SUFFIXES):
+                found.append(path.relative_to(base).as_posix())
+        return sorted(found)
+
+    def set_ref(
+        self,
+        namespace: str,
+        path: str,
+        digest: Digest,
+        *,
+        previous: Digest | None,
+        by: Subject,
+        receipt: Digest | None = None,
+        meta: dict[str, Value] | None = None,
+    ) -> RefRecord:
+        """Move a ref by compare-and-swap, writing its record.
+
+        The move happens under the ref's lock. The namespace's
+        mutation class is enforced: write-once refuses a second digest
+        and treats the same digest as done; monotone requires the new
+        target to be a version present here whose parents include the
+        current target; volatile needs only the compare-and-swap.
+
+        Args:
+            namespace: a declared namespace.
+            path: the ref's path.
+            digest: what the ref names afterwards.
+            previous: what the caller believes it names now; None to
+                create.
+            by: who moves it.
+            receipt: the receipt of the moving call, if any.
+            meta: the consumer's own object for the record.
+
+        Returns:
+            The record written, or the existing record when a
+            write-once ref already names *digest*.
+
+        Raises:
+            RefConflict: when the ref does not name *previous*.
+            WriteOnceRefused: on a write-once ref that names another digest.
+            NotFastForward: on a monotone ref whose new target does not
+                descend from the current one, or is not a version here.
+            LockTimeout: when a live lock outlasts the timeout.
+            RefTampered: when the ref and its record disagree.
+        """
+        target = self.ref_path(namespace, path)
+        mutation = self._namespace(namespace).mutation
+        with self._locked(target):
+            found = self._read_ref(namespace, path)
+            current = None if found is None else found[0]
+            if current != previous:
+                raise RefConflict(
+                    f"ref {namespace}/{path} names {current}, not {previous};"
+                    " re-read it and retry"
+                )
+            if mutation == "write-once" and found is not None:
+                if found[0] == digest:
+                    return found[1]
+                raise WriteOnceRefused(
+                    f"ref {namespace}/{path} is write-once and names {found[0]};"
+                    f" {digest} is refused"
+                )
+            if mutation == "monotone" and current is not None:
+                self._check_fast_forward(namespace, path, digest, current)
+            record = RefRecord(
+                digest, previous, by, self._clock(), receipt, dict(meta or {})
+            )
+            target.parent.mkdir(parents=True, exist_ok=True)
+            _write_atomically(target.with_name(target.name + _RECORD), record.encode())
+            _write_atomically(target, f"{digest}\n".encode("ascii"))
+            return record
+
+    def _check_fast_forward(
+        self, namespace: str, path: str, digest: Digest, current: Digest
+    ) -> None:
+        try:
+            version = Version.decode(self.read(digest))
+        except (MissingObject, ErasedObject, FormatError) as error:
+            raise NotFastForward(
+                f"ref {namespace}/{path} is monotone and {digest} is not a"
+                f" version present here: {error}"
+            ) from None
+        if current not in version.parents:
+            raise NotFastForward(
+                f"ref {namespace}/{path} names {current}, which is not a"
+                f" parent of {digest}; rebase the version and retry"
+            )
+
+    @contextlib.contextmanager
+    def _locked(self, target: Path) -> Generator[None]:
+        lock = target.with_name(target.name + _LOCK)
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        deadline = time.monotonic() + self._lock_timeout
+        while True:
+            try:
+                with lock.open("x") as handle:
+                    handle.write(json.dumps({"pid": os.getpid(), "at": time.time()}))
+                break
+            except FileExistsError:
+                if self._lock_is_stale(lock):
+                    lock.unlink(missing_ok=True)
+                    continue
+                if time.monotonic() >= deadline:
+                    raise LockTimeout(
+                        f"{lock} is held by a live process past"
+                        f" {self._lock_timeout}s; retry later"
+                    ) from None
+                time.sleep(_LOCK_POLL)
+        try:
+            yield
+        finally:
+            lock.unlink(missing_ok=True)
+
+    def _lock_is_stale(self, lock: Path) -> bool:
+        # Break only on provable staleness: a holder that is dead, or a
+        # lock older than the stale bound. A torn lock file is a holder
+        # that died mid-write. The compare-and-swap still decides the
+        # winner afterwards, so a wrong break costs a retry, never a
+        # torn record.
+        try:
+            content = json.loads(lock.read_text("ascii"))
+            pid = int(content["pid"])
+            at = float(content["at"])
+        except (OSError, ValueError, KeyError, TypeError):
+            return True
+        if not _PID_ALIVE(pid):
+            return True
+        return time.time() - at > self._lock_stale
+
+
+def _scratch_beside(path: Path) -> Path:
+    # Two processes landing the same digest each need their own scratch,
+    # or their writes interleave in one file; the process id and a
+    # per-process counter make the name unique, and the `.part` suffix
+    # keeps it the one thing an age sweep may remove.
+    _SCRATCH_COUNT[0] += 1
+    return path.with_name(f"{path.name}.{os.getpid()}-{_SCRATCH_COUNT[0]}{_PART}")
+
+
+_SCRATCH_COUNT = [0]
+
+
+def _write_atomically(path: Path, data: bytes) -> None:
+    scratch = _scratch_beside(path)
+    scratch.write_bytes(data)
+    os.replace(scratch, path)

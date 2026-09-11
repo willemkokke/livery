@@ -137,7 +137,7 @@ def digest_of(data: bytes, *, algorithm: str = SHA256.name) -> Digest:
     Raises:
         FormatError: when the algorithm is not registered.
     """
-    entry = _registered(algorithm)
+    entry = registered(algorithm)
     return Digest(entry.name, entry.constructor(data).hexdigest())
 
 
@@ -154,14 +154,15 @@ def digest_stream(stream: IO[bytes], *, algorithm: str = SHA256.name) -> Digest:
     Raises:
         FormatError: when the algorithm is not registered.
     """
-    entry = _registered(algorithm)
+    entry = registered(algorithm)
     hasher = entry.constructor(b"")
     while chunk := stream.read(_STREAM_CHUNK):
         hasher.update(chunk)
     return Digest(entry.name, hasher.hexdigest())
 
 
-def _registered(algorithm: str) -> Algorithm:
+def registered(algorithm: str) -> Algorithm:
+    """The registry entry for *algorithm*, or a refusal naming the registry."""
     entry = ALGORITHMS.get(algorithm)
     if entry is None:
         known = ", ".join(sorted(ALGORITHMS))
