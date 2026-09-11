@@ -253,14 +253,40 @@ def test_starting_over_refuses_unpushed_commits_then_deletes_everything(
     assert lines[0].startswith("  deleted") and len(lines) == 2
 
 
-def test_a_red_run_fails_the_proof_naming_its_page() -> None:
+def test_a_red_run_is_re_run_once_and_then_fails_the_proof_naming_its_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     fake, repo = _proof_rig()
     fake.push(_e2e.E2E_OWNER, _e2e.E2E_REPO, "main", outcome="failure", sha=_SHA)
     fake.settle(_e2e.E2E_OWNER, _e2e.E2E_REPO, _SHA)
+    real = _e2e._retry_red_once
+    retries: list[int] = []
+
+    def _still_red(repo_: object, runs_: tuple[object, ...]) -> list[str]:
+        retried = real(repo, repo.checks.runs(head_sha=_SHA))
+        retries.append(len(retried))
+        fake.settle(_e2e.E2E_OWNER, _e2e.E2E_REPO, _SHA)  # the attempt, red again
+        return retried
+
+    monkeypatch.setattr(_e2e, "_retry_red_once", _still_red)
     with pytest.raises(_FAILURES) as caught:
-        _e2e._completed_run(repo, _SHA, event="push")
+        _e2e._completed_run(repo, _SHA, event="push", interval=0)
+    assert retries == [1]
     assert "ended failure" in str(caught.value)
     assert "/actions/runs/" in str(caught.value)
+    # A second attempt that passes is the proof's run.
+    fake.push(_e2e.E2E_OWNER, _e2e.E2E_REPO, "main", outcome="failure", sha="e" * 40)
+    fake.settle(_e2e.E2E_OWNER, _e2e.E2E_REPO, "e" * 40)
+
+    def _then_green(repo_: object, runs_: tuple[object, ...]) -> list[str]:
+        retried = real(repo, repo.checks.runs(head_sha="e" * 40))
+        fake.set_outcome(_e2e.E2E_OWNER, _e2e.E2E_REPO, "e" * 40, "success")
+        fake.settle(_e2e.E2E_OWNER, _e2e.E2E_REPO, "e" * 40)
+        return retried
+
+    monkeypatch.setattr(_e2e, "_retry_red_once", _then_green)
+    run, _jobs = _e2e._completed_run(repo, "e" * 40, event="push", interval=0)
+    assert run.conclusion == "success"
 
 
 def test_a_proof_waits_only_until_its_deadline_and_reads_its_event_alone() -> None:

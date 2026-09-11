@@ -848,19 +848,27 @@ def _ensure_members(root: Path) -> None:
 
 
 def _completed_run(
-    repo: Repository, sha: str, *, event: str, timeout: float = 900.0
+    repo: Repository,
+    sha: str,
+    *,
+    event: str,
+    timeout: float = 900.0,
+    interval: float = 5.0,
 ) -> tuple[Run, tuple[Job, ...]]:
     """The newest completed ``ci.yml`` run of *sha* for *event*, with its jobs.
 
-    Waits for the run to register and complete; a red run fails
-    verbatim, naming its page. The jobs carry their names, the check
-    legs by their matrix display (``check (ubuntu-latest, 3.14)``),
-    so a reader looks for the prefix it needs; the logs are read per
-    job on demand, since a job the run skipped has none to serve.
+    Waits for the run to register and complete; a run that ended
+    failure is re-run once and waited for again, and a red run then
+    fails verbatim, naming its page. The jobs carry their names, the
+    check legs by their matrix display (``check (ubuntu-latest,
+    3.14)``), so a reader looks for the prefix it needs; the logs are
+    read per job on demand, since a job the run skipped has none to
+    serve.
     """
     import time
 
     deadline = time.monotonic() + timeout
+    retried = False
     while True:
         runs = [
             run
@@ -869,13 +877,15 @@ def _completed_run(
         ]
         run = max(runs, key=lambda run: run.id, default=None)
         if run is not None and run.status == "completed":
-            break
+            if retried or not _retry_red_once(repo, (run,)):
+                break
+            retried = True
         if time.monotonic() >= deadline:
             fail(
                 f"no completed {event} run for {sha[:10]} within {timeout:.0f}s:"
                 f" {repo.web_url()}/actions"
             )
-        time.sleep(5)
+        time.sleep(interval)
     if run.conclusion != "success":
         fail(
             f"run {run.id} ({event}, {sha[:10]}) ended {run.conclusion}:"
