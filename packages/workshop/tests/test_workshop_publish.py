@@ -234,6 +234,13 @@ def test_pending_release_wave_sees_only_an_unwaved_squash(train) -> None:
     found, missing = pending
     assert found == sha
     assert missing == ("packages/base/v0.3.0", "packages/left/v0.3.0")
+    # A later release that is fully cut does not strand the older
+    # died wave: the oldest squash with an uncut receipt answers.
+    later = _squash(root, ("right",))
+    _git(root, "tag", "-a", "packages/right/v0.3.0", "-m", "right", later)
+    _git(root, "push", "origin", "--tags")
+    pending = pending_release_wave(root, git)
+    assert pending is not None and pending[0] == sha
     for tag in missing:
         _git(root, "tag", "-a", tag, "-m", tag, sha)
     _git(root, "push", "origin", "--tags")
