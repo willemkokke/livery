@@ -783,6 +783,14 @@ def pending_release_wave(root: Path, git: GitOps) -> tuple[str, tuple[str, ...]]
     return pending
 
 
+def uncut_in_set(
+    missing: tuple[str, ...], members: tuple[Package, ...]
+) -> tuple[str, ...]:
+    """The uncut receipts, `packages/<dir>/v<x>`, that belong to *members*."""
+    names = {member.directory.name for member in members}
+    return tuple(tag for tag in missing if tag.split("/")[1] in names)
+
+
 release_group = workflow.group("release", help="The release train")
 
 
@@ -843,7 +851,7 @@ def workflow_release(
     print(f"  act: release train, from '{branch}'")
     pending = pending_release_wave(root, git)
     repo = this_repository(root)
-    if pending is not None:
+    if pending is not None and uncut_in_set(pending[1], members):
         squash, missing = pending
         print(f"  release squash {squash[:12]} has uncut receipts:")
         for name in missing:
@@ -856,6 +864,16 @@ def workflow_release(
             print(line)
         print("  re-run to release work newer than the squash")
         return
+    if pending is not None:
+        # An uncut receipt outside this set is that set's recovery,
+        # named so a person can run it; this release goes ahead.
+        squash, missing = pending
+        others = " ".join(sorted({tag.split("/")[1] for tag in missing}))
+        print(
+            f"  release squash {squash[:12]} has uncut receipts outside this"
+            f" set: {', '.join(missing)}; `{footman.prog()} workflow.release"
+            f" {others}` re-dispatches its wave"
+        )
     if workshop:
         fail(
             "--workshop pins the driver of a re-dispatched wave, and no"

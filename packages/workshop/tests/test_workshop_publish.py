@@ -247,6 +247,22 @@ def test_pending_release_wave_sees_only_an_unwaved_squash(train) -> None:
     assert pending_release_wave(root, git) is None
 
 
+def test_uncut_receipts_are_matched_to_the_requested_set(train) -> None:
+    # The fallback first: an uncut receipt outside the set names no
+    # recovery for it, so the requested release goes ahead.
+    from livery.workshop._packages import discover_packages
+    from livery.workshop._release_driver import uncut_in_set
+
+    root = train[0]
+    by_name = {p.directory.name: p for p in discover_packages(root)}
+    missing = ("packages/base/v0.3.0", "packages/left/v0.3.0")
+    assert uncut_in_set(missing, (by_name["right"],)) == ()
+    assert uncut_in_set(missing, (by_name["left"], by_name["right"])) == (
+        "packages/left/v0.3.0",
+    )
+    assert uncut_in_set((), (by_name["left"],)) == ()
+
+
 def test_discovery_ignores_rider_files_and_survives_a_wrong_title(train) -> None:
     # hse's shape: the title is presentation. A rider file in the
     # squash and a hand-mangled title change nothing about what the
