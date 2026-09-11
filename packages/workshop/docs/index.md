@@ -60,7 +60,15 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
   matrix, floor included, so the floor's legs cost runner minutes at
   night and no pull request time, and a floor-only failure reaches a
   person the next morning. A declared `[ci] python-versions` runs at
-  the gate as declared.
+  the gate as declared. On a Windows leg of a GitHub-shaped workspace
+  the entry points `TEMP` and `TMP` under the runner's own temp: the
+  hosted runners keep the workspace, the uv cache, and that temp on
+  the fast working drive and the system temp on the slow system
+  drive, so the tests' files and the environments they build share
+  the drive with the cache and uv links instead of copying.
+  `[ci] windows-temp = "system"` leaves the system temp, for a runner
+  without a separate working drive; `"runner"` asks for the move on
+  any forge.
 - `fm submit`: get the branch onto the remote, verified. Its local
   gate is the one the CI legs run: the whole workspace, or the
   affected gate against the base branch when the contract declares
