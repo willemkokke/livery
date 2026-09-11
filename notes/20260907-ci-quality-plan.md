@@ -2035,3 +2035,17 @@ None. Every ruling raised in this plan was closed in the review of
   whose behaviour is POSIX by design, which skip by name. The runner
   stays out of `[ci] runners` by the 2026-09-09 ruling; returning it,
   to the gate or to the nightly point, is Willem's to rule.
+- 2026-09-11, Willem: a Windows leg's temporary directory lives under
+  the runner's temp on GitHub by default, and stays configurable for
+  custom and enterprise runners (`[ci] windows-temp = "runner" |
+  "system"`, #475). The hosted runners keep the workspace, the uv
+  cache, and `RUNNER_TEMP` on the D: working drive and the system temp
+  on the slow C: drive, so the tests' files and the environments they
+  build with uv had been cross-drive from the cache. Measured on one
+  tree with a windows-latest proof leg on the branch, runs 34651386106
+  and 34650089820: the gate 576 s with the system temp against 486 s
+  with the runner's, the workshop suite 1377 s against 1098 s summed
+  over the workers, footman 381 s against 325 s, toolroom 75 s against
+  90 s; the same 19 strongroom failures in both (#478), everything
+  else green. The Gitea and GitLab shells keep the system temp, since
+  their runners are the workspace's own.
