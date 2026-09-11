@@ -1,5 +1,121 @@
 # Changelog
 
+## [0.2.0] - 2026-09-11
+
+### Added
+
+- The armed suite rehearses the release path on the true graph
+- The docs site's rendered config and build verb
+- The API reference, every docstring published
+- Changelog pages and the paginated release view
+- The docs gate, drifted links red before CI says so
+- The publish seams, declared in the contract per forge kind
+- The docs seeds and the gradient add-back
+- The registry ladder and the kind registry, opened to layers
+- The C/C++ library kind on conan 2
+- The binary-extension kind through the chain
+- The cross-kind dependency
+- Publish and the identity guard across kinds
+- The chain add-back for both kinds
+- Issue bodies through fm
+- The entry contract and the bare fm spelling
+- Package-owned nav for the docs site
+- The docs generator seam
+- The docs config surface and the theme
+- Llms.txt and llms-full.txt for the site
+- The coverage seam
+- The per-package task reference
+- Toolroom joins the workspace
+- Footman joins the workspace
+- The version rules speak as the ecosystem's own
+- The train carries a migrated line's first release
+- The release branch carries its own set manifest
+- Fm ci.e2e drives the whole loop against the local forge
+- The server blocks red merges on every forge
+- Receipt tags are protected on every forge
+- The post-edit hook never removes an import mid-edit
+- Every gate leg runs profiled and uploads its trace
+- The CI state store on refs/workshop/*, with compare-and-swap writes and a janitor
+- Timing rows on the state store, and fm ci.timings
+- CI as points on the gitea emitter, fm ci.run per job
+- The merge point dispatches the release wave, fm workflow.release.dispatch
+- The nightly point, fm release.replay, and the schedule seam's first entry
+- [ci] python-versions, matrices as contract config; a one-leg loop
+- Contract keys are kebab-case; one loader refuses underscores, the render verbs migrate
+- The wheels matrix reads wheel-platforms; the loop builds a nanobind wheel through the docker socket
+- [ci] affected-legs, the check legs run the scoped gate against the pull request's base
+- Workshop/verified, the gate stamps the tree it proved green and a run of the same tree skips
+- A cancelled run names the run that superseded it, and the watchers follow
+- The gitea lane meters its check legs and unions them in the gate job
+- A skipped suite's floor is judged from the workshop/coverage store
+- The leg splits one pooled test run by test context instead of one process per suite
+- The GitHub emitter runs the check legs and the gate job through the points shell
+- The auto-ratchet floor mode, fm coverage.accept, and a coverage row on every gated run
+- A diff confined to notes and markdown affects no package, so its legs skip the gate
+- A test declares the CI points it runs at, and the nanobind wheel build runs at the nightly point only
+- The submit's gate is the gate the CI legs run
+- The site's own root files affect no package
+- A narrowed green run on a verified base stamps its tree in full
+- The GitHub shell carries the merge point's jobs, and the legs start at once
+- The timings record every job of the run and the run's own wall
+- The submit's gate skips a tree this machine's check already proved
+- The runner's directories are swept through a plugin surface
+- Every test runs apart from the live runner state, and the registry stays clean
+- The check legs run the newest Python; the nightly runs the matrix
+- Every series reads and writes its rows through the store
+- The coverage store and the per-run halves are keyed series
+- The gate record and the diagnostics are local series of the store
+- One janitor sweeps the runner's directories and the store
+- The state store is read by hand, and the pages read it after a skip
+- The coverage record is keyed by main, one row per unit per leg
+- Each branch keeps its own coverage record, copied to main's at the merge
+- The gate judges statements and branches, and the record holds arcs
+- The workspace tests directory is a unit of the affected engine
+- Dispatch and read the nightly, ride out dropped connections, merge notes by union, judge the task nav
+- The test speed ratchet, slice 6 of the state store plan
+- A re-dispatched wave may name a released driver, and recovery reaches older squashes
+
+### Fixed
+
+- Prepare refreshes uv.lock with the stamp
+- Ci.rerun re-runs the branch's verdict, read back
+- The changelogs are the manifest and recovery handles its leftovers
+- Tie the submit verdict to the pushed head
+- The newborn's first release is v0.0.0 everywhere
+- One release number per distribution line
+- The isolated leg answers for its own environment
+- The leg runs serial, and the history ships in the wheel
+- Re-preparing an unpublished release is recovery, not a fault
+- The emitted title check speaks footman's grammar, and a red title cancels the matrix
+- The docs deploy fetches the receipt tags
+- The scoped gate hands its steps to the block
+- The context-rename heal skips a forge that names no contexts
+- Lint and format take paths and --safe-fix; the hook calls the verbs
+- The metrics collect looks a pull request's run up under the event's head
+- The completion test heals no real project; the dev build keeps timestamps
+- Classify takes the emitters' path set once instead of rendering per path
+- The units a leg ran come from its marker, the legs trace with ctrace, and the workspace's tests are a stored unit
+- The gate's own driver is not measured, only the tests
+- Six frictions of the daily loop, and workshop's floor at 83
+- The ecosystem rung carries PyPI's upload endpoint
+- The dev plugin imports livery.toolroom, and the registration gate's test states both cases
+- The train recovers an uncut wave only for the set that names it
+- The registration gate's test reads the wheel case off the module's own file
+
+### Changed
+
+- The post-mortem's process rules enter the conventions
+- Integrate and the wip park through their paces
+- The docs seeds move to a shared package-base template
+- The task reference documents the advertised tree
+- The footman floor rises to 0.52.1
+- The kind backend owns its gate composition
+- The connection surfaces its credential
+- The remaining quick wins on the leg's profile
+- The test suite seeds git once and renders once
+- The floor on forge names the co-released 0.3.0
+- The floor on copier names 9.18.2, the locked version
+
 ## [0.1.0] - 2026-09-04
 
 ### Added

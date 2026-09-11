@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.3.0] - 2026-09-11
+
+### Added
+
+- The publish seams, declared in the contract per forge kind
+- The registry ladder and the kind registry, opened to layers
+- Issue bodies through fm
+- Package-owned nav for the docs site
+- The per-package task reference
+- Toolroom joins the workspace
+- Footman joins the workspace
+- The version rules speak as the ecosystem's own
+- The train carries a migrated line's first release
+- Fm ci.e2e drives the whole loop against the local forge
+- The server blocks red merges on every forge
+- Receipt tags are protected on every forge
+- Timing rows on the state store, and fm ci.timings
+- Contract keys are kebab-case; one loader refuses underscores, the render verbs migrate
+- The wheels matrix reads wheel-platforms; the loop builds a nanobind wheel through the docker socket
+- Every test runs apart from the live runner state, and the registry stays clean
+- The gate judges statements and branches, and the record holds arcs
+- Dispatch and read the nightly, ride out dropped connections, merge notes by union, judge the task nav
+
+### Fixed
+
+- Ci.rerun re-runs the branch's verdict, read back
+- The dev runner image carries its tools; docker speaks toolroom
+- Tie the submit verdict to the pushed head
+- Six frictions of the daily loop, and workshop's floor at 83
+- The dev plugin imports livery.toolroom, and the registration gate's test states both cases
+
+### Changed
+
+- The connection surfaces its credential
+
 ## [0.2.0] - 2026-09-04
 
 ### Added
