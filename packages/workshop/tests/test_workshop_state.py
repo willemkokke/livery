@@ -424,6 +424,24 @@ def test_put_stamps_the_schema_and_the_time_over_what_a_row_carries(
     assert found.rows[0].when > found.rows[1].when > "2026"
 
 
+def test_put_removes_the_named_rows_and_keeps_the_rest(
+    repos: tuple[Path, Path],
+) -> None:
+    _, work = repos
+    assert (
+        ROWS.put(work, {"a": {"x": 1}, "b": {"x": 2}, "c": {"x": 3}}, message="three")
+        == ""
+    )
+    # A record replaced in place: one row fresh, one removed, one
+    # standing with the stamp it had.
+    before = {row.name: row.when for row in ROWS.rows(work).rows}
+    assert ROWS.put(work, {"a": {"x": 11}}, message="again", remove=["b", "gone"]) == ""
+    found = ROWS.rows(work)
+    assert {row.name: row.data["x"] for row in found.rows} == {"a": 11, "c": 3}
+    stamps = {row.name: row.when for row in found.rows}
+    assert stamps["c"] == before["c"] and stamps["a"] > before["a"]
+
+
 def test_the_window_keeps_the_newest_rows_by_their_stamps_not_their_names(
     repos: tuple[Path, Path],
 ) -> None:

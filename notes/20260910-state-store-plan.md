@@ -239,7 +239,28 @@ change.
    branch reruns that suite, and a branch behind main reruns the
    suites main changed since; the submit integrates first, so both are
    rare. Sizes: about 370 KB per leg for the record, the same per leg
-   on a per-run ref while a run is in flight.
+   on a per-run ref while a run is in flight. Landed 2026-09-11, #417:
+   `_coverage_store.RECORD` is the family `coverage/<base>/<leg>`, its
+   one base `main`, one row per unit named by the unit's path; a leg
+   puts one file, `coverage.json`, on its per-run ref with its scope
+   and every unit it measured (`put_run`), the gate job reads the
+   run's legs in one listing (`run_legs`) and main's record once per
+   leg (`recorded`), and `put_record` refuses any run but a push. One
+   consequence the issue did not spell out: a tree the verified
+   record proves no longer skips everything. The leg reads the record
+   and runs, measured for their lines alone, the suites whose closure
+   moved since main's record, under a fifth scope, `measured`, which
+   the stamp treats as `verified`; on main after a merge that is the
+   changed package and the workspace tests, the checks themselves
+   never rerun. The closure-keyed refs are two-part keys under the
+   same prefix, so the janitor drops them by the family's current
+   keys on the first merge's sweep, no migration code. `Series.put`
+   gained `remove`, so the record's stale rows go in the write that
+   replaces it. The loop's proofs changed with the wording: main's
+   run after the setup squash says `the union of 3 leg(s) and 0
+   reused suite(s)` and `main/check-ubuntu-latest-3.14: 3 fresh`,
+   and main's run after the member-only squash `2 leg(s) and 1
+   reused` with `2 fresh, 1 carried`.
 
 Slices 1 to 3 are a day together; 4 and 5 another; 6 a day of its own,
 once the timing rows carry a fortnight of legs at the gate's Python; 7
@@ -305,3 +326,10 @@ a day, before 6 or after it.
   slice 7. Measured the same day: one stored entry is 8 KB to 108 KB
   per unit, about 370 KB per leg per full run. The gate measures
   lines, not branches; a switch to branches is a ruling of its own.
+- 2026-09-11: slice 7 landed (#417). Taken by default, one line to
+  reverse: on a proved tree the leg measures the suites main's
+  record cannot supply, the tests alone, and leaves the scope
+  `measured`. The alternative, a full skip on main, would leave the
+  record without fresh rows after every merge and the next run red
+  by name; the cost is the changed package's suite and the workspace
+  tests rerun once on main after each merge.

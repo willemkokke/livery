@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 import tempfile
 import tomllib
@@ -27,6 +28,7 @@ from livery.footman import fail
 from livery.toolroom import basedpyright, mypy, pyrefly, pytest, ruff, ruff_format, ty
 from livery.workshop._contract import load_contract
 from livery.workshop._packages import Package
+from livery.workshop._state import slug
 
 #: The whole repo, as CI lints it.
 SRC = (".",)
@@ -356,7 +358,10 @@ def report_coverage(root: Path, packages: tuple[Package, ...]) -> None:
         print(f"  coverage {package.path}: {percent:.1f}% here ({judged})")
 
 
-#: Where the gate job collects every leg's coverage artifact.
+#: The gate job's scratch directory for the union's inputs: one
+#: directory per leg, the leg's fresh units and the units carried from
+#: main's record as coverage data files. Ignored by the template's
+#: gitignore, written afresh by every union.
 COVERAGE_DATA = "coverage-data"
 
 
@@ -377,14 +382,14 @@ def _unmetered() -> dict[str, str]:
 
 
 def suites_of(packages: tuple[Package, ...]) -> tuple[Package, ...]:
-    """The packages with a test directory: the units the coverage store keys."""
+    """The packages with a test directory: the units the record keys."""
     return tuple(
         package for package in packages if (package.directory / "tests").is_dir()
     )
 
 
 def units_of(root: Path, packages: tuple[Package, ...]) -> tuple[Package, ...]:
-    """The stored units: every package's suite, then the workspace's own tests."""
+    """The recorded units: every package's suite, then the workspace's own tests."""
     from livery.workshop._coverage_store import workspace_suite
 
     unit = workspace_suite(root)
@@ -437,19 +442,20 @@ def suites_that_ran(
     """The units the leg ran, by its scope marker.
 
     Every suite after a full gate, the named packages' suites after a
-    narrowed one, none after a skip; the workspace's own tests
-    whenever any suite ran, since every leg that runs a suite runs
-    them. The marker decides, never the data's contexts: a suite whose
-    tests reach no line that collection had not already reached leaves
-    no context of its own under a first-hit tracer, and still ran.
+    narrowed or a measured one, none after a skip; the workspace's
+    own tests whenever any suite ran, since every leg that runs a
+    suite runs them. The marker decides, never the data's contexts: a
+    suite whose tests reach no line that collection had not already
+    reached leaves no context of its own under a first-hit tracer,
+    and still ran.
     """
     from livery.workshop._coverage_store import workspace_suite
-    from livery.workshop._verified import AFFECTED, FULL
+    from livery.workshop._verified import AFFECTED, FULL, MEASURED
 
     scope = marker["scope"]
     if scope == FULL:
         ran = suites_of(packages)
-    elif scope == AFFECTED:
+    elif scope in (AFFECTED, MEASURED):
         named = set(marker["packages"])
         ran = tuple(package for package in suites_of(packages) if package.path in named)
     else:
@@ -473,25 +479,62 @@ def _relative(filename: str, root: Path) -> str | None:
 SUITES_DATA = "coverage-suites.db"
 
 
+def _put_leg(root: Path, marker: dict[str, Any], units: dict[str, Any]) -> None:
+    """Put the leg's scope and *units* on its per-run ref; red when it cannot.
+
+    Outside CI nothing is put and the line says so. Inside CI a leg
+    that measured and cannot put its lines is red: the union would
+    otherwise lack a suite, and a smaller union never passes.
+    """
+    from livery.workshop._coverage_store import put_run
+    from livery.workshop._state import run_context
+
+    run = run_context()
+    leg = marker["leg"]
+    if run is None:
+        print(
+            f"  coverage store: {len(units)} unit(s) measured; outside CI nothing"
+            " is stored"
+        )
+        return
+    why = put_run(
+        root,
+        run,
+        leg=leg,
+        scope=marker["scope"],
+        packages=tuple(marker["packages"]),
+        units=units,
+    )
+    if why:
+        fail(
+            f"the leg's lines could not be put on its per-run ref ({why}): a leg"
+            " that measured a suite and cannot store its lines is red, never a"
+            " smaller union"
+        )
+    print(
+        f"  coverage store: {len(units)} unit(s) on the run's ref for"
+        f" {leg or 'an unlabelled leg'} ({marker['scope']})"
+    )
+
+
 def store_suites(
     root: Path, packages: tuple[Package, ...], *, marker: dict[str, Any]
 ) -> None:
-    """Split the leg's data per unit and stamp each unit on the coverage store.
+    """Split the leg's data per unit and put every unit on the leg's per-run ref.
 
     The leg's parts combine into `SUITES_DATA` first (kept apart from
-    the upload); each unit the marker says ran is split out and its
-    lines within its closure are stamped under the marker's leg label
-    and the unit's closure identity. Only a CI run stamps; a refusal
-    from the store is printed, never fatal, since the next leg that
-    misses the unit runs it fresh.
+    the leg's own combine); each unit the marker says ran is split out
+    and its lines within its closure ride the per-run ref under the
+    unit's closure identity, with the scope the gate ran. Only a CI
+    run puts; a put that fails is red.
     """
-    leg = marker["leg"]
     from coverage import CoverageData
 
-    from livery.workshop._coverage_store import closure_id, stamp
+    from livery.workshop._coverage_store import Unit, closure_id
     from livery.workshop._git_ops import GitOps
     from livery.workshop._state import run_context
 
+    leg = marker["leg"]
     parts = sorted(root.glob(".coverage.*"))
     if not parts:
         return
@@ -503,6 +546,7 @@ def store_suites(
     combined.write()
     run = run_context()
     git = GitOps(root)
+    measured: dict[str, Unit] = {}
     for package in suites_that_ran(marker, root, packages):
         files = suite_lines_by_context(root / SUITES_DATA, packages, package, root=root)
         if run is None:
@@ -512,36 +556,31 @@ def store_suites(
             )
             continue
         key = closure_id(git, packages, package)
-        why = stamp(
-            root,
-            run,
-            leg=leg,
-            package=package,
-            closure_key=key,
-            sha=git.head_sha(),
-            files=files,
+        measured[package.path] = Unit(
+            package.path, key, run.run_id, git.head_sha(), files
         )
-        if why:
-            print(f"  coverage store: {package.path} not stored ({why})")
-        else:
-            print(
-                f"  coverage store: {package.path} stored for closure {key[:12]}"
-                f" on {leg} ({len(files)} files)"
-            )
     (root / SUITES_DATA).unlink(missing_ok=True)
+    if run is None:
+        return
+    _put_leg(root, marker, measured)
+    for unit in measured.values():
+        print(
+            f"  coverage store: {unit.path} stored for closure {unit.closure[:12]}"
+            f" on {leg} ({len(unit.files)} files)"
+        )
 
 
 def combine_leg(root: Path, packages: tuple[Package, ...]) -> None:
-    """Combine the leg's data into ``.coverage``, each suite's lines stored first.
+    """Combine the leg's data into ``.coverage``, each suite's lines put first.
 
-    Every suite the leg ran is combined apart and stamped on the
-    coverage store under the leg's label (the marker's), so a later
-    leg that skips the suite reuses its lines; then every data file
-    combines into the leg's ``.coverage`` for the union. Refuses when
-    a leg that ran its gate left no data, naming the variable that
-    arms the meter; a leg whose gate skipped (a tree already proved,
-    or nothing affected) legitimately measured nothing, and says so
-    instead.
+    Every suite the leg ran is combined apart and put on the leg's
+    per-run ref under the leg's label (the marker's), so the gate
+    job's union reads it there; then every data file combines into
+    the leg's ``.coverage``. Refuses when a leg that ran its gate left
+    no data, naming the variable that arms the meter; a leg whose
+    gate skipped (a tree already proved, or nothing affected)
+    legitimately measured nothing, says so, and puts its scope alone,
+    so the union knows the leg skipped rather than died.
     """
     from livery.workshop._verified import NOTHING, VERIFIED, read_marker
 
@@ -556,6 +595,7 @@ def combine_leg(root: Path, packages: tuple[Package, ...]) -> None:
                 " python starts metered; without it there is nothing to union."
             )
         print(f"  coverage: no data, the gate ran {scope!r}; nothing to combine")
+        _put_leg(root, marker, {})
         return
     store_suites(root, packages, marker=marker)
     if parts:
@@ -570,215 +610,230 @@ def combine_leg(root: Path, packages: tuple[Package, ...]) -> None:
     print(f"  coverage: {len(parts)} data file(s) combined into .coverage")
 
 
+def _write_unit(folder: Path, name: str, files: dict[str, list[int]]) -> Path:
+    """One unit's lines as a coverage data file under *folder*; the path."""
+    from coverage import CoverageData
+
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / name
+    data = CoverageData(basename=str(path))
+    data.add_lines(dict(files))
+    data.write()
+    return path
+
+
 def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, ...]:
-    """Combine the collected legs' data into the union; the packages it judges.
+    """Union the run's legs' lines with main's record; the packages it judges.
 
-    Each leg's directory under `COVERAGE_DATA` carries its scope
-    marker beside its data. A full leg's data judges every package
-    and a narrowed leg's the suites its marker names; a leg whose
-    gate skipped (a tree already proved, or nothing affected)
-    measured nothing. Every suite no leg ran is pulled from the
-    coverage store, per leg label, for its closure identity, so the
+    Each check leg's per-run ref carries the scope its gate ran and
+    the units it measured. A full leg measured every suite, a narrowed
+    or measured leg the suites its marker names; a leg whose gate
+    skipped (a tree already proved, or nothing affected) measured
+    nothing. Every unit a leg did not measure is carried from main's
+    record on that leg, at the unit's current closure identity, so the
     union is the same global union a full run produces and every
-    package is judged. A suite the store cannot supply refuses by
-    name: a leg skips a suite only when the store holds it, so a miss
-    here is a leg that narrowed without the store, or a store since
-    trimmed, never a smaller union.
+    package is judged. A unit the record cannot supply refuses by
+    name: a leg skips a suite only when the record holds it, so a miss
+    here is a leg that narrowed without the record, or a record main
+    moved on from since, never a smaller union.
 
-    Refuses by name when no leg directory was collected, when a leg
-    carries no readable marker, when a marker names a scope the union
-    does not read, and when a leg that ran its gate left no data: a
-    missing upload is a red gate, never a smaller union.
+    On main's run (a push) the record is written back per leg: the
+    leg's fresh units replace their rows, the carried rows stand, and
+    the rows of units that no longer exist go. A record that cannot
+    be written prints why: the next run reruns what it cannot reuse,
+    the safe direction. Any other run reads and never writes.
+
+    Refuses by name when no leg left its lines, when a leg's ref
+    carries no readable file, when a leg names no scope the union
+    reads, when a leg that ran a suite left its lines out, and when a
+    unit is neither the run's nor the record's.
 
     Returns:
-        The judged packages, in *packages* order; empty when nothing
-        ran and nothing was reused, and then no union file is written.
+        The judged packages, in *packages* order; empty when the
+        workspace has no unit to union, and then no union file is
+        written.
     """
-    from livery.workshop._coverage_store import WORKSPACE_TESTS
+    from livery.workshop._coverage_store import (
+        MAIN,
+        RUN_FILE,
+        Record,
+        Unit,
+        closure_id,
+        put_record,
+        recorded,
+        run_legs,
+    )
+    from livery.workshop._git_ops import GitOps
+    from livery.workshop._state import run_context
     from livery.workshop._verified import (
         AFFECTED,
         FULL,
-        MARKER,
+        MEASURED,
         NOTHING,
         VERIFIED,
-        read_marker,
     )
 
-    legs = sorted(path for path in (root / COVERAGE_DATA).glob("*") if path.is_dir())
+    run = run_context()
+    if run is None:
+        fail(
+            "the union reads the run's per-run refs, and outside CI there is no"
+            " run: the legs' lines are unioned and judged inside CI alone"
+        )
+    legs, why = run_legs(root, run)
+    if why:
+        fail(f"the run's per-run refs could not be read ({why}); nothing to union")
     if not legs:
         fail(
-            f"no leg's coverage data under {COVERAGE_DATA}/: the check legs"
-            " upload theirs as coverage-<os>-<python> artifacts, and the gate"
-            " job collects them before this union. A missing upload is a red"
-            " leg, never a smaller union."
+            f"no check leg left its lines on run {run.run_id}'s refs: every leg"
+            f" puts its scope and its lines there ({RUN_FILE}) at its end, and"
+            " a missing put is a red leg, never a smaller union"
         )
+    scratch = root / COVERAGE_DATA
+    shutil.rmtree(scratch, ignore_errors=True)
+    scratch.mkdir()
+    git = GitOps(root)
+    units = units_of(root, packages)
+    keys = {unit.path: closure_id(git, packages, unit) for unit in units}
     collected: list[Path] = []
-    judged: set[str] = set()
-    labels: list[tuple[Path, str]] = []
-    for leg in legs:
-        marker = read_marker(leg)
-        scope = marker["scope"]
-        if scope in (VERIFIED, NOTHING):
-            print(f"  coverage: leg {leg.name} ran {scope!r}: no suite, no data")
-            labels.append((leg, marker["leg"]))
-            continue
-        if scope not in (FULL, AFFECTED):
+    reused: list[Path] = []
+    ran = 0
+    writes: list[tuple[str, dict[str, Unit], Record]] = []
+    for leg in sorted(legs, key=lambda item: item.key):
+        if leg.why:
             fail(
-                f"leg {leg.name}: no readable {MARKER} beside its data (scope"
-                f" {scope!r}); the check legs upload the marker with the data,"
-                " and the union judges by it"
+                f"leg {leg.key}: {leg.why}; the leg died before its lines, or"
+                " its put failed, and a missing put is a red leg, never a"
+                " smaller union"
             )
-        data = leg / ".coverage"
-        if not data.is_file():
+        if not leg.label:
             fail(
-                f"leg {leg.name} ran its gate {scope!r} and left no .coverage:"
-                " a leg that ran a suite uploads its data, and a missing"
-                " upload is a red gate, never a smaller union"
+                f"leg {leg.key} names no label, so {MAIN}'s record cannot supply"
+                " what it skipped; the job runner sets WORKSHOP_LEG for every leg"
             )
-        collected.append(data)
-        labels.append((leg, marker["leg"]))
-        if scope == FULL:
-            judged.update(package.path for package in packages)
+        if leg.scope in (VERIFIED, NOTHING):
+            print(f"  coverage: leg {leg.label} ran {leg.scope!r}: no suite, no data")
+        elif leg.scope in (FULL, AFFECTED, MEASURED):
+            marker = {"scope": leg.scope, "packages": list(leg.packages), "leg": ""}
+            expected = suites_that_ran(marker, root, packages)
+            missing = [unit.path for unit in expected if unit.path not in leg.units]
+            if missing:
+                fail(
+                    f"leg {leg.label} ran {leg.scope!r} and its ref lacks"
+                    f" {', '.join(missing)}: a leg that ran a suite puts its"
+                    " lines, and a missing put is a red leg, never a smaller union"
+                )
+            ran += 1
+            for path, unit in sorted(leg.units.items()):
+                collected.append(
+                    _write_unit(
+                        scratch / leg.label, f"fresh-{slug(path)}.coverage", unit.files
+                    )
+                )
         else:
-            judged.update(marker["packages"])
-        judged.add(WORKSPACE_TESTS)
-    reused = _reuse_suites(root, packages, judged, labels)
-    collected.extend(reused)
-    unjudged = [package.path for package in packages if package.path not in judged]
-    if unjudged:
-        print(
-            "  coverage: unjudged this run, no leg ran their suites:"
-            f" {', '.join(unjudged)}"
-        )
-    if not collected:
-        print("  coverage: no leg ran a suite this run; nothing to union")
+            fail(
+                f"leg {leg.label}: its ref names a scope the union does not read"
+                f" ({leg.scope!r}); the check legs leave full, affected, nothing,"
+                " verified, or measured"
+            )
+        pending = [unit for unit in units if unit.path not in leg.units]
+        held = Record({})
+        if pending or run.event == "push":
+            held = recorded(root, leg=leg.label)
+            if held.failed:
+                fail(
+                    f"{MAIN}'s record on {leg.label} could not be read"
+                    f" ({held.reason}); the suites the leg skipped cannot be"
+                    " supplied, and a smaller union never passes"
+                )
+            for skipped in held.skipped:
+                print(f"  coverage: {MAIN}/{leg.label}: {skipped}")
+        for suite in pending:
+            row = held.units.get(suite.path)
+            if row is None or row.closure != keys[suite.path]:
+                held_at = f", only at {row.closure[:12]}" if row is not None else ""
+                fail(
+                    f"leg {leg.label}: {MAIN}'s record holds no {suite.path} at"
+                    f" closure {keys[suite.path][:12]}{held_at}. A leg skips a"
+                    " suite only when the record holds it at the suite's"
+                    " closure, so this leg narrowed without the record, or"
+                    f" {MAIN} moved on since; a run of the full gate measures"
+                    " it again."
+                )
+            reused.append(
+                _write_unit(
+                    scratch / leg.label, f"reuse-{slug(suite.path)}.coverage", row.files
+                )
+            )
+            print(
+                f"  coverage: {suite.path} on {leg.label}: reused from run"
+                f" {row.run} ({len(row.files)} files)"
+            )
+        writes.append((leg.label, dict(leg.units), held))
+    if not collected and not reused:
+        print("  coverage: no unit to union; nothing judged")
         return ()
     scrubbed = _unmetered()
     result = toolroom.coverage.opts(
         cwd=root, env=scrubbed, nofail=True, recorded=False
-    )("combine", *(str(path) for path in collected))
+    )("combine", *(str(path) for path in collected + reused))
     if result.code != 0:
         fail(f"coverage combine exited {result.code}:\n{result.stdout}{result.stderr}")
     report = toolroom.coverage.opts(
         cwd=root, env=scrubbed, nofail=True, recorded=False
     )("report", "--sort=cover")
     print(report.stdout.rstrip())
-    print(
-        f"  coverage: the union of {len(collected) - len(reused)} leg(s)"
-        f" and {len(reused)} reused suite(s)"
-    )
-    return tuple(package for package in packages if package.path in judged)
-
-
-def _reuse_suites(
-    root: Path,
-    packages: tuple[Package, ...],
-    judged: set[str],
-    labels: list[tuple[Path, str]],
-) -> list[Path]:
-    """Pull every unit no leg ran from the store, one data file per leg.
-
-    The units are the packages' suites and the workspace's own tests.
-    Extends *judged* to every package once each unit is accounted
-    for. Refuses by name when a leg has no label to read the store by,
-    when the store cannot be read, and when it holds no entry for a
-    unit's closure on a leg.
-    """
-    from livery.workshop._coverage_store import closure_id
-    from livery.workshop._git_ops import GitOps
-    from livery.workshop._verified import MARKER
-
-    pending = [unit for unit in units_of(root, packages) if unit.path not in judged]
-    if not pending:
-        # Every unit ran: the union is complete, and the packages
-        # without a suite of their own are judged on it too.
-        judged.update(package.path for package in packages)
-        return []
-    git = GitOps(root)
-    keys = {package.path: closure_id(git, packages, package) for package in pending}
-    written: list[Path] = []
-    for leg, label in labels:
-        if not label:
-            fail(
-                f"leg {leg.name} names no label in its {MARKER}, so the"
-                f" store cannot supply {', '.join(p.path for p in pending)};"
-                " the job runner sets WORKSHOP_LEG for every leg"
+    print(f"  coverage: the union of {ran} leg(s) and {len(reused)} reused suite(s)")
+    if run.event != "push":
+        print(
+            f"  coverage record: a {run.event or 'local'} run reads {MAIN}'s"
+            " record and never writes it"
+        )
+        return tuple(packages)
+    for label, fresh, held in writes:
+        stale = held.stale(keys)
+        carried = [path for path in held.units if path in keys and path not in fresh]
+        why = put_record(root, run, leg=label, fresh=fresh, remove=stale)
+        if why:
+            print(
+                f"  coverage record: {MAIN}/{label} not written ({why}); the"
+                " next run reruns what it cannot reuse"
             )
-        for package in pending:
-            path, why = _pull_unit(root, package, keys[package.path], leg, label)
-            if path is None:
-                fail(
-                    f"leg {leg.name}: no stored suite for {package.path} at"
-                    f" closure {keys[package.path][:12]} on {label}"
-                    f"{' (' + why + ')' if why else ''}. A leg skips a suite"
-                    " only when the store holds it, so this leg narrowed"
-                    " without the store, or the store was trimmed since;"
-                    " a run of the full gate stores it again."
-                )
-            written.append(path)
-    judged.update(package.path for package in packages)
-    return written
-
-
-def _pull_unit(
-    root: Path, package: Package, key: str, leg: Path, label: str
-) -> tuple[Path | None, str]:
-    """Write one stored unit's lines under *leg*; the file, or why not.
-
-    The unit is *package*'s suite at closure *key* as *label*
-    measured it. ``(None, "")`` is a plain miss; ``(None, reason)``
-    a store that could not be read or an entry that is not a row.
-    """
-    from coverage import CoverageData
-
-    from livery.workshop._coverage_store import find
-    from livery.workshop._state import slug
-
-    found, why = find(root, leg=label, package=package, closure_key=key)
-    if found is None:
-        return None, why
-    path = leg / f"reuse-{slug(package.name)}.coverage"
-    data = CoverageData(basename=str(path))
-    data.add_lines(dict(found.files))
-    data.write()
-    print(
-        f"  coverage: {package.path} on {label}: reused from run"
-        f" {found.run} ({len(found.files)} files)"
-    )
-    return path, ""
+            continue
+        print(
+            f"  coverage record: {MAIN}/{label}: {len(fresh)} fresh,"
+            f" {len(carried)} carried, {len(stale)} removed"
+        )
+    return tuple(packages)
 
 
 def stored_union(
-    root: Path, packages: tuple[Package, ...], labels: list[str], into: Path
+    root: Path, labels: list[str], into: Path
 ) -> tuple[list[Path], list[str]]:
-    """Every stored unit on each leg in *labels*, under *into*; files and misses.
+    """Every unit of main's record on each leg in *labels*, under *into*.
 
-    The site's coverage pages read this when the run's legs left no
-    data: a run whose legs skipped on the verified record still
-    publishes the union the gate judged. A unit the store cannot
-    supply on a leg is a named miss, never a refusal: the pages render
-    what there is.
+    Returns the files written and the misses, named.
 
-    Raises:
-        GitError: When a unit's closure is not in ``HEAD``.
+    The site's coverage pages read this in the merge point's deploy
+    job: the union main's gate judged, whatever its legs ran. A leg
+    whose record cannot be read, or holds nothing, is a named miss,
+    never a refusal: the pages render what there is.
     """
-    from livery.workshop._coverage_store import closure_id
-    from livery.workshop._git_ops import GitOps
+    from livery.workshop._coverage_store import MAIN, recorded
 
-    git = GitOps(root)
-    units = units_of(root, packages)
-    keys = {unit.path: closure_id(git, packages, unit) for unit in units}
     written: list[Path] = []
     misses: list[str] = []
     for label in labels:
-        leg = into / label
-        leg.mkdir(parents=True, exist_ok=True)
-        for unit in units:
-            path, why = _pull_unit(root, unit, keys[unit.path], leg, label)
-            if path is None:
-                misses.append(f"{unit.path} on {label}" + (f" ({why})" if why else ""))
-            else:
-                written.append(path)
+        held = recorded(root, leg=label)
+        if held.failed:
+            misses.append(f"{MAIN}/{label} ({held.reason})")
+            continue
+        if not held.units:
+            misses.append(f"{MAIN}/{label}: nothing recorded")
+            continue
+        for path, unit in sorted(held.units.items()):
+            written.append(
+                _write_unit(into / label, f"reuse-{slug(path)}.coverage", unit.files)
+            )
     return written, misses
 
 

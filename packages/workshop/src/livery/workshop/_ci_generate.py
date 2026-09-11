@@ -42,8 +42,6 @@ DOWNLOAD = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c #
 #: a runner that carries the inputs sees it exit 0 (measured on the
 #: loop's runner).
 GITEA_UPLOAD = "christopherhx/gitea-upload-artifact@v4"
-#: The matching download fork, for the gate job's union of the legs.
-GITEA_DOWNLOAD = "christopherhx/gitea-download-artifact@v4"
 
 
 def _facts(root: Path) -> dict[str, Any]:
@@ -57,7 +55,6 @@ def _facts(root: Path) -> dict[str, Any]:
     """
     from livery.workshop._compose import layer_template_tree
     from livery.workshop._docs import (
-        docs_coverage_declared,
         docs_requirements,
         publish_seam,
     )
@@ -91,10 +88,7 @@ def _facts(root: Path) -> dict[str, Any]:
         "docs_requirements": (
             list(docs_requirements(root)) if (root / "packages").is_dir() else []
         ),
-        # Whether any package declares coverage reports: the docs jobs
-        # then consume the check legs' coverage artifacts, so the
         # declaring packages' generators can render their trees.
-        "docs_coverage": docs_coverage_declared(root),
         "publish_seam": publish_seam(root),
         # The committed .repo.env's keys: the offline, deterministic
         # list of which secrets the rung step may carry into a job.
@@ -223,20 +217,6 @@ def _github_gate(answers: dict[str, Any], prog: str) -> str:
     )
     setup_uv_docs = _setup_uv_step(answers, cache_suffix="docs")
     requirements = _docs_requirements_step(answers)
-    coverage_declared = bool(answers.get("docs_coverage"))
-    # The deploy renders the site's coverage pages from the run's own
-    # legs; it plumbs their data only when a package declares a
-    # report. A pull request's docs job builds without them.
-    coverage_step = (
-        f"""      - name: Coverage artifacts for the site
-        uses: {DOWNLOAD}
-        with:
-          pattern: coverage-*
-          path: coverage-data
-"""
-        if coverage_declared
-        else ""
-    )
     # The pages seam is the forge's own act: the grant, the
     # environment, and the two pages actions after the verb; another
     # seam runs the verb alone, which publishes or says why not.
@@ -300,25 +280,14 @@ jobs:
           # coverage-enable-subprocess dev dependency installs calls
           # coverage.process_startup() in every python this venv
           # starts, armed by this variable, so the whole {prog}
-          # invocation meters from interpreter start; the leg's data
-          # is combined by the check job's own entries and judged
-          # once, on the union, in the gate job below.
+          # invocation meters from interpreter start; the leg's
+          # measured suites ride its per-run ref on the state store,
+          # and the gate job below unions them with main's record
+          # and judges once.
           COVERAGE_PROCESS_START: pyproject.toml
         run: >-
           {prog} ci.run --point=gate --job=check
           --os="${{{{ matrix.os }}}}" --python="${{{{ matrix.python }}}}"
-      # The data and the scope the gate ran (fm-gate.json): the union
-      # judges only the packages a leg's scope covered, and pulls the
-      # suites it skipped from the coverage store.
-      - name: Leg coverage data
-        uses: {UPLOAD}
-        with:
-          name: coverage-${{{{ matrix.os }}}}-${{{{ matrix.python }}}}
-          path: |
-            .coverage
-            fm-gate.json
-          include-hidden-files: true
-          if-no-files-found: error
       # The run as a Chrome trace, one artifact per leg: every task,
       # step, lane wait, and pytest test as slices. Observational, so
       # it runs on a red gate too (the run worth reading) and its own
@@ -344,11 +313,11 @@ jobs:
 
   # The one required context. Branch protection points here, so the
   # matrix can grow or shrink without touching repository settings.
-  # Its entries collect the run's timing rows, union every leg's
-  # coverage and judge the floors, ask the forge for the jobs it
-  # needs, and stamp the tree a green run proved; always(), so a red
-  # run is judged too. The state store's pushes need the grant, since
-  # organisation defaults are read-only.
+  # Its entries union the legs' measured suites with main's coverage
+  # record and judge the floors, collect the run's timing rows, ask
+  # the forge for the jobs it needs, and stamp the tree a green run
+  # proved; always(), so a red run is judged too. The state store's
+  # pushes need the grant, since organisation defaults are read-only.
   {context}:
     if: always()
     needs: [check, docs]
@@ -361,13 +330,6 @@ jobs:
           # The stamp composes a narrowed run with its base tree's
           # record through the merge base, which a shallow clone lacks.
           fetch-depth: 0
-      # Every leg's coverage data, for the union the gate's own
-      # entries combine and judge against the floors.
-      - name: Collect every leg's coverage data
-        uses: {DOWNLOAD}
-        with:
-          pattern: coverage-*
-          path: coverage-data
 {setup_uv}{enter}      - name: Verdict
         env:
           FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
@@ -387,7 +349,7 @@ jobs:
           # The release view reads the receipt tags; a shallow
           # tagless clone renders its no-tags fallback page instead.
           fetch-tags: true
-{setup_uv_docs}{requirements}{coverage_step}{enter}      - name: Deploy
+{setup_uv_docs}{requirements}{enter}      - name: Deploy
         env:
           FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
         run: {prog} ci.run --point=merge --job=deploy
@@ -640,24 +602,14 @@ jobs:
         env:
           # Coverage's own subprocess contract: every python this venv
           # starts is metered from interpreter start, so the whole
-          # {prog} invocation measures with no wrapper; the leg's data
-          # is combined by the check job's own entries and judged once,
-          # on the union, in the gate job.
+          # {prog} invocation measures with no wrapper; the leg's
+          # measured suites ride its per-run ref on the state store,
+          # and the gate job unions them with main's record and
+          # judges once.
           COVERAGE_PROCESS_START: pyproject.toml
         run: >-
           {prog} ci.run --point=gate --job=check
           --os="${{{{ matrix.os }}}}" --python="${{{{ matrix.python }}}}"
-      # The data and the scope the gate ran (fm-gate.json): the union
-      # judges only the packages a leg's scope covered.
-      - name: Leg coverage data
-        uses: {GITEA_UPLOAD}
-        with:
-          name: coverage-${{{{ matrix.os }}}}-${{{{ matrix.python }}}}
-          path: |
-            .coverage
-            fm-gate.json
-          include-hidden-files: true
-          if-no-files-found: error
       # The run as a Chrome trace, one artifact per leg: every task,
       # step, lane wait, and pytest test as slices. Observational, so
       # it runs on a red gate too (the run worth reading) and its own
@@ -684,8 +636,9 @@ jobs:
 
   # The one required context. Branch protection points here, so the
   # matrix can grow or shrink without touching repository settings.
-  # It collects the run's timing rows, then judges the jobs it needs
-  # by asking the forge; always(), so a red run is judged too.
+  # It unions the legs' measured suites with main's coverage record,
+  # collects the run's timing rows, then judges the jobs it needs by
+  # asking the forge; always(), so a red run is judged too.
   {context}:
     if: always()
     needs: [check, docs]
@@ -696,13 +649,6 @@ jobs:
           # The stamp composes a narrowed run with its base tree's
           # record through the merge base, which a shallow clone lacks.
           fetch-depth: 0
-      # Every leg's coverage data, for the union the gate's own
-      # entries combine and judge against the committed floors.
-      - name: Collect every leg's coverage data
-        uses: {GITEA_DOWNLOAD}
-        with:
-          pattern: coverage-*
-          path: coverage-data
 {rung}{enter}      - name: Verdict
         env:
           FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}

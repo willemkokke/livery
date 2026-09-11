@@ -477,18 +477,18 @@ def test_the_github_shell_is_one_verb_per_job_for_the_gate_point(
     )
     assert check_step["env"] == {"COVERAGE_PROCESS_START": "pyproject.toml"}
     assert not [s for s in check["steps"] if "ci.metrics.leg" in s.get("run", "")]
-    upload = next(s for s in check["steps"] if s.get("name") == "Leg coverage data")
-    assert upload["with"]["path"].split() == [".coverage", "fm-gate.json"]
-    assert upload["with"]["if-no-files-found"] == "error"
+    # The leg's measured suites ride its per-run ref on the state
+    # store: no artifact carries coverage, on the leg or in the gate
+    # job, and the profile upload is the leg's one artifact step.
+    artifacts = [s for s in check["steps"] if "artifact" in s.get("uses", "")]
+    assert [s["name"] for s in artifacts] == ["Upload the run profile"]
     gate = jobs["gate"]
     assert gate["needs"] == ["check", "docs"]
     # The stamp composes a narrowed run with its base tree's record,
     # which needs the merge base a shallow clone lacks.
     assert gate["steps"][0]["with"]["fetch-depth"] == 0
     names = [step.get("name", "") for step in gate["steps"]]
-    assert names.index("Collect every leg's coverage data") < names.index("Verdict")
-    collect = gate["steps"][names.index("Collect every leg's coverage data")]
-    assert collect["with"] == {"pattern": "coverage-*", "path": "coverage-data"}
+    assert not [s for s in gate["steps"] if "artifact" in s.get("uses", "")]
     verdict = gate["steps"][names.index("Verdict")]
     assert verdict["run"] == "fm ci.run --point=gate --job=gate"
     assert verdict["env"] == {"FORGE_TOKEN": "${{ secrets.GITHUB_TOKEN }}"}
@@ -1101,13 +1101,11 @@ def test_the_gitea_lane_meters_its_legs_and_unions_them_in_the_gate_job(
     check = workflow["jobs"]["check"]["steps"]
     run = next(step for step in check if step.get("name") == "Check")
     assert run["env"]["COVERAGE_PROCESS_START"] == "pyproject.toml"
-    upload = next(step for step in check if step.get("name") == "Leg coverage data")
-    assert upload["with"]["path"].split() == [".coverage", "fm-gate.json"]
-    assert upload["with"]["if-no-files-found"] == "error"
+    # No artifact carries coverage: the leg's measured suites ride its
+    # per-run ref, and the gate job reads them from the store.
+    artifacts = [step for step in check if "artifact" in step.get("uses", "")]
+    assert [step["name"] for step in artifacts] == ["Upload the run profile"]
     gate = workflow["jobs"]["gate"]["steps"]
-    download = next(
-        step for step in gate if step.get("name") == "Collect every leg's coverage data"
-    )
-    assert download["with"] == {"pattern": "coverage-*", "path": "coverage-data"}
+    assert not [step for step in gate if "artifact" in step.get("uses", "")]
     # The union is a gate entry, never a YAML line: the shell stays plumbing.
     assert "coverage combine" not in generate(root)[".gitea/workflows/ci.yml"]

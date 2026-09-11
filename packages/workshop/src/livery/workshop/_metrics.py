@@ -44,7 +44,10 @@ SCHEMA = 1
 SERIES = Series("metrics", window=300, schema=SCHEMA)
 
 #: The per-run family: one series per run and check leg, holding the
-#: leg's half of its row until the run's gate job collects it. A half
+#: leg's half of its timing row, and beside it the scope its gate ran
+#: with the lines of every suite it measured
+#: ([livery.workshop._coverage_store.put_run][]), until the run's gate
+#: job collects the halves and drops the refs, lines included. A half
 #: older than six hours outlived a run that was cancelled or died
 #: before its gate job could collect, and the janitor drops it: no
 #: run lasts that long, and the forge has no run-by-id lookup to ask.

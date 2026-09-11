@@ -40,14 +40,24 @@ SERIES = Series("verified", window=200)
 #: its gate ran, for the leg's metrics row and the gate job's stamp.
 MARKER = "fm-gate.json"
 
-#: The scope names a leg records.
+#: The scope names a leg records: the whole gate; the gate narrowed
+#: to the affected packages; nothing, for a prose-only diff; the tree
+#: already proved, nothing run; the tree already proved and the named
+#: suites run measured for their lines alone, because main's coverage
+#: record could not supply them at their current closure.
 FULL = "full"
 AFFECTED = "affected"
 NOTHING = "nothing"
 VERIFIED = "verified"
+MEASURED = "measured"
 
 #: The scopes a leg can leave; anything else means the leg said nothing.
-KNOWN = (FULL, AFFECTED, NOTHING, VERIFIED)
+KNOWN = (FULL, AFFECTED, NOTHING, VERIFIED, MEASURED)
+
+#: The scopes of a leg whose tree the record already names: nothing
+#: to stamp, whether the leg ran nothing or measured suites for
+#: their lines.
+PROVED = (VERIFIED, MEASURED)
 
 
 @dataclass(frozen=True)
@@ -85,8 +95,9 @@ def write_marker(
     """Leave the leg's scope, the suites it ran, and its label beside its trace.
 
     The metrics row, the stamp, and the coverage union read it back:
-    *packages* are the suites the leg ran under a narrowed scope, and
-    *leg* the label the store keys the leg's measurements by.
+    *packages* are the suites the leg ran under a narrowed or a
+    measured scope, and *leg* the label the record keys the leg's
+    measurements by.
     """
     (root / MARKER).write_text(
         json.dumps(
@@ -210,9 +221,9 @@ def stamp_from_metrics(root: Path, run: RunContext, *, sha: str) -> str:
         return f"  verified: no stamp, {', '.join(unknown)} left no scope"
     git = GitOps(root)
     tree = tree_id(git)
-    if all(scope == VERIFIED for scope in scopes.values()):
+    if all(scope in PROVED for scope in scopes.values()):
         return f"  verified: tree {tree[:12]} is already recorded; nothing to stamp"
-    if all(scope in (FULL, VERIFIED) for scope in scopes.values()):
+    if all(scope in (FULL, *PROVED) for scope in scopes.values()):
         why = stamp(root, run, tree=tree, sha=sha, legs=legs)
         if why:
             return f"  verified: no stamp, {why}"
