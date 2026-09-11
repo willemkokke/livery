@@ -1,25 +1,11 @@
 # Strongroom in a vacuum: the store standard and its core
 
-Status: executing; Willem's go 2026-09-11. Phase 1 landed 2026-09-11
-(issue #434, PR #436): the package, the spec's formats with their
-vectors, and the Python formats. Phase 2 landed 2026-09-11 (issue
-#440, PR #443): the local store, objects and refs. Phase 3 landed
-2026-09-11 (issue #444, PR #445): sources and tiers, fill and
-offline. Phase 4 landed 2026-09-11 (issue #446, PR #447): the
-lifecycle. Phase 5 landed 2026-09-11 (issue #448, PR #449): the
-materialiser, the whole ladder, prefetch and shed. Phase 6 built
-2026-09-11 (issue #450, PR #451): the harness in the package and the
-docs. The first release, v0.0.0, waits on the PyPI pending publisher
-(open item 3); `fm workflow.release strongroom --local` derived
-v0.0.0 and built the wheel on 2026-09-11.
-Scoped by Willem the same day: strongroom alone, no change to
-toolroom, footman, or the workshop. This note lives in
-`packages/strongroom/notes/`, beside the package it plans. This plan executes steps 0, 2
-and 3 of the content-addressed store design note
-(`livery-planning/docs/20260828-content-addressed-store.md`, the
-"store note" below): the spec with its vectors, the core, and the
-materialiser. The tool store rework over strongroom is a later plan
-of toolroom's, and adds the first dependency edge then.
+Status: complete. Willem's go 2026-09-11; six phases landed the same
+day (issues #434, #440, #444, #446, #448, #450; PRs #436, #443, #445,
+#447, #449, #451). The first release, livery-strongroom v0.0.0, is
+on PyPI with its receipt `packages/strongroom/v0.0.0` at squash
+fd7bc7e, cut 2026-09-11 after the recovery recorded in
+`notes/20260911-strongroom-first-release-debrief.md`.
 
 ## Scope
 
@@ -556,6 +542,15 @@ Acceptance:
   would make a group of ref moves all-or-nothing under one authority,
   and a root object per namespace would add snapshot visibility.
   Proposed as a phase 7 if a consumer needs it. Awaiting ruling.
+- 2026-09-11, the first release landed. The wave for squash
+  fd7bc7e died on a workshop defect in the squash's own tree; the
+  recovery took eleven workshop changes, a release of forge 0.3.0
+  and workshop 0.2.0, and a re-dispatch of the wave driven by the
+  released workshop. The receipt was cut from a machine with the
+  train's own publish verb after the wave had published, because the
+  job's ambient token may not push a tag at a squash whose workflow
+  file differs from the tip's. The whole account, every decision and
+  what each implies, is `notes/20260911-strongroom-first-release-debrief.md`.
 - 2026-09-11, Willem: the materialiser's whole strategy ladder is
   implemented and tested in this plan, not the copy rung alone. The
   agent's reading of "implement and test the whole rung"; correct it
@@ -571,13 +566,13 @@ Acceptance:
    does not support `FICLONE`. The success path is proven on macOS;
    whether a Linux leg on a btrfs or XFS loop mount is worth its cost
    is decided when phase 5 lands. Owner: the agent, at phase 5.
-3. **The first release's PyPI side.** `livery-strongroom` and
-   `strongroom` were both free on PyPI on 2026-09-11. Trusted
-   publishing is registered per project name out of band: a pending
-   publisher for `livery-strongroom` (repository `willemkokke/livery`,
-   workflow `release.yml`, environment `pypi`) must exist on pypi.org
-   before `fm workflow.release strongroom` can publish. Owner:
-   Willem; the release runs the moment it exists.
+3. **Resolved 2026-09-11.** Willem registered the pending publisher
+   and the wave published `livery-strongroom 0.0.0`; the receipt is
+   cut. What remains open for the train, not for this plan, is in
+   the debrief note: a `FORGE_TOKEN` secret with the workflow scope
+   for receipts at non-tip squashes (#480 landed the job side), the
+   recovery selection (#479), the rerun (#469) and the leg cache
+   (#470).
 4. **The toolroom note amendment.** `packages/toolroom/notes/
    20260827-pinned-tool-store.md` still puts the bytes engine in
    `toolroom.store`. The store note asks for the amendment; it waits
