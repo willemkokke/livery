@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -256,8 +257,6 @@ def start_over(lane: Forge, token: str, root: Path, *, url: str) -> list[str]:
     a release already gone is not an error: the next birth wants them
     absent, and a re-run of the reset is the recovery procedure.
     """
-    import shutil
-
     from livery.forge._registry import purge_packages
 
     if (root / ".git").is_dir():
@@ -277,9 +276,19 @@ def start_over(lane: Forge, token: str, root: Path, *, url: str) -> list[str]:
         + (f": {', '.join(purged)}" if purged else "")
     )
     if root.exists():
-        shutil.rmtree(root)
+        _rmtree(root)
         lines.append(f"  removed {root}")
     return lines
+
+
+def _rmtree(path: Path) -> None:
+    """Remove *path* whole; git's pack files are read-only, which Windows honours."""
+    import stat
+
+    for entry in path.rglob("*"):
+        if entry.is_file() and not entry.is_symlink():
+            entry.chmod(entry.stat().st_mode | stat.S_IWRITE)
+    shutil.rmtree(path)
 
 
 def _unpushed_commits(root: Path) -> list[str]:
@@ -362,9 +371,11 @@ def _point_templates(contract: str, templates: Path) -> str:
             "the loop's contract names no template source; birth seeds"
             " one, so this workspace was not born by the loop"
         )
+    from livery.workshop._contract import toml_string
+
     return (
         contract[: match.start()]
-        + f'templates = "{templates}"'
+        + f"templates = {toml_string(templates.as_posix())}"
         + contract[match.end() :]
     )
 
@@ -1343,6 +1354,42 @@ def _prove_tests_leg(root: Path, kind: str) -> None:
     print(f"  composed skip: proven on main's run {run.id} after the tests-leg squash")
 
 
+def _prove_nightly(root: Path, kind: str) -> None:
+    """Prove the nightly point by hand: dispatched, followed to green, read back.
+
+    The loop's contract schedules the released member's replay at the
+    nightly point, so the dispatched run proves a task attached
+    through the contract with no YAML change, and the verbs that
+    start and read a point run against the real runner. After the
+    release act, so the replay has a wheel to install.
+    """
+    code = _loop_fm(root, "ci.dispatch", "--point=nightly", "--interval=5", nofail=True)
+    if code:
+        fail(f"the loop's `{footman.prog()} ci.dispatch --point=nightly` exited {code}")
+    if _loop_fm(root, "ci.status", "--point=nightly", nofail=True):
+        fail(
+            f"the loop's `{footman.prog()} ci.status --point=nightly` did not"
+            " read the dispatched run green"
+        )
+    from livery.workshop._ci_tasks import point_runs
+
+    forge, _ = _dev_forge(kind)
+    repo = forge.repository(E2E_OWNER, E2E_REPO)
+    run = point_runs(repo, "nightly")[0]
+    jobs = repo.checks.jobs(run.id)
+    _require_lines(
+        repo,
+        run,
+        jobs,
+        "nightly",
+        ("replaying ", " passes its own tests from site-packages"),
+    )
+    print(
+        f"  nightly: proven by hand (run {run.id}: dispatched, followed to green,"
+        " the scheduled replay ran, and the point read back green)"
+    )
+
+
 def _release_act(root: Path, kind: str) -> None:
     """Release the member through the loop; verify wheel and receipt.
 
@@ -1643,4 +1690,5 @@ if _WORKSHOP_TESTS.is_dir():
         _prove_prose_leg(root, forge)
         _prove_tests_leg(root, forge)
         _release_act(root, forge)
-        print("  the loop is whole: gate, merge, release, receipt")
+        _prove_nightly(root, forge)
+        print("  the loop is whole: gate, merge, release, receipt, nightly")

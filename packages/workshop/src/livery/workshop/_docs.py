@@ -1487,7 +1487,8 @@ def require_site(root: Path) -> None:
     index = root / "site" / "index.html"
     if not index.is_file():
         fail(
-            f"the site build exited 0 but left no {index}: nothing to publish;"
+            f"the site build exited 0 but left no {index.as_posix()}: nothing"
+            " to publish;"
             f" run `{footman.prog()} docs.build` again"
         )
 

@@ -85,6 +85,22 @@ def test_slow_status_reads_answer_none_before_the_truth() -> None:
     assert repo.checks.status(sha).state == "success"
 
 
+def test_dropped_connections_raise_then_the_next_read_answers() -> None:
+    driver = FakeDriver()
+    repo, _, sha = _repo_with_open_pr(driver)
+    driver.settle(repo.owner, repo.name, sha)
+    driver.fake.faults.drop_connections = 2
+    # The quirk: the server closes the connection mid-poll; the client
+    # raises with no status, and the next read is a fresh connection.
+    with pytest.raises(ForgeError) as first:
+        repo.checks.status(sha)
+    assert first.value.status is None and "unreachable" in str(first.value)
+    with pytest.raises(ForgeError):
+        repo.checks.runs(head_sha=sha)
+    assert repo.checks.status(sha).state == "success"
+    assert repo.checks.runs(head_sha=sha)
+
+
 def test_a_skipped_run_is_not_a_verdict() -> None:
     # A workflow whose jobs all skip completes in seconds; counting
     # it would report a commit green before the real gate starts.

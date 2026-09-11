@@ -76,6 +76,35 @@ def test_release_or_nightly():
 """
 
 
+def test_an_empty_selection_is_green_beyond_the_default_points_only(
+    pytester: pytest.Pytester, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(_pytest_points.POINT_VARIABLE, raising=False)
+    # Refusal first: at the gate, a run with nothing to run keeps
+    # pytest's own answer, exit 5.
+    pytester.makepyfile("def test_default():\n    pass\n")
+    result = pytester.runpytest("-p", "no:cacheprovider", "-k", "nothing_matches")
+    assert result.ret == pytest.ExitCode.NO_TESTS_COLLECTED
+    # The nightly with no test declaring it: nothing to run, green.
+    result = pytester.runpytest("-p", "no:cacheprovider", "--workshop-point", "nightly")
+    assert result.ret == pytest.ExitCode.OK
+    result.stdout.fnmatch_lines(
+        ["*no test declares the nightly point: nothing to run there, green*"]
+    )
+    # A test that does declare it runs, and a failure there is red.
+    pytester.makepyfile(
+        """
+        import pytest
+
+        @pytest.mark.only_at("nightly")
+        def test_nightly():
+            assert False
+        """
+    )
+    result = pytester.runpytest("-p", "no:cacheprovider", "--workshop-point", "nightly")
+    assert result.ret == pytest.ExitCode.TESTS_FAILED
+
+
 @pytest.mark.parametrize(
     ("point", "expected"),
     [

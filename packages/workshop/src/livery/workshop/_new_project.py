@@ -27,6 +27,7 @@ from typing import Annotated
 import livery.footman as footman
 from livery.footman import doc, fail
 from livery.forge import Forge, ForgeError, Repository
+from livery.workshop._contract import toml_string
 from livery.workshop._templates import new as new_group
 
 #: The web host each kind means when the contract carries no URL.
@@ -192,7 +193,7 @@ def new_project(
             f"layers = [{spelled}]",
         ]
         if templates:
-            lines.append(f'templates = "{templates}"')
+            lines.append(f"templates = {toml_string(templates)}")
         lines += ["", "[forge]", f'kind = "{forge}"']
         if owner:
             lines.append(f'owner = "{owner}"')

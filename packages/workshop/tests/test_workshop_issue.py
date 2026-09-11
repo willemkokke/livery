@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,7 @@ from livery.workshop._issue_tasks import (
     issue_start,
     issue_stop,
     parse_ref,
+    worktree_home,
     worktree_path,
 )
 from livery.workshop._shell import default_kind, shell_launch_plan, shell_prepare
@@ -196,7 +198,17 @@ def test_start_opens_a_worktree_by_default_and_provisions_it(
             ToolError=toolroom.ToolError,
         ),
     )
+    swept: list[Path] = []
+
+    def _sweep(home: Path, **_kwargs: object) -> list[str]:
+        swept.append(home)
+        return []
+
+    monkeypatch.setattr("livery.workshop._sweep.sweep_worktrees", _sweep)
     issue_start(str(created.number))
+    # The sweep walks <home>/<repo>/<tree>, so it is handed the home
+    # above this repository's directory, never the directory itself.
+    assert swept == [worktree_home(root).parent]
     path = worktree_path(root, created.number, "tree work")
     assert path.is_dir()
     head = subprocess.run(
@@ -503,6 +515,9 @@ def test_default_kind_follows_the_shell_variable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("SHELL", "/bin/zsh")
+    if sys.platform == "win32":
+        assert default_kind() == "pwsh"  # SHELL is not consulted there
+        return
     assert default_kind() == "zsh"
     monkeypatch.setenv("SHELL", "/opt/fish")
     assert default_kind() == "bash"

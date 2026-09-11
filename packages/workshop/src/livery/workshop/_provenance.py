@@ -27,7 +27,7 @@ from livery.workshop._layers import layer_names, workspace_root
 #: The project render's managed names, judged by the drift gate. The
 #: template tree is the truth; this list is the offline copy a wheel
 #: instance can answer from, pinned against the tree by test.
-PROJECT_RENDERED = ("pyproject.toml", "tasks.py", ".gitignore")
+PROJECT_RENDERED = ("pyproject.toml", "tasks.py", ".gitignore", ".gitattributes")
 
 #: Comment leaders by suffix, and by exact name for suffixless files.
 #: A type absent from both tables cannot carry a header and is
@@ -42,7 +42,7 @@ _BY_SUFFIX = {
     ".ini": "#",
     ".md": "html",
 }
-_BY_NAME = {".gitignore": "#", "CODEOWNERS": "#"}
+_BY_NAME = {".gitignore": "#", ".gitattributes": "#", "CODEOWNERS": "#"}
 
 
 def comment_style(path: Path) -> str:
@@ -418,9 +418,11 @@ def content_lint(root: Path, *, fix: bool = False) -> list[str]:
                 continue
             if fix:
                 inject(path, header)
-                problems.append(f"{path.relative_to(root)}: header written")
+                problems.append(f"{path.relative_to(root).as_posix()}: header written")
             else:
-                problems.append(f"{path.relative_to(root)}: missing its header")
+                problems.append(
+                    f"{path.relative_to(root).as_posix()}: missing its header"
+                )
     return problems
 
 

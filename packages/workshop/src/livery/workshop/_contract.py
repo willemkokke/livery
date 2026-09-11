@@ -17,6 +17,7 @@ if it were migrated instead of refusing.
 
 from __future__ import annotations
 
+import json
 import re
 import tomllib
 from pathlib import Path
@@ -24,6 +25,17 @@ from typing import Any
 
 import livery.footman as footman
 from livery.footman import fail
+
+
+def toml_string(value: str) -> str:
+    """*value* as a TOML basic string, quotes and escapes included.
+
+    A Windows path carries backslashes, which a basic string must
+    escape; JSON's string syntax is the subset of TOML's that a
+    path or a URL needs, so the JSON encoder is the writer.
+    """
+    return json.dumps(value)
+
 
 #: The contract file's name, at the root and in each package directory.
 CONTRACT = "workshop.toml"

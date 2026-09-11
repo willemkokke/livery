@@ -8,7 +8,10 @@ the default ones. The point comes from the job runner's environment
 (``WORKSHOP_POINT``, set for every entry it spawns) or from
 ``--workshop-point`` on the command line, and is the gate when
 neither says. Tests outside the point's selection are deselected,
-never skipped, so they leave no noise in the summary.
+never skipped, so they leave no noise in the summary. A point beyond
+the default ones that selects no test at all is green: the nightly
+runs the whole check with its own tests selected in, and a workspace
+that declares none has nothing to run there, which is not a failure.
 """
 
 from __future__ import annotations
@@ -100,3 +103,27 @@ def pytest_collection_modifyitems(
     if dropped:
         config.hook.pytest_deselected(items=dropped)
         items[:] = kept
+
+
+def pytest_sessionfinish(
+    session: pytest.Session, exitstatus: int | pytest.ExitCode
+) -> None:
+    """Turn "no tests collected" into green at a point beyond the default ones.
+
+    pytest exits 5 when nothing ran. At the gate and the merge that
+    stands, since a workspace without tests is not proved by an
+    empty run. At the nightly or the release point an empty selection
+    is the declared state: no test asked for the point, so the point
+    has nothing to run and says so.
+    """
+    if exitstatus != pytest.ExitCode.NO_TESTS_COLLECTED:
+        return
+    point = current_point(session.config)
+    if point in DEFAULT_POINTS:
+        return
+    session.exitstatus = pytest.ExitCode.OK
+    reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+    if reporter is not None:
+        reporter.write_line(
+            f"no test declares the {point} point: nothing to run there, green"
+        )

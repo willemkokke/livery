@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,10 @@ def _deny_symlinks(monkeypatch: pytest.MonkeyPatch) -> None:
         raise OSError("symlinks refused for this test")
 
     monkeypatch.setattr(os, "symlink", refused)
+    if sys.platform == "win32":
+        # The second mechanism there, a junction, must fail too for
+        # the copy fallback to be the one under test.
+        monkeypatch.setattr("_winapi.CreateJunction", refused)
 
 
 def _source(tmp_path: Path) -> Path:
@@ -217,7 +222,15 @@ def test_the_enforcement_reads_real_coverage_data(tmp_path: Path) -> None:
         if not key.startswith(("COVERAGE_", "COV_CORE_"))
     }
     subprocess.run(
-        ["python3", "-m", "coverage", "run", "--source", str(package_dir), str(module)],
+        [
+            sys.executable,
+            "-m",
+            "coverage",
+            "run",
+            "--source",
+            str(package_dir),
+            str(module),
+        ],
         cwd=tmp_path,
         capture_output=True,
         check=True,

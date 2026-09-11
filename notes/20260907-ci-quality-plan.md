@@ -2002,3 +2002,36 @@ None. Every ruling raised in this plan was closed in the review of
   discard the note"). The proposal note of 2026-09-10 was discarded
   unrecorded. The per-pull-request cost that remains, the GitHub run
   floor and the hosted macOS leg, is accepted as it stands.
+- 2026-09-11: the plan's remaining issues, #388, #392, #360, #357, and
+  #371, landed in one pull request, #438 (Willem: "I don't want to
+  wait for ci 6 times"). Instead of asking Willem, I decided #388's
+  shape: the notes merge by union (a rendered `.gitattributes`, the
+  workshop's rule line beside it), so two slices' decision entries
+  both land and an integrate never stops on a note; the issue's two
+  options, entries under their phase or dated decision files, would
+  have moved where every entry is written. What the union does not
+  cover: two edits of one existing line land both lines without a
+  marker, so a merged note is read once before it ships. #392: `fm
+  ci.dispatch --point=nightly` starts the nightly and follows it to
+  its verdict, `fm ci.status --point=nightly` and `fm ci.logs
+  --point=nightly` read the newest nightly run by workflow, and the
+  loop dispatches the nightly after its release act and reads it back;
+  the first dispatch on the loop found the nightly red since its birth
+  (pytest exits 5 with nothing selected, and no loop test declares the
+  point), so an empty selection beyond the default points is green
+  now. #360: every transport error is a `ForgeError` with no status,
+  and the watchers poll through five in a row before giving up naming
+  the last error and the pull request. #371: `fm template.check`
+  renders each task nav block in memory and refuses a committed block
+  that lags, in an instance too. #357: the pwsh masking is gone with
+  the one-verb steps, and the suite was run on a windows-latest leg
+  added to the branch for the proof alone: 82 failures on run
+  34599704165, 2 on 34601116440, and green on 34602900925 (a green leg
+  prints no test count). Most of the first run's failures had one
+  cause, the workshop tests' seed copy rewriting the seed's path in
+  git configs only as Python spells it, while git doubles each
+  backslash; the rest were paths written into TOML unescaped, paths in
+  messages with backslashes, the venv's `Scripts` layout, and tests
+  whose behaviour is POSIX by design, which skip by name. The runner
+  stays out of `[ci] runners` by the 2026-09-09 ruling; returning it,
+  to the gate or to the nightly point, is Willem's to rule.

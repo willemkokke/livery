@@ -87,6 +87,10 @@ nav = [
             { "shots" = "_generated/tasks/docs/shots.md" },
             { "site" = "_generated/tasks/docs/site.md" },
         ] },
+        { "janitor" = [
+            { "Overview" = "_generated/tasks/janitor/index.md" },
+            { "default" = "_generated/tasks/janitor/default.md" },
+        ] },
         { "self" = [
             { "Overview" = "_generated/tasks/self/index.md" },
             { "add" = "_generated/tasks/self/add.md" },

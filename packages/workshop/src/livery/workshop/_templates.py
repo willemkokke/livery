@@ -505,8 +505,8 @@ def project_drift(root: Path) -> list[str]:
     with tempfile.TemporaryDirectory() as scratch:
         render(source, Path(scratch), data)
         for rendered in rendered_files(Path(scratch)):
-            relative = rendered.relative_to(scratch)
-            if relative.as_posix() in PROJECT_SEEDS:
+            relative = rendered.relative_to(scratch).as_posix()
+            if relative in PROJECT_SEEDS:
                 continue
             committed = root / relative
             # The owners map keys the composed tree: kind-prefixed,
@@ -533,7 +533,7 @@ def project_drift(root: Path) -> list[str]:
             generated_header("#") + rendered_owners.content
         )
     for path, content in generated.items():
-        relative_generated = path.relative_to(root)
+        relative_generated = path.relative_to(root).as_posix()
         if not path.is_file():
             drift.append(
                 f"{relative_generated}: generated, but missing from the repository"
@@ -544,7 +544,8 @@ def project_drift(root: Path) -> list[str]:
 
     for path in retired_files(root):
         drift.append(
-            f"{path.relative_to(root)}: retired, still present; the apply deletes it"
+            f"{path.relative_to(root).as_posix()}: retired, still present;"
+            " the apply deletes it"
         )
     return drift
 
@@ -638,7 +639,7 @@ def package_drift(root: Path) -> list[str]:
                 if not rendered.is_file():
                     continue
                 committed = directory / name
-                relative = committed.relative_to(root)
+                relative = committed.relative_to(root).as_posix()
                 if not committed.is_file():
                     drift.append(
                         f"{relative}: rendered, but missing from the repository"
@@ -657,15 +658,15 @@ def apply_project(root: Path) -> list[str]:
     with tempfile.TemporaryDirectory() as scratch:
         render(source, Path(scratch), data, ref=ref)
         for rendered in rendered_files(Path(scratch)):
-            relative = rendered.relative_to(scratch)
+            relative = rendered.relative_to(scratch).as_posix()
             committed = root / relative
-            if relative.as_posix() in PROJECT_SEEDS and committed.is_file():
+            if relative in PROJECT_SEEDS and committed.is_file():
                 continue  # a seed is the workspace's own once it exists
             body = _lf(rendered.read_bytes())
             if not committed.is_file() or _lf(committed.read_bytes()) != body:
                 committed.parent.mkdir(parents=True, exist_ok=True)
                 committed.write_bytes(body)
-                changed.append(str(relative))
+                changed.append(relative)
     changed.extend(apply_generated(root))
     return changed
 
@@ -694,12 +695,12 @@ def apply_generated(root: Path) -> list[str]:
         if not path.is_file() or _lf(path.read_bytes()) != body:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(body)
-            changed.append(str(path.relative_to(root)))
+            changed.append(path.relative_to(root).as_posix())
     from livery.workshop._ci_generate import retired_files
 
     for path in retired_files(root):
         path.unlink()
-        changed.append(f"{path.relative_to(root)} (retired)")
+        changed.append(f"{path.relative_to(root).as_posix()} (retired)")
     return changed
 
 
@@ -737,7 +738,7 @@ def apply_packages(root: Path) -> list[str]:
                 body = _lf(rendered.read_bytes())
                 if not committed.is_file() or _lf(committed.read_bytes()) != body:
                     committed.write_bytes(body)
-                    changed.append(str(committed.relative_to(root)))
+                    changed.append(committed.relative_to(root).as_posix())
     return changed
 
 
@@ -746,20 +747,32 @@ def template_check() -> None:
     """Fail when a rendered file drifts from the template source.
 
     Part of the gate. A workspace without a ``templates/`` directory
-    is an instance, not the template source, and passes vacuously.
+    is an instance, not the template source, and passes the render
+    check vacuously. Every workspace's committed task nav blocks are
+    judged against the advertised task trees
+    (livery.workshop._taskref.stale_task_blocks): a stale block is
+    named with the verb that rewrites it.
     """
-    root = _root()
-    if local_template_dir(root) is None:
-        return
+    from livery.workshop._taskref import stale_task_blocks
 
-    drift = project_drift(root) + package_drift(root)
-    if drift:
-        fail(
-            "rendered files drift from templates/:\n  "
-            + "\n  ".join(drift)
-            + "\n  edit templates/ (never the rendered copy) and run"
-            f" `{footman.prog()} template.apply`"
-        )
+    root = _root()
+    stale = stale_task_blocks(root)
+    drift: list[str] = []
+    if local_template_dir(root) is not None:
+        drift = project_drift(root) + package_drift(root)
+    if not stale and not drift:
+        return
+    remedy = (
+        f"\n  edit templates/ (never the rendered copy) and run"
+        f" `{footman.prog()} template.apply`"
+        if drift
+        else ""
+    )
+    fail(
+        "committed files drift from their generation:\n  "
+        + "\n  ".join(stale + drift)
+        + remedy
+    )
 
 
 @template.task(name="apply")

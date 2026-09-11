@@ -156,8 +156,10 @@ def _align_answers_source(root: Path, source: str) -> list[str]:
     if not answers.is_file():
         return []
     text = answers.read_text("utf-8")
+    # A function, not a template string: a Windows path's backslashes
+    # would read as escapes in a replacement template.
     aligned, count = re.subn(
-        r"^_src_path: .*$", f"_src_path: {source}", text, count=1, flags=re.M
+        r"^_src_path: .*$", lambda _m: f"_src_path: {source}", text, count=1, flags=re.M
     )
     if count and aligned != text:
         answers.write_text(aligned, encoding="utf-8")

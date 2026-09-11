@@ -49,13 +49,24 @@ def copy_seed(home: Path, key: str, build: Build, destination: Path) -> Path:
             shutil.rmtree(seed, ignore_errors=True)
             raise
     _copy(seed, destination)
+    # Git spells a path in its config as it was given, forward slashes
+    # on every platform where it normalises, and a backslash escaped as
+    # two; every spelling the seed's path could have taken is renamed.
+    spellings = [
+        (str(seed), str(destination)),
+        (seed.as_posix(), destination.as_posix()),
+        (str(seed).replace("\\", "\\\\"), str(destination).replace("\\", "\\\\")),
+    ]
     for config in destination.rglob("config"):
         bare = (config.parent / "HEAD").is_file()
         if config.parent.name != ".git" and not bare:
             continue
         text = config.read_text("utf-8")
-        if str(seed) in text:
-            config.write_text(text.replace(str(seed), str(destination)), "utf-8")
+        renamed = text
+        for old, new in spellings:
+            renamed = renamed.replace(old, new)
+        if renamed != text:
+            config.write_text(renamed, "utf-8")
     return destination
 
 

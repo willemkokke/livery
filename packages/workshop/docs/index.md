@@ -77,8 +77,10 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
   [livery-forge](https://pypi.org/project/livery-forge/).
 - `fm template.check` keeps rendered files byte-identical to the
   template source the contract names (`[workspace] templates`: a
-  local directory, or a fork URL at its own risk); `fm new.package`
-  renders a member and wires it in.
+  local directory, or a fork URL at its own risk), and refuses a
+  committed `tasks` nav block that lags the package's advertised
+  task tree, naming `fm docs.task-reference` as the remedy;
+  `fm new.package` renders a member and wires it in.
 - `fm release.prepare` and `fm release.verify` run the path-tag
   train (`packages/<pkg>/v<semver>`); a workshop release also
   publishes the template snapshot, tagged in lockstep.
@@ -110,6 +112,11 @@ the rest; a local `fm test` selects for the gate, and
 `fm test -- --workshop-point nightly` selects for a point on demand.
 The nightly point runs the whole check with its own tests selected
 in, and never skips on the verified record or narrows.
+`fm ci.dispatch --point=nightly` starts the nightly now, on `main`
+unless `--ref` names another, and follows the run to its verdict;
+`fm ci.status --point=nightly` and `fm ci.logs --point=nightly` read
+the newest nightly run by workflow rather than by commit, so a
+failure only the nightly meets reaches a person through `fm`.
 
 ## Coverage floors
 

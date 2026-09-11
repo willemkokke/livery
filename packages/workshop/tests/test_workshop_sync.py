@@ -168,11 +168,11 @@ def test_a_stale_settings_copy_refreshes(tmp_path: Path) -> None:
     target = root / ".claude" / "settings.json"
     # An older ship: the copy and its record agree with each other and
     # disagree with what the layer ships now.
-    stale = '{"hooks": {"old": true}}\n'
-    target.write_text(stale)
-    digest = hashlib.sha256(stale.encode()).hexdigest()
+    stale = b'{"hooks": {"old": true}}\n'
+    target.write_bytes(stale)
+    digest = hashlib.sha256(stale).hexdigest()
     manifest = root / ".claude" / ".workshop-materialised"
-    manifest.write_text(f"{digest} settings.json\n")
+    manifest.write_bytes(f"{digest} settings.json\n".encode())
     lines = sync_workspace(root)
     assert any("refreshed" in line for line in lines)
     assert target.read_bytes() == _SHIPPED_SETTINGS.read_bytes()
