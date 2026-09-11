@@ -1130,6 +1130,7 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
             "coverage: the union of 1 leg(s) and 1 reused suite(s)",
             "coverage record: chore/scoped-leg/check-ubuntu-latest-3.14: 2 fresh,"
             " 1 carried, 0 removed",
+            "speed packages/loop-echo on check-ubuntu-latest-3.14: ",
             "recorded as proved green by run",
             " on top of tree ",
             "is not a release branch: nothing to check",

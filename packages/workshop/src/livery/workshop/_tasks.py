@@ -34,6 +34,7 @@ from livery.workshop import (  # noqa: F401
     _release,
     _release_driver,
     _shell,
+    _speed_tasks,
     _store_tasks,
     _submit,
     _sync,

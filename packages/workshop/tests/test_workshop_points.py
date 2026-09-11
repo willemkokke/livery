@@ -179,6 +179,7 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
         ["hse", "provenance"],
         ["hse", "coverage.union"],
         ["hse", "ci.metrics.collect"],
+        ["hse", "speed.judge"],
         ["hse", "ci.verdict", "--needs=check,docs"],
         ["hse", "ci.verified.stamp"],
     ]

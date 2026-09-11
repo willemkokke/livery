@@ -505,10 +505,13 @@ def ci_metrics_collect() -> None:
 
 
 def timings_flow(root: Path, *, since: int, base: int) -> None:
-    """Print the rendered timings."""
+    """Print the rendered timings, then the speed marks beside the newest run."""
     from livery.workshop._metrics import render
+    from livery.workshop._speed import render_marks
 
     for line in render(root, since=since, base=base):
+        print(line)
+    for line in render_marks(root):
         print(line)
 
 
@@ -523,7 +526,8 @@ def ci_timings(
     writer, a local run reads. Per job, every metric's latest value
     and its median and ninetieth percentile over the series' window,
     then the biggest movers: the recent runs' median against the
-    base runs' median.
+    base runs' median. Then the speed marks, each package's mark on
+    each leg beside the newest run's time.
     """
     root = workspace_root()
     if root is None:

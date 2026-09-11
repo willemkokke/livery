@@ -1139,26 +1139,88 @@ def run_test(
             if (package.directory / "tests").is_dir()
         ) + ((WORKSPACE_TESTS,) if (root / WORKSPACE_TESTS).is_dir() else ())
     from livery.workshop._pytest_contexts import ARMED
+    from livery.workshop._pytest_speed import FILE_VARIABLE
     from livery.workshop._state import run_context
 
-    if run_context() is not None:
-        # Inside CI the tests run metered, and only they. Coverage's
-        # own subprocess variable is armed in pytest's environment,
-        # never in the gate's own, so every python the tests start
-        # inherits it (the xdist workers, the runner's children a test
-        # spawns in a fixture workspace) and the driver that decides
-        # what to run records nothing: a line counts only when a test
-        # reached it, whatever the gate ran around the tests. The
-        # workshop's pytest plugin names each test's context in that
-        # run, the leg splits the one run's data per suite, and the
-        # floors are judged once, on the union, in the gate job.
-        armed = {**os.environ, ARMED: str(root / "pyproject.toml")}
-        pytest.opts(in_process=False, env=armed)(*dirs, *pytest_args)
-        return
-    # Bare --cov: the measured source is [tool.coverage.run] source,
-    # the namespace the render derived, never a spelled module.
-    pytest.opts(in_process=False)(*dirs, "--cov", "--cov-report=", *pytest_args)
-    report_coverage(root, packages)
+    run = run_context()
+    with tempfile.TemporaryDirectory() as scratch:
+        # The workshop's speed plugin sums each package's test time
+        # into this file; the sums print beside the marks afterwards,
+        # on a red run too.
+        sums = Path(scratch) / "speed.json"
+        env = {**os.environ, FILE_VARIABLE: str(sums)}
+        try:
+            if run is not None:
+                # Inside CI the tests run metered, and only they.
+                # Coverage's own subprocess variable is armed in
+                # pytest's environment, never in the gate's own, so
+                # every python the tests start inherits it (the xdist
+                # workers, the runner's children a test spawns in a
+                # fixture workspace) and the driver that decides what
+                # to run records nothing: a line counts only when a
+                # test reached it, whatever the gate ran around the
+                # tests. The workshop's pytest plugin names each
+                # test's context in that run, the leg splits the one
+                # run's data per suite, and the floors are judged
+                # once, on the union, in the gate job.
+                armed = {**env, ARMED: str(root / "pyproject.toml")}
+                pytest.opts(in_process=False, env=armed)(*dirs, *pytest_args)
+            else:
+                # Bare --cov: the measured source is [tool.coverage.run]
+                # source, the namespace the render derived, never a
+                # spelled module.
+                pytest.opts(in_process=False, env=env)(
+                    *dirs, "--cov", "--cov-report=", *pytest_args
+                )
+        finally:
+            for line in speed_lines(root, sums, leg=run.leg if run else ""):
+                print(line)
+    if run is None:
+        report_coverage(root, packages)
+
+
+def speed_lines(root: Path, sums: Path, *, leg: str = "") -> list[str]:
+    """Each package's summed test time beside its mark on *leg*; the lines.
+
+    *sums* is the file the speed plugin wrote. Without *leg* the mark
+    shown is the reference leg's. An unreadable store says so once and
+    the times still print; no file means the plugin did not run.
+    """
+    from livery.workshop import _speed
+    from livery.workshop._points import check_legs
+
+    if not sums.is_file():
+        return []
+    try:
+        loaded = json.loads(sums.read_text("utf-8"))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(loaded, dict) or not loaded:
+        return []
+    if not leg:
+        legs = check_legs(root)
+        leg = next((item for item in legs if _speed.is_reference(item)), "")
+        if not leg and legs:
+            leg = legs[0]
+    current, why = _speed.marks(root)
+    lines: list[str] = []
+    if current is None:
+        lines.append(f"  speed marks: not read ({why})")
+    for package, data in sorted(loaded.items()):
+        if not isinstance(data, dict):
+            continue
+        seconds = float(data.get("seconds", 0.0))
+        tests = int(data.get("tests", 0))
+        mark = current.get((str(package), leg)) if current else None
+        beside = (
+            f"mark {mark.seconds:.1f}s on {leg}"
+            if mark is not None
+            else f"no mark on {leg}"
+            if current is not None
+            else "mark unknown"
+        )
+        lines.append(f"  speed {package}: {seconds:.1f}s over {tests} tests ({beside})")
+    return lines
 
 
 def declared_requirements(package: Package) -> dict[str, str]:
