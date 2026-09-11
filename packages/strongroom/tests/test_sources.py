@@ -29,6 +29,8 @@ from livery.strongroom import (
     MissingObject,
     OriginHint,
     Store,
+    Subject,
+    Tombstone,
     Unreachable,
     _store,
     digest_of,
@@ -111,10 +113,10 @@ def test_a_fill_policy_and_a_url_are_checked_at_declaration(tmp_path: Path) -> N
 def test_fetch_refuses_an_erased_object_before_any_source(tmp_path: Path) -> None:
     mirror = _mirror(tmp_path / "m", b"hello")
     store = Store.create(tmp_path / "s", sources=[FolderSource(mirror.root)])
-    path = store.object_path(HELLO)
-    path.parent.mkdir(parents=True)
-    path.with_name(path.name + ".tombstone").write_bytes(b"{}")
-    with pytest.raises(ErasedObject):
+    store.write_tombstone(
+        Tombstone(HELLO, "2026-09-11T12:00:00Z", Subject("person", "w"), None, "gone")
+    )
+    with pytest.raises(ErasedObject, match="gone"):
         store.fetch(HELLO)
 
 

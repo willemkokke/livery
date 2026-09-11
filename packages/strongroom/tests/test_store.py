@@ -29,6 +29,7 @@ from livery.strongroom import (
     RefTampered,
     Store,
     Subject,
+    Tombstone,
     UnknownNamespace,
     Version,
     WriteOnceRefused,
@@ -63,11 +64,11 @@ def store(tmp_path: Path) -> Store:
 
 
 def _tombstone(store: Store, digest: Digest) -> Path:
+    store.write_tombstone(
+        Tombstone(digest, "2026-09-11T12:00:00Z", WILLEM, None, "test tombstone")
+    )
     path = store.object_path(digest)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    stone = path.with_name(path.name + ".tombstone")
-    stone.write_bytes(b"{}")
-    return stone
+    return path.with_name(path.name + ".tombstone")
 
 
 # Opening: every way a directory is not this store.
@@ -156,9 +157,9 @@ def test_landing_refuses_an_erased_object(store: Store) -> None:
     digest = digest_of(b"gone")
     _tombstone(store, digest)
     assert store.state(digest) == "erased"
-    with pytest.raises(ErasedObject, match="tombstone stands"):
+    with pytest.raises(ErasedObject, match="test tombstone"):
         store.land(b"gone")
-    with pytest.raises(ErasedObject, match="tombstone stands"):
+    with pytest.raises(ErasedObject, match="test tombstone"):
         store.path(digest)
     assert list(store.root.rglob("*.part")) == []
 

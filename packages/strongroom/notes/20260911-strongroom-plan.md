@@ -3,9 +3,10 @@
 Status: executing; Willem's go 2026-09-11. Phase 1 landed 2026-09-11
 (issue #434, PR #436): the package, the spec's formats with their
 vectors, and the Python formats. Phase 2 landed 2026-09-11 (issue
-#440, PR #443): the local store, objects and refs. Phase 3 built
-2026-09-11 (issue #444): sources and tiers, fill and offline; see the
-decision record.
+#440, PR #443): the local store, objects and refs. Phase 3 landed
+2026-09-11 (issue #444, PR #445): sources and tiers, fill and
+offline. Phase 4 built 2026-09-11 (issue #446): the lifecycle; see
+the decision record.
 Scoped by Willem the same day: strongroom alone, no change to
 toolroom, footman, or the workshop. This note lives in
 `packages/strongroom/notes/`, beside the package it plans. This plan executes steps 0, 2
@@ -338,6 +339,18 @@ Deliverables:
   whose directory is gone is retired by the next sweep.
 - Portable names enforced at publish, so a view never meets a name
   the platform cannot represent.
+- `Store.prefetch(digest)`: the offline closure. Fetch the object,
+  read it by shape, and fetch everything it reaches, so a machine
+  warms exactly what one ref needs before it disconnects. A miss
+  names the first digest no source could answer.
+- `Store.shed(source)`: the upstream-backed purge. Evict the local
+  copy of every present object that the named source holds, checked
+  by existence in a folder or a HEAD on HTTP and never by trust,
+  except objects a live view depends on through the reference,
+  hardlink or link rung. The report names the source relied on and
+  every object shed. Integrity is unchanged, because the next fetch
+  verifies on arrival and a lying tier is a named miss; availability
+  is the cost, and the caller chose it.
 
 Platform coverage, stated so it is decided: the gate runs
 ubuntu-latest and macos-latest. The clone rung's success path runs on
@@ -468,6 +481,29 @@ Acceptance:
   lacking the object, reported like an unreachable source; `fill`
   reuses a folder that is already a store of the same algorithm and
   refuses one of another.
+- 2026-09-11, phase 4 built (issue #446). Choices at the cut: roots
+  are every ref on disk in every namespace, read from disk rather
+  than from the declaration at open, so a consumer's refs root its
+  objects whoever sweeps; marking reads each object by shape (a
+  version, then a tree, else a leaf) instead of by namespace, because
+  the store interprets no namespace and a wrong guess keeps more,
+  never less; the pending id is random hex behind a seam; the lease
+  is recorded as whole seconds in the pending record's `meta` and
+  nothing acts on it yet; only a volatile ref may be dropped, the
+  other classes go by pruning under a retention class, which does not
+  exist yet; erasing an absent object is allowed and refuses its
+  future landing; the maintenance lease is the ref lock mechanism on
+  `index/maintenance`, shared by the sweep and unpin; the seam
+  between marking and deleting is a module function the harness
+  replaces to begin a publish mid-sweep.
+- 2026-09-11, Willem asked whether phase 3 caches only what is needed
+  for offline use and whether local copies a tier above holds can be
+  purged. Answered: a fetch lands one object and a fill a listed set,
+  offline still consults folders and HTTP sources, and no closure
+  verb exists yet; the sweep removes only the unreached, and a purge
+  of upstream-backed copies must respect live views' rungs, so both
+  (`prefetch`, `shed`) were proposed for phase 5. Willem, the same
+  day: "add that to phase 5". Added to phase 5's deliverables.
 - 2026-09-11, Willem: the materialiser's whole strategy ladder is
   implemented and tested in this plan, not the copy rung alone. The
   agent's reading of "implement and test the whole rung"; correct it

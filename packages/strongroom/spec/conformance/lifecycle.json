@@ -1,0 +1,100 @@
+{
+  "scenarios": [
+    {
+      "id": "the-publish-sequence",
+      "namespaces": [{"name": "tools", "mutation": "write-once"}],
+      "steps": [
+        {"op": "put", "data": "a", "as": "A"},
+        {"op": "tree", "entries": {"a": "A"}, "as": "T"},
+        {"op": "begin", "target": "MISSING", "as": "P0", "expect": "missing"},
+        {"op": "begin", "target": "T", "as": "P1", "expect": "ok"},
+        {"op": "pending", "expect": ["P1"]},
+        {"op": "sweep", "expect_removed": []},
+        {"op": "commit", "pending": "P1", "namespace": "tools", "path": "bun@1", "previous": null, "expect": "ok"},
+        {"op": "ref", "namespace": "tools", "path": "bun@1", "expect": "T"},
+        {"op": "pending", "expect": []},
+        {"op": "commit", "pending": "P1", "namespace": "tools", "path": "bun@1", "previous": "T", "expect": "no-such-pending"},
+        {"op": "retire", "pending": "P1", "expect": "no-such-pending"},
+        {"op": "sweep", "expect_removed": []},
+        {"op": "state", "digest": "A", "expect": "present"}
+      ]
+    },
+    {
+      "id": "a-refused-commit-leaves-the-pending-ref",
+      "namespaces": [{"name": "datasets", "mutation": "monotone"}],
+      "steps": [
+        {"op": "put", "data": "a", "as": "A"},
+        {"op": "tree", "entries": {"a": "A"}, "as": "T"},
+        {"op": "version", "tree": "T", "parents": [], "as": "V1"},
+        {"op": "version", "tree": "T", "parents": [], "message": "a second root", "as": "ROOT2"},
+        {"op": "set", "namespace": "datasets", "path": "d/main", "digest": "V1", "previous": null, "expect": "ok"},
+        {"op": "begin", "target": "ROOT2", "as": "P", "expect": "ok"},
+        {"op": "commit", "pending": "P", "namespace": "datasets", "path": "d/main", "previous": "V1", "expect": "not-fast-forward"},
+        {"op": "pending", "expect": ["P"]},
+        {"op": "retire", "pending": "P", "expect": "ok"},
+        {"op": "pending", "expect": []},
+        {"op": "sweep", "expect_removed": ["ROOT2"]},
+        {"op": "state", "digest": "V1", "expect": "present"}
+      ]
+    },
+    {
+      "id": "the-sweep-rescans-pending-refs-before-deleting",
+      "namespaces": [],
+      "steps": [
+        {"op": "put", "data": "late", "as": "L"},
+        {"op": "tree", "entries": {"late": "L"}, "as": "T"},
+        {"op": "sweep", "begin_during": "T", "expect_removed": []},
+        {"op": "state", "digest": "T", "expect": "present"},
+        {"op": "state", "digest": "L", "expect": "present"}
+      ]
+    },
+    {
+      "id": "the-three-object-states",
+      "namespaces": [{"name": "urls", "mutation": "volatile"}],
+      "steps": [
+        {"op": "put", "data": "a face", "as": "F"},
+        {"op": "tree", "entries": {"face": "F"}, "as": "T"},
+        {"op": "set", "namespace": "urls", "path": "keep", "digest": "T", "previous": null, "expect": "ok"},
+        {"op": "state", "digest": "F", "expect": "present"},
+        {"op": "erase", "digest": "F", "reason": "erasure request"},
+        {"op": "state", "digest": "F", "expect": "erased"},
+        {"op": "path", "digest": "F", "expect": "erased"},
+        {"op": "land", "data": "a face", "expect": "erased"},
+        {"op": "sweep", "expect_removed": []},
+        {"op": "state", "digest": "F", "expect": "erased"},
+        {"op": "state", "digest": "T", "expect": "present"},
+        {"op": "drop", "namespace": "urls", "path": "keep", "previous": "T", "expect": "ok"},
+        {"op": "sweep", "expect_removed": ["T"]},
+        {"op": "state", "digest": "T", "expect": "absent"},
+        {"op": "state", "digest": "F", "expect": "erased"}
+      ]
+    },
+    {
+      "id": "only-a-volatile-ref-is-dropped",
+      "namespaces": [{"name": "tools", "mutation": "write-once"}, {"name": "urls", "mutation": "volatile"}],
+      "steps": [
+        {"op": "put", "data": "a", "as": "A"},
+        {"op": "set", "namespace": "tools", "path": "x", "digest": "A", "previous": null, "expect": "ok"},
+        {"op": "drop", "namespace": "tools", "path": "x", "previous": "A", "expect": "protected"},
+        {"op": "set", "namespace": "urls", "path": "y", "digest": "A", "previous": null, "expect": "ok"},
+        {"op": "drop", "namespace": "urls", "path": "y", "previous": "MISSING", "expect": "conflict"},
+        {"op": "drop", "namespace": "urls", "path": "y", "previous": "A", "expect": "ok"},
+        {"op": "ref", "namespace": "urls", "path": "y", "expect": null},
+        {"op": "ref", "namespace": "tools", "path": "x", "expect": "A"}
+      ]
+    },
+    {
+      "id": "pins-root-and-unpin-sheds",
+      "namespaces": [],
+      "steps": [
+        {"op": "put", "data": "a", "as": "A"},
+        {"op": "pin", "name": "keep", "digest": "A"},
+        {"op": "sweep", "expect_removed": []},
+        {"op": "unpin", "name": "keep", "expect": "ok"},
+        {"op": "unpin", "name": "keep", "expect": "conflict"},
+        {"op": "sweep", "expect_removed": ["A"]},
+        {"op": "state", "digest": "A", "expect": "absent"}
+      ]
+    }
+  ]
+}

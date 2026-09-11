@@ -25,7 +25,11 @@ per namespace. Its refusals are the classes under
 ([livery.strongroom.FolderSource][], [livery.strongroom.HttpSource][],
 [livery.strongroom.OriginHint][]) fetches what it lacks through them,
 verified and in order, with [livery.strongroom.Store.fetch][], and
-builds a mirror with [livery.strongroom.Store.fill][].
+builds a mirror with [livery.strongroom.Store.fill][]. The lifecycle
+is the store's too: [livery.strongroom.Store.publish_begin][] and
+[livery.strongroom.Store.publish_commit][] for the fail-closed
+publish, [livery.strongroom.Store.sweep][] for reachability, and
+[livery.strongroom.Store.erase][] for the tombstone.
 """
 
 from __future__ import annotations
@@ -47,14 +51,17 @@ from livery.strongroom._errors import (
     LockTimeout,
     ManifestError,
     MissingObject,
+    NoSuchPending,
     NotFastForward,
     RefConflict,
+    RefProtected,
     RefTampered,
     StoreError,
     UnknownNamespace,
     WriteOnceRefused,
 )
 from livery.strongroom._fields import Subject, SubjectKind, check_timestamp
+from livery.strongroom._lifecycle import PENDING, PINS, Pending, SweepReport
 from livery.strongroom._records import RefRecord, Tombstone
 from livery.strongroom._sources import (
     FillPolicy,
@@ -100,6 +107,8 @@ __all__ = [
     "MUTATION_CLASSES",
     "NAME_BUDGET",
     "OWNED",
+    "PENDING",
+    "PINS",
     "SHA256",
     "Algorithm",
     "Clock",
@@ -122,11 +131,14 @@ __all__ = [
     "MissingObject",
     "MutationClass",
     "Namespace",
+    "NoSuchPending",
     "NotFastForward",
     "ObjectState",
     "OriginHint",
+    "Pending",
     "Progress",
     "RefConflict",
+    "RefProtected",
     "RefRecord",
     "RefTampered",
     "ScrubReport",
@@ -135,6 +147,7 @@ __all__ = [
     "StoreError",
     "Subject",
     "SubjectKind",
+    "SweepReport",
     "Tombstone",
     "Tree",
     "UnknownNamespace",
