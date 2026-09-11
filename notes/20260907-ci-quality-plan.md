@@ -1996,3 +1996,9 @@ None. Every ruling raised in this plan was closed in the review of
   with one Python per runner; lines only the floor's interpreter
   reaches leave the gate's union, which the floors absorb or an
   accept names.
+- 2026-09-11, Willem: the local lane, livery's own tickets gated and
+  merged on the local Gitea with a native macOS runner and pushed to
+  GitHub in batches, is not pursued ("not interested in local lane,
+  discard the note"). The proposal note of 2026-09-10 was discarded
+  unrecorded. The per-pull-request cost that remains, the GitHub run
+  floor and the hosted macOS leg, is accepted as it stands.
