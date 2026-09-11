@@ -487,7 +487,8 @@ def _unrecorded(
             if row is not None and row.closure == key:
                 break
             states.append(
-                f"{base}'s record holds it at another closure"
+                f"{base}'s record holds it at closure {row.closure[:12]}, not"
+                f" {key[:12]}"
                 if row is not None
                 else f"{base}'s record holds no measurement of it"
             )
