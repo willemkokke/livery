@@ -8,6 +8,7 @@ nothing but time.
 from __future__ import annotations
 
 import shutil
+import sys
 from pathlib import Path
 
 import pytest
@@ -967,6 +968,10 @@ def test_a_declared_but_absent_local_source_teaches(tmp_path: Path) -> None:
     assert "my-fork-checkout" in text and "no such" in text
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="git for Windows reads a file URL that carries userinfo as a path",
+)
 def test_a_credentialled_source_never_reaches_a_rendered_byte(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
