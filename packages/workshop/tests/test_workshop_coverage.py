@@ -500,7 +500,13 @@ def _union(
     return written
 
 
-def test_a_union_outside_ci_refuses(tmp_path: Path) -> None:
+def test_a_union_outside_ci_refuses(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A runner's own environment would make this a CI run: scrubbed,
+    # so the test reads the same on a runner as on a desk.
+    for name in ("GITHUB_ACTIONS", "GITEA_ACTIONS", "GITLAB_CI"):
+        monkeypatch.delenv(name, raising=False)
     with pytest.raises(_FAILURES, match="outside CI there is no run"):
         _python.combine_union(tmp_path, ())
 
