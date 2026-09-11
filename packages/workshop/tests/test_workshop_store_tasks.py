@@ -92,7 +92,7 @@ def test_ls_names_every_series_with_its_scope_window_and_count(work: Path) -> No
     listed = _store_tasks.ls_flow(work)
     assert "  metrics: remote, window 300; 0 row(s)" in listed
     assert "  verified: remote, window 200; 1 row(s)" in listed
-    assert "  coverage/<leg>/<package>: remote, window 6; 0 key(s)" in listed
+    assert "  coverage/<base>/<leg>: remote, no window; 0 key(s)" in listed
     assert "  gate-record: local, window 200; 0 row(s)" in listed
     assert "  diagnostics: local, window 20; 0 row(s)" in listed
 

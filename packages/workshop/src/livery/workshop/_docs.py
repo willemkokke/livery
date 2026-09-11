@@ -138,13 +138,6 @@ def package_coverage_reports(package: Package) -> list[tuple[str, str]]:
     return reports
 
 
-def docs_coverage_declared(root: Path) -> bool:
-    """Whether any package declares coverage reports; an emitter fact."""
-    if not (root / "packages").is_dir():
-        return False
-    return any(package_coverage_reports(package) for package in discover_packages(root))
-
-
 def _slug(label: str) -> str:
     """A filesystem-safe slug for a report label."""
     import re
@@ -1334,25 +1327,27 @@ def render_python_coverage(root: Path) -> list[str]:
 
     The python packages' answer to the coverage seam: every python
     package declaring an ``htmlcov`` report gets its tree rendered
-    from the workspace's measured data, scoped to its own files. The
-    data is the CI union (``coverage-data/*/.coverage*`` downloaded
-    by the emitted docs job) when present; inside CI without it, the
-    units the store holds for every check leg, so a run whose legs
-    skipped on the verified record still publishes the union the
-    gate judged; else the local ``.coverage`` a gate run left. With
-    none, nothing renders and the coverage page states the absence.
+    from the workspace's measured data, scoped to its own files. In
+    the merge point's deploy job the data is main's coverage record,
+    every unit on every check leg, the union main's gate judged
+    whatever its legs ran; anywhere else it is the local ``.coverage``
+    a gate run left. With none, nothing renders and the coverage page
+    states the absence.
     """
     import tempfile
 
+    from livery.workshop._backends._python import _unmetered
     from livery.workshop._kinds import is_python_kind
 
-    legs = sorted(root.glob("coverage-data/*/.coverage*"))
-    if not legs:
-        legs, misses = _stored_legs(root)
-        for miss in misses:
-            print(f"  coverage: {miss}: not in the store; the pages render without it")
-        if legs:
-            print(f"  coverage: the pages read {len(legs)} stored unit file(s)")
+    # The coverage CLI on named files: under a metered gate the
+    # ambient COVERAGE_* variables would re-point it at the outer
+    # run's live data file, and the page would find no union.
+    unmetered = _unmetered()
+    legs, misses = _stored_legs(root)
+    for miss in misses:
+        print(f"  coverage: {miss}: not in the record; the pages render without it")
+    if legs:
+        print(f"  coverage: the pages read {len(legs)} recorded unit file(s)")
     if legs:
         with tempfile.TemporaryDirectory() as scratch:
             copies = []
@@ -1360,9 +1355,9 @@ def render_python_coverage(root: Path) -> list[str]:
                 copy = Path(scratch) / f".coverage.{index}"
                 shutil.copy2(leg, copy)
                 copies.append(str(copy))
-            combined = toolroom.coverage.opts(cwd=root, nofail=True, recorded=False)(
-                "combine", "--keep", *copies
-            )
+            combined = toolroom.coverage.opts(
+                cwd=root, env=unmetered, nofail=True, recorded=False
+            )("combine", "--keep", *copies)
             if combined.code != 0:
                 fail(
                     f"coverage combine exited {combined.code}:\n"
@@ -1379,7 +1374,9 @@ def render_python_coverage(root: Path) -> list[str]:
         ):
             continue
         name = package.directory.name
-        result = toolroom.coverage.opts(cwd=root, nofail=True, recorded=False)(
+        result = toolroom.coverage.opts(
+            cwd=root, env=unmetered, nofail=True, recorded=False
+        )(
             "html",
             f"--include=packages/{name}/*",
             "-d",
@@ -1501,7 +1498,7 @@ def docs_publish() -> None:
 
 
 def _stored_legs(root: Path) -> tuple[list[Path], list[str]]:
-    """In the merge point's deploy job, the stored units for every check leg.
+    """In the merge point's deploy job, main's recorded units for every check leg.
 
     Returns the files and the misses. Anywhere else nothing is pulled:
     a pull request's docs job builds without the legs' data by design,
@@ -1511,7 +1508,6 @@ def _stored_legs(root: Path) -> tuple[list[Path], list[str]]:
     import os
 
     from livery.workshop._backends import _python
-    from livery.workshop._git_ops import GitError
     from livery.workshop._points import check_legs
     from livery.workshop._pytest_points import POINT_VARIABLE
     from livery.workshop._state import LEG_VARIABLE, run_context
@@ -1522,12 +1518,7 @@ def _stored_legs(root: Path) -> tuple[list[Path], list[str]]:
     )
     if run_context() is None or not deploying:
         return [], []
-    try:
-        return _python.stored_union(
-            root, discover_packages(root), check_legs(root), root / "coverage-data"
-        )
-    except GitError as error:
-        return [], [f"the units' closures ({error})"]
+    return _python.stored_union(root, check_legs(root), root / "coverage-data")
 
 
 @docs_group.task(name="python-coverage")

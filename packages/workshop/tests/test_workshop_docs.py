@@ -1065,8 +1065,8 @@ def test_the_pages_read_the_store_inside_ci_when_the_legs_left_no_data(
     )
     assert _docs.render_python_coverage(root) == ["core"]
     out = capsys.readouterr().out
-    assert "packages/other on check-a: not in the store; the pages render" in out
-    assert "the pages read 1 stored unit file(s)" in out
+    assert "packages/other on check-a: not in the record; the pages render" in out
+    assert "the pages read 1 recorded unit file(s)" in out
     assert "bare: no measured data; its page states the absence" in out
     assert (root / "packages" / "core" / "htmlcov" / "index.html").is_file()
     assert not (root / "packages" / "bare" / "htmlcov").exists()
@@ -1082,7 +1082,7 @@ def test_the_store_is_pulled_only_in_the_merge_points_deploy_job(
     calls: list[tuple[list[str], Path]] = []
 
     def _pull(
-        root_: Path, packages: object, labels: list[str], into: Path
+        root_: Path, labels: list[str], into: Path
     ) -> tuple[list[Path], list[str]]:
         calls.append((labels, into))
         return [into / "x.coverage"], ["packages/bare on check-a"]
@@ -1186,9 +1186,9 @@ def test_the_emitted_plumbing_follows_the_declaration(tmp_path: Path) -> None:
     docs_job = gate.split("  docs:")[1].split("  gate:")[0]
     # The pull request's docs job builds beside the legs and never
     # waits for their data: nobody reads a pull request's coverage
-    # page. The deploy on main renders the pages from the run's own
-    # legs, downloaded in the same run.
+    # page. The deploy on main renders the pages from main's coverage
+    # record on the store, so no job downloads coverage.
     assert "needs:" not in docs_job and "coverage-*" not in docs_job
     deploy = gate.split("  deploy:")[1].split("  govern:")[0]
-    assert "pattern: coverage-*" in deploy
+    assert "coverage" not in deploy
     assert "workflow_run" not in gate and "run-id:" not in gate

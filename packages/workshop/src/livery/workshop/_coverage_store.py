@@ -1,41 +1,55 @@
-"""The per-suite coverage store: a skipped suite's data, keyed by its closure.
+"""The coverage record: main's lines per check leg, and the legs' lines in flight.
 
-Coverage stays global under the affected mode. When a check leg runs
-a package's test suite, the suite's measured lines are stamped on the
-store under the leg, the package, and the identity of the package's
-dependency closure. When a later leg skips that suite because nothing
-in its closure changed, the gate job pulls the stamped lines into the
-union instead, and the floors are judged on the same global union a
-full run produces. A leg skips a suite only when the store holds its
-data for this closure, so a miss runs the suite fresh and the store
-needs no backfill.
+Coverage stays global under the affected mode. Main's record holds,
+per check leg, one row per unit (a package's test suite, or the
+workspace's own tests): the lines the suite reached within its
+closure, and the identity of the closure it was measured at. A check
+leg skips a suite when the record on that leg holds the unit at the
+suite's current closure identity, and runs it otherwise. A leg that
+ran a suite puts the suite's lines on its per-run ref, beside its
+timing half, with the scope its gate ran; the run's gate job unions
+the per-run refs with the rows it carries from the record, judges the
+floors on that union, and on main's run alone writes the record back:
+fresh rows for the suites the legs ran, the previous rows carried for
+the rest, the units that no longer exist removed. A pull request's
+run reads the record and never writes it, so reuse goes through main
+only: a leg reruns a suite whose closure moved since main's record,
+and main's own run after a merge measures what the merge changed.
 
 The unit is the suite that ran, never the package covered: a suite
 executes lines across packages (a dependant's tests run its
 dependencies), so the stored lines are filtered to the files of the
 suite's closure, the files whose identity the key names. Reach for
-[livery.workshop._coverage_store.find][] to read a suite's data and
-[livery.workshop._coverage_store.stamp][] to write it.
+[livery.workshop._coverage_store.recorded][] to read main's record on
+a leg, [livery.workshop._coverage_store.put_run][] to put a leg's
+lines, [livery.workshop._coverage_store.run_legs][] to read them in
+the gate job, and [livery.workshop._coverage_store.put_record][] to
+write the record.
 """
 
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._packages import Package
-from livery.workshop._state import Keyed, RunContext, slug
+from livery.workshop._state import Keyed, RunContext, Series, Skipped, slug
 
-#: The entry shape; another schema reads as a miss, named.
+#: The rows' shape; a row of another schema is skipped and named.
 SCHEMA = 1
 
-#: The newest entries kept per suite and leg. A suite's closure changes
-#: with every commit that touches it, so the store holds the recent
-#: history of one branch's tips, not an archive.
-WINDOW = 6
+#: The record's base: the branch whose measurement the record is.
+#: Every key of the family spells it, and only a run of a push to it
+#: writes the record.
+MAIN = "main"
+
+#: The file a check leg puts on its per-run ref beside its timing
+#: half: the scope its gate ran and the lines of every suite it ran.
+RUN_FILE = "coverage.json"
 
 #: The root files whose identity every suite's key carries: a pin
 #: change is a dependency change for every suite, whichever package
@@ -63,58 +77,104 @@ def workspace_suite(root: Path) -> Package | None:
 
 
 def current_keys(root: Path) -> set[tuple[str, ...]] | None:
-    """The keys the current matrix produces: each check leg with each stored unit.
+    """The keys the current matrix produces: main with each check leg.
 
     The janitor drops a ref outside this set, so a leg the matrix no
-    longer produces, or a unit that no longer exists, stops holding
-    entries. ``None`` when the contract or the packages cannot be
-    read, and then nothing is dropped.
+    longer produces stops holding a record. ``None`` when the
+    contract cannot be read, and then nothing is dropped.
     """
-    from livery.workshop._backends._python import units_of
-    from livery.workshop._packages import discover_packages
     from livery.workshop._points import check_legs
 
     try:
-        packages = discover_packages(root)
         legs = check_legs(root)
-        units = units_of(root, packages)
     except (Exception, SystemExit):
         return None
-    return {(slug(leg), slug(unit.name)) for leg in legs for unit in units}
+    return {(MAIN, slug(leg)) for leg in legs}
 
 
-#: The family: one series per check leg and suite, its entries named
-#: by their moment and closure; a series of a leg or unit the current
-#: matrix no longer produces is the janitor's to drop.
-COVERAGE = Keyed(
-    "coverage", ("leg", "package"), window=WINDOW, schema=SCHEMA, current=current_keys
-)
+#: The family: one series per base and check leg, ``coverage/main/<leg>``,
+#: one row per unit, replaced in place at every merge; a series of a
+#: leg the current matrix no longer produces is the janitor's to drop.
+RECORD = Keyed("coverage", ("base", "leg"), schema=SCHEMA, current=current_keys)
 
 
 @dataclass(frozen=True)
-class Stored:
-    """One suite's stored measurement.
+class Unit:
+    """One unit's measurement: the lines its suite reached within its closure.
 
     Attributes:
-        leg: The check leg that measured it (``check-ubuntu-latest-3.14``).
-        package: The suite's package path (``packages/forge``).
+        path: The unit's path (``packages/forge``, or ``tests``).
         closure: The closure identity the measurement is keyed by.
         run: The run that measured it.
         sha: The commit that run checked out.
         files: Measured lines per file, relative to the workspace root.
     """
 
-    leg: str
-    package: str
+    path: str
     closure: str
     run: str
     sha: str
     files: dict[str, list[int]]
 
 
-def suite_ref(leg: str, package: Package) -> str:
-    """The ref holding *package*'s suite data as measured on *leg*."""
-    return COVERAGE.series(leg, package.name).ref
+@dataclass(frozen=True)
+class Leg:
+    """What one check leg put on its per-run ref.
+
+    Attributes:
+        key: The leg's part of the per-run key, as its ref spells it.
+        label: The leg's label (``check-ubuntu-latest-3.14``), the key
+            of its record.
+        scope: The scope the leg's gate ran, as its marker named it.
+        packages: The packages whose suites a narrowed leg ran.
+        units: The suites the leg measured, by the unit's path.
+        why: Why the ref carries no readable file, when it does not.
+    """
+
+    key: str
+    label: str
+    scope: str
+    packages: tuple[str, ...]
+    units: dict[str, Unit]
+    why: str = ""
+
+
+@dataclass(frozen=True)
+class Record:
+    """Main's record on one leg, as read.
+
+    Attributes:
+        units: The recorded units by path.
+        skipped: The rows that are not units, named; printing one
+            gives the line.
+        failed: Whether the record could not be read at all.
+        reason: Why it could not, in the store's wording.
+    """
+
+    units: dict[str, Unit]
+    skipped: tuple[Skipped, ...] = ()
+    failed: bool = False
+    reason: str = ""
+
+    def stale(self, current: Iterable[str]) -> list[str]:
+        """The row names to drop: units outside *current*, and rows that are no unit.
+
+        A stale row is a unit that no longer exists, or a row the
+        reader could not take as a unit at all.
+        """
+        keep = set(current)
+        names = [row_name(path) for path in self.units if path not in keep]
+        return names + [item.name for item in self.skipped]
+
+
+def record_ref(leg: str) -> str:
+    """The ref holding main's record on *leg*."""
+    return RECORD.series(MAIN, leg).ref
+
+
+def row_name(path: str) -> str:
+    """The record's file for the unit at *path*."""
+    return f"{slug(path)}.json"
 
 
 def closure(packages: tuple[Package, ...], package: Package) -> tuple[Package, ...]:
@@ -150,7 +210,7 @@ def closure_id(git: GitOps, packages: tuple[Package, ...], package: Package) -> 
     The workspace's own tests reach any package, so their identity is
     every package's tree, their own directory's tree, and the root
     pins: prose leaves it untouched, and a root configuration change
-    forces a full run anyway, which stores the unit afresh.
+    forces a full run anyway, which measures the unit afresh.
 
     Raises:
         GitError: When a closure directory is not in ``HEAD``.
@@ -187,92 +247,179 @@ def in_closure(packages: tuple[Package, ...], package: Package, filename: str) -
     return filename.replace("\\", "/").startswith(roots)
 
 
-def _entry_name(when: datetime, closure_key: str) -> str:
-    """The entry's file name: its moment to the microsecond, then its closure.
+def _unit_fields(unit: Unit) -> dict[str, Any]:
+    return {
+        "unit": unit.path,
+        "closure": unit.closure,
+        "run": unit.run,
+        "sha": unit.sha,
+        "files": {name: sorted(lines) for name, lines in sorted(unit.files.items())},
+    }
 
-    A read picks the newest entry for a closure by name, so the moment
-    leads and is fine enough that two stamps never share a name.
-    """
-    return f"{when.strftime('%Y%m%dT%H%M%S.%fZ')}--{closure_key}"
+
+def _parse_unit(raw: Any, *, path: str = "") -> Unit | None:
+    """A unit from its fields, or ``None`` when they are not a unit's."""
+    if not isinstance(raw, dict):
+        return None
+    files = raw.get("files")
+    if not isinstance(files, dict):
+        return None
+    unit_path = str(raw.get("unit", "") or path)
+    if not unit_path:
+        return None
+    return Unit(
+        path=unit_path,
+        closure=str(raw.get("closure", "")),
+        run=str(raw.get("run", "")),
+        sha=str(raw.get("sha", "")),
+        files={
+            str(name): [int(line) for line in lines]
+            for name, lines in files.items()
+            if isinstance(lines, list)
+        },
+    )
 
 
-def stamp(
+def _per_run(run_id: str, leg: str) -> Series:
+    """The per-run series *leg* of *run_id* writes, the timing half's."""
+    from livery.workshop._metrics import RUNS
+
+    return RUNS.series(run_id, leg)
+
+
+def put_run(
     root: Path,
     run: RunContext,
     *,
     leg: str,
-    package: Package,
-    closure_key: str,
-    sha: str,
-    files: dict[str, list[int]],
+    scope: str,
+    packages: tuple[str, ...],
+    units: Mapping[str, Unit],
 ) -> str:
-    """Store *package*'s suite lines for *closure_key* on *leg*; ``""`` or the reason.
+    """Put *leg*'s scope and its measured *units* on its per-run ref; ``""`` or why not.
 
-    Only a CI run writes. The entry is named by its time and its
-    closure, so the window keeps the newest measurements and a read
-    picks the newest entry for a closure.
+    Only a CI run writes. The one file carries the scope the leg's
+    gate ran, the packages a narrowed gate named, and every unit's
+    lines, so the gate job reads a leg's whole fact in one read and
+    the lines go with the ref when the run's metrics are collected.
     """
     if not leg:
-        return "refusing: the leg has no label, so the measurement has no key"
-    entry = {
+        return "refusing: the leg has no label, so its lines have no key"
+    row = {
         "leg": leg,
-        "package": package.path,
-        "closure": closure_key,
+        "scope": scope,
+        "packages": list(packages),
         "run": run.run_id,
-        "sha": sha,
         "forge": run.forge,
-        "files": {name: sorted(lines) for name, lines in sorted(files.items())},
+        "units": {path: _unit_fields(unit) for path, unit in sorted(units.items())},
     }
-    return COVERAGE.series(leg, package.name).put(
-        root,
-        {_entry_name(datetime.now(UTC), closure_key): entry},
-        message=f"coverage: {package.path} on {leg} by run {run.run_id}",
+    return _per_run(run.run_id, leg).put(
+        root, {RUN_FILE: row}, message=f"coverage: {leg} of run {run.run_id}"
     )
 
 
-def find(
-    root: Path, *, leg: str, package: Package, closure_key: str
-) -> tuple[Stored | None, str]:
-    """The newest stored measurement of *package* on *leg* for *closure_key*.
+def run_legs(root: Path, run: RunContext) -> tuple[list[Leg], str]:
+    """Every check leg's coverage file on *run*'s per-run refs; the legs, or the reason.
 
-    Returns ``(None, "")`` for a plain miss (no leg label, no ref,
-    no entry for the closure) and ``(None, reason)`` when the store
-    could not be read or the entry is unreadable, so a caller can
-    fall back on either and still print why.
+    The reason is set when the refs could not be listed. A ref that
+    carries no readable coverage file is a leg whose ``why`` names
+    it: a leg that died before its lines, or a file that is not a
+    row; the caller decides, and a missing put is red there.
+    """
+    from livery.workshop._metrics import RUNS
+
+    keys = RUNS.listed(root, run.run_id)
+    if keys is None:
+        return [], f"{RUNS.prefix}{run.run_id}/*: the remote could not be listed"
+    legs: list[Leg] = []
+    for key in keys:
+        series = RUNS.at(*key)
+        found, why = series.row(root, RUN_FILE)
+        if why:
+            legs.append(Leg(key[-1], "", "", (), {}, why=f"{series.ref}: {why}"))
+            continue
+        if found is None:
+            legs.append(
+                Leg(
+                    key[-1],
+                    "",
+                    "",
+                    (),
+                    {},
+                    why=f"{series.ref} carries no {RUN_FILE}",
+                )
+            )
+            continue
+        raw_units = found.data.get("units")
+        units: dict[str, Unit] = {}
+        if isinstance(raw_units, dict):
+            for path, raw in raw_units.items():
+                unit = _parse_unit(raw, path=str(path))
+                if unit is not None:
+                    units[unit.path] = unit
+        legs.append(
+            Leg(
+                key[-1],
+                str(found.data.get("leg", "") or ""),
+                str(found.data.get("scope", "") or ""),
+                tuple(str(item) for item in found.data.get("packages", []) or []),
+                units,
+            )
+        )
+    return legs, ""
+
+
+def recorded(root: Path, *, leg: str) -> Record:
+    """Main's record on *leg*: every recorded unit, in one read.
+
+    An absent record is no units and no failure; a record the store
+    could not read is a failure with its reason; a row that is not a
+    unit is skipped and named, and the rest stand. A leg without a
+    label has no record to read.
     """
     if not leg:
-        return None, ""
-    found = COVERAGE.series(leg, package.name).rows(root)
+        return Record({}, failed=True, reason="this leg has no label")
+    found = RECORD.series(MAIN, leg).rows(root)
     if found.failed:
-        return None, found.reason
-    suffix = f"--{closure_key}"
-    rows = {row.name: row.data for row in found.rows if row.name.endswith(suffix)}
-    bad = {item.name: item.why for item in found.skipped if item.name.endswith(suffix)}
-    if not rows and not bad:
-        return None, ""
-    # The names lead with the moment, so the newest entry sorts last.
-    # A newest entry that is not a row is a reason, never a miss: the
-    # leg runs the suite fresh and its stamp replaces the entry.
-    newest = max([*rows, *bad])
-    if newest in bad:
-        return None, f"the entry {newest}: {bad[newest]}"
-    entry = rows[newest]
-    raw = entry.get("files")
-    if not isinstance(raw, dict):
-        return None, f"the entry {newest} carries no files"
-    files = {
-        str(name): [int(line) for line in lines]
-        for name, lines in raw.items()
-        if isinstance(lines, list)
-    }
-    return (
-        Stored(
-            leg=str(entry.get("leg", leg)),
-            package=str(entry.get("package", package.path)),
-            closure=str(entry.get("closure", closure_key)),
-            run=str(entry.get("run", "")),
-            sha=str(entry.get("sha", "")),
-            files=files,
-        ),
-        "",
+        return Record({}, failed=True, reason=found.reason)
+    units: dict[str, Unit] = {}
+    skipped = list(found.skipped)
+    for row in found.rows:
+        unit = _parse_unit(row.data)
+        if unit is None:
+            skipped.append(Skipped(row.name, "carries no unit"))
+            continue
+        units[unit.path] = unit
+    return Record(units, tuple(skipped))
+
+
+def put_record(
+    root: Path,
+    run: RunContext,
+    *,
+    leg: str,
+    fresh: Mapping[str, Unit],
+    remove: Iterable[str] = (),
+) -> str:
+    """Write the *fresh* units onto main's record on *leg*; ``""`` or the reason.
+
+    Only main's run writes, the run of a push, and it replaces the
+    record in place: a fresh row replaces the unit's, a row named in
+    *remove* goes, every other row stands as the carried measurement
+    it is. A run of any other event is refused by name, so a pull
+    request never writes what main's next run will skip on.
+    """
+    if not leg:
+        return "refusing: the leg has no label, so the record has no key"
+    if run.event != "push":
+        return (
+            f"refusing: a {run.event or 'local'} run reads {MAIN}'s record"
+            " and never writes it"
+        )
+    rows = {row_name(path): _unit_fields(unit) for path, unit in sorted(fresh.items())}
+    return RECORD.series(MAIN, leg).put(
+        root,
+        rows,
+        message=f"coverage: {MAIN}'s record on {leg} by run {run.run_id}",
+        remove=remove,
     )

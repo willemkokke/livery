@@ -25,7 +25,7 @@ DECLARED: tuple[Series | Keyed, ...] = (
     _metrics.RUNS,
     _verified.SERIES,
     _coverage_marks.SERIES,
-    _coverage_store.COVERAGE,
+    _coverage_store.RECORD,
     _gate_record.SERIES,
     _diagnostics.SERIES,
 )

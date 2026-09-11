@@ -44,25 +44,14 @@ jobs:
           # coverage-enable-subprocess dev dependency installs calls
           # coverage.process_startup() in every python this venv
           # starts, armed by this variable, so the whole fm
-          # invocation meters from interpreter start; the leg's data
-          # is combined by the check job's own entries and judged
-          # once, on the union, in the gate job below.
+          # invocation meters from interpreter start; the leg's
+          # measured suites ride its per-run ref on the state store,
+          # and the gate job below unions them with main's record
+          # and judges once.
           COVERAGE_PROCESS_START: pyproject.toml
         run: >-
           fm ci.run --point=gate --job=check
           --os="${{ matrix.os }}" --python="${{ matrix.python }}"
-      # The data and the scope the gate ran (fm-gate.json): the union
-      # judges only the packages a leg's scope covered, and pulls the
-      # suites it skipped from the coverage store.
-      - name: Leg coverage data
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: coverage-${{ matrix.os }}-${{ matrix.python }}
-          path: |
-            .coverage
-            fm-gate.json
-          include-hidden-files: true
-          if-no-files-found: error
       # The run as a Chrome trace, one artifact per leg: every task,
       # step, lane wait, and pytest test as slices. Observational, so
       # it runs on a red gate too (the run worth reading) and its own
@@ -97,11 +86,11 @@ jobs:
 
   # The one required context. Branch protection points here, so the
   # matrix can grow or shrink without touching repository settings.
-  # Its entries collect the run's timing rows, union every leg's
-  # coverage and judge the floors, ask the forge for the jobs it
-  # needs, and stamp the tree a green run proved; always(), so a red
-  # run is judged too. The state store's pushes need the grant, since
-  # organisation defaults are read-only.
+  # Its entries union the legs' measured suites with main's coverage
+  # record and judge the floors, collect the run's timing rows, ask
+  # the forge for the jobs it needs, and stamp the tree a green run
+  # proved; always(), so a red run is judged too. The state store's
+  # pushes need the grant, since organisation defaults are read-only.
   gate:
     if: always()
     needs: [check, docs]
@@ -114,13 +103,6 @@ jobs:
           # The stamp composes a narrowed run with its base tree's
           # record through the merge base, which a shallow clone lacks.
           fetch-depth: 0
-      # Every leg's coverage data, for the union the gate's own
-      # entries combine and judge against the floors.
-      - name: Collect every leg's coverage data
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: coverage-*
-          path: coverage-data
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.12.7"
@@ -162,11 +144,6 @@ jobs:
           # every leg but the first fail its save with a
           # reservation warning.
           cache-suffix: docs
-      - name: Coverage artifacts for the site
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: coverage-*
-          path: coverage-data
       - name: Enter the workspace
         run: bash setup.sh github
       - name: Deploy

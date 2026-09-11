@@ -1,4 +1,4 @@
-"""The per-suite coverage store: the misses and refusals first, then the reuse."""
+"""The coverage record: the refusals and misses first, then the reads and writes."""
 
 from __future__ import annotations
 
@@ -12,10 +12,9 @@ from livery.workshop import _coverage_store, _state
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._packages import Edge, Package
 
-RUN = _state.RunContext(
-    "gitea", "1013", "push", "refs/heads/main", leg="check-linux-3.14"
-)
 LEG = "check-linux-3.14"
+RUN = _state.RunContext("gitea", "1013", "push", "refs/heads/main", leg=LEG)
+PULL = _state.RunContext("gitea", "1014", "pull_request", "refs/pull/3/merge", leg=LEG)
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -76,91 +75,99 @@ def _packages(work: Path) -> tuple[Package, Package]:
     return _package(work, "base"), _package(work, "top", ("base",))
 
 
-# --- the misses and refusals first --------------------------------------------
+def _unit(
+    path: str,
+    *,
+    closure: str = "a" * 64,
+    run: str = "1013",
+    files: dict[str, list[int]] | None = None,
+) -> _coverage_store.Unit:
+    return _coverage_store.Unit(path, closure, run, "b" * 40, files or {})
 
 
-def test_an_absent_store_and_an_unknown_closure_are_plain_misses(work: Path) -> None:
-    base, _top = _packages(work)
-    assert _coverage_store.find(work, leg=LEG, package=base, closure_key="a" * 64) == (
-        None,
-        "",
+# --- the refusals and misses first --------------------------------------------
+
+
+def test_a_leg_without_a_label_neither_puts_nor_reads(work: Path) -> None:
+    why = _coverage_store.put_run(
+        work, RUN, leg="", scope="full", packages=(), units={}
     )
-    why = _coverage_store.stamp(
-        work, RUN, leg=LEG, package=base, closure_key="a" * 64, sha="b" * 40, files={}
-    )
-    assert why == ""
-    assert _coverage_store.find(work, leg=LEG, package=base, closure_key="c" * 64) == (
-        None,
-        "",
-    )
+    assert why == "refusing: the leg has no label, so its lines have no key"
+    held = _coverage_store.recorded(work, leg="")
+    assert held.failed and held.reason == "this leg has no label"
+    why = _coverage_store.put_record(work, RUN, leg="", fresh={})
+    assert why == "refusing: the leg has no label, so the record has no key"
 
 
-def test_a_leg_without_a_label_neither_reads_nor_writes(work: Path) -> None:
-    base, _top = _packages(work)
-    assert _coverage_store.find(work, leg="", package=base, closure_key="a" * 64) == (
-        None,
-        "",
-    )
-    why = _coverage_store.stamp(
-        work, RUN, leg="", package=base, closure_key="a" * 64, sha="b" * 40, files={}
-    )
-    assert "no label" in why
-
-
-def test_the_stamp_refuses_outside_ci(
+def test_the_puts_refuse_outside_ci(
     work: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    base, _top = _packages(work)
     monkeypatch.delenv("GITHUB_ACTIONS")
-    why = _coverage_store.stamp(
-        work, RUN, leg=LEG, package=base, closure_key="a" * 64, sha="b" * 40, files={}
+    why = _coverage_store.put_run(
+        work, RUN, leg=LEG, scope="full", packages=(), units={}
     )
     assert "only a CI run writes" in why
+    assert "only a CI run writes" in _coverage_store.put_record(
+        work, RUN, leg=LEG, fresh={}
+    )
 
 
-def test_an_unreadable_store_and_a_foreign_entry_name_their_reason(
+def test_only_mains_run_writes_the_record(work: Path) -> None:
+    fresh = {"packages/base": _unit("packages/base")}
+    why = _coverage_store.put_record(work, PULL, leg=LEG, fresh=fresh)
+    assert why == "refusing: a pull_request run reads main's record and never writes it"
+    local = _state.RunContext("gitea", "", "", "", leg=LEG)
+    assert "a local run reads main's record" in _coverage_store.put_record(
+        work, local, leg=LEG, fresh=fresh
+    )
+    assert _coverage_store.recorded(work, leg=LEG) == _coverage_store.Record({})
+
+
+def test_an_absent_record_is_no_units_and_an_unreachable_store_names_its_reason(
     work: Path, tmp_path: Path
 ) -> None:
-    base, _top = _packages(work)
-    ref = _coverage_store.suite_ref(LEG, base)
-    assert (
-        _state.put(
-            work,
-            ref,
-            {"20260101T000000Z--" + "a" * 64: json.dumps({"schema": 99})},
-            message="foreign",
-        )
-        == ""
-    )
-    found, why = _coverage_store.find(work, leg=LEG, package=base, closure_key="a" * 64)
-    assert found is None and "this reader speaks" in why
-    assert (
-        _state.put(
-            work, ref, {"20260102T000000Z--" + "a" * 64: "not json"}, message="garbled"
-        )
-        == ""
-    )
-    found, why = _coverage_store.find(work, leg=LEG, package=base, closure_key="a" * 64)
-    assert found is None and "does not parse" in why
-    # A good stamp is newer than both and wins; a garbled entry newer
-    # still is a reason again, never a silent fall-back to the stamp.
-    why = _coverage_store.stamp(
-        work, RUN, leg=LEG, package=base, closure_key="a" * 64, sha="b" * 40, files={}
-    )
-    assert why == ""
-    found, why = _coverage_store.find(work, leg=LEG, package=base, closure_key="a" * 64)
-    assert why == "" and found is not None and found.run == RUN.run_id
-    assert (
-        _state.put(
-            work, ref, {"20991231T000000Z--" + "a" * 64: "not json"}, message="newer"
-        )
-        == ""
-    )
-    found, why = _coverage_store.find(work, leg=LEG, package=base, closure_key="a" * 64)
-    assert found is None and "does not parse" in why
+    assert _coverage_store.recorded(work, leg=LEG) == _coverage_store.Record({})
+    assert _coverage_store.run_legs(work, RUN) == ([], "")
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    found, why = _coverage_store.find(work, leg=LEG, package=base, closure_key="a" * 64)
-    assert found is None and "could not be read" in why
+    held = _coverage_store.recorded(work, leg=LEG)
+    assert held.failed and "could not be read" in held.reason and held.units == {}
+    legs, why = _coverage_store.run_legs(work, RUN)
+    assert legs == [] and why.endswith("the remote could not be listed")
+
+
+def test_a_row_that_is_not_a_unit_is_skipped_named_and_stale(work: Path) -> None:
+    ref = _coverage_store.record_ref(LEG)
+    rows = {
+        "odd.json": json.dumps({"schema": 99}),
+        "bare.json": json.dumps({"schema": 1, "unit": "packages/x"}),
+        "junk.json": "not json",
+    }
+    assert _state.put(work, ref, rows, message="foreign") == ""
+    held = _coverage_store.recorded(work, leg=LEG)
+    assert held.units == {} and not held.failed
+    assert sorted(str(item) for item in held.skipped) == [
+        "bare.json: carries no unit; skipped",
+        "junk.json: does not parse; skipped",
+        "odd.json: schema 99, this reader speaks 1; skipped",
+    ]
+    assert sorted(held.stale(())) == ["bare.json", "junk.json", "odd.json"]
+
+
+def test_a_per_run_ref_without_the_file_or_with_a_foreign_one_is_named(
+    work: Path,
+) -> None:
+    from livery.workshop._metrics import ROW_FILE, RUNS
+
+    half = RUNS.series(RUN.run_id, LEG)
+    assert half.put(work, {ROW_FILE: {"job": "check"}}, message="half") == ""
+    legs, why = _coverage_store.run_legs(work, RUN)
+    assert why == "" and len(legs) == 1
+    assert legs[0].key == _state.slug(LEG) and legs[0].units == {}
+    assert legs[0].why == f"{half.ref} carries no {_coverage_store.RUN_FILE}"
+    foreign = {_coverage_store.RUN_FILE: json.dumps({"schema": 99})}
+    assert _state.put(work, half.ref, foreign, message="foreign") == ""
+    legs, _why = _coverage_store.run_legs(work, RUN)
+    assert legs[0].why.startswith(half.ref) and "this reader speaks" in legs[0].why
 
 
 def test_the_closure_id_refuses_a_directory_head_lacks(work: Path) -> None:
@@ -216,109 +223,148 @@ def test_the_closure_id_follows_the_closure_and_the_root_pins(work: Path) -> Non
     assert _coverage_store.in_closure(packages, top, "packages\\top\\src\\top\\mod.py")
 
 
-# --- the reuse ----------------------------------------------------------------
+# --- the reads and the writes -------------------------------------------------
 
 
-def test_a_stamp_is_found_by_its_closure_newest_first_within_the_window(
-    work: Path,
-) -> None:
-    base, _top = _packages(work)
-    key = "a" * 64
-    for run_id, lines in (("1", [1]), ("2", [1, 2])):
-        run = _state.RunContext("gitea", run_id, "push", "refs/heads/main", leg=LEG)
-        why = _coverage_store.stamp(
-            work,
-            run,
-            leg=LEG,
-            package=base,
-            closure_key=key,
-            sha="b" * 40,
-            files={"packages/base/src/base/mod.py": lines},
-        )
-        assert why == ""
-    found, why = _coverage_store.find(work, leg=LEG, package=base, closure_key=key)
-    assert why == "" and found is not None
-    assert found.run == "2"
-    assert found.files == {"packages/base/src/base/mod.py": [1, 2]}
-    assert found.package == "packages/base" and found.leg == LEG
-    # Another leg's measurement is another ref: a miss here.
-    other = _coverage_store.find(
-        work, leg="check-macos-3.13", package=base, closure_key=key
+def test_a_legs_lines_ride_its_per_run_ref_and_go_with_it(work: Path) -> None:
+    from livery.workshop import _metrics
+
+    unit = _unit("packages/base", files={"packages/base/src/base/mod.py": [3, 1, 2]})
+    why = _coverage_store.put_run(
+        work,
+        RUN,
+        leg=LEG,
+        scope="affected",
+        packages=("packages/base",),
+        units={"packages/base": unit},
     )
-    assert other == (None, "")
-    # The window bounds the ref: the oldest entries go first.
-    for extra in range(_coverage_store.WINDOW + 2):
-        assert (
-            _coverage_store.stamp(
-                work,
-                RUN,
-                leg=LEG,
-                package=base,
-                closure_key=f"{extra:064d}",
-                sha="b" * 40,
-                files={},
-            )
-            == ""
-        )
-    held = _state.read(work, _coverage_store.suite_ref(LEG, base))
-    assert held.files is not None and len(held.files) == _coverage_store.WINDOW
-    assert _coverage_store.find(work, leg=LEG, package=base, closure_key=key) == (
-        None,
+    assert why == ""
+    ref = _metrics.run_ref(RUN, LEG)
+    held = _state.read(work, ref).files
+    assert held is not None and set(held) == {_coverage_store.RUN_FILE}
+    legs, why = _coverage_store.run_legs(work, RUN)
+    assert why == "" and len(legs) == 1
+    leg = legs[0]
+    assert (leg.key, leg.label, leg.scope, leg.packages, leg.why) == (
+        _state.slug(LEG),
+        LEG,
+        "affected",
+        ("packages/base",),
         "",
     )
+    assert leg.units == {
+        "packages/base": _coverage_store.Unit(
+            "packages/base",
+            "a" * 64,
+            "1013",
+            "b" * 40,
+            {"packages/base/src/base/mod.py": [1, 2, 3]},
+        )
+    }
+    # Another run's refs are another run's; the lines go with the ref.
+    other = _state.RunContext("gitea", "9", "push", "refs/heads/main", leg=LEG)
+    assert _coverage_store.run_legs(work, other) == ([], "")
+    assert _state.drop(work, ref) == ""
+    assert _coverage_store.run_legs(work, RUN) == ([], "")
 
 
-def test_the_current_keys_are_every_check_leg_with_every_unit_or_none(
+def test_the_record_is_replaced_in_place_fresh_over_carried_stale_removed(
     work: Path,
 ) -> None:
-    # No contract at the root: the keys cannot be told, and the janitor
-    # drops nothing.
-    assert _coverage_store.current_keys(work) is None
+    series = _coverage_store.RECORD.series(_coverage_store.MAIN, LEG)
+    assert series.ref == _coverage_store.record_ref(LEG)
+    assert series.ref == _state.NAMESPACE + "coverage/main/" + _state.slug(LEG)
+    base = _unit("packages/base", run="1", files={"packages/base/src/b.py": [1]})
+    top = _unit("packages/top", closure="c" * 64, run="1")
+    ghost = _unit("packages/ghost", run="1")
+    fresh = {"packages/base": base, "packages/top": top, "packages/ghost": ghost}
+    assert _coverage_store.put_record(work, RUN, leg=LEG, fresh=fresh) == ""
+    held = _coverage_store.recorded(work, leg=LEG)
+    assert held.units == fresh and held.skipped == ()
+    first = {row.name: row.when for row in series.rows(work).rows}
+    # The next merge: base fresh again, top carried untouched, ghost gone.
+    again = _unit("packages/base", closure="d" * 64, run="2")
+    later = _state.RunContext("gitea", "2", "push", "refs/heads/main", leg=LEG)
+    stale = held.stale(["packages/base", "packages/top"])
+    assert stale == [_coverage_store.row_name("packages/ghost")]
+    why = _coverage_store.put_record(
+        work, later, leg=LEG, fresh={"packages/base": again}, remove=stale
+    )
+    assert why == ""
+    held = _coverage_store.recorded(work, leg=LEG)
+    assert held.units == {"packages/base": again, "packages/top": top}
+    rows = {row.name: row.when for row in series.rows(work).rows}
+    assert rows[_coverage_store.row_name("packages/top")] == first["packages-top.json"]
+    assert rows["packages-base.json"] > first["packages-base.json"]
+    # Another leg's record is another ref.
+    assert _coverage_store.recorded(work, leg="check-macos-3.13") == (
+        _coverage_store.Record({})
+    )
+
+
+def _contract(work: Path, runners: str) -> None:
     (work / "workshop.toml").write_text(
-        '[ci]\nrunners = ["ubuntu-latest", "macos-latest"]\n'
-        'python-versions = ["3.14"]\n'
+        f'[ci]\nrunners = [{runners}]\npython-versions = ["3.14"]\n'
     )
     for name in ("base", "top"):
         (work / "packages" / name / "pyproject.toml").write_text(
             f'[project]\nname = "livery-{name}"\nversion = "0"\n'
         )
+
+
+def test_the_current_keys_are_main_with_every_check_leg_or_none(work: Path) -> None:
+    # No contract at the root: the keys cannot be told, and the janitor
+    # drops nothing.
+    assert _coverage_store.current_keys(work) is None
+    _contract(work, '"ubuntu-latest", "macos-latest"')
     assert _coverage_store.current_keys(work) == {
-        ("check-ubuntu-latest-3-14", "livery-base"),
-        ("check-ubuntu-latest-3-14", "livery-top"),
-        ("check-macos-latest-3-14", "livery-base"),
-        ("check-macos-latest-3-14", "livery-top"),
+        ("main", "check-ubuntu-latest-3-14"),
+        ("main", "check-macos-latest-3-14"),
     }
 
 
-def test_the_stored_union_pulls_every_unit_and_names_the_misses(
+def test_the_janitor_drops_a_closure_keyed_ref_and_keeps_the_record_and_the_marks(
+    work: Path,
+) -> None:
+    # A ref of the shape the family no longer produces, one leg and
+    # unit keyed by closure, is an orphan under the current keys; the
+    # marks series beside the family is not the family's at all.
+    old = _state.NAMESPACE + "coverage/check-linux-3-14/livery-base"
+    marks = _state.NAMESPACE + "coverage/marks"
+    assert _state.put(work, old, {"x": "{}"}, message="old") == ""
+    assert _state.put(work, marks, {"m": "{}"}, message="marks") == ""
+    _contract(work, '"linux"')
+    fresh = {"packages/base": _unit("packages/base")}
+    assert _coverage_store.put_record(work, RUN, leg=LEG, fresh=fresh) == ""
+    lines = _state.sweep(work, (_coverage_store.RECORD,), remote=True)
+    assert f"  {old}: no current base and leg produces it; dropped" in lines
+    assert f"  {_coverage_store.record_ref(LEG)}: 1 row(s), within its bounds" in lines
+    assert _state.read(work, old).files is None
+    assert _state.read(work, marks).files == {"m": "{}"}
+    assert _coverage_store.recorded(work, leg=LEG).units == fresh
+
+
+def test_the_stored_union_pulls_every_recorded_unit_and_names_the_misses(
     work: Path, tmp_path: Path
 ) -> None:
     from livery.workshop._backends._python import stored_union
 
-    base, top = _packages(work)
-    git = GitOps(work)
-    packages = (base, top)
-    for package in packages:
-        assert (
-            _coverage_store.stamp(
-                work,
-                RUN,
-                leg=LEG,
-                package=package,
-                closure_key=_coverage_store.closure_id(git, packages, package),
-                sha="b" * 40,
-                files={f"{package.path}/src/x.py": [1, 2]},
-            )
-            == ""
-        )
+    fresh = {
+        "packages/base": _unit("packages/base", files={"packages/base/src/x.py": [1]}),
+        "packages/top": _unit("packages/top", files={"packages/top/src/x.py": [1, 2]}),
+    }
+    assert _coverage_store.put_record(work, RUN, leg=LEG, fresh=fresh) == ""
     into = tmp_path / "pages"
-    files, misses = stored_union(work, packages, [LEG, "check-other"], into)
+    files, misses = stored_union(work, [LEG, "check-other"], into)
     assert sorted(path.name for path in files) == [
-        "reuse-livery-base.coverage",
-        "reuse-livery-top.coverage",
+        "reuse-packages-base.coverage",
+        "reuse-packages-top.coverage",
     ]
     assert all(path.parent == into / LEG for path in files)
-    assert misses == ["packages/base on check-other", "packages/top on check-other"]
+    assert misses == ["main/check-other: nothing recorded"]
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    _files, misses = stored_union(work, [LEG], into)
+    assert len(misses) == 1 and misses[0].startswith(f"main/{LEG} (")
 
 
 # --- the workspace's own tests, a unit keyed by the whole tree -----------------
@@ -355,6 +401,5 @@ def test_the_workspace_tests_are_a_unit_keyed_by_the_tree(work: Path) -> None:
         (base, top), unit, "packages/base/src/base/mod.py"
     )
     assert _coverage_store.in_closure((base, top), unit, "tests/test_x.py")
-    # Its ref stands beside the packages' under the one prefix.
-    assert _coverage_store.suite_ref(LEG, unit).endswith("/workspace-tests")
     assert isinstance(unit, Package)
+    assert _coverage_store.row_name(unit.path) == "tests.json"

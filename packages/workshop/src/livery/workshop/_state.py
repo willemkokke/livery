@@ -246,13 +246,20 @@ class Series:
         return Row(name, data), ""
 
     def put(
-        self, root: Path, rows: Mapping[str, Mapping[str, Any]], *, message: str
+        self,
+        root: Path,
+        rows: Mapping[str, Mapping[str, Any]],
+        *,
+        message: str,
+        remove: Iterable[str] = (),
     ) -> str:
         """Write *rows* by file name, stamped; ``""`` or the reason.
 
         Every row is written with the schema and the time stamped on
         it, and the stamp wins over a ``schema`` or ``when`` the row
-        carries.
+        carries. The rows the series already holds stand, less the
+        file names in *remove*, so a caller replacing a record in
+        place names what goes and puts what changed.
 
         The window keeps the newest rows by their stamps, so a series
         keyed by something other than time (a tree id) keeps its
@@ -275,6 +282,7 @@ class Series:
             window=self.window,
             ci_only=self.ci_only,
             order=_by_when,
+            remove=remove,
         )
 
     def _unreadable(self, found: Read) -> str:
@@ -287,7 +295,7 @@ class Series:
 class Keyed:
     """A family of series under one prefix, one ref per key.
 
-    The coverage store keeps one series per leg and package, the
+    The coverage record keeps one series per base and leg, the
     per-run halves one per run and leg. A family declares its key
     parts once: `series` makes the series of one key, with every
     part made ref-safe, and `listed` reads the keys the remote

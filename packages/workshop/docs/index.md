@@ -128,17 +128,25 @@ depend on one machine's view. Coverage stays global under the
 affected mode: in a check leg's one measured run every test records
 under a context named by its node id (the workshop's own pytest
 plugin, quiet outside a measured run), the leg splits the run's data
-per suite and stores each suite's lines on the store, keyed by the
-leg, the package, and the identity of the package's dependency
-closure (the tree ids of the package and of every package it depends
-on, plus the root's `pyproject.toml` and `uv.lock`), and a leg skips
-a suite only when the store holds its lines for that identity;
-otherwise the suite runs, and the leg says why. The workspace's own
-`tests/` directory is a unit too, keyed by the whole tree, and every
-leg that runs a suite runs it. The gate job pulls every skipped suite
-from the store before it judges, so the union is the same global
-union a full run produces; a suite the store cannot supply is red by
-name, never a smaller union. A local `fm test` prints its own
+per suite and puts each suite's lines on its per-run ref of the
+state store, with the identity of the suite's dependency closure
+(the tree ids of the package and of every package it depends on,
+plus the root's `pyproject.toml` and `uv.lock`). Main's coverage
+record holds, per check leg, one row per suite: the lines main's
+gate last measured and the closure they were measured at. A leg
+skips a suite only when the record on that leg holds it at the
+suite's current closure; otherwise the suite runs, and the leg says
+why. The workspace's own `tests/` directory is a unit too, keyed by
+every package's tree, and every leg that runs a suite runs it. The
+gate job unions the legs' lines with every skipped suite carried
+from the record before it judges, so the union is the same global
+union a full run produces; a suite neither the run nor the record
+can supply is red by name, never a smaller union. On main's run the
+gate job writes the record back, fresh rows for what the legs
+measured, the rest carried, and a pull request's run never writes
+it, so reuse goes through main alone: on a tree the verified record
+already proves, a leg runs nothing but the suites whose closure
+moved since main's record, measured for their lines alone. A local `fm test` prints its own
 lower-biased preview beside the floor, for information. Raise a
 committed floor as the suite grows; lower it only deliberately, in a
 reviewed change or an accepted row. The release legs publish a
@@ -159,9 +167,9 @@ share and a fresh clone starts without.
 | series | a row is | window | writer |
 | --- | --- | --- | --- |
 | `metrics` | one run: every job's times, the run's wall, the union's percentages | 300 | the gate job |
-| `run/<id>/<leg>` | a check leg's half of its timing row, until the gate job collects it | none | the leg |
+| `run/<id>/<leg>` | a check leg's half of its timing row, and the suites it measured with the scope it ran, until the gate job collects it | none | the leg |
 | `verified` | a tree a green gate proved, with its scope and the base it composed on | 200 | the gate job |
-| `coverage/<leg>/<package>` | a suite's measured lines for one closure identity | 6 | the leg |
+| `coverage/main/<leg>` | main's measured lines per suite on one leg, each at the closure it was measured at, replaced in place at every merge | none | main's gate job |
 | `coverage/marks` | a package's coverage mark and who set it | 400 | the gate job, `fm coverage.accept` |
 | `gate-record` (local) | a tree this checkout's `fm check` proved green | 200, 7 days | a green local gate |
 | `diagnostics` (local) | the follow classifier's inputs for an unmerged ending | 20 | every unmerged follow |
@@ -174,8 +182,8 @@ and `--json` for the rows as they are. `fm ci.timings` renders the
 the window, then the movers. `fm janitor` bounds every series in the
 scope it runs in, windows, ages, and orphans, the remote ones from
 the merge point's gate job after every green run. The deploy renders
-the site's coverage pages from the run's legs' data, and when the
-legs skipped on the verified record, from the store's union.
+the site's coverage pages from main's coverage record, the union
+main's gate judged whatever its legs ran.
 
 ## Where a test lives
 

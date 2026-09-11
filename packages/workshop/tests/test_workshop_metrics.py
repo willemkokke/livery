@@ -459,6 +459,30 @@ def test_render_skips_other_schemas_and_renders_percentiles_and_movers(
     assert "    +3.0s  gate: wall_ms (6.0s -> 9.0s)" in lines
 
 
+def test_collect_drops_the_legs_measured_lines_with_its_half(
+    work: Path, tmp_path: Path
+) -> None:
+    from livery.workshop import _coverage_store
+
+    fake = FakeForge()
+    fake.create_repo("owner", "repo")
+    repo = fake.repository("owner", "repo")
+    trace = _trace(tmp_path / "t.json", tasks={"check": 100.0})
+    assert _metrics.put_leg(work, RUN, job=JOB, label="check-a", trace=trace) == ""
+    why = _coverage_store.put_run(
+        work, RUN, leg="check-a", scope="verified", packages=(), units={}
+    )
+    assert why == ""
+    ref = _metrics.run_ref(RUN, "check-a")
+    held = _state.read(work, ref).files
+    assert held is not None
+    assert set(held) == {_metrics.ROW_FILE, _coverage_store.RUN_FILE}
+    lines = _metrics.collect(work, repo, RUN, sha="b" * 40)
+    assert f"  {ref}: dropped" in lines
+    assert _state.read(work, ref).files is None
+    assert _coverage_store.run_legs(work, RUN) == ([], "")
+
+
 # --- the coverage row: folded into the run's file, rendered as a trend ---------
 
 
