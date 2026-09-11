@@ -12,6 +12,7 @@ members = [
     "livery",
     "livery-footman",
     "livery-forge",
+    "livery-strongroom",
     "livery-toolroom",
     "livery-workshop",
     "toolroom",
@@ -864,6 +865,7 @@ dev = [
     { name = "git-cliff" },
     { name = "livery-footman", extra = ["test"] },
     { name = "livery-forge", extra = ["github-secrets"] },
+    { name = "livery-strongroom" },
     { name = "livery-toolroom", extra = ["test"] },
     { name = "livery-workshop" },
     { name = "mypy" },
@@ -893,6 +895,7 @@ dev = [
     { name = "git-cliff", specifier = ">=2.13" },
     { name = "livery-footman", extras = ["test"], editable = "packages/footman" },
     { name = "livery-forge", extras = ["github-secrets"], editable = "packages/forge" },
+    { name = "livery-strongroom", editable = "packages/strongroom" },
     { name = "livery-toolroom", extras = ["test"], editable = "packages/toolroom" },
     { name = "livery-workshop", editable = "packages/workshop" },
     { name = "mypy", specifier = ">=1.14" },
@@ -960,6 +963,11 @@ github-secrets = [
 [package.metadata]
 requires-dist = [{ name = "pynacl", marker = "extra == 'github-secrets'", specifier = ">=1.5" }]
 provides-extras = ["github-secrets"]
+
+[[package]]
+name = "livery-strongroom"
+version = "0.0.0"
+source = { editable = "packages/strongroom" }
 
 [[package]]
 name = "livery-toolroom"

@@ -1,0 +1,104 @@
+{
+  "bytes": [
+    {
+      "id": "sha256-empty",
+      "data": "",
+      "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "sha256-abc",
+      "data": "abc",
+      "digest": "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    },
+    {
+      "id": "sha256-hello",
+      "data": "hello",
+      "digest": "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+    }
+  ],
+  "parse": [
+    {
+      "id": "sha256-lowercase",
+      "text": "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+      "algorithm": "sha256",
+      "encoded": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+      "path": [
+        "sha256",
+        "ba",
+        "7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+      ]
+    }
+  ],
+  "refusals": [
+    {
+      "id": "no-colon",
+      "text": "sha256",
+      "reason": "OCI grammar"
+    },
+    {
+      "id": "empty-encoded",
+      "text": "sha256:",
+      "reason": "OCI grammar"
+    },
+    {
+      "id": "uppercase-algorithm",
+      "text": "SHA256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+      "reason": "OCI grammar"
+    },
+    {
+      "id": "space",
+      "text": "sha256: ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+      "reason": "OCI grammar"
+    },
+    {
+      "id": "uppercase-hex",
+      "text": "sha256:BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD",
+      "reason": "full lowercase"
+    },
+    {
+      "id": "truncated",
+      "text": "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015a",
+      "reason": "full lowercase"
+    },
+    {
+      "id": "too-long",
+      "text": "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad0",
+      "reason": "full lowercase"
+    },
+    {
+      "id": "not-hex",
+      "text": "sha256:gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
+      "reason": "full lowercase"
+    },
+    {
+      "id": "sha1",
+      "text": "sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "reason": "not in the registry"
+    },
+    {
+      "id": "sha512",
+      "text": "sha512:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "reason": "not in the registry"
+    },
+    {
+      "id": "blake3",
+      "text": "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "reason": "not in the registry"
+    },
+    {
+      "id": "md5",
+      "text": "md5:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "reason": "not in the registry"
+    },
+    {
+      "id": "xxh3",
+      "text": "xxh3:aaaaaaaaaaaaaaaa",
+      "reason": "not in the registry"
+    },
+    {
+      "id": "sha256-truncated-name",
+      "text": "sha256-160:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "reason": "not in the registry"
+    }
+  ]
+}

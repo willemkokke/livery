@@ -146,6 +146,19 @@ nav = [
             { "livery.forge._types" = "_generated/api/forge/_types.md" },
         ] },
     ] },
+    { "strongroom" = [
+        { "Index" = "_generated/packages/strongroom/index.md" },
+        { "Changelog" = "_generated/packages/strongroom/changelog.md" },
+        { "API" = [
+            { "livery.strongroom" = "_generated/api/strongroom/index.md" },
+            { "livery.strongroom._canonical" = "_generated/api/strongroom/_canonical.md" },
+            { "livery.strongroom._digest" = "_generated/api/strongroom/_digest.md" },
+            { "livery.strongroom._fields" = "_generated/api/strongroom/_fields.md" },
+            { "livery.strongroom._records" = "_generated/api/strongroom/_records.md" },
+            { "livery.strongroom._tree" = "_generated/api/strongroom/_tree.md" },
+            { "livery.strongroom._version" = "_generated/api/strongroom/_version.md" },
+        ] },
+    ] },
     { "toolroom" = [
         { "Index" = "_generated/packages/toolroom/index.md" },
         { "Playground" = "_generated/packages/toolroom/playground.md" },
@@ -514,6 +527,7 @@ base_path = [
     "packages/footman/_generated",
     "packages/footman-compat/_generated",
     "packages/forge/_generated",
+    "packages/strongroom/_generated",
     "packages/toolroom/_generated",
     "packages/toolroom-compat/_generated",
     "packages/workshop/_generated",
@@ -524,7 +538,7 @@ auto_append = [
 ]
 
 [project.plugins.mkdocstrings.handlers.python]
-paths = ["packages/forge/src", "packages/toolroom/src", "packages/workshop/src"]
+paths = ["packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/workshop/src"]
 inventories = ["https://docs.python.org/3/objects.inv", "https://willemkokke.github.io/footman/objects.inv", "https://willemkokke.github.io/toolroom/objects.inv"]
 
 [project.plugins.mkdocstrings.handlers.python.options]

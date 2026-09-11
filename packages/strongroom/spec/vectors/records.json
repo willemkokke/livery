@@ -1,0 +1,171 @@
+{
+  "records": [
+    {
+      "id": "create",
+      "record": {
+        "digest": "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "previous": null,
+        "by": {
+          "kind": "person",
+          "value": "willem"
+        },
+        "at": "2026-09-11T12:00:00Z",
+        "receipt": null,
+        "meta": {}
+      },
+      "canonical": "{\"at\":\"2026-09-11T12:00:00Z\",\"by\":{\"kind\":\"person\",\"value\":\"willem\"},\"digest\":\"sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\",\"meta\":{},\"previous\":null,\"receipt\":null}"
+    },
+    {
+      "id": "update-with-meta",
+      "record": {
+        "digest": "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+        "previous": "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "by": {
+          "kind": "call",
+          "value": "fetch:v1"
+        },
+        "at": "2026-09-11T12:00:01Z",
+        "receipt": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "meta": {
+          "validators": {
+            "etag": "\"abc\""
+          },
+          "max-age": 300
+        }
+      },
+      "canonical": "{\"at\":\"2026-09-11T12:00:01Z\",\"by\":{\"kind\":\"call\",\"value\":\"fetch:v1\"},\"digest\":\"sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824\",\"meta\":{\"max-age\":300,\"validators\":{\"etag\":\"\\\"abc\\\"\"}},\"previous\":\"sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\",\"receipt\":\"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"}"
+    }
+  ],
+  "record_refusals": [
+    {
+      "id": "meta-not-object",
+      "record": {
+        "digest": "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "previous": null,
+        "by": {
+          "kind": "person",
+          "value": "willem"
+        },
+        "at": "2026-09-11T12:00:00Z",
+        "receipt": null,
+        "meta": []
+      },
+      "reason": "not a JSON object"
+    },
+    {
+      "id": "missing-previous",
+      "record": {
+        "digest": "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "by": {
+          "kind": "person",
+          "value": "willem"
+        },
+        "at": "2026-09-11T12:00:00Z",
+        "receipt": null,
+        "meta": {}
+      },
+      "reason": "wrong keys"
+    },
+    {
+      "id": "bad-at",
+      "record": {
+        "digest": "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "previous": null,
+        "by": {
+          "kind": "person",
+          "value": "willem"
+        },
+        "at": "yesterday",
+        "receipt": null,
+        "meta": {}
+      },
+      "reason": "RFC 3339 UTC"
+    },
+    {
+      "id": "previous-not-digest",
+      "record": {
+        "digest": "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "previous": "abc",
+        "by": {
+          "kind": "person",
+          "value": "willem"
+        },
+        "at": "2026-09-11T12:00:00Z",
+        "receipt": null,
+        "meta": {}
+      },
+      "reason": "OCI grammar"
+    },
+    {
+      "id": "by-not-object",
+      "record": {
+        "digest": "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "previous": null,
+        "by": "willem",
+        "at": "2026-09-11T12:00:00Z",
+        "receipt": null,
+        "meta": {}
+      },
+      "reason": "not a JSON object"
+    }
+  ],
+  "tombstones": [
+    {
+      "id": "erase",
+      "tombstone": {
+        "digest": "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "at": "2026-09-11T12:00:00Z",
+        "authority": {
+          "kind": "person",
+          "value": "willem"
+        },
+        "receipt": null,
+        "reason": "erasure request"
+      },
+      "canonical": "{\"at\":\"2026-09-11T12:00:00Z\",\"authority\":{\"kind\":\"person\",\"value\":\"willem\"},\"digest\":\"sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\",\"reason\":\"erasure request\",\"receipt\":null}"
+    }
+  ],
+  "tombstone_refusals": [
+    {
+      "id": "missing-reason",
+      "tombstone": {
+        "digest": "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "at": "2026-09-11T12:00:00Z",
+        "authority": {
+          "kind": "person",
+          "value": "willem"
+        },
+        "receipt": null
+      },
+      "reason": "wrong keys"
+    },
+    {
+      "id": "bad-at",
+      "tombstone": {
+        "digest": "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "at": "2026-09-11",
+        "authority": {
+          "kind": "person",
+          "value": "willem"
+        },
+        "receipt": null,
+        "reason": "erasure request"
+      },
+      "reason": "RFC 3339 UTC"
+    },
+    {
+      "id": "reason-not-string",
+      "tombstone": {
+        "digest": "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "at": "2026-09-11T12:00:00Z",
+        "authority": {
+          "kind": "person",
+          "value": "willem"
+        },
+        "receipt": null,
+        "reason": null
+      },
+      "reason": "not a string"
+    }
+  ]
+}

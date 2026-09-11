@@ -1,11 +1,11 @@
 # Strongroom in a vacuum: the store standard and its core
 
-Status: proposed 2026-09-11, awaiting Willem's go. Nothing built.
+Status: executing; Willem's go 2026-09-11. Phase 1 built 2026-09-11
+(issue #434): the package, the spec's formats with their vectors,
+and the Python formats; see the decision record.
 Scoped by Willem the same day: strongroom alone, no change to
-toolroom, footman, or the workshop. This note's home is
-`packages/strongroom/notes/`; it waits in the root `notes/` only
-because `fm new.package` refuses to render into a directory that
-already exists, and moves in phase 1's change. This plan executes steps 0, 2
+toolroom, footman, or the workshop. This note lives in
+`packages/strongroom/notes/`, beside the package it plans. This plan executes steps 0, 2
 and 3 of the content-addressed store design note
 (`livery-planning/docs/20260828-content-addressed-store.md`, the
 "store note" below): the spec with its vectors, the core, and the
@@ -422,6 +422,20 @@ Acceptance:
 - 2026-09-11, Willem: the spec lives at `packages/strongroom/spec/`.
 - 2026-09-11, Willem: Windows is designed in and not gated; the plan
   names the deferral where it applies.
+- 2026-09-11, phase 1 built (issue #434). Choices made at the cut,
+  each the agent's and open to reversal while nothing persists: a
+  tree's JSON is `{"entries": [...]}` with no format tag, because
+  the referrer names the format; a subject is `{"kind", "value"}`
+  with kinds person, call, receipt and code, and a receipt or code
+  value must parse as a digest; an instant is RFC 3339 in UTC with
+  the `Z` designator and seconds required, so one instant has one
+  spelling; the canonical JSON profile refuses every float and any
+  integer past 2^53; the version's producer, the record's writer
+  and the tombstone's authority share the subject shape. The
+  template's pyproject omits `dependencies`, so the package spells
+  `dependencies = []` for the contract test to pin. The total-path
+  budget is stated in the spec and enforced in phase 2, where a
+  whole tree is first published.
 - 2026-09-11, Willem: the materialiser's whole strategy ladder is
   implemented and tested in this plan, not the copy rung alone. The
   agent's reading of "implement and test the whole rung"; correct it

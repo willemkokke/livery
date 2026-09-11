@@ -1,0 +1,111 @@
+{
+  "cases": [
+    {
+      "id": "literals",
+      "input": {
+        "b": true,
+        "a": null,
+        "c": false
+      },
+      "canonical": "{\"a\":null,\"b\":true,\"c\":false}"
+    },
+    {
+      "id": "integers",
+      "input": [
+        0,
+        -1,
+        9007199254740992,
+        -9007199254740992
+      ],
+      "canonical": "[0,-1,9007199254740992,-9007199254740992]"
+    },
+    {
+      "id": "rfc8785-string",
+      "input": "\u20ac$\u000f\nA'B\"\\\\\"/",
+      "canonical": "\"\u20ac$\\u000f\\nA'B\\\"\\\\\\\\\\\"/\""
+    },
+    {
+      "id": "short-escapes",
+      "input": "\b\t\n\f\r\"\\",
+      "canonical": "\"\\b\\t\\n\\f\\r\\\"\\\\\""
+    },
+    {
+      "id": "control-chars",
+      "input": "\u0000\u0001\u001f\u007f",
+      "canonical": "\"\\u0000\\u0001\\u001f\u007f\""
+    },
+    {
+      "id": "key-order-utf16",
+      "input": {
+        "\uff00": 1,
+        "\ud83d\ude00": 2,
+        "\u20ac": 3,
+        "a": 4
+      },
+      "canonical": "{\"a\":4,\"\u20ac\":3,\"\ud83d\ude00\":2,\"\uff00\":1}"
+    },
+    {
+      "id": "nested",
+      "input": {
+        "z": [
+          {
+            "y": {},
+            "x": []
+          }
+        ],
+        "a": ""
+      },
+      "canonical": "{\"a\":\"\",\"z\":[{\"x\":[],\"y\":{}}]}"
+    },
+    {
+      "id": "unicode-literal",
+      "input": "\u00f6\u20ac\ud83d\ude00\u2028\u2029",
+      "canonical": "\"\u00f6\u20ac\ud83d\ude00\u2028\u2029\""
+    },
+    {
+      "id": "empty-object",
+      "input": {},
+      "canonical": "{}"
+    },
+    {
+      "id": "empty-array",
+      "input": [],
+      "canonical": "[]"
+    },
+    {
+      "id": "solidus-literal",
+      "input": "a/b",
+      "canonical": "\"a/b\""
+    }
+  ],
+  "refusals": [
+    {
+      "id": "float",
+      "input": 1.5,
+      "reason": "no canonical form"
+    },
+    {
+      "id": "whole-float",
+      "input": 4.0,
+      "reason": "no canonical form"
+    },
+    {
+      "id": "float-in-array",
+      "input": [
+        1,
+        2.5
+      ],
+      "reason": "no canonical form"
+    },
+    {
+      "id": "integer-past-2-53",
+      "input": 9007199254740993,
+      "reason": "past 2^53"
+    },
+    {
+      "id": "negative-past-2-53",
+      "input": -9007199254740993,
+      "reason": "past 2^53"
+    }
+  ]
+}

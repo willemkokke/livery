@@ -28,3 +28,6 @@ packages:
 - dir: footman-compat
   name: footman
   dev: footman
+- dir: strongroom
+  name: livery-strongroom
+  dev: livery-strongroom
