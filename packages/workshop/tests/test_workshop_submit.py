@@ -452,8 +452,75 @@ def test_prepare_validates_branch_and_title(rig: tuple[FakeForge, SubmitGit]) ->
         prepare(git)
 
 
-def test_an_ambiguous_title_default_refuses_on_first_open(
+def test_ci_status_reads_the_heads_runs_and_exits_by_state(
+    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop._ci_tasks import runs_status_flow
+    from livery.workshop._verdict import EXIT_CI_FAILED, EXIT_PENDING, EXIT_TIMEOUT
+
+    fake, git = rig
+    repo = _repo(fake)
+    sha = git.head_sha()
+    # No run yet is pending, and a wait that runs out says so and exits 14.
+    assert runs_status_flow(repo, git) == EXIT_PENDING
+    assert "no runs yet for" in capsys.readouterr().out
+    assert runs_status_flow(repo, git, wait=True, interval=0, timeout=0) == EXIT_TIMEOUT
+    assert "still pending after 0s" in capsys.readouterr().out
+    # A queued run is pending; settled red is 13; settled green is 0.
+    fake.push(OWNER, NAME, git.current_branch(), outcome="failure", sha=sha)
+    assert runs_status_flow(repo, git) == EXIT_PENDING
+    fake.settle(OWNER, NAME, sha)
+    assert runs_status_flow(repo, git) == EXIT_CI_FAILED
+    out = capsys.readouterr().out
+    assert "ci.yml" in out and "failure" in out and "red: 1 run(s)" in out
+    # A new head whose run settles green is 0; a skipped run is not red.
+    _git(git.root, "commit", "--allow-empty", "-m", "feat: a green head")
+    head = git.head_sha()
+    fake.push(OWNER, NAME, git.current_branch(), outcome="success", sha=head)
+    fake.push(OWNER, NAME, git.current_branch(), outcome="skipped", sha=head)
+    fake.settle(OWNER, NAME, head)
+    assert runs_status_flow(repo, git) == 0
+    assert "green: 2 run(s)" in capsys.readouterr().out
+
+
+def test_a_pull_request_the_forge_never_runs_classifies_as_conflicts_at_once(
     rig: tuple[FakeForge, SubmitGit],
+) -> None:
+    from livery.workshop._verdict import EXIT_CONFLICTS, classify
+
+    fake, git = rig
+    repo = _repo(fake)
+    branch = git.current_branch()
+    # A skipped run is no verdict, so the combined status reads none:
+    # the shape of a pull request the forge never runs. Without a
+    # conflict that is in flight, as before.
+    _git(git.root, "push", "-u", "origin", branch)
+    fake.push(OWNER, NAME, branch, outcome="skipped", sha=git.head_sha())
+    fake.settle(OWNER, NAME, git.head_sha())
+    repo.pr.open(branch, "main", "feat: the first change")
+    verdict = classify(repo, branch, git)
+    assert verdict.state == "in-flight" and "CI none" in verdict.detail
+    # Main moves on the same file the branch changed: the forge cannot
+    # build the merge ref and never starts a run, and the probe decides
+    # within one read instead of a timeout.
+    _git(git.root, "switch", "main")
+    (git.root / "work.txt").write_text("main moved\n")
+    _git(git.root, "add", "work.txt")
+    _git(git.root, "commit", "-m", "feat: main moves")
+    _git(git.root, "push", "origin", "main")
+    _git(git.root, "switch", branch)
+    (git.root / "work.txt").write_text("branch moved\n")
+    _git(git.root, "commit", "-am", "feat: the branch moves")
+    _git(git.root, "push", "origin", branch)
+    fake.push(OWNER, NAME, branch, outcome="skipped", sha=git.head_sha())
+    fake.settle(OWNER, NAME, git.head_sha())
+    verdict = classify(repo, branch, git)
+    assert verdict.state == "conflicts" and verdict.exit_code == EXIT_CONFLICTS
+    assert "the forge runs nothing for it" in verdict.detail
+
+
+def test_an_ambiguous_title_default_refuses_on_first_open(
+    rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Two commits ahead: no commit subject may name the new PR. The
     # refusal lists the subjects; --title opens; and once the PR
@@ -462,10 +529,18 @@ def test_an_ambiguous_title_default_refuses_on_first_open(
     fake, git = rig
     (git.root / "work.txt").write_text("second\n")
     _git(git.root, "commit", "-am", "feat: the second commit")
+    # The refusal comes before the gate: a flag a person could have
+    # passed never costs minutes of gate first.
+    gates: list[bool] = []
+    monkeypatch.setattr(
+        "livery.workshop._submit._gate",
+        lambda fix=False, *, root, base="main": gates.append(True),
+    )
     with pytest.raises(_FAILURES) as caught:
-        _submit(fake, git, armed=False, follow_to_verdict=False)
+        _submit(fake, git, armed=False, follow_to_verdict=False, gate=True)
     assert "2 commits ahead" in str(caught.value)
     assert "the first change" in str(caught.value)
+    assert gates == []
     # The refusal happens before the push: a branch left on the remote
     # would make the next submit of a rebuilt branch non-fast-forward.
     heads = subprocess.run(
@@ -840,8 +915,15 @@ def test_a_context_rename_refuses_teaching_fix_armed(
         "livery.workshop._layers.workspace_root", lambda start=None: git.root
     )
     monkeypatch.setattr("livery.workshop._forge_lane.this_forge", lambda _root: fake)
+    # The title is decided before anything else, so the two-commit
+    # branch names its intent; the rename refusal comes next.
     with pytest.raises(_FAILURES) as caught:
-        _submit(fake, git, follow_to_verdict=False)
+        _submit(
+            fake,
+            git,
+            follow_to_verdict=False,
+            title="feat: rename the required context",
+        )
     message = str(caught.value)
     assert "renames the required CI context" in message
     assert "submit --fix --armed" in message

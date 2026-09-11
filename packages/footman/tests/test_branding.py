@@ -577,15 +577,23 @@ def test_the_user_rung_overlays_the_builtins(tmp_path, monkeypatch):
     assert "mine" in out and "self" in out
 
 
-def test_an_uninstalled_builtin_refuses_naming_the_brand(tmp_path, monkeypatch):
+def test_an_uninstalled_builtin_warns_naming_the_brand_and_carries_on(
+    tmp_path, monkeypatch
+):
+    """The brand's family is installed by a sync; a refusal would refuse
+    the sync too. So the family that did not mount is a warning with the
+    remedy, and the families that did mount still answer."""
     empty = tmp_path / "empty"
     empty.mkdir()
     monkeypatch.chdir(empty)
-    result = Runner(App(name="acme", prog="acme", builtin=["acme.nope"])).invoke(
-        "--list"
-    )
-    assert result.exit_code == EX_USAGE
+    monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
+    acme = Runner(App(name="acme", prog="acme", builtin=["acme.nope", "footman.self"]))
+    result = acme.invoke("--list")
+    assert result.ok, result.stderr
     assert "acme declares built-in tasks from 'acme.nope'" in result.stderr
+    assert "carrying on without them" in result.stderr
+    assert "`acme sync`" in result.stderr
+    assert "self" in result.stdout
 
 
 def test_the_plugins_report_shows_built_in(tmp_path, monkeypatch):

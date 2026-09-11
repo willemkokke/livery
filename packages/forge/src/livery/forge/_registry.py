@@ -15,6 +15,7 @@ import base64
 import json
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from html.parser import HTMLParser
 
 from livery.forge._errors import ForgeError
@@ -145,3 +146,65 @@ class SimpleRegistry:
                 f" JSON nor PEP 503 HTML for {canonical}"
             ) from None
         return tuple(str(v) for v in payload.get("versions") or [])
+
+
+def purge_packages(
+    base: str,
+    owner: str,
+    *,
+    token: str,
+    kind: str = "pypi",
+    api: Callable[[str, str, str], tuple[int, object]] | None = None,
+) -> list[str]:
+    """Delete every *kind* package version *owner* holds on the Gitea at *base*.
+
+    The workshop's CI loop publishes rehearsal releases into its dev
+    forge's registry, and a rebirth of the loop must publish the same
+    versions again, which the registry refuses while they exist.
+    Returns ``name==version`` for each deleted release. *api* is the
+    call seam, ``(method, path, token)`` to ``(status, body)``, with
+    *path* below ``/api/v1``; the default speaks to *base*.
+    """
+    call = api or (lambda method, path, token: _api_json(base, method, path, token))
+    purged: list[str] = []
+    while True:
+        status, body = call("GET", f"/packages/{owner}?type={kind}&limit=50", token)
+        if status == 404 or not isinstance(body, list) or not body:
+            return purged
+        for item in body:
+            if not isinstance(item, dict):
+                continue
+            name, version = str(item.get("name", "")), str(item.get("version", ""))
+            if not name or not version:
+                continue
+            gone, _ = call(
+                "DELETE", f"/packages/{owner}/{kind}/{name}/{version}", token
+            )
+            if gone not in (204, 404):
+                raise SystemExit(
+                    f"the registry refused to delete {name}=={version}: HTTP {gone}"
+                )
+            purged.append(f"{name}=={version}")
+        if len(body) < 50:
+            return purged
+
+
+def _api_json(base: str, method: str, path: str, token: str) -> tuple[int, object]:
+    """One Gitea API call with a JSON answer; the status and the decoded body."""
+    import json
+    import urllib.error
+    import urllib.request
+
+    request = urllib.request.Request(
+        f"{base.rstrip('/')}/api/v1{path}",
+        method=method,
+        headers={"Authorization": f"token {token}", "Accept": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            raw = response.read()
+            return int(response.status), (json.loads(raw) if raw else None)
+    except urllib.error.HTTPError as exc:
+        return exc.code, None
+    except urllib.error.URLError:
+        return 0, None

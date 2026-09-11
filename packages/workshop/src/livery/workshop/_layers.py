@@ -120,8 +120,10 @@ def mount_layers(start: Path | None = None) -> tuple[str, ...]:
                 raise RuntimeError(message) from error
             # Importable, but its plugin offers no tasks (or none are
             # advertised yet): a young layer legitimately ships only
-            # content, and content needs no mount.
-            print(f"  note: layer {layer} contributes content only (no tasks)")
+            # content, and content needs no mount. The refusal rides
+            # the note, since a layer with tasks that fails to mount
+            # reads the same way otherwise.
+            print(f"  note: layer {layer} contributes content only (no tasks): {error}")
         else:
             mounted.append(layer)
     return tuple(mounted)

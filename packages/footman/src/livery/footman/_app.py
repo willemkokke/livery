@@ -319,9 +319,12 @@ def _base_tree(names: tuple[str, ...], json_mode: bool) -> registry.Group | int:
     a project that wants the same set mounts it the ordinary way.
 
     Built only when discovery found no project task files. A name that does
-    not mount is a refusal naming *whoever declared it* — the brand for its
-    own, the user's config for theirs, since that is whose install or
-    spelling is what needs fixing — never a crash."""
+    not mount is a warning naming *whoever declared it*, and the base
+    carries on with what mounted: the brand's own families are installed
+    by the workspace's sync, and refusing here would refuse the sync that
+    installs them; a discovered built-in is a record footman can rebuild.
+    The one refusal left is the user's config naming a plugin that does
+    not mount, since that is their spelling or install to fix."""
     from livery.footman import compose
 
     declared_by_user = set(_config.user_builtin())
@@ -354,11 +357,17 @@ def _base_tree(names: tuple[str, ...], json_mode: bool) -> registry.Group | int:
                         f"is installed"
                     )
                     continue
-                return _refuse(
-                    json_mode,
+                # The brand's own family, not installed in this venv yet:
+                # a checkout whose source declares a family its venv has
+                # not synced. The verbs that mounted still run, the sync
+                # among them, so the remedy stays reachable.
+                _error(
                     f"{_brand.name} declares built-in tasks from {name!r}, "
-                    f"which did not mount: {exc}",
+                    f"which did not mount: {exc} — carrying on without them; "
+                    f"install the package that provides it (a workspace's "
+                    f"`{_brand.prog} sync` does)"
                 )
+                continue
     # A built-in was defined by no tasks file, so it must carry no folder —
     # and the stamp lives on the function, which is the same object every
     # time it is mounted. Without this, an earlier in-process invocation that

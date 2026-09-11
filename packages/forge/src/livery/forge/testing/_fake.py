@@ -367,6 +367,18 @@ class FakeForge:
         state = self._require_repo(owner, name)
         state.tags[tag] = state.branches[state.default_branch]
 
+    def set_outcome(self, owner: str, name: str, sha: str, outcome: Outcome) -> None:
+        """Change what CI will do with every run for *sha* that has not settled.
+
+        A re-run reaches the outcome set here when it settles, so a
+        rig can make the second attempt of a red run pass, as a
+        flaky runner would.
+        """
+        state = self._require_repo(owner, name)
+        for run_state in state.runs.values():
+            if run_state.head_sha == sha and run_state.status != "completed":
+                run_state.outcome = outcome
+
     def settle(self, owner: str, name: str, sha: str) -> None:
         """Simulate CI settling: every run for *sha* reaches its outcome.
 

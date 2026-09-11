@@ -4,7 +4,9 @@
 exits that state's code (0 while nothing is wrong); ``--watch``
 follows instead of reading once. The ``ci`` group acts on the head
 commit's runs: ``ci.rerun`` re-runs the failed jobs, ``ci.cancel``
-cancels what is still moving (the relief for a wedged queue), and
+cancels what is still moving (the relief for a wedged queue),
+``ci.status`` says where the head commit's runs stand and exits that
+state's code, so a script can wait on main after a merge, and
 ``ci.logs`` prints the job logs, the one read that stays here so
 logs reach an agent through fm. ``ci.run`` runs one job of a point
 (livery.workshop._points), the one verb the emitted shells call;
@@ -25,7 +27,13 @@ from livery.forge import Capability, Forge, ForgeError, Job, Repository, Run
 from livery.workshop._contract import load_contract
 from livery.workshop._git_ops import GitOps
 from livery.workshop._layers import workspace_root
-from livery.workshop._verdict import classify, follow
+from livery.workshop._verdict import (
+    EXIT_CI_FAILED,
+    EXIT_PENDING,
+    EXIT_TIMEOUT,
+    classify,
+    follow,
+)
 
 ci = group("ci", help="The head commit's CI runs")
 
@@ -178,6 +186,79 @@ def ci_cancel(
     """Cancel the head commit's unfinished runs."""
     repo, git = _resolved()
     cancel_flow(repo, git, force=force)
+
+
+#: The run conclusions that are not red.
+_GREEN = ("success", "skipped", "neutral")
+
+
+def runs_state(runs: tuple[Run, ...]) -> tuple[str, int]:
+    """The one word for *runs* together and its exit: green 0, pending 18, red 13.
+
+    No run at all is pending: the forge may not have registered the
+    push yet, and a script waiting on it keeps waiting. A run still
+    moving is pending whatever the others concluded. Red is any run
+    that completed with a conclusion that is not green.
+    """
+    if not runs or any(run.status != "completed" for run in runs):
+        return "pending", EXIT_PENDING
+    if any(run.conclusion not in _GREEN for run in runs):
+        return "red", EXIT_CI_FAILED
+    return "green", 0
+
+
+def runs_status_flow(
+    repo: Repository,
+    git: GitOps,
+    *,
+    wait: bool = False,
+    interval: float = 15,
+    timeout: float = 1800,
+) -> int:
+    """Print the head commit's runs and their state; return that state's exit.
+
+    One line per run, workflow, status or conclusion, and page, then
+    the word for all of them. With *wait* the read repeats every
+    *interval* seconds while the state is pending, until *timeout*,
+    which exits 14.
+    """
+    import time
+
+    sha = _head_sha(repo, git)
+    deadline = time.monotonic() + timeout
+    while True:
+        runs = repo.checks.runs(head_sha=sha)
+        for run in runs:
+            print(f"  {run.workflow:14} {run.conclusion or run.status:12} {run.url}")
+        word, code = runs_state(runs)
+        if not runs:
+            print(f"  no runs yet for {sha[:10]}")
+        if code != EXIT_PENDING or not wait:
+            print(f"  {word}: {len(runs)} run(s) for {sha[:10]}")
+            return code
+        if time.monotonic() >= deadline:
+            print(f"  still pending after {timeout:.0f}s")
+            return EXIT_TIMEOUT
+        time.sleep(interval)
+
+
+@ci.task(name="status")
+def ci_status(
+    wait: Annotated[bool, doc("poll until the runs are no longer pending")] = False,
+    interval: Annotated[int, doc("poll seconds under --wait")] = 15,
+    timeout: Annotated[int, doc("deadline seconds under --wait")] = 1800,
+) -> None:
+    """Say where the head commit's runs stand; exit that state's code.
+
+    Green exits 0, red 13, pending 18, and a wait that runs out 14,
+    so a script can ask whether main's push has finished after a
+    merge. The head is the pull request's when the branch has one,
+    else the local HEAD, so on main after a pull it is the merge.
+    """
+    repo, git = _resolved()
+    code = runs_status_flow(repo, git, wait=wait, interval=interval, timeout=timeout)
+    if code:
+        raise SystemExit(code)
 
 
 def logs_flow(

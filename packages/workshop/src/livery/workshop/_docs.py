@@ -1471,7 +1471,25 @@ def docs_build(
 
     written = write_llms_files(root)
     print(f"  agent files: {', '.join(written)}")
+    require_site(root)
     print(f"  site built at {root / 'site'}")
+
+
+def require_site(root: Path) -> None:
+    """Refuse when the build left no site to publish.
+
+    The site generator has exited 0 in a fraction of its usual time
+    with nothing on disk, and the publish that followed was the one
+    to fail; the build is the one that knows, so it says so.
+    """
+    import livery.footman as footman
+
+    index = root / "site" / "index.html"
+    if not index.is_file():
+        fail(
+            f"the site build exited 0 but left no {index}: nothing to publish;"
+            f" run `{footman.prog()} docs.build` again"
+        )
 
 
 @docs_group.task(name="publish")
