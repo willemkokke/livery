@@ -56,6 +56,9 @@ RUNS = Keyed("run", ("run", "leg"), schema=SCHEMA, stale_after=timedelta(hours=6
 #: The one file a leg puts on its per-run ref.
 ROW_FILE = "row.json"
 
+#: The slowest tests a leg's row names, by their call phase.
+SLOWEST = 20
+
 #: The union's per-package percentages, left by the gate job's
 #: coverage entry for the collect entry to fold into the run's file.
 COVERAGE_ROW = "fm-coverage.json"
@@ -127,6 +130,7 @@ def leg_row(trace: Path, *, job: str) -> tuple[dict[str, Any] | None, str]:
     packages: dict[str, dict[str, float]] = defaultdict(
         lambda: {"tests_ms": 0.0, "tests": 0}
     )
+    calls: list[tuple[float, str]] = []
     begins: list[float] = []
     ends: list[float] = []
     for event in events:
@@ -149,15 +153,22 @@ def leg_row(trace: Path, *, job: str) -> tuple[dict[str, Any] | None, str]:
                 )
                 if cat == "test.call":
                     packages[package]["tests"] += 1
+                    calls.append((_ms(event), name))
     if not tasks:
         return None, f"the trace at {trace} records no task: nothing to row"
     total = round((max(ends) - min(begins)) / 1000.0, 1) if begins else 0.0
+    # The slowest tests by their call phase, for the speed judge's
+    # warning to name; the per-package sums count every phase.
+    calls.sort(reverse=True)
     return {
         "job": job,
         "total_ms": total,
         "tasks": dict(sorted(tasks.items())),
         "waits_ms": {name: round(ms, 1) for name, ms in sorted(waits.items())},
         "packages": dict(sorted(packages.items())),
+        "slowest": [
+            {"test": name, "s": round(ms / 1000.0, 2)} for ms, name in calls[:SLOWEST]
+        ],
     }, ""
 
 
@@ -300,6 +311,7 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
             "tasks": half.get("tasks", {}),
             "waits_ms": half.get("waits_ms", {}),
             "packages": half.get("packages", {}),
+            "slowest": half.get("slowest", []),
             "scope": half.get("scope", {"scope": "unknown", "packages": []}),
         }
         if job is None:

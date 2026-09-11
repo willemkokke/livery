@@ -116,6 +116,10 @@ BUILTIN: tuple[Entry, ...] = (
     # the run's row beside the timings.
     Entry("gate", "gate", "coverage.union"),
     Entry("gate", "gate", "ci.metrics.collect"),
+    # The speed judge reads the run's row the collect just put: a
+    # suite over its mark for the second run in a row is red here,
+    # before the verdict, so the record never names a slow tree green.
+    Entry("gate", "gate", "speed.judge"),
     Entry("gate", "gate", "ci.verdict", ("--needs=check,docs",)),
     # After a green verdict only: a red verdict fails the job before
     # this entry, so the record never names a tree a run proved red.

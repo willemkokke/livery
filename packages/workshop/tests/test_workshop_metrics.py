@@ -172,6 +172,27 @@ def test_the_leg_row_reads_tasks_waits_and_packages(tmp_path: Path) -> None:
 # --- the collect: refusals first ----------------------------------------------
 
 
+def test_the_leg_row_names_the_slowest_tests_by_their_call_phase(
+    tmp_path: Path,
+) -> None:
+    trace = _trace(
+        tmp_path / "trace.json",
+        tasks={"check": 100.0},
+        tests={
+            "packages/forge/tests/t.py::quick": 100.0,
+            "packages/forge/tests/t.py::slow": 4000.0,
+            "tests/test_root.py::mid": 900.0,
+        },
+    )
+    row, why = _metrics.leg_row(trace, job="check (ubuntu-latest, 3.14)")
+    assert why == "" and row is not None
+    # The packages' tests, as the sums are; the root suite is no package.
+    assert row["slowest"] == [
+        {"test": "packages/forge/tests/t.py::slow", "s": 4.0},
+        {"test": "packages/forge/tests/t.py::quick", "s": 0.1},
+    ]
+
+
 def test_the_per_run_family_spells_the_janitors_prefix_and_safe_refs() -> None:
     assert _metrics.RUNS.prefix == _state.RUN_PREFIX
     run = _state.RunContext("github", "7", "push", "refs/heads/main")

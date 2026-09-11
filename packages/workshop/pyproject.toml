@@ -63,6 +63,7 @@ livery-workshop-isolation = "livery.workshop._pytest_isolation"
 # A test declares the CI points it runs at; the point in the job
 # runner's environment selects.
 livery-workshop-points = "livery.workshop._pytest_points"
+livery-workshop-speed = "livery.workshop._pytest_speed"
 
 [project.urls]
 Repository = "https://github.com/willemkokke/livery"

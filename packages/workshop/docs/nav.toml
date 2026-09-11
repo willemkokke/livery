@@ -89,6 +89,11 @@ nav = [
             { "default" = "_generated/tasks/shell/default.md" },
             { "prepare" = "_generated/tasks/shell/prepare.md" },
         ] },
+        { "speed" = [
+            { "Overview" = "_generated/tasks/speed/index.md" },
+            { "accept" = "_generated/tasks/speed/accept.md" },
+            { "judge" = "_generated/tasks/speed/judge.md" },
+        ] },
         { "store" = [
             { "Overview" = "_generated/tasks/store/index.md" },
             { "ls" = "_generated/tasks/store/ls.md" },

@@ -215,6 +215,12 @@ change.
    is measured (the same code took 274 s to 431 s on the macOS 3.14
    leg in one day). `fm test` prints the package's summed time beside
    its mark, and `fm ci.timings` gains the marks as rows and movers.
+   Landed 2026-09-11, #437, with the margins as constants: `_speed.py`
+   holds the marks (`speed/marks`, window 400), `speed.judge` runs in
+   the gate job after the collect and before the verdict, the timing
+   rows name each leg's twenty slowest tests for the warning, the
+   speed plugin sums each package's phases for `fm test`, and
+   `fm speed.accept` takes `--leg` (the ubuntu leg when absent).
 
 7. **The coverage store keyed by main** (#417). One record per check
    leg, `coverage/main/<leg>`, one row per unit with its closure
@@ -397,3 +403,15 @@ a day, before 6 or after it.
   tests anyway; comparing the subset's length with the packages'
   would have run the full gate for a widened subset, and inside a
   test that is pytest spawning pytest.
+- 2026-09-11: slice 6 landed (#437), on Willem's ruling to build it now
+  with the margins as constants (fifteen per cent and twenty seconds
+  over the mark warns, five per cent under it ratchets, five green
+  runs behind a mark). Instead of asking Willem, I decided two
+  things: the ratchet moves on the median of the last five green runs
+  beating the mark, not on one run beating it, since one fast run on
+  a quiet runner would set a mark the next ordinary run is over; and
+  the "tests that grew most" are read from the rows' own top twenty,
+  so a test outside every recent row's top twenty is never named as
+  grown. A red run between two runs over the mark does not reset the
+  pair: the streak counts green runs. The root `tests/` suite is no
+  package in the timing rows and is not judged.

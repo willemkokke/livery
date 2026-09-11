@@ -15,6 +15,7 @@ from livery.workshop import (
     _diagnostics,
     _gate_record,
     _metrics,
+    _speed,
     _verified,
 )
 from livery.workshop._state import Keyed, Series
@@ -25,6 +26,7 @@ DECLARED: tuple[Series | Keyed, ...] = (
     _metrics.RUNS,
     _verified.SERIES,
     _coverage_marks.SERIES,
+    _speed.SERIES,
     _coverage_store.RECORD,
     _gate_record.SERIES,
     _diagnostics.SERIES,

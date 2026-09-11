@@ -166,6 +166,22 @@ committed floor as the suite grows; lower it only deliberately, in a
 reviewed change or an accepted row. The release legs publish a
 further, informational union that includes the live-only code.
 
+## Test speed
+
+The gate job judges each check leg's summed test time per package
+against a mark on the state store. The mark is the median of the
+leg's last five green runs for the package, recorded once five are
+seen; it moves down when that median beats it by more than five per
+cent, so a suite cannot regress slowly. A run over the mark by more
+than fifteen per cent and twenty seconds warns in the gate job's
+output, naming the leg's slowest tests and the ones that grew most
+against their own medians; the second run over in a row on the
+ubuntu leg is red, and the other legs warn only. A new heavy test is
+a cost someone chose: `fm speed.accept <package> <seconds>
+--reason=<why>` raises the mark, on the ubuntu leg unless `--leg`
+names another. `fm test` prints each package's summed time beside
+its mark, and `fm ci.timings` shows the marks beside the timings.
+
 ## The state store
 
 Every row the workshop keeps across runs is a row of the state
@@ -174,9 +190,9 @@ store: JSON files on git refs, `refs/workshop/*` on the remote and
 clone or fetch never downloads the remote namespace, no refspec
 names the local one, and every row carries the schema the store
 stamped and the time it wrote it. The remote series are written by
-CI only, `fm coverage.accept` the one exception; a local run reads
-them and writes only the local ones, which the checkout's worktrees
-share and a fresh clone starts without.
+CI only, `fm coverage.accept` and `fm speed.accept` the exceptions;
+a local run reads them and writes only the local ones, which the
+checkout's worktrees share and a fresh clone starts without.
 
 | series | a row is | window | writer |
 | --- | --- | --- | --- |
@@ -185,6 +201,7 @@ share and a fresh clone starts without.
 | `verified` | a tree a green gate proved, with its scope and the base it composed on | 200 | the gate job |
 | `coverage/<base>/<leg>` | a record on one leg, main's or a branch's: one row per suite, the arcs its last run judged at the closure each was measured at, replaced in place; a branch's goes with the branch | none | main's gate job at a merge; a branch's own pull request runs |
 | `coverage/marks` | a package's coverage mark and who set it | 400 | the gate job, `fm coverage.accept` |
+| `speed/marks` | a package's test time mark on one check leg and who set it | 400 | the gate job, `fm speed.accept` |
 | `gate-record` (local) | a tree this checkout's `fm check` proved green | 200, 7 days | a green local gate |
 | `diagnostics` (local) | the follow classifier's inputs for an unmerged ending | 20 | every unmerged follow |
 
