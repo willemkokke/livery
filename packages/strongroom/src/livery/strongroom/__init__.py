@@ -21,7 +21,11 @@ with the golden vectors the tests run.
 objects landed by digest and verified, refs moved by compare-and-swap
 under a per-ref lock with a record beside each, and a mutation class
 per namespace. Its refusals are the classes under
-[livery.strongroom.StoreError][].
+[livery.strongroom.StoreError][]. A store opened with sources
+([livery.strongroom.FolderSource][], [livery.strongroom.HttpSource][],
+[livery.strongroom.OriginHint][]) fetches what it lacks through them,
+verified and in order, with [livery.strongroom.Store.fetch][], and
+builds a mirror with [livery.strongroom.Store.fill][].
 """
 
 from __future__ import annotations
@@ -52,6 +56,16 @@ from livery.strongroom._errors import (
 )
 from livery.strongroom._fields import Subject, SubjectKind, check_timestamp
 from livery.strongroom._records import RefRecord, Tombstone
+from livery.strongroom._sources import (
+    FillPolicy,
+    FolderSource,
+    HttpSource,
+    OriginHint,
+    Progress,
+    Source,
+    Unreachable,
+    fetch_url,
+)
 from livery.strongroom._store import (
     LAYOUT_VERSION,
     MANIFEST_NAME,
@@ -66,6 +80,7 @@ from livery.strongroom._store import (
     ScrubReport,
     Store,
     now,
+    silent,
 )
 from livery.strongroom._tree import (
     NAME_BUDGET,
@@ -92,9 +107,12 @@ __all__ = [
     "Entry",
     "EntryKind",
     "ErasedObject",
+    "FillPolicy",
+    "FolderSource",
     "FormatError",
     "HashConstructor",
     "Hasher",
+    "HttpSource",
     "IntegrityError",
     "Landed",
     "Link",
@@ -106,10 +124,13 @@ __all__ = [
     "Namespace",
     "NotFastForward",
     "ObjectState",
+    "OriginHint",
+    "Progress",
     "RefConflict",
     "RefRecord",
     "RefTampered",
     "ScrubReport",
+    "Source",
     "Store",
     "StoreError",
     "Subject",
@@ -117,6 +138,7 @@ __all__ = [
     "Tombstone",
     "Tree",
     "UnknownNamespace",
+    "Unreachable",
     "Value",
     "Version",
     "WriteOnceRefused",
@@ -127,7 +149,9 @@ __all__ = [
     "check_timestamp",
     "digest_of",
     "digest_stream",
+    "fetch_url",
     "now",
+    "silent",
 ]
 
 __version__ = "0.0.0"

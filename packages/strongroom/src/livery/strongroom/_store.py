@@ -40,6 +40,15 @@ from livery.strongroom._errors import (
 )
 from livery.strongroom._fields import Subject, expect_int, expect_object, expect_str
 from livery.strongroom._records import RefRecord
+from livery.strongroom._sources import (
+    FolderSource,
+    HttpSource,
+    OriginHint,
+    Progress,
+    Source,
+    Unreachable,
+    fetch_url,
+)
 from livery.strongroom._tree import check_name
 from livery.strongroom._version import Version
 
@@ -72,6 +81,10 @@ _LOCK_POLL = 0.02
 def now() -> str:
     """The current instant, RFC 3339 in UTC to the second."""
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def silent(message: str) -> None:
+    """The default progress sink: report nothing."""
 
 
 def _replace(source: Path, destination: Path) -> None:
@@ -217,11 +230,16 @@ class Store:
         root: the store's directory.
         algorithm: the address space's algorithm.
         namespaces: every declared namespace by name.
+        sources: the sources consulted in order for an object the
+            local directory lacks.
+        offline: whether origin hints are never consulted.
     """
 
     root: Path
     algorithm: Algorithm
     namespaces: dict[str, Namespace]
+    sources: tuple[Source, ...]
+    offline: bool
 
     def __init__(
         self,
@@ -232,9 +250,18 @@ class Store:
         clock: Clock,
         lock_stale: float,
         lock_timeout: float,
+        sources: Iterable[Source],
+        offline: bool,
+        progress: Progress,
     ) -> None:
         self.root = root
         self.algorithm = algorithm
+        self.sources = tuple(sources)
+        self.offline = offline
+        self._progress = progress
+        for source in self.sources:
+            if isinstance(source, FolderSource):
+                self._check_folder(source)
         self.namespaces = {owned.name: owned for owned in OWNED}
         for namespace in namespaces:
             declared = self.namespaces.get(namespace.name)
@@ -247,6 +274,7 @@ class Store:
         self._clock = clock
         self._lock_stale = lock_stale
         self._lock_timeout = lock_timeout
+        self._checked_http: set[str] = set()
 
     # Creation and opening.
 
@@ -260,6 +288,9 @@ class Store:
         clock: Clock = now,
         lock_stale: float = 600.0,
         lock_timeout: float = 30.0,
+        sources: Iterable[Source] = (),
+        offline: bool = False,
+        progress: Progress = silent,
     ) -> Store:
         """Create a store at *root* and open it.
 
@@ -271,6 +302,12 @@ class Store:
             lock_stale: seconds after which a lock whose holder cannot
                 be proven alive is broken.
             lock_timeout: seconds to wait for a live lock.
+            sources: where to look for an object the store lacks, in
+                order. A folder source is checked now; an HTTP source
+                on first use.
+            offline: never consult an origin hint.
+            progress: where a fetch reports a skipped or refused
+                source; silent by default.
 
         Returns:
             The open store.
@@ -293,6 +330,9 @@ class Store:
             clock=clock,
             lock_stale=lock_stale,
             lock_timeout=lock_timeout,
+            sources=sources,
+            offline=offline,
+            progress=progress,
         )
 
     @classmethod
@@ -304,6 +344,9 @@ class Store:
         clock: Clock = now,
         lock_stale: float = 600.0,
         lock_timeout: float = 30.0,
+        sources: Iterable[Source] = (),
+        offline: bool = False,
+        progress: Progress = silent,
     ) -> Store:
         """Open the store at *root*.
 
@@ -314,6 +357,12 @@ class Store:
             lock_stale: seconds after which a lock whose holder cannot
                 be proven alive is broken.
             lock_timeout: seconds to wait for a live lock.
+            sources: where to look for an object the store lacks, in
+                order. A folder source is checked now; an HTTP source
+                on first use.
+            offline: never consult an origin hint.
+            progress: where a fetch reports a skipped or refused
+                source; silent by default.
 
         Returns:
             The store.
@@ -321,7 +370,8 @@ class Store:
         Raises:
             ManifestError: when the manifest is missing or malformed,
                 or names a layout or an algorithm this implementation
-                does not speak.
+                does not speak; or when a folder source's manifest is
+                missing or of another store.
             ValueError: when a namespace is declared twice with
                 different classes.
         """
@@ -346,6 +396,9 @@ class Store:
             clock=clock,
             lock_stale=lock_stale,
             lock_timeout=lock_timeout,
+            sources=sources,
+            offline=offline,
+            progress=progress,
         )
 
     # Objects.
@@ -558,6 +611,181 @@ class Store:
             while chunk := handle.read(_CHUNK):
                 hasher.update(chunk)
         return Digest(self.algorithm.name, hasher.hexdigest())
+
+    # Sources.
+
+    def fetch(self, digest: Digest) -> Path:
+        """A path to the object, consulting the sources when it is not here.
+
+        Sources are consulted in order. A hit is verified on arrival:
+        a copy-policy folder, an HTTP tier and an origin hint land the
+        bytes here; a reference-policy folder answers with a path into
+        the folder and lands nothing. An unreachable source is skipped
+        and reported; a source serving wrong bytes is refused and
+        reported, and the next one consulted. An origin hint is
+        consulted only for its own digest and never when offline.
+
+        Returns:
+            A read-only path: this store's object, or the folder's
+            under a reference policy.
+
+        Raises:
+            MissingObject: when no source has it. The message names
+                the digest, and when an origin hint was passed over
+                because the store is offline, the URL that would have
+                satisfied it.
+            ErasedObject: when the object was erased here.
+            ManifestError: when an HTTP source's manifest is of
+                another store.
+        """
+        state = self.state(digest)
+        if state == "erased":
+            raise ErasedObject(f"{digest} was erased here; a tombstone stands")
+        if state == "present":
+            return self.path(digest)
+        passed_over: OriginHint | None = None
+        for source in self.sources:
+            if isinstance(source, OriginHint):
+                if source.digest != digest:
+                    continue
+                if self.offline:
+                    passed_over = source
+                    continue
+            try:
+                found = self._fetch_from(source, digest)
+            except Unreachable as error:
+                self._progress(f"skipped {source.describe()}: {error}")
+                continue
+            except IntegrityError as error:
+                self._progress(f"refused {source.describe()}: {error}")
+                continue
+            if found is not None:
+                return found
+        offline = (
+            ""
+            if passed_over is None
+            else (
+                f"; the store is offline and {passed_over.url} would have satisfied it"
+            )
+        )
+        raise MissingObject(
+            f"{digest} is not in the store at {self.root} nor at any of its"
+            f" {len(self.sources)} source(s){offline}"
+        )
+
+    def fill(self, target: Path, digests: Iterable[Digest]) -> list[Landed]:
+        """Land *digests* into the folder tier at *target*.
+
+        The folder becomes a store of this store's algorithm when it is
+        not one already, and afterwards opens as a
+        [livery.strongroom.FolderSource][] that serves every filled
+        digest. Each object is fetched through this store's sources.
+
+        Args:
+            target: the folder; created when missing.
+            digests: the objects to land there.
+
+        Returns:
+            One landing per digest, in order.
+
+        Raises:
+            ManifestError: when *target* is a store of another layout
+                or algorithm.
+            MissingObject: when a digest is not obtainable.
+        """
+        if (target / MANIFEST_NAME).exists():
+            mirror = Store.open(target)
+        else:
+            mirror = Store.create(target, algorithm=self.algorithm.name)
+        if mirror.algorithm != self.algorithm:
+            raise ManifestError(
+                f"{target} is a {mirror.algorithm.name} store; this store is"
+                f" {self.algorithm.name}"
+            )
+        landed: list[Landed] = []
+        for digest in digests:
+            with self.fetch(digest).open("rb") as handle:
+                landed.append(mirror.land(handle, expected=digest))
+        return landed
+
+    def _fetch_from(self, source: Source, digest: Digest) -> Path | None:
+        if isinstance(source, FolderSource):
+            return self._fetch_from_folder(source, digest)
+        if isinstance(source, HttpSource):
+            return self._fetch_from_http(source, digest)
+        return self._fetch_from_origin(source, digest)
+
+    def _fetch_from_folder(self, source: FolderSource, digest: Digest) -> Path | None:
+        algorithm, fanout, rest = digest.path_parts
+        remote = source.path / "objects" / algorithm / fanout / rest
+        if not remote.exists():
+            return None
+        if source.fill == "copy":
+            with remote.open("rb") as handle:
+                self.land(handle, expected=digest)
+            return self.path(digest)
+        mark = self._reference_mark(digest)
+        size = remote.stat().st_size
+        try:
+            if int(mark.read_text("ascii")) == size:
+                return remote
+        except FileNotFoundError:
+            pass
+        actual = self._hash_file(remote)
+        if actual != digest:
+            raise IntegrityError(f"{remote} holds bytes named {actual}, not {digest}")
+        mark.parent.mkdir(parents=True, exist_ok=True)
+        _write_atomically(mark, str(size).encode("ascii"))
+        return remote
+
+    def _fetch_from_http(self, source: HttpSource, digest: Digest) -> Path | None:
+        if source.base_url not in self._checked_http:
+            with fetch_url(
+                source.url(MANIFEST_NAME),
+                connect_timeout=source.connect_timeout,
+                transfer_timeout=source.transfer_timeout,
+            ) as response:
+                self._check_manifest(
+                    Manifest.decode(response.read()), source.describe()
+                )
+            self._checked_http.add(source.base_url)
+        algorithm, fanout, rest = digest.path_parts
+        with fetch_url(
+            source.url(f"objects/{algorithm}/{fanout}/{rest}"),
+            connect_timeout=source.connect_timeout,
+            transfer_timeout=source.transfer_timeout,
+        ) as response:
+            self.land(response, expected=digest)
+        return self.path(digest)
+
+    def _fetch_from_origin(self, source: OriginHint, digest: Digest) -> Path:
+        with fetch_url(
+            source.url,
+            connect_timeout=source.connect_timeout,
+            transfer_timeout=source.transfer_timeout,
+        ) as response:
+            self.land(response, expected=digest)
+        return self.path(digest)
+
+    def _check_folder(self, source: FolderSource) -> None:
+        try:
+            manifest = Manifest.decode((source.path / MANIFEST_NAME).read_bytes())
+        except FileNotFoundError:
+            raise ManifestError(
+                f"{source.describe()} is not a store: no {MANIFEST_NAME}"
+            ) from None
+        self._check_manifest(manifest, source.describe())
+
+    def _check_manifest(self, manifest: Manifest, what: str) -> None:
+        if manifest != Manifest(LAYOUT_VERSION, self.algorithm.name):
+            raise ManifestError(
+                f"{what} is layout {manifest.layout}, {manifest.algorithm};"
+                f" this store is layout {LAYOUT_VERSION}, {self.algorithm.name}"
+            )
+
+    def _reference_mark(self, digest: Digest) -> Path:
+        algorithm, fanout, rest = digest.path_parts
+        return self.root / "index" / "referenced" / algorithm / fanout / rest
 
     # Refs.
 
