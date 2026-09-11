@@ -169,7 +169,7 @@ def bump_set_floors(root: Path, plans: tuple[MemberPlan, ...]) -> list[str]:
                 )
             if text != original:
                 path.write_text(text, encoding="utf-8")
-                changed.append(str(path.relative_to(root)))
+                changed.append(path.relative_to(root).as_posix())
     return changed
 
 
@@ -201,7 +201,9 @@ def rollback_prepare(root: Path, members: tuple[Package, ...]) -> None:
         )
         src = package.directory / "src"
         if src.is_dir():
-            paths.extend(str(p.relative_to(root)) for p in src.rglob("__init__.py"))
+            paths.extend(
+                p.relative_to(root).as_posix() for p in src.rglob("__init__.py")
+            )
     toolroom.git.opts(cwd=root, nofail=True, recorded=False)("checkout", "--", *paths)
     # The lock the stamp refreshed, restored alone: an untracked lock
     # in the same pathspec would refuse the whole checkout, taking

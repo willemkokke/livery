@@ -1353,7 +1353,9 @@ def _leg_env(root: Path, venv: Path) -> dict[str, str]:
         and entry != workspace_venv
         and not entry.startswith(workspace_venv + os.sep)
     ]
-    env["PATH"] = os.pathsep.join([str(venv / "bin"), *kept])
+    from livery.workshop._pythons import scripts_dir
+
+    env["PATH"] = os.pathsep.join([str(scripts_dir(venv)), *kept])
     env["VIRTUAL_ENV"] = str(venv)
     return env
 
@@ -1434,8 +1436,10 @@ def run_isolated_test(
     if not wheels:
         fail(f"{package.name}: no wheel in dist/ to validate; build first")
     with tempfile.TemporaryDirectory() as scratch:
+        from livery.workshop._pythons import venv_python
+
         venv = Path(scratch) / "venv"
-        python = venv / "bin" / "python"
+        python = venv_python(venv)
 
         def _run_install(*args: str) -> None:
             result = toolroom.uv.opts(cwd=scratch, nofail=True, recorded=False)(*args)
@@ -1521,7 +1525,7 @@ def run_isolated_test(
         if tests.is_dir():
             result = footman.run(
                 [
-                    str(venv / "bin" / "python"),
+                    str(python),
                     "-m",
                     "pytest",
                     str(tests),

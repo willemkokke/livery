@@ -2002,3 +2002,28 @@ None. Every ruling raised in this plan was closed in the review of
   discard the note"). The proposal note of 2026-09-10 was discarded
   unrecorded. The per-pull-request cost that remains, the GitHub run
   floor and the hosted macOS leg, is accepted as it stands.
+- 2026-09-11: the plan's remaining issues, #388, #392, #360, #357,
+  and #371, land in one pull request (Willem: "I don't want to wait
+  for ci 6 times"). Instead of asking Willem, I decided #388's shape:
+  the notes merge by union (a rendered `.gitattributes`, the
+  workshop's rule line beside it), so two slices' decision entries
+  both land and an integrate never stops on a note; the issue's two
+  options, entries under their phase or dated decision files, would
+  have moved where every entry is written. What the union does not
+  cover: two edits of one existing line land both lines without a
+  marker, so a merged note is read once before it ships. #392: `fm
+  ci.dispatch --point=nightly` starts the nightly and follows it to
+  its verdict, `fm ci.status --point=nightly` and `fm ci.logs
+  --point=nightly` read the newest nightly run by workflow, and the
+  loop dispatches the nightly after its release act and reads it
+  back. #360: every transport error is a `ForgeError` with no
+  status, and the watchers poll through five in a row before giving
+  up naming the last error and the pull request. #371: `fm
+  template.check` renders each task nav block in memory and refuses
+  a committed block that lags, in an instance too. #357: the pwsh
+  masking is gone with the one-verb steps; the 37 Windows failures
+  are fixed blind from the run's log (TOML strings for paths, posix
+  paths in messages, the venv's `Scripts` layout) or skipped by name
+  where the behaviour is POSIX by design, and proven on a Windows leg
+  added to the branch's runners for the proof alone; the runner
+  stays out of `[ci] runners` by the 2026-09-09 ruling.

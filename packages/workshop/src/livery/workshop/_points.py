@@ -38,6 +38,30 @@ from livery.workshop._state import LEG_VARIABLE, run_context
 #: The points, in the order a change meets them.
 POINTS = ("gate", "merge", "nightly", "release")
 
+#: The workflow file each point's shell is, as GitHub and Gitea
+#: address a dispatch and name a run: the gate and the merge point
+#: share one, the nightly and the release have their own. GitLab has
+#: one pipeline definition and names no workflow on a run.
+WORKFLOWS = {
+    "gate": "ci.yml",
+    "merge": "ci.yml",
+    "nightly": "nightly.yml",
+    "release": "release.yml",
+}
+
+#: The events that trigger each point's runs, in the forges' words.
+EVENTS = {
+    "gate": ("pull_request",),
+    "merge": ("push",),
+    "nightly": ("schedule", "workflow_dispatch"),
+    "release": ("workflow_dispatch",),
+}
+
+#: The points a person starts by hand through ``ci.dispatch``: their
+#: shells carry a dispatch entry. The release wave is dispatched by
+#: the merge point through ``workflow.release.dispatch``.
+DISPATCHABLE = ("nightly",)
+
 #: The trace the profiled gate writes, read by the leg's row.
 TRACE = "fm-profile.json"
 
@@ -159,6 +183,13 @@ def declared(root: Path) -> tuple[Entry, ...]:
 def schedule(root: Path) -> tuple[Entry, ...]:
     """Every entry, the builtin ones first, then the contract's."""
     return BUILTIN + declared(root)
+
+
+def workflow_of(point: str) -> str:
+    """The workflow file *point*'s shell is; refuses a name that is not a point."""
+    if point not in WORKFLOWS:
+        fail(f"{point!r} is not a point; the points are {', '.join(POINTS)}")
+    return WORKFLOWS[point]
 
 
 def jobs_of(root: Path, point: str) -> tuple[str, ...]:

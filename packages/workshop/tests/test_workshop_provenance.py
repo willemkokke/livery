@@ -60,6 +60,7 @@ def test_comment_hostile_types_have_no_style() -> None:
     assert comment_style(Path("LICENSE")) == ""
     assert comment_style(Path("py.typed")) == ""
     assert comment_style(Path(".gitignore")) == "#"
+    assert comment_style(Path(".gitattributes")) == "#"
     assert comment_style(Path("CODEOWNERS")) == "#"
 
 

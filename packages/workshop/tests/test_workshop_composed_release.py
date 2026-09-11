@@ -177,7 +177,7 @@ def test_a_child_renders_from_the_composed_artifact(
     (child / "workshop.toml").write_text(
         "[workspace]\n"
         'layers = ["livery.workshop", "acme.brand"]\n'
-        f'templates = "git+file://{repo}"\n'
+        f'templates = "git+{repo.as_uri()}"\n'
         "\n"
         '[forge]\nkind = "gitea"\nowner = "kid"\nurl = "https://forge.acme.example"\n'
         "\n"

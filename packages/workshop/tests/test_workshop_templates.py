@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from livery.workshop._contract import toml_string
 from livery.workshop._templates import (
     apply_packages,
     apply_project,
@@ -195,6 +196,28 @@ def test_apply_settles_and_drift_names_the_file(tmp_path: Path) -> None:
     (root / "pyproject.toml").write_text("# doctored\n")
     drift = project_drift(root)
     assert "pyproject.toml: differs from its render" in drift
+
+
+def test_template_check_refuses_a_stale_task_nav_block_in_an_instance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # An instance (no templates/ directory) passes the render check
+    # vacuously; its committed task nav is still judged.
+    from livery.footman import Failed
+    from livery.workshop import _taskref, _templates
+
+    root = tmp_path / "instance"
+    root.mkdir()
+    (root / "workshop.toml").write_text("[workspace]\n")
+    monkeypatch.setattr(_templates, "_root", lambda: root)
+    monkeypatch.setattr(_taskref, "stale_task_blocks", lambda _root: [])
+    _templates.template_check()
+    line = "packages/core/docs/nav.toml: the 'tasks' nav block lags the task tree"
+    monkeypatch.setattr(_taskref, "stale_task_blocks", lambda _root: [line])
+    with pytest.raises((SystemExit, Failed)) as caught:
+        _templates.template_check()
+    assert line in str(caught.value)
+    assert "template.apply" not in str(caught.value)
 
 
 def _render_kind(tmp_path: Path, forge_kind: str, **extra: object) -> Path:
@@ -581,6 +604,17 @@ def test_the_rendered_tasks_mount_the_profiler(tmp_path: Path) -> None:
     assert "fm-profile.json" in (rendered / ".gitignore").read_text()
 
 
+def test_the_rendered_notes_merge_by_union(tmp_path: Path) -> None:
+    # Every change appends to a plan note's decision record, so two
+    # changes in flight collide at the same tail; the rendered
+    # attributes make git take both sides' lines there instead of
+    # stopping the integrate on a conflict.
+    rendered = _render_kind(tmp_path, "github")
+    attributes = (rendered / ".gitattributes").read_text()
+    assert "notes/*.md merge=union" in attributes
+    assert "notes/**/*.md merge=union" in attributes
+
+
 def test_the_rendered_prose_spells_the_brand(tmp_path: Path) -> None:
     from livery.workshop._templates import render
 
@@ -698,7 +732,9 @@ def test_the_remote_update_arm_brands_and_reemits(
     assert "Run with ``fm <task>``" in (instance / "tasks.py").read_text()
     contract = (instance / "workshop.toml").read_text()
     lines = [
-        f'templates = "{repo}"' if line.startswith("templates = ") else line
+        f"templates = {toml_string(str(repo))}"
+        if line.startswith("templates = ")
+        else line
         for line in contract.splitlines()
     ]
     assert any(line.startswith("templates = ") for line in lines)
@@ -788,7 +824,7 @@ def _wheel_instance(tmp_path: Path, source: str) -> Path:
     (root / "workshop.toml").write_text(
         "[workspace]\n"
         'layers = ["livery.workshop"]\n'
-        f'templates = "{source}"\n'
+        f"templates = {toml_string(str(source))}\n"
         '\n[forge]\nkind = "github"\nowner = "owner"\n'
         '\n[ci]\nrunners = ["ubuntu-latest"]\nrequired-context = "gate"\n'
     )

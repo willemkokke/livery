@@ -10,6 +10,7 @@ traffic by construction argument alone.
 
 from __future__ import annotations
 
+import http.client
 import json
 import urllib.error
 import urllib.request
@@ -196,15 +197,27 @@ class JsonClient:
                 endpoint=endpoint,
                 detail=detail,
             ) from exc
-        except (urllib.error.URLError, TimeoutError) as exc:
+        except (urllib.error.URLError, OSError, http.client.HTTPException) as exc:
             # No status: the server never answered, which is a different
             # decision for the caller than any code it could have sent.
+            # urllib wraps most transport failures in URLError; a
+            # connection the server closes without a response raises
+            # http.client's own RemoteDisconnected, and a reset raises
+            # the socket's OSError, so all three families fold here.
             raise ForgeError(
                 f"server unreachable on {method} {endpoint}: {exc}",
                 method=method,
                 endpoint=endpoint,
             ) from exc
-        body: bytes = response.read()
+        try:
+            body: bytes = response.read()
+        except (OSError, http.client.HTTPException) as exc:
+            # The body can drop after the status line arrived.
+            raise ForgeError(
+                f"server unreachable on {method} {endpoint}: {exc}",
+                method=method,
+                endpoint=endpoint,
+            ) from exc
         return body
 
     def paginate(

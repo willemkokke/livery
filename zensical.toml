@@ -90,6 +90,10 @@ nav = [
                 { "shots" = "_generated/packages/footman/_generated/tasks/docs/shots.md" },
                 { "site" = "_generated/packages/footman/_generated/tasks/docs/site.md" },
             ] },
+            { "janitor" = [
+                { "Overview" = "_generated/packages/footman/_generated/tasks/janitor/index.md" },
+                { "default" = "_generated/packages/footman/_generated/tasks/janitor/default.md" },
+            ] },
             { "self" = [
                 { "Overview" = "_generated/packages/footman/_generated/tasks/self/index.md" },
                 { "add" = "_generated/packages/footman/_generated/tasks/self/add.md" },
@@ -237,13 +241,14 @@ nav = [
             { "ci" = [
                 { "Overview" = "_generated/packages/workshop/_generated/tasks/ci/index.md" },
                 { "cancel" = "_generated/packages/workshop/_generated/tasks/ci/cancel.md" },
+                { "dispatch" = "_generated/packages/workshop/_generated/tasks/ci/dispatch.md" },
                 { "e2e" = "_generated/packages/workshop/_generated/tasks/ci/e2e.md" },
-                { "janitor" = "_generated/packages/workshop/_generated/tasks/ci/janitor.md" },
                 { "logs" = "_generated/packages/workshop/_generated/tasks/ci/logs.md" },
                 { "metrics.collect" = "_generated/packages/workshop/_generated/tasks/ci/metrics/collect.md" },
                 { "metrics.leg" = "_generated/packages/workshop/_generated/tasks/ci/metrics/leg.md" },
                 { "rerun" = "_generated/packages/workshop/_generated/tasks/ci/rerun.md" },
                 { "run" = "_generated/packages/workshop/_generated/tasks/ci/run.md" },
+                { "status" = "_generated/packages/workshop/_generated/tasks/ci/status.md" },
                 { "timings" = "_generated/packages/workshop/_generated/tasks/ci/timings.md" },
                 { "verdict" = "_generated/packages/workshop/_generated/tasks/ci/verdict.md" },
                 { "verified.stamp" = "_generated/packages/workshop/_generated/tasks/ci/verified/stamp.md" },
@@ -308,6 +313,11 @@ nav = [
                 { "Overview" = "_generated/packages/workshop/_generated/tasks/shell/index.md" },
                 { "default" = "_generated/packages/workshop/_generated/tasks/shell/default.md" },
                 { "prepare" = "_generated/packages/workshop/_generated/tasks/shell/prepare.md" },
+            ] },
+            { "store" = [
+                { "Overview" = "_generated/packages/workshop/_generated/tasks/store/index.md" },
+                { "ls" = "_generated/packages/workshop/_generated/tasks/store/ls.md" },
+                { "show" = "_generated/packages/workshop/_generated/tasks/store/show.md" },
             ] },
             { "submit" = [
                 { "Overview" = "_generated/packages/workshop/_generated/tasks/submit/index.md" },

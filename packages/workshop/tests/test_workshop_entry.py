@@ -179,6 +179,10 @@ def _stub(path: Path, body: str) -> None:
 
 
 @pytest.mark.skipif(BASH is None, reason="no bash on this machine")
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="the stubbed curl and sh are the POSIX entry's install path",
+)
 def test_a_failed_uv_install_names_the_network(tmp_path: Path) -> None:
     root, bin_dir, env = _script_home(tmp_path)
     # No uv anywhere, and the installer unreachable.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -503,6 +504,9 @@ def test_default_kind_follows_the_shell_variable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("SHELL", "/bin/zsh")
+    if sys.platform == "win32":
+        assert default_kind() == "pwsh"  # SHELL is not consulted there
+        return
     assert default_kind() == "zsh"
     monkeypatch.setenv("SHELL", "/opt/fish")
     assert default_kind() == "bash"

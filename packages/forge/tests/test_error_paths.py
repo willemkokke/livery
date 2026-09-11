@@ -57,6 +57,40 @@ class _Redirecting:
         raise urllib.error.HTTPError(request.full_url, 302, "Found", headers, None)
 
 
+class _Dropping:
+    """An opener whose server closes the connection without a response."""
+
+    def open(self, request: urllib.request.Request, /, *, timeout: float = 30.0) -> Any:
+        import http.client
+
+        raise http.client.RemoteDisconnected(
+            "Remote end closed connection without response"
+        )
+
+
+class _DroppingMidRead:
+    """An opener whose response drops while its body is read."""
+
+    def open(self, request: urllib.request.Request, /, *, timeout: float = 30.0) -> Any:
+        class _Response:
+            def read(self) -> bytes:
+                raise ConnectionResetError(54, "Connection reset by peer")
+
+        return _Response()
+
+
+def test_a_dropped_connection_raises_with_no_status() -> None:
+    # The transport's own exceptions (http.client's, the socket's) are
+    # not urllib's URLError; each is still "the server did not answer".
+    for opener in (_Dropping(), _DroppingMidRead()):
+        client = JsonClient("https://x.invalid/api", headers={}, opener=opener)
+        with pytest.raises(ForgeError) as refusal:
+            client.request("/user")
+        assert refusal.value.status is None
+        assert "unreachable" in str(refusal.value)
+        assert "GET /user" in str(refusal.value)
+
+
 def test_an_unreachable_server_raises_with_no_status() -> None:
     client = JsonClient("https://x.invalid/api", headers={}, opener=_Unreachable())
     with pytest.raises(ForgeError) as refusal:
