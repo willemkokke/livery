@@ -8,8 +8,10 @@ vectors, and the Python formats. Phase 2 landed 2026-09-11 (issue
 offline. Phase 4 landed 2026-09-11 (issue #446, PR #447): the
 lifecycle. Phase 5 landed 2026-09-11 (issue #448, PR #449): the
 materialiser, the whole ladder, prefetch and shed. Phase 6 built
-2026-09-11 (issue #450): the harness in the package and the docs;
-the first release waits on the PyPI pending publisher (open item 3).
+2026-09-11 (issue #450, PR #451): the harness in the package and the
+docs. The first release, v0.0.0, waits on the PyPI pending publisher
+(open item 3); `fm workflow.release strongroom --local` derived
+v0.0.0 and built the wheel on 2026-09-11.
 Scoped by Willem the same day: strongroom alone, no change to
 toolroom, footman, or the workshop. This note lives in
 `packages/strongroom/notes/`, beside the package it plans. This plan executes steps 0, 2
@@ -396,17 +398,19 @@ Deliverables:
   site, with the spec files mounted, the namespace conventions, the
   platform checklist for Windows, and the stdlib-only statement.
   Written as the site, never as scratch.
-- `CHANGELOG.md` with the first entry, then the release:
-  `fm workflow.release` on the strongroom branch, the receipt tag
-  `packages/strongroom/v0.1.0`, `livery-strongroom` on PyPI.
+- The first release: `fm workflow.release strongroom` from main, the
+  train's own act. The receipt tag is `packages/strongroom/v0.0.0`:
+  a newborn's first release is v0.0.0 by the kind-hierarchy plan's
+  ruling of 2026-09-05, and the train derives it. `livery-strongroom`
+  on PyPI.
 
 Acceptance:
 
 - `uv run fm check` exits 0.
 - `uv run fm docs.build` exits 0 with the strongroom pages present.
-- `git tag --list 'packages/strongroom/v*'` lists `v0.1.0` and
+- `git tag --list 'packages/strongroom/v*'` lists `v0.0.0` and
   `git cat-file -t` on it prints `tag`.
-- `uv pip download livery-strongroom==0.1.0 --no-deps` succeeds from
+- `uv pip download livery-strongroom==0.0.0 --no-deps` succeeds from
   a clean directory.
 
 ## Temporary, replaced by
@@ -540,7 +544,10 @@ Acceptance:
   trusted publishing is registered per project name on PyPI out of
   band, so the tag waits for Willem to add the pending publisher for
   `livery-strongroom`. `livery-strongroom` was free on PyPI when
-  checked this day.
+  checked this day. The plan had said v0.1.0 for the first release;
+  the kind-hierarchy plan's ruling of 2026-09-05 makes a newborn's
+  first release v0.0.0, and the train's local act derives exactly
+  that, so the plan now says v0.0.0.
 - 2026-09-11, Willem asked whether `publish_begin` and
   `publish_commit` extend to a transaction over a group of moves.
   Answered: not today, one ref per commit; a tree is already one
