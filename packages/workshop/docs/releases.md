@@ -34,7 +34,11 @@ Where the built wheel goes depends on the forge kind the workspace
 renders:
 
 - github: trusted publishing to PyPI. No token is stored; the
-  workflow's identity is the credential.
+  workflow's identity is the credential. With nothing declared, reads
+  come from PyPI's simple index and uploads go to its upload endpoint;
+  a `[registries.python]` declaration that names only a read index
+  refuses to publish, because an upload endpoint is never defaulted
+  from a read address.
 - gitea and gitlab: `uv publish` with the `UV_PUBLISH_TOKEN` secret
   to the registry the contract's `[registries]` table names for the
   kind, else the forge's own package registry.
