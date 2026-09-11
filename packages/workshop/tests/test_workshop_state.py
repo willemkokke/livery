@@ -327,6 +327,38 @@ def test_the_run_context_head_is_the_pull_requests_on_a_pull_request(
     assert gitlab is not None and gitlab.head_sha == "c" * 40
 
 
+def test_the_run_context_head_branch_is_the_pull_requests_and_empty_otherwise(
+    tmp_path: Path,
+) -> None:
+    event = tmp_path / "event.json"
+    base = {
+        "GITHUB_ACTIONS": "true",
+        "GITHUB_RUN_ID": "7",
+        "GITHUB_EVENT_NAME": "pull_request",
+        "GITHUB_EVENT_PATH": str(event),
+    }
+    # Fallbacks first: a payload without the head names no branch, the
+    # runner's own variable stands in, and a push names none.
+    event.write_text(json.dumps({"pull_request": {"head": {"sha": "b" * 40}}}))
+    bare = _state.run_context(base)
+    assert bare is not None and bare.head_ref == ""
+    named = _state.run_context({**base, "GITHUB_HEAD_REF": "feat/x"})
+    assert named is not None and named.head_ref == "feat/x"
+    event.write_text(json.dumps({"after": "a" * 40}))
+    push = _state.run_context({**base, "GITHUB_EVENT_NAME": "push"})
+    assert push is not None and push.head_ref == ""
+    # The payload names the branch, and wins over the variable.
+    event.write_text(
+        json.dumps({"pull_request": {"head": {"sha": "b" * 40, "ref": "feat/y"}}})
+    )
+    run = _state.run_context({**base, "GITHUB_HEAD_REF": "feat/x"})
+    assert run is not None and run.head_ref == "feat/y"
+    gitlab = _state.run_context(
+        {"GITLAB_CI": "true", "CI_MERGE_REQUEST_SOURCE_BRANCH_NAME": "feat/z"}
+    )
+    assert gitlab is not None and gitlab.head_ref == "feat/z"
+
+
 def test_the_event_payload_is_none_when_missing_junk_or_not_an_object(
     tmp_path: Path,
 ) -> None:

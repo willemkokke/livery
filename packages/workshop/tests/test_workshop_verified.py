@@ -224,7 +224,12 @@ def test_the_marker_reaches_the_legs_row(work: Path) -> None:
 # --- the composed stamp: a narrowed run on a verified base --------------------
 
 PULL = _state.RunContext(
-    "gitea", "1014", "pull_request", "refs/pull/1/merge", base_ref="main"
+    "gitea",
+    "1014",
+    "pull_request",
+    "refs/pull/1/merge",
+    base_ref="main",
+    head_ref="feat/one",
 )
 
 
@@ -319,6 +324,12 @@ def test_a_narrowed_run_on_a_verified_base_stamps_its_tree_naming_the_base(
     assert why == "" and found is not None
     assert found.scope == _verified.FULL and found.legs == ("check (a)",)
     assert found.base_tree == base and found.base_run == "1013"
+    # The row names the branch whose run proved the tree, so main's run
+    # after the squash finds the branch's coverage record to copy; the
+    # base row, stamped by main's own push, names none.
+    assert found.branch == "feat/one"
+    base_row, _ = _verified.record(work, base)
+    assert base_row is not None and base_row.branch == ""
     # The legs read a composed row like a full one, and say what it rests on.
     assert _quality.verified_already(work)
     out = capsys.readouterr().out

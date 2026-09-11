@@ -1,20 +1,23 @@
-"""The coverage record: main's lines per check leg, and the legs' lines in flight.
+"""The coverage record: main's and each branch's lines per leg, and the lines in flight.
 
-Coverage stays global under the affected mode. Main's record holds,
-per check leg, one row per unit (a package's test suite, or the
+Coverage stays global under the affected mode. A record holds, per
+check leg, one row per unit (a package's test suite, or the
 workspace's own tests): the lines the suite reached within its
-closure, and the identity of the closure it was measured at. A check
-leg skips a suite when the record on that leg holds the unit at the
-suite's current closure identity, and runs it otherwise. A leg that
-ran a suite puts the suite's lines on its per-run ref, beside its
-timing half, with the scope its gate ran; the run's gate job unions
-the per-run refs with the rows it carries from the record, judges the
-floors on that union, and on main's run alone writes the record back:
-fresh rows for the suites the legs ran, the previous rows carried for
-the rest, the units that no longer exist removed. A pull request's
-run reads the record and never writes it, so reuse goes through main
-only: a leg reruns a suite whose closure moved since main's record,
-and main's own run after a merge measures what the merge changed.
+closure, and the identity of the closure it was measured at. Main has
+a record, and so does every branch with a pull request run, under the
+same family with the branch as the base part. A check leg skips a
+suite when its branch's record or main's holds the unit at the suite's
+current closure identity, and runs it otherwise. A leg that ran a
+suite puts the suite's lines on its per-run ref, beside its timing
+half, with the scope its gate ran; the run's gate job unions the
+per-run refs with the rows it carries from the records, judges the
+floors on that union, and writes the union back: a pull request's run
+onto its branch's record, main's run onto main's, each replaced in
+place, the units that no longer exist removed. At the merge main's
+run finds its tree on the verified record, which names the branch,
+and copies the branch's rows into main's without measuring; a squash
+of a stale branch has another tree, and main pays the full gate. A
+unit neither record holds is measured on the spot, never red.
 
 The unit is the suite that ran, never the package covered: a suite
 executes lines across packages (a dependant's tests run its
@@ -37,14 +40,21 @@ from typing import Any
 
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._packages import Package
-from livery.workshop._state import Keyed, RunContext, Series, Skipped, slug
+from livery.workshop._state import (
+    Keyed,
+    RunContext,
+    Series,
+    Skipped,
+    list_refs,
+    slug,
+)
 
 #: The rows' shape; a row of another schema is skipped and named.
 SCHEMA = 1
 
-#: The record's base: the branch whose measurement the record is.
-#: Every key of the family spells it, and only a run of a push to it
-#: writes the record.
+#: The record every leg reads last and main's run alone writes: the
+#: measurement of main's tree. A branch's record has the branch's
+#: name as its base instead, written by that branch's own runs.
 MAIN = "main"
 
 #: The file a check leg puts on its per-run ref beside its timing
@@ -76,12 +86,21 @@ def workspace_suite(root: Path) -> Package | None:
     )
 
 
-def current_keys(root: Path) -> set[tuple[str, ...]] | None:
-    """The keys the current matrix produces: main with each check leg.
+def branches(root: Path) -> list[str] | None:
+    """The branches origin holds, by name; ``None`` if origin cannot be listed."""
+    heads = list_refs(root, "refs/heads/")
+    if heads is None:
+        return None
+    return sorted(name[len("refs/heads/") :] for name in heads)
 
-    The janitor drops a ref outside this set, so a leg the matrix no
-    longer produces stops holding a record. ``None`` when the
-    contract cannot be read, and then nothing is dropped.
+
+def current_keys(root: Path) -> set[tuple[str, ...]] | None:
+    """The keys the world produces: main and every branch on origin, per check leg.
+
+    The janitor drops a ref outside this set: a branch's record once
+    the branch is gone from origin, and a leg's once the matrix no
+    longer produces it. ``None`` when the contract or the remote
+    cannot be read, and then nothing is dropped.
     """
     from livery.workshop._points import check_legs
 
@@ -89,12 +108,18 @@ def current_keys(root: Path) -> set[tuple[str, ...]] | None:
         legs = check_legs(root)
     except (Exception, SystemExit):
         return None
-    return {(MAIN, slug(leg)) for leg in legs}
+    heads = branches(root)
+    if heads is None:
+        return None
+    bases = {MAIN, *(slug(branch) for branch in heads)}
+    return {(base, slug(leg)) for base in bases for leg in legs}
 
 
-#: The family: one series per base and check leg, ``coverage/main/<leg>``,
-#: one row per unit, replaced in place at every merge; a series of a
-#: leg the current matrix no longer produces is the janitor's to drop.
+#: The family: one series per base and check leg, ``coverage/main/<leg>``
+#: for main and ``coverage/<branch>/<leg>`` for a branch, one row per
+#: unit, replaced in place by every write; a series of a branch gone
+#: from origin, or of a leg the matrix no longer produces, is the
+#: janitor's to drop.
 RECORD = Keyed("coverage", ("base", "leg"), schema=SCHEMA, current=current_keys)
 
 
@@ -167,9 +192,9 @@ class Record:
         return names + [item.name for item in self.skipped]
 
 
-def record_ref(leg: str) -> str:
-    """The ref holding main's record on *leg*."""
-    return RECORD.series(MAIN, leg).ref
+def record_ref(leg: str, base: str = MAIN) -> str:
+    """The ref holding *base*'s record on *leg*: main's, or a branch's."""
+    return RECORD.series(base, leg).ref
 
 
 def row_name(path: str) -> str:
@@ -369,17 +394,19 @@ def run_legs(root: Path, run: RunContext) -> tuple[list[Leg], str]:
     return legs, ""
 
 
-def recorded(root: Path, *, leg: str) -> Record:
-    """Main's record on *leg*: every recorded unit, in one read.
+def recorded(root: Path, *, leg: str, base: str = MAIN) -> Record:
+    """*base*'s record on *leg*, main's by default: every recorded unit, in one read.
 
     An absent record is no units and no failure; a record the store
     could not read is a failure with its reason; a row that is not a
     unit is skipped and named, and the rest stand. A leg without a
-    label has no record to read.
+    label, or an empty base, has no record to read.
     """
     if not leg:
         return Record({}, failed=True, reason="this leg has no label")
-    found = RECORD.series(MAIN, leg).rows(root)
+    if not base:
+        return Record({}, failed=True, reason="no branch to read a record for")
+    found = RECORD.series(base, leg).rows(root)
     if found.failed:
         return Record({}, failed=True, reason=found.reason)
     units: dict[str, Unit] = {}
@@ -400,26 +427,37 @@ def put_record(
     leg: str,
     fresh: Mapping[str, Unit],
     remove: Iterable[str] = (),
+    base: str = MAIN,
 ) -> str:
-    """Write the *fresh* units onto main's record on *leg*; ``""`` or the reason.
+    """Write the *fresh* units onto *base*'s record on *leg*; ``""`` or the reason.
 
-    Only main's run writes, the run of a push, and it replaces the
-    record in place: a fresh row replaces the unit's, a row named in
-    *remove* goes, every other row stands as the carried measurement
-    it is. A run of any other event is refused by name, so a pull
-    request never writes what main's next run will skip on.
+    Main's record is written by main's run alone, the run of a push;
+    a branch's record by that branch's own pull request run alone.
+    Either replaces its record in place: a fresh row replaces the
+    unit's, a row named in *remove* goes, every other row stands as
+    the carried measurement it is. Any other run is refused by name,
+    so a pull request never writes what main's next run will skip on,
+    and no branch writes another's record.
     """
     if not leg:
         return "refusing: the leg has no label, so the record has no key"
-    if run.event != "push":
+    if not base:
+        return "refusing: no branch to write a record for"
+    if base == MAIN and run.event != "push":
         return (
             f"refusing: a {run.event or 'local'} run reads {MAIN}'s record"
             " and never writes it"
         )
+    if base != MAIN and (run.event != "pull_request" or run.head_ref != base):
+        return (
+            f"refusing: {base}'s record is written by that branch's own pull"
+            f" request run, not a {run.event or 'local'} run of"
+            f" {run.head_ref or 'no branch'}"
+        )
     rows = {row_name(path): _unit_fields(unit) for path, unit in sorted(fresh.items())}
-    return RECORD.series(MAIN, leg).put(
+    return RECORD.series(base, leg).put(
         root,
         rows,
-        message=f"coverage: {MAIN}'s record on {leg} by run {run.run_id}",
+        message=f"coverage: {base}'s record on {leg} by run {run.run_id}",
         remove=remove,
     )

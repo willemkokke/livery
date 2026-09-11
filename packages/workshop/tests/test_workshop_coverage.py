@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from livery.footman import Failed
-from livery.workshop import _coverage_store
+from livery.workshop import _coverage_store, _verified
 from livery.workshop._backends import _python
 from livery.workshop._packages import Package
 
@@ -301,7 +301,14 @@ def test_a_leg_with_no_metered_data_refuses_naming_the_meter(tmp_path: Path) -> 
 
 
 def _in_ci(monkeypatch: pytest.MonkeyPatch, leg: str) -> None:
-    for name in ("GITHUB_EVENT_PATH", "GITHUB_SHA", "GITHUB_REF", "GITHUB_JOB"):
+    for name in (
+        "GITHUB_EVENT_PATH",
+        "GITHUB_SHA",
+        "GITHUB_REF",
+        "GITHUB_JOB",
+        "GITHUB_HEAD_REF",
+        "GITHUB_EVENT_NAME",
+    ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     monkeypatch.setenv("GITEA_ACTIONS", "true")
@@ -489,14 +496,29 @@ def _union(
     legs: list[_coverage_store.Leg],
     *,
     held: _coverage_store.Record | None = None,
+    records: dict[str, _coverage_store.Record] | None = None,
     listing: str = "",
-) -> list[tuple[str, list[str], list[str]]]:
-    """Stand in for the store: the legs, main's record, and the record's writes."""
-    record = _coverage_store.Record({}) if held is None else held
+    proved: str = "",
+) -> list[tuple[str, str, list[str], list[str]]]:
+    """Stand in for the store: the legs, the records by base, and the writes.
+
+    *held* is main's record, *records* the others by base, *proved* the
+    branch the verified row names for a push's tree.
+    """
+    by_base = dict(records or {})
+    if held is not None:
+        by_base["main"] = held
     monkeypatch.setattr(_coverage_store, "run_legs", lambda root, run: (legs, listing))
-    monkeypatch.setattr(_coverage_store, "recorded", lambda root, *, leg: record)
+    monkeypatch.setattr(
+        _coverage_store,
+        "recorded",
+        lambda root, *, leg, base="main": by_base.get(base, _coverage_store.Record({})),
+    )
     monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
-    written: list[tuple[str, list[str], list[str]]] = []
+    row = _verified.Verified("t", "5", "a" * 40, "full", ("check-a",), branch=proved)
+    monkeypatch.setattr(_verified, "tree_id", lambda git, ref="HEAD": "t")
+    monkeypatch.setattr(_verified, "record", lambda root, tree: (row, ""))
+    written: list[tuple[str, str, list[str], list[str]]] = []
 
     def _put(
         root: Path,
@@ -505,8 +527,9 @@ def _union(
         leg: str,
         fresh: dict[str, _coverage_store.Unit],
         remove: tuple[str, ...] = (),
+        base: str = "main",
     ) -> str:
-        written.append((leg, sorted(fresh), sorted(remove)))
+        written.append((base, leg, sorted(fresh), sorted(remove)))
         return ""
 
     monkeypatch.setattr(_coverage_store, "put_record", _put)
@@ -576,15 +599,18 @@ def test_a_skipped_suite_the_record_cannot_supply_refuses_naming_it(
     _union(monkeypatch, [_leg("check-a", "verified")])
     with pytest.raises(
         _FAILURES,
-        match=r"main's record holds no packages/x at closure kkkkkkkkkkkk\.",
+        match=r"no record holds packages/x at closure kkkkkkkkkkkk \(main none\)\.",
     ):
         _python.combine_union(tmp_path, (x,))
     held = _coverage_store.Record(
         {"packages/x": _unit("packages/x", {}, closure="j" * 64)}
     )
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
+    monkeypatch.setenv("GITHUB_HEAD_REF", "feat/x")
     _union(monkeypatch, [_leg("check-a", "nothing")], held=held)
     with pytest.raises(
-        _FAILURES, match="no packages/x at closure kkkkkkkkkkkk, only at jjjjjjjjjjjj"
+        _FAILURES,
+        match=r"at closure kkkkkkkkkkkk \(feat/x none, main only at jjjjjjjjjjjj\)",
     ):
         _python.combine_union(tmp_path, (x,))
     down = _coverage_store.Record({}, failed=True, reason="remote down")
@@ -596,7 +622,7 @@ def test_a_skipped_suite_the_record_cannot_supply_refuses_naming_it(
     assert not (tmp_path / ".coverage").exists()
 
 
-def test_a_skipped_leg_reuses_every_unit_from_the_record_and_never_writes_it(
+def test_a_skipped_leg_reuses_every_unit_from_mains_record_and_writes_its_branchs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     x = _suite(tmp_path, "x")
@@ -604,6 +630,7 @@ def test_a_skipped_leg_reuses_every_unit_from_the_record_and_never_writes_it(
     (tmp_path / "tests").mkdir()  # the workspace's own tests, a unit too
     _in_ci(monkeypatch, "gate")
     monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
+    monkeypatch.setenv("GITHUB_HEAD_REF", "feat/x")
     held = _coverage_store.Record(
         {
             "packages/x": _unit("packages/x", {source: [1, 2, 3, 4]}),
@@ -614,15 +641,56 @@ def test_a_skipped_leg_reuses_every_unit_from_the_record_and_never_writes_it(
     assert _python.combine_union(tmp_path, (x,)) == (x,)
     out = capsys.readouterr().out
     assert "coverage: leg check-a ran 'verified': no suite, no data" in out
-    assert "coverage: packages/x on check-a: reused from run 7 (1 files)" in out
-    assert "coverage: tests on check-a: reused from run 6 (1 files)" in out
+    assert "coverage: packages/x on check-a: reused from run 7 (1 files), main's" in out
+    assert "coverage: tests on check-a: reused from run 6 (1 files), main's" in out
     assert "the union of 0 leg(s) and 2 reused suite(s)" in out
-    assert (
-        "coverage record: a pull_request run reads main's record and never writes it"
-        in out
-    )
-    assert written == []
+    # The rows carried from main are copied onto the branch's record,
+    # which is its own from here.
+    assert written == [("feat/x", "check-a", ["packages/x", "tests"], [])]
+    assert "coverage record: feat/x/check-a: 0 fresh, 2 carried, 0 removed" in out
     assert _python.measured_coverage(tmp_path, (x,)) == {"packages/x": 100.0}
+    # A pull request run that names no branch has no record to write.
+    monkeypatch.delenv("GITHUB_HEAD_REF")
+    written = _union(monkeypatch, [_leg("check-a", "verified")], held=held)
+    assert _python.combine_union(tmp_path, (x,)) == (x,)
+    out = capsys.readouterr().out
+    assert written == []
+    assert (
+        "coverage record: not written, a pull_request run that names no branch"
+        " has no record of its own" in out
+    )
+
+
+def test_a_branchs_own_record_is_asked_before_mains_and_its_rows_stand(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    x = _suite(tmp_path, "x")
+    source = str(_source(tmp_path, "x"))
+    (tmp_path / "tests").mkdir()
+    _in_ci(monkeypatch, "gate")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
+    monkeypatch.setenv("GITHUB_HEAD_REF", "feat/x")
+    own = _coverage_store.Record(
+        {"packages/x": _unit("packages/x", {source: [1, 2, 3, 4]}, run="9")}
+    )
+    main = _coverage_store.Record(
+        {
+            "packages/x": _unit("packages/x", {source: [1, 2]}, run="7"),
+            "tests": _unit("tests", {source: [3, 4]}, run="6"),
+        }
+    )
+    written = _union(
+        monkeypatch, [_leg("check-a", "verified")], held=main, records={"feat/x": own}
+    )
+    assert _python.combine_union(tmp_path, (x,)) == (x,)
+    out = capsys.readouterr().out
+    assert (
+        "coverage: packages/x on check-a: reused from run 9 (1 files), feat/x's" in out
+    )
+    assert "coverage: tests on check-a: reused from run 6 (1 files), main's" in out
+    # Only the row copied from main is written; the branch's own row stands.
+    assert written == [("feat/x", "check-a", ["tests"], [])]
+    assert "coverage record: feat/x/check-a: 0 fresh, 2 carried, 0 removed" in out
 
 
 def test_a_narrowed_leg_reuses_the_suite_it_skipped(
@@ -655,7 +723,7 @@ def test_a_narrowed_leg_reuses_the_suite_it_skipped(
     }
 
 
-def test_mains_run_writes_the_record_fresh_over_carried_and_drops_the_stale(
+def test_mains_run_copies_the_merged_branchs_record_and_drops_the_stale(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     from livery.workshop._state import Skipped
@@ -676,21 +744,37 @@ def test_mains_run_writes_the_record_fresh_over_carried_and_drops_the_stale(
             "tests": _unit("tests", {y_source: [1]}),
         },
     )
+    # y comes from the merged branch's record, named by the verified row;
+    # main's own row of y is at another closure and is replaced.
+    branch = _coverage_store.Record(
+        {"packages/y": _unit("packages/y", {y_source: [1, 2, 3, 4]}, run="5")}
+    )
     held = _coverage_store.Record(
         {
-            "packages/y": _unit("packages/y", {y_source: [1, 2, 3, 4]}, run="5"),
+            "packages/y": _unit("packages/y", {}, run="3", closure="j" * 64),
             "packages/gone": _unit("packages/gone", {}, run="3"),
             "tests": _unit("tests", {y_source: [2]}, run="5"),
         },
         skipped=(Skipped("junk.json", "does not parse"),),
     )
-    written = _union(monkeypatch, [leg], held=held)
+    written = _union(
+        monkeypatch, [leg], held=held, records={"feat/x": branch}, proved="feat/x"
+    )
     assert _python.combine_union(tmp_path, (x, y)) == (x, y)
     out = capsys.readouterr().out
+    assert "coverage record: main takes feat/x's record for the tree it proved" in out
     assert "coverage: main/check-a: junk.json: does not parse; skipped" in out
+    assert (
+        "coverage: packages/y on check-a: reused from run 5 (1 files), feat/x's" in out
+    )
     assert "the union of 1 leg(s) and 1 reused suite(s)" in out
     assert written == [
-        ("check-a", ["packages/x", "tests"], ["junk.json", "packages-gone.json"])
+        (
+            "main",
+            "check-a",
+            ["packages/x", "packages/y", "tests"],
+            ["junk.json", "packages-gone.json"],
+        )
     ]
     assert "coverage record: main/check-a: 2 fresh, 1 carried, 2 removed" in out
     # A record that cannot be written prints why and never reddens the
@@ -703,6 +787,30 @@ def test_mains_run_writes_the_record_fresh_over_carried_and_drops_the_stale(
         "coverage record: main/check-a not written (push refused: down)"
         in capsys.readouterr().out
     )
+
+
+def test_a_push_of_an_unnamed_tree_carries_from_main_alone_and_writes_nothing_new(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    x = _suite(tmp_path, "x")
+    source = str(_source(tmp_path, "x"))
+    (tmp_path / "tests").mkdir()
+    _in_ci(monkeypatch, "gate")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "push")
+    held = _coverage_store.Record(
+        {
+            "packages/x": _unit("packages/x", {source: [1, 2, 3, 4]}),
+            "tests": _unit("tests", {source: [1]}, run="6"),
+        }
+    )
+    written = _union(monkeypatch, [_leg("check-a", "verified")], held=held)
+    assert _python.combine_union(tmp_path, (x,)) == (x,)
+    out = capsys.readouterr().out
+    assert "the union of 0 leg(s) and 2 reused suite(s)" in out
+    assert "main takes" not in out
+    # Every row came from main itself: nothing to write back.
+    assert written == []
+    assert "coverage record: main/check-a: unchanged, 2 carried" in out
 
 
 def test_the_union_of_two_legs_covers_what_each_left_uncovered(

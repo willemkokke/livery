@@ -433,6 +433,10 @@ class RunContext:
         leg: The check leg this process runs in (``check-ubuntu-latest-3.14``),
             as the job runner names it in ``WORKSHOP_LEG`` for every entry it
             spawns; empty outside a scheduled job.
+        head_ref: The branch a pull request comes from, as the event
+            payload names it (GitLab: the merge request's source), the
+            base of the branch's own coverage record; empty on a push
+            or when the runner did not say.
     """
 
     forge: str
@@ -442,6 +446,7 @@ class RunContext:
     head_sha: str = ""
     base_ref: str = ""
     leg: str = ""
+    head_ref: str = ""
 
 
 def event_payload(environ: Mapping[str, str] | None = None) -> dict[str, Any] | None:
@@ -488,6 +493,16 @@ def _event_base_ref(env: Mapping[str, str]) -> str:
     return ""
 
 
+def _event_head_ref(env: Mapping[str, str]) -> str:
+    """The pull request's source branch: the payload's, else the runner's variable."""
+    payload = event_payload(env)
+    if payload is not None:
+        head = (payload.get("pull_request") or {}).get("head") or {}
+        if isinstance(head, dict) and head.get("ref"):
+            return str(head["ref"])
+    return env.get("GITHUB_HEAD_REF", "")
+
+
 def run_context(environ: dict[str, str] | None = None) -> RunContext | None:
     """The CI run this process runs in, or ``None`` outside CI.
 
@@ -506,6 +521,7 @@ def run_context(environ: dict[str, str] | None = None) -> RunContext | None:
             _event_head_sha(env),
             _event_base_ref(env),
             env.get(LEG_VARIABLE, ""),
+            _event_head_ref(env),
         )
     if env.get("GITLAB_CI") == "true":
         return RunContext(
@@ -516,6 +532,7 @@ def run_context(environ: dict[str, str] | None = None) -> RunContext | None:
             env.get("CI_COMMIT_SHA", ""),
             env.get("CI_MERGE_REQUEST_TARGET_BRANCH_NAME", ""),
             env.get(LEG_VARIABLE, ""),
+            env.get("CI_MERGE_REQUEST_SOURCE_BRANCH_NAME", ""),
         )
     return None
 

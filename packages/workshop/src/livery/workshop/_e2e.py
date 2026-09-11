@@ -844,17 +844,17 @@ def _require_lines(
 
 
 def _prove_verified_skip(root: Path, kind: str) -> None:
-    """Prove main's run after the setup squash skips the gate and measures every unit.
+    """Prove main's run after the setup squash skips the gate and copies the record.
 
-    The setup pull request's check leg ran the full gate and stamped
-    its tree on the verified record; the squash lands the same tree
-    on main, so main's push run finds it on the record and skips the
-    gate. Main's coverage record is empty on a fresh loop, so the leg
-    measures both members' suites and the workspace tests for their
-    lines alone, the union judges both floors from them, and the
-    gate job writes the record. A skipped leg reddening the union, or
-    passing it with nothing counted, is the failure this proof exists
-    for; the next proofs reuse what this run recorded.
+    The setup pull request's check leg ran the full gate, its gate
+    job wrote the setup branch's coverage record, and its stamp put
+    the tree on the verified record naming the branch; the squash
+    lands the same tree on main, so main's push run finds it on the
+    record, skips the gate, measures nothing, and its union takes
+    every unit from the setup branch's record and copies it into
+    main's. A skipped leg reddening the union, passing it with
+    nothing counted, or measuring what the branch already measured
+    is the failure this proof exists for.
     """
     from livery.workshop._git_ops import GitOps
 
@@ -862,20 +862,16 @@ def _prove_verified_skip(root: Path, kind: str) -> None:
     head = GitOps(root).head_sha()
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
+    from livery.workshop._new_project import _SETUP_BRANCH
+
     run, logs = _completed_run(repo, head, event="push")
     _require_lines(
         repo,
         run,
         logs,
         "check",
-        (
-            "skipping the gate",
-            "measuring: packages/loop-echo, packages/loop-native, tests run for"
-            " their lines alone",
-            "coverage store: packages/loop-echo stored for closure",
-            "coverage store: packages/loop-native stored for closure",
-            "coverage store: tests stored for closure",
-        ),
+        ("skipping the gate",),
+        forbidden=("measuring:", "coverage store: packages/loop-echo stored"),
     )
     _require_lines(
         repo,
@@ -883,17 +879,23 @@ def _prove_verified_skip(root: Path, kind: str) -> None:
         logs,
         "gate",
         (
+            f"coverage record: main takes {_SETUP_BRANCH}'s record for the tree"
+            " it proved",
+            "coverage: packages/loop-echo on check-ubuntu-latest-3.14: reused from run",
+            "coverage: packages/loop-native on check-ubuntu-latest-3.14:"
+            " reused from run",
+            "coverage: tests on check-ubuntu-latest-3.14: reused from run",
             "coverage packages/loop-echo: 100.0% (floor 100.0%",
             "coverage packages/loop-native: 100.0% (",
-            "coverage: the union of 1 leg(s) and 0 reused suite(s)",
-            "coverage record: main/check-ubuntu-latest-3.14: 3 fresh, 0 carried,"
+            "coverage: the union of 0 leg(s) and 3 reused suite(s)",
+            "coverage record: main/check-ubuntu-latest-3.14: 0 fresh, 3 carried,"
             " 0 removed",
         ),
-        forbidden=("unjudged this run", "reused from run"),
+        forbidden=("unjudged this run",),
     )
     print(
-        f"  verified skip: proven on main's run {run.id}; the gate skipped, the"
-        " leg measured every unit, and main's record holds them"
+        f"  verified skip: proven on main's run {run.id}; the gate skipped,"
+        f" nothing was measured, and main copied {_SETUP_BRANCH}'s record"
     )
 
 
@@ -971,13 +973,12 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
     the loop's gate, and reads the run's logs: the check leg must say
     it narrowed against main to that one member and put that member's
     suite on its ref, and the gate job's union must judge both
-    members, the other one reused from main's record, never writing
-    the record, and its stamp composes with main's verified tree.
-    Main's push run after the squash then skips the gate on that
-    composed row, measures the member the merge changed and the
-    workspace tests, reuses the other member, and writes the record.
-    Re-run on a pass-owned branch with main's tip as the stamp, so
-    the diff is never empty.
+    members, the other one reused from main's record, write the
+    branch's own record, and compose its stamp with main's verified
+    tree. Main's push run after the squash then skips the gate on
+    that composed row, measures nothing, and copies the branch's
+    record into main's. Re-run on a pass-owned branch with main's tip
+    as the stamp, so the diff is never empty.
     """
     from livery.workshop._git_ops import GitOps
 
@@ -1044,8 +1045,8 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
             "accepted: the loop proves an accepted lowering",
             "new mark: 100.0%",
             "coverage: the union of 1 leg(s) and 1 reused suite(s)",
-            "coverage record: a pull_request run reads main's record and never"
-            " writes it",
+            "coverage record: chore/scoped-leg/check-ubuntu-latest-3.14: 2 fresh,"
+            " 1 carried, 0 removed",
             "recorded as proved green by run",
             " on top of tree ",
             "is not a release branch: nothing to check",
@@ -1054,14 +1055,13 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
     )
     print(
         "  scoped leg: proven on a member-only pull request (affected:"
-        " packages/loop-echo; the union reused loop-native from main's record;"
-        " the stamp composed with main's tree)"
+        " packages/loop-echo; the union reused loop-native from main's record"
+        " and wrote the branch's; the stamp composed with main's tree)"
     )
     # The narrowed run rested on main's verified tree, so its stamp
-    # composed, and main's push after the squash skips the gate; the
-    # record holds loop-echo and the workspace tests at the closures
-    # before the merge, so the leg measures those two, the union
-    # reuses loop-native, and the record is written back.
+    # composed naming the branch, and main's push after the squash
+    # skips the gate, measures nothing, and copies the branch's
+    # record, every unit at the closures the squash lands.
     landed = GitOps(root).head_sha()
     run, logs = _completed_run(repo, landed, event="push")
     _require_lines(
@@ -1069,13 +1069,8 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
         run,
         logs,
         "check",
-        (
-            "skipping the gate",
-            " on top of tree ",
-            "measuring: packages/loop-echo, tests run for their lines alone",
-            "coverage store: packages/loop-echo stored for closure",
-        ),
-        forbidden=("coverage store: packages/loop-native stored for closure",),
+        ("skipping the gate", " on top of tree "),
+        forbidden=("measuring:", "coverage store: packages/loop-echo stored"),
     )
     _require_lines(
         repo,
@@ -1083,20 +1078,19 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
         logs,
         "gate",
         (
-            "coverage: packages/loop-native on check-ubuntu-latest-3.14:"
-            " reused from run",
+            "coverage record: main takes chore/scoped-leg's record for the tree"
+            " it proved",
             "coverage packages/loop-echo: 100.0% (floor 100.0%",
             "coverage packages/loop-native: 100.0% (mark 100.0% ratchet by run",
-            "coverage: the union of 1 leg(s) and 1 reused suite(s)",
-            "coverage record: main/check-ubuntu-latest-3.14: 2 fresh, 1 carried,"
+            "coverage: the union of 0 leg(s) and 3 reused suite(s)",
+            "coverage record: main/check-ubuntu-latest-3.14: 0 fresh, 3 carried,"
             " 0 removed",
         ),
         forbidden=("unjudged this run",),
     )
     print(
         f"  composed skip: proven on main's run {run.id} after the member-only"
-        " squash; the leg measured the changed member, the union reused the"
-        " other, and main's record was written"
+        " squash; nothing was measured, and main copied the branch's record"
     )
 
 
@@ -1163,8 +1157,8 @@ def _prove_prose_leg(root: Path, kind: str) -> None:
             "coverage packages/loop-echo: 100.0% (floor 100.0%",
             "coverage packages/loop-native: 100.0% (",
             "coverage: the union of 0 leg(s) and 3 reused suite(s)",
-            "coverage record: a pull_request run reads main's record and never"
-            " writes it",
+            "coverage record: chore/prose-leg/check-ubuntu-latest-3.14: 0 fresh,"
+            " 3 carried, 0 removed",
             "recorded as proved green by run",
             " on top of tree ",
         ),
@@ -1172,8 +1166,8 @@ def _prove_prose_leg(root: Path, kind: str) -> None:
     )
     print(
         f"  prose leg: proven on a note-only pull request (run {run.id}: the"
-        " check leg skipped, the union reused every unit from main's record,"
-        " the stamp composed)"
+        " check leg skipped, the union reused every unit from main's record"
+        " and wrote the branch's, the stamp composed)"
     )
     landed = GitOps(root).head_sha()
     run, logs = _completed_run(repo, landed, event="push")

@@ -20,7 +20,7 @@ import tempfile
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import livery.footman as footman
 from livery import toolroom
@@ -28,7 +28,11 @@ from livery.footman import fail
 from livery.toolroom import basedpyright, mypy, pyrefly, pytest, ruff, ruff_format, ty
 from livery.workshop._contract import load_contract
 from livery.workshop._packages import Package
-from livery.workshop._state import slug
+from livery.workshop._state import RunContext, slug
+
+if TYPE_CHECKING:
+    from livery.workshop._coverage_store import Record
+    from livery.workshop._git_ops import GitOps
 
 #: The whole repo, as CI lints it.
 SRC = (".",)
@@ -625,30 +629,34 @@ def _write_unit(folder: Path, name: str, files: dict[str, list[int]]) -> Path:
 
 
 def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, ...]:
-    """Union the run's legs' lines with main's record; the packages it judges.
+    """Union the run's legs' lines with the records; the packages it judges.
 
     Each check leg's per-run ref carries the scope its gate ran and
     the units it measured. A full leg measured every suite, a narrowed
     or measured leg the suites its marker names; a leg whose gate
     skipped (a tree already proved, or nothing affected) measured
-    nothing. Every unit a leg did not measure is carried from main's
-    record on that leg, at the unit's current closure identity, so the
-    union is the same global union a full run produces and every
-    package is judged. A unit the record cannot supply refuses by
-    name: a leg skips a suite only when the record holds it, so a miss
-    here is a leg that narrowed without the record, or a record main
-    moved on from since, never a smaller union.
+    nothing. Every unit a leg did not measure is carried from a record
+    on that leg, the branch's own before main's, at the unit's current
+    closure identity, so the union is the same global union a full run
+    produces and every package is judged. A unit no record can supply
+    refuses by name: a leg skips a suite only when a record holds it,
+    so a miss here is a leg that narrowed without the records, or a
+    record moved on since, never a smaller union.
 
-    On main's run (a push) the record is written back per leg: the
-    leg's fresh units replace their rows, the carried rows stand, and
-    the rows of units that no longer exist go. A record that cannot
-    be written prints why: the next run reruns what it cannot reuse,
-    the safe direction. Any other run reads and never writes.
+    The union is written back per leg: a pull request's run onto its
+    branch's record, main's run onto main's. The leg's fresh units
+    replace their rows, the rows carried from the other record are
+    copied in, the target's own carried rows stand, and the rows of
+    units that no longer exist go. On main's run the branch is the one
+    the verified record names for the tree, so the merge copies the
+    branch's record into main's. A record that cannot be written
+    prints why: the next run reruns what it cannot reuse, the safe
+    direction.
 
     Refuses by name when no leg left its lines, when a leg's ref
     carries no readable file, when a leg names no scope the union
     reads, when a leg that ran a suite left its lines out, and when a
-    unit is neither the run's nor the record's.
+    unit is neither the run's nor any record's.
 
     Returns:
         The judged packages, in *packages* order; empty when the
@@ -656,13 +664,10 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
         written.
     """
     from livery.workshop._coverage_store import (
-        MAIN,
         RUN_FILE,
-        Record,
         Unit,
         closure_id,
         put_record,
-        recorded,
         run_legs,
     )
     from livery.workshop._git_ops import GitOps
@@ -696,10 +701,11 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
     git = GitOps(root)
     units = units_of(root, packages)
     keys = {unit.path: closure_id(git, packages, unit) for unit in units}
+    bases, target = _record_bases(root, git, run)
     collected: list[Path] = []
     reused: list[Path] = []
     ran = 0
-    writes: list[tuple[str, dict[str, Unit], Record]] = []
+    writes: list[tuple[str, dict[str, Unit], dict[str, tuple[str, Unit]], Record]] = []
     for leg in sorted(legs, key=lambda item: item.key):
         if leg.why:
             fail(
@@ -709,8 +715,8 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
             )
         if not leg.label:
             fail(
-                f"leg {leg.key} names no label, so {MAIN}'s record cannot supply"
-                " what it skipped; the job runner sets WORKSHOP_LEG for every leg"
+                f"leg {leg.key} names no label, so no record can supply what it"
+                " skipped; the job runner sets WORKSHOP_LEG for every leg"
             )
         if leg.scope in (VERIFIED, NOTHING):
             print(f"  coverage: leg {leg.label} ran {leg.scope!r}: no suite, no data")
@@ -738,29 +744,30 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
                 " verified, or measured"
             )
         pending = [unit for unit in units if unit.path not in leg.units]
-        held = Record({})
-        if pending or run.event == "push":
-            held = recorded(root, leg=leg.label)
-            if held.failed:
-                fail(
-                    f"{MAIN}'s record on {leg.label} could not be read"
-                    f" ({held.reason}); the suites the leg skipped cannot be"
-                    " supplied, and a smaller union never passes"
-                )
-            for skipped in held.skipped:
-                print(f"  coverage: {MAIN}/{leg.label}: {skipped}")
+        held: dict[str, Record] = {}
+        carried: dict[str, tuple[str, Unit]] = {}
         for suite in pending:
-            row = held.units.get(suite.path)
-            if row is None or row.closure != keys[suite.path]:
-                held_at = f", only at {row.closure[:12]}" if row is not None else ""
-                fail(
-                    f"leg {leg.label}: {MAIN}'s record holds no {suite.path} at"
-                    f" closure {keys[suite.path][:12]}{held_at}. A leg skips a"
-                    " suite only when the record holds it at the suite's"
-                    " closure, so this leg narrowed without the record, or"
-                    f" {MAIN} moved on since; a run of the full gate measures"
-                    " it again."
+            key = keys[suite.path]
+            states: list[str] = []
+            for base in bases:
+                row = _read_record(root, held, base, leg.label).units.get(suite.path)
+                if row is not None and row.closure == key:
+                    carried[suite.path] = (base, row)
+                    break
+                states.append(
+                    f"{base} only at {row.closure[:12]}"
+                    if row is not None
+                    else f"{base} none"
                 )
+            else:
+                fail(
+                    f"leg {leg.label}: no record holds {suite.path} at closure"
+                    f" {key[:12]} ({', '.join(states)}). A leg skips a suite"
+                    " only when a record holds it at the suite's closure, so"
+                    " this leg narrowed without the records, or they moved on"
+                    " since; a run of the full gate measures it again."
+                )
+            base, row = carried[suite.path]
             reused.append(
                 _write_unit(
                     scratch / leg.label, f"reuse-{slug(suite.path)}.coverage", row.files
@@ -768,9 +775,11 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
             )
             print(
                 f"  coverage: {suite.path} on {leg.label}: reused from run"
-                f" {row.run} ({len(row.files)} files)"
+                f" {row.run} ({len(row.files)} files), {base}'s record"
             )
-        writes.append((leg.label, dict(leg.units), held))
+        if target:
+            own = _read_record(root, held, target, leg.label)
+            writes.append((leg.label, dict(leg.units), carried, own))
     if not collected and not reused:
         print("  coverage: no unit to union; nothing judged")
         return ()
@@ -785,27 +794,88 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
     )("report", "--sort=cover")
     print(report.stdout.rstrip())
     print(f"  coverage: the union of {ran} leg(s) and {len(reused)} reused suite(s)")
-    if run.event != "push":
+    if not target:
         print(
-            f"  coverage record: a {run.event or 'local'} run reads {MAIN}'s"
-            " record and never writes it"
+            f"  coverage record: not written, a {run.event or 'local'} run"
+            " that names no branch has no record of its own"
         )
         return tuple(packages)
-    for label, fresh, held in writes:
-        stale = held.stale(keys)
-        carried = [path for path in held.units if path in keys and path not in fresh]
-        why = put_record(root, run, leg=label, fresh=fresh, remove=stale)
+    for label, fresh, carried, own in writes:
+        stale = own.stale(keys)
+        # The rows carried from another record are copied in; the
+        # target's own carried rows already stand.
+        rows = dict(fresh)
+        rows.update(
+            {path: row for path, (base, row) in carried.items() if base != target}
+        )
+        if not rows and not stale:
+            print(
+                f"  coverage record: {target}/{label}: unchanged, {len(carried)}"
+                " carried"
+            )
+            continue
+        why = put_record(root, run, leg=label, fresh=rows, remove=stale, base=target)
         if why:
             print(
-                f"  coverage record: {MAIN}/{label} not written ({why}); the"
+                f"  coverage record: {target}/{label} not written ({why}); the"
                 " next run reruns what it cannot reuse"
             )
             continue
         print(
-            f"  coverage record: {MAIN}/{label}: {len(fresh)} fresh,"
+            f"  coverage record: {target}/{label}: {len(fresh)} fresh,"
             f" {len(carried)} carried, {len(stale)} removed"
         )
     return tuple(packages)
+
+
+def _read_record(root: Path, held: dict[str, Record], base: str, label: str) -> Record:
+    """*base*'s record on the leg *label*, read once into *held*; red if unreadable."""
+    from livery.workshop._coverage_store import recorded
+
+    if base not in held:
+        held[base] = recorded(root, leg=label, base=base)
+        if held[base].failed:
+            fail(
+                f"{base}'s record on {label} could not be read"
+                f" ({held[base].reason}); the suites the leg skipped cannot be"
+                " supplied, and a smaller union never passes"
+            )
+        for skipped in held[base].skipped:
+            print(f"  coverage: {base}/{label}: {skipped}")
+    return held[base]
+
+
+def _record_bases(
+    root: Path, git: GitOps, run: RunContext
+) -> tuple[tuple[str, ...], str]:
+    """The records the union carries from, in order, and the one it writes.
+
+    A pull request's run reads its branch's record before main's and
+    writes its branch's; a run naming no branch reads main's and
+    writes nothing. Main's run reads the record of the branch the
+    verified row names for its tree, the branch just merged, before
+    main's, and writes main's: that is the copy at the merge. A push
+    of a tree the record does not name, a stale squash, reads main's
+    alone, and its full gate measured everything anyway.
+    """
+    from livery.workshop._coverage_store import MAIN
+    from livery.workshop._quality import record_bases
+    from livery.workshop._verified import record, tree_id
+
+    if run.event == "push":
+        row, why = record(root, tree_id(git))
+        branch = row.branch if row is not None else ""
+        if why:
+            print(f"  coverage record: the verified row could not be read ({why})")
+        elif branch:
+            print(
+                f"  coverage record: {MAIN} takes {branch}'s record for the tree"
+                " it proved"
+            )
+        return record_bases(branch), MAIN
+    if run.event == "pull_request" and run.head_ref:
+        return record_bases(run.head_ref), run.head_ref
+    return (MAIN,), ""
 
 
 def stored_union(
