@@ -5,8 +5,9 @@ Status: executing; Willem's go 2026-09-11. Phase 1 landed 2026-09-11
 vectors, and the Python formats. Phase 2 landed 2026-09-11 (issue
 #440, PR #443): the local store, objects and refs. Phase 3 landed
 2026-09-11 (issue #444, PR #445): sources and tiers, fill and
-offline. Phase 4 built 2026-09-11 (issue #446): the lifecycle; see
-the decision record.
+offline. Phase 4 landed 2026-09-11 (issue #446, PR #447): the
+lifecycle. Phase 5 built 2026-09-11 (issue #448): the materialiser,
+the whole ladder, prefetch and shed; see the decision record.
 Scoped by Willem the same day: strongroom alone, no change to
 toolroom, footman, or the workshop. This note lives in
 `packages/strongroom/notes/`, beside the package it plans. This plan executes steps 0, 2
@@ -504,6 +505,27 @@ Acceptance:
   of upstream-backed copies must respect live views' rungs, so both
   (`prefetch`, `shed`) were proposed for phase 5. Willem, the same
   day: "add that to phase 5". Added to phase 5's deliverables.
+- 2026-09-11, phase 5 built (issue #448). Choices at the cut: the
+  reference rung is `path`, a path into the tier with nothing
+  created, and never an entry inside a view, because a tree is not a
+  directory in any tier; the ladder inside a view is clone, hardlink,
+  link, copy, and a rung that refuses once is closed for that view;
+  an executable entry never uses hardlink or link, because both share
+  the target's mode; a clone or a copy is read-only unless the view
+  is writable; the clone rung is `clonefile` through `ctypes` on
+  macOS and `FICLONE` through `fcntl` on Linux, and refuses elsewhere,
+  so Windows falls through, with ReFS cloning and junctions left
+  unwired and said so in the spec; the Linux wiring is proven through
+  the ioctl seam and the macOS clone for real, so the union across
+  legs covers both; a symlink entry that the platform refuses becomes
+  the within-view target's content as a copy, or is parked when the
+  target escapes or is absent; the path budget is 1024 UTF-8 bytes,
+  enforced when a view is planned and when outputs are collected; the
+  view record is canonical JSON in the local index, not a format; a
+  view is a root while its directory exists and the sweep retires
+  one whose directory is gone; `shed` keeps objects a live view
+  reaches through a hardlink or a link and checks holding by
+  existence, a HEAD, or an origin hint's own digest.
 - 2026-09-11, Willem: the materialiser's whole strategy ladder is
   implemented and tested in this plan, not the copy rung alone. The
   agent's reading of "implement and test the whole rung"; correct it

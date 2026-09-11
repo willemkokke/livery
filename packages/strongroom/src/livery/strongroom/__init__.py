@@ -29,7 +29,11 @@ builds a mirror with [livery.strongroom.Store.fill][]. The lifecycle
 is the store's too: [livery.strongroom.Store.publish_begin][] and
 [livery.strongroom.Store.publish_commit][] for the fail-closed
 publish, [livery.strongroom.Store.sweep][] for reachability, and
-[livery.strongroom.Store.erase][] for the tombstone.
+[livery.strongroom.Store.erase][] for the tombstone. The materialiser
+is [livery.strongroom.Store.view][], [livery.strongroom.Store.collect][]
+and [livery.strongroom.Store.drop_view][]: the only route from a digest
+to a path, by the cheapest safe rung, under a doctrine about what may
+be removed.
 """
 
 from __future__ import annotations
@@ -63,6 +67,7 @@ from livery.strongroom._errors import (
 from livery.strongroom._fields import Subject, SubjectKind, check_timestamp
 from livery.strongroom._lifecycle import PENDING, PINS, Pending, SweepReport
 from livery.strongroom._records import RefRecord, Tombstone
+from livery.strongroom._rungs import RUNGS, MadeRung, Rung, RungUnavailable
 from livery.strongroom._sources import (
     FillPolicy,
     FolderSource,
@@ -99,22 +104,36 @@ from livery.strongroom._tree import (
     check_target,
 )
 from livery.strongroom._version import Version
+from livery.strongroom._views import (
+    ENTRY_RUNGS,
+    PATH_BUDGET,
+    DropReport,
+    EntryRung,
+    ShedReport,
+    ViewEntry,
+    ViewRecord,
+)
 
 __all__ = [
     "ALGORITHMS",
+    "ENTRY_RUNGS",
     "LAYOUT_VERSION",
     "MANIFEST_NAME",
     "MUTATION_CLASSES",
     "NAME_BUDGET",
     "OWNED",
+    "PATH_BUDGET",
     "PENDING",
     "PINS",
+    "RUNGS",
     "SHA256",
     "Algorithm",
     "Clock",
     "Digest",
+    "DropReport",
     "Entry",
     "EntryKind",
+    "EntryRung",
     "ErasedObject",
     "FillPolicy",
     "FolderSource",
@@ -126,6 +145,7 @@ __all__ = [
     "Landed",
     "Link",
     "LockTimeout",
+    "MadeRung",
     "Manifest",
     "ManifestError",
     "MissingObject",
@@ -141,7 +161,10 @@ __all__ = [
     "RefProtected",
     "RefRecord",
     "RefTampered",
+    "Rung",
+    "RungUnavailable",
     "ScrubReport",
+    "ShedReport",
     "Source",
     "Store",
     "StoreError",
@@ -154,6 +177,8 @@ __all__ = [
     "Unreachable",
     "Value",
     "Version",
+    "ViewEntry",
+    "ViewRecord",
     "WriteOnceRefused",
     "__version__",
     "canonical",

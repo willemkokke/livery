@@ -136,14 +136,15 @@ class Unreachable(Exception):
 
 @contextlib.contextmanager
 def fetch_url(
-    url: str, *, connect_timeout: float, transfer_timeout: float
+    url: str, *, connect_timeout: float, transfer_timeout: float, method: str = "GET"
 ) -> Generator[http.client.HTTPResponse]:
     """Open *url* for reading, or raise Unreachable naming why.
 
     The one seam every network read goes through, so tests fake it and
     a fetch never needs a server. The connect timeout bounds
     establishing the connection; the transfer timeout then bounds
-    each wait for bytes, headers included.
+    each wait for bytes, headers included. `method` is `GET`, or
+    `HEAD` to learn whether a source holds an object without reading it.
 
     Yields:
         The response, status 200, positioned at its first byte.
@@ -165,7 +166,7 @@ def fetch_url(
         # exists, every later wait is bounded by the transfer timeout.
         connection.connect()
         cast(socket.socket, connection.sock).settimeout(transfer_timeout)
-        connection.request("GET", target)
+        connection.request(method, target)
         response = connection.getresponse()
         if response.status != 200:
             raise Unreachable(f"{url}: HTTP {response.status}")

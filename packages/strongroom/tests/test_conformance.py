@@ -16,6 +16,7 @@ from livery.strongroom import (
     Digest,
     Entry,
     ErasedObject,
+    Link,
     LockTimeout,
     MissingObject,
     Namespace,
@@ -24,13 +25,16 @@ from livery.strongroom import (
     RefConflict,
     RefProtected,
     RefTampered,
+    RungUnavailable,
     Store,
     Subject,
     Tree,
     UnknownNamespace,
     Version,
+    ViewRecord,
     WriteOnceRefused,
     _lifecycle,
+    _rungs,
 )
 
 CONFORMANCE = Path(__file__).resolve().parents[1] / "spec" / "conformance"
@@ -69,6 +73,8 @@ class Harness:
         self.monkeypatch = monkeypatch
         self.names: dict[str, Digest] = {}
         self.pendings: dict[str, str] = {}
+        self.views: dict[str, ViewRecord] = {}
+        self.base = store.root.parent
 
     def digest(self, name: str | None) -> Digest | None:
         if name is None:
@@ -97,10 +103,15 @@ class Harness:
         self.expecting(step, lambda: self.store.land(step["data"].encode("utf-8")))
 
     def op_tree(self, step: dict[str, Any]) -> None:
-        entries = [
-            Entry(name, "blob", self.names[blob], 0)
-            for name, blob in step["entries"].items()
-        ]
+        entries: list[Entry | Link] = []
+        for name, blob in step["entries"].items():
+            digest = self.names[blob]
+            entries.append(Entry(name, "blob", digest, len(self.store.read(digest))))
+        for name, subtree in step.get("subtrees", {}).items():
+            digest = self.names[subtree]
+            entries.append(Entry(name, "tree", digest, len(self.store.read(digest))))
+        for name, target in step.get("links", {}).items():
+            entries.append(Link(name, target))
         self.names[step["as"]] = self.store.put(Tree.of(entries).encode())
 
     def op_version(self, step: dict[str, Any]) -> None:
@@ -228,6 +239,48 @@ class Harness:
         expected = {self.names[name] for name in step["expect_removed"]}
         assert set(report.removed) == expected
 
+    # The materialiser.
+
+    def op_view(self, step: dict[str, Any]) -> None:
+        tree = self.names[step["tree"]]
+        at = self.base / step["at"]
+
+        def make() -> None:
+            self.views[step["as"]] = self.store.view(tree, at)
+
+        if "expect" in step:
+            self.expecting(step, make)
+        else:
+            make()
+
+    def op_entry(self, step: dict[str, Any]) -> None:
+        record = self.views[step["view"]]
+        entry = next(e for e in record.entries if e.path == step["path"])
+        assert entry.rung in step["expect_rung"], entry
+
+    def op_collect(self, step: dict[str, Any]) -> None:
+        tree = self.store.collect(self.base / step["at"], step["declared"])
+        assert tree.digest() == self.names[step["expect"]]
+
+    def op_drop_view(self, step: dict[str, Any]) -> None:
+        report = self.store.drop_view(self.views[step["view"]].id)
+        assert list(report.left) == step["expect_left"]
+
+    def op_stray(self, step: dict[str, Any]) -> None:
+        path = self.base / step["at"] / step["path"]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"not the view's")
+
+    def op_exists(self, step: dict[str, Any]) -> None:
+        path = self.base / step["at"] / step["path"]
+        assert (path.is_symlink() or path.exists()) is step["expect"]
+
+    def op_refuse_symlinks(self, step: dict[str, Any]) -> None:
+        def refuse(target: Any, destination: Any, **kwargs: Any) -> None:
+            raise RungUnavailable(1, "refused by the harness")
+
+        self.monkeypatch.setattr(_rungs, "symlink", refuse)
+
 
 @pytest.mark.parametrize("scenario", _scenarios())
 def test_scenario(
@@ -237,7 +290,7 @@ def test_scenario(
         Namespace(ns["name"], ns["mutation"]) for ns in scenario["namespaces"]
     ]
     store = Store.create(
-        tmp_path, namespaces=namespaces, lock_timeout=0.1, lock_stale=60
+        tmp_path / "store", namespaces=namespaces, lock_timeout=0.1, lock_stale=60
     )
     harness = Harness(store, monkeypatch)
     for step in scenario["steps"]:
@@ -248,4 +301,5 @@ def test_every_conformance_file_has_a_scenario() -> None:
     assert sorted(path.name for path in CONFORMANCE.glob("*.json")) == [
         "lifecycle.json",
         "refs.json",
+        "views.json",
     ]

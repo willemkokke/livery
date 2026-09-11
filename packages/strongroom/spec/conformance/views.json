@@ -1,0 +1,72 @@
+{
+  "scenarios": [
+    {
+      "id": "a-view-round-trips-through-collect",
+      "namespaces": [],
+      "steps": [
+        {"op": "put", "data": "read me", "as": "R"},
+        {"op": "put", "data": "main", "as": "M"},
+        {"op": "tree", "entries": {"main.py": "M"}, "as": "SRC"},
+        {"op": "tree", "entries": {"README.md": "R"}, "subtrees": {"src": "SRC"}, "links": {"latest": "src/main.py"}, "as": "T"},
+        {"op": "view", "tree": "T", "at": "v", "as": "V"},
+        {"op": "entry", "view": "V", "path": "README.md", "expect_rung": ["clone", "hardlink", "link", "copy"]},
+        {"op": "entry", "view": "V", "path": "latest", "expect_rung": ["symlink", "copy"]},
+        {"op": "collect", "at": "v", "declared": ["README.md", "src", "latest"], "expect": "T"},
+        {"op": "drop-view", "view": "V", "expect_left": []},
+        {"op": "sweep", "expect_removed": ["T", "SRC", "R", "M"]}
+      ]
+    },
+    {
+      "id": "a-live-view-is-a-root",
+      "namespaces": [],
+      "steps": [
+        {"op": "put", "data": "a", "as": "A"},
+        {"op": "tree", "entries": {"a": "A"}, "as": "T"},
+        {"op": "view", "tree": "T", "at": "v", "as": "V"},
+        {"op": "sweep", "expect_removed": []},
+        {"op": "drop-view", "view": "V", "expect_left": []},
+        {"op": "sweep", "expect_removed": ["T", "A"]}
+      ]
+    },
+    {
+      "id": "drop-leaves-what-it-did-not-create",
+      "namespaces": [],
+      "steps": [
+        {"op": "put", "data": "a", "as": "A"},
+        {"op": "tree", "entries": {"a": "A"}, "as": "SUB"},
+        {"op": "tree", "entries": {}, "subtrees": {"sub": "SUB"}, "as": "T"},
+        {"op": "view", "tree": "T", "at": "v", "as": "V"},
+        {"op": "stray", "at": "v", "path": "sub/mine.txt"},
+        {"op": "drop-view", "view": "V", "expect_left": ["sub: not created by the view: mine.txt", ".: not created by the view: sub"]},
+        {"op": "exists", "at": "v", "path": "sub/mine.txt", "expect": true},
+        {"op": "exists", "at": "v", "path": "sub/a", "expect": false}
+      ]
+    },
+    {
+      "id": "an-escaping-symlink-is-parked-when-links-are-refused",
+      "namespaces": [],
+      "steps": [
+        {"op": "put", "data": "a", "as": "A"},
+        {"op": "tree", "entries": {"a": "A"}, "links": {"out": "../elsewhere", "in": "a"}, "as": "T"},
+        {"op": "refuse-symlinks"},
+        {"op": "view", "tree": "T", "at": "v", "as": "V"},
+        {"op": "entry", "view": "V", "path": "out", "expect_rung": ["parked"]},
+        {"op": "entry", "view": "V", "path": "in", "expect_rung": ["copy"]},
+        {"op": "exists", "at": "v", "path": "out", "expect": false},
+        {"op": "exists", "at": "v", "path": "in", "expect": true}
+      ]
+    },
+    {
+      "id": "an-erased-entry-fails-the-view-loudly",
+      "namespaces": [{"name": "urls", "mutation": "volatile"}],
+      "steps": [
+        {"op": "put", "data": "a face", "as": "F"},
+        {"op": "tree", "entries": {"face": "F"}, "as": "T"},
+        {"op": "set", "namespace": "urls", "path": "keep", "digest": "T", "previous": null, "expect": "ok"},
+        {"op": "erase", "digest": "F", "reason": "erasure request"},
+        {"op": "view", "tree": "T", "at": "v", "as": "V", "expect": "erased"},
+        {"op": "exists", "at": "v", "path": "face", "expect": false}
+      ]
+    }
+  ]
+}
