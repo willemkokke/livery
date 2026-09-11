@@ -18,6 +18,8 @@ from livery.workshop._env_tasks import (
     github_persist,
     tool_profile,
     venv_bin,
+    windows_temp_policy,
+    with_runner_temp,
     workspace_delta,
 )
 from livery.workshop._envfile import (
@@ -213,6 +215,97 @@ def test_github_persist_needs_actions_and_filters_secrets(
     assert env_file.read_text() == "PLAIN=1\n"  # the secret never lands
     assert path_file.read_text() == "/w/.venv/bin\n"
     assert "PLAIN" in written and "API_TOKEN" not in written
+
+
+def _contract(root: Path, forge: str, *ci: str) -> Path:
+    body = f'[forge]\nkind = "{forge}"\n'
+    if ci:
+        body += "[ci]\n" + "\n".join(ci) + "\n"
+    (root / "workshop.toml").write_text(body)
+    return root
+
+
+def test_the_windows_temp_policy_refuses_a_value_that_is_neither(
+    tmp_path: Path,
+) -> None:
+    _contract(tmp_path, "github", 'windows-temp = "fast"')
+    with pytest.raises(_FAILURES) as caught:
+        windows_temp_policy(tmp_path)
+    assert "windows-temp is 'fast'" in str(caught.value)
+    assert "runner, system" in str(caught.value)
+
+
+def test_the_windows_temp_defaults_by_forge_kind_and_the_contract_decides(
+    tmp_path: Path,
+) -> None:
+    assert windows_temp_policy(_contract(tmp_path, "github")) == "runner"
+    assert windows_temp_policy(_contract(tmp_path, "gitea")) == "system"
+    assert windows_temp_policy(_contract(tmp_path, "gitlab")) == "system"
+    assert (
+        windows_temp_policy(_contract(tmp_path, "github", 'windows-temp = "system"'))
+        == "system"
+    )
+    assert (
+        windows_temp_policy(_contract(tmp_path, "gitea", 'windows-temp = "runner"'))
+        == "runner"
+    )
+
+
+def test_a_windows_leg_moves_temp_under_the_runners_temp_and_says_when_not(
+    tmp_path: Path,
+) -> None:
+    root = _contract(tmp_path, "github")
+    delta = EnvDelta(values={"PLAIN": "1"}, paths=("/w/.venv/bin",))
+    runner_temp = tmp_path / "_temp"
+    # Off Windows nothing moves and nothing is said.
+    assert with_runner_temp(
+        delta, root, {"RUNNER_TEMP": str(runner_temp)}, platform="linux"
+    ) == (delta, "")
+    # A Windows leg whose runner names no temp keeps the system temp, and says so.
+    same, note = with_runner_temp(delta, root, {}, platform="win32")
+    assert same == delta and "names no RUNNER_TEMP" in note
+    # The system policy keeps it too, and says so.
+    _contract(tmp_path, "github", 'windows-temp = "system"')
+    same, note = with_runner_temp(
+        delta, root, {"RUNNER_TEMP": str(runner_temp)}, platform="win32"
+    )
+    assert same == delta and "windows-temp = system" in note
+    # The runner policy points TEMP and TMP under the runner's temp, created.
+    _contract(tmp_path, "github")
+    moved, note = with_runner_temp(
+        delta, root, {"RUNNER_TEMP": str(runner_temp)}, platform="win32"
+    )
+    target = runner_temp / "tmp"
+    assert target.is_dir()
+    assert moved.values == {"PLAIN": "1", "TEMP": str(target), "TMP": str(target)}
+    assert moved.paths == delta.paths
+    assert note == f"TEMP: {target} (the runner's working drive, beside the uv cache)"
+
+
+def test_the_github_emission_persists_the_moved_temp(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import sys
+
+    from livery.workshop import _env_tasks
+
+    root = _contract(tmp_path, "github")
+    monkeypatch.setattr(
+        "livery.workshop._layers.workspace_root", lambda start=None: root
+    )
+    monkeypatch.chdir(root)
+    monkeypatch.setattr(sys, "platform", "win32")
+    env_file = tmp_path / "env"
+    runner_temp = tmp_path / "_temp"
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_ENV", str(env_file))
+    monkeypatch.delenv("GITHUB_PATH", raising=False)
+    monkeypatch.setenv("RUNNER_TEMP", str(runner_temp))
+    out = _env_tasks.env_emit(github=True)
+    lines = env_file.read_text().splitlines()
+    assert f"TEMP={runner_temp / 'tmp'}" in lines
+    assert f"TMP={runner_temp / 'tmp'}" in lines
+    assert "TEMP:" in out and "the runner's working drive" in out
 
 
 def test_the_tool_profile_derives_from_package_types(tmp_path: Path) -> None:

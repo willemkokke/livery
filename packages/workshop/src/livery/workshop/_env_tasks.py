@@ -138,6 +138,68 @@ class EnvDelta:
     paths: tuple[str, ...] = ()
 
 
+#: The temporary directory of a Windows leg: ``runner`` puts it under
+#: the runner's own temp, ``system`` leaves it where Windows puts it.
+WINDOWS_TEMP_VALUES = ("runner", "system")
+
+
+def windows_temp_policy(root: Path) -> str:
+    """The contract's ``[ci] windows-temp``, or the forge kind's default.
+
+    ``runner`` for a GitHub-shaped workspace: GitHub's hosted Windows
+    runners keep the workspace, the uv cache, and the runner's temp on
+    the fast working drive and the system temp on the slow system
+    drive. ``system`` for every other forge, whose runners are the
+    workspace's own. A value that is neither refuses naming both.
+    """
+    from livery.workshop._contract import load_contract
+
+    contract = load_contract(root / "workshop.toml")
+    value = (contract.get("ci") or {}).get("windows-temp")
+    if value is None:
+        kind = str((contract.get("forge") or {}).get("kind", ""))
+        return "runner" if kind == "github" else "system"
+    if value not in WINDOWS_TEMP_VALUES:
+        fail(
+            f"[ci] windows-temp is {value!r}; it is one of"
+            f" {', '.join(WINDOWS_TEMP_VALUES)}"
+        )
+    return str(value)
+
+
+def with_runner_temp(
+    delta: EnvDelta,
+    root: Path,
+    environ: dict[str, str],
+    *,
+    platform: str = "",
+) -> tuple[EnvDelta, str]:
+    """*delta* with ``TEMP`` and ``TMP`` under the runner's temp on a Windows leg.
+
+    The tests' files and the environments they build with uv then
+    share the working drive with the uv cache, which the runner keeps
+    under its temp, so uv links instead of copying. Returns the delta
+    and one line saying what happened. Nothing changes off Windows,
+    under the ``system`` policy, or when the runner names no
+    ``RUNNER_TEMP``; the last two say so.
+    """
+    import sys
+
+    if (platform or sys.platform) != "win32":
+        return delta, ""
+    if windows_temp_policy(root) == "system":
+        return delta, "TEMP: the system temp stays ([ci] windows-temp = system)"
+    runner_temp = environ.get("RUNNER_TEMP", "")
+    if not runner_temp:
+        return delta, "TEMP: the runner names no RUNNER_TEMP; the system temp stays"
+    target = Path(runner_temp) / "tmp"
+    target.mkdir(parents=True, exist_ok=True)
+    values = {**delta.values, "TEMP": str(target), "TMP": str(target)}
+    return EnvDelta(values=values, paths=delta.paths), (
+        f"TEMP: {target} (the runner's working drive, beside the uv cache)"
+    )
+
+
 def venv_bin(root: Path) -> Path:
     """The venv's executables directory: ``Scripts`` on Windows, ``bin`` elsewhere.
 
@@ -297,16 +359,21 @@ def env_emit(
     Bare: the entered-shell emission plus the interactive completion
     hook. ``--agent``: the membership selection for an agent session
     (evaluated by its env file, so no completion hook). ``--github``
-    writes the runner's env files instead of printing.
+    writes the runner's env files instead of printing, and on a
+    Windows leg points ``TEMP`` and ``TMP`` under the runner's temp
+    when the contract's ``[ci] windows-temp`` says ``runner``, the
+    default of a GitHub-shaped workspace.
     """
     import sys
 
     root, cwd = _workspace()
     dialect = target or ("pwsh" if sys.platform == "win32" else "posix")
     if github:
-        delta = workspace_delta(root, cwd)
+        delta, note = with_runner_temp(
+            workspace_delta(root, cwd), root, dict(os.environ)
+        )
         written = github_persist(delta, dict(os.environ))
-        return "\n".join(written)
+        return "\n".join([*written, note] if note else written)
     if agent:
         delta = agent_delta(root, cwd, dict(os.environ))
         return "\n".join(emit_lines(delta, dialect))
