@@ -368,10 +368,10 @@ COVERAGE_DATA = "coverage-data"
 def _unmetered() -> dict[str, str]:
     """The environment for a coverage CLI call on a named data file.
 
-    Under a metered gate the ambient ``COVERAGE_*`` and ``COV_CORE_*``
-    variables re-point the coverage CLI at the outer run's live data
-    file, whose parallel parts are still being written, and meter the
-    CLI process itself; scrubbing them keeps the call on the files the
+    Ambient ``COVERAGE_*`` and ``COV_CORE_*`` variables, from a shell
+    that armed the meter or a pytest-cov parent, would re-point the
+    coverage CLI at that process's live data file and meter the CLI
+    process itself; scrubbing them keeps the call on the files the
     caller named.
     """
     return {
@@ -590,9 +590,11 @@ def combine_leg(root: Path, packages: tuple[Package, ...]) -> None:
     if not parts and not (root / ".coverage").is_file():
         if scope not in (VERIFIED, NOTHING):
             fail(
-                "this leg left no coverage data: nothing was metered. The leg's"
-                " runner sets COVERAGE_PROCESS_START=pyproject.toml so every"
-                " python starts metered; without it there is nothing to union."
+                "this leg left no coverage data: nothing was metered. Inside CI"
+                " the test runner arms COVERAGE_PROCESS_START in pytest's"
+                " environment, so the tests and every process they start are"
+                " metered; a leg that ran its gate and left no data ran no"
+                " metered pytest, and there is nothing to union."
             )
         print(f"  coverage: no data, the gate ran {scope!r}; nothing to combine")
         _put_leg(root, marker, {})
@@ -979,10 +981,11 @@ def run_test(
     """Run the test suite; *pytest_args* forwarded verbatim.
 
     With *packages* and *root*, the run measures coverage over
-    ``livery`` and enforces each package's committed floor afterwards;
-    *scoped* additionally narrows collection to those packages' own
-    test directories (the affected mode). Without them the arguments
-    pass through untouched.
+    ``livery``: inside CI the tests run metered for the gate job's
+    union, and on a machine the run enforces each package's committed
+    floor afterwards. *scoped* additionally narrows collection to
+    those packages' own test directories (the affected mode). Without
+    them the arguments pass through untouched.
     """
     if not packages or root is None:
         pytest.opts(in_process=False)(*pytest_args)
@@ -999,15 +1002,22 @@ def run_test(
             for package in packages
             if (package.directory / "tests").is_dir()
         ) + ((WORKSPACE_TESTS,) if (root / WORKSPACE_TESTS).is_dir() else ())
-    if os.environ.get("COVERAGE_PROCESS_START"):
-        # Coverage's own subprocess variable: when it is set, every
-        # python this venv starts is already metered from interpreter
-        # start (the CI gate arms it), so the run adds no second
-        # meter and the enforcement happens once, on the merged
-        # union, in the aggregating job. The workshop's pytest plugin
-        # names each test's context in that run, and the leg splits
-        # the one run's data per suite afterwards.
-        pytest.opts(in_process=False)(*dirs, *pytest_args)
+    from livery.workshop._pytest_contexts import ARMED
+    from livery.workshop._state import run_context
+
+    if run_context() is not None:
+        # Inside CI the tests run metered, and only they. Coverage's
+        # own subprocess variable is armed in pytest's environment,
+        # never in the gate's own, so every python the tests start
+        # inherits it (the xdist workers, the runner's children a test
+        # spawns in a fixture workspace) and the driver that decides
+        # what to run records nothing: a line counts only when a test
+        # reached it, whatever the gate ran around the tests. The
+        # workshop's pytest plugin names each test's context in that
+        # run, the leg splits the one run's data per suite, and the
+        # floors are judged once, on the union, in the gate job.
+        armed = {**os.environ, ARMED: str(root / "pyproject.toml")}
+        pytest.opts(in_process=False, env=armed)(*dirs, *pytest_args)
         return
     # Bare --cov: the measured source is [tool.coverage.run] source,
     # the namespace the render derived, never a spelled module.

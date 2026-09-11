@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from pathlib import Path
 
@@ -208,7 +209,7 @@ def _suite(tmp_path: Path, name: str) -> Package:
     return package
 
 
-def test_a_measuring_parent_runs_one_pooled_process_and_adds_no_meter(
+def test_inside_ci_the_tests_run_metered_and_the_gate_itself_does_not(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     thing = _suite(tmp_path, "thing")
@@ -220,16 +221,25 @@ def test_a_measuring_parent_runs_one_pooled_process_and_adds_no_meter(
         raise AssertionError("enforcement belongs to the aggregating job")
 
     monkeypatch.setattr(_python, "enforce_coverage", refuse)
-    monkeypatch.setenv("COVERAGE_PROCESS_START", "pyproject.toml")
+    _in_ci(monkeypatch, "check-a")
     _python.run_test(packages=(thing, other), root=tmp_path, scoped=True)
     # One process for every suite, under the leg's own prefix: the
     # plugin names each test's context, and the leg splits the data.
-    assert fake.calls == [(("packages/thing/tests", "packages/other/tests"), None)]
+    # The meter is armed in pytest's environment alone, with the
+    # config's absolute path, and never in the gate's own.
+    assert [args for args, _env in fake.calls] == [
+        ("packages/thing/tests", "packages/other/tests")
+    ]
+    env = fake.calls[0][1]
+    assert env is not None
+    assert env["COVERAGE_PROCESS_START"] == str(tmp_path / "pyproject.toml")
+    assert env["WORKSHOP_LEG"] == "check-a"  # the rest of the environment rides
+    assert "COVERAGE_PROCESS_START" not in os.environ
     # The workspace's own tests ride every scoped run once they exist.
     (tmp_path / "tests").mkdir()
     fake.calls.clear()
     _python.run_test(packages=(thing,), root=tmp_path, scoped=True)
-    assert fake.calls == [(("packages/thing/tests", "tests"), None)]
+    assert [args for args, _env in fake.calls] == [("packages/thing/tests", "tests")]
     assert not any("--cov" in args for args, _env in fake.calls)
 
 
@@ -251,7 +261,10 @@ def test_without_a_parent_the_meter_and_the_preview_run(
     monkeypatch.setattr(
         _python, "report_coverage", lambda root, packages: enforced.append(root)
     )
-    monkeypatch.delenv("COVERAGE_PROCESS_START", raising=False)
+    # A runner's own environment would make this a CI run: scrubbed,
+    # so the test reads the same on a runner as on a desk.
+    for name in ("GITHUB_ACTIONS", "GITEA_ACTIONS", "GITLAB_CI"):
+        monkeypatch.delenv(name, raising=False)
     _python.run_test(packages=(package,), root=tmp_path, scoped=True)
     assert any(arg == "--cov" for arg in seen[0])
     assert "packages/thing/tests" not in seen[0]  # no tests dir exists

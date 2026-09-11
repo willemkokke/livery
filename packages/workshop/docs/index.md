@@ -121,10 +121,11 @@ writes nothing. Lowering a mark is a person's act:
 `fm coverage.accept <package> <value> --reason=<why>` writes a row
 naming who and why, and refuses without a reason, at or above the
 current mark, or for a package with a committed floor. The number
-that is judged is the CI union: every leg runs measured (each `fm`
-child included) and the gate job combines all platforms before
-enforcing, so the floors are deterministic per change and never
-depend on one machine's view. Coverage stays global under the
+that is judged is the CI union: on every leg the tests run measured,
+each process a test starts included and the gate's own driver never,
+so a line counts only when a test reached it, and the gate job
+combines all platforms before enforcing, so the floors are
+deterministic per change and never depend on one machine's view. Coverage stays global under the
 affected mode: in a check leg's one measured run every test records
 under a context named by its node id (the workshop's own pytest
 plugin, quiet outside a measured run), the leg splits the run's data

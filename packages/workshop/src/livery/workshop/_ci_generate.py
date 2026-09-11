@@ -275,16 +275,12 @@ jobs:
           # pull request's base branch, which a shallow clone lacks.
           fetch-depth: 0
 {setup_uv_leg}{enter_leg}      - name: Check
-        env:
-          # Coverage's own subprocess contract: the .pth the
-          # coverage-enable-subprocess dev dependency installs calls
-          # coverage.process_startup() in every python this venv
-          # starts, armed by this variable, so the whole {prog}
-          # invocation meters from interpreter start; the leg's
-          # measured suites ride its per-run ref on the state store,
-          # and the gate job below unions them with main's record
-          # and judges once.
-          COVERAGE_PROCESS_START: pyproject.toml
+        # The tests run metered, and only they: the test runner arms
+        # coverage's process-start variable in pytest's environment,
+        # so the tests and every process they start record, and the
+        # gate's own driver does not. The leg's measured suites ride
+        # its per-run ref on the state store, and the gate job below
+        # unions them with main's record and judges once.
         run: >-
           {prog} ci.run --point=gate --job=check
           --os="${{{{ matrix.os }}}}" --python="${{{{ matrix.python }}}}"
@@ -599,14 +595,12 @@ jobs:
       # act_runner host mode: no setup actions. The entry script
       # installs the lock's pinned uv itself where the host has none.
 {rung}{enter_leg}      - name: Check
-        env:
-          # Coverage's own subprocess contract: every python this venv
-          # starts is metered from interpreter start, so the whole
-          # {prog} invocation measures with no wrapper; the leg's
-          # measured suites ride its per-run ref on the state store,
-          # and the gate job unions them with main's record and
-          # judges once.
-          COVERAGE_PROCESS_START: pyproject.toml
+        # The tests run metered, and only they: the test runner arms
+        # coverage's process-start variable in pytest's environment,
+        # so the tests and every process they start record, and the
+        # gate's own driver does not. The leg's measured suites ride
+        # its per-run ref on the state store, and the gate job unions
+        # them with main's record and judges once.
         run: >-
           {prog} ci.run --point=gate --job=check
           --os="${{{{ matrix.os }}}}" --python="${{{{ matrix.python }}}}"
