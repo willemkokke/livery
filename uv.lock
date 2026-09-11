@@ -1005,7 +1005,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "copier", specifier = ">=9.18.1" },
+    { name = "copier", specifier = ">=9.18.2" },
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-forge", editable = "packages/forge" },
     { name = "livery-toolroom", editable = "packages/toolroom" },
