@@ -132,22 +132,24 @@ plugin, quiet outside a measured run), the leg splits the run's data
 per suite and puts each suite's lines on its per-run ref of the
 state store, with the identity of the suite's dependency closure
 (the tree ids of the package and of every package it depends on,
-plus the root's `pyproject.toml` and `uv.lock`). Main's coverage
-record holds, per check leg, one row per suite: the lines main's
-gate last measured and the closure they were measured at. A leg
-skips a suite only when the record on that leg holds it at the
-suite's current closure; otherwise the suite runs, and the leg says
-why. The workspace's own `tests/` directory is a unit too, keyed by
-every package's tree, and every leg that runs a suite runs it. The
-gate job unions the legs' lines with every skipped suite carried
-from the record before it judges, so the union is the same global
-union a full run produces; a suite neither the run nor the record
-can supply is red by name, never a smaller union. On main's run the
-gate job writes the record back, fresh rows for what the legs
-measured, the rest carried, and a pull request's run never writes
-it, so reuse goes through main alone: on a tree the verified record
-already proves, a leg runs nothing but the suites whose closure
-moved since main's record, measured for their lines alone. A local `fm test` prints its own
+plus the root's `pyproject.toml` and `uv.lock`). Main has a
+coverage record, and so does every branch with a pull request run:
+per check leg, one row per suite, the lines the last run judged and
+the closure each was measured at. A leg skips a suite only when its
+branch's record or main's holds it at the suite's current closure;
+otherwise the suite runs, and the leg says why. The workspace's own
+`tests/` directory is a unit too, keyed by every package's tree, and
+every leg that runs a suite runs it. The gate job unions the legs'
+lines with every skipped suite carried from the records before it
+judges, so the union is the same global union a full run produces,
+and writes that union back onto the branch's record; a suite no
+record can supply is red by name, never a smaller union. At the
+merge main's run finds its tree on the verified record, which names
+the branch, skips the gate, and copies the branch's record into
+main's without measuring; a squash of a stale branch has another
+tree and pays the full gate. A suite neither record holds is
+measured on the spot. The janitor drops a branch's record once the
+branch is gone from origin. A local `fm test` prints its own
 lower-biased preview beside the floor, for information. Raise a
 committed floor as the suite grows; lower it only deliberately, in a
 reviewed change or an accepted row. The release legs publish a
@@ -170,7 +172,7 @@ share and a fresh clone starts without.
 | `metrics` | one run: every job's times, the run's wall, the union's percentages | 300 | the gate job |
 | `run/<id>/<leg>` | a check leg's half of its timing row, and the suites it measured with the scope it ran, until the gate job collects it | none | the leg |
 | `verified` | a tree a green gate proved, with its scope and the base it composed on | 200 | the gate job |
-| `coverage/main/<leg>` | main's measured lines per suite on one leg, each at the closure it was measured at, replaced in place at every merge | none | main's gate job |
+| `coverage/<base>/<leg>` | a record on one leg, main's or a branch's: one row per suite, the lines its last run judged at the closure each was measured at, replaced in place; a branch's goes with the branch | none | main's gate job at a merge; a branch's own pull request runs |
 | `coverage/marks` | a package's coverage mark and who set it | 400 | the gate job, `fm coverage.accept` |
 | `gate-record` (local) | a tree this checkout's `fm check` proved green | 200, 7 days | a green local gate |
 | `diagnostics` (local) | the follow classifier's inputs for an unmerged ending | 20 | every unmerged follow |

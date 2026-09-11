@@ -14,7 +14,9 @@ from livery.workshop._packages import Edge, Package
 
 LEG = "check-linux-3.14"
 RUN = _state.RunContext("gitea", "1013", "push", "refs/heads/main", leg=LEG)
-PULL = _state.RunContext("gitea", "1014", "pull_request", "refs/pull/3/merge", leg=LEG)
+PULL = _state.RunContext(
+    "gitea", "1014", "pull_request", "refs/pull/3/merge", leg=LEG, head_ref="feat/x"
+)
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -63,7 +65,13 @@ def work(tmp_path: Path) -> Path:
 
 @pytest.fixture(autouse=True)
 def _in_ci(monkeypatch: pytest.MonkeyPatch) -> None:
-    for name in ("GITHUB_EVENT_PATH", "GITHUB_SHA", "GITHUB_REF", "GITHUB_JOB"):
+    for name in (
+        "GITHUB_EVENT_PATH",
+        "GITHUB_SHA",
+        "GITHUB_REF",
+        "GITHUB_JOB",
+        "GITHUB_HEAD_REF",
+    ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     monkeypatch.setenv("GITEA_ACTIONS", "true")
@@ -112,7 +120,9 @@ def test_the_puts_refuse_outside_ci(
     )
 
 
-def test_only_mains_run_writes_the_record(work: Path) -> None:
+def test_only_mains_run_writes_mains_record_and_only_a_branchs_own_run_its_own(
+    work: Path,
+) -> None:
     fresh = {"packages/base": _unit("packages/base")}
     why = _coverage_store.put_record(work, PULL, leg=LEG, fresh=fresh)
     assert why == "refusing: a pull_request run reads main's record and never writes it"
@@ -121,6 +131,28 @@ def test_only_mains_run_writes_the_record(work: Path) -> None:
         work, local, leg=LEG, fresh=fresh
     )
     assert _coverage_store.recorded(work, leg=LEG) == _coverage_store.Record({})
+    # A branch's record: its own pull request run writes it, no other run.
+    why = _coverage_store.put_record(work, PULL, leg=LEG, fresh=fresh, base="feat/y")
+    assert why == (
+        "refusing: feat/y's record is written by that branch's own pull request"
+        " run, not a pull_request run of feat/x"
+    )
+    why = _coverage_store.put_record(work, RUN, leg=LEG, fresh=fresh, base="feat/x")
+    assert why.endswith("not a push run of no branch")
+    assert _coverage_store.put_record(work, PULL, leg=LEG, fresh=fresh, base="") == (
+        "refusing: no branch to write a record for"
+    )
+    assert (
+        _coverage_store.put_record(work, PULL, leg=LEG, fresh=fresh, base="feat/x")
+        == ""
+    )
+    assert _coverage_store.recorded(work, leg=LEG, base="feat/x").units == fresh
+    assert _coverage_store.recorded(work, leg=LEG) == _coverage_store.Record({})
+    empty = _coverage_store.recorded(work, leg=LEG, base="")
+    assert empty.failed and empty.reason == "no branch to read a record for"
+    assert _coverage_store.record_ref(LEG, "feat/x") == (
+        _state.NAMESPACE + "coverage/feat-x/" + _state.slug(LEG)
+    )
 
 
 def test_an_absent_record_is_no_units_and_an_unreachable_store_names_its_reason(
@@ -312,7 +344,9 @@ def _contract(work: Path, runners: str) -> None:
         )
 
 
-def test_the_current_keys_are_main_with_every_check_leg_or_none(work: Path) -> None:
+def test_the_current_keys_are_main_and_every_branch_with_every_check_leg_or_none(
+    work: Path, tmp_path: Path
+) -> None:
     # No contract at the root: the keys cannot be told, and the janitor
     # drops nothing.
     assert _coverage_store.current_keys(work) is None
@@ -321,6 +355,19 @@ def test_the_current_keys_are_main_with_every_check_leg_or_none(work: Path) -> N
         ("main", "check-ubuntu-latest-3-14"),
         ("main", "check-macos-latest-3-14"),
     }
+    # A branch on origin is a base while it lives, spelled ref-safe.
+    _git(work, "push", "-q", "origin", "main:refs/heads/feat/x")
+    assert _coverage_store.branches(work) == ["feat/x", "main"]
+    assert _coverage_store.current_keys(work) == {
+        ("main", "check-ubuntu-latest-3-14"),
+        ("main", "check-macos-latest-3-14"),
+        ("feat-x", "check-ubuntu-latest-3-14"),
+        ("feat-x", "check-macos-latest-3-14"),
+    }
+    # A remote that cannot be listed tells no keys, and nothing is dropped.
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    assert _coverage_store.branches(work) is None
+    assert _coverage_store.current_keys(work) is None
 
 
 def test_the_janitor_drops_a_closure_keyed_ref_and_keeps_the_record_and_the_marks(
@@ -336,11 +383,24 @@ def test_the_janitor_drops_a_closure_keyed_ref_and_keeps_the_record_and_the_mark
     _contract(work, '"linux"')
     fresh = {"packages/base": _unit("packages/base")}
     assert _coverage_store.put_record(work, RUN, leg=LEG, fresh=fresh) == ""
+    # A branch's record lives while the branch does, and goes with it.
+    _git(work, "push", "-q", "origin", "main:refs/heads/feat/x")
+    assert (
+        _coverage_store.put_record(work, PULL, leg=LEG, fresh=fresh, base="feat/x")
+        == ""
+    )
+    branch_ref = _coverage_store.record_ref(LEG, "feat/x")
     lines = _state.sweep(work, (_coverage_store.RECORD,), remote=True)
     assert f"  {old}: no current base and leg produces it; dropped" in lines
     assert f"  {_coverage_store.record_ref(LEG)}: 1 row(s), within its bounds" in lines
+    assert f"  {branch_ref}: 1 row(s), within its bounds" in lines
     assert _state.read(work, old).files is None
     assert _state.read(work, marks).files == {"m": "{}"}
+    assert _coverage_store.recorded(work, leg=LEG).units == fresh
+    _git(work, "push", "-q", "origin", ":refs/heads/feat/x")
+    lines = _state.sweep(work, (_coverage_store.RECORD,), remote=True)
+    assert f"  {branch_ref}: no current base and leg produces it; dropped" in lines
+    assert _state.read(work, branch_ref).files is None
     assert _coverage_store.recorded(work, leg=LEG).units == fresh
 
 

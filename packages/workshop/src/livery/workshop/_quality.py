@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING, Annotated
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from livery.workshop._verified import Verified
+
 import livery.footman as footman
 from livery.footman import Forward, doc, fail, group, parallel, task
 from livery.workshop._backends import _python, require_backends
@@ -184,14 +186,15 @@ def ci_affected_base(root: Path, run: RunContext | None) -> str:
     return run.base_ref
 
 
-def verified_already(root: Path) -> bool:
-    """Whether the record names this checkout's tree as proved green in full.
+def verified_already(root: Path) -> Verified | None:
+    """The record's full row for this checkout's tree, or ``None`` to run the gate.
 
     Prints the run that proved it when it does, and the reason when
     the record could not decide (an unreadable store, an entry of
     another shape); an absent entry or a narrowed scope is the
     ordinary case and stays quiet. Never skips on anything but a
-    full entry for this exact tree.
+    full entry for this exact tree. The row names the branch whose
+    run proved it, the coverage record main's run copies.
     """
     from livery.workshop import _verified
     from livery.workshop._git_ops import GitError, GitOps
@@ -200,19 +203,19 @@ def verified_already(root: Path) -> bool:
         tree = _verified.tree_id(GitOps(root))
     except GitError as error:
         print(f"  verified: this checkout has no tree id ({error}); running the gate")
-        return False
+        return None
     found, why = _verified.record(root, tree)
     if why:
         print(f"  verified: {why}; running the gate")
-        return False
+        return None
     if found is None or found.scope != _verified.FULL:
-        return False
+        return None
     basis = f" on top of tree {found.base_tree[:12]}" if found.base_tree else ""
     print(
         f"  verified: tree {tree[:12]} proved green by run {found.run}"
         f" at {found.sha[:12]}{basis}; skipping the gate"
     )
-    return True
+    return found
 
 
 def _affected(base: str = "main") -> tuple[Package, ...] | None:
@@ -290,14 +293,11 @@ def check(
         print(
             "  nightly: the whole gate, the verified record and the narrowing set aside"
         )
-    if (
-        not nightly
-        and root_for_ci is not None
-        and run is not None
-        and verified_already(root_for_ci)
-    ):
-        _measure_unrecorded(root_for_ci, run)
-        return
+    if not nightly and root_for_ci is not None and run is not None:
+        proved = verified_already(root_for_ci)
+        if proved is not None:
+            _measure_unrecorded(root_for_ci, run, bases=record_bases(proved.branch))
+            return
     ci_base = (
         ci_affected_base(root_for_ci, run)
         if not affected and not nightly and root_for_ci is not None
@@ -421,47 +421,75 @@ def _nothing_reason(base: str) -> str:
     return "the branch changes no files"
 
 
+def record_bases(branch: str) -> tuple[str, ...]:
+    """The records a leg reads, in order: the branch's own if any, then main's."""
+    from livery.workshop._coverage_store import MAIN
+
+    return (branch, MAIN) if branch and branch != MAIN else (MAIN,)
+
+
 def _unrecorded(
     root: Path,
     run: RunContext,
     packages: tuple[Package, ...],
     units: tuple[Package, ...],
+    *,
+    bases: tuple[str, ...],
 ) -> tuple[Package, ...]:
-    """Of *units*, those main's record on this leg cannot supply; each says why.
+    """Of *units*, those no record in *bases* can supply on this leg; each says why.
 
-    One read of the record. A unit the record holds at its current
-    closure identity is supplied; a unit it lacks or holds at another
-    closure, an unreadable record, a leg without a label, or a closure
-    git cannot identify runs the suite fresh and says why, so the
-    union never lacks a suite and the record needs no backfill.
+    One read per record. A unit a record holds at its current closure
+    identity is supplied, the branch's record asked before main's; a
+    unit every record lacks or holds at another closure, an unreadable
+    record, a leg without a label, or a closure git cannot identify
+    runs the suite fresh and says why, so the union never lacks a
+    suite and the records need no backfill.
     """
-    from livery.workshop._coverage_store import MAIN, closure_id, recorded
+    from livery.workshop._coverage_store import closure_id, recorded
     from livery.workshop._git_ops import GitError, GitOps
 
     if not units:
         return ()
-    held = recorded(root, leg=run.leg)
+    if not run.leg:
+        for unit in units:
+            print(
+                f"  coverage store: {unit.path} runs, nothing to reuse (this leg"
+                " has no label)"
+            )
+        return units
+    held = {base: recorded(root, leg=run.leg, base=base) for base in bases}
     git = GitOps(root)
     out: list[Package] = []
     for unit in units:
-        if held.failed:
-            why = held.reason
+        try:
+            key = closure_id(git, packages, unit)
+        except GitError as error:
+            print(
+                f"  coverage store: {unit.path} runs, nothing to reuse (its closure"
+                f" has no identity: {error})"
+            )
+            out.append(unit)
+            continue
+        states: list[str] = []
+        for base in bases:
+            record = held[base]
+            if record.failed:
+                states.append(f"{base}'s record could not be read ({record.reason})")
+                continue
+            row = record.units.get(unit.path)
+            if row is not None and row.closure == key:
+                break
+            states.append(
+                f"{base}'s record holds it at another closure"
+                if row is not None
+                else f"{base}'s record holds no measurement of it"
+            )
         else:
-            try:
-                key = closure_id(git, packages, unit)
-            except GitError as error:
-                why = f"its closure has no identity ({error})"
-            else:
-                row = held.units.get(unit.path)
-                if row is not None and row.closure == key:
-                    continue
-                why = (
-                    f"{MAIN}'s record on this leg holds it at another closure"
-                    if row is not None
-                    else f"{MAIN}'s record on this leg holds no measurement of it"
-                )
-        print(f"  coverage store: {unit.path} runs, nothing to reuse ({why})")
-        out.append(unit)
+            print(
+                f"  coverage store: {unit.path} runs, nothing to reuse (on this leg"
+                f" {', '.join(states)})"
+            )
+            out.append(unit)
     return tuple(out)
 
 
@@ -471,11 +499,11 @@ def _with_unstored_suites(
     packages: tuple[Package, ...],
     subset: tuple[Package, ...],
 ) -> tuple[Package, ...]:
-    """*subset* plus every suite main's record cannot supply for this leg.
+    """*subset* plus every suite no record can supply for this leg.
 
-    A leg skips a suite only when the record holds the suite's lines
-    at its current closure on this leg; the rest run fresh, and the
-    line says why.
+    A leg skips a suite only when its branch's record or main's holds
+    the suite's lines at its current closure on this leg; the rest run
+    fresh, and the line says why.
     """
     from livery.workshop._backends._python import suites_of
 
@@ -483,27 +511,30 @@ def _with_unstored_suites(
     skipped = tuple(
         package for package in suites_of(packages) if package.path not in kept
     )
-    extra = {unit.path for unit in _unrecorded(root, run, packages, skipped)}
+    bases = record_bases(run.head_ref)
+    extra = {
+        unit.path for unit in _unrecorded(root, run, packages, skipped, bases=bases)
+    }
     if not extra:
         return subset
     return tuple(package for package in packages if package.path in kept | extra)
 
 
-def _measure_unrecorded(root: Path, run: RunContext) -> None:
-    """On a proved tree, run the units main's record cannot supply, for their lines.
+def _measure_unrecorded(root: Path, run: RunContext, *, bases: tuple[str, ...]) -> None:
+    """On a proved tree, run the units no record in *bases* can supply, for their lines.
 
     The gate's checks already passed for this tree, so none reruns.
-    The coverage union still needs every unit at its current closure,
-    and a pull request's run never writes the record, so main's run
-    after a merge measures what the merge changed: those suites run
-    metered, and nothing else. A tree the record supplies in full
-    leaves the ``verified`` scope and runs nothing.
+    The coverage union still needs every unit at its current closure;
+    the branch whose run proved the tree recorded them, so a tree the
+    records supply in full leaves the ``verified`` scope and runs
+    nothing. A unit neither record holds, a row written before the
+    record named branches, say, runs metered, and nothing else.
     """
     from livery.workshop import _verified
     from livery.workshop._backends._python import units_of
 
     packages = _packages()
-    units = _unrecorded(root, run, packages, units_of(root, packages))
+    units = _unrecorded(root, run, packages, units_of(root, packages), bases=bases)
     if not units:
         _verified.write_marker(root, _verified.VERIFIED, leg=run.leg)
         return

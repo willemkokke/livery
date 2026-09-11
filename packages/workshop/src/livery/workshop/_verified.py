@@ -73,6 +73,9 @@ class Verified:
         legs: The check legs' names, as the forge lists them.
         base_tree: The tree a composed row rests on; empty otherwise.
         base_run: The run that proved that base; empty otherwise.
+        branch: The pull request branch whose run proved the tree, the
+            base of the coverage record main's run copies at the merge;
+            empty for main's own run and for a row that never said.
     """
 
     tree: str
@@ -82,6 +85,7 @@ class Verified:
     legs: tuple[str, ...]
     base_tree: str = ""
     base_run: str = ""
+    branch: str = ""
 
 
 def tree_id(git: GitOps, ref: str = "HEAD") -> str:
@@ -146,6 +150,7 @@ def record(root: Path, tree: str) -> tuple[Verified | None, str]:
             legs=tuple(str(leg) for leg in entry.get("legs", [])),
             base_tree=str(entry.get("base_tree", "")),
             base_run=str(entry.get("base_run", "")),
+            branch=str(entry.get("branch", "") or ""),
         ),
         "",
     )
@@ -159,12 +164,15 @@ def stamp(
     sha: str,
     legs: tuple[str, ...],
     base: Verified | None = None,
+    branch: str = "",
 ) -> str:
     """Record *tree* as proved green by *run*; ``""`` or the reason.
 
     Only a CI run writes. The legs named all ran the full gate, or
     ran narrowed on top of *base*, a full row the caller read from
-    the record; a composed row names that base and its run.
+    the record; a composed row names that base and its run. *branch*
+    is the pull request branch the run came from, so main's run after
+    the squash finds the branch's coverage record to copy.
     """
     entry: dict[str, object] = {
         "tree": tree,
@@ -174,6 +182,8 @@ def stamp(
         "scope": FULL,
         "legs": list(legs),
     }
+    if branch:
+        entry["branch"] = branch
     basis = ""
     if base is not None:
         entry["base_tree"] = base.tree
@@ -224,7 +234,7 @@ def stamp_from_metrics(root: Path, run: RunContext, *, sha: str) -> str:
     if all(scope in PROVED for scope in scopes.values()):
         return f"  verified: tree {tree[:12]} is already recorded; nothing to stamp"
     if all(scope in (FULL, *PROVED) for scope in scopes.values()):
-        why = stamp(root, run, tree=tree, sha=sha, legs=legs)
+        why = stamp(root, run, tree=tree, sha=sha, legs=legs, branch=run.head_ref)
         if why:
             return f"  verified: no stamp, {why}"
         return (
@@ -250,7 +260,9 @@ def stamp_from_metrics(root: Path, run: RunContext, *, sha: str) -> str:
             f"  verified: no stamp, {narrowed} ran narrowed on base tree {base[:12]},"
             " which the record has not proved in full"
         )
-    why = stamp(root, run, tree=tree, sha=sha, legs=legs, base=base_row)
+    why = stamp(
+        root, run, tree=tree, sha=sha, legs=legs, base=base_row, branch=run.head_ref
+    )
     if why:
         return f"  verified: no stamp, {why}"
     return (

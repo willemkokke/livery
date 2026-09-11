@@ -262,6 +262,35 @@ change.
    and main's run after the member-only squash `2 leg(s) and 1
    reused` with `2 fresh, 1 carried`.
 
+8. **The branch record** (#425). Each branch with a pull request run
+   keeps `coverage/<branch>/<leg>`, the same family with the branch as
+   the base, replaced in place by its runs with the union each judged:
+   fresh rows for what the legs measured, the rest carried from the
+   branch's own previous record before main's. A leg skips a suite
+   when either record holds it at the suite's current closure. The
+   verified row names the branch, so main's run at the merge, finding
+   its tree proved, measures nothing and copies the branch's record
+   into main's; the measured fallback of slice 7 stays for a unit no
+   record holds. The janitor drops a branch's record once the branch
+   is gone from origin, by the family's current keys. Landed
+   2026-09-11, #425: `RunContext.head_ref`, `Verified.branch`,
+   `_coverage_store.branches` and `put_record(base=)` with the two
+   writer rules, `_quality.record_bases`, and the union's
+   `_record_bases`; the loop's proofs read `main takes
+   chore/setup-check's record for the tree it proved` and `0 fresh, 3
+   carried` on main's runs, and the pull requests' records are written
+   with what each judged.
+
+9. **Branch coverage** (#423). `branch = true` in the rendered
+   configuration, rows of arcs, the combined figure judged everywhere,
+   forge's and workshop's floors re-based in the same change. Ruled
+   2026-09-11, after slice 8.
+
+10. **The workspace tests as a unit of the affected engine** (#424). A
+    change under `tests/` runs the workspace tests with format, lint,
+    and the type checkers over that directory, not the whole gate.
+    Ruled 2026-09-11, after slice 9.
+
 Slices 1 to 3 are a day together; 4 and 5 another; 6 a day of its own,
 once the timing rows carry a fortnight of legs at the gate's Python; 7
 a day, before 6 or after it.
@@ -341,3 +370,10 @@ a day, before 6 or after it.
   a full run against 85.90 % on a measured run of the same tree,
   #421). Ruled after "should we not measure the runner itself
   everywhere?"; landed the same day.
+- 2026-09-11, Willem: each branch keeps its own record and main's run
+  copies it at the merge ("I thought each branch would store its
+  latest and in main merge they'd be copied to the main ref"); the
+  measured rerun on main that slice 7 introduced was the wrong reading
+  of the issue. Filed as #425, slice 8. Branch coverage (#423) and the
+  workspace tests as a unit of the engine (#424) follow, in that
+  order.
