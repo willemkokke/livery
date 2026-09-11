@@ -161,10 +161,12 @@ nav = [
             { "livery.strongroom._fields" = "_generated/api/strongroom/_fields.md" },
             { "livery.strongroom._lifecycle" = "_generated/api/strongroom/_lifecycle.md" },
             { "livery.strongroom._records" = "_generated/api/strongroom/_records.md" },
+            { "livery.strongroom._rungs" = "_generated/api/strongroom/_rungs.md" },
             { "livery.strongroom._sources" = "_generated/api/strongroom/_sources.md" },
             { "livery.strongroom._store" = "_generated/api/strongroom/_store.md" },
             { "livery.strongroom._tree" = "_generated/api/strongroom/_tree.md" },
             { "livery.strongroom._version" = "_generated/api/strongroom/_version.md" },
+            { "livery.strongroom._views" = "_generated/api/strongroom/_views.md" },
         ] },
     ] },
     { "toolroom" = [

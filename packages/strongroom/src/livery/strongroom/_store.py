@@ -64,8 +64,21 @@ from livery.strongroom._sources import (
     Unreachable,
     fetch_url,
 )
-from livery.strongroom._tree import check_name
+from livery.strongroom._tree import Tree, check_name
 from livery.strongroom._version import Version
+from livery.strongroom._views import (
+    DropReport,
+    ShedReport,
+    ViewRecord,
+    collect,
+    drop_view,
+    live_roots,
+    prefetch,
+    shed,
+    view,
+    view_record,
+    views,
+)
 
 MANIFEST_NAME = "strongroom.json"
 """The root manifest's file name."""
@@ -965,13 +978,14 @@ class Store:
         return reachable_from(self, digest)
 
     def roots(self) -> list[Digest]:
-        """Every root: what every ref on disk names, in every namespace.
+        """Every root: what every ref on disk names, and every live view's tree.
 
         Namespaces are read from disk, not from the declaration at
         open, so a consumer's refs root its objects whoever opened the
-        store. A ref file that is not a digest roots nothing.
+        store. A ref file that is not a digest roots nothing. A view
+        whose directory is gone is retired here rather than rooted.
         """
-        found: list[Digest] = []
+        found: list[Digest] = live_roots(self)
         base = self.root / "refs"
         for path in sorted(base.rglob("*")):
             if not path.is_file() or path.name.endswith(_RESERVED_SUFFIXES):
@@ -1006,6 +1020,121 @@ class Store:
     def _maintenance(self) -> Generator[None]:
         with self._locked(self.root / "index" / "maintenance"):
             yield
+
+    # The materialiser. The bodies live in `_views`.
+
+    def view(
+        self,
+        tree: Digest,
+        at: Path,
+        *,
+        writable: bool = False,
+        allow_hardlink: bool = False,
+    ) -> ViewRecord:
+        """Fill *at* from the tree by the cheapest safe rung per entry.
+
+        The ladder is clone, hardlink, link, copy; a rung that refuses
+        once is not tried again for this view. A hardlink is refused
+        into a writable view unless *allow_hardlink* says the view's
+        consumers never write in place; a link is refused from a
+        writable view. An executable entry never shares an inode or a
+        target's mode. A symlink entry becomes a real symlink where the
+        platform allows, the within-view target's content as a marked
+        copy where it does not, and a parked refusal when the target
+        escapes the view. Blobs are fetched through the sources.
+
+        Args:
+            tree: the tree to present; fetched if absent here.
+            at: the directory to fill; missing or empty.
+            writable: whether the caller will write in the view.
+            allow_hardlink: allow hardlinks into a writable view.
+
+        Returns:
+            The record, listing every path and its rung. The view is a
+            root while its directory exists.
+
+        Raises:
+            FileExistsError: when *at* exists and is not an empty
+                directory.
+            MissingObject: when a blob is obtainable from no source,
+                naming the entry's path.
+            ErasedObject: when a blob was erased, naming the entry's
+                path and the tombstone's reason.
+            FormatError: when a path in the tree is over the budget.
+        """
+        return view(self, tree, at, writable=writable, allow_hardlink=allow_hardlink)
+
+    def views(self) -> list[ViewRecord]:
+        """Every recorded view, live or not, by id."""
+        return views(self)
+
+    def view_record(self, view_id: str) -> ViewRecord | None:
+        """The record of one view, or None."""
+        return view_record(self, view_id)
+
+    def drop_view(self, view_id: str) -> DropReport:
+        """Remove what the view's record lists, and nothing else.
+
+        A path inside the view that the record does not list is left
+        and named; so is a directory that then stays non-empty, the
+        view's root included. A view whose directory is already gone
+        is retired with nothing removed. The record goes either way.
+
+        Raises:
+            FileNotFoundError: when no such view is recorded.
+        """
+        return drop_view(self, view_id)
+
+    def collect(self, at: Path, declared: Iterable[str]) -> Tree:
+        """Read the declared paths under *at* back into a tree, landing every object.
+
+        A declared directory is collected whole; an undeclared path is
+        not read. Names must be portable and paths within the budget.
+
+        Returns:
+            The root tree, landed here with every subtree.
+
+        Raises:
+            FileNotFoundError: when a declared path is absent.
+            FormatError: when a name or a symlink target breaks a rule,
+                or a path is over the budget.
+        """
+        return collect(self, at, declared)
+
+    def prefetch(self, digest: Digest) -> list[Digest]:
+        """Fetch *digest* and everything it reaches, for offline use.
+
+        Returns:
+            Every object fetched, the root first.
+
+        Raises:
+            MissingObject: naming the first digest no source answered.
+        """
+        return prefetch(self, digest)
+
+    def shed(self, source: Source) -> ShedReport:
+        """Evict every local copy *source* holds, except what a live view needs.
+
+        Holding is checked by existence in a folder, a HEAD on an HTTP
+        source, or the digest an origin hint names; never by trust.
+        The next fetch verifies on arrival, so a lying source costs a
+        named miss and never a wrong byte. Objects a live view reaches
+        through a hardlink or a link are kept.
+        """
+        return shed(self, source)
+
+    def head(self, source: HttpSource, relative: str) -> bool:
+        """Whether the HTTP source answers a HEAD for *relative*."""
+        try:
+            with fetch_url(
+                source.url(relative),
+                connect_timeout=source.connect_timeout,
+                transfer_timeout=source.transfer_timeout,
+                method="HEAD",
+            ):
+                return True
+        except Unreachable:
+            return False
 
     # Refs.
 

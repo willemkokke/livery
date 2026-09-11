@@ -58,8 +58,10 @@ Within one tree, no two names are equal when case is ignored
 (Unicode case folding), because NTFS and APFS by default are
 case-insensitive and would collapse them.
 
-The total path budget is enforced when a whole tree is published, not
-per subtree: a subtree cannot know its depth.
+The total path budget, 1024 UTF-8 bytes with separators, is enforced
+when a view is planned and when outputs are collected, not per
+subtree: a subtree cannot know its depth
+([materialiser.md](materialiser.md)).
 
 ## Symlink entries
 

@@ -84,4 +84,17 @@ scratch under an exclusive maintenance lease that `unpin` shares.
 bytes: the name stays valid in every tree that carries it, a path to
 it fails naming the reason, and landing it again is refused.
 
-The materialiser builds on these in a later release.
+## The materialiser
+
+`view` fills a directory from a tree by the cheapest safe rung per
+entry: clone (APFS and Linux copy-on-write), hardlink (refused into a
+writable view unless allowed), link (refused from a writable view),
+copy. An executable entry never shares an inode or a target's mode. A
+symlink entry becomes a real symlink, the within-view target's content
+as a marked copy where the platform refuses, or a parked refusal when
+the target escapes the view. The record lists every path and rung and
+is a root while the view's directory exists; `drop_view` removes only
+what the record lists and names what it leaves. `collect` reads
+declared outputs back into a tree, landing every object. `prefetch`
+warms everything one digest reaches, and `shed` evicts local copies a
+named source holds, except what a live view depends on.

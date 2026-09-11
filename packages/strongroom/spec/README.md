@@ -21,6 +21,7 @@ Bytes, each with golden vectors under `vectors/`:
 | [layout.md](layout.md) | the on-disk layout, the root manifest, and the HTTP mapping |
 | [sources.md](sources.md) | sources and tiers: the read path, verification, offline, and fill |
 | [lifecycle.md](lifecycle.md) | roots, marking by shape, the sweep, the pending publish, erasure |
+| [materialiser.md](materialiser.md) | the ladder and its rules, symlink entries, the path budget, the removal doctrine, warming and shedding |
 | [namespaces.md](namespaces.md) | the two ref namespaces the store owns and the conventions it publishes |
 
 A vector file has cases and refusals. A case pins the canonical bytes
