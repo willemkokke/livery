@@ -390,3 +390,10 @@ a day, before 6 or after it.
   of the issue. Filed as #425, slice 8. Branch coverage (#423) and the
   workspace tests as a unit of the engine (#424) follow, in that
   order.
+- 2026-09-11, taken by default in #424: the check counts packages
+  only when it decides whether the gate is narrowed. The workspace
+  tests ride the subset as a unit beside the packages, and a subset
+  of every package plus that unit is the whole gate, which runs those
+  tests anyway; comparing the subset's length with the packages'
+  would have run the full gate for a widened subset, and inside a
+  test that is pytest spawning pytest.
