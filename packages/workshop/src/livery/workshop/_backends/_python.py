@@ -39,9 +39,19 @@ SRC = (".",)
 
 
 def package_paths(packages: tuple[Package, ...]) -> tuple[str, ...]:
-    """The src and tests directories the *packages* own, as they exist."""
+    """The src and tests directories the *packages* own, as they exist.
+
+    The workspace's own tests, a unit whose directory is the tests
+    themselves, contribute that directory.
+    """
+    from livery.workshop._coverage_store import WORKSPACE_TESTS
+
     paths = []
     for package in packages:
+        if package.path == WORKSPACE_TESTS:
+            if package.directory.is_dir():
+                paths.append(package.path)
+            continue
         for name in ("src", "tests"):
             directory = package.directory / name
             if directory.is_dir():
@@ -357,8 +367,12 @@ def report_coverage(root: Path, packages: tuple[Package, ...]) -> None:
     a low-biased preview: it informs, and the aggregating CI job's
     union is what the floors gate.
     """
+    from livery.workshop._coverage_store import WORKSPACE_TESTS
+
     measured = measured_coverage(root, packages)
     for package in packages:
+        if package.path == WORKSPACE_TESTS:
+            continue  # a unit of the union, never a package with a floor
         policy = coverage_policy(package)
         if policy is None:
             continue
@@ -1046,12 +1060,17 @@ def scoped_gate(
     patch this module's verbs keep gating the composition.
     """
     from livery.footman import parallel, step
+    from livery.workshop._coverage_store import WORKSPACE_TESTS
     from livery.workshop._kinds import gated
 
+    # The workspace's own tests are a unit of this gate with no kind:
+    # formatted, linted, type-checked, and run, never type-complete.
+    members = tuple(package for package in subset if package.path != WORKSPACE_TESTS)
+    unit = tuple(package for package in subset if package.path == WORKSPACE_TESTS)
     paths = package_paths(subset)
-    type_paths = package_paths(gated(subset, "typecheck"))
-    complete = gated(subset, "typecomplete")
-    tested = gated(subset, "test")
+    type_paths = package_paths(gated(members, "typecheck") + unit)
+    complete = gated(members, "typecomplete")
+    tested = gated(members, "test") + unit
     with parallel() as p:
         if check_style:
             p(step(run_format, title="format")(check=True, paths=paths))

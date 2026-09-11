@@ -1175,6 +1175,91 @@ def _prove_prose_leg(root: Path, kind: str) -> None:
     print(f"  composed skip: proven on main's run {run.id} after the note-only squash")
 
 
+def _prove_tests_leg(root: Path, kind: str) -> None:
+    """Prove a change under the workspace's own tests runs that unit alone.
+
+    A new test file under the root ``tests/`` and nothing else: the
+    check leg must narrow to the workspace tests, run and store them
+    as a unit, and leave every member's suite to the record; the
+    union judges both members from main's record, writes the branch's
+    record with the one fresh unit, and the stamp composes with main's
+    tree. Re-run on a pass-owned branch with main's tip as the stamp.
+    """
+    from livery.workshop._git_ops import GitOps
+
+    git = GitOps(root)
+    _fresh_branch(root, "chore/tests-leg")
+    stamp = git.head_sha()
+    probe = root / "tests" / "test_tests_leg.py"
+    probe.write_text(
+        '"""A workspace-tests change: the loop proves the tests leg on it."""\n'
+        "\n"
+        f'STAMP = "{stamp}"\n'
+        "\n\n"
+        "def test_the_stamp_is_a_commit():\n"
+        "    assert len(STAMP) == 40\n",
+        "utf-8",
+    )
+    git.commit_all(
+        "chore(tests): a workspace-tests change for the tests leg\n\nOne file"
+        " under the root tests directory, so the check leg narrows to the"
+        " workspace tests and says so."
+    )
+    head = git.head_sha()
+    import livery.toolroom as toolroom
+
+    toolroom.git.opts(cwd=root, nofail=True)("fetch", "--prune", "origin")
+    _loop_fm(root, "submit", "--force", "--armed")
+    _align_main(root)
+    forge, _ = _dev_forge(kind)
+    repo = forge.repository(E2E_OWNER, E2E_REPO)
+    run, logs = _completed_run(repo, head, event="pull_request")
+    _require_lines(
+        repo,
+        run,
+        logs,
+        "check",
+        (
+            "affected-legs: the scoped gate against origin/main",
+            "affected: tests",
+            "coverage store: tests stored for closure",
+        ),
+        forbidden=(
+            "affected: packages/",
+            "coverage store: packages/loop-echo stored",
+            "coverage store: packages/loop-native stored",
+        ),
+    )
+    _require_lines(
+        repo,
+        run,
+        logs,
+        "gate",
+        (
+            "coverage: packages/loop-echo on check-ubuntu-latest-3.14: reused from run",
+            "coverage: packages/loop-native on check-ubuntu-latest-3.14:"
+            " reused from run",
+            "coverage packages/loop-echo: 100.0% (floor 100.0%",
+            "coverage packages/loop-native: 100.0% (",
+            "coverage: the union of 1 leg(s) and 2 reused suite(s)",
+            "coverage record: chore/tests-leg/check-ubuntu-latest-3.14: 1 fresh,"
+            " 2 carried, 0 removed",
+            "recorded as proved green by run",
+            " on top of tree ",
+        ),
+        forbidden=("unjudged this run", "coverage: tests on check-ubuntu-latest-3.14"),
+    )
+    print(
+        f"  tests leg: proven on a workspace-tests pull request (run {run.id}: the"
+        " check leg ran the workspace tests alone, the union reused both members"
+        " from main's record, the stamp composed)"
+    )
+    landed = GitOps(root).head_sha()
+    run, logs = _completed_run(repo, landed, event="push")
+    _require_lines(repo, run, logs, "check", ("skipping the gate", " on top of tree "))
+    print(f"  composed skip: proven on main's run {run.id} after the tests-leg squash")
+
+
 def _release_act(root: Path, kind: str) -> None:
     """Release the member through the loop; verify wheel and receipt.
 
@@ -1466,5 +1551,6 @@ if _WORKSHOP_TESTS.is_dir():
         _prepare_ratchet(root, forge)
         _prove_scoped_leg(root, forge)
         _prove_prose_leg(root, forge)
+        _prove_tests_leg(root, forge)
         _release_act(root, forge)
         print("  the loop is whole: gate, merge, release, receipt")

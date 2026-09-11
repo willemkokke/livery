@@ -75,16 +75,21 @@ def is_prose(path: str) -> bool:
 def affected_packages(
     root: Path, git: GitOps, *, base: str = "main"
 ) -> tuple[Package, ...] | None:
-    """The packages this branch's changes can influence.
+    """The packages this branch's changes can influence, and the workspace's own tests.
 
     None means everything: a touched file outside every package (the
-    root configuration, templates, workspace tests) configures every
-    gate, so no narrowing is honest, and the file is named. Prose
-    (`is_prose`) and the site's own files (`is_site`) affect no
-    package wherever they live, so a diff confined to them affects
-    nothing. An empty tuple means the branch changes nothing a gate
-    reads.
+    root configuration, templates) configures every gate, so no
+    narrowing is honest, and the file is named. Prose (`is_prose`)
+    and the site's own files (`is_site`) affect no package wherever
+    they live, so a diff confined to them affects nothing. A change
+    under the workspace's own ``tests/`` affects that unit alone,
+    which the answer then carries as a package of its own
+    ([livery.workshop._coverage_store.workspace_suite][]): its tests
+    reach every package, and every leg that runs a suite runs them
+    anyway, so no package's suite has to run for it. An empty tuple
+    means the branch changes nothing a gate reads.
     """
+    from livery.workshop._coverage_store import WORKSPACE_TESTS, workspace_suite
     from livery.workshop._kinds import kind_names
 
     packages = discover_packages(root)
@@ -100,8 +105,12 @@ def affected_packages(
             )
             return None
     seeds: set[str] = set()
+    tests_changed = False
     for path in git.changed_paths(base):
         if is_prose(path) or is_site(path):
+            continue
+        if path.startswith(WORKSPACE_TESTS + "/"):
+            tests_changed = True
             continue
         for package in packages:
             if path.startswith(package.path + "/"):
@@ -110,7 +119,14 @@ def affected_packages(
         else:
             print(f"  {path}: outside the packages; everything runs")
             return None
-    return dependents_closure(packages, seeds)
+    affected = dependents_closure(packages, seeds)
+    if not tests_changed:
+        return affected
+    unit = workspace_suite(root)
+    if unit is None:
+        print(f"  {WORKSPACE_TESTS}/: changed and gone; everything runs")
+        return None
+    return (*affected, unit)
 
 
 @graph.task(name="affected")

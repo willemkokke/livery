@@ -316,7 +316,14 @@ def check(
             if root_for_ci is not None and run is not None:
                 _verified.write_marker(root_for_ci, _verified.NOTHING, leg=run.leg)
             return
-        if len(subset) < len(packages):
+        # Narrowed when some package's gate is skipped: the workspace's
+        # own tests in the subset are a unit beside the packages, not
+        # one of them, and a subset of every package plus that unit is
+        # the whole gate, which runs those tests anyway.
+        from livery.workshop._coverage_store import WORKSPACE_TESTS
+
+        members = [package for package in subset if package.path != WORKSPACE_TESTS]
+        if len(members) < len(packages):
             names = ", ".join(package.path for package in subset)
             print(f"  affected: {names}")
             if root_for_ci is not None and run is not None:
@@ -506,6 +513,7 @@ def _with_unstored_suites(
     fresh, and the line says why.
     """
     from livery.workshop._backends._python import suites_of
+    from livery.workshop._coverage_store import WORKSPACE_TESTS
 
     kept = {package.path for package in subset}
     skipped = tuple(
@@ -517,7 +525,10 @@ def _with_unstored_suites(
     }
     if not extra:
         return subset
-    return tuple(package for package in packages if package.path in kept | extra)
+    # The workspace's own tests ride the subset as a unit of their own,
+    # outside the packages, and stay in it.
+    unit = tuple(package for package in subset if package.path == WORKSPACE_TESTS)
+    return tuple(package for package in packages if package.path in kept | extra) + unit
 
 
 def _measure_unrecorded(root: Path, run: RunContext, *, bases: tuple[str, ...]) -> None:
@@ -563,13 +574,18 @@ def _scoped_check(subset: tuple[Package, ...], *, fix: bool = False) -> None:
     assert root is not None
     if fix:
         _python.scoped_rewrite(subset)
+    from livery.workshop._coverage_store import WORKSPACE_TESTS
+
+    # The workspace's own tests are a unit of the python gate alone:
+    # no kind owns them.
+    members = tuple(package for package in subset if package.path != WORKSPACE_TESTS)
     with parallel() as p:
         p(
             step(_python.scoped_gate, title="python")(
                 subset, root=root, check_style=not fix
             )
         )
-        run_kind_checks(subset, root)
+        run_kind_checks(members, root)
 
 
 coverage = group("coverage", help="The measured union and its floors")

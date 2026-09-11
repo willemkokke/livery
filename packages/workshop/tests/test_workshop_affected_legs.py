@@ -292,6 +292,62 @@ def test_a_suite_the_store_holds_stays_skipped_and_a_miss_runs(
     assert "runs, nothing to reuse" not in capsys.readouterr().out
 
 
+# --- the workspace's own tests, a unit of the engine ---------------------------
+
+
+def test_a_workspace_tests_change_narrows_to_that_unit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop._coverage_store import workspace_suite
+
+    root = _root(tmp_path, "affected-legs = true\n")
+    x, y = _member(root, "x"), _member(root, "y")
+    (root / "tests").mkdir()
+    unit = workspace_suite(root)
+    assert unit is not None
+    monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: root)
+    monkeypatch.setattr("livery.workshop._quality._packages", lambda: (x, y))
+    monkeypatch.setattr(
+        "livery.workshop._state.run_context", lambda: _run("pull_request", "main")
+    )
+    monkeypatch.setattr(
+        "livery.workshop._quality._affected", lambda base="main": (unit,)
+    )
+    monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
+    held = {
+        path: _coverage_store.Unit(path, "k" * 64, "5", "a" * 40, {})
+        for path in ("packages/x", "packages/y")
+    }
+    monkeypatch.setattr(
+        _coverage_store,
+        "recorded",
+        lambda root, *, leg, base="main": _coverage_store.Record(held),
+    )
+    gated: list[tuple[str, ...]] = []
+    monkeypatch.setattr(
+        "livery.workshop._quality._scoped_check",
+        lambda subset, *, fix=False: gated.append(tuple(p.path for p in subset)),
+    )
+    _quality.check()
+    out = capsys.readouterr().out
+    assert gated == [("tests",)]
+    assert "affected: tests" in out
+    assert read_marker(root) == {
+        "scope": "affected",
+        "packages": ["tests"],
+        "leg": "check-a",
+    }
+    # A suite the records cannot supply widens the subset, and the unit
+    # stays in it.
+    del held["packages/y"]
+    gated.clear()
+    _quality.check()
+    assert gated == [("packages/y", "tests")]
+    assert (
+        "coverage store: packages/y runs, nothing to reuse" in capsys.readouterr().out
+    )
+
+
 # --- a proved tree measures what main's record cannot supply ------------------
 
 
