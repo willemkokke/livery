@@ -1,0 +1,288 @@
+{
+  "cases": [
+    {
+      "id": "root",
+      "version": {
+        "tree": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "parents": [],
+        "producer": {
+          "kind": "person",
+          "value": "willem"
+        },
+        "created": "2026-09-11T12:00:00Z",
+        "message": "first",
+        "receipt": null,
+        "attachments": {}
+      },
+      "canonical": "{\"attachments\":{},\"created\":\"2026-09-11T12:00:00Z\",\"message\":\"first\",\"parents\":[],\"producer\":{\"kind\":\"person\",\"value\":\"willem\"},\"receipt\":null,\"tree\":\"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"}",
+      "digest": "sha256:cf471a823c2a6d51e8b81203e3baf9a8fbb2ec21f912636da8a40f33eb68d011"
+    },
+    {
+      "id": "child-with-attachment",
+      "version": {
+        "tree": "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "parents": [
+          "sha256:cf471a823c2a6d51e8b81203e3baf9a8fbb2ec21f912636da8a40f33eb68d011"
+        ],
+        "producer": {
+          "kind": "receipt",
+          "value": "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        },
+        "created": "2026-09-11T12:00:00.5Z",
+        "message": "",
+        "receipt": "sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+        "attachments": {
+          "card.json": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      "canonical": "{\"attachments\":{\"card.json\":\"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"},\"created\":\"2026-09-11T12:00:00.5Z\",\"message\":\"\",\"parents\":[\"sha256:cf471a823c2a6d51e8b81203e3baf9a8fbb2ec21f912636da8a40f33eb68d011\"],\"producer\":{\"kind\":\"receipt\",\"value\":\"sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824\"},\"receipt\":\"sha256:2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824\",\"tree\":\"sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\"}",
+      "digest": "sha256:e86c9c14564a5573ce667d52b7bc039574a16f24cbfb0ffa7a2bdfee2ce17ec4"
+    }
+  ],
+  "refusals": [
+    {
+      "id": "offset-timestamp",
+      "version": {
+        "tree": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "parents": [],
+        "producer": {
+          "kind": "person",
+          "value": "willem"
+        },
+        "created": "2026-09-11T12:00:00+00:00",
+        "message": "first",
+        "receipt": null,
+        "attachments": {}
+      },
+      "reason": "RFC 3339 UTC"
+    },
+    {
+      "id": "no-seconds",
+      "version": {
+        "tree": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "parents": [],
+        "producer": {
+          "kind": "person",
+          "value": "willem"
+        },
+        "created": "2026-09-11T12:00Z",
+        "message": "first",
+        "receipt": null,
+        "attachments": {}
+      },
+      "reason": "RFC 3339 UTC"
+    },
+    {
+      "id": "impossible-month",
+      "version": {
+        "tree": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "parents": [],
+        "producer": {
+          "kind": "person",
+          "value": "willem"
+        },
+        "created": "2026-13-01T00:00:00Z",
+        "message": "first",
+        "receipt": null,
+        "attachments": {}
+      },
+      "reason": "not a real instant"
+    },
+    {
+      "id": "unknown-producer-kind",
+      "version": {
+        "tree": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "parents": [],
+        "producer": {
+          "kind": "robot",
+          "value": "x"
+        },
+        "created": "2026-09-11T12:00:00Z",
+        "message": "first",
+        "receipt": null,
+        "attachments": {}
+      },
+      "reason": "not one of"
+    },
+    {
+      "id": "empty-producer-value",
+      "version": {
+        "tree": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "parents": [],
+        "producer": {
+          "kind": "person",
+          "value": ""
+        },
+        "created": "2026-09-11T12:00:00Z",
+        "message": "first",
+        "receipt": null,
+        "attachments": {}
+      },
+      "reason": "is empty"
+    },
+    {
+      "id": "code-producer-not-digest",
+      "version": {
+        "tree": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "parents": [],
+        "producer": {
+          "kind": "code",
+          "value": "main.py"
+        },
+        "created": "2026-09-11T12:00:00Z",
+        "message": "first",
+        "receipt": null,
+        "attachments": {}
+      },
+      "reason": "OCI grammar"
+    },
+    {
+      "id": "producer-wrong-keys",
+      "version": {
+        "tree": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "parents": [],
+        "producer": {
+          "kind": "person"
+        },
+        "created": "2026-09-11T12:00:00Z",
+        "message": "first",
+        "receipt": null,
+        "attachments": {}
+      },
+      "reason": "wrong keys"
+    },
+    {
+      "id": "producer-not-object",
+      "version": {
+        "tree": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "parents": [],
+        "producer": "willem",
+        "created": "2026-09-11T12:00:00Z",
+        "message": "first",
+        "receipt": null,
+        "attachments": {}
+      },
+      "reason": "not a JSON object"
+    },
+    {
+      "id": "reserved-attachment-name",
+      "version": {
+        "tree": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "parents": [],
+        "producer": {
+          "kind": "person",
+          "value": "willem"
+        },
+        "created": "2026-09-11T12:00:00Z",
+        "message": "first",
+        "receipt": null,
+        "attachments": {
+          "CON": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      "reason": "Windows-reserved"
+    },
+    {
+      "id": "attachments-not-object",
+      "version": {
+        "tree": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "parents": [],
+        "producer": {
+          "kind": "person",
+          "value": "willem"
+        },
+        "created": "2026-09-11T12:00:00Z",
+        "message": "first",
+        "receipt": null,
+        "attachments": []
+      },
+      "reason": "not a JSON object"
+    },
+    {
+      "id": "parents-not-array",
+      "version": {
+        "tree": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "parents": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "producer": {
+          "kind": "person",
+          "value": "willem"
+        },
+        "created": "2026-09-11T12:00:00Z",
+        "message": "first",
+        "receipt": null,
+        "attachments": {}
+      },
+      "reason": "not an array"
+    },
+    {
+      "id": "parent-not-digest",
+      "version": {
+        "tree": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "parents": [
+          "abc"
+        ],
+        "producer": {
+          "kind": "person",
+          "value": "willem"
+        },
+        "created": "2026-09-11T12:00:00Z",
+        "message": "first",
+        "receipt": null,
+        "attachments": {}
+      },
+      "reason": "OCI grammar"
+    },
+    {
+      "id": "receipt-not-digest",
+      "version": {
+        "tree": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "parents": [],
+        "producer": {
+          "kind": "person",
+          "value": "willem"
+        },
+        "created": "2026-09-11T12:00:00Z",
+        "message": "first",
+        "receipt": "abc",
+        "attachments": {}
+      },
+      "reason": "OCI grammar"
+    },
+    {
+      "id": "message-not-string",
+      "version": {
+        "tree": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "parents": [],
+        "producer": {
+          "kind": "person",
+          "value": "willem"
+        },
+        "created": "2026-09-11T12:00:00Z",
+        "message": 1,
+        "receipt": null,
+        "attachments": {}
+      },
+      "reason": "not a string"
+    },
+    {
+      "id": "missing-message",
+      "version": {
+        "tree": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "parents": [],
+        "producer": {
+          "kind": "person",
+          "value": "willem"
+        },
+        "created": "2026-09-11T12:00:00Z",
+        "receipt": null,
+        "attachments": {}
+      },
+      "reason": "wrong keys"
+    },
+    {
+      "id": "version-not-object",
+      "version": [],
+      "reason": "not a JSON object"
+    }
+  ]
+}

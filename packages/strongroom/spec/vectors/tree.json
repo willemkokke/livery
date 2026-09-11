@@ -1,0 +1,657 @@
+{
+  "cases": [
+    {
+      "id": "empty",
+      "tree": {
+        "entries": []
+      },
+      "canonical": "{\"entries\":[]}",
+      "digest": "sha256:d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658"
+    },
+    {
+      "id": "three-kinds",
+      "tree": {
+        "entries": [
+          {
+            "name": "README.md",
+            "kind": "blob",
+            "digest": "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            "size": 3,
+            "executable": true
+          },
+          {
+            "name": "latest",
+            "kind": "symlink",
+            "target": "src/main"
+          },
+          {
+            "name": "src",
+            "kind": "tree",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 12,
+            "executable": false
+          }
+        ]
+      },
+      "canonical": "{\"entries\":[{\"digest\":\"sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\",\"executable\":true,\"kind\":\"blob\",\"name\":\"README.md\",\"size\":3},{\"kind\":\"symlink\",\"name\":\"latest\",\"target\":\"src/main\"},{\"digest\":\"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"executable\":false,\"kind\":\"tree\",\"name\":\"src\",\"size\":12}]}",
+      "digest": "sha256:6c432c7bf922089f56fe33e04289a21e16096a9c1b9ca5895cf7364f8c8a515d"
+    },
+    {
+      "id": "byte-order",
+      "tree": {
+        "entries": [
+          {
+            "name": "Zed",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false
+          },
+          {
+            "name": "_under",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false
+          },
+          {
+            "name": "apple",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false
+          },
+          {
+            "name": "~tilde",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false
+          },
+          {
+            "name": "\u00e9.txt",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false
+          }
+        ]
+      },
+      "canonical": "{\"entries\":[{\"digest\":\"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"executable\":false,\"kind\":\"blob\",\"name\":\"Zed\",\"size\":0},{\"digest\":\"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"executable\":false,\"kind\":\"blob\",\"name\":\"_under\",\"size\":0},{\"digest\":\"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"executable\":false,\"kind\":\"blob\",\"name\":\"apple\",\"size\":0},{\"digest\":\"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"executable\":false,\"kind\":\"blob\",\"name\":\"~tilde\",\"size\":0},{\"digest\":\"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"executable\":false,\"kind\":\"blob\",\"name\":\"\u00e9.txt\",\"size\":0}]}",
+      "digest": "sha256:339d66d502676eb27341581fa89cd9851a77368e576abfcbe513afbc660ebdc0"
+    },
+    {
+      "id": "link-with-parent-steps",
+      "tree": {
+        "entries": [
+          {
+            "name": "up",
+            "kind": "symlink",
+            "target": "../sibling/file"
+          }
+        ]
+      },
+      "canonical": "{\"entries\":[{\"kind\":\"symlink\",\"name\":\"up\",\"target\":\"../sibling/file\"}]}",
+      "digest": "sha256:0f614a2b05c523ba7cc793ee5d776b74b20738d66a5653e10eec98b9367ac6be"
+    }
+  ],
+  "refusals": [
+    {
+      "id": "not-sorted",
+      "tree": {
+        "entries": [
+          {
+            "name": "b",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false
+          },
+          {
+            "name": "a",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false
+          }
+        ]
+      },
+      "reason": "not sorted"
+    },
+    {
+      "id": "case-duplicate",
+      "tree": {
+        "entries": [
+          {
+            "name": "A",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false
+          },
+          {
+            "name": "a",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false
+          }
+        ]
+      },
+      "reason": "same name when case is ignored"
+    },
+    {
+      "id": "exact-duplicate",
+      "tree": {
+        "entries": [
+          {
+            "name": "a",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false
+          },
+          {
+            "name": "a",
+            "kind": "blob",
+            "digest": "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            "size": 1,
+            "executable": false
+          }
+        ]
+      },
+      "reason": "same name when case is ignored"
+    },
+    {
+      "id": "reserved-con",
+      "tree": {
+        "entries": [
+          {
+            "name": "CON",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false
+          }
+        ]
+      },
+      "reason": "Windows-reserved"
+    },
+    {
+      "id": "reserved-lowercase-with-extension",
+      "tree": {
+        "entries": [
+          {
+            "name": "con.txt",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false
+          }
+        ]
+      },
+      "reason": "Windows-reserved"
+    },
+    {
+      "id": "reserved-lpt9",
+      "tree": {
+        "entries": [
+          {
+            "name": "LPT9",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false
+          }
+        ]
+      },
+      "reason": "Windows-reserved"
+    },
+    {
+      "id": "trailing-dot",
+      "tree": {
+        "entries": [
+          {
+            "name": "x.",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false
+          }
+        ]
+      },
+      "reason": "ends in a dot or a space"
+    },
+    {
+      "id": "trailing-space",
+      "tree": {
+        "entries": [
+          {
+            "name": "x ",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false
+          }
+        ]
+      },
+      "reason": "ends in a dot or a space"
+    },
+    {
+      "id": "separator",
+      "tree": {
+        "entries": [
+          {
+            "name": "a/b",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false
+          }
+        ]
+      },
+      "reason": "separator"
+    },
+    {
+      "id": "backslash",
+      "tree": {
+        "entries": [
+          {
+            "name": "a\\b",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false
+          }
+        ]
+      },
+      "reason": "separator"
+    },
+    {
+      "id": "colon",
+      "tree": {
+        "entries": [
+          {
+            "name": "a:b",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false
+          }
+        ]
+      },
+      "reason": "separator"
+    },
+    {
+      "id": "control-char",
+      "tree": {
+        "entries": [
+          {
+            "name": "a\u0001b",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false
+          }
+        ]
+      },
+      "reason": "separator"
+    },
+    {
+      "id": "empty-name",
+      "tree": {
+        "entries": [
+          {
+            "name": "",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false
+          }
+        ]
+      },
+      "reason": "empty"
+    },
+    {
+      "id": "dot",
+      "tree": {
+        "entries": [
+          {
+            "name": ".",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false
+          }
+        ]
+      },
+      "reason": "relative directory marker"
+    },
+    {
+      "id": "dot-dot",
+      "tree": {
+        "entries": [
+          {
+            "name": "..",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false
+          }
+        ]
+      },
+      "reason": "relative directory marker"
+    },
+    {
+      "id": "not-nfc",
+      "tree": {
+        "entries": [
+          {
+            "name": "e\u0301",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false
+          }
+        ]
+      },
+      "reason": "not in Unicode NFC"
+    },
+    {
+      "id": "over-budget",
+      "tree": {
+        "entries": [
+          {
+            "name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false
+          }
+        ]
+      },
+      "reason": "longer than 255"
+    },
+    {
+      "id": "float-size",
+      "tree": {
+        "entries": [
+          {
+            "name": "a",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 1.5,
+            "executable": false
+          }
+        ]
+      },
+      "reason": "not an integer"
+    },
+    {
+      "id": "whole-float-size",
+      "tree": {
+        "entries": [
+          {
+            "name": "a",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 2.0,
+            "executable": false
+          }
+        ]
+      },
+      "reason": "not an integer"
+    },
+    {
+      "id": "bool-size",
+      "tree": {
+        "entries": [
+          {
+            "name": "a",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": true,
+            "executable": false
+          }
+        ]
+      },
+      "reason": "not an integer"
+    },
+    {
+      "id": "negative-size",
+      "tree": {
+        "entries": [
+          {
+            "name": "a",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": -1,
+            "executable": false
+          }
+        ]
+      },
+      "reason": "negative"
+    },
+    {
+      "id": "string-executable",
+      "tree": {
+        "entries": [
+          {
+            "name": "a",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": "yes"
+          }
+        ]
+      },
+      "reason": "not a boolean"
+    },
+    {
+      "id": "executable-tree",
+      "tree": {
+        "entries": [
+          {
+            "name": "a",
+            "kind": "tree",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": true
+          }
+        ]
+      },
+      "reason": "cannot be executable"
+    },
+    {
+      "id": "unknown-kind",
+      "tree": {
+        "entries": [
+          {
+            "name": "a",
+            "kind": "dir",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false
+          }
+        ]
+      },
+      "reason": "not blob, tree or symlink"
+    },
+    {
+      "id": "missing-kind",
+      "tree": {
+        "entries": [
+          {
+            "name": "a"
+          }
+        ]
+      },
+      "reason": "kind is not a string"
+    },
+    {
+      "id": "missing-size",
+      "tree": {
+        "entries": [
+          {
+            "name": "a",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "executable": false
+          }
+        ]
+      },
+      "reason": "wrong keys"
+    },
+    {
+      "id": "extra-key",
+      "tree": {
+        "entries": [
+          {
+            "name": "a",
+            "kind": "blob",
+            "digest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "size": 0,
+            "executable": false,
+            "mtime": 1
+          }
+        ]
+      },
+      "reason": "wrong keys"
+    },
+    {
+      "id": "link-extra-key",
+      "tree": {
+        "entries": [
+          {
+            "name": "a",
+            "kind": "symlink",
+            "target": "b",
+            "size": 1
+          }
+        ]
+      },
+      "reason": "wrong keys"
+    },
+    {
+      "id": "bad-digest",
+      "tree": {
+        "entries": [
+          {
+            "name": "a",
+            "kind": "blob",
+            "digest": "sha256:short",
+            "size": 0,
+            "executable": false
+          }
+        ]
+      },
+      "reason": "full lowercase"
+    },
+    {
+      "id": "absolute-target",
+      "tree": {
+        "entries": [
+          {
+            "name": "a",
+            "kind": "symlink",
+            "target": "/etc/passwd"
+          }
+        ]
+      },
+      "reason": "absolute"
+    },
+    {
+      "id": "drive-target",
+      "tree": {
+        "entries": [
+          {
+            "name": "a",
+            "kind": "symlink",
+            "target": "C:/x"
+          }
+        ]
+      },
+      "reason": "absolute"
+    },
+    {
+      "id": "unc-target",
+      "tree": {
+        "entries": [
+          {
+            "name": "a",
+            "kind": "symlink",
+            "target": "\\\\server\\share"
+          }
+        ]
+      },
+      "reason": "backslash"
+    },
+    {
+      "id": "backslash-target",
+      "tree": {
+        "entries": [
+          {
+            "name": "a",
+            "kind": "symlink",
+            "target": "dir\\file"
+          }
+        ]
+      },
+      "reason": "backslash"
+    },
+    {
+      "id": "empty-target",
+      "tree": {
+        "entries": [
+          {
+            "name": "a",
+            "kind": "symlink",
+            "target": ""
+          }
+        ]
+      },
+      "reason": "empty"
+    },
+    {
+      "id": "not-nfc-target",
+      "tree": {
+        "entries": [
+          {
+            "name": "a",
+            "kind": "symlink",
+            "target": "e\u0301"
+          }
+        ]
+      },
+      "reason": "not in Unicode NFC"
+    },
+    {
+      "id": "entry-not-object",
+      "tree": {
+        "entries": [
+          "a"
+        ]
+      },
+      "reason": "not a JSON object"
+    },
+    {
+      "id": "entries-not-array",
+      "tree": {
+        "entries": {}
+      },
+      "reason": "not an array"
+    },
+    {
+      "id": "tree-not-object",
+      "tree": [],
+      "reason": "not a JSON object"
+    },
+    {
+      "id": "tree-wrong-keys",
+      "tree": {
+        "items": []
+      },
+      "reason": "wrong keys"
+    }
+  ]
+}

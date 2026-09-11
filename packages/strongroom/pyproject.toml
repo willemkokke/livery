@@ -1,0 +1,35 @@
+# Seeded from the template channel (package-python kind) at
+# birth; this file is the workspace's own. Edit it directly:
+# the template never rewrites it.
+[build-system]
+requires = ["uv_build>=0.11,<0.13"]
+build-backend = "uv_build"
+
+[project]
+name = "livery-strongroom"
+version = "0.0.0"
+description = "Content-addressed storage: one address space, every tenant."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Willem Kokke", email = "mail@willem.net" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Typing :: Typed",
+]
+
+# Stdlib-only at runtime, pinned by test: strongroom is the package
+# every other one may depend on, so it takes no dependency itself.
+# Extras add reach, never features, and none is declared yet.
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/willemkokke/livery"
+
+[tool.uv.build-backend]
+# PEP 420 namespace: the importable package is livery.strongroom and
+# there is no livery/__init__.py anywhere in this repository.
+module-name = "livery.strongroom"
