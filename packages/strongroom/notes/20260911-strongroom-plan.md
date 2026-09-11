@@ -2,8 +2,10 @@
 
 Status: executing; Willem's go 2026-09-11. Phase 1 landed 2026-09-11
 (issue #434, PR #436): the package, the spec's formats with their
-vectors, and the Python formats. Phase 2 built 2026-09-11 (issue
-#440): the local store, objects and refs; see the decision record.
+vectors, and the Python formats. Phase 2 landed 2026-09-11 (issue
+#440, PR #443): the local store, objects and refs. Phase 3 built
+2026-09-11 (issue #444): sources and tiers, fill and offline; see the
+decision record.
 Scoped by Willem the same day: strongroom alone, no change to
 toolroom, footman, or the workshop. This note lives in
 `packages/strongroom/notes/`, beside the package it plans. This plan executes steps 0, 2
@@ -453,6 +455,19 @@ Acceptance:
   terminates. Behaviour cases live under `spec/conformance/refs.json`,
   run by a harness in the tests until phase 6 moves it into the
   package.
+- 2026-09-11, phase 3 built (issue #444). Choices at the cut: sources
+  are declared at open, not per fetch, so a store instance is one
+  read path; a folder source's manifest is checked at open and an
+  HTTP source's on first use, and a mismatch is an error rather than
+  a skip, because a misconfigured tier is not a transient; a
+  reference-policy hit is hashed in full once and trusted by size
+  afterwards through a mark in the local index, the same two facts
+  as a landed object; network reads go through `http.client` so the
+  connect timeout and the transfer timeout are two settings, with
+  one seam (`fetch_url`) that tests fake; an HTTP 404 is the source
+  lacking the object, reported like an unreachable source; `fill`
+  reuses a folder that is already a store of the same algorithm and
+  refuses one of another.
 - 2026-09-11, Willem: the materialiser's whole strategy ladder is
   implemented and tested in this plan, not the copy rung alone. The
   agent's reading of "implement and test the whole rung"; correct it

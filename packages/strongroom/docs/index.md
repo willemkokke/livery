@@ -56,5 +56,18 @@ without reading the namespace's meaning: write-once, monotone
 (fast-forward over versions), or volatile. `pins` and `pending` are
 the store's own.
 
-Tiers and sources, the lifecycle and the materialiser build on these
-in later releases.
+## Sources and tiers
+
+A store opens with an ordered list of sources: a folder in the same
+layout (a mirror, or a read-only share under a reference policy that
+lands nothing), an HTTP base URL serving the layout, or an origin
+hint, one URL with the digest it yields. `fetch` answers locally when
+it can and otherwise consults the sources in order, verifying every
+hit on arrival, skipping an unreachable source after its connect
+timeout and refusing one that serves wrong bytes, each reported
+through a progress sink that never prints. `offline` never consults
+an origin, and a miss names the URL that would have satisfied it.
+`fill` lands a set of objects into a folder, which then serves as a
+source: a mirror built by the store.
+
+The lifecycle and the materialiser build on these in later releases.
