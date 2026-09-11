@@ -676,12 +676,18 @@ def dispatch_flow(
     git: GitOps,
     *,
     base: str = "main",
+    at: str = "",
+    workshop: str = "",
     timeout: float = 60.0,
     interval: float = 2.0,
 ) -> list[str]:
     """Dispatch the wave for a merged, unpublished release, or say why not.
 
-    Reads the manifest at HEAD. Green when there is none, or when
+    Reads the manifest at HEAD, or at *at*, an older release squash
+    a later release has moved past. *workshop* names a released
+    driver for the wave instead of the squash's own, the recovery for
+    a wave whose workshop was the fault; empty runs the squash's.
+    Green when there is none, or when
     every member's receipt tag is already on the remote: the
     manifest is permanent residue of the last release, so presence
     is not the signal, missing receipts are. A wave already in
@@ -695,10 +701,11 @@ def dispatch_flow(
     """
     from livery.workshop._publish import MANIFEST, read_manifest
 
-    text = git.file_at("HEAD", MANIFEST)
+    where = at or "HEAD"
+    text = git.file_at(where, MANIFEST)
     recorded = read_manifest(text) if text else None
     if not recorded:
-        return ["  no release manifest at HEAD: nothing to dispatch"]
+        return [f"  no release manifest at {where}: nothing to dispatch"]
     cut = set(git.remote_tags())
     receipts = [f"packages/{directory}/v{version}" for directory, version in recorded]
     missing = [tag for tag in receipts if tag not in cut]
@@ -710,14 +717,17 @@ def dispatch_flow(
             f"  the wave is already in flight: run {live[0].id};"
             f" uncut so far: {', '.join(missing)}"
         ]
-    stamping = git.last_commit_touching(MANIFEST)
+    stamping = at or git.last_commit_touching(MANIFEST)
     if not stamping:
         return [
             f"  {MANIFEST} is at HEAD but no commit touches it: nothing to dispatch"
         ]
     seen = {run.id for run in _wave_runs(repo)}
+    inputs = {"ref": stamping}
+    if workshop:
+        inputs["workshop"] = workshop
     try:
-        repo.checks.dispatch(RELEASE_WORKFLOW, ref=base, inputs={"ref": stamping})
+        repo.checks.dispatch(RELEASE_WORKFLOW, ref=base, inputs=inputs)
     except ForgeError as error:
         return [
             f"  the forge refused the dispatch: {error}; uncut: {', '.join(missing)}"
@@ -728,8 +738,9 @@ def dispatch_flow(
     while time.monotonic() < deadline:
         new = [run for run in _wave_runs(repo) if run.id not in seen]
         if new:
+            driver = f" driven by {workshop}" if workshop else ""
             return [
-                f"  dispatched the wave at {stamping[:12]}: run {new[0].id};"
+                f"  dispatched the wave at {stamping[:12]}{driver}: run {new[0].id};"
                 f" uncut: {', '.join(missing)}"
             ]
         time.sleep(interval)
@@ -748,24 +759,28 @@ def pending_release_wave(root: Path, git: GitOps) -> tuple[str, tuple[str, ...]]
     Re-preparing from that state derives an empty release (measured:
     an empty pull request the forge never agrees to merge), so the
     recovery is the wave at the squash, never a new pull request.
-    Only the newest release squash is consulted: older history is
-    not this verb's to rewrite. Returns the squash sha and the
-    missing receipt tags, or None when nothing is pending.
+    Every release squash in recent history is consulted and the
+    oldest with an uncut receipt answers, so a later release never
+    strands an earlier died wave, and recoveries run in order.
+    Returns the squash sha and the missing receipt tags, or None when
+    nothing is pending.
     """
     from livery.workshop._publish import discover_release
 
+    cut = set(git.remote_tags())
+    pending: tuple[str, tuple[str, ...]] | None = None
     for sha, subject in git.recent_commits(50):
         if not subject.startswith("chore(release): released"):
             continue
         released = discover_release(root, git, sha)
-        cut = set(git.remote_tags())
         missing = tuple(
             f"{package.path}/v{version}"
             for package, version in released
             if f"{package.path}/v{version}" not in cut
         )
-        return (sha, missing) if missing else None
-    return None
+        if missing:
+            pending = (sha, missing)
+    return pending
 
 
 release_group = workflow.group("release", help="The release train")
@@ -781,6 +796,9 @@ def workflow_release(
     force_unverified_base: Annotated[
         bool, doc("release without waiting for the base's own CI")
     ] = False,
+    workshop: Annotated[
+        str, doc("a released livery-workshop version to drive a re-dispatched wave")
+    ] = "",
 ) -> None:
     """Release a set of packages: the branch decides the act.
 
@@ -791,7 +809,9 @@ def workflow_release(
     branch at a dev version, published only to the configured custom
     index after a confirmation, no reserved branch, no PR, no tags.
     ``--local`` is everything that stays on this machine, on either
-    branch mode.
+    branch mode. ``--workshop`` applies only to the recovery of a
+    died wave: the named release drives the wave in place of the
+    squash's own workshop.
     """
     from livery.workshop._dev_release import dev_release
     from livery.workshop._forge_lane import this_repository
@@ -832,10 +852,16 @@ def workflow_release(
         # at the squash, the duplicate-tolerant wave walks past what
         # an earlier attempt already did, and nothing new prepares.
         print("  dispatching the wave at the squash; nothing new prepares")
-        for line in dispatch_flow(root, repo, git):
+        for line in dispatch_flow(root, repo, git, at=squash, workshop=workshop):
             print(line)
         print("  re-run to release work newer than the squash")
         return
+    if workshop:
+        fail(
+            "--workshop pins the driver of a re-dispatched wave, and no"
+            " release squash has an uncut receipt; drop the flag to prepare"
+            " a release"
+        )
     driver = ReleaseDriver(
         root,
         repo,
@@ -848,13 +874,23 @@ def workflow_release(
 
 
 @release_group.task(name="dispatch")
-def workflow_release_dispatch() -> None:
+def workflow_release_dispatch(
+    at: Annotated[
+        str, doc("an older release squash to dispatch instead of HEAD's")
+    ] = "",
+    workshop: Annotated[
+        str, doc("a released livery-workshop version to drive the wave")
+    ] = "",
+) -> None:
     """Dispatch the release wave for a merged, unpublished release; green otherwise.
 
     The merge point's last task, and the recovery gesture by hand:
     it reads the manifest at HEAD and the receipts on the remote, so
     on a normal day it prints green, after a died merge run it
     dispatches, and a wave in flight is reported with its run id.
+    ``--at`` names an older release squash a later release has moved
+    past; ``--workshop`` names a released driver for a wave whose own
+    workshop was the fault.
     """
     from livery.workshop._forge_lane import this_repository
     from livery.workshop._layers import workspace_root
@@ -862,7 +898,9 @@ def workflow_release_dispatch() -> None:
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
-    for line in dispatch_flow(root, this_repository(root), GitOps(root)):
+    for line in dispatch_flow(
+        root, this_repository(root), GitOps(root), at=at, workshop=workshop
+    ):
         print(line)
 
 

@@ -183,6 +183,27 @@ def _docs_requirements_step(answers: dict[str, Any], *, sudo: bool = True) -> st
     )
 
 
+DRIVER_DIST = "livery-workshop"
+"""The distribution a re-dispatched wave may pin as its driver."""
+
+
+def _pin_driver_step() -> str:
+    """The wave's driver pin: a released workshop installed over the squash's.
+
+    Empty on a normal wave, so the squash's own workshop drives it and
+    a re-run does what the first run did. Set by a re-dispatch whose
+    first run died on the driver itself: the named release replaces
+    the workshop the checkout synced, in this workspace the editable
+    member and elsewhere the version the lock pins, and the checkout,
+    the ref and the wheel stay the squash's.
+    """
+    return (
+        "      - name: Pin the driver\n"
+        "        if: inputs.workshop != ''\n"
+        f'        run: uv pip install "{DRIVER_DIST}==${{{{ inputs.workshop }}}}"\n'
+    )
+
+
 def _enter_step(*, matrix_python: bool = False) -> str:
     """The entry step: ``setup.sh github`` persists the emission.
 
@@ -434,6 +455,7 @@ def _github_release(answers: dict[str, Any], prog: str) -> str:
     rung = _rung_step(answers)
     setup_uv = _setup_uv_step(answers)
     enter = _enter_step()
+    pin = _pin_driver_step()
     publisher = str(answers.get("templates_publisher", ""))
     wheel_labels = _wheel_runners(answers)
     wheels = bool(wheel_labels)
@@ -453,7 +475,7 @@ def _github_release(answers: dict[str, Any], prog: str) -> str:
         with:
           ref: ${{{{ inputs.ref }}}}
           fetch-depth: 0
-{setup_uv}{enter}      - name: Build this platform's wheels
+{setup_uv}{enter}{pin}      - name: Build this platform's wheels
         run: >-
           {prog} release.wheels
           --ref="${{{{ inputs.ref }}}}"
@@ -485,13 +507,18 @@ def _github_release(answers: dict[str, Any], prog: str) -> str:
 # member. A tag is a receipt, never a trigger: the merge point's
 # dispatch job starts the wave at the release squash, and a hand
 # dispatch with --ref is the recovery entry when a publish died
-# mid-wave.
+# mid-wave; --workshop names a released driver for a wave whose own
+# workshop was the fault.
 on:
   workflow_dispatch:
     inputs:
       ref:
         description: the release squash to publish
         required: true
+      workshop:
+        description: a released {DRIVER_DIST} version to drive the wave; empty runs the squash's own
+        required: false
+        default: ""
 
 jobs:
 {wheels_job}  publish:
@@ -507,7 +534,7 @@ jobs:
         with:
           ref: ${{{{ inputs.ref }}}}
           fetch-depth: 0
-{setup_uv}{collect_step}{rung}{enter}      # The ambient job token suffices here: the wave reads the forge
+{setup_uv}{collect_step}{rung}{enter}{pin}      # The ambient job token suffices here: the wave reads the forge
       # and pushes receipt tags, and a tag is never a trigger, so the
       # suppressed-workflow-events limit cannot bite by construction.
       - name: Publish the wave
@@ -535,7 +562,7 @@ jobs:
       - uses: {CHECKOUT}
         with:
           ref: ${{{{ inputs.ref }}}}
-{setup_uv}{enter}      - name: Deploy key
+{setup_uv}{enter}{pin}      - name: Deploy key
         run: |
           mkdir -p ~/.ssh
           printf '%s\\n' "${{{{ secrets.WORKSHOP_TEMPLATES_DEPLOY_KEY }}}}" > ~/.ssh/templates_deploy

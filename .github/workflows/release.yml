@@ -8,13 +8,18 @@ name: release
 # member. A tag is a receipt, never a trigger: the merge point's
 # dispatch job starts the wave at the release squash, and a hand
 # dispatch with --ref is the recovery entry when a publish died
-# mid-wave.
+# mid-wave; --workshop names a released driver for a wave whose own
+# workshop was the fault.
 on:
   workflow_dispatch:
     inputs:
       ref:
         description: the release squash to publish
         required: true
+      workshop:
+        description: a released livery-workshop version to drive the wave; empty runs the squash's own
+        required: false
+        default: ""
 
 jobs:
   publish:
@@ -35,6 +40,9 @@ jobs:
           version: "0.12.7"
       - name: Enter the workspace
         run: bash setup.sh github
+      - name: Pin the driver
+        if: inputs.workshop != ''
+        run: uv pip install "livery-workshop==${{ inputs.workshop }}"
       # The ambient job token suffices here: the wave reads the forge
       # and pushes receipt tags, and a tag is never a trigger, so the
       # suppressed-workflow-events limit cannot bite by construction.
@@ -61,6 +69,9 @@ jobs:
           version: "0.12.7"
       - name: Enter the workspace
         run: bash setup.sh github
+      - name: Pin the driver
+        if: inputs.workshop != ''
+        run: uv pip install "livery-workshop==${{ inputs.workshop }}"
       - name: Deploy key
         run: |
           mkdir -p ~/.ssh

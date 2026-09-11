@@ -163,6 +163,50 @@ def test_the_wave_is_dispatched_at_the_stamping_commit_and_confirmed(
     assert again.startswith(f"  the wave is already in flight: run {run.id}")
 
 
+def test_an_older_squash_is_dispatched_at_itself_with_a_named_driver(
+    rig: tuple[FakeForge, Path, GitOps], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The recovery for a squash a later release moved past: the wave
+    # goes to the older squash, reads its manifest there, and names
+    # the released workshop that drives it in place of the squash's.
+    fake, root, git = rig
+    older = _stamp(root, fake, ("thing", "1.2.0"))
+    _stamp(root, fake, ("other", "0.3.0"))
+    repo = fake.repository(OWNER, NAME)
+    asked: list[tuple[str, str, dict[str, str] | None]] = []
+    real = repo.checks.dispatch
+
+    def record(
+        workflow: str, *, ref: str, inputs: dict[str, str] | None = None
+    ) -> None:
+        asked.append((workflow, ref, inputs))
+        real(workflow, ref=ref, inputs=inputs)
+
+    monkeypatch.setattr(repo.checks, "dispatch", record)
+    (line,) = dispatch_flow(
+        root, repo, git, at=older, workshop="0.2.0", timeout=5, interval=0.05
+    )
+    assert asked == [("release.yml", "main", {"ref": older, "workshop": "0.2.0"})]
+    (run,) = repo.checks.runs(event="workflow_dispatch")
+    assert line == (
+        f"  dispatched the wave at {older[:12]} driven by 0.2.0: run {run.id};"
+        " uncut: packages/thing/v1.2.0"
+    )
+
+
+def test_the_rendered_release_workflow_carries_the_driver_pin() -> None:
+    from livery.workshop._ci_generate import generate
+
+    release = generate(Path(__file__).resolve().parents[3])[
+        ".github/workflows/release.yml"
+    ]
+    assert "      workshop:\n" in release
+    assert 'default: ""' in release
+    assert release.count("- name: Pin the driver") == 2  # publish, templates
+    assert "if: inputs.workshop != ''" in release
+    assert 'uv pip install "livery-workshop==${{ inputs.workshop }}"' in release
+
+
 def test_await_wave_answers_a_wave_newer_than_the_merge_or_none(
     rig: tuple[FakeForge, Path, GitOps],
 ) -> None:
