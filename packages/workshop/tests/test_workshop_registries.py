@@ -51,10 +51,15 @@ def test_no_rung_answering_refuses_teaching_the_declaration(
 
 
 def test_python_falls_through_to_the_ecosystem_default(tmp_path: Path) -> None:
+    # Nothing declared is a deliberate PyPI publish: the rung carries
+    # the upload endpoint, because the publish step refuses an empty
+    # address and never defaults one itself.
     root = _workspace(tmp_path)
     target = resolve_registry(root, "python")
     assert target == RegistryTarget(
-        kind="python", url="https://pypi.org/simple", publish_url=""
+        kind="python",
+        url="https://pypi.org/simple",
+        publish_url="https://upload.pypi.org/legacy/",
     )
 
 

@@ -33,9 +33,12 @@ _ENV_VARS = {
     "container": ("CONTAINER_REGISTRY",),
 }
 
-#: The ecosystem default, where one exists.
+#: The ecosystem default, where one exists: the read index and the
+#: upload endpoint. The publish step refuses an empty address, so a
+#: deliberate PyPI publish arrives there as this rung's explicit URL;
+#: trusted publishing or a token carries the credential.
 _ECOSYSTEM = {
-    "python": ("https://pypi.org/simple", ""),
+    "python": ("https://pypi.org/simple", "https://upload.pypi.org/legacy/"),
 }
 
 #: The env cascade's credential variable, per kind. Read on every
