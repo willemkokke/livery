@@ -152,10 +152,14 @@ nav = [
     ] },
     { "strongroom" = [
         { "Index" = "_generated/packages/strongroom/index.md" },
+        { "Using the store" = "_generated/packages/strongroom/store.md" },
+        { "The standard" = "_generated/packages/strongroom/standard.md" },
+        { "Platforms" = "_generated/packages/strongroom/platforms.md" },
         { "Changelog" = "_generated/packages/strongroom/changelog.md" },
         { "API" = [
             { "livery.strongroom" = "_generated/api/strongroom/index.md" },
             { "livery.strongroom._canonical" = "_generated/api/strongroom/_canonical.md" },
+            { "livery.strongroom._conformance" = "_generated/api/strongroom/_conformance.md" },
             { "livery.strongroom._digest" = "_generated/api/strongroom/_digest.md" },
             { "livery.strongroom._errors" = "_generated/api/strongroom/_errors.md" },
             { "livery.strongroom._fields" = "_generated/api/strongroom/_fields.md" },

@@ -57,8 +57,16 @@ def new_pending_id() -> str:
     return secrets.token_hex(8)
 
 
-def after_mark() -> None:
-    """Runs between marking and deleting; the seam a test uses to race a publish."""
+def _after_mark() -> None:
+    """Nothing: the sweep proceeds from marking to deleting."""
+
+
+after_mark: Callable[[], None] = _after_mark
+"""Runs between marking and deleting.
+
+A variable, not a function, so the conformance harness can begin a
+publish there and put the sweep back afterwards.
+"""
 
 
 @dataclass(frozen=True)
