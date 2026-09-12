@@ -76,6 +76,26 @@ The pending ref roots the target from `begin` to `commit`, so a sweep
 during the publish keeps every object it names. A refused commit
 leaves the pending ref for a retry; `retire` drops one deliberately.
 
+Several refs move together, or not at all, as a group:
+
+```python
+with store.transaction(by=me) as tx:
+    tx.move("tools", "bun@1.3", tree, previous=None)
+    tx.move("datasets", "corpus/main", version, previous=v1)
+records = tx.records
+```
+
+Entering begins a group under `pending/<id>`, whose manifest roots
+every move's target. A clean exit commits: under the maintenance
+lease and the refs' locks, every move is checked first, the
+compare-and-swap and the namespace's class, and the first refusal
+stops the group with nothing moved; then the moves apply in order.
+An exception in the body, or a refused commit, retires the group.
+A commit that stops between two applies leaves the group with its
+journal; `store.commit(id, by=me)` on the same id finishes it, and
+`retire` refuses it. `begin`, `add`, `commit`, `group` and `groups`
+are the pieces underneath, for a group that spans processes.
+
 ## Views
 
 ```python

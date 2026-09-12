@@ -1,0 +1,486 @@
+{
+  "scenarios": [
+    {
+      "id": "a-refused-second-move-moves-nothing",
+      "namespaces": [
+        {
+          "name": "tools",
+          "mutation": "write-once"
+        },
+        {
+          "name": "urls",
+          "mutation": "volatile"
+        }
+      ],
+      "steps": [
+        {
+          "op": "put",
+          "data": "a",
+          "as": "A"
+        },
+        {
+          "op": "put",
+          "data": "b",
+          "as": "B"
+        },
+        {
+          "op": "tree",
+          "entries": {
+            "a": "A"
+          },
+          "as": "T"
+        },
+        {
+          "op": "tree",
+          "entries": {
+            "b": "B"
+          },
+          "as": "U"
+        },
+        {
+          "op": "set",
+          "namespace": "tools",
+          "path": "bun@1",
+          "digest": "U",
+          "previous": null,
+          "expect": "ok"
+        },
+        {
+          "op": "group-begin",
+          "as": "G"
+        },
+        {
+          "op": "group-add",
+          "group": "G",
+          "namespace": "urls",
+          "path": "x",
+          "digest": "T",
+          "previous": null,
+          "expect": "ok"
+        },
+        {
+          "op": "group-add",
+          "group": "G",
+          "namespace": "urls",
+          "path": "x",
+          "digest": "T",
+          "previous": null,
+          "expect": "conflict"
+        },
+        {
+          "op": "group-add",
+          "group": "G",
+          "namespace": "urls",
+          "path": "y",
+          "digest": "MISSING",
+          "previous": null,
+          "expect": "missing"
+        },
+        {
+          "op": "group-add",
+          "group": "G",
+          "namespace": "tools",
+          "path": "bun@1",
+          "digest": "T",
+          "previous": "U",
+          "expect": "ok"
+        },
+        {
+          "op": "group-commit",
+          "group": "G",
+          "expect": "write-once-refused"
+        },
+        {
+          "op": "ref",
+          "namespace": "urls",
+          "path": "x",
+          "expect": null
+        },
+        {
+          "op": "ref",
+          "namespace": "tools",
+          "path": "bun@1",
+          "expect": "U"
+        },
+        {
+          "op": "pending",
+          "expect": [
+            "G"
+          ]
+        },
+        {
+          "op": "groups",
+          "expect": [
+            "G"
+          ]
+        },
+        {
+          "op": "group-retire",
+          "group": "G",
+          "expect": "ok"
+        },
+        {
+          "op": "group-retire",
+          "group": "G",
+          "expect": "no-such-pending"
+        },
+        {
+          "op": "group-commit",
+          "group": "G",
+          "expect": "no-such-pending"
+        },
+        {
+          "op": "pending",
+          "expect": []
+        }
+      ]
+    },
+    {
+      "id": "a-compare-and-swap-that-lies-moves-nothing",
+      "namespaces": [
+        {
+          "name": "urls",
+          "mutation": "volatile"
+        }
+      ],
+      "steps": [
+        {
+          "op": "put",
+          "data": "a",
+          "as": "A"
+        },
+        {
+          "op": "tree",
+          "entries": {
+            "a": "A"
+          },
+          "as": "T"
+        },
+        {
+          "op": "group-begin",
+          "as": "G"
+        },
+        {
+          "op": "group-add",
+          "group": "G",
+          "namespace": "urls",
+          "path": "x",
+          "digest": "T",
+          "previous": null,
+          "expect": "ok"
+        },
+        {
+          "op": "group-add",
+          "group": "G",
+          "namespace": "urls",
+          "path": "y",
+          "digest": "T",
+          "previous": "T",
+          "expect": "ok"
+        },
+        {
+          "op": "group-commit",
+          "group": "G",
+          "expect": "conflict"
+        },
+        {
+          "op": "ref",
+          "namespace": "urls",
+          "path": "x",
+          "expect": null
+        },
+        {
+          "op": "ref",
+          "namespace": "urls",
+          "path": "y",
+          "expect": null
+        },
+        {
+          "op": "pending",
+          "expect": [
+            "G"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "replay-after-a-crash",
+      "namespaces": [
+        {
+          "name": "urls",
+          "mutation": "volatile"
+        }
+      ],
+      "steps": [
+        {
+          "op": "put",
+          "data": "a",
+          "as": "A"
+        },
+        {
+          "op": "put",
+          "data": "b",
+          "as": "B"
+        },
+        {
+          "op": "tree",
+          "entries": {
+            "a": "A"
+          },
+          "as": "T"
+        },
+        {
+          "op": "tree",
+          "entries": {
+            "b": "B"
+          },
+          "as": "U"
+        },
+        {
+          "op": "group-begin",
+          "as": "G"
+        },
+        {
+          "op": "group-add",
+          "group": "G",
+          "namespace": "urls",
+          "path": "x",
+          "digest": "T",
+          "previous": null,
+          "expect": "ok"
+        },
+        {
+          "op": "group-add",
+          "group": "G",
+          "namespace": "urls",
+          "path": "y",
+          "digest": "U",
+          "previous": null,
+          "expect": "ok"
+        },
+        {
+          "op": "group-commit",
+          "group": "G",
+          "crash_after": 1,
+          "expect": "crashed"
+        },
+        {
+          "op": "ref",
+          "namespace": "urls",
+          "path": "x",
+          "expect": "T"
+        },
+        {
+          "op": "ref",
+          "namespace": "urls",
+          "path": "y",
+          "expect": null
+        },
+        {
+          "op": "group-retire",
+          "group": "G",
+          "expect": "half-applied"
+        },
+        {
+          "op": "group-add",
+          "group": "G",
+          "namespace": "urls",
+          "path": "z",
+          "digest": "T",
+          "previous": null,
+          "expect": "half-applied"
+        },
+        {
+          "op": "pending",
+          "expect": [
+            "G"
+          ]
+        },
+        {
+          "op": "group-commit",
+          "group": "G",
+          "expect": "ok"
+        },
+        {
+          "op": "ref",
+          "namespace": "urls",
+          "path": "y",
+          "expect": "U"
+        },
+        {
+          "op": "pending",
+          "expect": []
+        },
+        {
+          "op": "groups",
+          "expect": []
+        }
+      ]
+    },
+    {
+      "id": "the-sweep-through-a-group",
+      "namespaces": [
+        {
+          "name": "tools",
+          "mutation": "write-once"
+        }
+      ],
+      "steps": [
+        {
+          "op": "put",
+          "data": "a",
+          "as": "A"
+        },
+        {
+          "op": "tree",
+          "entries": {
+            "a": "A"
+          },
+          "as": "T"
+        },
+        {
+          "op": "group-begin",
+          "as": "G",
+          "manifest_as": "M0"
+        },
+        {
+          "op": "group-add",
+          "group": "G",
+          "namespace": "tools",
+          "path": "bun@1",
+          "digest": "T",
+          "previous": null,
+          "expect": "ok",
+          "manifest_as": "M1"
+        },
+        {
+          "op": "sweep",
+          "expect_removed": [
+            "M0"
+          ]
+        },
+        {
+          "op": "state",
+          "digest": "A",
+          "expect": "present"
+        },
+        {
+          "op": "state",
+          "digest": "T",
+          "expect": "present"
+        },
+        {
+          "op": "group-commit",
+          "group": "G",
+          "expect": "ok"
+        },
+        {
+          "op": "ref",
+          "namespace": "tools",
+          "path": "bun@1",
+          "expect": "T"
+        },
+        {
+          "op": "sweep",
+          "expect_removed": [
+            "M1"
+          ]
+        },
+        {
+          "op": "state",
+          "digest": "A",
+          "expect": "present"
+        },
+        {
+          "op": "group-commit",
+          "group": "G",
+          "expect": "no-such-pending"
+        }
+      ]
+    },
+    {
+      "id": "a-single-publish-is-not-a-group",
+      "namespaces": [
+        {
+          "name": "tools",
+          "mutation": "write-once"
+        }
+      ],
+      "steps": [
+        {
+          "op": "put",
+          "data": "a",
+          "as": "A"
+        },
+        {
+          "op": "tree",
+          "entries": {
+            "a": "A"
+          },
+          "as": "T"
+        },
+        {
+          "op": "begin",
+          "target": "T",
+          "as": "P",
+          "expect": "ok"
+        },
+        {
+          "op": "group-add",
+          "group": "P",
+          "namespace": "tools",
+          "path": "bun@1",
+          "digest": "T",
+          "previous": null,
+          "expect": "not-a-group"
+        },
+        {
+          "op": "group-commit",
+          "group": "P",
+          "expect": "not-a-group"
+        },
+        {
+          "op": "groups",
+          "expect": []
+        },
+        {
+          "op": "pending",
+          "expect": [
+            "P"
+          ]
+        },
+        {
+          "op": "group-begin",
+          "as": "G"
+        },
+        {
+          "op": "pending",
+          "expect": [
+            "P",
+            "G"
+          ]
+        },
+        {
+          "op": "groups",
+          "expect": [
+            "G"
+          ]
+        },
+        {
+          "op": "retire",
+          "pending": "P",
+          "expect": "ok"
+        },
+        {
+          "op": "group-commit",
+          "group": "G",
+          "expect": "ok"
+        },
+        {
+          "op": "pending",
+          "expect": []
+        }
+      ]
+    }
+  ]
+}

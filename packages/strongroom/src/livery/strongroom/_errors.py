@@ -58,5 +58,13 @@ class NoSuchPending(StoreError):
     """The named pending publish does not exist: retired, committed, or never begun."""
 
 
+class NotAGroup(StoreError):
+    """The pending ref is a single publish's, not a group's."""
+
+
+class GroupHalfApplied(StoreError):
+    """A commit already applied part of the group; only a commit finishes it."""
+
+
 class RefProtected(StoreError):
     """The ref's mutation class does not allow dropping it."""

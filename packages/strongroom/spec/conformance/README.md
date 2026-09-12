@@ -29,7 +29,12 @@ arguments and, where the step observes something, an `expect`.
 | `begin` | `target` (a name, or `MISSING`), `as`, `expect` | begin a publish and bind the pending id to `as`; `expect` is `ok` or `missing` |
 | `commit` | `pending`, `namespace`, `path`, `previous`, `expect` | commit the publish; `expect` as for `set`, or `no-such-pending` |
 | `retire` | `pending`, `expect` | retire the publish; `expect` is `ok` or `no-such-pending` |
-| `pending` | `expect` (bound pending names) | the pending publishes, exactly these |
+| `pending` | `expect` (bound pending names) | the pending publishes, exactly these, groups included |
+| `group-begin` | `as`, optional `manifest_as` | begin a group and bind its id to `as`, and its manifest's digest to `manifest_as` |
+| `group-add` | `group`, `namespace`, `path`, `digest` (a name), `previous`, `expect`, optional `manifest_as` | add a move; `expect` is `ok`, `missing`, `conflict`, `not-a-group`, `no-such-pending` or `half-applied`; `manifest_as` binds the new manifest's digest |
+| `group-commit` | `group`, `expect`, optional `crash_after` | commit the group; `expect` as for `set`, or `not-a-group`, `no-such-pending`, or `crashed` with `crash_after`, the number of applies after which the commit stops as a crash would |
+| `group-retire` | `group`, `expect` | retire the group; `expect` is `ok`, `no-such-pending` or `half-applied` |
+| `groups` | `expect` (bound group names) | the groups begun and not committed, exactly these |
 | `pin`, `unpin` | `name`, `digest` (pin only), `expect` (unpin only) | root a digest under `pins/`, or drop the pin; unpin's `expect` is `ok` or `conflict` |
 | `sweep` | `expect_removed` (names), optional `begin_during` (a name) | sweep; with `begin_during`, a publish of that target begins between marking and deleting |
 | `view` | `tree` (a name), `at` (a directory name), `as`, optional `expect` | fill the directory from the tree and bind the record to `as`; `expect` is a refusal such as `erased` |
@@ -50,6 +55,7 @@ arguments and, where the step observes something, an `expect`.
 | --- | --- |
 | [refs.json](refs.json) | compare-and-swap, the three mutation classes, the lock-break rule, out-of-band edits, undeclared namespaces |
 | [lifecycle.json](lifecycle.json) | the publish sequence, a refused commit, the sweep's re-scan of pending refs, the three object states, dropping refs, pins |
+| [groups.json](groups.json) | a group of moves: a refused second move moves nothing, replay after a crash, retire refused part-way, the sweep through a group, a single publish is not a group |
 | [views.json](views.json) | a view round-trips through collect, a live view is a root, drop leaves what it did not create, an escaping symlink is parked, an erased entry fails the view |
 
 ## The harness
