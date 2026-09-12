@@ -374,6 +374,28 @@ def test_disarm_before_push_and_the_merged_refusal(
     assert "already merged" in str(caught.value)
 
 
+def test_a_rerun_on_the_merged_head_reports_the_merge(
+    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Re-running the submit is its recovery procedure: with HEAD the
+    # very head the pull request merged, nothing is pushed or opened,
+    # and the verdict reported is the merge. The refusal above is for
+    # a head strictly ahead of the merged one.
+    fake, git = rig
+    number = _submit(fake, git, armed=False, follow_to_verdict=False)
+    repo = _repo(fake)
+    repo.pr.arm(number, title="feat: the first change")  # green: merges now
+    merged_pr = repo.pr.get(number)
+    assert merged_pr is not None and merged_pr.merged
+    capsys.readouterr()
+    again = _submit(fake, git, armed=True)
+    out = capsys.readouterr().out
+    assert again == number
+    assert f"PR #{number} already merged this head; nothing to push" in out
+    assert "opened PR" not in out and "reusing PR" not in out
+    assert repo.pr.get(number + 1) is None  # no second pull request
+
+
 def test_a_fresh_cycle_of_a_reused_branch_name_proceeds(
     rig: tuple[FakeForge, SubmitGit],
 ) -> None:
