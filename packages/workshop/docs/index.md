@@ -122,6 +122,10 @@ adds points to the default ones. The job runner names the point to
 every child it spawns, and the workshop's pytest plugin deselects
 the rest; a local `fm test` selects for the gate, and
 `fm test -- --workshop-point nightly` selects for a point on demand.
+A `[[ci.schedule]]` entry in `workshop.toml` attaches a task to a
+point's job; `every = "1w"` or `"2w"` runs it on Mondays, or on the
+Monday of an even ISO week, and any other run of the point skips it
+naming the day it runs next.
 The nightly point runs the whole check with its own tests selected
 in, and never skips on the verified record or narrows.
 `fm ci.dispatch --point=nightly` starts the nightly now, on `main`
