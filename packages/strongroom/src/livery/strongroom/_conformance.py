@@ -58,6 +58,7 @@ from livery.strongroom._views import DropReport, ViewRecord
 LockHolder = Literal["live", "dead", "expired"]
 """Who a scenario says holds a lock: a live process, an exited one, or one long ago."""
 
+
 class CrashedCommit(Exception):
     """The harness stopped a commit part-way, as a crash would."""
 

@@ -433,9 +433,7 @@ class Transaction:
 
 
 @contextlib.contextmanager
-def transaction(
-    store: Store, *, by: Subject, lease: float
-) -> Generator[Transaction]:
+def transaction(store: Store, *, by: Subject, lease: float) -> Generator[Transaction]:
     """The body of [livery.strongroom.Store.transaction][]."""
     handle = Transaction(store, by=by, lease=lease)
     handle.id = begin(store, by=by, lease=lease).id
