@@ -12,8 +12,9 @@ material, the rules that decide eligibility are.
 - `view(tree, at, writable=False)` fills a directory; the caller says
   whether it will write, and the materialiser picks the cheapest safe
   rung per entry and records which one it used.
-- `collect(at, declared)` reads declared outputs back into a tree,
-  landing every object.
+- `collect(at, declared, executable=())` reads declared outputs back
+  into a tree, landing every object; `executable` names the outputs
+  that are executable where the file mode cannot say.
 - `drop_view(id)` removes what the view's record lists and nothing
   else.
 
@@ -46,13 +47,40 @@ the target's mode and the object's own mode must not change. A clone
 or a copy takes the entry's mode: read-only unless the view is
 writable, executable when the entry says so.
 
+## The executable bit
+
+A blob entry's `executable` flag is part of the tree, never of the
+object: the same bytes with and without it are one object and two
+trees. `view` sets it through the file mode where the platform has
+one. `collect` learns it by a ladder: the caller's declaration first,
+on every platform, so one call lands one tree everywhere; then the
+file mode where it carries the bit; where it does not, the view
+record's answer for a path the view made, then the platform's own
+reading of a new file, which on Windows is the extension (`.exe`,
+`.bat`, `.cmd`, `.com`); then false. A script a program writes on
+Windows arrives elsewhere without its bit unless the caller declares
+it: nothing on that platform can know.
+
 ## Symlink entries
 
-A real symlink with the entry's target where the platform allows.
-Where it does not: the within-view target's content as a marked copy,
-or a parked refusal when the target escapes the view or is absent in
-it. The record says which, and why. A view never follows a link out
-of itself on the materialiser's own initiative.
+A link never leaves its view. `view` parks an entry whose target
+resolves above the view's root, with the note "target escapes the
+view", and creates nothing, on every platform; a subtree viewed on
+its own has no parent, so its upward links park. Inside the view a
+target may step up and down freely. Where the platform makes
+symlinks, the entry is a real symlink with the entry's target,
+spelled with the platform's separator; where it refuses, the
+within-view target's content as a marked copy, or a parked refusal
+when the target is absent. The record says which, and why.
+
+`collect` reads a link's target back in the tree's spelling. A target
+inside the view is content: an absolute one, which a program may
+write, is recorded as the relative path from the link's own
+directory. A target outside the view is the link rung's own symlink
+into the store, read through as the blob it presents, when the view's
+record says so or when it lands under the collecting store's root.
+Any other target outside the view is refused, naming the path; a
+caller who means it leaves that path out of the declared outputs.
 
 ## The path budget
 
@@ -89,11 +117,16 @@ named miss. Availability is the cost, and the caller chose it.
 
 ## Windows
 
-Paths stay inside the budget by layout. Symlinks need Developer Mode
-or a privilege, so the symlink rung refuses and files copy; a
-directory symlink entry is a junction's case, which this
-implementation does not create yet, so it copies too. Hardlinks work
-on NTFS. ReFS or a Dev Drive gives copy-on-write, which this
-implementation does not wire yet, so the clone rung refuses and the
-view falls through. None of this is proven on a Windows runner; the
-rungs are exercised through their seams.
+Paths stay inside the budget by layout. Whether a process can make a
+symlink depends on Developer Mode or elevation: with either, a
+symlink entry is a real link, its target spelled with backslashes on
+the way out and forward slashes on the way back, so a view
+round-trips; without, the rung refuses and the within-view content
+copies. Hardlinks work on NTFS. ReFS or a Dev Drive gives
+copy-on-write, which this implementation does not wire yet, so the
+clone rung refuses and the view falls through. The file mode has no
+executable bit: `view` cannot set one, and `collect` takes the bit
+from the declaration, the record, or the extension, as the ladder
+above says. Windows refuses to unlink a file marked read-only, and a
+view marks every clone, copy, and hardlink so; dropping a view and
+evicting an object clear the mark on refusal and remove again.

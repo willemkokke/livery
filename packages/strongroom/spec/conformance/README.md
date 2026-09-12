@@ -20,7 +20,7 @@ arguments and, where the step observes something, an `expect`.
 | `lock` | `namespace`, `path`, `holder` | write the ref's lock file as if held: `live` by a running process now, `dead` by a process that has exited, `expired` by a running process longer ago than the stale bound |
 | `unlock` | `namespace`, `path` | remove the lock file |
 | `tamper` | `namespace`, `path`, `digest` (a name) | rewrite the ref file out of band, leaving its record |
-| `tree` | `entries` (name to bound blob name), optional `subtrees` (name to bound tree name), optional `links` (name to target), `as` | build a tree, land it, bind its digest |
+| `tree` | `entries` (name to bound blob name), optional `subtrees` (name to bound tree name), optional `links` (name to target), optional `executable` (entry names), `as` | build a tree, land it, bind its digest |
 | `land` | `data`, `expect` | land the bytes without binding; `expect` is `ok` or `erased` |
 | `state` | `digest` (a name), `expect` | the object's state: `present`, `absent` or `erased` |
 | `path` | `digest` (a name), `expect` | ask for the object's path; `expect` is `ok` or `erased` |
@@ -34,7 +34,7 @@ arguments and, where the step observes something, an `expect`.
 | `sweep` | `expect_removed` (names), optional `begin_during` (a name) | sweep; with `begin_during`, a publish of that target begins between marking and deleting |
 | `view` | `tree` (a name), `at` (a directory name), `as`, optional `expect` | fill the directory from the tree and bind the record to `as`; `expect` is a refusal such as `erased` |
 | `entry` | `view`, `path`, `expect_rung` (a list) | the recorded rung of one entry is one of the listed |
-| `collect` | `at`, `declared` (paths), `expect` (a name) | collect the declared paths and compare the tree's digest |
+| `collect` | `at`, `declared` (paths), optional `executable` (paths), `expect` (a name) | collect the declared paths, the named ones executable, and compare the tree's digest |
 | `drop-view` | `view`, `expect_left` (lines) | drop the view; what it left, exactly these lines |
 | `stray` | `at`, `path` | write a file inside the view the view did not create |
 | `exists` | `at`, `path`, `expect` (a boolean) | whether the path exists, a symlink included |
@@ -50,7 +50,7 @@ arguments and, where the step observes something, an `expect`.
 | --- | --- |
 | [refs.json](refs.json) | compare-and-swap, the three mutation classes, the lock-break rule, out-of-band edits, undeclared namespaces |
 | [lifecycle.json](lifecycle.json) | the publish sequence, a refused commit, the sweep's re-scan of pending refs, the three object states, dropping refs, pins |
-| [views.json](views.json) | a view round-trips through collect, a live view is a root, drop leaves what it did not create, an escaping symlink is parked, an erased entry fails the view |
+| [views.json](views.json) | a view round-trips through collect, an executable entry round-trips and a declared output is executable, a live view is a root, drop leaves what it did not create, an escaping symlink is parked whether or not links are refused, an erased entry fails the view |
 
 ## The harness
 

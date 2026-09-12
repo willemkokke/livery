@@ -14,6 +14,7 @@ and `path` for objects, `ref` and `set_ref` for names.
 from __future__ import annotations
 
 import contextlib
+import ctypes
 import json
 import os
 import time
@@ -22,9 +23,10 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
-from typing import IO, Literal
+from typing import IO, Any, Literal
 
 import livery.strongroom._lifecycle as lifecycle
+import livery.strongroom._rungs as rungs
 from livery.strongroom._canonical import FormatError, Value, canonical
 from livery.strongroom._digest import Algorithm, Digest, registered
 from livery.strongroom._errors import (
@@ -132,16 +134,54 @@ def _pid_alive_posix(pid: int) -> bool:
     return True
 
 
-def _pid_alive_unknown(pid: int) -> bool:
+_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+_ERROR_ACCESS_DENIED = 5
+_STILL_ACTIVE = 259
+
+
+def _kernel32() -> Any:
+    # Windows only: elsewhere ctypes has no WinDLL and this raises, so
+    # the probe is handed a stand-in there. Looked up by name, because
+    # the stubs define WinDLL only on Windows.
+    return getattr(ctypes, "WinDLL")("kernel32", use_last_error=True)  # noqa: B009
+
+
+def _last_error() -> int:
+    return int(getattr(ctypes, "get_last_error")())  # noqa: B009
+
+
+def _pid_alive_windows(
+    pid: int, *, kernel32: Any = None, last_error: Callable[[], int] = _last_error
+) -> bool:
     # Windows' os.kill terminates the process for any signal it does
-    # not special-case, so a liveness probe is never sent there; a lock
-    # is stale by age alone.
+    # not special-case, so the probe asks the kernel for a handle
+    # instead. A handle refused for access is a process that exists but
+    # is not ours to query, alive, the reading os.kill's PermissionError
+    # gets on POSIX; any other refusal is no such process. A handle
+    # whose exit code is not still-active is a process that exited and
+    # is not yet reaped.
+    dll = kernel32 if kernel32 is not None else _kernel32()
+    handle = dll.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if not handle:
+        return last_error() == _ERROR_ACCESS_DENIED
+    try:
+        code = ctypes.c_ulong()
+        if not dll.GetExitCodeProcess(handle, ctypes.byref(code)):
+            return True
+        return code.value == _STILL_ACTIVE
+    finally:
+        dll.CloseHandle(handle)
+
+
+def _pid_alive_unknown(pid: int) -> bool:
+    # No probe on this platform: a lock is stale by age alone.
     return True
 
 
-_PID_ALIVE: Callable[[int], bool] = {"posix": _pid_alive_posix}.get(
-    os.name, _pid_alive_unknown
-)
+_PID_ALIVE: Callable[[int], bool] = {
+    "posix": _pid_alive_posix,
+    "nt": _pid_alive_windows,
+}.get(os.name, _pid_alive_unknown)
 
 
 @dataclass(frozen=True)
@@ -838,7 +878,7 @@ class Store:
 
     def evict(self, digest: Digest) -> None:
         """Remove the object's bytes and its marks; the name is untouched."""
-        self.object_path(digest).unlink(missing_ok=True)
+        rungs.remove(self.object_path(digest))
         self._mark(digest).unlink(missing_ok=True)
         self._reference_mark(digest).unlink(missing_ok=True)
 
@@ -1085,21 +1125,43 @@ class Store:
         """
         return drop_view(self, view_id)
 
-    def collect(self, at: Path, declared: Iterable[str]) -> Tree:
+    def collect(
+        self, at: Path, declared: Iterable[str], *, executable: Iterable[str] = ()
+    ) -> Tree:
         """Read the declared paths under *at* back into a tree, landing every object.
 
         A declared directory is collected whole; an undeclared path is
         not read. Names must be portable and paths within the budget.
 
+        A blob's executable bit comes from a ladder: a path named in
+        *executable* is executable on every platform, so one call lands
+        one tree everywhere; otherwise the file mode where it carries
+        the bit; where it does not, the record of the view that made
+        the path, then the platform's reading of a new file, the
+        extension on Windows; otherwise false.
+
+        A symlink whose target stays inside *at* is content, an
+        absolute target recorded as the relative path from the link's
+        directory. One that leaves *at* is the link rung's own symlink
+        into this store, read through as the blob it presents, when
+        the view's record says so or the target lands under this
+        store's root; any other is refused.
+
+        Args:
+            at: the directory to read.
+            declared: the paths to collect, relative and forward-slashed.
+            executable: the paths that are executable, spelled the same.
+
         Returns:
             The root tree, landed here with every subtree.
 
         Raises:
-            FileNotFoundError: when a declared path is absent.
+            FileNotFoundError: when a declared path, or a declared
+                executable, is absent.
             FormatError: when a name or a symlink target breaks a rule,
-                or a path is over the budget.
+                a symlink escapes *at*, or a path is over the budget.
         """
-        return collect(self, at, declared)
+        return collect(self, at, declared, executable)
 
     def prefetch(self, digest: Digest) -> list[Digest]:
         """Fetch *digest* and everything it reaches, for offline use.

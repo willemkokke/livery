@@ -2,10 +2,14 @@
 
 `view` fills a directory from a tree, choosing the cheapest safe rung
 per entry and recording which one it used; `collect` reads declared
-outputs back into a tree; `drop_view` removes only what the record
-lists. A view is a root while it lives. `prefetch` warms everything
-one digest reaches, and `shed` evicts local copies a named source
-holds, except what a live view depends on.
+outputs back into a tree, learning each blob's executable bit from
+the caller, the file mode, the view's record, or the platform, in
+that order; `drop_view` removes only what the record lists. A view is
+a root while it lives, and a link never leaves it: an entry whose
+target escapes is parked, and a collected link that escapes is
+refused. `prefetch` warms everything one digest reaches, and `shed`
+evicts local copies a named source holds, except what a live view
+depends on.
 
 The functions here are the bodies of the [livery.strongroom.Store][]
 methods of the same names; reach for the methods.
@@ -21,6 +25,7 @@ import shutil
 import stat
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from operator import attrgetter
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -44,6 +49,17 @@ if TYPE_CHECKING:
 
 PATH_BUDGET = 1024
 """The most UTF-8 bytes a path inside a view may take, separators included."""
+
+# The file mode carries the executable bit on POSIX; on Windows chmod
+# cannot set it and stat reports it from the extension, so a view's
+# record answers first there. A module name, so a test forces the
+# Windows ladder on any platform.
+_MODE_CARRIES_EXECUTABLE = os.name == "posix"
+
+# A symlink's target is spelled with the platform's separator on the
+# way out and the tree's forward slash on the way back; the same on
+# POSIX. A module name, so a test forces the Windows spelling.
+_SEP = os.sep
 
 EntryRung = Literal["clone", "hardlink", "link", "copy", "symlink", "parked"]
 """How one view entry was made: a ladder rung, a real symlink, or not at all."""
@@ -73,12 +89,15 @@ class ViewEntry:
             note says why.
         digest: the blob it presents, or None for a symlink entry.
         note: why a symlink became a copy or was parked; empty otherwise.
+        executable: whether the tree marked the blob executable; what
+            `collect` answers for this path where the file mode cannot.
     """
 
     path: str
     rung: EntryRung
     digest: Digest | None = None
     note: str = ""
+    executable: bool = False
 
     def to_json(self) -> dict[str, Value]:
         """The entry as a JSON object."""
@@ -87,12 +106,15 @@ class ViewEntry:
             "rung": self.rung,
             "digest": None if self.digest is None else str(self.digest),
             "note": self.note,
+            "executable": self.executable,
         }
 
     @classmethod
     def from_json(cls, value: Value) -> ViewEntry:
         """Decode an entry, refusing a rung outside the ladder."""
-        fields = expect_object(value, ("path", "rung", "digest", "note"), where="entry")
+        fields = expect_object(
+            value, ("path", "rung", "digest", "note", "executable"), where="entry"
+        )
         digest = fields["digest"]
         return cls(
             expect_str(fields["path"], where="entry.path"),
@@ -101,6 +123,7 @@ class ViewEntry:
             if digest is None
             else Digest.parse(expect_str(digest, where="entry.digest")),
             expect_str(fields["note"], where="entry.note"),
+            expect_bool(fields["executable"], where="entry.executable"),
         )
 
 
@@ -317,7 +340,7 @@ def view(
         destination = at / path
         rung = ladder.make(source, destination, executable=entry.executable)
         _set_mode(destination, rung, executable=entry.executable, writable=writable)
-        entries.append(ViewEntry(path, rung, entry.digest))
+        entries.append(ViewEntry(path, rung, entry.digest, executable=entry.executable))
     for path, link in plan.links:
         entries.append(_make_link(at, path, link))
     record = ViewRecord(
@@ -348,15 +371,18 @@ def _set_mode(path: Path, rung: MadeRung, *, executable: bool, writable: bool) -
 def _make_link(at: Path, path: str, link: Link) -> ViewEntry:
     destination = at / path
     resolved = posixpath.normpath(posixpath.join(posixpath.dirname(path), link.target))
-    escapes = resolved == ".." or resolved.startswith("../")
-    inside = None if escapes else at / resolved
+    if resolved == ".." or resolved.startswith("../"):
+        # The view's policy on every platform: a link never leaves its
+        # root, so nothing outside can be reached through a tree.
+        return ViewEntry(
+            path, "parked", note=f"target escapes the view: {link.target!r}"
+        )
+    inside = at / resolved
     try:
         rungs.symlink(
-            link.target, destination, directory=inside is not None and inside.is_dir()
+            link.target.replace("/", _SEP), destination, directory=inside.is_dir()
         )
     except RungUnavailable as error:
-        if inside is None:
-            return ViewEntry(path, "parked", note=f"target escapes the view: {error}")
         if not inside.exists():
             return ViewEntry(
                 path, "parked", note=f"target is absent in the view: {error}"
@@ -429,9 +455,9 @@ def drop_view(store: Store, view_id: str) -> DropReport:
         if entry.rung == "parked" or not _lexists(path):
             continue
         if path.is_dir() and not path.is_symlink():
-            shutil.rmtree(path)
+            rungs.remove_tree(path)
         else:
-            path.unlink()
+            rungs.remove(path)
         removed.append(entry.path)
     for directory in [*reversed(record.directories), "."]:
         path = root / directory
@@ -469,8 +495,26 @@ class _Node:
     dirs: dict[str, _Node] = field(default_factory=dict)
 
 
-def collect(store: Store, at: Path, declared: Iterable[str]) -> Tree:
+@dataclass(frozen=True)
+class _Collecting:
+    """One collect: its root, the declared executables, the view's record if any."""
+
+    at: Path
+    executable: frozenset[str]
+    made: dict[str, ViewEntry]
+
+
+def collect(
+    store: Store, at: Path, declared: Iterable[str], executable: Iterable[str] = ()
+) -> Tree:
     """Read the declared paths under *at* back into a tree, landing every object."""
+    wanted = frozenset(executable)
+    for relative in sorted(wanted):
+        if not _lexists(at.joinpath(*relative.split("/"))):
+            raise FileNotFoundError(
+                f"declared executable {relative!r} is absent under {at}"
+            )
+    collecting = _Collecting(at, wanted, _made_under(store, at))
     root = _Node()
     for relative in declared:
         parts = relative.split("/")
@@ -482,7 +526,7 @@ def collect(store: Store, at: Path, declared: Iterable[str]) -> Tree:
         node = root
         for part in parts[:-1]:
             node = node.dirs.setdefault(part, _Node())
-        collected = _collect_path(store, at, path, relative)
+        collected = _collect_path(store, collecting, path, relative)
         if isinstance(collected, _Node):
             node.dirs[parts[-1]] = collected
         else:
@@ -490,20 +534,43 @@ def collect(store: Store, at: Path, declared: Iterable[str]) -> Tree:
     return _land_tree(store, root)
 
 
+def _made_under(store: Store, at: Path) -> dict[str, ViewEntry]:
+    # The newest record whose root is the directory: a view whose
+    # directory went and was viewed again leaves an older record the
+    # next sweep retires.
+    root = os.path.abspath(at)
+    covering = [r for r in views(store) if os.path.abspath(r.at) == root]
+    if not covering:
+        return {}
+    newest = max(covering, key=attrgetter("created"))
+    return {entry.path: entry for entry in newest.entries}
+
+
 def _collect_path(
-    store: Store, at: Path, path: Path, relative: str
+    store: Store, collecting: _Collecting, path: Path, relative: str
 ) -> Entry | Link | _Node:
     if len(relative.encode("utf-8")) > PATH_BUDGET:
         raise FormatError(f"path {relative!r} is longer than {PATH_BUDGET} UTF-8 bytes")
-    if path.is_symlink() and _points_inside(at, path):
-        # A link inside the view is content: a symlink entry. A link
-        # out of the view is the materialiser's own presentation of
-        # bytes owned elsewhere, the link rung, and is read through.
-        return Link(path.name, check_target(os.readlink(path)))
+    if path.is_symlink():
+        target = _plain(os.readlink(path)).replace(_SEP, "/")
+        if _lands_under(collecting.at, path, target):
+            # Content, one step and no further: a link to a within-view
+            # file that is itself the link rung's symlink into the store
+            # is still content, because its target is inside the view.
+            return Link(path.name, check_target(_relative_to_link(path, target)))
+        if not _is_link_rung(store, collecting, path, relative, target):
+            raise FormatError(
+                f"symlink {relative!r} escapes the view: its target {target!r}"
+                f" is outside {collecting.at}"
+            )
+        # The link rung's own symlink into the store: the materialiser's
+        # presentation of a blob, read through as that blob.
     if path.is_dir():
         node = _Node()
         for child in sorted(path.iterdir()):
-            collected = _collect_path(store, at, child, f"{relative}/{child.name}")
+            collected = _collect_path(
+                store, collecting, child, f"{relative}/{child.name}"
+            )
             if isinstance(collected, _Node):
                 node.dirs[child.name] = collected
             else:
@@ -511,18 +578,66 @@ def _collect_path(
         return node
     with path.open("rb") as handle:
         landed = store.land(handle)
-    executable = bool(path.stat().st_mode & stat.S_IXUSR)
+    executable = _executable(collecting, path, relative)
     return Entry(path.name, "blob", landed.digest, landed.size, executable)
 
 
-def _points_inside(at: Path, link: Path) -> bool:
-    # The link's own target, one step and no further: a link to a
-    # within-view file that is itself the link rung's symlink into the
-    # store is still content, because its target is inside the view.
-    raw = os.readlink(link)
-    target = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(link)), raw))
-    root = os.path.abspath(at)
-    return target == root or target.startswith(root + os.sep)
+def _executable(collecting: _Collecting, path: Path, relative: str) -> bool:
+    # The ladder: the caller's word on every platform, so one call lands
+    # one tree everywhere; then the file mode where it carries the bit;
+    # where it does not, the view's record for a path the view made,
+    # then the platform's reading of a new file, the extension on
+    # Windows; then false.
+    if relative in collecting.executable:
+        return True
+    made = None if _MODE_CARRIES_EXECUTABLE else collecting.made.get(relative)
+    if made is not None:
+        return made.executable
+    return bool(path.stat().st_mode & stat.S_IXUSR)
+
+
+def _is_link_rung(
+    store: Store, collecting: _Collecting, path: Path, relative: str, target: str
+) -> bool:
+    # The view's record knows exactly which paths it linked into the
+    # store; a directory no record covers is judged by where the target
+    # lands.
+    made = collecting.made.get(relative)
+    if made is not None:
+        return made.rung == "link"
+    return _lands_under(store.root, path, target)
+
+
+def _lands_under(root: Path, link: Path, target: str) -> bool:
+    # Textual, one step: the link's own target joined to its directory
+    # and normalised, against the root as spelled. Nothing is resolved
+    # through the filesystem.
+    landed = os.path.normpath(
+        os.path.join(os.path.dirname(os.path.abspath(link)), target)
+    )
+    base = os.path.abspath(root)
+    return landed == base or landed.startswith(base + os.sep)
+
+
+def _relative_to_link(link: Path, target: str) -> str:
+    # An absolute target inside the view is content spelled for one
+    # machine; the relative path from the link's own directory is what
+    # it means, and the only portable form it has.
+    if not os.path.isabs(target):
+        return target
+    relative = os.path.relpath(target, os.path.dirname(os.path.abspath(link)))
+    return relative.replace(os.sep, "/")
+
+
+def _plain(target: str) -> str:
+    # Windows reads an absolute link back with the extended-length
+    # prefix, which no plain path starts with, so the comparison
+    # against the view's root drops it first.
+    if target.startswith("\\\\?\\UNC\\"):
+        return "\\\\" + target[len("\\\\?\\UNC\\") :]
+    if target.startswith("\\\\?\\"):
+        return target[len("\\\\?\\") :]
+    return target
 
 
 def _land_tree(store: Store, node: _Node) -> Tree:

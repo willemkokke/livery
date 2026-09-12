@@ -29,12 +29,22 @@ Windows-only paths are exercised through their seams with fakes.
 - A replace over a file a reader holds open fails; landing treats it
   as success when the destination verifies, since the bytes are the
   same by name.
-- A liveness probe is never sent to a lock's holder, because
-  `os.kill` there terminates the process; a lock is stale by age
-  alone.
-- Symlinks need Developer Mode or a privilege, so the symlink rung
-  refuses and files copy; a directory symlink entry is a junction's
-  case, which this implementation does not create yet, so it copies.
+- A lock holder's liveness is probed through `OpenProcess` and
+  `GetExitCodeProcess`, never through `os.kill`, which terminates the
+  process there; a process that exists but refuses the query counts
+  as alive.
+- Symlinks need Developer Mode or elevation. With either, a symlink
+  entry is a real link, its target spelled with backslashes on the
+  way out and forward slashes on the way back; without, the symlink
+  rung refuses and files copy; a directory symlink entry is a
+  junction's case, which this implementation does not create yet, so
+  it copies.
+- The file mode has no executable bit. `collect` takes it from the
+  caller's declaration, the view's record, or the extension, in that
+  order.
+- Windows refuses to unlink a read-only file, and a view marks its
+  files so; removing a view's paths and evicting an object clear the
+  mark and remove again.
 - Hardlinks work on NTFS.
 - ReFS and a Dev Drive give copy-on-write, which this implementation
   does not wire yet; the clone rung refuses and the view falls

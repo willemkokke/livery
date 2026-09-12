@@ -408,7 +408,7 @@ Acceptance:
 | refs read from a non-authoritative tier are hints confirmed nowhere | the `[verify]` extra checking the signed receipt beside a ref |
 | the local index is files only | SQLite per local store once GC needs a reverse index |
 | the spec and vectors live in the repository only | package data in the wheel, if open item 1 rules so |
-| Windows paths proven through seams with fakes | the suite on windows-latest when livery#357 brings the runner back |
+| Windows paths proven through seams with fakes, and once on a windows-latest proof leg | the suite on windows-latest when livery#357 brings the runner back |
 
 ## Decision record
 
@@ -555,6 +555,35 @@ Acceptance:
   implemented and tested in this plan, not the copy rung alone. The
   agent's reading of "implement and test the whole rung"; correct it
   here if the intent was narrower.
+- 2026-09-12, a windows-latest proof leg on a branch (issue #478) met
+  19 failures. Fixed: removal of a view's paths and eviction of an
+  object clear the read-only mark Windows refuses to unlink through
+  (`_rungs.remove`, `_rungs.remove_tree`, forced through seams on
+  every platform); an absolute symlink read back with the
+  extended-length prefix is refused as content, not read through;
+  the Linux clone test stands a module in for `fcntl`; the
+  refused-port test allows Windows' retry and its own words. Two
+  families stayed open for a ruling, items 7 and 8 below, and the
+  leg found a third, item 9.
+- 2026-09-12, Willem, five rulings (issue #499), built on the same
+  branch. The executable bit is learned by a ladder in `collect`:
+  the caller's declaration on every platform, then the file mode
+  where it carries the bit, then the view record's answer where it
+  does not, then the platform's reading of a new file, the extension
+  on Windows; the record carries the bit for that, and the ruling
+  is that a Windows store exported over HTTP serves trees a Linux
+  consumer can trust. The lock's liveness is probed on Windows
+  through `OpenProcess` and `GetExitCodeProcess`, an extension of the
+  2026-09-11 ruling, since `os.kill` is still never sent there. A
+  symlink entry's target is spelled with the platform's separator on
+  the way out and the tree's on the way back. An absolute link inside
+  a view is content and collects as the relative path from the
+  link's directory. A link never leaves its view: `view` parks an
+  escaping entry on every platform, `collect` refuses an escaping
+  link, and the link rung's own symlink into the store is told apart
+  by the record, or by landing under the store's root. Judged
+  against the view's root, never a subtree's; a subtree viewed alone
+  has no parent.
 
 ## Open
 
@@ -585,3 +614,14 @@ Acceptance:
    `tokens.txt` sits beside them with no `.gitignore`. This plan cites
    the note by path; committing it, with the tokens file ignored, is
    Willem's. Owner: Willem.
+7. **Resolved 2026-09-12.** The executable bit travels outside the
+   file mode on Windows: the view record carries it for paths the
+   view made, and `collect(..., executable=)` carries it for new
+   outputs. The ladder is in the materialiser spec. Issue #499.
+8. **Resolved 2026-09-12.** A dead holder's lock is broken on Windows
+   through a Win32 liveness probe behind the `_PID_ALIVE` seam; the
+   conformance case holds on every platform. Issue #499.
+9. **Resolved 2026-09-12.** A symlink entry's target is spelled with
+   the platform's separator on the way out and the tree's on the way
+   back, so it resolves on Windows and round-trips. Issues #492 and
+   #499.
