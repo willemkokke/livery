@@ -16,7 +16,7 @@ def test_this_workspace_declares_the_workshop_as_its_base() -> None:
     assert layer_names(ROOT) == (
         "livery.workshop",
         "livery.forge",
-        "livery.toolroom.tools",
+        "livery.toolroom.bench",
         "livery.footman",
     )
 
@@ -40,7 +40,7 @@ def _the_workshop_never_mounts_itself() -> None:
     # arriving) and grafts only the further layers the contract names.
     assert mount_layers(ROOT) == (
         "livery.forge",
-        "livery.toolroom.tools",
+        "livery.toolroom.bench",
         "livery.footman",
     )
 

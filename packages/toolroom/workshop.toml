@@ -8,7 +8,7 @@ type = "python"
 name = "livery-toolroom"
 
 [docs]
-generators = ["toolroom.pages"]
+generators = ["tools.docs"]
 
 [release]
 # The line continues past the origin's last index release (0.6.1);

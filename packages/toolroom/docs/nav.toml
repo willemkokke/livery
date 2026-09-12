@@ -56,13 +56,4 @@ nav = [
         { "zsh" = "_generated/tools/zsh.md" },
         # nav:end tools
     ] },
-    # nav:begin tasks
-    { "Tasks" = [
-        { "Overview" = "_generated/tasks/index.md" },
-        { "toolroom" = [
-            { "Overview" = "_generated/tasks/toolroom/index.md" },
-            { "pages" = "_generated/tasks/toolroom/pages.md" },
-        ] },
-    ] },
-    # nav:end tasks
 ]

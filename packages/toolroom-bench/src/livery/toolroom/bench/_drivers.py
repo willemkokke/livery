@@ -26,8 +26,8 @@ import subprocess
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from livery.toolroom.tools._machinery import _toolhelp, _toolspec
-from livery.toolroom.tools._machinery._toolspec import ToolSpec, Verb
+from livery.toolroom.bench import _toolhelp, _toolspec
+from livery.toolroom.bench._toolspec import ToolSpec, Verb
 
 
 @dataclass(frozen=True)

@@ -30,8 +30,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from livery.toolroom.tools._machinery import _toolhelp
-from livery.toolroom.tools._machinery._toolspec import ToolSpec
+from livery.toolroom.bench import _toolhelp
+from livery.toolroom.bench._toolspec import ToolSpec
 
 _SGR = re.compile("\x1b\\[")  # a CSI escape — how "it emitted colour" is seen
 

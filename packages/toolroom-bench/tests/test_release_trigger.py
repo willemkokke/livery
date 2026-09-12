@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from livery.toolroom.tools._machinery import _tasks
+from livery.toolroom.bench import _tasks
 
 
 def _classify(monkeypatch, spans: dict[str, dict[str, Any]]) -> bool:

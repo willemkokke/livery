@@ -24,9 +24,9 @@ Stub drift therefore degrades a hint, never a run.
 One generated file per curated tool, read from the installed binaries
 on Linux, Windows, and macOS — each header records the tool version it
 was read from. The generator, the option-event history it maintains,
-and the refresh workflow currently live in
-[footman's repository](https://github.com/willemkokke/footman) and are
-moving here with the machinery.
+and the refresh are `livery-toolroom-bench`, the bench package beside
+this one; a workspace that keeps the stubs current names it as a
+layer, and a consumer of the handles never installs it.
 
 ## The vocabulary of a signature
 

@@ -27,7 +27,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from livery.toolroom.tools._machinery._toolspec import Option, ToolSpec, Verb
+from livery.toolroom.bench._toolspec import Option, ToolSpec, Verb
 
 SCHEMA = 1
 """Bumped when the on-disk shape changes in a way a reader must know about."""
@@ -673,8 +673,8 @@ def insert(
     Returns whether the release was added; a release the chain already holds
     is left exactly as it is.
     """
+    from livery.toolroom.bench._toolfetch import _patchlevel
     from livery.toolroom.tools import version_tuple
-    from livery.toolroom.tools._machinery._toolfetch import _patchlevel
 
     if version in observed(doc):
         return False

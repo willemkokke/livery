@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from livery.toolroom.tools._machinery._drivers import Driver, Plugin, Provision
+from livery.toolroom.bench._drivers import Driver, Plugin, Provision
 
 PYPI = "https://pypi.org/pypi/{package}/json"
 TIMEOUT = 30
@@ -282,7 +282,7 @@ def _read_index(request: urllib.request.Request, url: str) -> bytes:
     `Unreachable` still ends the run when the tries are spent: an index
     that will not answer must never read as "nothing new".
     """
-    from livery.toolroom.tools._machinery._provision import _worth_retrying
+    from livery.toolroom.bench._provision import _worth_retrying
 
     for attempt in range(_INDEX_TRIES):
         try:
@@ -305,7 +305,7 @@ def _index(url: str) -> Any:
     forge API a list), so the honest static type is the JSON it is. Raises
     `Unreachable` when it cannot be read.
     """
-    from livery.toolroom.tools._machinery._provision import api_headers
+    from livery.toolroom.bench._provision import api_headers
 
     request = urllib.request.Request(url, headers=api_headers(url))
     try:
@@ -549,7 +549,7 @@ def _docker_index() -> list[Release]:
 
 def _install_docker(driver: Driver, release: Release, into: Path) -> Path | None:
     """Fetch one static build and place its binary where the walk reads it."""
-    from livery.toolroom.tools._machinery import _provision
+    from livery.toolroom.bench import _provision
 
     os_name, arch, suffix = _docker_channel()
     index = _DOCKER_INDEX.format(os=os_name, arch=arch)
@@ -596,8 +596,8 @@ def install_plugin(plugin: Plugin, on_or_before: str, home: Path) -> bool:
     absent, which is what a walk of an era before the plugin existed
     should say.
     """
+    from livery.toolroom.bench import _provision
     from livery.toolroom.tools import version_tuple
-    from livery.toolroom.tools._machinery import _provision
 
     found = _listing(plugin.repo, 3)
     floor = version_tuple(plugin.since) if plugin.since else ()
@@ -674,7 +674,7 @@ def _install_man(driver: Driver, release: Release, into: Path) -> Path | None:
     """Unpack one release's manuals where the reader will look for them."""
     import tarfile
 
-    from livery.toolroom.tools._machinery import _provision
+    from livery.toolroom.bench import _provision
 
     man = driver.provision.manual
     if man is None:
@@ -886,7 +886,7 @@ def _install_asset(driver: Driver, release: Release, into: Path) -> Path | None:
     listing it worked and only installing failed. The version is still tried
     as a fallback, for a listing that recorded no tag.
     """
-    from livery.toolroom.tools._machinery import _provision
+    from livery.toolroom.bench import _provision
 
     kind = driver.provision.kind
     host = kind if kind in ("gitlab", "gitea") else "github"
