@@ -784,6 +784,94 @@ def test_status_and_rerun_and_doctor(rig: tuple[FakeForge, SubmitGit]) -> None:
     assert fake.whoami()
 
 
+def test_rerun_runs_the_whole_run_when_only_the_verdict_job_failed(
+    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The recovery first: the verdict job judges the legs' rows, which
+    # the first attempt's collect dropped, so re-run alone it can only
+    # fail; the fake's one job is named gate, the verdict job.
+    fake, git = rig
+    git.outcome = "failure"
+    _submit(fake, git, armed=False, follow_to_verdict=False)
+    repo = _repo(fake)
+    asked: list[bool] = []
+    real = repo.checks.rerun
+
+    def record(run: int, *, failed_only: bool = True) -> None:
+        asked.append(failed_only)
+        real(run, failed_only=failed_only)
+
+    monkeypatch_target = repo.checks
+    monkeypatch_target.rerun = record
+    rerun_flow(repo, git)
+    assert asked == [False]
+    assert "only the verdict job failed" in capsys.readouterr().out
+
+
+def test_rerun_keeps_failed_only_when_a_leg_failed(
+    rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.forge import Job
+
+    fake, git = rig
+    git.outcome = "failure"
+    _submit(fake, git, armed=False, follow_to_verdict=False)
+    repo = _repo(fake)
+    asked: list[bool] = []
+    real = repo.checks.rerun
+
+    def record(run: int, *, failed_only: bool = True) -> None:
+        asked.append(failed_only)
+        real(run, failed_only=failed_only)
+
+    def two_jobs(run: int) -> tuple[Job, ...]:
+        (only,) = fake.repository(OWNER, NAME).checks.jobs(run)
+        leg = Job(
+            id=only.id + 1,
+            name="check (ubuntu-latest, 3.14)",
+            status="completed",
+            conclusion="failure",
+            started_at="",
+            completed_at="",
+            steps=(),
+        )
+        return (leg, only)
+
+    monkeypatch.setattr(repo.checks, "rerun", record)
+    monkeypatch.setattr(repo.checks, "jobs", two_jobs)
+    rerun_flow(repo, git)
+    assert asked == [True]
+
+
+def test_rerun_leaves_a_release_wave_to_the_train_off_main(
+    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A red release wave on an ancestor commit is the train's to
+    # re-dispatch; on a feature branch the rerun names that and moves
+    # on. On main the wave is the branch's verdict and re-runs.
+    fake, git = rig
+    _git(git.root, "checkout", "main")
+    main_sha = _git(git.root, "rev-parse", "HEAD").strip()
+    fake.push(OWNER, NAME, "main", sha=main_sha)
+    fake.settle(OWNER, NAME, main_sha)
+    repo = _repo(fake)
+    cast(Any, repo.checks).dispatch("release.yml", ref="main", outcome="failure")
+    fake.settle(OWNER, NAME, main_sha)
+    _git(git.root, "checkout", "-b", "feat/later")
+    (git.root / "later.txt").write_text("later\n")
+    _git(git.root, "add", ".")
+    _git(git.root, "commit", "-m", "feat: later")
+    rerun_flow(repo, git)
+    out = capsys.readouterr().out
+    assert "release.yml" in out and "is a release wave, left to the train" in out
+    (wave,) = [run for run in repo.checks.runs() if run.workflow == "release.yml"]
+    assert wave.status == "completed"
+    _git(git.root, "checkout", "main")
+    rerun_flow(repo, git)
+    (wave,) = [run for run in repo.checks.runs() if run.workflow == "release.yml"]
+    assert wave.status != "completed"
+
+
 def test_rerun_reaches_a_failed_run_on_an_earlier_commit(
     rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
 ) -> None:

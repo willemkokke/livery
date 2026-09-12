@@ -25,6 +25,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Annotated
 
+import livery.footman as footman
 from livery.footman import doc, fail, group, task
 from livery.forge import (
     Capability,
@@ -147,8 +148,38 @@ def rerun_flow(repo: Repository, git: GitOps, *, failed_only: bool = True) -> No
     if not failed:
         print(f"  nothing failed on this branch as of {sha[:10]}")
         return
+    from livery.workshop._points import BUILTIN, workflow_of
+
+    release_workflow = workflow_of("release")
+    verdict_jobs = {entry.job for entry in BUILTIN if entry.task == "ci.verdict"}
+    on_main = git.current_branch() == "main"
     for run in failed:
-        repo.checks.rerun(run.id, failed_only=failed_only)
+        workflow = (run.workflow or "").rsplit("/", 1)[-1]
+        # A release wave is the train's: its recovery re-dispatches
+        # at the squash with the right driver, which a rerun of the
+        # same run cannot do. On main it is this branch's verdict.
+        if workflow == release_workflow and not on_main:
+            print(
+                f"  {workflow} (run {run.id}) is a release wave, left to the"
+                f" train: `{footman.prog()} workflow.release <set>` re-dispatches it"
+            )
+            continue
+        whole = not failed_only
+        if failed_only:
+            # The verdict job judges the legs' rows, which the first
+            # attempt's collect dropped; re-run alone it can only fail.
+            red = [
+                job.name
+                for job in repo.checks.jobs(run.id)
+                if job.status == "completed" and job.conclusion not in _GREEN
+            ]
+            if red and all(job in verdict_jobs for job in red):
+                whole = True
+                print(
+                    f"  {workflow} (run {run.id}): only the verdict job failed,"
+                    " and it judges the legs' rows; the whole run is asked to run again"
+                )
+        repo.checks.rerun(run.id, failed_only=not whole)
         after = next(
             (
                 candidate
