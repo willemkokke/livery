@@ -517,7 +517,12 @@ class _StubDriver:
                 self._git.create_branch(self.branch)
         marker = self._git.root / "update.txt"
         if not marker.exists():
-            marker.write_text("updated\n")
+            # A fresh nonce per update: two updates cut from the same
+            # base within one second would otherwise be the same commit,
+            # and the fake forge tells pull requests apart by head sha.
+            import time
+
+            marker.write_text(f"updated {time.time_ns()}\n")
             self._git.commit_all("chore: the update")
         return Submission(title="chore: the update", body="")
 
