@@ -31,10 +31,10 @@ teams = []
 approvals = 0
 
 [ci]
-# windows-latest is out of the gate by ruling: its legs were the
-# slowest by far (a test task of 600 to 800 s against 210 s on
-# ubuntu). The suite is green there; returning the runner, here or
-# at the nightly point, is the owner's call.
+# Every tier-1 platform gates. The windows-latest leg is the
+# slowest; `[ci] windows-temp` keeps its files on the runner's
+# working drive (the gate measured at 486 s there against 576 s on
+# the system temp), and the timing plan carries the rest.
 runners = ["ubuntu-latest", "macos-latest", "windows-latest"]
 # A pull request's check legs run the scoped gate against its base:
 # the packages the change can influence run, the others' suites are

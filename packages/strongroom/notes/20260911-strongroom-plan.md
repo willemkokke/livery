@@ -80,9 +80,10 @@ them, and the toolroom rework is where a real consumer arrives.
     fallback is forced by a test before the rung's success path is
     tested. A rung whose refusal has no test is untested code.
 13. **The gate is green at every phase cut** on the workspace's
-    runners. Windows is designed in and not gated (Willem,
-    2026-09-11): the Windows-only paths are exercised through their
-    seams with fakes, and the plan says so wherever it applies.
+    runners, windows-latest included since 2026-09-12 (it was
+    designed in and not gated from 2026-09-11 to then): the
+    Windows-only paths are exercised through their seams with fakes
+    on every platform and for real on the Windows leg.
 14. **Dependencies point downward.** `livery.strongroom` imports
     nothing first-party. Nothing in this plan imports it.
 
@@ -436,7 +437,7 @@ Acceptance:
 | refs read from a non-authoritative tier are hints confirmed nowhere | the `[verify]` extra checking the signed receipt beside a ref |
 | the local index is files only | SQLite per local store once GC needs a reverse index |
 | the spec and vectors live in the repository only | package data in the wheel, if open item 1 rules so |
-| Windows paths proven through seams with fakes, and once on a windows-latest proof leg | the suite on windows-latest when livery#357 brings the runner back |
+| Windows paths proven through seams with fakes, and on the windows-latest leg of every push since 2026-09-12 | nothing: the runner is in the gate |
 
 ## Decision record
 

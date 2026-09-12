@@ -2033,8 +2033,9 @@ None. Every ruling raised in this plan was closed in the review of
   backslash; the rest were paths written into TOML unescaped, paths in
   messages with backslashes, the venv's `Scripts` layout, and tests
   whose behaviour is POSIX by design, which skip by name. The runner
-  stays out of `[ci] runners` by the 2026-09-09 ruling; returning it,
-  to the gate or to the nightly point, is Willem's to rule.
+  stayed out of `[ci] runners` by the 2026-09-09 ruling until
+  2026-09-12, when Willem returned it on livery#487 with the
+  strongroom suite green there (the five rulings of livery#499).
 - 2026-09-11, Willem: a Windows leg's temporary directory lives under
   the runner's temp on GitHub by default, and stays configurable for
   custom and enterprise runners (`[ci] windows-temp = "runner" |
