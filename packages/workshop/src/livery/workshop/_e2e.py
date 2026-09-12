@@ -184,7 +184,9 @@ def _loop_home() -> Path:
     return data_dir() / "workshop-e2e"
 
 
-def _dev_pins(root: Path, head: str) -> dict[str, str]:
+def _dev_pins(
+    root: Path, head: str, members: tuple[str, ...] = DEV_MEMBERS
+) -> dict[str, str]:
     """The dev versions this pass built, by distribution name.
 
     Read from the newest wheel in each member's ``dist``, which the
@@ -195,7 +197,7 @@ def _dev_pins(root: Path, head: str) -> dict[str, str]:
     a dist holds no wheel or its newest wheel is another commit's.
     """
     pins: dict[str, str] = {}
-    for member in DEV_MEMBERS:
+    for member in members:
         dist = root / "packages" / member / "dist"
         wheels = sorted(dist.glob("*.whl"), key=lambda wheel: wheel.stat().st_mtime)
         if not wheels:
@@ -226,25 +228,59 @@ def _publish_dev_wheels(kind: str) -> dict[str, str]:
     distribution name, for the loop's lock to pin exactly.
     """
     from livery.footman import run
+    from livery.forge._registry import purge_packages
+    from livery.workshop._dev_release import unchanged_since_release
     from livery.workshop._git_ops import GitOps
     from livery.workshop._layers import workspace_root
+    from livery.workshop._packages import discover_packages
 
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
     _, token = _dev_forge(kind)
-    run(
-        ["fm", "--yes", "workflow.release", *DEV_MEMBERS],
-        cwd=root,
-        # The whole environment, extended: env= replaces, and a bare
-        # pair would strip PATH from under the child fm.
-        env={
-            **os.environ,
-            "PYTHON_PUBLISH_INDEX": ALIAS_URL + "/api/packages/" + E2E_OWNER + "/pypi",
-            "UV_PUBLISH_TOKEN": token,
-        },
-    )
-    pins = _dev_pins(root, GitOps(root).head_sha())
+    git = GitOps(root)
+    # A member nothing unreleased touches cannot be built as a dev
+    # wheel: that number would sort below its release and satisfy no
+    # floor naming it. The loop pins the release instead, and drops
+    # the member's stale rehearsal wheels from the registry, which a
+    # first-index resolve would otherwise pick over the release.
+    packages = {package.directory.name: package for package in discover_packages(root)}
+    changed: list[str] = []
+    released: dict[str, str] = {}
+    for member in DEV_MEMBERS:
+        version = unchanged_since_release(root, git, packages[member])
+        if version:
+            released[packages[member].name] = version
+            print(
+                f"  {member}: nothing unreleased since {version}; the loop pins"
+                " the release"
+            )
+        else:
+            changed.append(member)
+    if released:
+        purged = purge_packages(
+            os.environ.get("GITEA_URL", ""), E2E_OWNER, token=token, names=released
+        )
+        print(
+            f"  registry: {len(purged)} stale rehearsal release(s) of the pinned"
+            " member(s) dropped"
+        )
+    if changed:
+        run(
+            ["fm", "--yes", "workflow.release", *changed],
+            cwd=root,
+            # The whole environment, extended: env= replaces, and a bare
+            # pair would strip PATH from under the child fm.
+            env={
+                **os.environ,
+                "PYTHON_PUBLISH_INDEX": ALIAS_URL
+                + "/api/packages/"
+                + E2E_OWNER
+                + "/pypi",
+                "UV_PUBLISH_TOKEN": token,
+            },
+        )
+    pins = _dev_pins(root, git.head_sha(), tuple(changed)) | released
     print("  dev wheels: published to the loop's registry")
     return pins
 

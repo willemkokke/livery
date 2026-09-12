@@ -2049,3 +2049,13 @@ None. Every ruling raised in this plan was closed in the review of
   90 s; the same 19 strongroom failures in both (#478), everything
   else green. The Gitea and GitLab shells keep the system temp, since
   their runners are the workspace's own.
+- 2026-09-12: the loop's dev act pins a released member instead of
+  rebuilding it (#486). The first loop pass after livery-forge 0.3.0
+  refused at once: nothing unreleased touched forge, and a dev wheel
+  of released code sorts below its release and satisfies no floor
+  naming it, so `fm ci.e2e` was red on any branch that left forge
+  alone. The act now asks the dev release's own rule per member, pins
+  the release for a member with nothing unreleased, drops that
+  member's stale rehearsal wheels from the loop's registry (a
+  first-index resolve would pick them over the release), and builds
+  the rest.

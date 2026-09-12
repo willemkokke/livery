@@ -106,6 +106,21 @@ def describe_distance(git: GitOps, package: Package) -> tuple[int, str]:
     return (int(count) if count.isdigit() else 0), (sha or "0000000")
 
 
+def unchanged_since_release(root: Path, git: GitOps, package: Package) -> str:
+    """The released version nothing unreleased has touched, or empty.
+
+    Content, not position, judged against the release tag: HEAD can
+    be far past a package's tag with no commit touching it, and
+    git-cliff then answers the released version back. Empty for a
+    package with unreleased changes, or one with no release yet.
+    """
+    released = latest_released(git.tags()).get(package.path, "")
+    derived = _cliff.bumped_version(root, package)
+    if not derived:
+        fail(f"git-cliff derived no version for {package.name}; see its output above.")
+    return released if released and derived == released else ""
+
+
 def dev_version(root: Path, git: GitOps, package: Package, *, stamp: str = "") -> str:
     """Derive *package*'s dev version, refusing an unchanged package.
 
@@ -123,11 +138,9 @@ def dev_version(root: Path, git: GitOps, package: Package, *, stamp: str = "") -
     reads offline from a lock file; ``.dirty`` marks a tree whose
     wheel no commit describes.
     """
-    released = latest_released(git.tags()).get(package.path, "")
+    released = unchanged_since_release(root, git, package)
     derived = _cliff.bumped_version(root, package)
-    if not derived:
-        fail(f"git-cliff derived no version for {package.name}; see its output above.")
-    if released and derived == released:
+    if released:
         fail(
             f"nothing unreleased touches {package.name}: a dev build here"
             f" would carry the released code under {released}.dev<N>, which"

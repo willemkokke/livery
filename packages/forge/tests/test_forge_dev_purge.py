@@ -43,6 +43,24 @@ def test_an_owner_without_packages_purges_nothing() -> None:
     assert deletes == []
 
 
+def test_named_packages_alone_are_purged() -> None:
+    deletes: list[str] = []
+    page = [
+        {"name": "livery-forge", "version": "0.3.0.dev4"},
+        {"name": "livery-workshop", "version": "0.2.0.dev9"},
+        {"name": "livery-forge", "version": "0.3.0.dev5"},
+    ]
+    purged = purge_packages(
+        "http://x",
+        "livery",
+        token="t",
+        api=_api([page], deletes),
+        names={"livery-forge"},
+    )
+    assert purged == ["livery-forge==0.3.0.dev4", "livery-forge==0.3.0.dev5"]
+    assert all("livery-workshop" not in path for path in deletes)
+
+
 def test_every_page_is_walked_and_a_gone_release_is_fine() -> None:
     deletes: list[str] = []
     first = [{"name": f"pkg{n}", "version": "0.1.0"} for n in range(50)]
