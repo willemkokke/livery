@@ -9,6 +9,21 @@ format follows [Keep a Changelog](https://keepachangelog.com/), the
 project adheres to [Semantic Versioning](https://semver.org/), and
 while it is pre-1.0 a minor version may include breaking changes.
 
+## [0.1.0] - 2026-09-12
+
+### Added
+
+- A group of ref moves lands as a whole or not at all by @willemkokke
+
+### Fixed
+
+- Dropping a view and evicting an object clear the read-only mark Windows refuses on by @willemkokke
+
+### Changed
+
+- Strongroom's first release, the debrief by @willemkokke
+- Windows is in the gate, and the four places that said otherwise say so by @willemkokke
+
 ## [0.0.0] - 2026-09-11
 
 ### Added
