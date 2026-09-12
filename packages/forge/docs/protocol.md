@@ -103,6 +103,7 @@ reached on (see `quirks.md`).
 | `find_by_head_sha(sha)` | finds a merged pull request after its branch is gone |
 | `get(number)` | the pull request or None |
 | `update_title(number, title)` | the review-facing name and the future squash subject |
+| `update_body(number, body)` | the description, and the future squash message |
 | `close(number)` / `reopen(number)` | reopen reuses the pull request; a merged one refuses |
 | `merge_now(number, *, title, message)` | immediate merge; 405-shaped refusal when not green |
 | `arm(number, *, title, message)` | merge when green, server-side; disarm before any push |

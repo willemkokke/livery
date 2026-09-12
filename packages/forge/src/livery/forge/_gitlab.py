@@ -800,6 +800,14 @@ class _GitlabPullRequests:
             data={"title": title},
         )
 
+    def update_body(self, number: int, body: str) -> None:
+        """Replace the description of merge request *number*."""
+        self._client.request(
+            f"{self._base}/merge_requests/{number}",
+            method="PUT",
+            data={"description": body},
+        )
+
     def close(self, number: int) -> None:
         """Close merge request *number* without merging."""
         self._client.request(

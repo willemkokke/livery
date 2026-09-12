@@ -702,6 +702,12 @@ class _GiteaPullRequests:
             f"{self._base}/pulls/{number}", method="PATCH", data={"title": title}
         )
 
+    def update_body(self, number: int, body: str) -> None:
+        """Replace the description of pull request *number*."""
+        self._client.request(
+            f"{self._base}/pulls/{number}", method="PATCH", data={"body": body}
+        )
+
     def close(self, number: int) -> None:
         """Close pull request *number* without merging."""
         self._client.request(
