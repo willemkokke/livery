@@ -291,7 +291,7 @@ def run_point(
     environment and returns its exit code; the default is the runner's
     own child.
     """
-    from livery.workshop._state import remote_snapshot
+    from livery.workshop._state import SNAPSHOT_VARIABLE, remote_snapshot
 
     resolved = effective_point(point)
     entries = entries_for(root, resolved, job)
@@ -304,8 +304,10 @@ def run_point(
     # One listing of the state store's namespace for the whole job:
     # every entry reads through it and records what it writes for the
     # entries after it, so the job lists once, not once per entry.
-    with remote_snapshot(root, publish=True):
+    with remote_snapshot(root, publish=True) as published:
         env = {**os.environ, LEG_VARIABLE: label, POINT_VARIABLE: resolved}
+        if published:
+            env[SNAPSHOT_VARIABLE] = published
         for entry in entries:
             argv = [prog]
             if entry.profiled:

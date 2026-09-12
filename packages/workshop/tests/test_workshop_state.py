@@ -7,7 +7,6 @@ origin, so the refusals are the transport's own words, not a fake's.
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -653,8 +652,12 @@ def test_a_published_snapshot_serves_the_children_and_carries_their_writes(
     _, work = repos
     monkeypatch.delenv(_state.SNAPSHOT_VARIABLE, raising=False)
     assert ROWS.put(work, {"a": {"x": 1}}, message="one") == ""
-    with _state.remote_snapshot(work, publish=True):
-        named = os.environ[_state.SNAPSHOT_VARIABLE]
+    with _state.remote_snapshot(work, publish=True) as named:
+        assert named is not None
+        # The parent hands the path to its children; a child is
+        # its own process in truth, so here the variable is set by
+        # hand for the blocks below.
+        monkeypatch.setenv(_state.SNAPSHOT_VARIABLE, named)
         published = _json.loads(Path(named).read_text("utf-8"))
         assert (
             published["root"] == str(work.resolve()) and ROWS.ref in published["refs"]
@@ -673,7 +676,7 @@ def test_a_published_snapshot_serves_the_children_and_carries_their_writes(
         with counting_spawns() as next_child, _state.remote_snapshot(work):
             assert [row.name for row in ROWS.rows(work).rows] == ["b", "a"]
         assert next_child["git ls-remote"] == 0 and next_child["git fetch"] == 0
-    assert _state.SNAPSHOT_VARIABLE not in os.environ
+        monkeypatch.delenv(_state.SNAPSHOT_VARIABLE)
     assert not Path(named).exists()
 
 
@@ -697,8 +700,8 @@ def test_a_published_snapshot_that_cannot_be_read_or_is_anothers_counts_as_none(
     # A parent whose listing failed publishes nothing.
     monkeypatch.delenv(_state.SNAPSHOT_VARIABLE)
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    with _state.remote_snapshot(work, publish=True):
-        assert _state.SNAPSHOT_VARIABLE not in os.environ
+    with _state.remote_snapshot(work, publish=True) as named:
+        assert named is None
 
 
 def test_a_drop_inside_a_snapshot_forgets_the_ref_and_nesting_shares_the_listing(

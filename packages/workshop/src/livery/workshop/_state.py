@@ -657,7 +657,7 @@ def _missing_locally(root: Path, shas: Iterable[str]) -> set[str]:
 @contextmanager
 def remote_snapshot(
     root: Path, *, fetch: Iterable[str] = (), publish: bool = False
-) -> Generator[None]:
+) -> Generator[str | None]:
     """Read the remote namespace through one listing for the block.
 
     One ``ls-remote`` of the store's namespace and the branches when
@@ -675,17 +675,19 @@ def remote_snapshot(
     unlistable, never an absence. A block opened inside another for
     the same checkout shares the outer listing.
 
-    With *publish* the listing is written to a file named in
-    `SNAPSHOT_VARIABLE` for the block's child processes: a block they
-    open reads it instead of listing, and their writes record their
-    shas in it for the children after them. A listing the parent
-    could not take is not published, and a child lists for itself;
-    a file a child cannot read, or one taken for another checkout,
-    counts as none.
+    With *publish* the listing is written to a file whose path the
+    block yields, for the caller to hand its child processes under
+    `SNAPSHOT_VARIABLE`: a block a child opens reads that file
+    instead of listing, and the child's writes record their shas in
+    it for the children after it. A listing the parent could not
+    take is not published and the block yields ``None``, so a child
+    lists for itself; a file a child cannot read, or one taken for
+    another checkout, counts as none. Without *publish* the block
+    yields ``None``.
     """
     key = root.resolve()
     if key in _SNAPSHOTS:
-        yield
+        yield None
         return
     snapshot = _published_snapshot(key)
     if snapshot is None:
@@ -710,14 +712,12 @@ def remote_snapshot(
             snapshot.published = Path(handle.name)
         _write_published(key, snapshot)
         published_here = str(snapshot.published)
-        os.environ[SNAPSHOT_VARIABLE] = published_here
     _SNAPSHOTS[key] = snapshot
     try:
-        yield
+        yield published_here or None
     finally:
         _SNAPSHOTS.pop(key, None)
         if published_here:
-            os.environ.pop(SNAPSHOT_VARIABLE, None)
             Path(published_here).unlink(missing_ok=True)
 
 
