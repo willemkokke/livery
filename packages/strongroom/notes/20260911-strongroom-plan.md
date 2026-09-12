@@ -611,3 +611,9 @@ Acceptance:
    `GetExitCodeProcess` behind the `_PID_ALIVE` seam, or the two
    cases skipped by name on Windows with the spec saying the proof is
    age alone there. Owner: Willem.
+9. **A symlink entry dangles on Windows.** The hosted runner has the
+   symlink privilege, so the rung succeeds there, but the target
+   keeps the tree's forward slashes and Windows does not resolve it
+   (`WinError 123`). The spelling on the way out and on the way back
+   through `collect` is one change, issue #492. Owner: the agent,
+   once ruled.

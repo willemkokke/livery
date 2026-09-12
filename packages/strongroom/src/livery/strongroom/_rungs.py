@@ -129,8 +129,12 @@ def _rmtree(path: Path) -> None:
 def _writable(path: Path) -> None:
     # Adding the owner's write bit clears Windows' read-only attribute
     # and changes nothing else; a bare S_IWRITE would strip a POSIX
-    # directory's read and search bits and make it untraversable.
-    os.chmod(path, os.stat(path).st_mode | stat.S_IWRITE)
+    # directory's read and search bits and make it untraversable. A
+    # symlink is never marked and may dangle, so it is not followed.
+    mode = os.lstat(path).st_mode
+    if stat.S_ISLNK(mode):
+        return
+    os.chmod(path, mode | stat.S_IWRITE)
 
 
 def remove(path: Path) -> None:

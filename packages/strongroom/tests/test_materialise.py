@@ -65,7 +65,7 @@ def _refuse_read_only(monkeypatch: pytest.MonkeyPatch) -> list[Path]:
         for parent, _directories, files in os.walk(path):
             for name in files:
                 child = Path(parent) / name
-                if not os.stat(child).st_mode & stat.S_IWUSR:
+                if not os.lstat(child).st_mode & stat.S_IWUSR:
                     refused.append(child)
                     raise PermissionError(13, "Access is denied", str(child))
         shutil.rmtree(path)
@@ -139,6 +139,13 @@ def test_removal_clears_a_read_only_mark_when_the_platform_refuses_it(
     assert store.state(digest) == "absent"
     assert refused[-1] == store.object_path(digest)
     _rungs.remove(tmp_path / "never")
+    # A dangling link inside a refused directory is skipped, not followed.
+    (tmp_path / "d").mkdir()
+    (tmp_path / "d" / "f").write_bytes(b"f")
+    (tmp_path / "d" / "f").chmod(0o444)
+    os.symlink("nothing", tmp_path / "d" / "dangling")
+    _rungs.remove_tree(tmp_path / "d")
+    assert not (tmp_path / "d").exists()
 
 
 def test_an_extended_length_target_compares_as_a_plain_path() -> None:
