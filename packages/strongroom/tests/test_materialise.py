@@ -305,7 +305,7 @@ def test_a_view_whose_directory_is_gone_is_retired_not_touched(
     store: Store, sample: Digest, tmp_path: Path
 ) -> None:
     record = store.view(sample, tmp_path / "v")
-    shutil.rmtree(tmp_path / "v")
+    _rungs.remove_tree(tmp_path / "v")
     report = store.drop_view(record.id)
     assert report.removed == ()
     assert report.left == (f"{tmp_path / 'v'}: the view's directory is already gone",)
@@ -318,7 +318,7 @@ def test_a_live_view_roots_its_tree_and_a_gone_one_is_retired_by_the_sweep(
     record = store.view(sample, tmp_path / "v")
     assert store.sweep().removed == ()
     assert store.state(sample) == "present"
-    shutil.rmtree(tmp_path / "v")
+    _rungs.remove_tree(tmp_path / "v")
     report = store.sweep()
     assert sample in report.removed
     assert store.views() == []
@@ -478,7 +478,7 @@ def test_shed_evicts_what_a_folder_holds_and_keeps_what_a_view_needs(
     assert local.state(only_here) == "present"
     local.drop_view(record.id)
     gone = local.view(tree, tmp_path / "gone")
-    shutil.rmtree(tmp_path / "gone")
+    _rungs.remove_tree(tmp_path / "gone")
     again = local.shed(FolderSource(mirror.root))
     # The second view fetched the tree back, so it is shed again too.
     assert set(again.shed) == {digest_of(b"a"), digest_of(b"b"), tree}

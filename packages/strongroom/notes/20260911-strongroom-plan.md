@@ -408,7 +408,7 @@ Acceptance:
 | refs read from a non-authoritative tier are hints confirmed nowhere | the `[verify]` extra checking the signed receipt beside a ref |
 | the local index is files only | SQLite per local store once GC needs a reverse index |
 | the spec and vectors live in the repository only | package data in the wheel, if open item 1 rules so |
-| Windows paths proven through seams with fakes | the suite on windows-latest when livery#357 brings the runner back |
+| Windows paths proven through seams with fakes, and once on a windows-latest proof leg | the suite on windows-latest when livery#357 brings the runner back |
 
 ## Decision record
 
@@ -555,6 +555,16 @@ Acceptance:
   implemented and tested in this plan, not the copy rung alone. The
   agent's reading of "implement and test the whole rung"; correct it
   here if the intent was narrower.
+- 2026-09-12, a windows-latest proof leg on a branch (issue #478) met
+  19 failures. Fixed: removal of a view's paths and eviction of an
+  object clear the read-only mark Windows refuses to unlink through
+  (`_rungs.remove`, `_rungs.remove_tree`, forced through seams on
+  every platform); an absolute symlink read back with the
+  extended-length prefix is refused as content, not read through;
+  the Linux clone test stands a module in for `fcntl`; the
+  refused-port test allows Windows' retry and its own words. Two
+  families stay open below: the executable bit and the lock's
+  liveness probe, each a ruling.
 
 ## Open
 
@@ -585,3 +595,19 @@ Acceptance:
    `tokens.txt` sits beside them with no `.gitignore`. This plan cites
    the note by path; committing it, with the tokens file ignored, is
    Willem's. Owner: Willem.
+7. **The executable bit on Windows.** `os.chmod` cannot set it and
+   `stat` derives it from the extension, so a view does not keep it
+   and `collect` reports `.exe`, `.bat`, `.cmd`, and `.com` as
+   executable whatever the tree said. The round trip
+   `collect(view(t)) == t` fails there for any tree with an
+   executable entry. The choices: state the loss in the spec and
+   condition the four asserting tests on the platform, or carry the
+   bit outside the mode. Owner: Willem.
+8. **A dead holder's lock on Windows.** No liveness probe is sent
+   there, so a lock left by an exited process is broken by age alone,
+   and the conformance case `refs:lock-broken-only-on-provable-
+   staleness` and `test_a_stale_lock_is_broken_only_on_proof` time
+   out. The choices: a probe through `kernel32.OpenProcess` and
+   `GetExitCodeProcess` behind the `_PID_ALIVE` seam, or the two
+   cases skipped by name on Windows with the spec saying the proof is
+   age alone there. Owner: Willem.
