@@ -21,8 +21,9 @@ supporting filesystem.
 
 ## Windows
 
-Designed in, not gated: no Windows runner runs the suite, and the
-Windows-only paths are exercised through their seams with fakes.
+Gated: a windows-latest leg runs the suite on every push, and the
+Windows-only paths are also forced through their seams with fakes on
+the other platforms, so a fallback is proven wherever the tests run.
 
 - Paths stay inside the 260-character limit by layout: about eighty
   characters from the store root to an object.
