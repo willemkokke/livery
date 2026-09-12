@@ -117,8 +117,11 @@ kinds, the extraction, the version pinned per checkout, PATH.
 `specs/<name>.json`, hse's shape unchanged: `name`, `description`,
 `kind`, `pinned`, `min_version`, and `versions{<ver> → {version,
 definitions{<host> → {platform, arch, url, sha256, root, exe, paths,
-env, shims}}}}`. Five host keys: `macos-arm`, `macos-x64`,
-`linux-x64`, `linux-arm`, `windows-x64`. Dataclasses with explicit
+env, shims}}}}`. Six host keys: `macos-arm`, `macos-x64`,
+`linux-x64`, `linux-arm`, `windows-x64`, `windows-arm`. A spec
+carries any subset; an install on a host the spec lacks refuses,
+naming the hosts it has, and `fm tools.pin` says which upstreams ship
+no build for a host. Dataclasses with explicit
 validation raising `SpecError`; the two consistency rules (a
 `versions` key equals its `version`, a `definitions` key equals its
 host) stay. A JSON schema is exported beside the specs.
@@ -130,8 +133,7 @@ host) stay. A JSON schema is exported beside the specs.
 - `store/`, the strongroom store, algorithm sha256, namespaces
   `tools` (write-once) and `urls` (volatile, the machinery's download
   cache in phase 5).
-- `tools/<name>@<version>/`, the view of the tool's tree, the
-  directory PATH names.
+- `tools/<name>@<version>/`, the view of the tool's tree.
 - `uv/`, `bun/` and their caches for the delegated kinds, as hse lays
   them out.
 
@@ -166,12 +168,29 @@ loser re-probes and finds it present. The archive blob is unreached
 after step 5 and the next sweep removes it; the mirrors keep it for
 other machines.
 
-### Emission
+### The bin directory, and emission
 
-`store.delta(specs)` returns one PATH prepend per pinned tool's
-`paths`, its `env`, and its `shims` as a delta object; the workshop's
-`workspace_delta` extends with it and `emit_lines` renders it, POSIX
-and pwsh. The GitHub persistence goes through the same delta.
+PATH names one directory per checkout, and it never changes: a
+gitignored bin directory in the checkout holding one link per pinned
+tool binary (every entry the spec's `paths` and `exe` name) and the
+spec's `shims` (`node` to bun). `store.link(specs, into)` fills it
+from the store's views and removes only links it made; the reconcile
+calls it on the next command after the pins change, so an open shell
+follows a pin change without a new emission. On Windows a link falls
+back to the `.cmd` launcher toolroom already writes for an
+interpreter and the node shim, and a tool that finds its siblings
+through the path it was launched from gets a launcher that knows the
+real directory. Per checkout, not per machine, because a checkout
+resolves its own pins and two checkouts with different pins on one
+machine would fight over one directory; the store behind it stays
+machine-wide.
+
+`store.delta(specs, bin)` returns the one PATH prepend and the specs'
+`env` as a delta object; the workshop's `workspace_delta` extends
+with it and `emit_lines` renders it, POSIX and pwsh. The GitHub
+persistence goes through the same delta. The alternative, one PATH
+entry per tool directory, is hse's shape today; it goes stale in an
+open shell when a pin changes and grows with the tool count.
 
 ### Fetch
 
@@ -246,15 +265,17 @@ Acceptance:
 
 Deliverables:
 
-- `Store(home, *, sources, offline)`, `ensure`, the probe, `delta`,
-  the progress seam, `fetch`; kinds `archive` and `binary`.
+- `Store(home, *, sources, offline)`, `ensure`, the probe, `link`,
+  `delta`, the progress seam, `fetch`; kinds `archive` and `binary`.
 - Tests, refusals first: a wrong `sha256` at each tier; an `offline`
   miss naming the origin; a corrupt mirror entry skipped and the next
   tier tried; a held ref lock; an archive with no `root`; a host the
   spec lacks; then a five-host `fetch` into an empty folder equals a
   mirror, an offline install from that folder succeeds, an offline
-  install with one blob removed fails closed naming it, and a second
-  `ensure` is a probe.
+  install with one blob removed fails closed naming it, a second
+  `ensure` is a probe, `link` removes a link it made and never a file
+  it did not, and the Windows launcher fallback is forced through its
+  seam.
 - `packages/toolroom/docs/store.md`, the page.
 
 Acceptance:
@@ -288,8 +309,9 @@ Deliverables:
 
 - The workshop renders the specs the kinds name into a workspace and
   judges their drift; `fm sync` and the reconcile ensure them;
-  `workspace_delta` carries the store's delta; `fm env.check` reports
-  per tool.
+  `workspace_delta` carries the store's delta, the checkout's bin
+  directory on PATH once; the reconcile relinks it after a pin
+  change; `fm env.check` reports per tool.
 - The CI leg restores and saves the store directory keyed on the
   specs; the entry script emits the tool directories; the dev group
   loses ruff, ty, pyrefly and git-cliff; `fm check` runs them from the
@@ -305,7 +327,9 @@ Acceptance:
 - `grep -c "ruff\|ty\|pyrefly\|git-cliff" uv.lock` counts only
   transitive mentions, none in the dev group.
 - On a second checkout of this repository on one machine, `fm sync`
-  installs nothing and `fm env.show` names the same tool directories.
+  installs nothing and its bin directory links the same store views.
+- After a pin changes on a branch, the next `fm check` in an open
+  shell runs the new version with no new emission.
 
 ### Phase 4: the delegated kinds
 
@@ -358,6 +382,11 @@ Acceptance:
   was started for. This note. The 2026-08-27 note's bytes engine
   (cache, tiers, lock, promote) is superseded by strongroom; its
   spec, kinds, pinning and emission stand.
+- 2026-09-12, Willem: `windows-arm` is the sixth host key.
+- 2026-09-12, Willem asked whether every binary is linked into one
+  directory on PATH per checkout, so the PATH never changes; the
+  agent recommended yes, and the design above says so. Awaiting the
+  ruling with the rest.
 - 2026-09-12, the agent, for the ruling: a `tools/` ref names the
   extracted tree, not the archive, as strongroom's namespace table
   already publishes; the archive is landed by its pin and swept once
