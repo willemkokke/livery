@@ -109,10 +109,6 @@ nav = [
         ] },
         { "Changelog" = "_generated/packages/footman/changelog.md" },
     ] },
-    { "footman-compat" = [
-        { "Index" = "_generated/packages/footman-compat/index.md" },
-        { "Changelog" = "_generated/packages/footman-compat/changelog.md" },
-    ] },
     { "forge" = [
         { "Index" = "_generated/packages/forge/index.md" },
         { "Protocol" = "_generated/packages/forge/protocol.md" },
@@ -248,10 +244,6 @@ nav = [
             { "livery.toolroom._machinery._toolhistory" = "_generated/api/toolroom/_machinery/_toolhistory.md" },
             { "livery.toolroom._machinery._toolspec" = "_generated/api/toolroom/_machinery/_toolspec.md" },
         ] },
-    ] },
-    { "toolroom-compat" = [
-        { "Index" = "_generated/packages/toolroom-compat/index.md" },
-        { "Changelog" = "_generated/packages/toolroom-compat/changelog.md" },
     ] },
     { "workshop" = [
         { "Index" = "_generated/packages/workshop/index.md" },
@@ -553,11 +545,9 @@ custom_checkbox = true
 base_path = [
     ".",
     "packages/footman/_generated",
-    "packages/footman-compat/_generated",
     "packages/forge/_generated",
     "packages/strongroom/_generated",
     "packages/toolroom/_generated",
-    "packages/toolroom-compat/_generated",
     "packages/workshop/_generated",
 ]
 check_paths = true

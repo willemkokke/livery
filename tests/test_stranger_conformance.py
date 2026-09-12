@@ -24,7 +24,8 @@ TEMPLATES = ROOT / "packages/workshop/src/livery/workshop/templates"
 #: legitimately carries, and only through its contract's layer list,
 #: the dev group derived from it, and the runner import the seeded
 #: tasks.py opens with (livery.footman is the runner's real module;
-#: the footman dist the dev group names is its compat shim).
+#: the runner and the tool handles the dev group names by their
+#: livery distribution names).
 ALLOWED = (
     "livery.workshop",
     "livery-workshop",
@@ -32,6 +33,8 @@ ALLOWED = (
     "livery-forge",
     "livery.footman",
     "livery-footman",
+    "livery.toolroom",
+    "livery-toolroom",
 )
 
 _CONTRACT = (
@@ -136,9 +139,7 @@ def _driven_root(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         f'livery-workshop = {{ path = "{ROOT / "packages/workshop"}" }}\n'
         f'livery-forge = {{ path = "{ROOT / "packages/forge"}" }}\n'
         f'livery-toolroom = {{ path = "{ROOT / "packages/toolroom"}" }}\n'
-        f'livery-footman = {{ path = "{ROOT / "packages/footman"}" }}\n'
-        f'toolroom = {{ path = "{ROOT / "packages/toolroom-compat"}" }}\n'
-        f'footman = {{ path = "{ROOT / "packages/footman-compat"}" }}\n',
+        f'livery-footman = {{ path = "{ROOT / "packages/footman"}" }}\n',
         1,
     )
     pyproject.write_text(text)
@@ -205,9 +206,7 @@ def test_the_stranger_drives_the_whole_loop(tmp_path: Path) -> None:
         f'livery-workshop = {{ path = "{ROOT / "packages/workshop"}" }}\n'
         f'livery-forge = {{ path = "{ROOT / "packages/forge"}" }}\n'
         f'livery-toolroom = {{ path = "{ROOT / "packages/toolroom"}" }}\n'
-        f'livery-footman = {{ path = "{ROOT / "packages/footman"}" }}\n'
-        f'toolroom = {{ path = "{ROOT / "packages/toolroom-compat"}" }}\n'
-        f'footman = {{ path = "{ROOT / "packages/footman-compat"}" }}\n',
+        f'livery-footman = {{ path = "{ROOT / "packages/footman"}" }}\n',
         1,
     )
     pyproject.write_text(text)
@@ -282,9 +281,7 @@ def test_the_rehearsal_runs_a_graph_of_both_kinds(tmp_path: Path) -> None:
             f'livery-workshop = {{ path = "{ROOT / "packages/workshop"}" }}\n'
             f'livery-forge = {{ path = "{ROOT / "packages/forge"}" }}\n'
             f'livery-toolroom = {{ path = "{ROOT / "packages/toolroom"}" }}\n'
-            f'livery-footman = {{ path = "{ROOT / "packages/footman"}" }}\n'
-            f'toolroom = {{ path = "{ROOT / "packages/toolroom-compat"}" }}\n'
-            f'footman = {{ path = "{ROOT / "packages/footman-compat"}" }}\n',
+            f'livery-footman = {{ path = "{ROOT / "packages/footman"}" }}\n',
             1,
         )
     )

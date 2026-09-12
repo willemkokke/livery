@@ -8,14 +8,12 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "footman",
     "livery",
     "livery-footman",
     "livery-forge",
     "livery-strongroom",
     "livery-toolroom",
     "livery-workshop",
-    "toolroom",
 ]
 
 [[package]]
@@ -576,22 +574,14 @@ wheels = [
 [[package]]
 name = "footman"
 version = "0.52.2"
-source = { editable = "packages/footman-compat" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "livery-footman" },
 ]
-
-[package.optional-dependencies]
-uv = [
-    { name = "livery-footman", extra = ["uv"] },
+sdist = { url = "https://files.pythonhosted.org/packages/0e/2b/08edbfcd68becd413eedbb855127a0806a9365903ed99c01b7972355f408/footman-0.52.2.tar.gz", hash = "sha256:166c4e9dd9d0712188b498293aa62c83dc6be0a6b9e518caac925ac2f08b6dd7", size = 3682, upload-time = "2026-09-06T20:48:31.933Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/89/92/5b97733eca0ba7f900de8422bc1a464c576a8cace6aceeac7e6966149bbc/footman-0.52.2-py3-none-any.whl", hash = "sha256:e28d515a9064f341d1079e943869bae02e43fc14f3bff04b5a4b8cf3e6ec971b", size = 11679, upload-time = "2026-09-06T20:48:31.072Z" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "livery-footman", editable = "packages/footman" },
-    { name = "livery-footman", extras = ["uv"], marker = "extra == 'uv'", editable = "packages/footman" },
-]
-provides-extras = ["uv"]
 
 [[package]]
 name = "funcy"
@@ -861,7 +851,6 @@ dev = [
     { name = "basedpyright" },
     { name = "coverage", extra = ["toml"] },
     { name = "coverage-enable-subprocess" },
-    { name = "footman" },
     { name = "git-cliff" },
     { name = "livery-footman", extra = ["test"] },
     { name = "livery-forge", extra = ["github-secrets"] },
@@ -874,7 +863,6 @@ dev = [
     { name = "pytest-cov" },
     { name = "pytest-xdist" },
     { name = "ruff" },
-    { name = "toolroom" },
     { name = "ty" },
     { name = "types-pyyaml" },
     { name = "uv" },
@@ -891,7 +879,6 @@ dev = [
     { name = "basedpyright", specifier = ">=1.18" },
     { name = "coverage", extras = ["toml"], specifier = ">=7.10" },
     { name = "coverage-enable-subprocess", specifier = ">=1.0" },
-    { name = "footman", editable = "packages/footman-compat" },
     { name = "git-cliff", specifier = ">=2.13" },
     { name = "livery-footman", extras = ["test"], editable = "packages/footman" },
     { name = "livery-forge", extras = ["github-secrets"], editable = "packages/forge" },
@@ -904,7 +891,6 @@ dev = [
     { name = "pytest-cov", specifier = ">=5" },
     { name = "pytest-xdist", specifier = ">=3.6" },
     { name = "ruff", specifier = ">=0.6" },
-    { name = "toolroom", editable = "packages/toolroom-compat" },
     { name = "ty" },
     { name = "types-pyyaml" },
     { name = "uv" },
@@ -937,7 +923,7 @@ uv = [
 
 [package.metadata]
 requires-dist = [
-    { name = "footman", marker = "extra == 'test'", editable = "packages/footman-compat" },
+    { name = "footman", marker = "extra == 'test'", specifier = ">=0.52.2" },
     { name = "httpx", marker = "extra == 'test'", specifier = ">=0.27" },
     { name = "jedi", marker = "extra == 'test'", specifier = ">=0.20.0" },
     { name = "livery-toolroom", marker = "extra == 'test'", editable = "packages/toolroom" },
@@ -945,7 +931,7 @@ requires-dist = [
     { name = "python-dotenv", marker = "extra == 'test'", specifier = ">=1.0" },
     { name = "requests", marker = "extra == 'test'", specifier = ">=2.31" },
     { name = "rich", marker = "extra == 'test'", specifier = ">=13" },
-    { name = "toolroom", marker = "extra == 'test'", editable = "packages/toolroom-compat" },
+    { name = "toolroom", marker = "extra == 'test'", specifier = ">=0.6.2" },
     { name = "uv", marker = "extra == 'uv'", specifier = ">=0.6" },
 ]
 provides-extras = ["uv", "test"]
@@ -984,10 +970,10 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "footman", marker = "extra == 'test'", editable = "packages/footman-compat" },
+    { name = "footman", marker = "extra == 'test'", specifier = ">=0.52.2" },
     { name = "livery-footman", marker = "extra == 'test'", editable = "packages/footman" },
     { name = "mkdocs", marker = "extra == 'test'", specifier = ">=1.6" },
-    { name = "toolroom", marker = "extra == 'test'", editable = "packages/toolroom-compat" },
+    { name = "toolroom", marker = "extra == 'test'", specifier = ">=0.6.2" },
 ]
 provides-extras = ["test"]
 
@@ -1838,13 +1824,14 @@ wheels = [
 [[package]]
 name = "toolroom"
 version = "0.6.2"
-source = { editable = "packages/toolroom-compat" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "livery-toolroom" },
 ]
-
-[package.metadata]
-requires-dist = [{ name = "livery-toolroom", editable = "packages/toolroom" }]
+sdist = { url = "https://files.pythonhosted.org/packages/b7/10/722094cb9257b5586fadf049619826166909215373b6117a7f525515e5ca/toolroom-0.6.2.tar.gz", hash = "sha256:613a41418efcbdbe774e1dc0bd92baa15ed1e1ee252e106092241ada82632930", size = 2714, upload-time = "2026-09-06T20:52:05.287Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/97/cc/21e5d2302e98eca4993ef58c7767678a6bc4e03dff7c6265ffada93e9e4d/toolroom-0.6.2-py3-none-any.whl", hash = "sha256:8bf5073ce352d1db73493a361e57c731a37a69aebbf6897c43579492a1d64788", size = 4730, upload-time = "2026-09-06T20:52:04.46Z" },
+]
 
 [[package]]
 name = "ty"
