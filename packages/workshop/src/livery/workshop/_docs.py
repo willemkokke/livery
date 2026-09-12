@@ -1537,7 +1537,10 @@ def _stored_legs(root: Path) -> tuple[list[Path], list[str]]:
     )
     if run_context() is None or not deploying:
         return [], []
-    return _python.stored_union(root, check_legs(root), root / "coverage-data")
+    from livery.workshop._state import remote_snapshot
+
+    with remote_snapshot(root, fetch=("coverage/main/",)):
+        return _python.stored_union(root, check_legs(root), root / "coverage-data")
 
 
 @docs_group.task(name="python-coverage")

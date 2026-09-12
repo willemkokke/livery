@@ -694,14 +694,15 @@ verified = ci.group("verified", help="The trees a green gate proved", hidden=Tru
 
 def verified_stamp_flow(root: Path, git: GitOps) -> None:
     """Stamp the run's tree when every check leg ran the full gate; print why not."""
-    from livery.workshop._state import run_context
+    from livery.workshop._state import remote_snapshot, run_context
     from livery.workshop._verified import stamp_from_metrics
 
     run = run_context()
     if run is None:
         print("  not a CI run: the verified record is written by CI only")
         return
-    print(stamp_from_metrics(root, run, sha=git.head_sha()))
+    with remote_snapshot(root, fetch=("metrics", "verified")):
+        print(stamp_from_metrics(root, run, sha=git.head_sha()))
 
 
 @verified.task(name="stamp")
@@ -758,14 +759,15 @@ def ci_metrics_leg(
 def metrics_collect_flow(root: Path, repo: Repository, git: GitOps) -> None:
     """Collect the run's rows into the metrics series; print every line."""
     from livery.workshop._metrics import collect
-    from livery.workshop._state import run_context
+    from livery.workshop._state import remote_snapshot, run_context
 
     run = run_context()
     if run is None:
         print("  not a CI run: the run's timing rows are collected by CI only")
         return
-    for line in collect(root, repo, run, sha=git.head_sha()):
-        print(line)
+    with remote_snapshot(root, fetch=(f"run/{run.run_id}/", "metrics")):
+        for line in collect(root, repo, run, sha=git.head_sha()):
+            print(line)
 
 
 @metrics.task(name="collect")
@@ -786,11 +788,13 @@ def timings_flow(root: Path, *, since: int, base: int) -> None:
     """Print the rendered timings, then the speed marks beside the newest run."""
     from livery.workshop._metrics import render
     from livery.workshop._speed import render_marks
+    from livery.workshop._state import remote_snapshot
 
-    for line in render(root, since=since, base=base):
-        print(line)
-    for line in render_marks(root):
-        print(line)
+    with remote_snapshot(root, fetch=("metrics", "speed/marks")):
+        for line in render(root, since=since, base=base):
+            print(line)
+        for line in render_marks(root):
+            print(line)
 
 
 @ci.task(name="timings")
