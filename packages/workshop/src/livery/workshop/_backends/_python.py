@@ -643,6 +643,12 @@ def combine_leg(
     if timing is not None:
         timing = {**timing, "scope": marker}
     if not parts and not (root / ".coverage").is_file():
+        if scope in (VERIFIED, NOTHING):
+            # A skipped leg measured nothing and names no unit, so the
+            # union carries every unit from the records.
+            print(f"  coverage: no data, the gate ran {scope!r}; nothing to combine")
+            _put_leg(root, marker, {}, timing=timing)
+            return
         if not packages:
             # The workspace's own tests ran, unmetered, and reached no
             # package source: each unit the leg ran is put with no
@@ -669,17 +675,13 @@ def combine_leg(
                     )
             _put_leg(root, marker, empty, timing=timing)
             return
-        if scope not in (VERIFIED, NOTHING):
-            fail(
-                "this leg left no coverage data: nothing was metered. Inside CI"
-                " the test runner arms COVERAGE_PROCESS_START in pytest's"
-                " environment, so the tests and every process they start are"
-                " metered; a leg that ran its gate and left no data ran no"
-                " metered pytest, and there is nothing to union."
-            )
-        print(f"  coverage: no data, the gate ran {scope!r}; nothing to combine")
-        _put_leg(root, marker, {}, timing=timing)
-        return
+        fail(
+            "this leg left no coverage data: nothing was metered. Inside CI"
+            " the test runner arms COVERAGE_PROCESS_START in pytest's"
+            " environment, so the tests and every process they start are"
+            " metered; a leg that ran its gate and left no data ran no"
+            " metered pytest, and there is nothing to union."
+        )
     store_suites(root, packages, marker=marker, timing=timing)
     if parts:
         result = toolroom.coverage.opts(

@@ -331,6 +331,14 @@ def test_a_workspace_with_no_packages_puts_its_scope_alone(
     unit = units["tests"]
     assert isinstance(unit, _coverage_store.Unit)
     assert unit.files == {} and unit.closure == "k" * 64 and unit.sha == "a" * 40
+    # A skipped leg names no unit whatever the packages, so the union
+    # carries the tests unit from the record instead of finding it
+    # named and unmeasured.
+    from livery.workshop._verified import VERIFIED
+
+    write_marker(tmp_path, VERIFIED, leg="check-a")
+    _python.combine_leg(tmp_path, ())
+    assert put[1]["scope"] == "verified" and put[1]["units"] == {}
 
 
 def _in_ci(monkeypatch: pytest.MonkeyPatch, leg: str) -> None:
