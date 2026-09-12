@@ -29,9 +29,14 @@ def _git(*args: str) -> str:
     return result.stdout
 
 
-def _dist_name(package: str) -> str:
-    contract = ROOT / "packages" / package / "workshop.toml"
-    return str(tomllib.loads(contract.read_text("utf-8")).get("name", ""))
+def _dist_name(tag: str, package: str) -> str:
+    """The distribution name the package's contract carried at *tag*.
+
+    Read from the tag's own tree, so a package that has since left
+    the workspace still names its receipts.
+    """
+    contract = _git("show", f"{tag}:packages/{package}/workshop.toml")
+    return str(tomllib.loads(contract).get("name", ""))
 
 
 def test_every_release_tag_is_an_annotated_train_receipt() -> None:
@@ -44,7 +49,7 @@ def test_every_release_tag_is_an_annotated_train_receipt() -> None:
         assert kind == "tag", f"{tag}: lightweight; the train cuts annotated tags"
         _, package, version = tag.rsplit("/", 2)
         first_line = _git("tag", "-l", "--format=%(contents:lines=1)", tag).strip()
-        receipts = {tag, f"{_dist_name(package)} {version.lstrip('v')}"}
+        receipts = {tag, f"{_dist_name(tag, package)} {version.lstrip('v')}"}
         assert first_line in receipts, (
             f"{tag}: message {first_line!r} is not a train receipt"
         )
