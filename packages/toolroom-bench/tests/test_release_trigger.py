@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from livery.toolroom.tools._machinery import _tasks
+from livery.toolroom.bench import _tasks
 
 
 def _classify(monkeypatch, spans: dict[str, dict[str, Any]]) -> bool:

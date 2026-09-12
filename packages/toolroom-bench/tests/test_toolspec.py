@@ -20,8 +20,8 @@ from typing import Any
 import pytest
 
 from livery.footman import _globals
-from livery.toolroom.tools._machinery import _drivers, _stubgen, _toolhelp, _toolspec
-from livery.toolroom.tools._machinery._toolspec import Option, ToolSpec, Verb
+from livery.toolroom.bench import _drivers, _stubgen, _toolhelp, _toolspec
+from livery.toolroom.bench._toolspec import Option, ToolSpec, Verb
 
 CLAP = """\
 Usage: ruff check [OPTIONS] [FILES]...
@@ -125,6 +125,14 @@ Commands:
   gh-deploy  Deploy your documentation to GitHub Pages
   serve      Run the builtin development server
 """
+
+
+def _toolroom_root() -> Path:
+    """The toolroom package directory, whose docs and stubs the bench writes."""
+    import livery.toolroom.tools as tools
+
+    return Path(tools.__file__).resolve().parents[4]
+
 
 
 def flags(verb: Verb) -> dict[str, Option]:
@@ -361,7 +369,7 @@ def test_optional_value_option_is_neither_switch_nor_required_value():
 
 
 def test_optvalue_stub_type_accepts_bare_and_valued():
-    from livery.toolroom.tools._machinery._toolspec import Option
+    from livery.toolroom.bench._toolspec import Option
 
     assert (
         _stubgen._annotation(Option("gpg_sign", type_name="optvalue")) == "ValuedFlag"
@@ -906,7 +914,7 @@ def test_in_process_capability_is_the_entry_point():
 
 @pytest.mark.parametrize("key", [d.key for d in _drivers.DRIVERS])
 def test_every_curated_tool_has_a_checked_in_stub(key):
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     assert tools_tasks._stub_path(key).exists(), f"no stub for {key}"
 
@@ -926,7 +934,7 @@ def stubs(tmp_path, monkeypatch):
     writer. Every new write path belongs here in the same commit that adds
     it.
     """
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     monkeypatch.setattr(tools_tasks, "_STUBS", tmp_path)
     monkeypatch.setattr(tools_tasks, "_HISTORY", tmp_path / "history")
@@ -941,7 +949,7 @@ needs_uv = pytest.mark.skipif(shutil.which("uv") is None, reason="uv is not on P
 
 
 def test_list_names_every_curated_tool(capsys):
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     tools_tasks.list_()
     out = capsys.readouterr().out
@@ -951,7 +959,7 @@ def test_list_names_every_curated_tool(capsys):
 
 
 def test_list_missing_only_shows_what_is_absent(capsys):
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     tools_tasks.list_(show="missing")
     out = capsys.readouterr().out
@@ -960,7 +968,7 @@ def test_list_missing_only_shows_what_is_absent(capsys):
 
 
 def test_list_installed_only_shows_what_is_present(capsys):
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     tools_tasks.list_(show="installed")
     out = capsys.readouterr().out
@@ -975,8 +983,8 @@ def test_list_says_unreadable_when_a_present_tools_version_wont_read(
     # installed filter but whose `--version` stalls must never render the
     # false `not installed` — the contradiction two Windows CI slices caught
     # in one minute when gh's spawn stalled past the probe timeout.
-    from livery.toolroom.tools._machinery import _drivers
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _drivers
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     monkeypatch.setattr(
         _drivers, "_read_version", lambda name: ("", "timed out after 30s")
@@ -992,7 +1000,7 @@ def test_list_says_unreadable_when_a_present_tools_version_wont_read(
 
 @needs_ruff
 def test_spec_prints_what_the_tool_says(capsys):
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     tools_tasks.spec("ruff", verb="check")
     out = capsys.readouterr().out
@@ -1002,7 +1010,7 @@ def test_spec_prints_what_the_tool_says(capsys):
 
 
 def test_spec_refuses_an_unknown_or_absent_tool():
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     with pytest.raises(SystemExit, match="no driver"):
         tools_tasks.spec("not-a-curated-tool")
@@ -1012,7 +1020,7 @@ def test_color_probes_git_as_flag_forced(capsys):
     # git is a system tool (this is a git repo). Probed live, it forces colour
     # ON with its own switch (`-c color.ui=always`) and OFF via the environment.
     # `only=` skips the file write, so nothing on disk changes.
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     tools_tasks.color(only="git")
     out = capsys.readouterr().out
@@ -1020,8 +1028,8 @@ def test_color_probes_git_as_flag_forced(capsys):
 
 
 def test_colorprobe_categorises_git_and_unprobed():
-    from livery.toolroom.tools._machinery import _colorprobe, _drivers
-    from livery.toolroom.tools._machinery._toolspec import ToolSpec
+    from livery.toolroom.bench import _colorprobe, _drivers
+    from livery.toolroom.bench._toolspec import ToolSpec
 
     git = _drivers._resolve("git")
     assert git is not None
@@ -1035,7 +1043,7 @@ def test_colorprobe_categorises_git_and_unprobed():
 
 @needs_ruff
 def test_colorprobe_ruff_obeys_the_environment():
-    from livery.toolroom.tools._machinery import _colorprobe, _drivers
+    from livery.toolroom.bench import _colorprobe, _drivers
 
     driver = _drivers.find("ruff")
     assert driver is not None
@@ -1051,7 +1059,7 @@ def test_colorprobe_write_leaves_alone_what_it_could_not_probe():
     in no prefix, and a run that wrote only what it saw would drop its
     `-c color.ui=always` and take the bridge's colour forcing with it.
     """
-    from livery.toolroom.tools._machinery import _colorprobe
+    from livery.toolroom.bench import _colorprobe
 
     stored: dict[str, _colorprobe.Row] = {
         "git": ("git", "flag", "env", ("-c", "color.ui=always"), (), True),
@@ -1067,7 +1075,7 @@ def test_colorprobe_write_leaves_alone_what_it_could_not_probe():
 
 
 def test_colorprobe_render_round_trips():
-    from livery.toolroom.tools._machinery import _colorprobe
+    from livery.toolroom.bench import _colorprobe
 
     flag = _colorprobe.ColourFlag(("-c", "color.ui=always"), (), True)
     text = _colorprobe.render(
@@ -1087,7 +1095,7 @@ def test_colorprobe_render_round_trips():
 
 @needs_ruff
 def test_sync_writes_a_stub_and_audit_then_agrees(stubs, capsys):
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     tools_tasks.sync(only="ruff")
     written = stubs / "ruff.pyi"
@@ -1106,7 +1114,7 @@ def test_prefix_reads_binaries_from_the_provisioned_set(tmp_path, monkeypatch):
     """
     import os
 
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     bindir = tmp_path / "bin"
     bindir.mkdir()
@@ -1126,7 +1134,7 @@ def test_audit_reports_a_behind_snapshot_without_failing(stubs, capsys):
     not exit non-zero, or a weekly check reads as a broken build every time
     somebody else ships a release.
     """
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     tools_tasks.sync(only="ruff")
     (stubs / "ruff.pyi").write_text("class Ruff(_Tool): ...\n")
@@ -1148,7 +1156,7 @@ def test_audit_reports_a_behind_snapshot_without_failing(stubs, capsys):
 
 @needs_ruff
 def test_audit_strict_gives_automation_something_to_trip_on(stubs, capsys):
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     tools_tasks.sync(only="ruff")
     (stubs / "ruff.pyi").write_text("class Ruff(_Tool): ...\n")
@@ -1163,7 +1171,7 @@ def test_audit_strict_gives_automation_something_to_trip_on(stubs, capsys):
 @needs_ruff
 def test_audit_reports_a_runtime_table_that_disagrees(stubs, monkeypatch):
     from livery.toolroom import tools as bridge
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     monkeypatch.setitem(bridge._NEGATIONS, "ruff", {"fix": "--never-fix"})
     with pytest.raises(SystemExit, match=r"_NEGATIONS\['ruff'\]"):
@@ -1173,7 +1181,7 @@ def test_audit_reports_a_runtime_table_that_disagrees(stubs, monkeypatch):
 @needs_uv
 def test_audit_reports_a_wrappers_table_that_disagrees(stubs, monkeypatch):
     from livery.toolroom import tools as bridge
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     monkeypatch.setitem(bridge._WRAPPERS, "uv", frozenset({"run"}))  # missing tool.run
     with pytest.raises(SystemExit, match=r"_WRAPPERS\['uv'\]"):
@@ -1184,7 +1192,7 @@ def test_sync_skips_and_names_the_tools_it_cannot_ask(stubs, capsys):
     """A check that quietly covered three of thirteen would be worse than
     no check, so what was skipped is printed.
     """
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     tools_tasks.sync(only="definitely-not-installed")
     out = capsys.readouterr().out
@@ -1192,7 +1200,7 @@ def test_sync_skips_and_names_the_tools_it_cannot_ask(stubs, capsys):
 
 
 def test_formatting_falls_back_when_ruff_cannot_run(monkeypatch):
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     def boom(*args, **kwargs):
         raise OSError("no ruff here")
@@ -1589,7 +1597,7 @@ def test_a_verb_that_answers_with_the_root_help_is_not_that_verb(monkeypatch):
     recorded with docker's global options and docker's summary. Nothing
     downstream could tell: it is a real help text, just not this verb's.
     """
-    from livery.toolroom.tools._machinery import _toolhelp
+    from livery.toolroom.bench import _toolhelp
 
     root = "Usage:  docker [OPTIONS] COMMAND\n\nA runtime\n\nOptions:\n  --debug   On\n"
     own = (
@@ -1614,7 +1622,7 @@ def test_a_tool_with_plugins_is_read_under_the_home_they_were_fetched_into(
     user's home, so without this the machine's own compose answers for
     every release a walk installs.
     """
-    from livery.toolroom.tools._machinery import _tasks as task_module
+    from livery.toolroom.bench import _tasks as task_module
 
     bindir = tmp_path / "bin"
     bindir.mkdir()
@@ -1653,7 +1661,7 @@ def test_the_walk_reads_the_home_it_made_not_the_one_on_path(monkeypatch, tmp_pa
 
     A caller that knows where it put things hands the home over.
     """
-    from livery.toolroom.tools._machinery import _tasks as task_module
+    from livery.toolroom.bench import _tasks as task_module
 
     # What a lookup would find: the prefix, plugins and all.
     decoy = tmp_path / "prefix"
@@ -1686,7 +1694,7 @@ def test_the_fetched_home_is_the_one_beside_what_was_installed(tmp_path):
     """And nothing is claimed when the fetch made no home — a tool with no
     plugins, or a tier that places bare binaries.
     """
-    from livery.toolroom.tools._machinery import _tasks as task_module
+    from livery.toolroom.bench import _tasks as task_module
 
     placed = tmp_path / "release" / "bin"
     placed.mkdir(parents=True)
@@ -1702,7 +1710,7 @@ def test_the_fetched_home_is_the_one_beside_what_was_installed(tmp_path):
 
 def test_a_tool_with_no_plugin_home_is_read_exactly_as_before(monkeypatch, tmp_path):
     """The host's own docker, or a prefix from before this existed."""
-    from livery.toolroom.tools._machinery import _tasks as task_module
+    from livery.toolroom.bench import _tasks as task_module
 
     bindir = tmp_path / "bin"
     bindir.mkdir()
@@ -1733,7 +1741,7 @@ def test_rebasing_a_verb_that_is_not_there():
 
 
 def test_pages_writes_one_per_tool_plus_an_index(tmp_path):
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     tools_tasks.pages(tmp_path)
     index = (tmp_path / "index.md").read_text()
@@ -1750,7 +1758,7 @@ def test_pages_writes_one_per_tool_plus_an_index(tmp_path):
 
 
 def test_pages_regenerates_the_tools_nav_between_markers(tmp_path):
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     config = tmp_path / "z.toml"
     config.write_text(
@@ -1771,9 +1779,9 @@ def test_checked_in_tools_nav_lists_every_stubbed_driver():
     # the sidebar — the drift guard the hardcoded nav never had.
     from pathlib import Path
 
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _tasks as tools_tasks
 
-    config = Path(__file__).resolve().parents[1] / "docs" / "nav.toml"
+    config = _toolroom_root() / "docs" / "nav.toml"
     expected = sorted(
         d.key for d in _drivers.DRIVERS if tools_tasks._stub_path(d.key).exists()
     )
@@ -1781,7 +1789,7 @@ def test_checked_in_tools_nav_lists_every_stubbed_driver():
 
 
 def test_the_index_states_the_version_each_stub_was_read_from(tmp_path):
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     tools_tasks.pages(tmp_path)
     index = (tmp_path / "index.md").read_text()
@@ -1797,7 +1805,7 @@ def test_the_index_states_the_version_each_stub_was_read_from(tmp_path):
 
 
 def test_a_hand_written_stub_says_so_rather_than_inventing_a_version(tmp_path):
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     stub = tmp_path / "x.pyi"
     stub.write_text("# Hand-written, not generated: x is not installed\n")
@@ -1814,7 +1822,7 @@ def test_a_hand_written_stub_says_so_rather_than_inventing_a_version(tmp_path):
 
 
 def test_in_process_mode_is_detected_not_listed():
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     capable = ToolSpec(name="x", in_process=True)
     plain = ToolSpec(name="x", in_process=False)
@@ -1913,7 +1921,7 @@ def test_click_arguments_give_the_shape_exactly():
 
 
 def test_stub_renders_positional_only_and_keyword_only():
-    from livery.toolroom.tools._machinery._toolspec import Option
+    from livery.toolroom.bench._toolspec import Option
 
     # A keyword-only verb (positional="none") with an option forbids positionals
     # via `*,`; the option must be passed by keyword.
@@ -1949,7 +1957,7 @@ def test_stub_renders_positional_only_and_keyword_only():
 
 
 def test_stub_falls_back_when_the_lead_collides_with_an_option():
-    from livery.toolroom.tools._machinery._toolspec import Option
+    from livery.toolroom.bench._toolspec import Option
 
     verb = Verb(
         name="pip_install",
@@ -2300,7 +2308,7 @@ def test_arg_help_keeps_a_markdown_header_mid_line():
     # wrap could drop it to the start of a docstring line, where Markdown
     # reads a header. Entries are one line now and always lead with the
     # option's own name, so a `#` can only ever sit mid-line — not a block.
-    from livery.toolroom.tools._machinery._toolspec import Option
+    from livery.toolroom.bench._toolspec import Option
 
     option = Option(
         "ours",
@@ -2385,8 +2393,8 @@ def test_a_tool_older_than_the_snapshot_is_left_alone(stubs, capsys, monkeypatch
     Reading it would rewrite the stub *backwards*, dropping flags that exist
     upstream — so audit ignores it and sync leaves the file untouched.
     """
-    from livery.toolroom.tools._machinery import _drivers
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _drivers
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     tools_tasks.sync(only="ruff")
     written = (stubs / "ruff.pyi").read_text()
@@ -2408,7 +2416,7 @@ def test_a_tool_missing_from_the_prefix_is_left_alone(stubs, tmp_path, capsys):
     """A partial provision must not read as drift: a provisioned tool that
     isn't in the prefix falls back to nothing, never to the host's copy.
     """
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     empty = tmp_path / "prefix"
     (empty / "bin").mkdir(parents=True)
@@ -2422,7 +2430,7 @@ def test_the_prefix_launcher_counts_not_where_it_points(tmp_path):
     interpreter in uv's store, so following the symlink out of the prefix
     would call two properly provisioned tools missing.
     """
-    from livery.toolroom.tools._machinery._tasks import _from_prefix
+    from livery.toolroom.bench._tasks import _from_prefix
 
     root = tmp_path / "prefix"
     (root / "bin").mkdir(parents=True)
@@ -2446,7 +2454,7 @@ def test_every_installed_driver_reports_a_readable_version(capsys):
     """
     from concurrent.futures import ThreadPoolExecutor
 
-    from livery.toolroom.tools._machinery import _drivers
+    from livery.toolroom.bench import _drivers
 
     def probe(name: str) -> tuple[str, str]:
         found, why = _drivers._read_version(name)
@@ -2490,8 +2498,8 @@ def test_subcommand_groups_are_nested_classes():
     """
     import ast
 
-    from livery.toolroom.tools._machinery import _drivers
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _drivers
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     source = tools_tasks._stub_path("docker").read_text(encoding="utf-8")
     tree = ast.parse(source)
@@ -2531,8 +2539,7 @@ def test_a_nested_class_flags_returns_self():
     is what the chain means anyway: `docker.flags(host=…).compose.up()`.
     """
     source = (
-        pathlib.Path(__file__).resolve().parents[1]
-        / "src/livery/toolroom/tools/_stubs/docker.pyi"
+        _toolroom_root() / "src/livery/toolroom/tools/_stubs/docker.pyi"
     ).read_text()
     assert "-> Self:" in source
     assert "-> Docker:" not in source and "-> DockerCompose:" not in source
@@ -2543,7 +2550,7 @@ def test_index_verbs_are_dotted_so_they_read_as_they_are_called():
     `install` verbs collapse into one — the index then claims a tool has
     fewer verbs than it has.
     """
-    from livery.toolroom.tools._machinery import _tasks as tools_tasks
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     uv = tools_tasks._verbs_of(tools_tasks._stub_path("uv"))
     assert "pip.install" in uv and "tool.install" in uv
@@ -2589,7 +2596,7 @@ def test_a_stub_header_survives_being_read_on_more_than_one_platform():
     single-word pattern, every stub read as hand-written, and the published
     table said so.
     """
-    from livery.toolroom.tools._machinery import _tasks as tools
+    from livery.toolroom.bench import _tasks as tools
 
     for platform in ("macOS", "Linux and macOS", "Linux, Windows and macOS"):
         header = f"Read from ruff 0.16.0 on {platform}. In-process: no."

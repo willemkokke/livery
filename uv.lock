@@ -13,6 +13,7 @@ members = [
     "livery-forge",
     "livery-strongroom",
     "livery-toolroom",
+    "livery-toolroom-bench",
     "livery-workshop",
 ]
 
@@ -844,6 +845,7 @@ dev = [
     { name = "livery-forge", extra = ["github-secrets"] },
     { name = "livery-strongroom" },
     { name = "livery-toolroom", extra = ["test"] },
+    { name = "livery-toolroom-bench" },
     { name = "livery-workshop" },
     { name = "mypy" },
     { name = "pyrefly" },
@@ -872,6 +874,7 @@ dev = [
     { name = "livery-forge", extras = ["github-secrets"], editable = "packages/forge" },
     { name = "livery-strongroom", editable = "packages/strongroom" },
     { name = "livery-toolroom", extras = ["test"], editable = "packages/toolroom" },
+    { name = "livery-toolroom-bench", editable = "packages/toolroom-bench" },
     { name = "livery-workshop", editable = "packages/workshop" },
     { name = "mypy", specifier = ">=1.14" },
     { name = "pyrefly" },
@@ -947,12 +950,30 @@ source = { editable = "packages/toolroom" }
 [package.optional-dependencies]
 test = [
     { name = "livery-footman" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "livery-footman", marker = "extra == 'test'", editable = "packages/footman" }]
+provides-extras = ["test"]
+
+[[package]]
+name = "livery-toolroom-bench"
+version = "0.0.0"
+source = { editable = "packages/toolroom-bench" }
+dependencies = [
+    { name = "livery-footman" },
+    { name = "livery-toolroom" },
+]
+
+[package.optional-dependencies]
+test = [
     { name = "mkdocs" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "livery-footman", marker = "extra == 'test'", editable = "packages/footman" },
+    { name = "livery-footman", editable = "packages/footman" },
+    { name = "livery-toolroom", editable = "packages/toolroom" },
     { name = "mkdocs", marker = "extra == 'test'", specifier = ">=1.6" },
 ]
 provides-extras = ["test"]

@@ -35,12 +35,13 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 
-from livery.toolroom.tools._machinery import _drivers, _stubgen, _toolhistory, _toolspec
+from livery.toolroom.bench import _drivers, _stubgen, _toolhistory, _toolspec
 
 if TYPE_CHECKING:
     from types import ModuleType
 
-    from livery.toolroom.tools._machinery import _provision, _toolfetch
+    from livery.toolroom.bench import _provision, _toolfetch
+import livery.toolroom.tools as _tools
 from livery.footman._describe import bold, cyan, wants_color
 from livery.footman.context import current, data_dir
 from livery.footman.params import doc
@@ -49,7 +50,7 @@ from livery.toolroom.tools import version_tuple as _version_tuple
 
 tasks: Group = Group("tools", help="Keep the tools.* stubs honest")
 
-_STUBS = Path(__file__).resolve().parents[1] / "_stubs"
+_STUBS = Path(_tools.__file__).resolve().parent / "_stubs"
 # Repo-only, deliberately outside `src/`: generation reads the history and
 # generation is a maintainer task run from a checkout, while users read the
 # stubs — which already carry everything the log is for. Shipping it would
@@ -182,7 +183,7 @@ def _plugin_home(driver: _drivers.Driver) -> Path | None:
     answer and the only one available. A walk must not use it: see
     `_extract`.
     """
-    from livery.toolroom.tools._machinery import _toolfetch
+    from livery.toolroom.bench import _toolfetch
 
     if not driver.plugins:
         return None
@@ -196,7 +197,7 @@ def _plugin_home(driver: _drivers.Driver) -> Path | None:
 
 def _fetched_home(driver: _drivers.Driver, placed: Path) -> Path | None:
     """The home this observation's own plugins were fetched into."""
-    from livery.toolroom.tools._machinery import _toolfetch
+    from livery.toolroom.bench import _toolfetch
 
     if not driver.plugins:
         return None
@@ -336,7 +337,7 @@ def _node_shim(scratch: Path) -> Path | None:
     """
     import shutil
 
-    from livery.toolroom.tools._machinery._provision import write_node_shim
+    from livery.toolroom.bench._provision import write_node_shim
 
     bun = shutil.which("bun")
     if bun is None:
@@ -639,7 +640,7 @@ def _ignore(driver: _drivers.Driver, root: Path | None) -> str:
       machine behind the one that took the snapshot. Reading it would
       rewrite the stub *backwards*, losing flags that exist upstream.
     """
-    from livery.toolroom.tools._machinery import _toolhelp
+    from livery.toolroom.bench import _toolhelp
 
     manual = _toolhelp._fetched_manpath() if driver.provision.kind == "man" else ""
     if driver.provision.kind == "man" and root is not None and not manual:
@@ -923,7 +924,7 @@ def color(
 def _color_probe_and_write(
     only: str, write: bool, on: bool, root: Path | None = None
 ) -> None:
-    from livery.toolroom.tools._machinery import _colorprobe
+    from livery.toolroom.bench import _colorprobe
 
     installed: list[tuple[str, str, str, _toolspec.ToolSpec]] = []
     for driver in _drivers.DRIVERS:
@@ -971,7 +972,7 @@ def _color_probe_and_write(
     # the tools on PATH.
     from livery.toolroom.tools import _colordata
 
-    data = Path(__file__).resolve().parents[1] / "_colordata.py"
+    data = Path(_tools.__file__).resolve().parent / "_colordata.py"
     folded = _colorprobe.merged(_colordata.COLOUR, results)
     data.write_text(_formatted(_colorprobe.render(folded)), encoding="utf-8")
     print(f"\nwrote {data.name} ({len(folded)} tools, {len(results)} probed here)")
@@ -1078,7 +1079,7 @@ def prime(
     import shutil
     import tempfile
 
-    from livery.toolroom.tools._machinery import _toolfetch
+    from livery.toolroom.bench import _toolfetch
 
     _bounce_bare_call("prime")
     scratch = Path(tempfile.mkdtemp(prefix="footman-prime-"))
@@ -1190,7 +1191,7 @@ def gather(
     import shutil
     import tempfile
 
-    from livery.toolroom.tools._machinery import _toolfetch
+    from livery.toolroom.bench import _toolfetch
 
     _bounce_bare_call("gather")
     scratch = Path(tempfile.mkdtemp(prefix="footman-gather-"))
@@ -1294,7 +1295,7 @@ def owed(
     An index that would not answer is *not* nothing to do — `unreachable`
     is reported separately for exactly that reason.
     """
-    from livery.toolroom.tools._machinery import _toolfetch
+    from livery.toolroom.bench import _toolfetch
 
     _bounce_bare_call("owed")
     with _on_path(prefix):
@@ -1691,7 +1692,7 @@ def refresh(
 
 # The changelog stays a checkout fact: the release-note writer edits
 # the repository, never an installed copy.
-_CHANGELOG = Path(__file__).resolve().parents[4] / "CHANGELOG.md"
+_CHANGELOG = Path(_tools.__file__).resolve().parents[4] / "CHANGELOG.md"
 
 
 def _entry_for(key: str, doc: dict[str, Any], versions: list[str]) -> str:
@@ -2023,7 +2024,7 @@ def observe(
     describe itself — is a hole for the caller to report, never an error:
     the chain stays contiguous by construction, and a later run fills it.
     """
-    from livery.toolroom.tools._machinery import _toolfetch
+    from livery.toolroom.bench import _toolfetch
 
     driver = _drivers.find(tool)
     if driver is None or not scratch:  # pragma: no cover - engine-supplied
@@ -2426,7 +2427,7 @@ def provision(
     for a person deciding what to do next and wrong for a job that will
     read the prefix and believe it.
     """
-    from livery.toolroom.tools._machinery import _provision
+    from livery.toolroom.bench import _provision
 
     # Absolute: bun errors `ReadOnlyFileSystem` on a relative BUN_INSTALL, and
     # an absolute prefix keeps every tier's launchers and env vars unambiguous.

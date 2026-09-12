@@ -6,9 +6,9 @@ requires = ["uv_build>=0.11,<0.13"]
 build-backend = "uv_build"
 
 [project]
-name = "livery-toolroom"
-version = "0.6.2"
-description = "Typed surfaces for command-line tools, generated from the tools themselves."
+name = "livery-toolroom-bench"
+version = "0.0.0"
+description = "The bench where toolroom's typed tool handles are made and refreshed."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -21,28 +21,34 @@ classifiers = [
     "Typing :: Typed",
 ]
 
-# Dependency-free at runtime, pinned by test. The machinery that
-# makes and refreshes the handles is livery-toolroom-bench, which
-# depends on this package, never the other way round.
-dependencies = []
+# The bench runs under footman and writes the stubs of
+# livery.toolroom.tools: both are runtime dependencies, and a consumer
+# of the handles never installs the bench.
+dependencies = [
+    "livery-footman>=0.52.2",
+    "livery-toolroom>=0.7.0",
+]
 
-# The suite's needs beyond the (empty) runtime dependencies: the
-# hosted seam, the machinery, and the playground probe all drive
-# footman for real. The isolated release legs install this extra;
-# a consumer never sees it unasked.
 [project.optional-dependencies]
 test = [
-    "livery-footman>=0.52.2",
+    # The driver suite interrogates mkdocs structurally (the click
+    # ladder) and reads its version; without a venv copy the finder
+    # meets whatever the machine carries, which the suite's python
+    # cannot introspect.
+    "mkdocs>=1.6",
 ]
+
+[project.entry-points."footman.tasks"]
+"livery.toolroom.bench" = "livery.toolroom.bench"
 
 [project.urls]
 Repository = "https://github.com/willemkokke/livery"
 
 [tool.uv.build-backend]
-# PEP 420 namespaces: livery and livery.toolroom carry no __init__.py
-# anywhere, so the store and the machinery ship as their own
-# distributions under livery.toolroom; the handles are this one.
-module-name = "livery.toolroom.tools"
+# PEP 420 namespace: the importable package is livery.toolroom_bench and
+# there is no livery/__init__.py anywhere in this repository.
+# PEP 420 namespaces: livery and livery.toolroom carry no __init__.py.
+module-name = "livery.toolroom.bench"
 namespace = true
 
 [tool.ruff]
@@ -54,6 +60,3 @@ extend = "../../pyproject.toml"
 # cut-time rewrite. Retired by that pass.
 "src/**" = ["D105", "D102", "D107", "D205", "D301", "D415"]
 "tests/**" = ["D1", "D205", "D301", "D415", "E501"]
-# The generated stubs' ruling rides here too when ruff resolves this
-# nested config for the package's own tree.
-"src/livery/toolroom/tools/_stubs/*.pyi" = ["E501", "D"]

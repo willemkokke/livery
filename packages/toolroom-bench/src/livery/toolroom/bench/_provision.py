@@ -49,7 +49,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from livery.toolroom.tools._machinery._drivers import Driver
+from livery.toolroom.bench._drivers import Driver
 
 
 class ProvisionError(Exception):
@@ -171,7 +171,7 @@ def _man_tier(prefix: Path, drivers: list[Driver]) -> list[Outcome]:
     manual the pages *are* the tool, so provisioning fetches the newest
     set and `tools.sync` reads those rather than the machine's own git.
     """
-    from livery.toolroom.tools._machinery import _toolfetch
+    from livery.toolroom.bench import _toolfetch
 
     outcomes: list[Outcome] = []
     for driver in drivers:
@@ -207,7 +207,7 @@ def _docker_tier(prefix: Path, drivers: list[Driver]) -> list[Outcome]:
     to read that index, so provisioning asks it for the newest and installs
     exactly as a walk would.
     """
-    from livery.toolroom.tools._machinery import _toolfetch
+    from livery.toolroom.bench import _toolfetch
 
     outcomes: list[Outcome] = []
     for driver in drivers:
@@ -293,7 +293,7 @@ def _newest_python(driver: Driver) -> str:
     And the provisioned head must be a release the listing can place, or a
     prime cannot position the floor it is walking back from.
     """
-    from livery.toolroom.tools._machinery import _toolfetch
+    from livery.toolroom.bench import _toolfetch
 
     found = _toolfetch.releases(driver)
     return found[0].version if found else "3"

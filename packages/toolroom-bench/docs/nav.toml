@@ -1,0 +1,14 @@
+# The bench's site: hand-authored, with the task reference generated
+# into the `tasks` block between its markers.
+nav = [
+    { "Index" = "index.md" },
+    # nav:begin tasks
+    { "Tasks" = [
+        { "Overview" = "_generated/tasks/index.md" },
+        { "toolroom" = [
+            { "Overview" = "_generated/tasks/toolroom/index.md" },
+            { "pages" = "_generated/tasks/toolroom/pages.md" },
+        ] },
+    ] },
+    # nav:end tasks
+]

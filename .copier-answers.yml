@@ -25,3 +25,6 @@ packages:
 - dir: strongroom
   name: livery-strongroom
   dev: livery-strongroom
+- dir: toolroom-bench
+  name: livery-toolroom-bench
+  dev: livery-toolroom-bench

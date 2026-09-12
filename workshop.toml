@@ -8,7 +8,9 @@
 layers = [
     "livery.workshop",
     "livery.forge",
-    { import = "livery.toolroom.tools", dist = "livery-toolroom" },
+    # The bench mounts the tool verbs and depends on the handles, so
+    # livery-toolroom rides in with it and contributes no verbs of its own.
+    { import = "livery.toolroom.bench", dist = "livery-toolroom-bench" },
     "livery.footman",
 ]
 # Where the rendered files come from: a directory relative to this

@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from livery.toolroom.tools._machinery import _provision
-from livery.toolroom.tools._machinery._drivers import Driver, Provision
+from livery.toolroom.bench import _provision
+from livery.toolroom.bench._drivers import Driver, Provision
 
 
 def _tar_gz(path: Path, arcname: str, data: bytes) -> None:
@@ -101,7 +101,7 @@ def test_strict_turns_a_failed_tier_into_a_failed_run(tmp_path, monkeypatch):
     failed two steps earlier.
     """
     from livery.footman import Failed
-    from livery.toolroom.tools._machinery import _tasks as tools
+    from livery.toolroom.bench import _tasks as tools
 
     outcomes = [
         _provision.Outcome("ruff", "uv", "ok", "ruff"),
@@ -478,7 +478,7 @@ def test_download_caches_by_name(tmp_path, monkeypatch):
 
 
 def test_task_prints_table_and_export(tmp_path, monkeypatch, capsys):
-    from livery.toolroom.tools._machinery import _tasks as tools
+    from livery.toolroom.bench import _tasks as tools
 
     monkeypatch.setattr(
         _provision,
@@ -499,7 +499,7 @@ def test_task_sync_runs_sync_against_the_prefix(tmp_path, monkeypatch):
     """
     import os
 
-    from livery.toolroom.tools._machinery import _tasks as tools
+    from livery.toolroom.bench import _tasks as tools
 
     monkeypatch.setattr(_provision, "provision", lambda *a, **k: [])
     seen: dict[str, str] = {}
@@ -514,7 +514,7 @@ def test_task_sync_runs_sync_against_the_prefix(tmp_path, monkeypatch):
 
 
 def test_pytest_provisions_with_its_cov_plugin():
-    from livery.toolroom.tools._machinery import _drivers
+    from livery.toolroom.bench import _drivers
 
     pytest_driver = next(d for d in _drivers.DRIVERS if d.key == "pytest")
     # The prefix install carries pytest-cov, so provision reads a pytest whose
@@ -523,7 +523,7 @@ def test_pytest_provisions_with_its_cov_plugin():
 
 
 def test_uv_tier_installs_plugins_as_with_packages(tmp_path, monkeypatch):
-    from livery.toolroom.tools._machinery._drivers import Driver, Provision
+    from livery.toolroom.bench._drivers import Driver, Provision
 
     calls: list[list[str]] = []
 
@@ -541,7 +541,7 @@ def test_uv_tier_installs_plugins_as_with_packages(tmp_path, monkeypatch):
 
 
 def test_task_clean_removes_prefix(tmp_path, monkeypatch):
-    from livery.toolroom.tools._machinery import _tasks as tools
+    from livery.toolroom.bench import _tasks as tools
 
     prefix = tmp_path / "prefix"
     prefix.mkdir()
@@ -559,7 +559,7 @@ def test_a_token_reaches_the_api_and_nothing_else(monkeypatch):
     redirects, and a release asset redirects to a CDN that has no business
     seeing a credential.
     """
-    from livery.toolroom.tools._machinery._provision import api_headers
+    from livery.toolroom.bench._provision import api_headers
 
     monkeypatch.setenv("GH_TOKEN", "s3cret")
     assert api_headers("https://api.github.com/repos/cli/cli/releases") == {
@@ -580,7 +580,7 @@ def test_the_older_github_token_spelling_is_accepted(monkeypatch):
     """Actions exports `GITHUB_TOKEN`; `gh` exports `GH_TOKEN`. Both, so the
     workflow and a laptop need not disagree.
     """
-    from livery.toolroom.tools._machinery._provision import api_headers
+    from livery.toolroom.bench._provision import api_headers
 
     monkeypatch.delenv("GH_TOKEN", raising=False)
     monkeypatch.setenv("GITHUB_TOKEN", "from-actions")
@@ -592,7 +592,7 @@ def test_no_token_still_works_just_on_the_smaller_budget(monkeypatch):
     """A token is an offer, never a requirement — a fresh clone with no
     credentials still primes, against 60 calls an hour.
     """
-    from livery.toolroom.tools._machinery._provision import api_headers
+    from livery.toolroom.bench._provision import api_headers
 
     monkeypatch.delenv("GH_TOKEN", raising=False)
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
@@ -609,7 +609,7 @@ def test_the_interpreter_is_placed_however_the_platform_allows(tmp_path, monkeyp
     """
     import os
 
-    from livery.toolroom.tools._machinery import _provision
+    from livery.toolroom.bench import _provision
 
     target = tmp_path / "real" / "python"
     target.parent.mkdir()
@@ -638,7 +638,7 @@ def test_the_interpreter_is_placed_however_the_platform_allows(tmp_path, monkeyp
 
 
 def test_default_prefix_rides_footman_data_dir(tmp_path, monkeypatch):
-    from livery.toolroom.tools._machinery import _tasks
+    from livery.toolroom.bench import _tasks
 
     monkeypatch.setenv("FOOTMAN_DATA_DIR", str(tmp_path / "data"))
     assert _tasks.default_prefix() == tmp_path / "data" / "toolroom"
@@ -647,7 +647,7 @@ def test_default_prefix_rides_footman_data_dir(tmp_path, monkeypatch):
 def test_empty_prefix_resolves_to_the_default_room_once_provisioned(
     tmp_path, monkeypatch
 ):
-    from livery.toolroom.tools._machinery import _tasks
+    from livery.toolroom.bench import _tasks
 
     monkeypatch.setenv("FOOTMAN_DATA_DIR", str(tmp_path / "data"))
     assert _tasks._resolve_prefix("") is None  # nothing provisioned: host PATH
@@ -656,7 +656,7 @@ def test_empty_prefix_resolves_to_the_default_room_once_provisioned(
 
 
 def test_an_explicit_prefix_wins_over_the_default_room(tmp_path, monkeypatch):
-    from livery.toolroom.tools._machinery import _tasks
+    from livery.toolroom.bench import _tasks
 
     monkeypatch.setenv("FOOTMAN_DATA_DIR", str(tmp_path / "data"))
     (tmp_path / "data" / "toolroom").mkdir(parents=True)
