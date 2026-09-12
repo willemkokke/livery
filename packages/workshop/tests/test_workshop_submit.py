@@ -1682,3 +1682,83 @@ def test_a_merged_submit_in_the_main_checkout_keeps_its_branch(
     # A person reads the run from here; the janitor's branch rule
     # drops the branch later.
     assert git.current_branch() == "feat/1-first"
+
+
+# --- slice 2: no-close, a named abandon, and arming a green pull request ------
+
+
+def test_no_close_submits_without_the_footer_and_the_issue_stays_open(
+    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake, git = rig
+    issue = _repo(fake).issue.create("the work behind feat/1-first")
+    assert issue.number == 1
+    number = _submit(fake, git, armed=True, close=False)
+    out = capsys.readouterr().out
+    assert "closes nothing (--no-close)" in out
+    pr = _repo(fake).pr.get(number)
+    assert pr is not None and pr.merged and "Closes #" not in pr.body
+    live = _repo(fake).issue.get(1)
+    assert live is not None and live.state == "open"
+
+
+def test_abandon_of_a_named_branch_refuses_a_dirty_worktree_then_removes_it(
+    rig: tuple[FakeForge, SubmitGit], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake, git = rig
+    repo = _repo(fake)
+    # A branch that is nowhere is nothing to undo, said plainly.
+    abandon_flow(repo, git, "feat/9-nowhere", "main")
+    assert "no open pull request for feat/9-nowhere" in capsys.readouterr().out
+    wt = tmp_path / "wt-named"
+    _git(git.root, "worktree", "add", str(wt), "-b", "feat/9-linked", "main")
+    (wt / "linked.txt").write_text("w\n")
+    _git(wt, "add", ".")
+    _git(wt, "commit", "-m", "feat: linked work")
+    linked = SubmitGit(wt, fake)
+    linked.push("feat/9-linked")
+    repo.pr.open("feat/9-linked", "main", "feat: linked work")
+    (wt / "dirt.txt").write_text("d\n")
+    with pytest.raises(_FAILURES, match="uncommitted changes"):
+        abandon_flow(repo, git, "feat/9-linked", "main")
+    (wt / "dirt.txt").unlink()
+    abandon_flow(repo, git, "feat/9-linked", "main")
+    out = capsys.readouterr().out
+    assert "removed the worktree" in out and "deleted feat/9-linked" in out
+    assert not wt.exists()
+    assert _git(git.root, "branch", "--list", "feat/9-linked").strip() == ""
+    closed = repo.pr.find_by_head("feat/9-linked", state="all")
+    assert closed is not None and closed.state == "closed" and not closed.merged
+    # This checkout never moved.
+    assert git.current_branch() == "feat/1-first"
+
+
+def test_arming_a_green_pull_request_merges_it_when_the_forge_refuses_to_arm(
+    rig: tuple[FakeForge, SubmitGit],
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.forge import ForgeError
+
+    fake, git = rig
+    repo = _repo(fake)
+
+    def refuse(number: int, *, title: str, message: str = "") -> None:
+        raise ForgeError("Pull request Pull request is in clean status", status=422)
+
+    monkeypatch.setattr(repo.checks, "status", repo.checks.status)
+    monkeypatch.setattr(repo.pr, "arm", refuse)
+    # Red: the refusal surfaces as the forge's own error.
+    git.outcome = "failure"
+    with pytest.raises(ForgeError, match="clean status"):
+        submit_flow(repo, git, gate=False, armed=True, interval=0, timeout=5)
+    # Green: merged when green was the intent, and it is green. A new
+    # head, since the fake keeps the red verdict of the old one.
+    git.outcome = "success"
+    (git.root / "more.txt").write_text("m\n")
+    git.commit_all("feat: more work")
+    number = submit_flow(repo, git, gate=False, armed=True, interval=0, timeout=5)
+    out = capsys.readouterr().out
+    assert "arming refused" in out and "merged now" in out
+    pr = repo.pr.get(number)
+    assert pr is not None and pr.merged

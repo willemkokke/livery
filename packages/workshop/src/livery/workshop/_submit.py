@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Annotated, ParamSpec
 
 import livery.footman as footman
-from livery.footman import doc, fail, group
+from livery.footman import Arg, doc, fail, group
 from livery.forge import ForgeError, PullRequest, Repository, Unsupported
 from livery.workshop._contract import load_contract, normalise_keys
 from livery.workshop._conventional import TITLE_RE, TYPES
@@ -448,9 +448,33 @@ def _arm_verified(
     its own loop.
     """
     for attempt in range(1, _ARM_RETRIES + 1):
-        _follow_merge_state(
-            repo, kind, number, repo.pr.arm, number, title=title, message=message
-        )
+        try:
+            _follow_merge_state(
+                repo, kind, number, repo.pr.arm, number, title=title, message=message
+            )
+        except ForgeError as error:
+            # GitHub arms only a pull request that something blocks; one
+            # already green is refused with "in clean status". Merged
+            # when green was the intent, and it is green: merge it now.
+            pr = repo.pr.get(number)
+            if pr is None or pr.merged or pr.state != "open":
+                raise
+            if repo.checks.status(pr.head_sha).state != "success":
+                raise
+            print(
+                f"  arming refused ({error}); the pull request is already"
+                " green, so it is merged now"
+            )
+            _follow_merge_state(
+                repo,
+                kind,
+                number,
+                repo.pr.merge_now,
+                number,
+                title=title,
+                message=message,
+            )
+            return
         pr = repo.pr.get(number)
         if pr is not None and pr.merged:
             return  # the arm found green checks and merged on the spot
@@ -719,6 +743,7 @@ def submit_flow(
     body: str = "",
     base: str = "main",
     closes: int = 0,
+    close: bool = True,
     armed: bool = False,
     armed_reason: str = "",
     gate: bool = True,
@@ -754,9 +779,11 @@ def submit_flow(
     else:
         print("  gate skipped (--no-gate): CI is now the first verifier")
     _heal_context_rename(repo, git, plan, fix=fix)
-    linked = resolve_closes(repo, plan.branch, closes)
+    linked = resolve_closes(repo, plan.branch, closes) if close else None
     if linked is not None:
         print(f"  Closes #{linked} on merge")
+    elif not close:
+        print("  closes nothing (--no-close): the branch's issue stays open")
     if armed_reason:
         print(f"  arming: {'on' if armed else 'off'} - decided by {armed_reason}")
     number = push_and_pr(repo, git, plan, closes=linked, armed=armed, force=force)
@@ -865,6 +892,9 @@ def submit_default(
     body: Annotated[str, doc("PR body; defaults to HEAD's body")] = "",
     base: Annotated[str, doc("target branch")] = "main",
     closes: Annotated[int, doc("issue to close on merge; 0 = from branch name")] = 0,
+    close: Annotated[
+        bool, doc("close the branch's issue on merge; --no-close leaves it open")
+    ] = True,
     armed: Annotated[
         bool,
         footman.env("WORKSHOP_AUTOMERGE"),
@@ -887,7 +917,9 @@ def submit_default(
     verdict codes surface unchanged (see livery.workshop._verdict).
     ``--fix`` runs the gate's format and lint in their fix modes and
     folds any rewrites into the branch before pushing: amended into
-    HEAD while unpushed, a follow-up commit otherwise.
+    HEAD while unpushed, a follow-up commit otherwise. ``--no-close``
+    submits without the close footer, for a branch that carries
+    preparatory work on an issue the merge must leave open.
     """
     root = _root()
     from livery.workshop._forge_lane import this_repository
@@ -901,6 +933,7 @@ def submit_default(
         body=body,
         base=base,
         closes=closes,
+        close=close,
         armed=armed,
         armed_reason=reason,
         gate=gate,
@@ -1084,6 +1117,11 @@ def teardown_branch(
     if git.current_branch() == branch:
         git.switch(base)
         git.integrate(base)
+    else:
+        tree = worktree_for(git, git.root, branch)
+        if tree:
+            git._run("worktree", "remove", "--force", tree)
+            print(f"  removed the worktree {tree}")
     if git.local_branch_exists(branch):
         git.delete_local_branch(branch)
         print(f"  deleted {branch}; back on {base}")
@@ -1098,11 +1136,19 @@ def abandon_flow(repo: Repository, git: GitOps, branch: str, base: str) -> None:
     """
     if not branch or branch == base:
         fail(f"not on a feature branch (on {branch or '(detached)'!r})")
-    if not git.is_clean():
-        fail(
-            "the working tree has uncommitted changes; commit or discard"
-            " them before abandoning"
-        )
+    if branch == git.current_branch():
+        if not git.is_clean():
+            fail(
+                "the working tree has uncommitted changes; commit or discard"
+                " them before abandoning"
+            )
+    else:
+        tree = worktree_for(git, git.root, branch)
+        if tree and git._run("-C", tree, "status", "--porcelain").strip():
+            fail(
+                f"the worktree {tree} has uncommitted changes; commit or"
+                " discard them before abandoning"
+            )
     pr = repo.pr.find_by_head(branch)
     if pr is not None and pr.merged:
         fail(f"PR #{pr.number} already merged: nothing to abandon")
@@ -1112,19 +1158,23 @@ def abandon_flow(repo: Repository, git: GitOps, branch: str, base: str) -> None:
 
 
 @footman.task(serial=True)
-def abandon() -> None:
-    """Give up this feature: close the PR, delete the branches, return to base.
+def abandon(
+    branch: Annotated[Arg[str], doc("a branch to give up; this one when absent")] = "",
+) -> None:
+    """Give up a feature: close the PR, delete the branches, return to base.
 
-    Disarms and closes the pull request, deletes the remote and the
-    local branch, and leaves you on an up-to-date base. A dirty tree
-    refuses first. Idempotent: a second run finds nothing left to
-    undo.
+    This branch when none is named, or the named one from anywhere:
+    its linked worktree goes with it. Disarms and closes the pull
+    request, deletes the remote and the local branch, and leaves this
+    checkout on an up-to-date base when it stood on the branch. A
+    dirty tree, here or in the branch's worktree, refuses first.
+    Idempotent: a second run finds nothing left to undo.
     """
     root = _root()
     from livery.workshop._forge_lane import this_repository
 
     git = GitOps(root)
-    abandon_flow(this_repository(root), git, git.current_branch(), "main")
+    abandon_flow(this_repository(root), git, branch or git.current_branch(), "main")
 
 
 def merge_flow(repo: Repository, git: GitOps, branch: str, *, title: str = "") -> None:
