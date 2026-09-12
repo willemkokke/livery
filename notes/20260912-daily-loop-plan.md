@@ -334,7 +334,7 @@ this note in the same change.
    Closes #518 and #515. Acceptance: the loop's release proof and its
    member-only proof pass; a rig shows a squash-merged tree removed by
    the submit and none left for the janitor.
-2. **The top-level verbs.** `start` with its three forms and the
+2. **The top-level verbs** (landed 2026-09-13). `start` with its three forms and the
    entered shell; `issue.start` folds in; `abandon [branch]`;
    `commit` in its first form (the sketch under the verbs, refined
    over time); `submit --closes=none` and `issue.reopen` (#383: a
@@ -477,3 +477,24 @@ without asking; the child shell stays as the fallback.
   (a terminal on stdin, without `--no-input`), so the branch rule's
   first live run over the checkout's merged local branches is a
   person's, not an agent's.
+- 2026-09-13, slice 2 landed (#383, #230). `fm start` opens work from
+  an issue number, a quoted title that files one, or `<kind>/<slug>`
+  for a branch that belongs to no issue, always into a worktree under
+  the runner's home, entered in a shell when a person is at the
+  terminal; `issue.start` folded into it. `fm commit <type> "<subject>"`
+  stages, derives the scope from the packages the change touches,
+  runs the affected gate in its fix mode first, validates the subject,
+  and commits; it refuses on main and on a reserved branch. `fm
+  abandon [branch]` gives a named branch up from anywhere, its
+  worktree with it, and a branch that is nowhere is nothing to undo.
+  `fm submit --no-close` leaves the branch's issue open, and a pull
+  request already green when `--armed` asks is merged directly, since
+  GitHub arms only a blocked one. `Issues.reopen` joined the forge
+  protocol on every backend and the fake, with a conformance scenario
+  recorded for Gitea and GitLab (GitHub's cassette is Willem's to
+  record, since recording creates scratch repositories under his
+  account), and `fm issue.reopen` reopens an issue with start's
+  assignment. The shell-hook form of `start` (a wrapper function in
+  the completion snippet, no nested shell) is still to do; the child
+  shell is the form that landed. The loop was not run: the slice
+  touches no CI mechanism.

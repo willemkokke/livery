@@ -5,7 +5,7 @@ issue worktrees under ``worktrees/<repo>/`` and the loop's workspace.
 footman's collector never touches it, by design. This module is the
 workshop's sweeper, registered under footman's ``footman.sweepers``
 entry point and run by ``fm janitor``, by the daily collector child
-unattended, and, for the worktrees alone, by every ``fm issue.start``.
+unattended, and, for the worktrees alone, by every ``fm start``.
 It also runs the state store's own janitor over every series the
 workshop keeps ([livery.workshop._series][]), in the scope the run
 has: the checkout's local series on a machine, the remote series too

@@ -35,12 +35,14 @@ with `origin/main`.
   marks a missing verb: file the issue rather than script around
   it.
 - Development goes through issues: file one (`fm issue.create` or
-  `fm issue.start "title"`), work it in its worktree, and let the
-  merge close it. Branches follow `<kind>/<number>-<slug>` so the
-  close wires itself.
-- Issue worktrees (`fm issue.start`) live under the runner's data
-  directory (`worktrees/<repo>/`), outside every repository. Ad-hoc
-  agent sessions may still use `.claude/worktrees/`.
+  `fm start "title"`), work it in its worktree, and let the merge
+  close it. Branches follow `<kind>/<number>-<slug>` so the close
+  wires itself. A change that belongs to no issue (a note, a small
+  fix) starts as `fm start <kind>/<slug>`; its submit closes nothing.
+- Worktrees (`fm start`) live under the runner's data directory
+  (`worktrees/<repo>/`), outside every repository, and a merge takes
+  its worktree with it. Ad-hoc agent sessions may still use
+  `.claude/worktrees/`.
 - Person-wide configuration and tokens live in `.repo.shared.env`
   in the runner's config directory, so every checkout and worktree
   starts warm; `fm env.set KEY --scope=shared` writes it.
@@ -89,7 +91,8 @@ commits since the last release tag.
 
 Conventional prefixes (`feat:`, `fix:`, `docs:`, `chore:`,
 `refactor:`, `test:`), imperative subject, body only when the subject
-cannot carry it. No attribution trailers. Commit and push only when
+cannot carry it. No attribution trailers. `fm commit <type> "<subject>"` writes one,
+deriving the scope from the change and gating first. Commit and push only when
 asked. Tags are release tags, `<path>/v<semver>`, immutable and
 pushed alone.
 

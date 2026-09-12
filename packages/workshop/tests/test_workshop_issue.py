@@ -16,9 +16,10 @@ from livery.workshop._issue_tasks import (
     branch_name,
     issue_close,
     issue_create,
-    issue_start,
+    issue_reopen,
     issue_stop,
     parse_ref,
+    start,
     worktree_home,
     worktree_path,
 )
@@ -110,7 +111,7 @@ def test_start_at_the_limit_warns_and_continues(
     repo = fake.repository("willemkokke", "livery")
     created = repo.issue.create("held work")
     repo.issue.assign(created.number, "colleague")
-    issue_start(str(created.number), worktree=False)
+    start(str(created.number), worktree=False)
     out = capsys.readouterr().out
     assert "Warning" in out and "colleague" in out
     assert "[issues] assignees" in out and "workshop.toml" in out
@@ -123,10 +124,10 @@ def test_start_refuses_a_missing_number_and_a_bad_type(
     rig: tuple[Path, FakeForge, GitOps],
 ) -> None:
     with pytest.raises(_FAILURES) as caught:
-        issue_start("999", worktree=False)
+        start("999", worktree=False)
     assert "does not exist" in str(caught.value)
     with pytest.raises(_FAILURES) as caught:
-        issue_start("999", type="wat", worktree=False)
+        start("999", type="wat", worktree=False)
     assert "unknown type" in str(caught.value)
 
 
@@ -138,7 +139,7 @@ def test_start_in_this_checkout_refuses_dirt_naming_both_escapes(
     created = repo.issue.create("dirty start")
     (root / "stray.txt").write_text("dirty\n")
     with pytest.raises(_FAILURES) as caught:
-        issue_start(str(created.number), worktree=False)
+        start(str(created.number), worktree=False)
     message = str(caught.value)
     assert "--wip" in message and "worktree" in message
 
@@ -149,7 +150,7 @@ def test_start_assigns_and_branches_from_the_fetched_base(
     _root, fake, git = rig
     repo = fake.repository("willemkokke", "livery")
     created = repo.issue.create("build the widget")
-    issue_start(str(created.number), worktree=False)
+    start(str(created.number), worktree=False)
     live = repo.issue.get(created.number)
     assert live is not None and "fake-user" in live.assignees
     assert git.current_branch() == f"feat/{created.number}-build-the-widget"
@@ -162,7 +163,7 @@ def test_start_wip_parks_the_dirty_tree_then_branches(
     repo = fake.repository("willemkokke", "livery")
     created = repo.issue.create("park then go")
     (root / "stray.txt").write_text("dirty\n")
-    issue_start(str(created.number), worktree=False, wip=True)
+    start(str(created.number), worktree=False, wip=True)
     assert git.current_branch().startswith(f"feat/{created.number}-")
     parked = subprocess.run(
         ["git", "log", "--format=%s", "main", "-1"],
@@ -205,7 +206,7 @@ def test_start_opens_a_worktree_by_default_and_provisions_it(
         return []
 
     monkeypatch.setattr("livery.workshop._sweep.sweep_worktrees", _sweep)
-    issue_start(str(created.number))
+    start(str(created.number))
     # The sweep walks <home>/<repo>/<tree>, so it is handed the home
     # above this repository's directory, never the directory itself.
     assert swept == [worktree_home(root).parent]
@@ -224,13 +225,92 @@ def test_start_opens_a_worktree_by_default_and_provisions_it(
     assert git.current_branch() == "main"
 
 
+def test_start_refuses_without_a_ref_naming_the_three_forms(
+    rig: tuple[Path, FakeForge, GitOps],
+) -> None:
+    with pytest.raises(_FAILURES) as caught:
+        start("")
+    message = str(caught.value)
+    assert "start 123" in message and 'start "fix' in message
+    assert "start docs/the-plan" in message
+
+
+def test_start_refuses_a_branch_it_does_not_recognise(
+    rig: tuple[Path, FakeForge, GitOps],
+) -> None:
+    for bad in ("wat/thing", "docs/", "feat/-x"):
+        with pytest.raises(_FAILURES) as caught:
+            start(bad, worktree=False)
+        assert "<kind>/<slug>" in str(caught.value) or "name what to start" in str(
+            caught.value
+        )
+
+
+def test_start_of_a_plain_branch_files_nothing_and_opens_its_worktree(
+    rig: tuple[Path, FakeForge, GitOps],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from types import SimpleNamespace
+
+    root, fake, git = rig
+    repo = fake.repository("willemkokke", "livery")
+    before = len(repo.issue.list(state="all"))
+    from livery.toolroom import tools as toolroom
+
+    monkeypatch.setattr(
+        "livery.workshop._issue_tasks.tools",
+        SimpleNamespace(
+            uv=SimpleNamespace(
+                opts=lambda **_k: (
+                    lambda *a: SimpleNamespace(code=0, stdout="", stderr="")
+                )
+            ),
+            code=toolroom.code,
+            ToolError=toolroom.ToolError,
+        ),
+    )
+    monkeypatch.setattr("livery.workshop._sweep.sweep_worktrees", lambda home, **_k: [])
+    start("docs/a-note")
+    out = capsys.readouterr().out
+    path = worktree_home(root) / "docs-a-note"
+    assert path.is_dir()
+    assert "no issue; submit closes nothing" in out
+    head = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        cwd=path,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert head == "docs/a-note"
+    # No issue was filed, nobody was assigned, and this checkout never moved.
+    assert len(repo.issue.list(state="all")) == before
+    assert git.current_branch() == "main"
+    # A re-run re-enters the started work.
+    start("docs/a-note")
+    assert "already started: docs/a-note" in capsys.readouterr().out
+
+
+def test_start_of_a_plain_branch_in_this_checkout(
+    rig: tuple[Path, FakeForge, GitOps],
+) -> None:
+    _root, _fake, git = rig
+    start("fix/a-small-one", worktree=False)
+    assert git.current_branch() == "fix/a-small-one"
+    # The branch starts from the fetched base and carries no issue.
+    from livery.workshop._submit import branch_issue
+
+    assert branch_issue("fix/a-small-one") is None
+
+
 def _started(
     rig: tuple[Path, FakeForge, GitOps], title: str = "the work"
 ) -> tuple[Path, FakeForge, GitOps, int, str]:
     root, fake, git = rig
     repo = fake.repository("willemkokke", "livery")
     created = repo.issue.create(title)
-    issue_start(str(created.number), worktree=False)
+    start(str(created.number), worktree=False)
     branch = git.current_branch()
     return root, fake, git, created.number, branch
 
@@ -549,7 +629,7 @@ def _started_in_worktree(
             )
         ),
     )
-    issue_start(str(created.number))
+    start(str(created.number))
     path = worktree_path(root, created.number, title)
     branch = f"feat/{created.number}-{'-'.join(title.split())}"
     return root, fake, git, created.number, branch, path
@@ -679,7 +759,7 @@ def test_start_reruns_resume_instead_of_erroring(
     rig: tuple[Path, FakeForge, GitOps], capsys: pytest.CaptureFixture[str]
 ) -> None:
     _root, _fake, git, number, branch = _started(rig)
-    issue_start(str(number), worktree=False)  # the re-run
+    start(str(number), worktree=False)  # the re-run
     assert "already started" in capsys.readouterr().out
     assert git.current_branch() == branch
 
@@ -700,7 +780,7 @@ def test_start_with_a_title_survives_a_label_refusal(
         return real_create(self, title, **kwargs)  # type: ignore[arg-type]
 
     monkeypatch.setattr(fake_module._FakeIssues, "create", _refusing)
-    issue_start("titled work", worktree=False)
+    start("titled work", worktree=False)
     out = capsys.readouterr().out
     assert "filed #" in out and "without it" in out
 
@@ -722,7 +802,7 @@ def test_the_fail_opens_note_and_continue(
 
     # assign fail-open: the branch is still cut.
     monkeypatch.setattr(fake_module._FakeIssues, "assign", _refuse)
-    issue_start(str(created.number), worktree=False)
+    start(str(created.number), worktree=False)
     out = capsys.readouterr().out
     assert "could not assign" in out
     assert git.current_branch().startswith(f"feat/{created.number}-")
@@ -755,7 +835,7 @@ def test_the_provision_failure_is_a_note_not_a_refusal(
             )
         ),
     )
-    issue_start(str(created.number))
+    start(str(created.number))
     out = capsys.readouterr().out
     assert "fm sync` in the worktree failed" in out
     assert worktree_path(root, created.number, "cold tree").is_dir()
@@ -811,7 +891,9 @@ def test_the_agent_not_installed_teaching(
 
     monkeypatch.setattr("livery.workshop._issue_tasks.os.execvp", _no_exec)
     with pytest.raises(_FAILURES) as caught:
-        _launch_agent("claude", tmp_path, 1, "t", "b", "feat/1-t", "")
+        _launch_agent(
+            "claude", tmp_path, f"Work on issue #{1}: {'t'}\n\n{'b'}", "feat/1-t", ""
+        )
     assert "not installed" in str(caught.value)
 
 
@@ -854,3 +936,24 @@ def test_stop_after_a_merge_removes_the_local_copy_without_discard(
     issue_stop(str(number))
     assert "stopped #" in capsys.readouterr().out
     assert not git.local_branch_exists(branch)
+
+
+def test_reopen_refuses_a_missing_issue_then_reopens_and_assigns(
+    rig: tuple[Path, FakeForge, GitOps], capsys: pytest.CaptureFixture[str]
+) -> None:
+    _root, fake, _git = rig
+    repo = fake.repository("willemkokke", "livery")
+    with pytest.raises(_FAILURES, match="name the issue to reopen"):
+        issue_reopen("")
+    with pytest.raises(_FAILURES, match="does not exist"):
+        issue_reopen("999")
+    created = repo.issue.create("closed by a plan-only merge")
+    repo.issue.close(created.number)
+    issue_reopen(str(created.number))
+    out = capsys.readouterr().out
+    assert f"reopened #{created.number}" in out
+    live = repo.issue.get(created.number)
+    assert live is not None and live.state == "open"
+    assert "fake-user" in live.assignees
+    issue_reopen(str(created.number))
+    assert "already open" in capsys.readouterr().out

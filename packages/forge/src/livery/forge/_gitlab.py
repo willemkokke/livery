@@ -1414,6 +1414,23 @@ class _GitlabIssues:
             data={"state_event": "close"},
         )
 
+    def reopen(self, number: int) -> None:
+        """Reopen issue *number*; an open issue stays open.
+
+        ``state_event=reopen`` on an open issue is refused by GitLab,
+        so the current state gates the write.
+        """
+        issue = self.get(number)
+        if issue is None:
+            raise ForgeError(f"no issue {number} at {self._base}", status=404)
+        if issue.state == "open":
+            return
+        self._client.request(
+            f"{self._base}/issues/{number}",
+            method="PUT",
+            data={"state_event": "reopen"},
+        )
+
     def assigned_to_me(self) -> tuple[Issue, ...]:
         """The open issues assigned to the token's user."""
         return tuple(

@@ -1,11 +1,13 @@
 """The ``issue`` family: the shared work pool and its lifecycle.
 
 ``issue.create``, ``issue.list``, and ``issue.search`` are the pool's
-reads and the one write that files work. ``issue.start`` picks an
-issue up: assign within the workspace's limit, branch from a fetched
-base, and open the work, in a linked worktree by default.
-``issue.stop`` is start's inverse: unassign, clean up the local
-state, and leave the remote branch as the pool's copy.
+reads and the one write that files work. The top-level ``start``
+lives here too, since most work starts from an issue: it picks an
+issue up (assign within the workspace's limit, branch from a fetched
+base, open the work in a linked worktree by default), files one from
+a quoted title, or starts a plain branch that belongs to no issue.
+``issue.stop`` is start's inverse for an issue: unassign, clean up
+the local state, and leave the remote branch as the pool's copy.
 ``issue.close`` closes the issue itself, tearing the submission down
 through the shared mechanism and recording where the work got to.
 
@@ -24,7 +26,7 @@ from typing import Annotated
 
 import livery.footman as footman
 from livery.footman import Arg, ask, doc, fail, group, suggest
-from livery.forge import ForgeError, Repository
+from livery.forge import ForgeError, Issue, Repository
 from livery.toolroom import tools
 from livery.workshop._contract import load_contract
 from livery.workshop._git_ops import GitOps
@@ -181,7 +183,7 @@ def issue_create(
     type: Annotated[str, doc("kind label: feat, fix, chore, docs, refactor")] = "feat",
     body: Annotated[str, doc("the issue body, readable by an outsider")] = "",
 ) -> None:
-    """File a new issue; ``issue.start`` with a title files and starts.
+    """File a new issue; ``start`` with a title files and starts.
 
     The kind label is best-effort: a forge or token that refuses
     labels costs the label, never the issue. Every filed issue
@@ -232,8 +234,11 @@ def issue_update(
     print(f"  #{number}: {changed} updated")
 
 
-@issue.task(name="start", interactive=True)
-def issue_start(
+_PLAIN_BRANCH_RE = re.compile(rf"^({'|'.join(_KINDS)})/([a-z0-9][a-z0-9-]*)$")
+
+
+@footman.task(interactive=True)
+def start(
     ref: Annotated[Arg[str], ask(), suggest(_open_numbers, strict=False)] = "",
     type: Annotated[str, doc("kind override: feat, fix, chore, docs, refactor")] = "",
     body: Annotated[str, doc("the issue body when the title form files one")] = "",
@@ -244,63 +249,138 @@ def issue_start(
         bool, doc("open the work in a linked worktree (the default)")
     ] = True,
     agent: Annotated[
-        str, doc("hand the issue to a coding agent (implies a worktree)")
+        str, doc("hand the work to a coding agent (implies a worktree)")
     ] = "",
     prompt: Annotated[
         str, doc("an initial prompt appended to the agent's briefing")
     ] = "",
-    open: Annotated[str, doc("how to open a worktree: code, shell, or none")] = "",
+    open: Annotated[str, doc("how to open a worktree: shell, code, or none")] = "",
 ) -> None:
-    """Start work on an issue: assign it, branch, and open the work.
+    """Start work: an issue by number, a title that files one, or a plain branch.
 
-    REF is a number (a leading ``#`` is accepted) or a quoted title,
-    which files the issue first. Assignment is documentation: at the
+    REF is an issue number (a leading ``#`` is accepted), a quoted
+    title, which files the issue first, or ``<kind>/<slug>`` (``docs/
+    the-plan``) for a branch that belongs to no issue: a note, a small
+    fix. An issue is assigned, and assignment is documentation: at the
     workspace's assignee limit, or when the forge refuses the write,
-    the start proceeds with a warning that others will not see you
-    on the issue. The branch is
-    ``<kind>/<number>-<slug>``, always from a fetched
-    ``origin/main`` so a stale base is impossible. A worktree under
-    the runner's home is the default; ``--no-worktree`` reuses this
-    checkout, where a dirty tree refuses naming ``--wip`` (park the
-    tree as a commit; squash-only merging evaporates it) as the
-    escape. ``--agent`` launches the named agent in the worktree
+    the start proceeds with a warning that others will not see you on
+    the issue. An issue's branch is ``<kind>/<number>-<slug>`` and
+    ``fm submit`` closes the issue on merge; a plain branch is named
+    as given and closes nothing. Every branch starts from a fetched
+    ``origin/main``, so a stale base is impossible. A worktree under
+    the runner's home is the default, entered in a shell when a
+    person is at the terminal (``--open=code`` opens the editor
+    instead, ``--open=none`` prints the path); ``--no-worktree``
+    reuses this checkout, where a dirty tree refuses naming ``--wip``
+    (park the tree as a commit; squash-only merging evaporates it) as
+    the escape. ``--agent`` launches the named agent in the worktree
     with a minimal briefing; the worktree's own instructions are the
-    real ones.
+    real ones. Re-running on started work re-enters it.
     """
     if not ref:
         fail(
-            f"name an issue: a number (`{footman.prog()} issue.start 123`) or a quoted"
-            f' title (`{footman.prog()} issue.start "fix the flaky watch"`)'
+            f"name what to start: an issue number (`{footman.prog()} start 123`),"
+            f' a quoted title (`{footman.prog()} start "fix the flaky watch"`), or'
+            f" a branch (`{footman.prog()} start docs/the-plan`)"
         )
     root = _workspace()
     repo = _repo(root)
     git = GitOps(root)
-    me = _me(repo)
     if agent:
         worktree = True
     if type and type not in _KINDS:
         fail(f"unknown type {type!r}: one of {', '.join(_KINDS)}")
+    plain = _PLAIN_BRANCH_RE.match(ref)
+    if plain is None and "/" in ref and " " not in ref:
+        fail(
+            f"{ref!r} is not a branch this verb starts: spell it"
+            f" `<kind>/<slug>` with a kind of {', '.join(_KINDS)} and a"
+            " lowercase slug (`docs/the-plan`)"
+        )
+    if plain is not None:
+        kind, slug = plain.group(1), plain.group(2)
+        branch = ref
+        path = worktree_home(root) / f"{kind}-{slug}"
+        briefing = f"Work on branch {branch}."
+        started = f"{branch} (no issue; submit closes nothing)"
+    else:
+        work = _issue_for(repo, ref, type=type, body=body)
+        _assign(root, repo, work)
+        kind = _issue_kind(work.labels, type)
+        branch = branch_name(kind, work.number, work.title)
+        path = worktree_path(root, work.number, work.title)
+        briefing = f"Work on issue #{work.number}: {work.title}\n\n{work.body}"
+        started = branch
+    git.fetch()
+    if worktree:
+        from livery.workshop._sweep import sweep_worktrees
 
+        for line in sweep_worktrees(
+            worktree_home(root).parent, dry_run=False, unattended=False
+        ):
+            print(f"  {line}")
+        if path.is_dir() or git.local_branch_exists(branch):
+            print(f"  already started: {branch} at {path}")
+            if agent:
+                _launch_agent(agent, path, briefing, branch, prompt)
+                return
+            _open_work(path, open)
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        git._run("worktree", "add", str(path), "-b", branch, "origin/main")
+        print(f"  worktree {path} on {started}")
+        provision = tools.uv.opts(cwd=path, nofail=True, recorded=False)(
+            "run", footman.prog(), "sync"
+        )
+        if provision.code != 0:
+            print(
+                f"  Note: `{footman.prog()} sync` in the worktree failed; run it there"
+            )
+        if agent:
+            _launch_agent(agent, path, briefing, branch, prompt)
+            return
+        _open_work(path, open)
+        return
+    if not git.is_clean():
+        if wip:
+            git.commit_all(f"chore(wip): parked by start ({branch})")
+            print("  parked the working tree (squash-only merging evaporates it)")
+        else:
+            fail(
+                "the working tree has uncommitted changes.\n"
+                f"  Park them and reuse this checkout:  {footman.prog()} start --wip"
+                f" --no-worktree {ref}\n"
+                "  Or work in a linked worktree:       "
+                f"{footman.prog()} start {ref}"
+            )
+    if git.local_branch_exists(branch):
+        git.switch(branch)
+        print(f"  already started: back on {branch}")
+        return
+    git._run("checkout", "-b", branch, "origin/main")
+    print(f"  on {started}")
+
+
+def _issue_for(repo: Repository, ref: str, *, type: str, body: str) -> Issue:
+    """The issue *ref* names, or the one a quoted title files."""
     number, title = parse_ref(ref)
     if number:
         found = repo.issue.get(number)
         if found is None:
             fail(f"issue #{number} does not exist in this repository")
-        work = found
-    else:
-        try:
-            work = repo.issue.create(
-                title, body=body, labels=(f"kind/{type or 'feat'}",)
-            )
-        except ForgeError:
-            work = repo.issue.create(title, body=body)
-            print("  Note: the kind label was refused; filed without it")
-        print(f"  filed #{work.number}: {work.title}")
+        return found
+    try:
+        work = repo.issue.create(title, body=body, labels=(f"kind/{type or 'feat'}",))
+    except ForgeError:
+        work = repo.issue.create(title, body=body)
+        print("  Note: the kind label was refused; filed without it")
+    print(f"  filed #{work.number}: {work.title}")
+    return work
 
-    # Assignment is documentation, never a gate: it tells the pool
-    # who is working, and not being listed costs visibility, not the
-    # work. At the limit the assign is skipped with the warning; a
-    # forge that refuses the write costs the same visibility.
+
+def _assign(root: Path, repo: Repository, work: Issue) -> None:
+    """Put the caller on the issue; at the limit or a refusal, warn and go on."""
+    me = _me(repo)
     limit = assignee_limit(root)
     if me not in work.assignees and len(work.assignees) >= limit:
         listed = ", ".join(work.assignees)
@@ -311,83 +391,15 @@ def issue_start(
             " with them; `[issues] assignees` in workshop.toml raises the"
             " limit if this issue takes more people."
         )
-    else:
-        try:
-            if me and me not in work.assignees:
-                repo.issue.assign(work.number, me)
-        except ForgeError as error:
-            print(
-                f"  Note: could not assign the issue ({error}); others"
-                " will not see you working on it, so communicate."
-            )
-
-    kind = _issue_kind(work.labels, type)
-    branch = branch_name(kind, work.number, work.title)
-    git.fetch()
-
-    if worktree:
-        # The home is swept before it grows: the worktrees of closed
-        # issues go, anything holding work stays and is named.
-        from livery.workshop._sweep import sweep_worktrees
-
-        # The sweep walks <home>/<repo>/<tree>: the home above this
-        # repository's own directory, as the janitor passes it.
-        for line in sweep_worktrees(
-            worktree_home(root).parent, dry_run=False, unattended=False
-        ):
-            print(f"  {line}")
-        path = worktree_path(root, work.number, work.title)
-        if path.is_dir() or git.local_branch_exists(branch):
-            # Re-running start is its recovery: the work is already
-            # open, so say where and open it again.
-            print(f"  already started: {branch} at {path}")
-            if agent:
-                _launch_agent(
-                    agent, path, work.number, work.title, work.body, branch, prompt
-                )
-                return
-            _open_work(path, open)
-            return
-        path.parent.mkdir(parents=True, exist_ok=True)
-        git._run("worktree", "add", str(path), "-b", branch, "origin/main")
-        print(f"  worktree {path} on {branch}")
-        provision = tools.uv.opts(cwd=path, nofail=True, recorded=False)(
-            "run", footman.prog(), "sync"
+        return
+    try:
+        if me and me not in work.assignees:
+            repo.issue.assign(work.number, me)
+    except ForgeError as error:
+        print(
+            f"  Note: could not assign the issue ({error}); others"
+            " will not see you working on it, so communicate."
         )
-        if provision.code != 0:
-            # A linked worktree does not inherit the venv; failing to
-            # provision degrades to a note, not a refusal, because
-            # the worktree itself is ready to work in.
-            print(
-                f"  Note: `{footman.prog()} sync` in the worktree failed; run it there"
-            )
-        if agent:
-            _launch_agent(
-                agent, path, work.number, work.title, work.body, branch, prompt
-            )
-            return
-        _open_work(path, open)
-        return
-
-    if not git.is_clean():
-        if wip:
-            git.commit_all(f"chore(wip): parked by issue.start ({branch})")
-            print("  parked the working tree (squash-only merging evaporates it)")
-        else:
-            fail(
-                "the working tree has uncommitted changes.\n"
-                f"  Park them and reuse this checkout:  fm issue.start --wip"
-                f" --no-worktree {work.number}\n"
-                "  Or work in a linked worktree:       "
-                f"{footman.prog()} issue.start"
-                f" {work.number}"
-            )
-    if git.local_branch_exists(branch):
-        git.switch(branch)
-        print(f"  already started: back on {branch}")
-        return
-    git._run("checkout", "-b", branch, "origin/main")
-    print(f"  on {branch}")
 
 
 def _me(repo: Repository) -> str:
@@ -404,21 +416,17 @@ def _me(repo: Repository) -> str:
 def _launch_agent(
     name: str,
     path: Path,
-    number: int,
-    title: str,
-    body: str,
+    briefing: str,
     branch: str,
     prompt: str,
 ) -> None:
-    """Hand the issue to the agent in its worktree; a terminal handoff.
+    """Hand the work to the agent in its worktree; a terminal handoff.
 
     The briefing is minimal on purpose: the worktree carries the
     project's own instructions, and repeating them here would drift.
     Nothing after the exec runs.
     """
-    briefing = (
-        f"Work on issue #{number}: {title}\n\n{body}\n\nYou are on branch {branch}."
-    )
+    briefing = f"{briefing}\n\nYou are on branch {branch}."
     if prompt:
         briefing += f"\n\n{prompt}"
     executable = "claude" if name in ("", "claude") else name
@@ -430,7 +438,7 @@ def _launch_agent(
 
 
 def _open_work(path: Path, how: str) -> None:
-    mode = how or ("code" if sys.stdout.isatty() else "none")
+    mode = how or ("shell" if sys.stdout.isatty() else "none")
     if mode == "code":
         try:
             tools.code.opts(nofail=True, recorded=False)(str(path))
@@ -443,8 +451,10 @@ def _open_work(path: Path, how: str) -> None:
 
         os.chdir(path)
         launch_shell("")
-    elif mode != "none":
-        fail(f"unknown open mode {how!r}: code, shell, or none")
+    elif mode == "none":
+        print(f"  the worktree is at {path}")
+    else:
+        fail(f"unknown open mode {how!r}: shell, code, or none")
 
 
 @issue.task(name="stop")
@@ -658,3 +668,33 @@ def issue_close(
     repo.issue.comment(number, note)
     repo.issue.close(number)
     print(f"  closed #{number}: {reason}")
+
+
+@issue.task(name="reopen")
+def issue_reopen(
+    ref: Annotated[Arg[str], ask()] = "",
+) -> None:
+    """Reopen a closed issue and put yourself on it, as start does.
+
+    For an issue a merge closed before its work was done (a branch
+    that carried a plan or a pinning test under the issue's number).
+    Reopening an open issue is a no-op, and the assignment follows
+    start's rules: the workspace's limit and a refused write warn
+    and go on.
+    """
+    if not ref:
+        fail(f"name the issue to reopen: `{footman.prog()} issue.reopen 123`")
+    root = _workspace()
+    repo = _repo(root)
+    number, _title = parse_ref(ref)
+    if not number:
+        fail("issue.reopen takes a number; a title names nothing to reopen")
+    work = repo.issue.get(number)
+    if work is None:
+        fail(f"issue #{number} does not exist in this repository")
+    if work.state == "open":
+        print(f"  #{number} is already open")
+    else:
+        repo.issue.reopen(number)
+        print(f"  reopened #{number}: {work.title}")
+    _assign(root, repo, work)

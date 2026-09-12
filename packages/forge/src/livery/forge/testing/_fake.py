@@ -1162,6 +1162,10 @@ class _FakeIssues:
         """Close issue *number*; a closed issue stays closed."""
         self._fake._require_issue(self._state(), number).state = "closed"
 
+    def reopen(self, number: int) -> None:
+        """Reopen issue *number*; an open issue stays open."""
+        self._fake._require_issue(self._state(), number).state = "open"
+
 
 class _FakeReleases:
     """The release operations of one FakeForge repository."""

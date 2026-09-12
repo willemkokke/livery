@@ -69,6 +69,20 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
   `[ci] windows-temp = "system"` leaves the system temp, for a runner
   without a separate working drive; `"runner"` asks for the move on
   any forge.
+- `fm start`: open the work. An issue number assigns and branches
+  `<kind>/<number>-<slug>`, a quoted title files the issue first, and
+  `<kind>/<slug>` starts a branch that belongs to no issue, whose
+  submit closes nothing. Every form branches from a fetched
+  `origin/main` into a worktree under the runner's home, provisioned
+  and entered in a shell when a person is at the terminal
+  (`--open=code` opens the editor, `--open=none` prints the path);
+  `--no-worktree` reuses this checkout.
+- `fm commit <type> "<subject>"`: a conventional commit on a proved
+  tree. It stages the change (`--only` narrows), derives the scope
+  from the packages the change touches, runs the affected gate first
+  in its fix mode (`--no-check` skips), validates the subject the way
+  `fm submit` validates a title, and refuses on `main` and on a
+  reserved branch. `git commit` keeps working.
 - `fm submit`: get the branch onto the remote, verified. Its local
   gate is the one the CI legs run: the whole workspace, or the
   affected gate against the base branch when the contract declares
@@ -81,10 +95,14 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
   branch, and the follow classifies the verdict with stable exit
   codes; a follow that sees the merge from a linked worktree removes
   the tree and its branch, naming the directory to go to, and keeps
-  a tree holding something the merge did not take. `fm submit.merge`
-  lands a green, deliberately-unarmed PR;
-  `fm abandon` gives the feature up. `fm status`, `fm ci.*`, and
-  `fm doctor` stand beside them, all on
+  a tree holding something the merge did not take. `--no-close`
+  submits without the close footer, for preparatory work the merge
+  must leave open; a pull request already green when `--armed` asks
+  is merged directly, since a forge that arms only a blocked pull
+  request refuses. `fm submit.merge` lands a green,
+  deliberately-unarmed PR; `fm abandon [branch]` gives a feature up,
+  this one or a named one, its worktree with it. `fm status`,
+  `fm ci.*`, and `fm doctor` stand beside them, all on
   [livery-forge](https://pypi.org/project/livery-forge/).
 - `fm template.check` keeps rendered files byte-identical to the
   template source the contract names (`[workspace] templates`: a
@@ -98,7 +116,7 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
 - `fm janitor` sweeps the runner's directories and the state store:
   footman's cache, then what the workshop leaves in the data
   directory (the worktrees of closed issues and merged branches,
-  which `fm issue.start` sweeps first, the checkout's local branches
+  which `fm start` sweeps first, the checkout's local branches
   whose pull request merged, and files and folders no code writes any
   more), then every series the workshop keeps, in the
   scope the run has: the checkout's local series on a machine, the
