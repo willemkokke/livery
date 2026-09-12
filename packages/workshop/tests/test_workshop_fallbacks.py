@@ -271,6 +271,36 @@ def _cliff_workspace(tmp_path: Path, kind: str) -> tuple[Path, Package]:
     return tmp_path, package
 
 
+def test_the_changelog_credits_with_the_token_the_lane_connects_with(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # No variable names a token, but the lane's backend finds one on
+    # its own (the gh keyring): the changelog credits with it. A
+    # backend that refuses to connect without a token means the lane
+    # has none, and the entry goes offline as before.
+    from types import SimpleNamespace
+
+    from livery.forge import ForgeError
+    from livery.workshop import _cliff
+
+    root, _package = _cliff_workspace(tmp_path, "github")
+    for name in ("GITHUB_TOKEN", "FORGE_TOKEN", "FORGE_TOKEN__GITHUB_COM"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(
+        "livery.workshop._forge_lane._connect",
+        lambda kind, url, token: SimpleNamespace(token="from-the-keyring"),
+    )
+    assert _cliff._credential(root) == ("GITHUB_TOKEN", "from-the-keyring")
+    assert _cliff.credit_is_reachable(root)
+
+    def _refuses(kind: str, url: str, token: str | None) -> Any:
+        raise ForgeError("no token")
+
+    monkeypatch.setattr("livery.workshop._forge_lane._connect", _refuses)
+    assert _cliff._credential(root) == ("", "")
+    assert not _cliff.credit_is_reachable(root)
+
+
 def test_the_changelog_runs_offline_when_no_credential_is_in_reach(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
