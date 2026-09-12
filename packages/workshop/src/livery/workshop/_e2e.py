@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 
 import livery.footman as footman
 from livery.footman import fail
+from livery.forge import ForgeError
 from livery.workshop._ci_tasks import ci
 
 if TYPE_CHECKING:
@@ -287,13 +288,18 @@ def _publish_dev_wheels(kind: str) -> dict[str, str]:
     return pins
 
 
-def start_over(lane: Forge, token: str, root: Path, *, url: str) -> list[str]:
+def start_over(
+    lane: Forge, token: str, root: Path, *, url: str, wait: float = 120.0
+) -> list[str]:
     """Delete the loop's repository, its registry releases, and *root*; the lines.
 
     Refuses while *root* holds commits its origin has not seen, since
     the repository they would land in is about to go. A repository or
     a release already gone is not an error: the next birth wants them
-    absent, and a re-run of the reset is the recovery procedure.
+    absent, and a re-run of the reset is the recovery procedure. A
+    delete the forge answers too slowly for the client completes on
+    the server anyway, so the reset waits up to *wait* seconds for
+    the repository to be gone before it refuses.
     """
     from livery.forge._registry import purge_packages
 
@@ -306,8 +312,20 @@ def start_over(lane: Forge, token: str, root: Path, *, url: str) -> list[str]:
                 "  push or discard them before starting over"
             )
     lines: list[str] = []
-    lane.delete_repo(E2E_OWNER, E2E_REPO)
-    lines.append(f"  deleted {E2E_OWNER}/{E2E_REPO} on the dev forge")
+    try:
+        lane.delete_repo(E2E_OWNER, E2E_REPO)
+    except ForgeError as error:
+        if not _gone_within(lane, wait):
+            raise ForgeError(
+                f"{E2E_OWNER}/{E2E_REPO} is still on the dev forge after the"
+                f" delete's wait: {error}"
+            ) from error
+        lines.append(
+            f"  deleted {E2E_OWNER}/{E2E_REPO} on the dev forge (the delete"
+            " outran the client's wait and finished on the server)"
+        )
+    else:
+        lines.append(f"  deleted {E2E_OWNER}/{E2E_REPO} on the dev forge")
     purged = purge_packages(url, E2E_OWNER, token=token)
     lines.append(
         f"  purged {len(purged)} release(s) from the registry"
@@ -317,6 +335,19 @@ def start_over(lane: Forge, token: str, root: Path, *, url: str) -> list[str]:
         _rmtree(root)
         lines.append(f"  removed {root}")
     return lines
+
+
+def _gone_within(lane: Forge, wait: float) -> bool:
+    """Whether the loop's repository is gone from the forge within *wait* seconds."""
+    import time
+
+    deadline = time.monotonic() + wait
+    while True:
+        if lane.get_repo(E2E_OWNER, E2E_REPO) is None:
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(min(5.0, max(0.0, deadline - time.monotonic())))
 
 
 def _rmtree(path: Path) -> None:

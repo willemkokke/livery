@@ -348,9 +348,18 @@ class GiteaForge:
         )
 
     def delete_repo(self, owner: str, name: str) -> None:
-        """Delete the repository; one already gone is success."""
+        """Delete the repository; one already gone is success.
+
+        Gitea deletes a repository with a long run history slowly (a
+        loop repository with 1,400 runs outran a 30 s wait), so the
+        request is given two minutes; the deletion completes on the
+        server whether or not the client waits for it.
+        """
         self._client.request(
-            f"/repos/{quote(owner)}/{quote(name)}", method="DELETE", none_on=(404,)
+            f"/repos/{quote(owner)}/{quote(name)}",
+            method="DELETE",
+            none_on=(404,),
+            timeout=120.0,
         )
 
     def _require_cancel_floor(self) -> None:

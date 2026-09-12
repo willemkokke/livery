@@ -296,8 +296,30 @@ def test_the_units_a_leg_ran_come_from_its_marker(tmp_path: Path) -> None:
 
 
 def test_a_leg_with_no_metered_data_refuses_naming_the_meter(tmp_path: Path) -> None:
+    x = _package(tmp_path, "x")
     with pytest.raises(BaseException, match="COVERAGE_PROCESS_START"):
-        _python.combine_leg(tmp_path, ())
+        _python.combine_leg(tmp_path, (x,))
+
+
+def test_a_workspace_with_no_packages_puts_its_scope_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop._verified import FULL, write_marker
+
+    # A project just born has no packages: its tests ran unmetered,
+    # and there is nothing to union. That is not a dead meter.
+    _in_ci(monkeypatch, "check-a")
+    write_marker(tmp_path, FULL, leg="check-a")
+    put: list[dict[str, object]] = []
+
+    def _capture(root: Path, run: object, **kw: object) -> str:
+        put.append(kw)
+        return ""
+
+    monkeypatch.setattr(_coverage_store, "put_run", _capture)
+    _python.combine_leg(tmp_path, ())
+    assert "no packages to measure" in capsys.readouterr().out
+    assert len(put) == 1 and put[0]["scope"] == "full" and put[0]["packages"] == ()
 
 
 def _in_ci(monkeypatch: pytest.MonkeyPatch, leg: str) -> None:

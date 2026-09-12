@@ -627,7 +627,10 @@ def combine_leg(
     no data, naming the variable that arms the meter; a leg whose
     gate skipped (a tree already proved, or nothing affected)
     legitimately measured nothing, says so, and puts its scope alone,
-    so the union knows the leg skipped rather than died. The leg's
+    so the union knows the leg skipped rather than died. A workspace
+    with no packages (a project just born) runs its tests unmetered
+    and has nothing to union; that leg puts its scope alone too. The
+    leg's
     *timing* row, when it has one, rides the one write with the
     scope; the marker's scope goes on it, as the stamp reads it.
     """
@@ -639,6 +642,15 @@ def combine_leg(
     if timing is not None:
         timing = {**timing, "scope": marker}
     if not parts and not (root / ".coverage").is_file():
+        if not packages:
+            print(
+                print(
+                    "  coverage: the workspace has no packages to measure; nothing to"
+                    " combine"
+                )
+            )
+            _put_leg(root, marker, {}, timing=timing)
+            return
         if scope not in (VERIFIED, NOTHING):
             fail(
                 "this leg left no coverage data: nothing was metered. Inside CI"
