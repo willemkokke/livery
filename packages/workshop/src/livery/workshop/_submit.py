@@ -859,7 +859,7 @@ def _fold_fixes(git: GitOps, base: str) -> None:
         print("  gate fixes amended into HEAD")
 
 
-@submit.default
+@submit.default(serial=True)
 def submit_default(
     title: Annotated[str, doc("PR title; defaults to HEAD's subject")] = "",
     body: Annotated[str, doc("PR body; defaults to HEAD's body")] = "",
@@ -1042,7 +1042,13 @@ def teardown_branch(
     gates, forces, and refusals are the calling policy's job
     (livery.workshop._submit.abandon_flow for a feature,
     ``workflow.abort`` for a reserved workflow, ``issue.close`` for
-    an issue), so the policies can never drift apart.
+    an issue), so the policies can never drift apart. Removing a
+    linked worktree moves the process into the main checkout first:
+    Windows refuses to remove a directory a process stands in, and
+    the shell that ran the verb is told where to go. A real move of
+    the process directory is a serial task's to make (footman refuses
+    it in a parallel one), so every verb that reaches this from
+    inside a worktree is declared ``serial``.
     """
     pr = repo.pr.find_by_head(branch)
     if pr is not None and not pr.merged:
@@ -1105,7 +1111,7 @@ def abandon_flow(repo: Repository, git: GitOps, branch: str, base: str) -> None:
     teardown_branch(repo, git, branch, base)
 
 
-@footman.task
+@footman.task(serial=True)
 def abandon() -> None:
     """Give up this feature: close the PR, delete the branches, return to base.
 

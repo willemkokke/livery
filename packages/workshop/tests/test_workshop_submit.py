@@ -1661,6 +1661,19 @@ def test_a_merged_submit_in_a_linked_worktree_removes_the_worktree(
     assert _git(git.root, "rev-parse", "--abbrev-ref", "HEAD").strip() == "feat/1-first"
 
 
+def test_the_verbs_that_remove_a_worktree_own_the_real_directory() -> None:
+    # Removing a linked worktree moves the process into the main checkout
+    # (Windows refuses to remove a directory a process stands in), and
+    # footman lets only a serial task move the real directory: the first
+    # live teardown at a merge stopped on that refusal.
+    from livery.workshop._issue_tasks import issue_close
+    from livery.workshop._submit import abandon, submit_default
+
+    assert getattr(submit_default, "_footman_serial", False) is True
+    assert getattr(abandon, "_footman_serial", False) is True
+    assert getattr(issue_close, "_footman_interactive", False) is True
+
+
 def test_a_merged_submit_in_the_main_checkout_keeps_its_branch(
     rig: tuple[FakeForge, SubmitGit],
 ) -> None:
