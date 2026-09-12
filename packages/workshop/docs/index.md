@@ -180,7 +180,9 @@ The speed marks are off until the contract declares
 `[ci] speed-marks = true`: a hosted runner's test time varies by tens
 of seconds between two runs of one tree, so a mark taken from such
 runs says nothing about the suite. Declare the key on runners that
-keep a steady clock. On, the gate job judges each check leg's summed
+keep a steady clock. While the key is absent the gate job drops any
+marks left from before, so a later opt-in starts from the recorded
+timings alone. On, the gate job judges each check leg's summed
 test time per package against a mark on the state store. The mark is the median of the
 leg's last five green runs for the package, recorded once five are
 seen; it moves down when that median beats it by more than five per
@@ -209,7 +211,13 @@ or a write of a series is a fixed handful of git processes whatever
 the series holds: one `cat-file --batch` reads every row, one
 `hash-object --stdin-paths` writes every blob, so a series of three
 hundred rows costs no more processes than one of three (git 2.38 or
-newer).
+newer). A verb that reads several series takes one snapshot of the
+remote namespace: one listing, then one fetch of the refs the
+checkout lacks, and every read inside answers from the local object
+store, so `fm store.ls` and `fm ci.timings` cost two round trips and
+the gate job's union, collect, judge, stamp, and janitor one or two
+each. A write inside the snapshot keeps its compare-and-swap on the
+listed sha and records the sha it pushed, so a read after it sees it.
 
 | series | a row is | window | writer |
 | --- | --- | --- | --- |

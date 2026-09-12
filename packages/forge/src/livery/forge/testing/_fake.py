@@ -804,6 +804,10 @@ class _FakePullRequests:
         """Retitle pull request *number*."""
         self._fake._require_pr(self._state(), number).title = title
 
+    def update_body(self, number: int, body: str) -> None:
+        """Replace the description of pull request *number*."""
+        self._fake._require_pr(self._state(), number).body = body
+
     def close(self, number: int) -> None:
         """Close pull request *number*; closing a closed one is success."""
         state = self._state()

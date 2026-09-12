@@ -430,3 +430,17 @@ a day, before 6 or after it.
   newline translation, so a row is the same bytes on every platform; a
   row a Windows checkout wrote with carriage returns before this is
   read on its own with `show`.
+- 2026-09-12, Willem ("store.ls takes 16 seconds"): a verb reads the
+  remote namespace through one snapshot (#500). Every read fetched its
+  ref before it looked, and every family listing was its own
+  `ls-remote`, so a verb paid one round trip per series: 14 s for `fm
+  store.ls` on the desk against GitHub, seven reads and listings of
+  1.8 to 3.7 s each while the two local series cost 0.1 s. A snapshot
+  lists the namespace once, fetches the refs the verb names and the
+  checkout lacks together, and reads a commit the checkout holds with
+  no network; a write inside keeps its lease on the listed sha,
+  re-lists on a stale push, and records the sha it pushed. Measured
+  after: `fm store.ls` 5.9 s cold and 2.6 s warm, `fm ci.timings` 3.3
+  s. The union, the collect, the speed judge, the stamp, the janitor,
+  the check's verified read, and the deploy's pages take it; the leg's
+  own writes do not, one write each.

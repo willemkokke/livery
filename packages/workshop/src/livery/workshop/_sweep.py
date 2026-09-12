@@ -190,15 +190,19 @@ def sweep_worktrees(home: Path, *, dry_run: bool, unattended: bool) -> list[str]
 
 def sweep_store(root: Path | None, *, dry_run: bool, now: datetime) -> list[str]:
     """Bound every declared series of the state store in the run's scope; the lines."""
+    from contextlib import nullcontext
+
     from livery.workshop._series import DECLARED
-    from livery.workshop._state import run_context
+    from livery.workshop._state import WHOLE, remote_snapshot, run_context
     from livery.workshop._state import sweep as sweep_series
 
     if root is None:
         return ["state store: no checkout here; nothing swept"]
-    lines = sweep_series(
-        root, DECLARED, remote=run_context() is not None, dry_run=dry_run, now=now
-    )
+    remote = run_context() is not None
+    # The remote sweep reads every series: one listing and one fetch.
+    scope = remote_snapshot(root, fetch=WHOLE) if remote else nullcontext()
+    with scope:
+        lines = sweep_series(root, DECLARED, remote=remote, dry_run=dry_run, now=now)
     return [f"state store: {line.strip()}" for line in lines]
 
 

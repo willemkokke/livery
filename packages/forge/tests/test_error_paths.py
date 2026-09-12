@@ -248,5 +248,7 @@ def test_the_fake_names_every_missing_subject() -> None:
         here.checks.job_log(99)
     with pytest.raises(ForgeError, match="no pull request"):
         here.pr.update_title(1, "t")
+    with pytest.raises(ForgeError, match="no pull request"):
+        here.pr.update_body(1, "b")
     with pytest.raises(ForgeError, match="no issue"):
         here.issue.comment(1, "b")

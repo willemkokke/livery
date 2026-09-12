@@ -294,10 +294,14 @@ def check(
             "  nightly: the whole gate, the verified record and the narrowing set aside"
         )
     if not nightly and root_for_ci is not None and run is not None:
-        proved = verified_already(root_for_ci)
-        if proved is not None:
-            _measure_unrecorded(root_for_ci, run, bases=record_bases(proved.branch))
-            return
+        from livery.workshop._state import remote_snapshot
+
+        # The verified record and the records a skip reads: one listing.
+        with remote_snapshot(root_for_ci, fetch=("verified", "coverage/")):
+            proved = verified_already(root_for_ci)
+            if proved is not None:
+                _measure_unrecorded(root_for_ci, run, bases=record_bases(proved.branch))
+                return
     ci_base = (
         ci_affected_base(root_for_ci, run)
         if not affected and not nightly and root_for_ci is not None
@@ -623,10 +627,23 @@ def coverage_union() -> None:
     supply, so nothing passes as a smaller union; the report and the
     verdicts print, so the numbers on screen are the numbers enforced.
     """
+    from contextlib import nullcontext
+
+    from livery.workshop._state import remote_snapshot, run_context
+
     root = workspace_root()
     if root is None:
         raise ValueError("no workspace: no workshop.toml above the working directory")
-    judged = _python.combine_union(root, _packages())
+    run = run_context()
+    # The legs' per-run refs and every record the union may carry
+    # from: one listing and one fetch.
+    scope = (
+        remote_snapshot(root, fetch=(f"run/{run.run_id}/", "coverage/"))
+        if run is not None
+        else nullcontext()
+    )
+    with scope:
+        judged = _python.combine_union(root, _packages())
     if judged:
         from livery.workshop._metrics import write_coverage_row
 

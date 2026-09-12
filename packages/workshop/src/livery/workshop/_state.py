@@ -66,8 +66,9 @@ import json
 import os
 import re
 import tempfile
-from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass
+from collections.abc import Callable, Generator, Iterable, Mapping
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -571,6 +572,132 @@ class Read:
     reason: str = ""
 
 
+@dataclass
+class _Snapshot:
+    """One listing of the remote namespace, and the commits known to be local.
+
+    Attributes:
+        refs: Every ref under the namespace by sha, or ``None`` when
+            the listing could not be taken.
+        reason: The transport's words when it could not be.
+        local: The shas the checkout is known to hold, checked or
+            fetched inside this snapshot.
+    """
+
+    refs: dict[str, str] | None
+    reason: str = ""
+    local: set[str] = field(default_factory=set)
+
+
+#: The *fetch* of a `remote_snapshot` that wants every ref of the
+#: namespace: the empty prefix below it.
+WHOLE: tuple[str, ...] = ("",)
+
+#: The snapshot each checkout reads the remote namespace through while
+#: a `remote_snapshot` block is open for it; one per checkout at a time.
+_SNAPSHOTS: dict[Path, _Snapshot] = {}
+
+
+def _snapshot(root: Path) -> _Snapshot | None:
+    return _SNAPSHOTS.get(root.resolve())
+
+
+def _list_namespace(root: Path) -> tuple[dict[str, str] | None, str]:
+    """Every ref under the remote namespace by sha, or ``(None, reason)``."""
+    listed = _git(root, "ls-remote", "origin", NAMESPACE + "*")
+    if listed.code != 0:
+        return None, _words(listed)
+    refs: dict[str, str] = {}
+    for line in listed.stdout.splitlines():
+        sha, _, name = line.partition("\t")
+        if name:
+            refs[name.strip()] = sha.strip()
+    return refs, ""
+
+
+def _missing_locally(root: Path, shas: Iterable[str]) -> set[str]:
+    """The shas among *shas* the checkout's object store does not hold."""
+    wanted = sorted(set(shas))
+    if not wanted:
+        return set()
+    checked = _git(
+        root,
+        "cat-file",
+        "--batch-check",
+        "-z",
+        stdin="".join(f"{sha}\0" for sha in wanted),
+    )
+    if checked.code != 0:
+        return set(wanted)
+    missing: set[str] = set()
+    for line in checked.stdout.splitlines():
+        words = line.split()
+        if len(words) >= 2 and words[1] == "missing":
+            missing.add(words[0])
+    return missing
+
+
+@contextmanager
+def remote_snapshot(root: Path, *, fetch: Iterable[str] = ()) -> Generator[None]:
+    """Read the remote namespace through one listing for the block.
+
+    One ``ls-remote`` of the whole namespace when the block opens;
+    every read and listing of a remote ref inside answers from it,
+    and a ref whose commit the checkout already holds is read with no
+    network at all. The refs whose names start with a prefix in
+    *fetch* (spelled below the namespace, ``metrics`` or
+    ``run/1400/``) and whose commits the checkout lacks are fetched
+    together, one round trip, when the block opens; a ref outside
+    them is fetched on its own read. A write inside keeps its
+    compare-and-swap on the listed sha: a refused push lists again
+    and retries, and a successful write records its new sha, so a
+    read after it sees it. A listing the forge could not answer makes
+    every read inside a failure naming the reason and every listing
+    unlistable, never an absence. A block opened inside another for
+    the same checkout shares the outer listing.
+    """
+    key = root.resolve()
+    if key in _SNAPSHOTS:
+        yield
+        return
+    refs, why = _list_namespace(root)
+    snapshot = _Snapshot(refs, why)
+    if refs is not None:
+        prefixes = tuple(NAMESPACE + prefix for prefix in fetch)
+        wanted = {ref: sha for ref, sha in refs.items() if ref.startswith(prefixes)}
+        missing = _missing_locally(root, wanted.values())
+        snapshot.local.update(sha for sha in wanted.values() if sha not in missing)
+        to_fetch = sorted(ref for ref, sha in wanted.items() if sha in missing)
+        if to_fetch:
+            fetched = _git(root, "fetch", "--quiet", "origin", *to_fetch)
+            if fetched.code == 0:
+                snapshot.local.update(wanted[ref] for ref in to_fetch)
+    _SNAPSHOTS[key] = snapshot
+    try:
+        yield
+    finally:
+        _SNAPSHOTS.pop(key, None)
+
+
+def _relist(root: Path, snapshot: _Snapshot) -> None:
+    """List the namespace again after another writer moved a ref."""
+    snapshot.refs, snapshot.reason = _list_namespace(root)
+
+
+def _reachable(root: Path, snapshot: _Snapshot, ref: str, sha: str) -> str:
+    """Make *sha* local for a read inside *snapshot*; ``""`` or the reason."""
+    if sha in snapshot.local:
+        return ""
+    if not _missing_locally(root, (sha,)):
+        snapshot.local.add(sha)
+        return ""
+    fetched = _git(root, "fetch", "--quiet", "origin", ref)
+    if fetched.code != 0:
+        return _words(fetched)
+    snapshot.local.add(sha)
+    return ""
+
+
 def _git(root: Path, *args: str, stdin: str | None = None) -> toolroom.Result:
     tool = toolroom.git.opts(cwd=root, nofail=True, recorded=False)
     if stdin is not None:
@@ -611,6 +738,22 @@ def read(root: Path, ref: str) -> Read:
         if verified.code != 0:
             return Read(None, None, failed=True, reason=_words(verified))
         return _tree_files(root, verified.stdout.strip())
+    snapshot = _snapshot(root)
+    if snapshot is not None:
+        if snapshot.refs is None:
+            return Read(
+                None,
+                None,
+                failed=True,
+                reason=f"the remote could not be listed: {snapshot.reason}",
+            )
+        sha = snapshot.refs.get(ref)
+        if sha is None:
+            return Read(None, None, failed=False)
+        why = _reachable(root, snapshot, ref, sha)
+        if why:
+            return Read(None, sha, failed=True, reason=why)
+        return _tree_files(root, sha)
     fetched = _git(root, "fetch", "--quiet", "origin", ref)
     if fetched.code != 0:
         exists, why = _ref_exists(root, ref)
@@ -701,6 +844,15 @@ def list_refs(root: Path, prefix: str) -> dict[str, str] | None:
             root, "for-each-ref", "--format=%(objectname)%09%(refname)", prefix
         )
     else:
+        snapshot = _snapshot(root)
+        if snapshot is not None:
+            if snapshot.refs is None:
+                return None
+            return {
+                name: sha
+                for name, sha in snapshot.refs.items()
+                if name.startswith(prefix)
+            }
         listed = _git(root, "ls-remote", "origin", prefix + "*")
     if listed.code != 0:
         return None
@@ -852,11 +1004,18 @@ def put(
             return _readback(root, ref, commit)
         lease = f"--force-with-lease={ref}:{current.sha or ''}"
         pushed = _git(root, "push", "--quiet", lease, "origin", f"{commit}:{ref}")
+        snapshot = _snapshot(root)
         if pushed.code != 0:
             if _stale(pushed):
+                if snapshot is not None:
+                    _relist(root, snapshot)
                 continue
             return f"push refused: {_words(pushed)}"
-        return _readback(root, ref, commit)
+        why = _readback(root, ref, commit)
+        if not why and snapshot is not None and snapshot.refs is not None:
+            snapshot.refs[ref] = commit
+            snapshot.local.add(commit)
+        return why
     return f"gave up on {ref} after {attempts} attempts: another writer kept moving it"
 
 
@@ -908,22 +1067,32 @@ def drop(root: Path, ref: str) -> str:
         deleted = _git(root, "update-ref", "-d", ref)
         return "" if deleted.code == 0 else f"delete refused: {_words(deleted)}"
     deleted = _git(root, "push", "--quiet", "origin", f":{ref}")
-    if deleted.code == 0:
-        return ""
     words = deleted.stderr + deleted.stdout
-    if "remote ref does not exist" in words:
-        return ""
-    return f"delete refused: {_words(deleted)}"
+    if deleted.code != 0 and "remote ref does not exist" not in words:
+        return f"delete refused: {_words(deleted)}"
+    snapshot = _snapshot(root)
+    if snapshot is not None and snapshot.refs is not None:
+        snapshot.refs.pop(ref, None)
+    return ""
 
 
 def _commit_time(root: Path, ref: str) -> datetime | None:
     """When *ref*'s commit was made, remote refs fetched; ``None`` when unreadable."""
     at = ref
     if not ref.startswith(LOCAL_NAMESPACE):
-        fetched = _git(root, "fetch", "--quiet", "origin", ref)
-        if fetched.code != 0:
-            return None
-        at = "FETCH_HEAD"
+        snapshot = _snapshot(root)
+        if snapshot is not None:
+            if snapshot.refs is None or ref not in snapshot.refs:
+                return None
+            sha = snapshot.refs[ref]
+            if _reachable(root, snapshot, ref, sha):
+                return None
+            at = sha
+        else:
+            fetched = _git(root, "fetch", "--quiet", "origin", ref)
+            if fetched.code != 0:
+                return None
+            at = "FETCH_HEAD"
     stamp = _git(root, "log", "-1", "--format=%ct", at).stdout.strip()
     if not stamp.isdigit():
         return None

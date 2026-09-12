@@ -326,6 +326,8 @@ class Plan:
         title_given: Whether the title came from the caller. A
             defaulted title tracks HEAD, so only a given title may
             overwrite an existing pull request's.
+        body_given: Whether the body came from the caller; the same
+            rule for an existing pull request's body.
     """
 
     branch: str
@@ -333,6 +335,7 @@ class Plan:
     title: str
     body: str
     title_given: bool
+    body_given: bool = False
 
 
 def prepare(
@@ -376,6 +379,7 @@ def prepare(
         title=resolved_title,
         body=body or git.head_body(),
         title_given=bool(title),
+        body_given=bool(body),
     )
 
 
@@ -665,6 +669,9 @@ def push_and_pr(
         if plan.title_given and pr.title != plan.title:
             repo.pr.update_title(pr.number, plan.title)
             print(f"  title updated: {plan.title}")
+        if plan.body_given and pr.body != body:
+            repo.pr.update_body(pr.number, body)
+            print("  body updated")
     if armed:
         _arm_verified(
             repo,

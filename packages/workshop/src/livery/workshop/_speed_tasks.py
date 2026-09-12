@@ -37,14 +37,17 @@ def judge_flow(root: Path, run: RunContext) -> list[str]:
     Prints every verdict and every write. Fails open: a store that
     cannot be read prints its reason and reddens nothing.
     """
-    verdicts, why = _speed.judge_run(root, run)
-    for line in why:
-        print(line)
-    for verdict in verdicts:
-        for line in _speed.render(verdict):
+    from livery.workshop._state import remote_snapshot
+
+    with remote_snapshot(root, fetch=("metrics", "speed/marks")):
+        verdicts, why = _speed.judge_run(root, run)
+        for line in why:
             print(line)
-    for line in _speed.apply(root, verdicts, by=f"run {run.run_id}"):
-        print(line)
+        for verdict in verdicts:
+            for line in _speed.render(verdict):
+                print(line)
+        for line in _speed.apply(root, verdicts, by=f"run {run.run_id}"):
+            print(line)
     return [
         f"{v.sample.package} on {v.sample.leg}: {v.sample.seconds:.1f}s over the"
         f" limit {v.limit:.1f}s for the second run in a row"
@@ -58,17 +61,22 @@ def speed_judge() -> None:
     """Judge the run's test times against the speed marks; red on the second run over.
 
     Runs in the gate job after the timing rows are collected. Off
-    until the contract declares ``[ci] speed-marks = true``, and
-    outside CI, it says so and judges nothing.
+    until the contract declares ``[ci] speed-marks = true``: it says
+    so, and in CI drops any marks left from before the switch, so a
+    later opt-in starts from the timings alone. Outside CI it says so
+    and judges nothing.
     """
     root = _root()
+    run = run_context()
     if not _speed.enabled(root):
         print(
             f"  speed marks are off: declare [ci] {_speed.ENABLED_KEY} = true"
             " in workshop.toml to judge test time"
         )
+        if run is not None:
+            for line in _speed.drop_marks(root):
+                print(line)
         return
-    run = run_context()
     if run is None:
         print("  not a CI run: the speed marks are judged by the gate job")
         return

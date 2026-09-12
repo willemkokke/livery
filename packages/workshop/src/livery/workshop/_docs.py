@@ -1447,6 +1447,7 @@ def docs_build(
     carry, and the workspace build owns strictness.
     """
     root = _root()
+    require_sources(root)
     _generate_all(root)
     if package:
         config = materialise_preview(root, named_package(root, package))
@@ -1462,17 +1463,63 @@ def docs_build(
     releases = generate_release_pages(root)
     if releases:
         print(f"  release view: {', '.join(releases)}")
+    from livery.workshop._state import run_context
+
+    print(source_summary(root))
     result = toolroom.zensical.opts(cwd=root, nofail=True).build(
         clean=True, strict=True
     )
     if result.code != 0:
         fail(f"zensical build exited {result.code}:\n{result.stdout}{result.stderr}")
+    in_ci = run_context() is not None
+    for line in generator_lines(result.stdout, result.stderr, in_ci=in_ci):
+        print(line)
     from livery.workshop._llms import write_llms_files
 
     written = write_llms_files(root)
     print(f"  agent files: {', '.join(written)}")
     require_site(root)
     print(f"  site built at {root / 'site'}")
+
+
+def require_sources(root: Path) -> None:
+    """Refuse before the build when the site's sources are not in the checkout.
+
+    The generator has exited 0 in a fraction of its usual time with
+    nothing on disk. The first thing to rule out is a checkout
+    without the docs tree or the config, so their absence is named
+    here, before the generator runs, instead of surfacing as an
+    empty site after it.
+    """
+    missing = [name for name in ("docs", "zensical.toml") if not (root / name).exists()]
+    if missing:
+        fail(
+            f"no site sources at {root}: {', '.join(missing)} missing; the"
+            " build reads the docs tree and zensical.toml from the checkout"
+        )
+
+
+def source_summary(root: Path) -> str:
+    """One line on what the build reads: the pages under ``docs/`` and the config.
+
+    Printed before every workspace build, so a run that produced no
+    site says what its checkout held.
+    """
+    pages = sum(1 for _ in (root / "docs").rglob("*.md"))
+    return f"  site sources: {pages} page(s) under docs/, zensical.toml present"
+
+
+def generator_lines(stdout: str, stderr: str, *, in_ci: bool) -> list[str]:
+    """The generator's own output, indented, for a run in CI; nothing otherwise.
+
+    A local build stays quiet on success. In CI the lines are the
+    evidence a build that left no site leaves behind, so they are
+    printed whether or not the build succeeded.
+    """
+    if not in_ci:
+        return []
+    text = (stdout + stderr).strip()
+    return [f"    {line}" for line in text.splitlines()] if text else []
 
 
 def require_site(root: Path) -> None:
@@ -1537,7 +1584,10 @@ def _stored_legs(root: Path) -> tuple[list[Path], list[str]]:
     )
     if run_context() is None or not deploying:
         return [], []
-    return _python.stored_union(root, check_legs(root), root / "coverage-data")
+    from livery.workshop._state import remote_snapshot
+
+    with remote_snapshot(root, fetch=("coverage/main/",)):
+        return _python.stored_union(root, check_legs(root), root / "coverage-data")
 
 
 @docs_group.task(name="python-coverage")

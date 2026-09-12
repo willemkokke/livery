@@ -526,11 +526,14 @@ def _eat_dev_wheels(root: Path, pins: dict[str, str]) -> str:
                 " born by the loop"
             )
         contract_text = contract_text.replace(
-            marker,
-            marker
-            + 'python-versions = ["3.14"]\naffected-legs = true\n'
-            + "speed-marks = true\n",
-            1,
+            marker, marker + 'python-versions = ["3.14"]\naffected-legs = true\n', 1
+        )
+    if "speed-marks" not in contract_text:
+        # Seeded on its own: an adopted loop born before the key
+        # exists keeps its contract, and the judge stays off without
+        # it, which the scoped-leg proof pins.
+        contract_text = contract_text.replace(
+            "\n[ci]\n", "\n[ci]\nspeed-marks = true\n", 1
         )
     if "[[ci.schedule]]" not in contract_text:
         # The schedule seam's first entry: the nightly point replays

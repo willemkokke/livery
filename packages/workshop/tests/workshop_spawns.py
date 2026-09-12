@@ -18,15 +18,29 @@ from typing import Any
 
 @contextmanager
 def counting_spawns() -> Iterator[Counter[str]]:
-    """Count every process started inside the block, by the program's base name."""
+    """Count every process started inside the block, by program and git subcommand.
+
+    ``counts["git"]`` is every git; ``counts["git fetch"]`` the fetches,
+    past git's own ``-c`` pairs and flags, for a pin on round trips.
+    """
     counts: Counter[str] = Counter()
     original = subprocess.Popen.__init__
 
     def counting(
         self: subprocess.Popen[Any], args: Any, *rest: Any, **kwargs: Any
     ) -> None:
-        head = args[0] if isinstance(args, (list, tuple)) and args else str(args)
-        counts[basename(str(head)).removesuffix(".exe")] += 1
+        argv = (
+            [str(item) for item in args]
+            if isinstance(args, (list, tuple))
+            else [str(args)]
+        )
+        program = basename(argv[0]).removesuffix(".exe") if argv else ""
+        counts[program] += 1
+        words = argv[1:]
+        while words and words[0].startswith("-"):
+            words = words[2:] if words[0] == "-c" else words[1:]
+        if words:
+            counts[f"{program} {words[0]}"] += 1
         original(self, args, *rest, **kwargs)
 
     subprocess.Popen.__init__ = counting  # type: ignore[method-assign]

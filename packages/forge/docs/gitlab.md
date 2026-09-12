@@ -100,6 +100,7 @@ and on a licensed instance `configure` turns enforcement on through
 | `find_by_head_sha` | `GET /projects/:path/merge_requests?state=all` | no sha filter exists; the backend matches the `sha` field client-side, complete-or-raise |
 | `get` | `GET /projects/:path/merge_requests/:iid` | the protocol number is the iid |
 | `update_title` | `PUT /projects/:path/merge_requests/:iid` | `title` |
+| `update_body` | `PUT /projects/:path/merge_requests/:iid` | `description` |
 | `close` / `reopen` | `PUT /projects/:path/merge_requests/:iid` | `state_event: "close"` / `"reopen"`; reopening a merged MR fails and maps to `ForgeError` |
 | `merge_now` | `PUT /projects/:path/merge_requests/:iid/merge` | `squash`, `squash_commit_message` from title and message, and `should_remove_source_branch` read from the project setting, because the setting alone only pre-fills the UI checkbox; GitLab answers 405 while the mergeability recompute runs, which matches the protocol's 405-shaped refusal as-is |
 | `arm` | `PUT /projects/:path/merge_requests/:iid/merge` with `merge_when_pipeline_succeeds: true` | 405 until the mergeability recompute finishes and the head pipeline associates with the MR, both asynchronous; the backend surfaces the 405 verbatim and callers retry. The scheduled merge and its branch deletion land asynchronously after the pipeline succeeds: always observed, never assumed |
