@@ -450,4 +450,13 @@ without asking; the child shell stays as the fallback.
   suites and the loop, whose first pass caught a fault of #512's
   snapshot instead (a ref the remote moved past the listing failed
   its read); fixed in the same change, recorded in the state store
-  plan.
+  plan. The fresh pass, not run since the union and the metering
+  landed, was broken in four places of its own and fixed here too:
+  the repository delete outran the client, a package-less leg read
+  as a dead meter, that leg's unit rows lacked their closure
+  identity, and the verified-skip proof named members a fresh birth
+  does not have yet. One anomaly stayed unexplained: on one pass
+  main's check leg reported its per-run ref put and the gate job's
+  listing thirty seconds later lacked it; the next passes listed the
+  ref fine, with a readback beside the put and a raw listing beside
+  the union.
