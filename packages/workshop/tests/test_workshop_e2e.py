@@ -117,6 +117,17 @@ def test_dev_pins_refuse_a_wheel_another_commit_built(tmp_path: Path) -> None:
         _e2e._dev_pins(tmp_path, HEAD)
 
 
+def test_dev_pins_read_a_sha_of_digits_alone_through_its_g(tmp_path: Path) -> None:
+    # A build backend reads a local segment of digits alone as a
+    # number and drops its leading zero; the g git describe puts first
+    # keeps the sha a word, and the pin reads it back through the g.
+    head = "0442877" + "a" * 33
+    for member in _e2e.DEV_MEMBERS:
+        _wheel(tmp_path, member, "0.3.0.dev6+feat.486.store.g0442877.20260912")
+    pins = _e2e._dev_pins(tmp_path, head)
+    assert pins["livery-workshop"] == "0.3.0.dev6+feat.486.store.g0442877.20260912"
+
+
 def test_dev_pins_read_only_the_members_asked_for(tmp_path: Path) -> None:
     for member in ("workshop", "toolroom", "footman"):
         _wheel(tmp_path, member, "0.2.0.dev72+feat.314.profile.05482de.20260909")

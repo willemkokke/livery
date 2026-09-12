@@ -227,8 +227,8 @@ def test_the_version_grammar_and_its_pep440_form(tmp_path: Path) -> None:
     version = dev_version(root, git, packages[0], stamp="20260901")
     distance, sha = describe_distance(git, packages[0])
     assert distance == 1
-    assert version == f"0.3.0-dev.feat.9-widget.1+{sha}.20260901"
-    assert semver_to_pep440(version) == f"0.3.0.dev1+feat.9-widget.{sha}.20260901"
+    assert version == f"0.3.0-dev.feat.9-widget.1+g{sha}.20260901"
+    assert semver_to_pep440(version) == f"0.3.0.dev1+feat.9-widget.g{sha}.20260901"
     # A dirty tree marks the wheel no commit describes.
     (root / "packages" / "core" / "workshop.toml").write_text(
         'type = "python"\nname = "livery-core"\n# dirt\n'

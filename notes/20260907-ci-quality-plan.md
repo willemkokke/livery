@@ -2059,3 +2059,8 @@ None. Every ruling raised in this plan was closed in the review of
   member's stale rehearsal wheels from the loop's registry (a
   first-index resolve would pick them over the release), and builds
   the rest.
+- 2026-09-12: a dev version spells its sha as `git describe` does, `g`
+  first (#486). The branch's short sha was 0442877, digits alone,
+  which a version parser reads as a number: the build backend dropped
+  the leading zero and the loop's pin read the wheel as another
+  commit's. The pin reads the sha back through the `g`.

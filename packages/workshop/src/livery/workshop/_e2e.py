@@ -206,7 +206,9 @@ def _dev_pins(
         local = version.partition("+")[2].split(".")
         if local and local[-1] == "dirty":
             local.pop()
-        sha = local[-2] if len(local) >= 2 else ""
+        # The sha as git describe spells it, ``g`` first; a hex sha
+        # never starts with a ``g`` of its own.
+        sha = local[-2].removeprefix("g") if len(local) >= 2 else ""
         if not sha or not head.startswith(sha):
             fail(
                 f"the newest wheel in {dist} is {wheels[-1].name}, built from"
