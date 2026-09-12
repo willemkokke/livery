@@ -333,6 +333,7 @@ def put_run(
     scope: str,
     packages: tuple[str, ...],
     units: Mapping[str, Unit],
+    timing: Mapping[str, Any] | None = None,
 ) -> str:
     """Put *leg*'s scope and its measured *units* on its per-run ref; ``""`` or why not.
 
@@ -340,6 +341,8 @@ def put_run(
     gate ran, the packages a narrowed gate named, and every unit's
     lines, so the gate job reads a leg's whole fact in one read and
     the lines go with the ref when the run's metrics are collected.
+    *timing*, the leg's timing row ([livery.workshop._metrics.leg_row][]),
+    rides the same write as the row file, so a leg writes its ref once.
     """
     if not leg:
         return "refusing: the leg has no label, so its lines have no key"
@@ -351,8 +354,13 @@ def put_run(
         "forge": run.forge,
         "units": {path: _unit_fields(unit) for path, unit in sorted(units.items())},
     }
+    files: dict[str, Mapping[str, Any]] = {RUN_FILE: row}
+    if timing is not None:
+        from livery.workshop._metrics import ROW_FILE
+
+        files[ROW_FILE] = timing
     return _per_run(run.run_id, leg).put(
-        root, {RUN_FILE: row}, message=f"coverage: {leg} of run {run.run_id}"
+        root, files, message=f"coverage: {leg} of run {run.run_id}"
     )
 
 

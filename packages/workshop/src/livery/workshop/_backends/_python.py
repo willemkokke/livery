@@ -509,12 +509,19 @@ def _relative(filename: str, root: Path) -> str | None:
 SUITES_DATA = "coverage-suites.db"
 
 
-def _put_leg(root: Path, marker: dict[str, Any], units: dict[str, Any]) -> None:
+def _put_leg(
+    root: Path,
+    marker: dict[str, Any],
+    units: dict[str, Any],
+    *,
+    timing: dict[str, Any] | None = None,
+) -> None:
     """Put the leg's scope and *units* on its per-run ref; red when it cannot.
 
     Outside CI nothing is put and the line says so. Inside CI a leg
     that measured and cannot put its lines is red: the union would
-    otherwise lack a suite, and a smaller union never passes.
+    otherwise lack a suite, and a smaller union never passes. The
+    *timing* row, when the leg has one, rides the same write.
     """
     from livery.workshop._coverage_store import put_run
     from livery.workshop._state import run_context
@@ -534,6 +541,7 @@ def _put_leg(root: Path, marker: dict[str, Any], units: dict[str, Any]) -> None:
         scope=marker["scope"],
         packages=tuple(marker["packages"]),
         units=units,
+        timing=timing,
     )
     if why:
         fail(
@@ -548,7 +556,11 @@ def _put_leg(root: Path, marker: dict[str, Any], units: dict[str, Any]) -> None:
 
 
 def store_suites(
-    root: Path, packages: tuple[Package, ...], *, marker: dict[str, Any]
+    root: Path,
+    packages: tuple[Package, ...],
+    *,
+    marker: dict[str, Any],
+    timing: dict[str, Any] | None = None,
 ) -> None:
     """Split the leg's data per unit and put every unit on the leg's per-run ref.
 
@@ -592,7 +604,7 @@ def store_suites(
     (root / SUITES_DATA).unlink(missing_ok=True)
     if run is None:
         return
-    _put_leg(root, marker, measured)
+    _put_leg(root, marker, measured, timing=timing)
     for unit in measured.values():
         print(
             f"  coverage store: {unit.path} stored for closure {unit.closure[:12]}"
@@ -600,7 +612,12 @@ def store_suites(
         )
 
 
-def combine_leg(root: Path, packages: tuple[Package, ...]) -> None:
+def combine_leg(
+    root: Path,
+    packages: tuple[Package, ...],
+    *,
+    timing: dict[str, Any] | None = None,
+) -> None:
     """Combine the leg's data into ``.coverage``, each suite's lines put first.
 
     Every suite the leg ran is combined apart and put on the leg's
@@ -610,13 +627,17 @@ def combine_leg(root: Path, packages: tuple[Package, ...]) -> None:
     no data, naming the variable that arms the meter; a leg whose
     gate skipped (a tree already proved, or nothing affected)
     legitimately measured nothing, says so, and puts its scope alone,
-    so the union knows the leg skipped rather than died.
+    so the union knows the leg skipped rather than died. The leg's
+    *timing* row, when it has one, rides the one write with the
+    scope; the marker's scope goes on it, as the stamp reads it.
     """
     from livery.workshop._verified import NOTHING, VERIFIED, read_marker
 
     parts = sorted(root.glob(".coverage.*"))
     marker = read_marker(root)
     scope = marker["scope"]
+    if timing is not None:
+        timing = {**timing, "scope": marker}
     if not parts and not (root / ".coverage").is_file():
         if scope not in (VERIFIED, NOTHING):
             fail(
@@ -627,9 +648,9 @@ def combine_leg(root: Path, packages: tuple[Package, ...]) -> None:
                 " metered pytest, and there is nothing to union."
             )
         print(f"  coverage: no data, the gate ran {scope!r}; nothing to combine")
-        _put_leg(root, marker, {})
+        _put_leg(root, marker, {}, timing=timing)
         return
-    store_suites(root, packages, marker=marker)
+    store_suites(root, packages, marker=marker, timing=timing)
     if parts:
         result = toolroom.coverage.opts(
             cwd=root, env=_unmetered(), nofail=True, recorded=False

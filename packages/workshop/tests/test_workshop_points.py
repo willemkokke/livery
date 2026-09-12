@@ -176,13 +176,7 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
     assert points == ["gate"] * len(seen)
     assert seen == [
         ["hse", "--profile=fm-profile.json", "check"],
-        [
-            "hse",
-            "ci.metrics.leg",
-            "--job=check (ubuntu-latest, 3.14)",
-            "--label=check-ubuntu-latest-3.14",
-        ],
-        ["hse", "coverage.leg"],
+        ["hse", "coverage.leg", "--job=check (ubuntu-latest, 3.14)"],
     ]
     seen.clear()
     _points.run_point(root, "gate", "gate", spawn=green)

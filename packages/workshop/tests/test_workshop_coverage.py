@@ -463,7 +463,15 @@ def test_a_leg_that_cannot_put_its_lines_is_red_and_a_skipped_leg_puts_its_scope
     monkeypatch.setattr(_coverage_store, "put_run", _capture)
     _python.combine_leg(tmp_path, (x,))
     out = capsys.readouterr().out
-    assert put == [{"leg": "check-a", "scope": "verified", "packages": (), "units": {}}]
+    assert put == [
+        {
+            "leg": "check-a",
+            "scope": "verified",
+            "packages": (),
+            "units": {},
+            "timing": None,
+        }
+    ]
     assert "coverage: no data, the gate ran 'verified'; nothing to combine" in out
     assert "coverage store: 0 unit(s) on the run's ref for check-a (verified)" in out
     # Outside CI nothing is put, and the measurement is only named.

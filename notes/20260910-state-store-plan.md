@@ -444,3 +444,20 @@ a day, before 6 or after it.
   s. The union, the collect, the speed judge, the stamp, the janitor,
   the check's verified read, and the deploy's pages take it; the leg's
   own writes do not, one write each.
+- 2026-09-12, Willem ("drop, apply the rest too"): the store's
+  remaining round trips (#512). The readback after every push goes:
+  its one sighting, five runs on hse's Gitea on 2026-08-04, was
+  tainted the next day (the task printed "pushed" for failed pushes,
+  and a persisted checkout credential misled reads and writes alike),
+  no forge has been seen to do it since, and a readback through the
+  same git configuration cannot catch what would mislead the push;
+  git's report-status is the verdict and the compare-and-swap the
+  guard, a write eight processes now. The listing takes `refs/heads/*`
+  with the store's refs, so the coverage families' current keys cost
+  no listing of their own. A check leg writes its per-run ref once,
+  the timing row beside the measured suites, through `coverage.leg
+  --job`; the `ci.metrics.leg` verb is gone. The job runner takes one
+  snapshot for the whole job and publishes it to its entries through
+  `WORKSHOP_SNAPSHOT`, so the gate job lists once instead of once per
+  entry, and an entry's write records its sha for the entries after
+  it.

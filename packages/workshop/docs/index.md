@@ -212,12 +212,16 @@ the series holds: one `cat-file --batch` reads every row, one
 `hash-object --stdin-paths` writes every blob, so a series of three
 hundred rows costs no more processes than one of three (git 2.38 or
 newer). A verb that reads several series takes one snapshot of the
-remote namespace: one listing, then one fetch of the refs the
-checkout lacks, and every read inside answers from the local object
-store, so `fm store.ls` and `fm ci.timings` cost two round trips and
-the gate job's union, collect, judge, stamp, and janitor one or two
-each. A write inside the snapshot keeps its compare-and-swap on the
-listed sha and records the sha it pushed, so a read after it sees it.
+remote namespace: one listing of the store's refs and the branches
+together, then one fetch of the refs the checkout lacks, and every
+read inside answers from the local object store, so `fm store.ls`
+and `fm ci.timings` cost two round trips. The job runner takes one
+snapshot for the whole job and publishes it to the entries it runs,
+so the gate job lists once for its union, collect, judge, stamp, and
+janitor. A write keeps its compare-and-swap on the listed sha, its
+push's own report is its verdict, and it records the sha it pushed
+for the reads and the entries after it. A check leg writes its
+per-run ref once, its timing row beside its measured suites.
 
 | series | a row is | window | writer |
 | --- | --- | --- | --- |

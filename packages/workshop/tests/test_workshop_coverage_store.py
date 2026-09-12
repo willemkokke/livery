@@ -107,6 +107,29 @@ def test_a_leg_without_a_label_neither_puts_nor_reads(work: Path) -> None:
     assert why == "refusing: the leg has no label, so the record has no key"
 
 
+def test_a_legs_timing_row_rides_the_one_write_of_its_per_run_ref(work: Path) -> None:
+    from livery.workshop._metrics import ROW_FILE, RUNS
+    from workshop_spawns import counting_spawns
+
+    with counting_spawns() as spawned:
+        why = _coverage_store.put_run(
+            work,
+            RUN,
+            leg=LEG,
+            scope="full",
+            packages=(),
+            units={},
+            timing={"job": "check (a, b)", "total_ms": 12.0, "tasks": {}},
+        )
+    assert why == ""
+    assert spawned["git push"] == 1
+    series = RUNS.series(RUN.run_id, LEG)
+    row, why = series.row(work, ROW_FILE)
+    assert why == "" and row is not None and row.data["total_ms"] == 12.0
+    lines, why = series.row(work, _coverage_store.RUN_FILE)
+    assert why == "" and lines is not None and lines.data["scope"] == "full"
+
+
 def test_the_puts_refuse_outside_ci(
     work: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

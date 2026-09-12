@@ -20,7 +20,6 @@ nav = [
             { "e2e" = "_generated/tasks/ci/e2e.md" },
             { "logs" = "_generated/tasks/ci/logs.md" },
             { "metrics.collect" = "_generated/tasks/ci/metrics/collect.md" },
-            { "metrics.leg" = "_generated/tasks/ci/metrics/leg.md" },
             { "rerun" = "_generated/tasks/ci/rerun.md" },
             { "run" = "_generated/tasks/ci/run.md" },
             { "status" = "_generated/tasks/ci/status.md" },
