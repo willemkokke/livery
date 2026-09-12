@@ -415,3 +415,18 @@ a day, before 6 or after it.
   grown. A red run between two runs over the mark does not reset the
   pair: the streak counts green runs. The root `tests/` suite is no
   package in the timing rows and is not judged.
+- 2026-09-12, Willem ("implement the git process reduction"): a store
+  read runs one `cat-file --batch` for every row and a write one
+  `hash-object --stdin-paths` for every blob (#486), after a per-test
+  process count of the workshop suite on the desk: 9,313 processes,
+  9,074 of them git, the six store modules 3,628 of those, the gate
+  record test alone 1,249 (4.6 s on ubuntu, 23 s on macOS, 66 s on
+  Windows). After: 7,383 processes for the suite, the gate record test
+  37, its 205-row write and read from 75 s to 25 s on the desk; a read
+  is four processes and a write nine whatever the series holds, pinned
+  by test. What remains is one process per product step in the git
+  rigs (submit, workflow, issue, the release driver), the next lever,
+  method by method. Blobs are now hashed from files written without
+  newline translation, so a row is the same bytes on every platform; a
+  row a Windows checkout wrote with carriage returns before this is
+  read on its own with `show`.

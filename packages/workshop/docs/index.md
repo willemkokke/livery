@@ -200,7 +200,12 @@ names the local one, and every row carries the schema the store
 stamped and the time it wrote it. The remote series are written by
 CI only, `fm coverage.accept` and `fm speed.accept` the exceptions;
 a local run reads them and writes only the local ones, which the
-checkout's worktrees share and a fresh clone starts without.
+checkout's worktrees share and a fresh clone starts without. A read
+or a write of a series is a fixed handful of git processes whatever
+the series holds: one `cat-file --batch` reads every row, one
+`hash-object --stdin-paths` writes every blob, so a series of three
+hundred rows costs no more processes than one of three (git 2.38 or
+newer).
 
 | series | a row is | window | writer |
 | --- | --- | --- | --- |
