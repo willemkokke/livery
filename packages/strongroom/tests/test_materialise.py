@@ -317,7 +317,8 @@ def test_a_link_never_leaves_its_view(
         assert not (tmp_path / "v" / path).is_symlink()
     assert by_path["d/up"].rung == "symlink"
     assert by_path["root"].rung == "symlink"
-    assert sorted(calls) == ["../a", "d/.."]
+    # Spelled with the platform's separator on the way out.
+    assert sorted(c.replace(_views._SEP, "/") for c in calls) == ["../a", "d/.."]
     # Collect refuses a link a program made that leaves the view, and
     # reads through one into the store, the link rung's own shape.
     os.symlink("../elsewhere", tmp_path / "v" / "hand")
