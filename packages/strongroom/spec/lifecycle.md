@@ -56,6 +56,40 @@ crashed publish leaves a pending ref that a person, or a configured
 timeout acting on the recorded lease, retires deliberately with
 `retire(id)`. Nothing removes a pending ref on a clock.
 
+## Groups of moves
+
+A group moves several refs as a whole or not at all.
+
+1. `begin()` writes `refs/pending/<id>` naming an empty tree, with
+   the journal in the record's `meta`: the lease, an empty list of
+   moves, and `applied` at zero.
+2. `add(id, namespace, path, digest, previous)` requires the target
+   present here, appends the move to the journal, and re-points the
+   pending ref at a manifest tree with one entry per move, in order,
+   each naming that move's target. The pending ref is a root while
+   it exists, so the sweep keeps every target from the first move to
+   the commit, and removes the manifests the adds superseded.
+3. `commit(id)` takes the maintenance lease and every moved ref's
+   lock, in sorted ref order, for the checks and the moves only.
+   Every move not yet applied is checked first: the compare-and-swap
+   against `previous` and the namespace's mutation class, exactly as
+   a single move. A ref that already names the move's digest is done
+   and is not checked. The first refusal stops the group with
+   nothing moved and the pending ref standing. Then the moves apply
+   in journal order; after each, the journal's `applied` count
+   advances. The pending ref is dropped last.
+4. A commit that stops between two applies leaves the journal with
+   its count. `commit(id)` again replays it: the moves applied are
+   skipped, the rest apply. `retire(id)` refuses such a group, naming
+   the moves applied; only a commit finishes it. `add` refuses it
+   too.
+
+A group whose journal has no move commits as nothing. One move per
+ref: a second move of the same ref in one group is refused at `add`.
+The single publish of the previous section is not a group: its
+pending ref names the target itself and carries no journal, because
+its ref is named at commit.
+
 ## Dropping refs
 
 Only a volatile ref may be dropped, by compare-and-swap on its

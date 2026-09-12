@@ -207,5 +207,5 @@ def test_scenario(scenario: Scenario, tmp_path: Path) -> None:
 
 def test_every_conformance_file_has_a_scenario() -> None:
     files = {scenario.file for scenario in load_scenarios(CONFORMANCE)}
-    assert files == {"lifecycle", "refs", "views"}
+    assert files == {"groups", "lifecycle", "refs", "views"}
     assert sorted(path.stem for path in CONFORMANCE.glob("*.json")) == sorted(files)

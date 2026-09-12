@@ -27,14 +27,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
+import livery.strongroom._groups as groups
 import livery.strongroom._lifecycle as lifecycle
 import livery.strongroom._rungs as rungs
 from livery.strongroom._digest import Digest
 from livery.strongroom._errors import (
     ErasedObject,
+    GroupHalfApplied,
     LockTimeout,
     MissingObject,
     NoSuchPending,
+    NotAGroup,
     NotFastForward,
     RefConflict,
     RefProtected,
@@ -43,6 +46,7 @@ from livery.strongroom._errors import (
     WriteOnceRefused,
 )
 from livery.strongroom._fields import Subject
+from livery.strongroom._groups import Group
 from livery.strongroom._lifecycle import Pending, SweepReport
 from livery.strongroom._records import RefRecord, Tombstone
 from livery.strongroom._rungs import RungUnavailable
@@ -53,6 +57,11 @@ from livery.strongroom._views import DropReport, ViewRecord
 
 LockHolder = Literal["live", "dead", "expired"]
 """Who a scenario says holds a lock: a live process, an exited one, or one long ago."""
+
+
+class CrashedCommit(Exception):
+    """The harness stopped a commit part-way, as a crash would."""
+
 
 REFUSALS: dict[str, type[Exception]] = {
     "write-once-refused": WriteOnceRefused,
@@ -65,6 +74,9 @@ REFUSALS: dict[str, type[Exception]] = {
     "erased": ErasedObject,
     "no-such-pending": NoSuchPending,
     "protected": RefProtected,
+    "not-a-group": NotAGroup,
+    "half-applied": GroupHalfApplied,
+    "crashed": CrashedCommit,
 }
 """The refusal a scenario may expect, by name, and the class it must raise."""
 
@@ -127,6 +139,22 @@ class StoreLike(Protocol):
 
     def pendings(self) -> list[str]: ...
 
+    def begin(self, *, by: Subject) -> Group: ...
+
+    def add(
+        self,
+        group_id: str,
+        namespace: str,
+        path: str,
+        digest: Digest,
+        *,
+        previous: Digest | None,
+    ) -> Group: ...
+
+    def commit(self, group_id: str, *, by: Subject) -> tuple[RefRecord, ...]: ...
+
+    def groups(self) -> list[Group]: ...
+
     def pin(self, name: str, digest: Digest, *, by: Subject) -> RefRecord: ...
 
     def unpin(self, name: str) -> Digest: ...
@@ -143,7 +171,7 @@ class StoreLike(Protocol):
 
 
 class Hooks(Protocol):
-    """The three seams a scenario reaches past the API.
+    """The seams a scenario reaches past the API.
 
     Each returns a callable that undoes it, run when the scenario
     ends whatever happened.
@@ -160,6 +188,8 @@ class Hooks(Protocol):
     def begin_during_sweep(
         self, store: StoreLike, target: Digest
     ) -> Callable[[], None]: ...
+
+    def crash_commit_after(self, applied: int) -> Callable[[], None]: ...
 
 
 class PythonHooks:
@@ -214,6 +244,21 @@ class PythonHooks:
 
         def restore() -> None:
             lifecycle.after_mark = original
+
+        return restore
+
+    def crash_commit_after(self, applied: int) -> Callable[[], None]:
+        """Make the next commit stop after *applied* moves, as a crash would."""
+        original = groups.after_apply
+
+        def crash(count: int) -> None:
+            if count == applied:
+                raise CrashedCommit(f"the harness stopped the commit after {count}")
+
+        groups.after_apply = crash
+
+        def restore() -> None:
+            groups.after_apply = original
 
         return restore
 
@@ -477,6 +522,48 @@ class _Run:
         expected = sorted(self.pendings[name] for name in step["expect"])
         found = self.store.pendings()
         self.check(found == expected, f"pending are {found}, not {expected}")
+
+    def op_group_begin(self, step: dict[str, Any]) -> None:
+        group = self.store.begin(by=_WILLEM)
+        self.pendings[step["as"]] = group.id
+        if "manifest_as" in step:
+            self.names[step["manifest_as"]] = group.manifest
+
+    def op_group_add(self, step: dict[str, Any]) -> None:
+        digest = self.named(step["digest"])
+
+        def add() -> None:
+            group = self.store.add(
+                self.pendings[step["group"]],
+                step["namespace"],
+                step["path"],
+                digest,
+                previous=self.digest(step["previous"]),
+            )
+            if "manifest_as" in step:
+                self.names[step["manifest_as"]] = group.manifest
+
+        self.expecting(step, add)
+
+    def op_group_commit(self, step: dict[str, Any]) -> None:
+        after = step.get("crash_after")
+        if after is not None:
+            self.restores.append(self.hooks.crash_commit_after(after))
+        try:
+            self.expecting(
+                step,
+                lambda: self.store.commit(self.pendings[step["group"]], by=_WILLEM),
+            )
+        finally:
+            self.restore()
+
+    def op_group_retire(self, step: dict[str, Any]) -> None:
+        self.expecting(step, lambda: self.store.retire(self.pendings[step["group"]]))
+
+    def op_groups(self, step: dict[str, Any]) -> None:
+        expected = sorted(self.pendings[name] for name in step["expect"])
+        found = [group.id for group in self.store.groups()]
+        self.check(found == expected, f"groups are {found}, not {expected}")
 
     def op_pin(self, step: dict[str, Any]) -> None:
         self.store.pin(step["name"], self.named(step["digest"]), by=_WILLEM)

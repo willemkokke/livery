@@ -65,11 +65,13 @@ from livery.strongroom._digest import (
 )
 from livery.strongroom._errors import (
     ErasedObject,
+    GroupHalfApplied,
     IntegrityError,
     LockTimeout,
     ManifestError,
     MissingObject,
     NoSuchPending,
+    NotAGroup,
     NotFastForward,
     RefConflict,
     RefProtected,
@@ -79,6 +81,7 @@ from livery.strongroom._errors import (
     WriteOnceRefused,
 )
 from livery.strongroom._fields import Subject, SubjectKind, check_timestamp
+from livery.strongroom._groups import Group, Move, Transaction
 from livery.strongroom._lifecycle import PENDING, PINS, Pending, SweepReport
 from livery.strongroom._records import RefRecord, Tombstone
 from livery.strongroom._rungs import RUNGS, MadeRung, Rung, RungUnavailable
@@ -154,6 +157,8 @@ __all__ = [
     "FillPolicy",
     "FolderSource",
     "FormatError",
+    "Group",
+    "GroupHalfApplied",
     "HashConstructor",
     "Hasher",
     "Hooks",
@@ -167,9 +172,11 @@ __all__ = [
     "Manifest",
     "ManifestError",
     "MissingObject",
+    "Move",
     "MutationClass",
     "Namespace",
     "NoSuchPending",
+    "NotAGroup",
     "NotFastForward",
     "ObjectState",
     "OriginHint",
@@ -193,6 +200,7 @@ __all__ = [
     "SubjectKind",
     "SweepReport",
     "Tombstone",
+    "Transaction",
     "Tree",
     "UnknownNamespace",
     "Unreachable",

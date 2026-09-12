@@ -25,7 +25,37 @@ everywhere.
 | Namespace | Points at | Class | Purpose |
 | --- | --- | --- | --- |
 | `pins/<name>` | anything | volatile | explicit roots for the sweep |
-| `pending/<id>` | a tree or a version | volatile | the fail-closed publish: written before the bytes land, a root while it exists, retired deliberately |
+| `pending/<id>` | a tree or a version; for a group of moves, the manifest tree of the moves' targets | volatile | the fail-closed publish: written before the bytes land, a root while it exists, retired deliberately |
+
+### The journal of a group
+
+A group's pending record carries its journal in `meta`:
+
+```json
+{
+  "lease": 3600,
+  "applied": 0,
+  "moves": [
+    {
+      "namespace": "tools",
+      "path": "bun@1.3",
+      "digest": "sha256:...",
+      "previous": null,
+      "receipt": null,
+      "meta": {}
+    }
+  ]
+}
+```
+
+`moves` is the list in apply order; `previous` and `receipt` are a
+digest string or null; `meta` is the object the move writes into the
+ref's record. `applied` counts the moves a commit has already
+applied, zero until a commit stopped part-way. A pending record
+without `moves` is a single publish's. The manifest tree the pending
+ref names has one entry per move, named by the move's index as four
+decimal digits (`0000`, `0001`), of kind `tree` when the target
+decodes as a tree and `blob` otherwise.
 
 ## Conventions the store publishes
 

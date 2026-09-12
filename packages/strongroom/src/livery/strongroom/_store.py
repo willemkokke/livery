@@ -25,6 +25,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import IO, Any, Literal
 
+import livery.strongroom._groups as groups
 import livery.strongroom._lifecycle as lifecycle
 import livery.strongroom._rungs as rungs
 from livery.strongroom._canonical import FormatError, Value, canonical
@@ -42,6 +43,7 @@ from livery.strongroom._errors import (
     WriteOnceRefused,
 )
 from livery.strongroom._fields import Subject, expect_int, expect_object, expect_str
+from livery.strongroom._groups import Group, Transaction
 from livery.strongroom._lifecycle import (
     PENDING,
     Pending,
@@ -963,12 +965,112 @@ class Store:
 
         Raises:
             NoSuchPending: when it does not exist.
+            GroupHalfApplied: when it is a group a commit already
+                applied part of; only a commit finishes it.
         """
+        record = self.record(PENDING, pending_id)
+        if record is not None:
+            groups.refuse_half_applied(self, pending_id, record)
         return retire(self, pending_id)
 
     def pendings(self) -> list[str]:
-        """Every pending publish's id, sorted."""
+        """Every pending publish's id, sorted; groups included."""
         return self.refs(PENDING)
+
+    # Groups of moves. The bodies live in `_groups`.
+
+    def begin(self, *, by: Subject, lease: float = 3600.0) -> Group:
+        """Open a group of ref moves: an empty journal under `pending/<id>`.
+
+        Args:
+            by: who moves the refs.
+            lease: seconds the group expects to take; recorded for
+                whoever retires it.
+        """
+        return groups.begin(self, by=by, lease=lease)
+
+    def add(
+        self,
+        group_id: str,
+        namespace: str,
+        path: str,
+        digest: Digest,
+        *,
+        previous: Digest | None,
+        receipt: Digest | None = None,
+        meta: dict[str, Value] | None = None,
+    ) -> Group:
+        """Append a move to the group; its manifest roots the target from now on.
+
+        The arguments are [livery.strongroom.Store.set_ref][]'s. The
+        move is checked at commit, not here; only the target's
+        presence is required now.
+
+        Raises:
+            NoSuchPending: when the group does not exist.
+            NotAGroup: when `pending/<group_id>` is a single publish's.
+            GroupHalfApplied: when a commit already applied part of it.
+            MissingObject: when *digest* is not present here.
+            RefConflict: when the group already moves that ref.
+        """
+        return groups.add(
+            self,
+            group_id,
+            namespace,
+            path,
+            digest,
+            previous=previous,
+            receipt=receipt,
+            meta=meta,
+        )
+
+    def commit(self, group_id: str, *, by: Subject) -> tuple[RefRecord, ...]:
+        """Apply the group's moves, every one or none, and drop the pending ref.
+
+        Holds the maintenance lease and the moved refs' locks for the
+        checks and the moves only. A commit that stopped between two
+        applies is finished by calling this again with the same id.
+
+        Returns:
+            One record per move, in order.
+
+        Raises:
+            NoSuchPending: when the group does not exist.
+            NotAGroup: when `pending/<group_id>` is a single publish's.
+            RefConflict: when a ref does not name its expected
+                previous or its class refuses the move; nothing moved.
+            LockTimeout: when the lease or a lock outlasts the timeout.
+        """
+        return groups.commit(self, group_id, by=by)
+
+    def group(self, group_id: str) -> Group:
+        """The group under `pending/<group_id>`.
+
+        Raises:
+            NoSuchPending: when it does not exist.
+            NotAGroup: when it is a single publish's.
+        """
+        return groups.read_group(self, group_id)
+
+    def groups(self) -> list[Group]:
+        """Every group that has begun and not committed, sorted by id."""
+        return groups.groups(self)
+
+    def transaction(
+        self, *, by: Subject, lease: float = 3600.0
+    ) -> contextlib.AbstractContextManager[Transaction]:
+        """A group under a `with`: record moves, and the exit commits or retires.
+
+        ```python
+        with store.transaction(by=me) as tx:
+            tx.move("tools", "bun@1.3", tree, previous=None)
+            tx.move("datasets", "corpus/main", version, previous=v1)
+        records = tx.records
+        ```
+
+        See [livery.strongroom.Transaction][] for what each exit does.
+        """
+        return groups.transaction(self, by=by, lease=lease)
 
     def drop_ref(self, namespace: str, path: str, *, previous: Digest) -> None:
         """Remove a volatile ref and its record by compare-and-swap.
@@ -1330,32 +1432,68 @@ class Store:
             LockTimeout: when a live lock outlasts the timeout.
             RefTampered: when the ref and its record disagree.
         """
-        target = self.ref_path(namespace, path)
-        mutation = self._namespace(namespace).mutation
-        with self._locked(target):
-            found = self._read_ref(namespace, path)
-            current = None if found is None else found[0]
-            if current != previous:
-                raise RefConflict(
-                    f"ref {namespace}/{path} names {current}, not {previous};"
-                    " re-read it and retry"
-                )
-            if mutation == "write-once" and found is not None:
-                if found[0] == digest:
-                    return found[1]
-                raise WriteOnceRefused(
-                    f"ref {namespace}/{path} is write-once and names {found[0]};"
-                    f" {digest} is refused"
-                )
-            if mutation == "monotone" and current is not None:
-                self._check_fast_forward(namespace, path, digest, current)
-            record = RefRecord(
-                digest, previous, by, self._clock(), receipt, dict(meta or {})
+        with self._locked(self.ref_path(namespace, path)):
+            return self._move_locked(
+                namespace,
+                path,
+                digest,
+                previous=previous,
+                by=by,
+                receipt=receipt,
+                meta=meta,
             )
-            target.parent.mkdir(parents=True, exist_ok=True)
-            _write_atomically(target.with_name(target.name + _RECORD), record.encode())
-            _write_atomically(target, f"{digest}\n".encode("ascii"))
-            return record
+
+    def _check_move(
+        self, namespace: str, path: str, digest: Digest, previous: Digest | None
+    ) -> RefRecord | None:
+        """The move's checks under a lock the caller holds; the record when done.
+
+        Returns the existing record when the ref already names
+        *digest* under write-once, the one case a move is already
+        done; None when the move may proceed; raises otherwise.
+        """
+        mutation = self._namespace(namespace).mutation
+        found = self._read_ref(namespace, path)
+        current = None if found is None else found[0]
+        if current != previous:
+            raise RefConflict(
+                f"ref {namespace}/{path} names {current}, not {previous};"
+                " re-read it and retry"
+            )
+        if mutation == "write-once" and found is not None:
+            if found[0] == digest:
+                return found[1]
+            raise WriteOnceRefused(
+                f"ref {namespace}/{path} is write-once and names {found[0]};"
+                f" {digest} is refused"
+            )
+        if mutation == "monotone" and current is not None:
+            self._check_fast_forward(namespace, path, digest, current)
+        return None
+
+    def _move_locked(
+        self,
+        namespace: str,
+        path: str,
+        digest: Digest,
+        *,
+        previous: Digest | None,
+        by: Subject,
+        receipt: Digest | None,
+        meta: dict[str, Value] | None,
+    ) -> RefRecord:
+        """Check and write the move under a lock the caller holds."""
+        done = self._check_move(namespace, path, digest, previous)
+        if done is not None:
+            return done
+        target = self.ref_path(namespace, path)
+        record = RefRecord(
+            digest, previous, by, self._clock(), receipt, dict(meta or {})
+        )
+        target.parent.mkdir(parents=True, exist_ok=True)
+        _write_atomically(target.with_name(target.name + _RECORD), record.encode())
+        _write_atomically(target, f"{digest}\n".encode("ascii"))
+        return record
 
     def _check_fast_forward(
         self, namespace: str, path: str, digest: Digest, current: Digest

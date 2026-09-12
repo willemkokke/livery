@@ -1,11 +1,12 @@
 # Strongroom in a vacuum: the store standard and its core
 
-Status: complete. Willem's go 2026-09-11; six phases landed the same
-day (issues #434, #440, #444, #446, #448, #450; PRs #436, #443, #445,
+Status: phases 1 to 6 landed 2026-09-11, Willem's go the same day
+(issues #434, #440, #444, #446, #448, #450; PRs #436, #443, #445,
 #447, #449, #451). The first release, livery-strongroom v0.0.0, is
 on PyPI with its receipt `packages/strongroom/v0.0.0` at squash
 fd7bc7e, cut 2026-09-11 after the recovery recorded in
-`notes/20260911-strongroom-first-release-debrief.md`.
+`notes/20260911-strongroom-first-release-debrief.md`. Phase 7, groups
+of ref moves, landed 2026-09-12.
 
 ## Scope
 
@@ -399,6 +400,33 @@ Acceptance:
 - `uv pip download livery-strongroom==0.0.0 --no-deps` succeeds from
   a clean directory.
 
+### Phase 7: groups of ref moves
+
+Deliverables:
+
+- `livery.strongroom._groups`: a group is one pending ref naming a
+  manifest tree of every move's target, the journal in the record's
+  `meta`. `Store.begin`, `Store.add`, `Store.commit`, `Store.group`,
+  `Store.groups`, and `Store.transaction`, the context manager that
+  begins on entry, records moves, commits on a clean exit and
+  retires on an exception or a refused commit. `Store.retire` refuses
+  a group a commit applied part of. The lease and the refs' locks are
+  held for the checks and the moves only.
+- `spec/lifecycle.md` gains the groups section, `spec/namespaces.md`
+  the journal's shape, `spec/conformance/groups.json` the scenarios:
+  a refused second move moves nothing, a lying compare-and-swap moves
+  nothing, replay after a crash, retire refused part-way, the sweep
+  through a group, a single publish is not a group.
+- The single publish is unchanged: its ref is named at commit, so its
+  pending ref names the target itself and carries no journal. Both
+  share the pending namespace and the move code.
+
+Acceptance:
+
+- `uv run fm check` exits 0, strongroom at its coverage floor.
+- `uv run python -m pytest packages/strongroom/tests/test_conformance.py`
+  runs `groups.json` green.
+
 ## Temporary, replaced by
 
 | Temporary piece | Replaced by |
@@ -584,6 +612,15 @@ Acceptance:
   by the record, or by landing under the store's root. Judged
   against the view's root, never a subtree's; a subtree viewed alone
   has no parent.
+- 2026-09-12, Willem ruled phase 7 in, with a context manager for
+  the everyday case, on the condition that the maintenance lease is
+  taken only for the ref swaps, never while a caller lands objects.
+  Built that way: `begin` and `add` take no lease, `commit` takes the
+  lease and the refs' locks for its checks and moves and releases
+  them before returning. Deviation from the interface as presented:
+  the single publish does not become a group of one, because its
+  ref is named at commit and a journal needs the ref at `add`; the
+  two share the pending namespace and the move code instead.
 
 ## Open
 
