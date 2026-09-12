@@ -9,6 +9,7 @@ sleeps, no network.
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 from typing import Any, cast
@@ -1646,6 +1647,14 @@ def test_a_merged_submit_in_a_linked_worktree_removes_the_worktree(
     _git(wt, "commit", "-m", "feat: linked work")
     monkeypatch.chdir(wt)
     linked = SubmitGit(wt, fake)
+
+    # The submit runs in parallel with the gate's verbs, and footman
+    # refuses a change of the one real directory there: the teardown
+    # must finish without one.
+    def _refused(path: object) -> None:
+        raise RuntimeError("task submit changes the process directory")
+
+    monkeypatch.setattr(os, "chdir", _refused)
     number = submit_flow(
         _repo(fake), linked, gate=False, armed=True, interval=0, timeout=5
     )
