@@ -49,7 +49,10 @@ def _credential(root: Path) -> tuple[str, str]:
     """(git-cliff variable, value) for this forge, or two empties.
 
     A per-kind variable already set wins untouched; otherwise
-    ``FORGE_TOKEN`` resolves through livery.workshop._tokens and is
+    ``FORGE_TOKEN`` resolves through livery.workshop._tokens, and
+    failing that the token the forge lane itself connects with (the
+    GitHub backend's ``gh auth token``, say), so the changelog
+    credits authors wherever the lane can ask for them. The value is
     handed to git-cliff under the name its own contract reads.
     """
     from livery.workshop._tokens import forge_token
@@ -62,7 +65,25 @@ def _credential(root: Path) -> tuple[str, str]:
     if ambient:
         return variable, ambient
     token, _ = forge_token(kind, url)
+    if not token:
+        token = _lane_token(kind, url)
     return (variable, token) if token else ("", "")
+
+
+def _lane_token(kind: str, url: str) -> str:
+    """The token the forge lane would connect with, or empty when it has none.
+
+    A backend whose own fallback finds a token answers it; one that
+    refuses to connect without a token, as Gitea and GitLab do, means
+    the lane has none either.
+    """
+    from livery.forge import ForgeError
+    from livery.workshop._forge_lane import _connect
+
+    try:
+        return _connect(kind, url, None).token
+    except ForgeError:
+        return ""
 
 
 def credit_is_reachable(root: Path) -> bool:
