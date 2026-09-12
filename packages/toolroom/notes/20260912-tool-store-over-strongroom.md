@@ -8,16 +8,21 @@ tool store of that note stays and is built here over
 
 ## Scope
 
-In: `livery.toolroom.store`, the pinned tool store, public in the
-wheel and stdlib plus strongroom only. A tool spec format
+In: `livery.toolroom.store`, the pinned tool store, its own
+distribution `livery-toolroom-store`, installable alone, with its
+`fm` verbs bundled and loading only through footman's plugin, the way
+the docs generator of `livery.toolroom.tools` does. It imports
+`livery.toolroom.tools`, `livery.strongroom` and the standard library.
+A tool spec format
 byte-compatible with hse's `specs/<name>.json`. The `tools/`
 namespace of a machine-wide strongroom store: one copy of each tool
 version, versions side by side, shared by every checkout and project
 on the machine. Install from three verified tiers (local store,
 mirrors, origin), `offline`, and `fetch` for every host into a folder
 that is a mirror by construction. PATH and env emission as deltas the
-workshop's entry contract applies. `fm tools.pin` and `fm tools.fetch`
-in toolroom's machinery. The workshop side: specs delivered to a
+workshop's entry contract applies. `fm tools.fetch` in the store's verbs and
+`fm tools.pin` in `livery.toolroom.bench`, the machinery's own
+distribution, where the forges are. The workshop side: specs delivered to a
 workspace, the entry contract putting the pinned versions on PATH, the
 per-command reconcile keeping the store warm, `fm env.check` naming
 drift, and the gate's file-reading tools leaving the venv. Toolroom's
@@ -28,7 +33,9 @@ company tier's hosting (nginx, the fetch workflow), which is
 infrastructure. An npm proxy for node tools. Retention of old tool
 versions beyond what strongroom's sweep gives today. A pwsh entry
 script beyond the emission, decided in phase 3. Strongroom itself
-changes only where this plan names a gap, in its own issue.
+changes only where this plan names a gap, in its own issue. The
+machinery's move to `livery.toolroom.bench` is its own issue and
+lands before phase 2 needs the pin verb there.
 
 ## Why strongroom, and what it gives
 
@@ -98,10 +105,12 @@ kinds, the extraction, the version pinned per checkout, PATH.
    namespace and reads its meaning; strongroom enforces the class.
    Any gap found in strongroom is an issue there, never a workaround
    here.
-10. **Dependencies point downward.** `livery.toolroom` imports
-    `livery.strongroom` and the standard library, nothing else at
-    runtime; the workspace's layering lint pins the edge. Footman
-    stays free of toolroom.
+10. **Dependencies point downward.** `livery.toolroom.store` imports
+    `livery.toolroom.tools`, `livery.strongroom` and the standard
+    library, and footman only through its plugin entry;
+    `livery.toolroom.tools` imports nothing of the store; the
+    workspace's layering lint pins the edges. Footman stays free of
+    toolroom.
 11. **Fallbacks before happy paths.** Every refusal (a mismatch, an
     offline miss, a corrupt mirror entry, a lock held, an archive the
     extractor refuses) is forced by a test before the success path.
@@ -214,9 +223,15 @@ HTTP fixture in tests, never the network.
 `uv-python` delegate to `toolroom.uv` with the store's directories in
 the environment, `bun-install` to `toolroom.bun`, `system-check` to
 `toolroom.git` with a floor; each honours `offline` through the tool's
-own flag. Their bytes do not go through strongroom; a managed python
-re-pinned as an `archive` spec does, which is the offline path for
-interpreters.
+own flag. Their bytes do not go through strongroom. Each `uv-tool`
+install gets its own directory, `<home>/uv/tools/<name>@<version>`,
+because uv keeps one install per tool name and the store keeps
+versions side by side. Interpreters stay with uv: it picks the
+python-build-standalone build for the host, verifies it, installs
+once per machine under `<home>/uv/python`, and serves offline from
+`UV_PYTHON_INSTALL_MIRROR`, a folder `fetch` fills in that layout.
+The store would redo all of that for one mechanism's sake and gain
+nothing a checkout can use.
 
 ### The workspace
 
@@ -248,10 +263,13 @@ Deliverables:
   `packages/toolroom/tests/specs/` including hse's `bun.json` as is.
 - The `tools` namespace declaration and the home layout, with a test
   that opens the store twice and refuses a home of another layout.
-- `livery-strongroom` as toolroom's first runtime dependency, the
-  floor the next strongroom release, the `[[depends]]` edge in
-  `packages/toolroom/workshop.toml`, `verify_workspace` and the
-  package contract test updated: the reservation is spent.
+- `packages/toolroom-store/`, born with `fm new.package`:
+  distribution `livery-toolroom-store`, import
+  `livery.toolroom.store`, `[[depends]]` edges on `packages/toolroom`
+  and `packages/strongroom` (floor 0.1.0), footman in a `test` extra,
+  a `footman.tasks` entry point for its verbs, and a layer entry
+  `{ import = "livery.toolroom.store", dist = "livery-toolroom-store" }`
+  where a workspace wants the verbs.
 
 Acceptance:
 
@@ -288,8 +306,9 @@ Acceptance:
 
 Deliverables:
 
-- `_pick_asset(assets, host=...)` and the host table; `fm tools.pin`
-  writing a spec; `fm tools.fetch [--host ...] [--into DIR]`.
+- `_pick_asset(assets, host=...)` and the host table in
+  `livery.toolroom.bench`; `fm tools.pin` there, writing a spec;
+  `fm tools.fetch [--host ...] [--into DIR]` in the store.
 - A recorded HTTP fixture for the forge asset listings and the five
   downloads; `fm tools.pin bun 1.3.14` reproduces hse's `bun.json`
   but for key order.
@@ -336,7 +355,8 @@ Acceptance:
 Deliverables:
 
 - `uv-tool`, `uv-python`, `bun-install`, `system-check` through
-  `toolroom.uv`, `toolroom.bun`, `toolroom.git`, offline-aware;
+  `tools.uv`, `tools.bun`, `tools.git`, offline-aware; one directory
+  per `uv-tool` install so versions coexist;
   conformance under `answers()` so the tests never spawn, asserting
   the offline argv handed over.
 - `store.tool("bun")` returns the typed handle bound to the store's
@@ -387,6 +407,16 @@ Acceptance:
   directory on PATH per checkout, so the PATH never changes; the
   agent recommended yes, and the design above says so. Awaiting the
   ruling with the rest.
+- 2026-09-12, Willem: the store is its own distribution with its
+  verbs bundled, installable alone; the stub machinery is another,
+  named `livery.toolroom.bench`; the handles moved to
+  `livery.toolroom.tools` so `livery.toolroom` is a namespace
+  (livery#524), and the house style is
+  `from livery.toolroom import tools`. The shim distributions are
+  gone (livery#521).
+- 2026-09-12, Willem asked whether managed pythons should leave uv;
+  the agent answered no, with the reasons in the design, and the
+  plan keeps them with uv.
 - 2026-09-12, the agent, for the ruling: a `tools/` ref names the
   extracted tree, not the archive, as strongroom's namespace table
   already publishes; the archive is landed by its pin and swept once
@@ -408,9 +438,8 @@ Acceptance:
    alternative is the specs riding the layer's wheel, which the
    2026-08-27 note rejected for coupling every sync to a release.
    Owner: Willem.
-3. **The next strongroom release as the floor.** Phase 7 (groups) is
-   on main unreleased; phase 0 needs a released floor and would
-   release strongroom first. Owner: the agent, at phase 0.
+3. **Resolved 2026-09-12.** livery-strongroom 0.1.0, with the groups
+   of phase 7, is the floor; released the same day.
 4. **Retention of old tool versions.** A `tools/` ref is write-once,
    so a version stays reachable until a retention class exists in
    strongroom, and the sweep never removes a rooted tree. Sizes are

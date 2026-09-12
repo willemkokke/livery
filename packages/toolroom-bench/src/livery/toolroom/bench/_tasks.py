@@ -32,6 +32,7 @@ import threading
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
+from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
     from types import ModuleType
 
     from livery.toolroom.bench import _provision, _toolfetch
+
 import livery.toolroom.tools as _tools
 from livery.footman._describe import bold, cyan, wants_color
 from livery.footman.context import current, data_dir
@@ -1671,6 +1673,9 @@ def refresh(
     only: Annotated[str, doc("refresh just this tool")] = "",
     prefix: Annotated[str, doc("drive the tiers from this prefix's bin/")] = "",
     changelog: Annotated[bool, doc("write the events into CHANGELOG.md")] = True,
+    submit: Annotated[
+        bool, doc("commit what moved on a branch and open its pull request")
+    ] = False,
 ) -> Refreshed:
     """Observe what is new on this platform, and fold it into the store.
 
@@ -1685,9 +1690,78 @@ def refresh(
     non-zero rather than counting as "nothing new": a rename or a moved repo
     would otherwise make a tool silently untracked while the job kept
     reporting success.
+
+    With ``--submit``, a refresh that moved a tool's surface is
+    committed on a branch of its own and submitted as a pull request:
+    armed when every change only added to a surface, the graded
+    trigger's green light, and left for a person otherwise. Nothing
+    moved means no branch and no pull request.
     """
     found = gather(only=only, prefix=prefix)
-    return _finish(_assemble_documents([found.document()]), changelog)
+    finished = _finish(_assemble_documents([found.document()]), changelog)
+    if submit:
+        for line in submit_refresh(finished):
+            print(line)
+    return finished
+
+
+def submit_refresh(
+    found: Refreshed,
+    *,
+    git: Callable[..., object] | None = None,
+    submit: Callable[[list[str]], int] | None = None,
+    on: date | None = None,
+) -> list[str]:
+    """Commit a refresh that moved something and open its pull request.
+
+    The branch is ``chore/tools-refresh-<date>``; the pull request is
+    armed when `Refreshed.additions_only` holds and unarmed otherwise,
+    so a dropped verb waits for a person. A refresh that moved nothing
+    opens nothing and says so. *git*, *submit* and *on* are the seams
+    the tests drive; the defaults are the tool handle, the runner's
+    own submit verb, and today.
+
+    Returns:
+        The lines to print, one per step.
+    """
+    from livery.toolroom import tools
+
+    if not found.release:
+        return ["  nothing moved: no branch, no pull request"]
+    when = on or date.today()
+    run_git = git or tools.git
+    branch = f"chore/tools-refresh-{when:%Y%m%d}"
+    moved = ", ".join(sorted(found.events))
+    title = f"chore(toolroom): tool refresh {when:%Y-%m-%d}"
+    run_git("switch", "-c", branch)
+    run_git("add", "-A")
+    run_git("commit", "-m", f"{title}\n\n{moved}")
+    argv = [_prog(), "submit", f"--title={title}"]
+    if found.additions_only:
+        argv.append("--armed")
+    code = (submit or _run_submit)(argv)
+    if code != 0:
+        from livery.footman import fail
+
+        fail(f"the refresh's submit exited {code}; the branch {branch} stands")
+    return [
+        f"  refreshed {moved} on {branch}",
+        "  submitted armed: additions only"
+        if found.additions_only
+        else "  submitted unarmed: a surface lost something, a person decides",
+    ]
+
+
+def _prog() -> str:
+    import livery.footman as footman
+
+    return footman.prog()
+
+
+def _run_submit(argv: list[str]) -> int:
+    import subprocess
+
+    return subprocess.run(argv, check=False).returncode
 
 
 # The changelog stays a checkout fact: the release-note writer edits

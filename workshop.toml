@@ -51,3 +51,13 @@ affected-legs = true
 # The one status name branch protection requires, spelled by contract
 # so each forge's CI renders it rather than anyone retyping it.
 required-context = "gate"
+
+# toolroom's refresh, every two weeks on the nightly point: the tools'
+# new releases are observed, the stubs regenerated, and what moved is
+# committed and submitted, armed when every change only added to a
+# surface.
+[[ci.schedule]]
+point = "nightly"
+task = "tools.refresh"
+args = ["--submit"]
+every = "2w"

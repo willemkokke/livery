@@ -90,6 +90,72 @@ def test_a_schedule_entry_with_junk_args_refuses_at_load(tmp_path: Path) -> None
         _points.declared(root)
 
 
+def test_a_schedule_entry_with_an_unknown_cadence_refuses_at_load(
+    tmp_path: Path,
+) -> None:
+    root = _root(
+        tmp_path, '\n[[ci.schedule]]\npoint = "nightly"\ntask = "x"\nevery = "3d"\n'
+    )
+    with pytest.raises(_FAILURES, match=r"every '3d' is not a cadence"):
+        _points.declared(root)
+
+
+def test_a_cadence_is_due_on_its_monday_and_names_the_next_one() -> None:
+    from datetime import date
+
+    # No cadence: every run.
+    assert _points.due("", date(2026, 9, 16)) == (True, date(2026, 9, 16))
+    # Weekly: Monday runs, Wednesday waits for the next Monday.
+    assert _points.due("1w", date(2026, 9, 14)) == (True, date(2026, 9, 14))
+    assert _points.due("1w", date(2026, 9, 16)) == (False, date(2026, 9, 21))
+    # Two-weekly: the Monday of an even ISO week. 2026-09-14 is week
+    # 38, 2026-09-21 week 39, 2026-09-28 week 40.
+    assert _points.due("2w", date(2026, 9, 14)) == (True, date(2026, 9, 14))
+    assert _points.due("2w", date(2026, 9, 21)) == (False, date(2026, 9, 28))
+    assert _points.due("2w", date(2026, 9, 16)) == (False, date(2026, 9, 28))
+    assert _points.due("2w", date(2026, 9, 23)) == (False, date(2026, 9, 28))
+
+
+def test_an_entry_off_its_day_is_skipped_and_says_when(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from datetime import date
+
+    root = _root(
+        tmp_path,
+        '\n[[ci.schedule]]\npoint = "nightly"\ntask = "tools.refresh"\n'
+        'args = ["--submit"]\nevery = "2w"\n',
+    )
+    seen: list[list[str]] = []
+
+    def green(argv: list[str], env: dict[str, str]) -> int:
+        seen.append(argv)
+        return 0
+
+    monkeypatch.setattr(_points, "today", lambda: date(2026, 9, 16))
+    _points.run_point(root, "nightly", "nightly", spawn=green)
+    out = capsys.readouterr().out
+    assert (
+        "tools.refresh (workshop.toml) runs every 2w; next on 2026-09-28, skipped"
+        in out
+    )
+    assert [argv[-1] for argv in seen] == ["check"]
+    monkeypatch.setattr(_points, "today", lambda: date(2026, 9, 28))
+    seen.clear()
+    _points.run_point(root, "nightly", "nightly", spawn=green)
+    assert [argv[-1] for argv in seen] == ["check", "--submit"]
+
+
+def test_the_nightly_carries_the_forge_token_where_the_repository_has_one() -> None:
+    # A pull request the refresh opens with the job token starts no
+    # workflow; the secret, when present, is what makes it a real one.
+    from livery.workshop._ci_generate import generate
+
+    files = generate(Path(__file__).resolve().parents[3])
+    nightly = files[".github/workflows/nightly.yml"]
+    assert "FORGE_TOKEN: ${{ secrets.FORGE_TOKEN || secrets.GITHUB_TOKEN }}" in nightly
+
+
 def test_a_red_entry_fails_the_job_and_stops(tmp_path: Path) -> None:
     root = _root(tmp_path)
     seen: list[list[str]] = []
