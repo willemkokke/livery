@@ -166,6 +166,19 @@ def discover_release(
 _MINED_AT_RE = re.compile(r"^Mined-At: ([0-9a-f]{7,40})$", re.M)
 
 
+def mined_at(message: str) -> str:
+    """The mining point a release squash's *message* records, or ``""``.
+
+    The driver writes ``Mined-At: <sha>`` into the pull request body,
+    which becomes the squash's message at the merge. A commit without
+    the line is not a release squash: a branch's own stamp commit, or
+    a squash whose body was rewritten. The wave and the dispatch judge
+    a commit by this one rule.
+    """
+    match = _MINED_AT_RE.search(message)
+    return match.group(1) if match else ""
+
+
 def movement_check(root: Path, git: GitOps, package: Package, ref: str) -> None:
     """Refuse when commits the entry never saw ride in this squash.
 
@@ -176,16 +189,15 @@ def movement_check(root: Path, git: GitOps, package: Package, ref: str) -> None:
     does not cover. A squash without the line is not the driver's,
     and publishing it is refused for the same reason.
     """
-    message = git.commit_message(ref)
-    match = _MINED_AT_RE.search(message)
-    if match is None:
+    point = mined_at(git.commit_message(ref))
+    if not point:
         fail(
             f"{package.name}: the squash at {ref[:10]} carries no Mined-At"
             " line, so the movement backstop cannot run. Releases publish"
             " only from workflow.release squashes; re-run the release to"
             " produce one."
         )
-    span = f"{match.group(1)}..{ref}^"
+    span = f"{point}..{ref}^"
     moved = git.log_paths(span, (f"packages/{package.directory.name}",))
     if moved:
         listed = "\n".join(f"    {s}" for s in moved)

@@ -13,6 +13,7 @@ failed prepare, leaving ``dist/`` and the report.
 
 from __future__ import annotations
 
+import contextlib
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,7 +25,7 @@ from livery.footman import doc, fail
 from livery.forge import ForgeError, Repository, Run
 from livery.workshop import _cliff
 from livery.workshop._backends import _python, backend_for
-from livery.workshop._git_ops import GitOps
+from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._graph import order_topologically
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._release import prepare_release
@@ -722,6 +723,7 @@ def dispatch_flow(
         return [
             f"  {MANIFEST} is at HEAD but no commit touches it: nothing to dispatch"
         ]
+    _require_release_squash(git, stamping, base)
     seen = {run.id for run in _wave_runs(repo)}
     inputs = {"ref": stamping}
     if workshop:
@@ -751,8 +753,68 @@ def dispatch_flow(
     ]
 
 
+def _require_release_squash(git: GitOps, stamping: str, base: str) -> None:
+    """Refuse to send the wave to a commit the wave itself would refuse.
+
+    The wave publishes only from a release squash, recognised by the
+    ``Mined-At`` line the pull request body becomes at the merge. The
+    last commit touching the manifest on a release branch is the
+    branch's own stamp commit, which carries no such line, so a
+    dispatch from a checkout left on that branch would send a wave
+    that refuses. The refusal names the squash on the base instead.
+    """
+    from livery.workshop._publish import mined_at
+
+    if mined_at(git.commit_message(stamping)):
+        return
+    squash, subject = newest_release_squash(git, base)
+    prog = footman.prog()
+    if squash:
+        where = (
+            f"the newest release squash on origin/{base} is {squash[:12]}"
+            f" ({subject}); run `{prog} workflow.release.dispatch` from {base},"
+            f" or `{prog} workflow.release.dispatch --at={squash[:12]}` here"
+        )
+    else:
+        where = f"origin/{base} holds no release squash in its recent history"
+    fail(
+        f"{stamping[:12]} carries no Mined-At line: it is a branch's stamp"
+        " commit, not a release squash, and the wave would refuse it."
+        f" {where}"
+    )
+
+
+def newest_release_squash(git: GitOps, base: str = "main") -> tuple[str, str]:
+    """The newest release squash on the base, as (sha, subject); ("", "") when none."""
+    from livery.workshop._publish import mined_at
+
+    for sha, subject in git.recent_commits(50, ref=_base_ref(git, base)):
+        if subject.startswith("chore(release): released") and mined_at(
+            git.commit_message(sha)
+        ):
+            return sha, subject
+    return "", ""
+
+
+def _base_ref(git: GitOps, base: str) -> str:
+    """``origin/<base>`` after a fetch when the clone knows it, else HEAD.
+
+    The release squashes live on the base. HEAD equals the base on the
+    merge point and on a person's main, and differs on a release
+    branch, whose history lacks the squash it was merged as; a clone
+    without the remote (a rig) has only HEAD.
+    """
+    with contextlib.suppress(GitError):
+        git.fetch()
+    try:
+        git.object_id(f"origin/{base}")
+    except GitError:
+        return "HEAD"
+    return f"origin/{base}"
+
+
 def pending_release_waves(
-    root: Path, git: GitOps
+    root: Path, git: GitOps, base: str = "main"
 ) -> tuple[tuple[str, tuple[str, ...]], ...]:
     """Every recent release squash whose receipts are not all cut, oldest first.
 
@@ -761,15 +823,16 @@ def pending_release_waves(
     Re-preparing from that state derives an empty release (measured:
     an empty pull request the forge never agrees to merge), so the
     recovery is the wave at the squash, never a new pull request.
-    Every release squash in recent history is consulted, so a later
-    release never strands an earlier died wave. Each entry is the
-    squash sha and its missing receipt tags.
+    Every release squash in the base's recent history is consulted, so
+    a later release never strands an earlier died wave, and a checkout
+    standing on a release branch still finds the squash it was merged
+    as. Each entry is the squash sha and its missing receipt tags.
     """
     from livery.workshop._publish import discover_release
 
     cut = set(git.remote_tags())
     pending: list[tuple[str, tuple[str, ...]]] = []
-    for sha, subject in git.recent_commits(50):
+    for sha, subject in git.recent_commits(50, ref=_base_ref(git, base)):
         if not subject.startswith("chore(release): released"):
             continue
         released = discover_release(root, git, sha)

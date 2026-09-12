@@ -28,6 +28,11 @@ from livery.footman import Arg, ask, doc, fail, group, suggest
 from livery.forge import ForgeError, Repository
 from livery.workshop._contract import load_contract
 from livery.workshop._git_ops import GitOps
+from livery.workshop._submit import (
+    merged_pull_request,
+    only_local_work,
+    worktree_for,
+)
 
 _KINDS = ("feat", "fix", "chore", "docs", "refactor")
 _SLUG_CAP = 40
@@ -138,48 +143,6 @@ def _find_branch(git: GitOps, number: int) -> str:
     for name in git.remote_branches(""):
         if _BRANCH_RE.match(name) and needle in name:
             return name
-    return ""
-
-
-def _worktree_for(git: GitOps, root: Path, branch: str) -> str:
-    """The linked worktree holding *branch*; "" when none does."""
-    listing = git._run("worktree", "list", "--porcelain")
-    tree = ""
-    current: dict[str, str] = {}
-    for line in [*listing.splitlines(), ""]:
-        if not line.strip():
-            if current.get("branch", "").endswith(f"refs/heads/{branch}"):
-                tree = current.get("worktree", "")
-            current = {}
-            continue
-        key, _, value = line.partition(" ")
-        current[key] = value
-    if tree and Path(tree).resolve() == root.resolve():
-        return ""
-    return tree
-
-
-def _only_local_work(git: GitOps, root: Path, branch: str) -> str:
-    """Why *branch* holds work that exists nowhere else; "" when safe.
-
-    Dirt is looked for where the branch actually lives: this
-    checkout when it stands on the branch, the branch's linked
-    worktree otherwise. Ahead is measured against the remote branch
-    when one exists, and against the base when none does.
-    """
-    if git.current_branch() == branch and not git.is_clean():
-        return "uncommitted changes"
-    tree = _worktree_for(git, root, branch)
-    if tree:
-        status = git._run("-C", tree, "status", "--porcelain").strip()
-        if status:
-            return f"uncommitted changes in the worktree {tree}"
-    remote = f"origin/{branch}"
-    upstream = remote if branch in git.remote_branches("") else "origin/main"
-    count = git._run("rev-list", "--count", f"{upstream}..{branch}").strip()
-    if count.isdigit() and int(count) > 0:
-        where = "the remote branch" if upstream == remote else "any remote"
-        return f"{count} commit(s) not on {where}"
     return ""
 
 
@@ -520,8 +483,16 @@ def issue_stop(
     work = repo.issue.get(number)
     state = work.state if work is not None else "unknown"
     remote_exists = branch in git.remote_branches("")
+    merged_head = ""
+    try:
+        landed = merged_pull_request(repo, git, branch)
+        merged_head = landed.head_sha if landed is not None else ""
+    except ForgeError:
+        merged_head = ""
     only_local = (
-        _only_local_work(git, root, branch) if git.local_branch_exists(branch) else ""
+        only_local_work(git, root, branch, merged_head=merged_head)
+        if git.local_branch_exists(branch)
+        else ""
     )
     if only_local and not discard:
         if state == "closed":
@@ -559,7 +530,7 @@ def issue_stop(
 def _remove_local(root: Path, git: GitOps, branch: str) -> list[str]:
     """Remove the branch's worktree and local branch; what was removed."""
     removed: list[str] = []
-    tree = _worktree_for(git, root, branch)
+    tree = worktree_for(git, root, branch)
     if tree:
         git._run("worktree", "remove", "--force", tree)
         print(f"  removed worktree {tree}")
@@ -616,22 +587,27 @@ def issue_close(
 
     # The destruction rule runs before anything is torn down: the
     # teardown deletes branches, and a refusal that checks afterwards
-    # would be checking a branch that is already gone.
-    only_local = (
-        _only_local_work(git, root, branch)
-        if branch and git.local_branch_exists(branch)
-        else ""
-    )
-
+    # would be checking a branch that is already gone. The merged pull
+    # request is read first: its head decides what the merge took.
     merged = False
     live = None
+    landed = None
     if branch:
         try:
             live = repo.pr.find_by_head(branch, state="all")
+            landed = merged_pull_request(repo, git, branch)
         except ForgeError:
             live = None
-        if live is not None and live.merged:
+            landed = None
+        if landed is not None:
             merged = True
+    only_local = (
+        only_local_work(
+            git, root, branch, merged_head=landed.head_sha if landed else ""
+        )
+        if branch and git.local_branch_exists(branch)
+        else ""
+    )
 
     if merged:
         if reason:

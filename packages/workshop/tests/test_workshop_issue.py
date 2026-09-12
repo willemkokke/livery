@@ -369,6 +369,9 @@ def test_close_on_a_merged_pr_degrades_to_already_resolved(
     assert "reason does not apply" in out
     live = repo.issue.get(number)
     assert live is not None and live.state == "closed"
+    # The merge took the tip, so the branch holds nothing only here
+    # and goes without --discard.
+    assert not git.local_branch_exists(branch)
 
 
 def test_close_keep_branch_retains_both_copies(
@@ -617,6 +620,7 @@ def test_close_on_merged_keeps_an_only_local_delta_without_discard(
     issue_close(str(number), reason="done")
     out = capsys.readouterr().out
     assert "kept" in out and "--discard" in out
+    assert "1 commit(s) past the merged head" in out
     assert git.local_branch_exists(branch)  # the leftover survived
 
 
@@ -825,3 +829,28 @@ def test_the_pwsh_plan_enters_through_invoke_expression(
     # The single quote is doubled, PowerShell's own splice.
     assert "odd''name" in command
     assert plan.files == {} and plan.env == {}
+
+
+def test_stop_after_a_merge_removes_the_local_copy_without_discard(
+    rig: tuple[Path, FakeForge, GitOps], capsys: pytest.CaptureFixture[str]
+) -> None:
+    root, fake, git, number, branch = _started(rig)
+    repo = fake.repository("willemkokke", "livery")
+    (root / "work.txt").write_text("w\n")
+    git.commit_all("feat: landed work")
+    _git(root, "push", "origin", branch)
+    tip = git.head_sha()
+    fake.push("willemkokke", "livery", branch, sha=tip)
+    repo.pr.open(branch, "main", "feat: landed work")
+    fake.settle("willemkokke", "livery", tip)
+    repo.pr.merge_now(1, title="feat: landed work")
+    # A commit past the merge is unique work: the stop refuses first.
+    (root / "after.txt").write_text("a\n")
+    git.commit_all("feat: after the merge")
+    with pytest.raises(_FAILURES) as caught:
+        issue_stop(str(number))
+    assert "1 commit(s) past the merged head" in str(caught.value)
+    _git(root, "reset", "--hard", tip)
+    issue_stop(str(number))
+    assert "stopped #" in capsys.readouterr().out
+    assert not git.local_branch_exists(branch)

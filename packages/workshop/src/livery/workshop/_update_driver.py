@@ -126,6 +126,13 @@ class UpdateDriver:
                     print("  resuming the committed update from its branch")
                     return Submission(title=subjects[-1], body="")
                 resumed = True
+        elif self.branch in git.remote_branches(""):
+            # The engine returns to the branch it started from and
+            # drops the local copy once the pull request holds the
+            # branch, so a re-run resumes from origin's copy.
+            git.fetch()
+            git._run("checkout", "-b", self.branch, f"origin/{self.branch}")
+            return self.prepare()
         else:
             git.create_branch(self.branch)
         toolchain_before = _locked_workshop(self._root)

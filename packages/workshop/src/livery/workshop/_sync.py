@@ -23,7 +23,7 @@ from __future__ import annotations
 import importlib
 from importlib import resources
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import livery.footman as footman
 from livery.footman import fail, task
@@ -209,11 +209,53 @@ def _rebase_step(git: GitOps, onto: str, *, interactive: bool) -> bool:
     return False
 
 
+def _repository(root: Path) -> Any:
+    from livery.workshop._forge_lane import this_repository
+
+    return this_repository(root)
+
+
+def _leave_merged_reserved(root: Path, git: GitOps, branch: str) -> None:
+    """Step off a reserved branch whose pull request merged; else the engine owns it.
+
+    The release act returns to the branch it started from, so a
+    checkout standing on a merged reserved branch is one an older act
+    left there. The teardown every stop verb wears removes the branch
+    and steps back onto an up-to-date main; a branch holding something
+    the merge did not take is kept and named.
+    """
+    from livery.workshop._submit import (
+        merged_pull_request,
+        only_local_work,
+        teardown_branch,
+    )
+
+    try:
+        repo = _repository(root)
+        pull = merged_pull_request(repo, git, branch)
+    except Exception:
+        repo = None
+        pull = None
+    if repo is None or pull is None:
+        print(
+            f"  {branch}: a reserved branch; the engine owns it until its pull"
+            " request merges"
+        )
+        return
+    why = only_local_work(git, root, branch, merged_head=pull.head_sha)
+    if why:
+        print(f"  {branch}: PR #{pull.number} merged, but the branch holds {why}; kept")
+        return
+    print(f"  {branch}: PR #{pull.number} merged; stepping off")
+    teardown_branch(repo, git, branch, "main")
+
+
 def bring_current(root: Path, git: GitOps, *, interactive: bool) -> None:
     """Bring the current checkout up to date; the one-stop's first act.
 
     ``main`` only ever fast-forwards. A reserved ``workflow/`` branch
-    belongs to the engine, a detached HEAD names no branch, and a
+    belongs to the engine until its pull request merges, after which
+    the checkout steps off it; a detached HEAD names no branch, and a
     dirty tree is never moved: each skips with its note. A feature
     branch fast-forwards onto its moved remote, rebases onto it when
     diverged, then rebases onto the base; a rebase of a pushed
@@ -247,7 +289,8 @@ def bring_current(root: Path, git: GitOps, *, interactive: bool) -> None:
             print(f"  {error}")
         return
     if branch.startswith("workflow/"):
-        return  # the engine owns a workflow branch's staleness
+        _leave_merged_reserved(root, git, branch)
+        return
     if not git.is_clean():
         print("  uncommitted changes: the branch stays where it is")
         return
