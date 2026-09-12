@@ -78,6 +78,53 @@ def _history(
     return [_entry(first_run + i, {job: _leg(v, **leg)}) for i, v in enumerate(values)]
 
 
+# --- the switch ------------------------------------------------------------------
+
+
+def _contract(root: Path, ci: str) -> Path:
+    (root / "workshop.toml").write_text(
+        '[workspace]\nlayers = ["livery.workshop"]\n\n[forge]\nkind = "gitea"\n'
+        f"\n[ci]\n{ci}"
+    )
+    return root
+
+
+def test_the_marks_are_off_unless_the_contract_declares_them(tmp_path: Path) -> None:
+    # The refusal first: a string is not a switch. Then the default,
+    # off, and the one spelling that turns it on.
+    with pytest.raises(_FAILURES, match=r"\[ci\] speed-marks must be true or false"):
+        _speed.enabled(_contract(tmp_path, 'speed-marks = "yes"\n'))
+    assert _speed.enabled(_contract(tmp_path, 'runners = ["ubuntu-latest"]\n')) is False
+    assert _speed.enabled(_contract(tmp_path, "speed-marks = false\n")) is False
+    assert _speed.enabled(_contract(tmp_path, "speed-marks = true\n")) is True
+
+
+def test_the_judge_and_the_accept_do_nothing_while_the_marks_are_off(
+    work: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop import _speed_tasks
+
+    _contract(work, 'runners = ["ubuntu-latest"]\n')
+    monkeypatch.setattr(_speed_tasks, "workspace_root", lambda: work)
+    monkeypatch.setattr(_speed_tasks, "run_context", lambda: RUN)
+
+    def _never(_root: Path, _run: object) -> list[str]:
+        raise AssertionError("the judge must not read the rows while off")
+
+    monkeypatch.setattr(_speed_tasks, "judge_flow", _never)
+    _speed_tasks.speed_judge()
+    assert "speed marks are off: declare [ci] speed-marks = true" in (
+        capsys.readouterr().out
+    )
+    with pytest.raises(_FAILURES, match="speed marks are off"):
+        _speed_tasks.speed_accept("packages/forge", 90.0, reason="why")
+    # Declared, the judge reads the rows: an empty store judges
+    # nothing and says so.
+    _contract(work, "speed-marks = true\n")
+    monkeypatch.setattr(_speed_tasks, "judge_flow", lambda root, run: [])
+    _speed_tasks.speed_judge()
+
+
 # --- the shapes -----------------------------------------------------------------
 
 

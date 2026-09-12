@@ -527,7 +527,9 @@ def _eat_dev_wheels(root: Path, pins: dict[str, str]) -> str:
             )
         contract_text = contract_text.replace(
             marker,
-            marker + 'python-versions = ["3.14"]\naffected-legs = true\n',
+            marker
+            + 'python-versions = ["3.14"]\naffected-legs = true\n'
+            + "speed-marks = true\n",
             1,
         )
     if "[[ci.schedule]]" not in contract_text:
