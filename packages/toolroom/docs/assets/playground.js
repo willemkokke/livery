@@ -21,8 +21,8 @@ const REVISION_MARK = "example: revision";
 
 const DEFAULT_FILES = {
   "tasks.py": `from typing import Literal
-from footman import fail, run, task
-from toolroom import docker, pytest, ruff
+from livery.footman import fail, run, task
+from livery.toolroom.tools import docker, pytest, ruff
 
 @task
 def lint(fix: bool = False):
@@ -279,7 +279,8 @@ if sys.platform == "emscripten" or os.environ.get("_FM_PLAYGROUND_SIM"):
 
     # One thread is all the browser has: parallel() runs its callables
     # inline, in order, and a failure still surfaces after the others ran.
-    import footman, footman.context
+    import livery.footman as footman
+    import livery.footman.context
 
     footman.parallel  # resolve the lazy re-export before overriding it
 
@@ -311,7 +312,7 @@ def _fm_invoke(files_json, line, columns=80):
     for name, content in files.items():
         Path(name).write_text(content, encoding="utf-8")
     try:
-        from footman.testing import Runner
+        from livery.footman.testing import Runner
         result = Runner().invoke(_fm_sandbox_line(line), tasks=Path("tasks.py"))
         return json.dumps({
             "exit_code": result.exit_code,
@@ -341,8 +342,8 @@ def _fm_complete(code, line):
     # manifest tree once per source text, then every Tab is a pure walk —
     # the same complete() a shell hook consults.
     import types
-    from footman import _manifest as manifest, registry
-    from footman._complete import complete
+    from livery.footman import _manifest as manifest, registry
+    from livery.footman._complete import complete
     if _fm_manifest["code"] != code:
         module = types.ModuleType("tasks")
         sys.modules["tasks"] = module
@@ -379,7 +380,7 @@ function loadRuntime(status) {
       status("installing footman + toolroom…");
       await pyodide.loadPackage("micropip");
       const micropip = pyodide.pyimport("micropip");
-      await micropip.install(["footman", "toolroom"]);
+      await micropip.install(["livery-footman", "livery-toolroom"]);
       pyodide.runPython(BOOTSTRAP);
       return pyodide;
     })();

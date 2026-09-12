@@ -4,7 +4,7 @@ Typed surfaces for command-line tools, generated from the tools
 themselves.
 
 ```python
-from toolroom import git, cmake, ruff
+from livery.toolroom.tools import git, cmake, ruff
 
 git.switch("-c", "release/v1.4")
 cmake.build("build", parallel=8)
@@ -24,7 +24,7 @@ terraform.
 > **Beta.** toolroom is pre-1.0: minor versions may include breaking
 > changes — always called out in the
 > [changelog](https://github.com/willemkokke/toolroom/blob/main/CHANGELOG.md),
-> never in a patch release. Pin the minor (`toolroom~=0.6.0`) if you
+> never in a patch release. Pin the minor (`livery-toolroom~=0.6.0`) if you
 > build on it.
 
 ## No transcription
@@ -86,7 +86,7 @@ exercised — and only execution is replaced, answered from a table of
 canned output and exit codes:
 
 ```python
-from toolroom.testing import answers
+from livery.toolroom.tools.testing import answers
 
 with answers({("git", "push"): 1}) as calls:
     release()  # exercises the failure path

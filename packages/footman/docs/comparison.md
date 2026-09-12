@@ -124,7 +124,7 @@ because typer has a reputation for being heavy:
 
 | import           | cost over a bare interpreter |
 | ---------------- | ---------------------------: |
-| `import footman` |                  **+0.2 ms** |
+| `from livery import footman` |                  **+0.2 ms** |
 | `import typer`   |                   **+40 ms** |
 
 typer's import really is heavier: it ships its own parser plus `rich` and

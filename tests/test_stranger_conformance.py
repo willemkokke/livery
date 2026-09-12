@@ -33,7 +33,7 @@ ALLOWED = (
     "livery-forge",
     "livery.footman",
     "livery-footman",
-    "livery.toolroom",
+    "livery.toolroom.tools",
     "livery-toolroom",
 )
 

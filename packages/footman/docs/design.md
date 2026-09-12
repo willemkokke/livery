@@ -103,7 +103,7 @@ command-line interface (typed flags, positionals, completion) and its
 body is ordinary Python:
 
 ```python
-from footman import task, run
+from livery.footman import task, run
 
 
 @task
@@ -153,7 +153,7 @@ You can make a step three ways, and all three are the same word:
 ```python
 import shutil
 
-from footman import step
+from livery.footman import step
 
 
 def write_fixtures(): ...  # stand-ins for your own helpers
@@ -329,7 +329,7 @@ no way to write. An observer that finds a problem is not powerless,
 though: it can *fail* the work, loudly and attributably:
 
 ```python
-from footman import fail
+from livery.footman import fail
 
 
 @test.post_task
@@ -484,7 +484,7 @@ Everything else is yours to declare. A lane is created by binding a
 name, and claimed by handing that binding around:
 
 ```python
-import footman
+from livery import footman
 
 db = footman.lane("database", reason="serialises the shared dev DB")
 

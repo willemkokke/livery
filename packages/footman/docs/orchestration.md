@@ -10,7 +10,7 @@ request, body calls, sharing, steps of your own) lives on
 The examples on this page share a small cast of stand-in tasks:
 
 ```python
-from footman import task
+from livery.footman import task
 
 
 @task
@@ -109,7 +109,7 @@ least deliberate:
   run rather than one task.
 
 ```python
-from footman import task, fail
+from livery.footman import task, fail
 
 
 def open_pr() -> bool: ...  # your own lookup
@@ -186,7 +186,7 @@ touching the registered task:
 
 <!-- example: revision -->
 ```python
-from footman import Forward
+from livery.footman import Forward
 
 
 @task(pre=[fmt.opts(atomic=True), lint])  # protect fmt's writes here, not everywhere
@@ -284,8 +284,8 @@ a parameter of the same name:
 <!-- example: revision -->
 ```python
 from typing import Annotated
-from footman import task
-from footman.params import forward
+from livery.footman import task
+from livery.footman.params import forward
 
 
 @task(pre=[fmt, lint, test])
@@ -324,7 +324,7 @@ fail. It honours the same `-s` and `-j` as the scheduler (one worker under
 
 <!-- example: revision -->
 ```python
-from footman import task, parallel, step
+from livery.footman import task, parallel, step
 
 
 def clean(): ...
@@ -429,9 +429,9 @@ and the bare form runs, while the members stay addressable:
 
 <!-- example: fresh-session -->
 ```python
-from footman import group, run, task
-from footman.params import Forward
-from toolroom import ruff, markdownlint, cspell
+from livery.footman import group, run, task
+from livery.footman.params import Forward
+from livery.toolroom.tools import ruff, markdownlint, cspell
 
 lint = group("lint")
 

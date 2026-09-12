@@ -73,7 +73,7 @@ def _child_argv(override: str | None = None) -> list[str] | None:
 # back with every backslash doubled — unreadable on the one platform this is
 # for.
 _PROBE = (
-    "import sys; from pathlib import Path; from footman import _paths; "
+    "import sys; from pathlib import Path; from livery.footman import _paths; "
     "cwd = Path.cwd(); ceiling = _paths.find_repo_root(cwd); "
     "files = ', '.join(str(f) for f in _paths.task_files(cwd, ceiling)) or 'none'; "
     "print('cwd=%s; ceiling=%s; task_files=%s; manifest=%s; exe=%s' "
@@ -611,7 +611,9 @@ def _broken_project(tmp_path, monkeypatch):
     proj = tmp_path / "proj"
     proj.mkdir()
     (proj / "pyproject.toml").write_text("[project]\nname='x'\n")
-    (proj / "tasks.py").write_text("import footman\n\nthis is a syntax error\n")
+    (proj / "tasks.py").write_text(
+        "from livery import footman\n\nthis is a syntax error\n"
+    )
     monkeypatch.chdir(proj)
     return proj
 
@@ -651,7 +653,9 @@ def test_a_fixed_tasks_file_recovers_past_the_marker_age(tmp_path, monkeypatch, 
     # Fix the file. The marker still stands but is short-lived: age it out by
     # hand and run the stale-while-revalidate spawn inline, so the dance is
     # deterministic — one stale-served press, then the healthy tree.
-    (proj / "tasks.py").write_text("import footman\n\n@footman.task\ndef hi(): ...\n")
+    (proj / "tasks.py").write_text(
+        "from livery import footman\n\n@footman.task\ndef hi(): ...\n"
+    )
     manifest = _paths.cwd_manifest_path()
     old = time.time() - 60
     os.utime(manifest, (old, old))
@@ -674,7 +678,7 @@ def test_a_broken_f_file_marks_its_own_key(tmp_path, monkeypatch, capsys):
     proj.mkdir()
     monkeypatch.chdir(proj)
     tf = proj / "custom.py"
-    tf.write_text("import footman\n\nthis is a syntax error\n")
+    tf.write_text("from livery import footman\n\nthis is a syntax error\n")
     rc = complete_cli(["--", f"-f={tf}", ""])
     captured = capsys.readouterr()
     assert rc == _complete._EXIT_BROKEN
@@ -728,7 +732,9 @@ def test_a_user_tasks_file_counts_too(tmp_path, monkeypatch):
     monkeypatch.setenv("FOOTMAN_CONFIG", str(tmp_path / "user.toml"))
     monkeypatch.setenv("FOOTMAN_CONFIG_DIR", str(cfgdir))
     before = _paths.user_stamp()
-    (cfgdir / "tasks.py").write_text("from footman import task\n", encoding="utf-8")
+    (cfgdir / "tasks.py").write_text(
+        "from livery.footman import task\n", encoding="utf-8"
+    )
     assert _paths.user_stamp() != before
 
 
@@ -813,7 +819,7 @@ def test_the_marker_ages_fast_and_spawns_with_the_override(tmp_path, monkeypatch
     proj.mkdir()
     monkeypatch.chdir(proj)
     tf = proj / "custom.py"
-    tf.write_text("import footman\n\nthis is a syntax error\n")
+    tf.write_text("from livery import footman\n\nthis is a syntax error\n")
     assert complete_cli(["--", f"-f={tf}", ""]) == _complete._EXIT_BROKEN
     key = _paths.source_manifest_path(Path.cwd(), tf)
     old = time.time() - 60
@@ -858,7 +864,9 @@ def test_stock_complete_dispatch_keys_the_brand_version(tmp_path, monkeypatch):
     monkeypatch.setenv("FOOTMAN_CACHE_DIR", str(tmp_path / "cache"))
     proj = tmp_path / "proj"
     proj.mkdir()
-    (proj / "tasks.py").write_text("import footman\n\n@footman.task\ndef hi(): ...\n")
+    (proj / "tasks.py").write_text(
+        "from livery import footman\n\n@footman.task\ndef hi(): ...\n"
+    )
     monkeypatch.chdir(proj)
     monkeypatch.setattr(sys, "argv", ["fm", "--complete", "--", ""])
     with pytest.raises(SystemExit):
@@ -1025,8 +1033,8 @@ def _dynamic_project(tmp_path):
     (proj / "tasks.py").write_text(
         "from pathlib import Path\n"
         "from typing import Annotated\n"
-        "from footman import task\n"
-        "from footman.params import suggest\n\n"
+        "from livery.footman import task\n"
+        "from livery.footman.params import suggest\n\n"
         "def _targets():\n"
         "    return Path('targets.txt').read_text().split()\n\n"
         "@task\n"
@@ -1190,7 +1198,7 @@ def test_cold_cache_builds_and_serves(tmp_path, monkeypatch, capsys):
     proj.mkdir()
     (proj / "pyproject.toml").write_text("[project]\nname='x'\nversion='0'\n")
     (proj / "tasks.py").write_text(
-        "from footman import task\n\n@task\ndef lint(): ...\n@task\ndef check(): ...\n"
+        "from livery.footman import task\n\n@task\ndef lint(): ...\n@task\ndef check(): ...\n"
     )
     monkeypatch.chdir(proj)
     # nothing cached: the first completion builds the manifest and serves it,
@@ -1201,7 +1209,7 @@ def test_cold_cache_builds_and_serves(tmp_path, monkeypatch, capsys):
 
 
 def test_a_planted_footman_py_is_never_imported_by_a_tab(tmp_path, monkeypatch, capsys):
-    # The builder child runs `python -c "… from footman import _refresh …"`,
+    # The builder child runs `python -c "… from livery.footman import _refresh …"`,
     # and `-c` heads sys.path with the directory it was spawned in. A
     # `footman.py` sitting in the completed directory would answer that import
     # first, so one TAB in a directory somebody else wrote would execute its
@@ -1211,7 +1219,9 @@ def test_a_planted_footman_py_is_never_imported_by_a_tab(tmp_path, monkeypatch, 
     proj = tmp_path / "proj"
     proj.mkdir()
     (proj / "pyproject.toml").write_text("[project]\nname='x'\nversion='0'\n")
-    (proj / "tasks.py").write_text("from footman import task\n\n@task\ndef lint(): ...")
+    (proj / "tasks.py").write_text(
+        "from livery.footman import task\n\n@task\ndef lint(): ..."
+    )
     (proj / "footman.py").write_text(  # the plant, waiting to be imported
         "import pathlib\n\npathlib.Path(__file__).with_name('ran').touch()\n"
     )
@@ -1230,7 +1240,7 @@ def test_cold_f_cache_builds_and_serves(tmp_path, monkeypatch, capsys):
     proj.mkdir()
     (proj / "pyproject.toml").write_text("[project]\nname='x'\nversion='0'\n")
     (proj / "other.py").write_text(
-        "from footman import task\n\n@task\ndef ship(): ...\n"
+        "from livery.footman import task\n\n@task\ndef ship(): ...\n"
     )
     monkeypatch.chdir(proj)
     # a finished `-f <file>` with a cold cache builds that file's (cwd, file)
@@ -1337,7 +1347,9 @@ def test_cold_evidence_reports_the_childs_own_words(tmp_path, monkeypatch):
     proj = tmp_path / "proj"
     proj.mkdir()
     (proj / "pyproject.toml").write_text("[project]\nname='x'\nversion='0'\n")
-    (proj / "tasks.py").write_text("from footman import task\n\n@task\ndef go(): ...\n")
+    (proj / "tasks.py").write_text(
+        "from livery.footman import task\n\n@task\ndef go(): ...\n"
+    )
     monkeypatch.chdir(proj)
 
     def fake_run(cmd, **kwargs):
@@ -1521,7 +1533,7 @@ def test_stale_schema_cache_rebuilds_instead_of_walking(tmp_path, monkeypatch, c
     proj.mkdir()
     (proj / "pyproject.toml").write_text("[project]\nname='x'\nversion='0'\n")
     (proj / "tasks.py").write_text(
-        "from footman import task\n\n@task\ndef lint(): ...\n"
+        "from livery.footman import task\n\n@task\ndef lint(): ...\n"
     )
     monkeypatch.chdir(proj)
     stale = _paths.cwd_manifest_path()

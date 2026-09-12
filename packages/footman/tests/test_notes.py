@@ -274,7 +274,7 @@ def test_the_task_axis_carves_out_one_task(monkeypatch):
 
 def test_a_project_table_promotes_and_the_run_refuses_bad_tables(tmp_path):
     (tmp_path / "tasks.py").write_text(
-        "import os\nfrom footman import task\n\n"
+        "import os\nfrom livery.footman import task\n\n"
         "@task\ndef go():\n"
         '    """Set a variable."""\n'
         '    os.environ["PROMOTED_VAR"] = "1"\n'

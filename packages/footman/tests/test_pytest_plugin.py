@@ -121,7 +121,7 @@ def test_importing_footman_stays_lazy_under_the_plugin():
     import sys
 
     probe = (
-        "import footman.pytest_plugin, sys; "
+        "import livery.footman.pytest_plugin, sys; "
         "print('livery.footman.testing' in sys.modules"
         " or 'livery.footman.context' in sys.modules)"
     )

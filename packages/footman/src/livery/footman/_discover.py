@@ -14,7 +14,6 @@ the resulting trees are overlaid here.
 
 from __future__ import annotations
 
-import contextlib
 import importlib.util
 import sys
 from pathlib import Path
@@ -86,16 +85,6 @@ def _import_file(path: Path, index: int) -> Group:
     # Otherwise two cascade files each doing `import helpers` share whoever
     # imported first (F14/D8). Restoring sys.path also stops it accumulating
     # across the many load_tree calls an in-process runner makes.
-    # Claim the compat spelling before the tasks dir can answer for it:
-    # the runner's module is livery.footman, so nothing else holds the
-    # name `footman` in sys.modules, and a file called footman.py beside
-    # a tasks file that says `from footman import task` would otherwise
-    # import and run on a keystroke. Resolved before the tasks dir joins
-    # sys.path, so the installed shim is the only possible answer;
-    # without one the import fails exactly as it should.
-    if "footman" not in sys.modules:
-        with contextlib.suppress(ImportError):
-            importlib.import_module("footman")
     saved_path = sys.path[:]
     before = set(sys.modules)
     if parent in sys.path:

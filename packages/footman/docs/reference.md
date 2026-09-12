@@ -20,7 +20,7 @@ can't use — it would map to `--help`, which is always intercepted (see
 
 <!-- example: fragment -->
 ```python
-from footman import task, group, pre_tasks
+from livery.footman import task, group, pre_tasks
 
 
 @task  # bare

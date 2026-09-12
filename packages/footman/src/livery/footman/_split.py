@@ -535,7 +535,7 @@ def _vouched_distributions() -> set[str]:
 
     # "livery-footman" is the distribution that ships the framework's own
     # plugins, whatever name a project pins on (the stock CLI pins the
-    # `footman` compat shim; a brand pins its own). DEFAULT_BRAND is where
+    # runner's own distribution; a brand pins its own). DEFAULT_BRAND is where
     # footman states any dist of its own; reading it here keeps the two
     # from drifting apart.
     return {

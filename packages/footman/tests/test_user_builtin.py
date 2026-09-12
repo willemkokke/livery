@@ -259,7 +259,7 @@ def test_a_project_keeps_the_configured_set_beneath_it(user_config, provider, tm
     project.mkdir()
     (project / "pyproject.toml").write_text("[project]\nname='x'\n")
     (project / "tasks.py").write_text(
-        'from footman import task\n\n@task\ndef build():\n    """Build."""\n'
+        'from livery.footman import task\n\n@task\ndef build():\n    """Build."""\n'
     )
     user_config.write_text('[builtins]\nuser = ["acme_tasks"]\n', encoding="utf-8")
     result = stock_runner().invoke("--list", cwd=project)
@@ -323,7 +323,7 @@ def test_the_key_is_user_level_only(user_config, provider, tmp_path):
         "[project]\nname='x'\n[tool.footman.builtins]\nuser = ['acme_tasks']\n"
     )
     (project / "tasks.py").write_text(
-        'from footman import task\n\n@task\ndef build():\n    """Build."""\n'
+        'from livery.footman import task\n\n@task\ndef build():\n    """Build."""\n'
     )
     result = stock_runner().invoke("-v --list", cwd=project)
     assert result.ok, result.stderr
@@ -420,7 +420,7 @@ def test_global_only_keeps_a_builtin_out_of_a_project(user_config, provider, tmp
     project.mkdir()
     (project / "pyproject.toml").write_text("[project]\nname='x'\n")
     (project / "tasks.py").write_text(
-        'from footman import task\n\n@task\ndef build():\n    """Build."""\n'
+        'from livery.footman import task\n\n@task\ndef build():\n    """Build."""\n'
     )
     user_config.write_text('[builtins]\nuser = ["acme_tasks"]\n', encoding="utf-8")
 

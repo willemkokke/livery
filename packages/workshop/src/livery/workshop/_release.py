@@ -25,8 +25,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
-from livery import toolroom
 from livery.footman import Context, doc, fail, group
+from livery.toolroom import tools
 from livery.workshop import _cliff
 from livery.workshop._backends import backend_for
 from livery.workshop._git_ops import GitOps
@@ -217,7 +217,7 @@ def prepare_release(root: Path, path: str, version: str = "") -> list[str]:
         # blocks the train's own re-run. Refreshing here puts the lock
         # line inside the commit that stamps the version.
         before_lock = lock.read_bytes()
-        result = toolroom.uv.opts(cwd=root, nofail=True, recorded=False)("lock")
+        result = tools.uv.opts(cwd=root, nofail=True, recorded=False)("lock")
         if result.code != 0:
             fail(
                 f"uv lock after stamping {version} failed:"
@@ -260,8 +260,8 @@ def release_prepare(
         print(f"  stamped: {name}")
 
 
-def _run_git(cwd: Path, *args: str) -> toolroom.Result:
-    return toolroom.git.opts(cwd=cwd, nofail=True, recorded=False)(*args)
+def _run_git(cwd: Path, *args: str) -> tools.Result:
+    return tools.git.opts(cwd=cwd, nofail=True, recorded=False)(*args)
 
 
 def _git_or_fail(cwd: Path, *args: str) -> str:

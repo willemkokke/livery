@@ -77,7 +77,7 @@ from pathlib import Path
 from typing import Any
 
 import livery.footman as footman
-from livery import toolroom
+from livery.toolroom import tools
 
 #: Every state ref lives under this prefix. A push here matches no
 #: push trigger on any forge, so a store write can never start a
@@ -777,14 +777,14 @@ def _reachable(root: Path, snapshot: _Snapshot, ref: str, sha: str) -> str:
     return ""
 
 
-def _git(root: Path, *args: str, stdin: str | None = None) -> toolroom.Result:
-    tool = toolroom.git.opts(cwd=root, nofail=True, recorded=False)
+def _git(root: Path, *args: str, stdin: str | None = None) -> tools.Result:
+    tool = tools.git.opts(cwd=root, nofail=True, recorded=False)
     if stdin is not None:
         tool = tool.opts(input=stdin)
     return tool(*args)
 
 
-def _words(result: toolroom.Result) -> str:
+def _words(result: tools.Result) -> str:
     return (result.stderr or result.stdout).strip()[:200] or "no output"
 
 
@@ -1009,7 +1009,7 @@ def _build_commit(root: Path, files: dict[str, str], message: str) -> tuple[str,
     return commit.stdout.strip(), ""
 
 
-def _stale(refused: toolroom.Result) -> bool:
+def _stale(refused: tools.Result) -> bool:
     """Whether a refused write lost its compare-and-swap rather than failing outright.
 
     A push with a lease says ``stale info`` or ``[rejected]``; an

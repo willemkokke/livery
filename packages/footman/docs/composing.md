@@ -16,7 +16,7 @@ names the task anyway:
 calls and a human never types: a CI entry point, a step another task drives.
 
 ```python
-from footman import task
+from livery.footman import task
 
 
 @task(hidden=True)
@@ -41,7 +41,7 @@ has gone wrong) is the one most worth being spelled for you.
 declaration hides a whole subtree, and a child can still come back.
 
 ```python
-from footman import group
+from livery.footman import group
 
 internal = group("internal", hidden=True)  # the whole subtree, one word
 
@@ -92,7 +92,7 @@ if sys.platform == "darwin":
 can't run *here*":
 
 ```python
-from footman import task, requires_tool
+from livery.footman import task, requires_tool
 
 
 @task
@@ -172,7 +172,7 @@ imported-vs-imported clashes are loud.
 
 <!-- example: fragment -->
 ```python
-from footman import include
+from livery.footman import include
 
 include("shared_tasks")  # everything, at root
 include("shared_tasks", only=["lint", "fmt"])  # cherry-pick children
@@ -230,7 +230,7 @@ where the heavy `import` lives:
 
 ```python
 # devkit/tasks.py
-from footman import task, requires_dep
+from livery.footman import task, requires_dep
 
 
 @task
@@ -271,7 +271,7 @@ A package publishes a `Group` under the `footman.tasks` entry point:
 
 ```python
 # acme_mkdocs/__init__.py
-from footman import Group, requires_tool
+from livery.footman import Group, requires_tool
 
 tasks = Group("mkdocs", help="MkDocs site tasks")
 
@@ -289,7 +289,7 @@ And a project **opts in** with a mount line in its tasks file:
 
 <!-- example: fragment -->
 ```python
-from footman import plugin
+from livery.footman import plugin
 
 plugin("acme.mkdocs")  # fm mkdocs.build, fm mkdocs.deploy
 plugin("acme.mkdocs", only=["build"])  # just one child

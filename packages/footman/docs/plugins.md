@@ -16,8 +16,8 @@ One module, three kinds of contribution:
 ```python
 # acme_devkit/footman_tasks.py
 from pathlib import Path
-import footman
-from footman import GlobalOption, task
+from livery import footman
+from livery.footman import GlobalOption, task
 
 REGION = GlobalOption("region", str, default="eu", help="deployment region")
 
@@ -70,7 +70,7 @@ An installed plugin is inert metadata until a tasks file says otherwise:
 
 <!-- example: fragment -->
 ```python
-from footman.compose import plugin
+from livery.footman.compose import plugin
 
 plugin("acme.devkit", into="acme")  # fm acme.deploy
 ```
@@ -193,12 +193,12 @@ in real invocations.
 you, a tmp directory, assertions on the report:
 
 ```python
-from footman.testing import Runner
+from livery.footman.testing import Runner
 
 
 def test_the_option_reaches_the_task(tmp_path):
     (tmp_path / "tasks.py").write_text(
-        'from footman.compose import plugin\nplugin("acme.devkit")\n'
+        'from livery.footman.compose import plugin\nplugin("acme.devkit")\n'
     )
     result = Runner().invoke("--region=us deploy", tasks=tmp_path / "tasks.py")
     assert result.ok

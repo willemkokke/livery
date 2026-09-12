@@ -106,7 +106,7 @@ commands to know:
 environment works naturally:
 
 ```python
-from footman import requires_env, task
+from livery.footman import requires_env, task
 
 
 @task

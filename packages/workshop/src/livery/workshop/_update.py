@@ -13,8 +13,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from livery import toolroom
 from livery.footman import fail
+from livery.toolroom import tools
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import discover_packages
 
@@ -127,7 +127,7 @@ def refresh_rendered(root: Path) -> list[str]:
         else:
             spelled = str(value)
         data += ["--data", f"{key}={spelled}"]
-    result = toolroom.copier.opts(cwd=root)(
+    result = tools.copier.opts(cwd=root)(
         "update",
         "--defaults",
         "--trust",

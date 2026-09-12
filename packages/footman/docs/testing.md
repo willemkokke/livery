@@ -30,7 +30,7 @@ executing any of them, then hands you the steps to assert on:
 
 <!-- example: fragment -->
 ```python
-from footman.testing import recording
+from livery.footman.testing import recording
 from tasks import release
 
 
@@ -57,7 +57,7 @@ exercising, hand the recording a table of answers:
 
 <!-- example: fragment -->
 ```python
-from footman.testing import recording
+from livery.footman.testing import recording
 from tasks import release
 
 
@@ -132,7 +132,7 @@ Under the hood this is `Context(dry_run=True, quiet=True)` installed with
 ```python
 import os
 
-from footman import Context, use_context
+from livery.footman import Context, use_context
 
 with use_context(Context(env={**os.environ, "CI": "1"})) as ctx:
     deploy()  # runs for real, with CI=1 in its env
@@ -148,10 +148,10 @@ assert ctx.steps[-1].code == 0
 taught errors, exit codes — and captures everything:
 
 ```python
-from footman.testing import Runner
+from livery.footman.testing import Runner
 
 TASKS = """
-from footman import task, run
+from livery.footman import task, run
 
 @task
 def format():
@@ -221,7 +221,7 @@ dependency):
 ```python
 def test_release_dry(fm_project):
     fm = fm_project("""
-        from footman import task, run
+        from livery.footman import task, run
 
         @task
         def release(version: str, push: bool = False):
@@ -279,8 +279,8 @@ A custom `App` tests exactly like `fm`. Hand it to the `Runner` and every
 user-facing string carries your brand, including the error prefix:
 
 ```python
-from footman import App
-from footman.testing import Runner
+from livery.footman import App
+from livery.footman.testing import Runner
 
 
 def test_acme_teaches_with_its_own_name(tmp_path):

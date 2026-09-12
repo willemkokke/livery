@@ -189,7 +189,7 @@ def test_children_share_the_script():
 def test_answers_cover_a_bridge_call_under_a_live_context():
     """Under a recording, host detection routes a toolroom handle through
     run(), so one table answers plain calls and handles alike."""
-    from toolroom import git
+    from livery.toolroom.tools import git
 
     with recording(answers={"git branch": "main\n"}) as steps:
         out = git.branch(show_current=True)
@@ -198,8 +198,8 @@ def test_answers_cover_a_bridge_call_under_a_live_context():
 
 
 def test_toolrooms_table_wins_when_both_are_nested():
-    from toolroom import git
-    from toolroom.testing import answers
+    from livery.toolroom.tools import git
+    from livery.toolroom.tools.testing import answers
 
     with (
         recording(answers={"git branch": 1}) as steps,
@@ -438,7 +438,7 @@ def test_runner_file_path_propagates_keyboard_interrupt(tmp_path):
 
     tasks = tmp_path / "tasks.py"
     tasks.write_text(
-        "from footman import task\n@task\ndef boom():\n    raise KeyboardInterrupt\n"
+        "from livery.footman import task\n@task\ndef boom():\n    raise KeyboardInterrupt\n"
     )
     with pytest.raises(KeyboardInterrupt):
         Runner().invoke("boom", tasks=tasks, cwd=tmp_path)

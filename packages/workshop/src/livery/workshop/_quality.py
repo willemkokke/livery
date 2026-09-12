@@ -758,7 +758,7 @@ def _git_identity(root: Path) -> str:
     """Who is accepting: the git identity, or the user name the shell has."""
     import os
 
-    import livery.toolroom as toolroom
+    from livery.toolroom import tools as toolroom
 
     result = toolroom.git.opts(cwd=root, nofail=True, recorded=False)(
         "config", "user.name"

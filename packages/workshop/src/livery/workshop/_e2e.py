@@ -331,7 +331,7 @@ def _rmtree(path: Path) -> None:
 
 def _unpushed_commits(root: Path) -> list[str]:
     """The commits on any local branch of *root* that its origin does not hold."""
-    import livery.toolroom as toolroom
+    from livery.toolroom import tools as toolroom
 
     fetched = toolroom.git.opts(cwd=root, nofail=True, recorded=False)(
         "fetch", "--quiet", "origin"
@@ -380,7 +380,7 @@ def _authenticate_remote(root: Path, token: str) -> None:
     validates the token and ignores the username (measured), and
     ``oauth2`` is the conventional stand-in.
     """
-    import livery.toolroom as toolroom
+    from livery.toolroom import tools as toolroom
 
     bare = ALIAS_URL.removeprefix("http://")
     url = f"http://oauth2:{token}@{bare}/{E2E_OWNER}/{E2E_REPO}.git"
@@ -428,7 +428,7 @@ def _lock_pins(root: Path, pins: dict[str, str]) -> None:
     pins name the four versions outright; everything else keeps its
     locked version.
     """
-    import livery.toolroom as toolroom
+    from livery.toolroom import tools as toolroom
 
     args = [f"--upgrade-package={name}=={version}" for name, version in pins.items()]
     result = toolroom.uv.opts(cwd=root, nofail=True)("lock", *args)
@@ -752,7 +752,7 @@ def _align_main(root: Path) -> None:
     squashes supersede, so a fast-forward regularly cannot. What
     goes is printed, never silently vanished.
     """
-    import livery.toolroom as toolroom
+    from livery.toolroom import tools as toolroom
 
     toolroom.git.opts(cwd=root)("fetch", "origin")
     gone = toolroom.git.opts(cwd=root, nofail=True)(
@@ -799,7 +799,7 @@ def _fresh_branch(root: Path, name: str) -> None:
     a future edit can separate: the tree is reset to origin, cleaned,
     and swept of stale local branches before this one is recreated.
     """
-    import livery.toolroom as toolroom
+    from livery.toolroom import tools as toolroom
 
     _align_main(root)
     toolroom.git.opts(cwd=root)("switch", "-C", name)
@@ -815,7 +815,7 @@ def _loop_fm(
     verb exercise the dev wheels end to end. ``--yes`` rides every
     call, because the loop is automation and silence never confirms.
     """
-    import livery.toolroom as toolroom
+    from livery.toolroom import tools as toolroom
 
     # The caller's VIRTUAL_ENV points at the worktree; the loop's uv
     # must resolve the loop's own venv, so the variable stays behind.
@@ -1055,7 +1055,7 @@ def _prepare_ratchet(root: Path, kind: str) -> None:
     finish already lowered) is printed and the mark stands; the proof
     reads the same lines either way.
     """
-    import livery.toolroom as toolroom
+    from livery.toolroom import tools as toolroom
     from livery.workshop._git_ops import GitOps
 
     contract = root / "packages" / RATCHET_MEMBER / "workshop.toml"
@@ -1143,7 +1143,7 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
     # with a lease on that ref, which git refuses as stale against a
     # branch that is gone. A pruning fetch drops the stale ref (or
     # refreshes it when a failed pass left the branch behind).
-    import livery.toolroom as toolroom
+    from livery.toolroom import tools as toolroom
 
     toolroom.git.opts(cwd=root, nofail=True)("fetch", "--prune", "origin")
     _loop_fm(root, "submit", "--force", "--armed")
@@ -1261,7 +1261,7 @@ def _prove_prose_leg(root: Path, kind: str) -> None:
         " skips its gate."
     )
     head = git.head_sha()
-    import livery.toolroom as toolroom
+    from livery.toolroom import tools as toolroom
 
     toolroom.git.opts(cwd=root, nofail=True)("fetch", "--prune", "origin")
     _loop_fm(root, "submit", "--force", "--armed")
@@ -1344,7 +1344,7 @@ def _prove_tests_leg(root: Path, kind: str) -> None:
         " workspace tests and says so."
     )
     head = git.head_sha()
-    import livery.toolroom as toolroom
+    from livery.toolroom import tools as toolroom
 
     toolroom.git.opts(cwd=root, nofail=True)("fetch", "--prune", "origin")
     _loop_fm(root, "submit", "--force", "--armed")
@@ -1443,8 +1443,8 @@ def _release_act(root: Path, kind: str) -> None:
     registry and cuts the receipt tag. Done means measured: the
     served version and the annotated tag, never the exit code alone.
     """
-    import livery.toolroom as toolroom
     from livery.forge import SimpleRegistry
+    from livery.toolroom import tools as toolroom
     from livery.workshop._release_driver import release_name
 
     # Only the members without a receipt release: the driver refuses a
@@ -1601,7 +1601,7 @@ def _require_receipt_protected(root: Path, tag: str) -> None:
     import json
     import urllib.request
 
-    import livery.toolroom as toolroom
+    from livery.toolroom import tools as toolroom
 
     # Forced: a receipt recut by a later wave is a new tag object, and
     # the workspace may still hold the one an earlier pass fetched.

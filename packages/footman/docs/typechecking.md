@@ -14,7 +14,7 @@ callable: calling it from another task body checks your parameters and
 return type, and your editor completes them.
 
 ```python
-from footman import task
+from livery.footman import task
 
 
 @task

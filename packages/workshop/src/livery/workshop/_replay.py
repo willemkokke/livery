@@ -145,7 +145,7 @@ def install(venv: Path, python: str, requirement: str, index: str) -> int:
     a plain one outside the workspace: no lock, no editable members,
     so the package can only come from the index.
     """
-    from livery import toolroom
+    from livery.toolroom import tools as toolroom
 
     made = toolroom.uv.opts(nofail=True)("venv", str(venv), "--python", python)
     if made.code != 0:
@@ -208,7 +208,7 @@ def replay_flow(
     an index or an interpreter. With *repo*, a red replay files or
     extends the marker issue before failing.
     """
-    from livery import toolroom
+    from livery.toolroom import tools as toolroom
 
     member = package.directory.name
     replay = Replay(

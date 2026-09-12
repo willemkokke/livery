@@ -16,8 +16,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import livery.footman as footman
-from livery import toolroom
 from livery.footman import fail
+from livery.toolroom import tools
 
 if TYPE_CHECKING:
     from livery.workshop._packages import Package
@@ -283,7 +283,7 @@ def check(package: Package, root: Path) -> None:
     """
     del root
     build_dir = package.directory / GATE_BUILD_DIR
-    cmake = toolroom.cmake.opts(cwd=package.directory)
+    cmake = tools.cmake.opts(cwd=package.directory)
     cmake("-S", ".", "-B", str(build_dir), "-G", "Ninja")
     cmake("--build", str(build_dir))
     # The Ninja generator's `test` target runs ctest with the
@@ -291,7 +291,7 @@ def check(package: Package, root: Path) -> None:
     # test print its output instead of a bare summary line. The env
     # rides whole: standalone toolroom passes `env=` as the child's
     # entire environment, never a merge over the parent's.
-    result = toolroom.cmake.opts(
+    result = tools.cmake.opts(
         cwd=package.directory,
         env={**os.environ, "CTEST_OUTPUT_ON_FAILURE": "1"},
         nofail=True,

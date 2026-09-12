@@ -21,8 +21,8 @@ a script earns a receipt, captures through the task's lane, obeys
 around it.
 
 ```python
-from footman import task
-from livery.toolroom import ruff, pytest
+from livery.footman import task
+from livery.toolroom.tools import ruff, pytest
 
 
 @task
@@ -47,7 +47,7 @@ would be faked.
   run's story, a row in `--json`, output replayed on failure.
 - **`recording()`** — tests capture the commands a block would run
   without executing them. When a test needs a tool to *say* something
-  or to fail, that is [`livery.toolroom.testing.answers()`](testing.md) —
+  or to fail, that is [`livery.toolroom.tools.testing.answers()`](testing.md) —
   toolroom's own double, host or no host.
 - **`--dry-run`** — calls are faked, not executed.
 - **The in-process lane** — tools that prefer running inside the

@@ -528,7 +528,7 @@ def test_the_scan_answers_the_same_once_the_modules_are_imported(brand_dist):
 def test_a_spent_import_does_not_blind_the_scan(brand_dist, monkeypatch):
     """The flake, pinned deterministically: delete the memo for an
     already-imported plugin module and the scan is exactly where a worker
-    stood after a bare `import footman.env_files` beat every proper load —
+    stood after a bare `import livery.footman.env_files` beat every proper load —
     `load()` captures nothing, there is no tree to reuse, and the scan used
     to drop the flag for the rest of the process. It must rebuild instead,
     whatever this worker happened to run first."""

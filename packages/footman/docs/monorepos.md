@@ -58,7 +58,7 @@ every project, and in directories that are no project at all:
 
 ```python
 # ~/.config/footman/tasks.py
-from footman import run, task
+from livery.footman import run, task
 
 
 @task

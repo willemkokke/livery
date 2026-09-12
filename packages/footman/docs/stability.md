@@ -11,7 +11,7 @@ the promise covers:
 1. **The public API** — every name exported from `footman` itself: the
    decorators, [`group()`](reference.md), [`run()`](reference.md), the
    parameter markers, [`Context`](reference.md), the testing
-   [`Runner`](testing.md). If you can `from footman import` it without a
+   [`Runner`](testing.md). If you can `from livery.footman import` it without a
    leading underscore, it is on the surface.
 2. **The CLI grammar** — how a command line is read: chains without
    separators, [dotted addressing](orchestration.md), where `--` hands off,

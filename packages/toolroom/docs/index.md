@@ -9,7 +9,7 @@ themselves.
 
 <!-- example: fragment -->
 ```python
-from livery.toolroom import cmake, git
+from livery.toolroom.tools import cmake, git
 
 git.switch("-c", "release/v1.4")
 cmake.build("build", parallel=8)

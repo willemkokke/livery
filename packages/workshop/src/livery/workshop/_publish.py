@@ -30,8 +30,8 @@ from pathlib import Path
 from typing import Protocol
 
 import livery.footman as footman
-from livery import toolroom
 from livery.footman import fail
+from livery.toolroom import tools
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package, discover_packages
 
@@ -204,7 +204,7 @@ def ensure_git_identity(git: GitOps) -> None:
     Only when ``user.email`` is unset: the environment's GIT_* wins
     anyway, and a person's own configuration is never touched.
     """
-    probe = toolroom.git.opts(cwd=git.root, nofail=True, recorded=False)(
+    probe = tools.git.opts(cwd=git.root, nofail=True, recorded=False)(
         "config", "user.email"
     )
     if probe.code == 0 and probe.stdout.strip():
@@ -213,9 +213,7 @@ def ensure_git_identity(git: GitOps) -> None:
         ("user.email", "release@livery.local"),
         ("user.name", "livery release"),
     ):
-        toolroom.git.opts(cwd=git.root, nofail=True, recorded=False)(
-            "config", key, value
-        )
+        tools.git.opts(cwd=git.root, nofail=True, recorded=False)("config", key, value)
 
 
 def assert_wheel_identity(package: Package) -> None:
@@ -276,9 +274,7 @@ def publish_wheels(package: Package, *, index_url: str = "", token: str = "") ->
         # receipts, --json, and recordings alike.
         command += ["--token", token]
     command += [str(path) for path in sorted((package.directory / "dist").glob("*"))]
-    result = toolroom.uv.opts(cwd=package.directory, nofail=True, recorded=False)(
-        *command
-    )
+    result = tools.uv.opts(cwd=package.directory, nofail=True, recorded=False)(*command)
     if result.code == 0:
         return True
     output = f"{result.stdout}{result.stderr}"

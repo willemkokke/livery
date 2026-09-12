@@ -17,7 +17,7 @@ benchmark pins a fixture manifest so runs stay comparable):
 | ------------------------------------------ | -----: |
 | interpreter startup (floor)                | 13 ms  |
 | standalone resolver (`python -S`)          | 18 ms  |
-| `python -m footman --complete`             | 20 ms  |
+| `python -m livery.footman --complete`             | 20 ms  |
 | `fm --complete` (the installed hook path)  | 18 ms  |
 
 A structural answer — task names, options, `Literal` choices — costs a few
@@ -35,7 +35,7 @@ the command surface actually changed. Reproduce with
 
 Footman's `main()` checks for `--complete` **before importing the framework or
 your tasks**, dispatching straight to the stdlib-only resolver. A bare
-`import footman` pays for nothing but the entry module — no pathlib, no
+`from livery import footman` pays for nothing but the entry module — no pathlib, no
 subprocess, no typing, which an invariant test pins. That is why a keystroke
 costs what it does rather than what re-importing your project costs. When a
 live value is genuinely needed (a dynamic completer, or the first build in a
@@ -236,7 +236,7 @@ is what it hands *along*: the pattern the shell filters by.
 ```python
 from pathlib import Path
 from typing import Annotated
-from footman import matching, task
+from livery.footman import matching, task
 
 
 @task

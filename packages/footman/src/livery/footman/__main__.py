@@ -1,4 +1,4 @@
-"""Support `python -m footman` as an alias for the console script."""
+"""Support `python -m livery.footman` as an alias for the console script."""
 
 from livery.footman import main
 

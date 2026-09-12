@@ -9,33 +9,33 @@ implementation — it moves without notice.
 
 ## The handles
 
-::: livery.toolroom.Tool
+::: livery.toolroom.tools.Tool
 
 ## The vocabulary
 
-::: livery.toolroom.Argv
+::: livery.toolroom.tools.Argv
 
-::: livery.toolroom.Result
+::: livery.toolroom.tools.Result
 
-::: livery.toolroom.ToolError
+::: livery.toolroom.tools.ToolError
 
 ## Flag control
 
-::: livery.toolroom.off
+::: livery.toolroom.tools.off
 
 ## Versions
 
-::: livery.toolroom.read_version
+::: livery.toolroom.tools.read_version
 
-::: livery.toolroom.version_tuple
+::: livery.toolroom.tools.version_tuple
 
 ## Testing
 
 How these fit together is [Testing](testing.md)'s story; this is the
 reference.
 
-::: livery.toolroom.testing.answers
+::: livery.toolroom.tools.testing.answers
 
-::: livery.toolroom.testing.Call
+::: livery.toolroom.tools.testing.Call
 
-::: livery.toolroom.testing.UnservedAnswers
+::: livery.toolroom.tools.testing.UnservedAnswers

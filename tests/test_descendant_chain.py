@@ -152,7 +152,7 @@ def _chain(
     bridge = tmp_path / "bridge-config"
     (bridge / "footman").mkdir(parents=True, exist_ok=True)
     (bridge / "footman" / "tasks.py").write_text(
-        'from footman import plugin\n\nplugin("livery.workshop")\n'
+        'from livery.footman import plugin\n\nplugin("livery.workshop")\n'
     )
     bridged = {**env, "XDG_CONFIG_HOME": str(bridge)}
 

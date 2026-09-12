@@ -441,8 +441,12 @@ def test_include_two_submodules_of_one_package(tmp_path, monkeypatch):
     pkg = tmp_path / "provpkg"
     pkg.mkdir()
     (pkg / "__init__.py").write_text("")
-    (pkg / "alpha.py").write_text("from footman import task\n@task\ndef lint(): ...\n")
-    (pkg / "beta.py").write_text("from footman import task\n@task\ndef fmt(): ...\n")
+    (pkg / "alpha.py").write_text(
+        "from livery.footman import task\n@task\ndef lint(): ...\n"
+    )
+    (pkg / "beta.py").write_text(
+        "from livery.footman import task\n@task\ndef fmt(): ...\n"
+    )
     monkeypatch.syspath_prepend(str(tmp_path))
     monkeypatch.setattr(compose, "_module_trees", {})
     for name in [n for n in sys.modules if n == "provpkg" or n.startswith("provpkg.")]:
@@ -471,7 +475,9 @@ def test_a_pre_imported_empty_parent_is_walked_through(tmp_path, monkeypatch):
     pkg = tmp_path / "devkit"
     pkg.mkdir()
     (pkg / "__init__.py").write_text("REGISTRY = 'ghcr.io/acme'\n")
-    (pkg / "tasks.py").write_text("from footman import task\n@task\ndef lint(): ...\n")
+    (pkg / "tasks.py").write_text(
+        "from livery.footman import task\n@task\ndef lint(): ...\n"
+    )
     monkeypatch.syspath_prepend(str(tmp_path))
     monkeypatch.setattr(compose, "_module_trees", {})
     for name in [n for n in sys.modules if n == "devkit" or n.startswith("devkit.")]:
@@ -488,7 +494,7 @@ def test_a_pre_imported_module_with_tasks_still_refuses(tmp_path, monkeypatch):
     # is here, and the import that would have captured it is gone — so the
     # refusal stays, and now it only fires when it is true.
     (tmp_path / "spent.py").write_text(
-        "from footman import task\n@task\ndef go(): ...\n"
+        "from livery.footman import task\n@task\ndef go(): ...\n"
     )
     monkeypatch.syspath_prepend(str(tmp_path))
     monkeypatch.setattr(compose, "_module_trees", {})
@@ -528,7 +534,7 @@ def test_the_mount_failure_paths_teach_and_are_pinned(tmp_path, monkeypatch):
     monkeypatch.syspath_prepend(str(tmp_path))
     sys.modules.pop("prov_ok", None)
     (tmp_path / "prov_ok.py").write_text(
-        "from footman import task\n\n\n@task\ndef ping(): ...\n"
+        "from livery.footman import task\n\n\n@task\ndef ping(): ...\n"
     )
 
     with registry.capture():
@@ -551,7 +557,7 @@ def test_the_mount_failure_paths_teach_and_are_pinned(tmp_path, monkeypatch):
     (tmp_path / "provpkg").mkdir()
     (tmp_path / "provpkg" / "__init__.py").write_text("")
     (tmp_path / "provpkg" / "real.py").write_text(
-        "from footman import task\n\n\n@task\ndef pong(): ...\n"
+        "from livery.footman import task\n\n\n@task\ndef pong(): ...\n"
     )
     with (
         registry.capture(),
@@ -574,7 +580,7 @@ def test_a_provider_that_raises_on_import_names_the_tasks_file(tmp_path, monkeyp
     sys.modules.pop("prov_boom", None)
     (tmp_path / "prov_boom.py").write_text('raise RuntimeError("boom at import")\n')
     root = tmp_path / "tasks.py"
-    root.write_text("from footman import include\n\ninclude('prov_boom')\n")
+    root.write_text("from livery.footman import include\n\ninclude('prov_boom')\n")
     with pytest.raises(_discover.TasksImportError) as caught:
         _discover.load_tree([root])
     assert "boom at import" in str(caught.value) or "boom at import" in str(
@@ -679,14 +685,16 @@ def test_included_tasks_run_from_the_includers_dir(tmp_path, monkeypatch):
     provider_dir = tmp_path / "elsewhere"
     provider_dir.mkdir()
     (provider_dir / "prov.py").write_text(
-        "from footman import task\n@task\ndef show(ctx):\n    print(ctx.cwd)\n"
+        "from livery.footman import task\n@task\ndef show(ctx):\n    print(ctx.cwd)\n"
     )
     monkeypatch.syspath_prepend(str(provider_dir))
 
     project = tmp_path / "proj"
     project.mkdir()
     (project / "pyproject.toml").write_text('[project]\nname="x"\n')
-    (project / "tasks.py").write_text("from footman import include\ninclude('prov')\n")
+    (project / "tasks.py").write_text(
+        "from livery.footman import include\ninclude('prov')\n"
+    )
 
     result = Runner().invoke("show", cwd=project)
     assert result.ok
@@ -715,7 +723,7 @@ def test_pull_line_splats_an_anonymous_container(provider, tmp_path):
     project.mkdir()
     (project / "pyproject.toml").write_text('[project]\nname="x"\n')
     (project / "tasks.py").write_text(
-        "from footman import plugin, task\nplugin('shared')\n@task\ndef own(): ...\n"
+        "from livery.footman import plugin, task\nplugin('shared')\n@task\ndef own(): ...\n"
     )
     result = Runner().invoke("lint", cwd=project)
     assert result.ok
@@ -730,7 +738,7 @@ def test_pull_line_into_names_the_consumers_placement(provider, tmp_path):
     project.mkdir()
     (project / "pyproject.toml").write_text('[project]\nname="x"\n')
     (project / "tasks.py").write_text(
-        "from footman import plugin\nplugin('shared', into='vendor.kit')\n"
+        "from livery.footman import plugin\nplugin('shared', into='vendor.kit')\n"
     )
     result = Runner().invoke("vendor.kit.lint", cwd=project)
     assert result.ok and "lint fix=False" in result.stdout
@@ -741,7 +749,7 @@ def test_user_task_shadows_a_pulled_one(provider, tmp_path):
     project.mkdir()
     (project / "pyproject.toml").write_text('[project]\nname="x"\n')
     (project / "tasks.py").write_text(
-        "from footman import plugin, task\n"
+        "from livery.footman import plugin, task\n"
         "plugin('shared')\n"
         "@task\ndef lint():\n    print('mine')\n"
     )
@@ -755,7 +763,7 @@ def test_missing_plugin_pull_refuses(tmp_path):
     project.mkdir()
     (project / "pyproject.toml").write_text('[project]\nname="x"\n')
     (project / "tasks.py").write_text(
-        "from footman import plugin, task\nplugin('ghost')\n@task\ndef own(): ...\n"
+        "from livery.footman import plugin, task\nplugin('ghost')\n@task\ndef own(): ...\n"
     )
     result = Runner().invoke("own", cwd=project)
     assert result.exit_code == EX_USAGE
@@ -771,7 +779,7 @@ def test_stale_plugins_config_key_is_taught(tmp_path):
         '[project]\nname="x"\n[tool.footman]\nplugins = ["shared"]\n'
     )
     (project / "tasks.py").write_text(
-        "from footman import task\n@task\ndef own(): ...\n"
+        "from livery.footman import task\n@task\ndef own(): ...\n"
     )
     result = Runner().invoke("own", cwd=project)
     assert result.exit_code == EX_USAGE
@@ -846,7 +854,7 @@ def test_dotted_plugin_name_nests_and_shares_namespace(tmp_path, monkeypatch):
     project.mkdir()
     (project / "pyproject.toml").write_text('[project]\nname="x"\n')
     (project / "tasks.py").write_text(
-        "from footman import plugin, task\n"
+        "from livery.footman import plugin, task\n"
         "plugin('suite.alpha', into='suite')\n"
         "plugin('suite.beta', into='suite')\n"
         "@task\ndef own(): ...\n"
@@ -873,7 +881,7 @@ def test_broken_plugin_pull_refuses(tmp_path, monkeypatch):
     project.mkdir()
     (project / "pyproject.toml").write_text('[project]\nname="x"\n')
     (project / "tasks.py").write_text(
-        "from footman import plugin, task\nplugin('broken2')\n@task\ndef own(): ...\n"
+        "from livery.footman import plugin, task\nplugin('broken2')\n@task\ndef own(): ...\n"
     )
     result = Runner().invoke("own", cwd=project)
     assert result.exit_code == EX_USAGE
@@ -911,7 +919,7 @@ def test_plugin_explicit_group_module_is_adopted(tmp_path, monkeypatch):
 
 
 def test_a_spent_import_still_mounts_its_contributions(monkeypatch):
-    """A bare `import footman.profile` before any proper load used to spend
+    """A bare `import livery.footman.profile` before any proper load used to spend
     the module's one import: the entry point's later `load()` captured
     nothing, so the mount refused and the flag scan went blind — the
     worker-ordering flake of 2026-08-14. The declarations survive as
@@ -974,7 +982,7 @@ def test_include_of_a_pre_imported_module_teaches(tmp_path, monkeypatch):
     captured — re-executing it would double every side effect, so footman
     refuses with guidance instead of guessing."""
     (tmp_path / "early_tasks.py").write_text(
-        "from footman import task\n\n@task\ndef early():\n    'Early.'\n"
+        "from livery.footman import task\n\n@task\ndef early():\n    'Early.'\n"
     )
     monkeypatch.syspath_prepend(str(tmp_path))
     monkeypatch.delitem(sys.modules, "early_tasks", raising=False)
@@ -1000,7 +1008,7 @@ def test_include_of_a_module_with_two_groups_teaches(tmp_path, monkeypatch):
     # Group(...) constructs without registering; group(...) would register
     # and the module would no longer be "no tasks at all".
     (tmp_path / "two_groups.py").write_text(
-        "from footman.registry import Group\n\na = Group('a')\nb = Group('b')\n"
+        "from livery.footman.registry import Group\n\na = Group('a')\nb = Group('b')\n"
     )
     monkeypatch.syspath_prepend(str(tmp_path))
     monkeypatch.delitem(sys.modules, "two_groups", raising=False)
@@ -1135,7 +1143,7 @@ def test_included_group_default_runs_end_to_end(default_provider, tmp_path):
     project.mkdir()
     (project / "pyproject.toml").write_text('[project]\nname="x"\n')
     (project / "tasks.py").write_text(
-        "from footman import include\ninclude('reltasks')\n"
+        "from livery.footman import include\ninclude('reltasks')\n"
     )
     result = Runner().invoke("release --armed", cwd=project)
     assert result.ok, result.stderr
@@ -1169,7 +1177,7 @@ def test_include_runs_provider_hooks(tmp_path, monkeypatch):
     project.mkdir()
     (project / "pyproject.toml").write_text('[project]\nname="x"\n')
     (project / "tasks.py").write_text(
-        "from footman import include\ninclude('finmod')\n"
+        "from livery.footman import include\ninclude('finmod')\n"
     )
     listing = Runner().invoke("--list", cwd=project)
     assert listing.ok
@@ -1199,7 +1207,7 @@ def test_include_of_a_hooks_only_module_is_a_valid_pull(tmp_path, monkeypatch):
     project.mkdir()
     (project / "pyproject.toml").write_text('[project]\nname="x"\n')
     (project / "tasks.py").write_text(
-        "from footman import task, include\n"
+        "from livery.footman import task, include\n"
         "@task\ndef deploy(): ...\n"
         "include('hooks_only')\n"
     )
@@ -1273,7 +1281,7 @@ def test_plugin_subpath_walks_the_advertised_tree(provider, tmp_path):
     project.mkdir()
     (project / "pyproject.toml").write_text('[project]\nname="x"\n')
     (project / "tasks.py").write_text(
-        "from footman import plugin\nplugin('shared.docs')\n"
+        "from livery.footman import plugin\nplugin('shared.docs')\n"
     )
     result = Runner().invoke("docs.build", cwd=project)
     assert result.ok and "docs-build" in result.stdout
@@ -1318,7 +1326,7 @@ def test_provenance_is_stamped_and_reported(provider, tmp_path):
     project.mkdir()
     (project / "pyproject.toml").write_text('[project]\nname="x"\n')
     (project / "tasks.py").write_text(
-        "from footman import plugin\nplugin('shared', into='vendor')\n"
+        "from livery.footman import plugin\nplugin('shared', into='vendor')\n"
     )
     result = Runner().invoke("--plugins", cwd=project)
     assert result.ok
@@ -1334,7 +1342,9 @@ def test_unmounted_plugin_shows_state_and_the_dist_header_describes(provider, tm
     project = tmp_path / "proj_unpulled"
     project.mkdir()
     (project / "pyproject.toml").write_text('[project]\nname="x"\n')
-    (project / "tasks.py").write_text("from footman import task\n@task\ndef t(): ...\n")
+    (project / "tasks.py").write_text(
+        "from livery.footman import task\n@task\ndef t(): ...\n"
+    )
     result = Runner().invoke("--plugins", cwd=project)
     assert result.ok
     assert "shared" in result.stdout
@@ -1396,7 +1406,7 @@ def test_leaf_clash_across_identities_cites_both(provider, tmp_path, monkeypatch
 def test_module_docstring_becomes_container_help(tmp_path, monkeypatch):
     (tmp_path / "documented_kit.py").write_text(
         '"""A documented kit of tasks.\n\nMore prose.\n"""\n'
-        "from footman import task\n\n@task\ndef go(): ...\n"
+        "from livery.footman import task\n\n@task\ndef go(): ...\n"
     )
     monkeypatch.syspath_prepend(str(tmp_path))
     monkeypatch.setattr(compose, "_module_trees", {})
@@ -1439,7 +1449,7 @@ def test_adopted_default_fans_out_the_group_it_landed_in(tmp_path, monkeypatch):
     project.mkdir()
     (project / "pyproject.toml").write_text('[project]\nname="x"\n')
     (project / "tasks.py").write_text(
-        "from footman import group, plugin\n"
+        "from livery.footman import group, plugin\n"
         "lint = group('lint')\n"
         "@lint.task\n"
         "def markdown(fix: bool = False):\n"

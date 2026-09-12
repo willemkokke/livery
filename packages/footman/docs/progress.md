@@ -48,7 +48,7 @@ bar fills from the truth:
 
 ```python
 from pathlib import Path
-from footman import task, track, progress
+from livery.footman import task, track, progress
 
 
 def load_records() -> list: ...  # your own work, whatever shape it takes

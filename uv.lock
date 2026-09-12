@@ -572,18 +572,6 @@ wheels = [
 ]
 
 [[package]]
-name = "footman"
-version = "0.52.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "livery-footman" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/0e/2b/08edbfcd68becd413eedbb855127a0806a9365903ed99c01b7972355f408/footman-0.52.2.tar.gz", hash = "sha256:166c4e9dd9d0712188b498293aa62c83dc6be0a6b9e518caac925ac2f08b6dd7", size = 3682, upload-time = "2026-09-06T20:48:31.933Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/89/92/5b97733eca0ba7f900de8422bc1a464c576a8cace6aceeac7e6966149bbc/footman-0.52.2-py3-none-any.whl", hash = "sha256:e28d515a9064f341d1079e943869bae02e43fc14f3bff04b5a4b8cf3e6ec971b", size = 11679, upload-time = "2026-09-06T20:48:31.072Z" },
-]
-
-[[package]]
 name = "funcy"
 version = "2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -907,7 +895,6 @@ source = { editable = "packages/footman" }
 
 [package.optional-dependencies]
 test = [
-    { name = "footman" },
     { name = "httpx" },
     { name = "jedi" },
     { name = "livery-toolroom" },
@@ -915,7 +902,6 @@ test = [
     { name = "python-dotenv" },
     { name = "requests" },
     { name = "rich" },
-    { name = "toolroom" },
 ]
 uv = [
     { name = "uv" },
@@ -923,7 +909,6 @@ uv = [
 
 [package.metadata]
 requires-dist = [
-    { name = "footman", marker = "extra == 'test'", specifier = ">=0.52.2" },
     { name = "httpx", marker = "extra == 'test'", specifier = ">=0.27" },
     { name = "jedi", marker = "extra == 'test'", specifier = ">=0.20.0" },
     { name = "livery-toolroom", marker = "extra == 'test'", editable = "packages/toolroom" },
@@ -931,7 +916,6 @@ requires-dist = [
     { name = "python-dotenv", marker = "extra == 'test'", specifier = ">=1.0" },
     { name = "requests", marker = "extra == 'test'", specifier = ">=2.31" },
     { name = "rich", marker = "extra == 'test'", specifier = ">=13" },
-    { name = "toolroom", marker = "extra == 'test'", specifier = ">=0.6.2" },
     { name = "uv", marker = "extra == 'uv'", specifier = ">=0.6" },
 ]
 provides-extras = ["uv", "test"]
@@ -962,18 +946,14 @@ source = { editable = "packages/toolroom" }
 
 [package.optional-dependencies]
 test = [
-    { name = "footman" },
     { name = "livery-footman" },
     { name = "mkdocs" },
-    { name = "toolroom" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "footman", marker = "extra == 'test'", specifier = ">=0.52.2" },
     { name = "livery-footman", marker = "extra == 'test'", editable = "packages/footman" },
     { name = "mkdocs", marker = "extra == 'test'", specifier = ">=1.6" },
-    { name = "toolroom", marker = "extra == 'test'", specifier = ">=0.6.2" },
 ]
 provides-extras = ["test"]
 
@@ -1819,18 +1799,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/12/64/da524626d3b9cc40c168a13da8335fe1c51be12c0a63685cc6db7308daae/tomli-2.4.1-cp314-cp314t-win_amd64.whl", hash = "sha256:2c1c351919aca02858f740c6d33adea0c5deea37f9ecca1cc1ef9e884a619d26", size = 121196, upload-time = "2026-03-25T20:22:01.169Z" },
     { url = "https://files.pythonhosted.org/packages/5a/cd/e80b62269fc78fc36c9af5a6b89c835baa8af28ff5ad28c7028d60860320/tomli-2.4.1-cp314-cp314t-win_arm64.whl", hash = "sha256:eab21f45c7f66c13f2a9e0e1535309cee140182a9cdae1e041d02e47291e8396", size = 100393, upload-time = "2026-03-25T20:22:02.137Z" },
     { url = "https://files.pythonhosted.org/packages/7b/61/cceae43728b7de99d9b847560c262873a1f6c98202171fd5ed62640b494b/tomli-2.4.1-py3-none-any.whl", hash = "sha256:0d85819802132122da43cb86656f8d1f8c6587d54ae7dcaf30e90533028b49fe", size = 14583, upload-time = "2026-03-25T20:22:03.012Z" },
-]
-
-[[package]]
-name = "toolroom"
-version = "0.6.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "livery-toolroom" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/b7/10/722094cb9257b5586fadf049619826166909215373b6117a7f525515e5ca/toolroom-0.6.2.tar.gz", hash = "sha256:613a41418efcbdbe774e1dc0bd92baa15ed1e1ee252e106092241ada82632930", size = 2714, upload-time = "2026-09-06T20:52:05.287Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/97/cc/21e5d2302e98eca4993ef58c7767678a6bc4e03dff7c6265ffada93e9e4d/toolroom-0.6.2-py3-none-any.whl", hash = "sha256:8bf5073ce352d1db73493a361e57c731a37a69aebbf6897c43579492a1d64788", size = 4730, upload-time = "2026-09-06T20:52:04.46Z" },
 ]
 
 [[package]]

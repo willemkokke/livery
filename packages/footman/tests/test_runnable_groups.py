@@ -523,7 +523,7 @@ def test_group_help_lists_the_default_row(tmp_path, monkeypatch, capsys):
 
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from footman import group\n"
+        "from livery.footman import group\n"
         "lint = group('lint', help='Lint things')\n"
         "@lint.task\n"
         "def markdown(fix: bool = False):\n"
@@ -550,7 +550,7 @@ def test_collision_note_reaches_stderr(tmp_path, monkeypatch, capsys):
 
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from footman import group\n"
+        "from livery.footman import group\n"
         "lint = group('lint')\n"
         "@lint.task\n"
         "def markdown(fix: bool = False):\n"

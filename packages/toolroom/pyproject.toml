@@ -34,31 +34,25 @@ dependencies = []
 [project.optional-dependencies]
 test = [
     "livery-footman>=0.52.2",
-    # The playground harness speaks the compat spelling on purpose
-    # (it is the spelling a browser consumer installs), so its probe
-    # needs the shim beside the real distribution.
-    "footman>=0.52.2",
     # The driver suite interrogates mkdocs structurally (the click
     # ladder) and reads its version; without a venv copy the finder
     # meets whatever the machine carries, which the suite's python
     # cannot introspect.
     "mkdocs>=1.6",
-    # The playground writes a consumer tasks.py that imports the
-    # package by its index spelling; the suite drives that spelling
-    # on purpose, so it needs this package's own shim.
-    "toolroom>=0.6.2",
 ]
 
 [project.entry-points."footman.tasks"]
-"livery.toolroom" = "livery.toolroom._docsgen"
+"livery.toolroom.tools" = "livery.toolroom.tools._docsgen"
 
 [project.urls]
 Repository = "https://github.com/willemkokke/livery"
 
 [tool.uv.build-backend]
-# PEP 420 namespace: the importable package is livery.toolroom and
-# there is no livery/__init__.py anywhere in this repository.
-module-name = "livery.toolroom"
+# PEP 420 namespaces: livery and livery.toolroom carry no __init__.py
+# anywhere, so the store and the machinery ship as their own
+# distributions under livery.toolroom; the handles are this one.
+module-name = "livery.toolroom.tools"
+namespace = true
 
 [tool.ruff]
 extend = "../../pyproject.toml"
@@ -71,4 +65,4 @@ extend = "../../pyproject.toml"
 "tests/**" = ["D1", "D205", "D301", "D415", "E501"]
 # The generated stubs' ruling rides here too when ruff resolves this
 # nested config for the package's own tree.
-"src/livery/toolroom/_stubs/*.pyi" = ["E501", "D"]
+"src/livery/toolroom/tools/_stubs/*.pyi" = ["E501", "D"]

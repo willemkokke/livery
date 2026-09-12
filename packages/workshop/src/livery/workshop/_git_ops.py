@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from livery import toolroom
+from livery.toolroom import tools
 
 
 class GitError(RuntimeError):
@@ -29,7 +29,7 @@ class GitOps:
         self.root = root
 
     def _run(self, *args: str) -> str:
-        result = toolroom.git.opts(cwd=self.root, nofail=True, recorded=False)(*args)
+        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(*args)
         if result.code != 0:
             raise GitError(
                 f"git {' '.join(args)} exited {result.code}:"
@@ -72,7 +72,7 @@ class GitOps:
         A commit this clone does not know cannot be an ancestor, so
         an unknown *ancestor* answers False rather than raising.
         """
-        result = toolroom.git.opts(cwd=self.root, nofail=True, recorded=False)(
+        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
             "merge-base", "--is-ancestor", ancestor, descendant
         )
         return result.code == 0
@@ -108,7 +108,7 @@ class GitOps:
         moves; exit 1 with conflicts is the answer, any other failure
         raises.
         """
-        result = toolroom.git.opts(cwd=self.root, nofail=True, recorded=False)(
+        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
             "merge-tree", "--write-tree", "--name-only", "HEAD", f"origin/{base}"
         )
         if result.code in (0, 1):
@@ -152,7 +152,7 @@ class GitOps:
 
     def local_branch_exists(self, branch: str) -> bool:
         """Whether *branch* exists locally."""
-        result = toolroom.git.opts(cwd=self.root, nofail=True, recorded=False)(
+        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
             "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"
         )
         return result.code == 0
@@ -163,7 +163,7 @@ class GitOps:
         Reads the local remote-tracking ref, so call
         livery.workshop._git_ops.GitOps.fetch first for a fresh answer.
         """
-        result = toolroom.git.opts(cwd=self.root, nofail=True, recorded=False)(
+        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
             "rev-parse", f"origin/{branch}"
         )
         return result.stdout.strip() if result.code == 0 else ""
@@ -250,12 +250,12 @@ class GitOps:
 
     def any_head(self, branch: str) -> str:
         """*branch*'s head sha: local when present, else the remote's, else empty."""
-        result = toolroom.git.opts(cwd=self.root, nofail=True, recorded=False)(
+        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
             "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"
         )
         if result.code == 0 and result.stdout.strip():
             return result.stdout.strip()
-        result = toolroom.git.opts(cwd=self.root, nofail=True, recorded=False)(
+        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
             "ls-remote", "origin", f"refs/heads/{branch}"
         )
         if result.code == 0 and result.stdout.strip():
@@ -278,7 +278,7 @@ class GitOps:
 
     def file_at(self, ref: str, path: str) -> str:
         """The contents of *path* as committed at *ref*; empty when absent."""
-        result = toolroom.git.opts(cwd=self.root, nofail=True, recorded=False)(
+        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
             "show", f"{ref}:{path}"
         )
         return result.stdout if result.code == 0 else ""

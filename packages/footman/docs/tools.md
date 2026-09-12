@@ -27,8 +27,8 @@ use its typed tool handles, which detect footman and route every call through
 exactly what broke:
 
 ```python
-from footman import task, run
-from toolroom import pytest, ruff
+from livery.footman import task, run
+from livery.toolroom.tools import pytest, ruff
 
 
 @task
@@ -38,7 +38,7 @@ def check():
     run("mkdocs build --strict")  # any command at all
 ```
 
-Each toolroom handle is imported by name: `from toolroom import git` gives
+Each toolroom handle is imported by name: `from livery.toolroom.tools import git` gives
 you a typed `git` you call as `git.commit(…)`, and a tool nobody has heard
 of imports just the same and runs as a subprocess. This page covers `run()` and
 the task context; the handles — flag translation, disabling flags,
@@ -78,7 +78,7 @@ artifacts for deleted projects clean themselves up:
 
 ```python
 from pathlib import Path
-from footman import fetch, task
+from livery.footman import fetch, task
 
 
 @task
@@ -108,8 +108,8 @@ Everything a task ordinarily reaches for is a free function that finds the
 running task by itself, so a body stays boilerplate-free:
 
 ```python
-from footman import passthrough, task
-from toolroom import pytest
+from livery.footman import passthrough, task
+from livery.toolroom.tools import pytest
 
 
 @task
@@ -125,7 +125,7 @@ of the *invocation itself*, which is not something most tasks should
 branch on.
 
 ```python
-from footman import Context, task, run
+from livery.footman import Context, task, run
 
 
 @task

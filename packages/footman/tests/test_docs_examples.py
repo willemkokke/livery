@@ -538,7 +538,7 @@ def test_playground_simulated_child_honours_the_bytes_contract(tmp_path: Path):
     files = {
         "tasks.py": (
             "import subprocess\n"
-            "from footman import task\n"
+            "from livery.footman import task\n"
             "\n"
             "@task\n"
             "def contract():\n"
@@ -565,8 +565,8 @@ def test_playground_completes_the_homepages_git_branches(tmp_path: Path):
     files = {
         "tasks.py": (
             "from typing import Annotated\n"
-            "from footman import suggest, task\n"
-            "from toolroom import git\n"
+            "from livery.footman import suggest, task\n"
+            "from livery.toolroom.tools import git\n"
             "\n"
             "def branches() -> list[str]:\n"
             '    return git.branch(format="%(refname:short)").stdout.split()\n'
@@ -662,7 +662,9 @@ def test_playground_editor_completion_carries_docstrings(tmp_path: Path):
     dump = next(c for c in got if c["label"] == "dump")
     assert "info" in dump and "obj" in dump["info"], dump
 
-    got, err = _editor_complete(tmp_path, "from toolroom import ruff\nruff.che", 2, 8)
+    got, err = _editor_complete(
+        tmp_path, "from livery.toolroom.tools import ruff\nruff.che", 2, 8
+    )
     labels = [c["label"] for c in got]
     assert "check" in labels, (labels, err)
 
@@ -692,7 +694,7 @@ def test_playground_editor_completion_ranks_like_an_ide(tmp_path: Path):
     in the user's own buffer outranks an import, and builtins sink."""
     prefix = 'ruff.check("src", '
     got, err = _editor_complete(
-        tmp_path, "from toolroom import ruff\n" + prefix, 2, len(prefix)
+        tmp_path, "from livery.toolroom.tools import ruff\n" + prefix, 2, len(prefix)
     )
     labels = [c["label"] for c in got]
     assert "fix=" in labels, (labels, err)
@@ -703,7 +705,7 @@ def test_playground_editor_completion_ranks_like_an_ide(tmp_path: Path):
     rest = [c for c in got if not c["label"].endswith("=")]
     assert any(c.get("boost") == -1 for c in rest), rest
 
-    src = "from footman import task\n\n@task\ndef build_wheels():\n    pass\n\nbui\n"
+    src = "from livery.footman import task\n\n@task\ndef build_wheels():\n    pass\n\nbui\n"
     got, err = _editor_complete(tmp_path, src, 7, 3)
     own = next((c for c in got if c["label"] == "build_wheels"), None)
     assert own is not None, (got, err)
@@ -754,7 +756,7 @@ def test_playground_hover_help_answers_signatures(tmp_path: Path):
     assert help_ is not None, err
     assert "dumps(" in help_["label"], help_
 
-    on_name = "from toolroom import ruff\nruff.check"
+    on_name = "from livery.toolroom.tools import ruff\nruff.check"
     help_, err = _editor_help(tmp_path, on_name, 2, 7)
     assert help_ is not None, err
     # The stub's signature line, not a bare name — a Name's docstring()
@@ -780,7 +782,7 @@ def test_playground_hover_help_answers_signatures(tmp_path: Path):
     # annotation says it is (Willem's screenshot: hovering `test` showed
     # TaskFn(*args, **kwargs) and the protocol's prose).
     own = (
-        "from footman import task\n"
+        "from livery.footman import task\n"
         "\n"
         "@task\n"
         "def build(target: str = 'app'):\n"
@@ -791,7 +793,7 @@ def test_playground_hover_help_answers_signatures(tmp_path: Path):
     assert help_["label"].startswith("build("), help_
     assert "Compile the thing" in help_["doc"], help_
 
-    on_keyword = "from toolroom import ruff\nruff.check('src', fix=True)"
+    on_keyword = "from livery.toolroom.tools import ruff\nruff.check('src', fix=True)"
     col = on_keyword.split("\n")[1].index("fix=") + 1
     help_, err = _editor_help(tmp_path, on_keyword, 2, col)
     assert help_ is not None, err
@@ -827,7 +829,7 @@ def test_playground_hover_needs_a_symbol(tmp_path: Path):
     Hover answers about a SYMBOL — no identifier under the pointer means
     no tooltip, the way every IDE behaves. Which call the cursor sits in
     is the parameter-hints panel's question now."""
-    src = "from toolroom import ruff\nfix = False\nruff.check('src', fix=fix)"
+    src = "from livery.toolroom.tools import ruff\nfix = False\nruff.check('src', fix=fix)"
     line = src.split("\n")[2]
 
     # A position adjacent to an identifier still belongs to it — the
@@ -892,7 +894,7 @@ def test_playground_parameter_hints_track_the_cursor(tmp_path: Path):
     highlight. A variadic positional rides on the summary line."""
     pre = "ruff.check("
     help_, err = _editor_sighelp(
-        tmp_path, "from toolroom import ruff\n" + pre, 2, len(pre)
+        tmp_path, "from livery.toolroom.tools import ruff\n" + pre, 2, len(pre)
     )
     assert help_ is not None, err
     assert help_["label"].startswith("check("), help_
@@ -910,7 +912,7 @@ def test_playground_parameter_hints_track_the_cursor(tmp_path: Path):
     assert help_["sig"] == ["deploy(target, ", 'region="eu"', ")"], help_
     pre = 'ruff.check("src", fix='
     help_, err = _editor_sighelp(
-        tmp_path, "from toolroom import ruff\n" + pre, 2, len(pre)
+        tmp_path, "from livery.toolroom.tools import ruff\n" + pre, 2, len(pre)
     )
     assert help_ is not None, err
     assert help_["active"] == "fix", help_
@@ -945,7 +947,7 @@ def test_playground_parameter_hints_track_the_cursor(tmp_path: Path):
     assert help_ is None, help_
     pre = 'run("git commit -m foo, bar'
     help_, err = _editor_sighelp(
-        tmp_path, "from footman import run\n" + pre, 2, len(pre)
+        tmp_path, "from livery.footman import run\n" + pre, 2, len(pre)
     )
     assert help_ is None, help_
 

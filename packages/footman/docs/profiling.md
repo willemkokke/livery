@@ -14,7 +14,7 @@ Mount it like any plugin:
 
 <!-- example: fragment -->
 ```python
-from footman.compose import plugin
+from livery.footman.compose import plugin
 
 plugin("footman.profile")
 ```
@@ -64,8 +64,8 @@ recorded on the run's clock and carried on the task's row:
 
 <!-- example: fragment -->
 ```python
-import footman
-from footman import task
+from livery import footman
+from livery.footman import task
 
 
 @task

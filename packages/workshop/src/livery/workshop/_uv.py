@@ -10,13 +10,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from livery import toolroom
 from livery.footman import fail
+from livery.toolroom import tools
 
 
 def run_uv(*args: str, root: Path) -> None:
     """Run ``uv *args`` at *root*; a failure carries uv's own words."""
-    result = toolroom.uv.opts(cwd=root, nofail=True, recorded=False)(*args)
+    result = tools.uv.opts(cwd=root, nofail=True, recorded=False)(*args)
     if result.code != 0:
         fail(
             f"uv {' '.join(args)} exited {result.code}:\n{result.stdout}{result.stderr}"

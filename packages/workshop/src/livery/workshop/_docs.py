@@ -25,8 +25,8 @@ import tomllib
 from pathlib import Path
 from typing import Annotated
 
-from livery import toolroom
 from livery.footman import doc, fail, group
+from livery.toolroom import tools
 from livery.workshop._contract import load_contract
 from livery.workshop._packages import Package, discover_packages
 
@@ -897,7 +897,7 @@ def _receipt_tags(root: Path) -> list[tuple[str, str, str, str]]:
     """
     import re
 
-    result = toolroom.git.opts(cwd=root, nofail=True, recorded=False)(
+    result = tools.git.opts(cwd=root, nofail=True, recorded=False)(
         "for-each-ref",
         "refs/tags/packages",
         "--format=%(refname:short) %(creatordate:short)",
@@ -1266,7 +1266,7 @@ def _publish_container(root: Path) -> None:
     with tempfile.NamedTemporaryFile("w", suffix=".Dockerfile", delete=False) as handle:
         handle.write(dockerfile)
         spec = handle.name
-    docker = toolroom.docker.opts(cwd=root, nofail=True, recorded=False)
+    docker = tools.docker.opts(cwd=root, nofail=True, recorded=False)
     built = docker("build", "-f", spec, "-t", image, ".")
     if built.code != 0:
         fail(f"docker build exited {built.code}:\n{built.stdout}{built.stderr}")
@@ -1355,7 +1355,7 @@ def render_python_coverage(root: Path) -> list[str]:
                 copy = Path(scratch) / f".coverage.{index}"
                 shutil.copy2(leg, copy)
                 copies.append(str(copy))
-            combined = toolroom.coverage.opts(
+            combined = tools.coverage.opts(
                 cwd=root, env=unmetered, nofail=True, recorded=False
             )("combine", "--keep", *copies)
             if combined.code != 0:
@@ -1374,7 +1374,7 @@ def render_python_coverage(root: Path) -> list[str]:
         ):
             continue
         name = package.directory.name
-        result = toolroom.coverage.opts(
+        result = tools.coverage.opts(
             cwd=root, env=unmetered, nofail=True, recorded=False
         )(
             "html",
@@ -1451,7 +1451,7 @@ def docs_build(
     _generate_all(root)
     if package:
         config = materialise_preview(root, named_package(root, package))
-        result = toolroom.zensical.opts(cwd=config.parent, nofail=True).build(
+        result = tools.zensical.opts(cwd=config.parent, nofail=True).build(
             clean=True, config_file=str(config)
         )
         if result.code != 0:
@@ -1466,9 +1466,7 @@ def docs_build(
     from livery.workshop._state import run_context
 
     print(source_summary(root))
-    result = toolroom.zensical.opts(cwd=root, nofail=True).build(
-        clean=True, strict=True
-    )
+    result = tools.zensical.opts(cwd=root, nofail=True).build(clean=True, strict=True)
     if result.code != 0:
         fail(f"zensical build exited {result.code}:\n{result.stdout}{result.stderr}")
     in_ci = run_context() is not None
@@ -1643,7 +1641,7 @@ def docs_serve(
     _generate_all(root)
     if package:
         config = materialise_preview(root, named_package(root, package))
-        toolroom.zensical.opts(cwd=config.parent).serve(config_file=str(config))
+        tools.zensical.opts(cwd=config.parent).serve(config_file=str(config))
         return
     generate_release_pages(root)
-    toolroom.zensical.opts(cwd=root).serve()
+    tools.zensical.opts(cwd=root).serve()

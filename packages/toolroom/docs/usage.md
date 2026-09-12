@@ -11,7 +11,7 @@ Every tool is a handle; every handle speaks the same grammar.
 Keyword arguments become flags mechanically:
 
 - `fix=True` → `--fix` (`False`/`None` → omitted entirely)
-- `strict=off` → `--no-strict` — `off` is the `livery.toolroom.off` sentinel
+- `strict=off` → `--no-strict` — `off` is the `livery.toolroom.tools.off` sentinel
   for disabling a default-on flag; `no_strict=True` spells the same
   thing by name
 - `output_format="github"` → `--output-format github`
@@ -26,18 +26,18 @@ subcommands:
 
 <!-- example: fragment -->
 ```python
-from livery.toolroom import docker
+from livery.toolroom.tools import docker
 
 docker.compose.up(detach=True)  # docker compose up --detach
 ```
 
-Any executable works without being declared: `livery.toolroom.terraform("plan")`
+Any executable works without being declared: `livery.toolroom.tools.terraform("plan")`
 runs `terraform plan`. Tools with quirks are curated — `eclint` takes
 single-dash long flags, `mkdocs build` negates `clean` as `--dirty`,
 `python` means the running interpreter, never whatever `python` is on
 `PATH` — and the curation rides every call. Point a handle at a
 different executable deliberately with `.at()` (`python.at(venv_python)`);
-ambient intent is spelled `livery.toolroom.python3`.
+ambient intent is spelled `livery.toolroom.tools.python3`.
 
 ## Results and failures
 
@@ -48,7 +48,7 @@ the default reading of a tool call is "this worked":
 
 <!-- example: fragment -->
 ```python
-from livery.toolroom import git, ToolError
+from livery.toolroom.tools import git, ToolError
 
 try:
     sha = git("rev-parse", "HEAD").stdout.strip()
@@ -77,8 +77,8 @@ flattening it:
 
 <!-- example: fragment -->
 ```python
-from footman import Secret
-from livery.toolroom import docker
+from livery.footman import Secret
+from livery.toolroom.tools import docker
 
 docker.login("ghcr.io", username="ci", password=Secret("hunter2"))
 # shown and recorded: docker login ghcr.io --username ci --password ***

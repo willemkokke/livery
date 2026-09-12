@@ -56,7 +56,7 @@ def test_docs_url_error_refuses_the_broken_shapes():
 @pytest.fixture
 def linked_project(tmp_path):
     (tmp_path / "tasks.py").write_text(
-        "from footman import group, task\n\n"
+        "from livery.footman import group, task\n\n"
         "@task\n"
         "def build():\n"
         '    """Build it."""\n'
@@ -129,7 +129,7 @@ def test_an_unknown_placeholder_is_refused_by_name(linked_project):
 
 def test_without_the_key_nothing_changes(tmp_path):
     (tmp_path / "tasks.py").write_text(
-        'from footman import task\n\n@task\ndef build():\n    """Build."""\n'
+        'from livery.footman import task\n\n@task\ndef build():\n    """Build."""\n'
     )
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     dressed = Runner().invoke("--color=always --list", cwd=tmp_path)

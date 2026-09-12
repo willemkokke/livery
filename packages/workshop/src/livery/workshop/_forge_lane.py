@@ -13,9 +13,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from livery import toolroom
 from livery.footman import fail
 from livery.forge import Forge, GiteaForge, GithubForge, GitlabForge, Repository
+from livery.toolroom import tools
 from livery.workshop._contract import load_contract
 from livery.workshop._tokens import admin_token, forge_token
 
@@ -28,7 +28,7 @@ _REMOTE_RE = re.compile(
 
 def remote_repo_name(root: Path) -> str:
     """The repository name the ``origin`` remote points at."""
-    result = toolroom.git.opts(cwd=root, nofail=True, recorded=False)(
+    result = tools.git.opts(cwd=root, nofail=True, recorded=False)(
         "remote", "get-url", "origin"
     )
     if result.code != 0:

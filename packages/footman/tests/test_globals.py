@@ -1033,7 +1033,7 @@ def test_zero_arg_entry_parallelises_via_the_router(monkeypatch):
     # the cross-handshake deadlocks-and-fails if they serialise on a lock.
     import sys as _s
 
-    import livery.toolroom as _tools
+    from livery.toolroom import tools as _tools
 
     e1, e2 = threading.Event(), threading.Event()
     seen = {}

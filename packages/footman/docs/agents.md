@@ -76,7 +76,7 @@ when you run one by hand:
 ```python
 from dataclasses import dataclass, field
 from typing import Annotated
-from footman import RunFailed, fail, group, stdin, task
+from livery.footman import RunFailed, fail, group, stdin, task
 
 hooks = group("hooks", hidden=True, help="Agent lifecycle hooks")
 

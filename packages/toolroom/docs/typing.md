@@ -46,7 +46,7 @@ Positionals are `str | PathLike[str]` for the same reason:
 
 <!-- example: fragment -->
 ```python
-from livery.toolroom import Flag, Value, ruff
+from livery.toolroom.tools import Flag, Value, ruff
 
 
 def lint(fix: Flag = None, select: Value = None):
@@ -67,7 +67,7 @@ over `Argv`, so a *built* call keeps the same flag checking as a run:
 
 <!-- example: fragment -->
 ```python
-from livery.toolroom import git
+from livery.toolroom.tools import git
 
 sha_cmd = git.rev_parse.argv("HEAD")  # Argv, same completions, same checks
 ```

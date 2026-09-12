@@ -23,9 +23,9 @@ from pathlib import Path
 from typing import Annotated
 
 import livery.footman as footman
-from livery import toolroom
 from livery.footman import Arg, ask, doc, fail, group, suggest
 from livery.forge import ForgeError, Repository
+from livery.toolroom import tools
 from livery.workshop._contract import load_contract
 from livery.workshop._git_ops import GitOps
 
@@ -388,7 +388,7 @@ def issue_start(
         path.parent.mkdir(parents=True, exist_ok=True)
         git._run("worktree", "add", str(path), "-b", branch, "origin/main")
         print(f"  worktree {path} on {branch}")
-        provision = toolroom.uv.opts(cwd=path, nofail=True, recorded=False)(
+        provision = tools.uv.opts(cwd=path, nofail=True, recorded=False)(
             "run", footman.prog(), "sync"
         )
         if provision.code != 0:
@@ -470,8 +470,8 @@ def _open_work(path: Path, how: str) -> None:
     mode = how or ("code" if sys.stdout.isatty() else "none")
     if mode == "code":
         try:
-            toolroom.code.opts(nofail=True, recorded=False)(str(path))
-        except (OSError, toolroom.ToolError):
+            tools.code.opts(nofail=True, recorded=False)(str(path))
+        except (OSError, tools.ToolError):
             # Opening an editor is a convenience, never the work: a
             # machine without `code` gets the path instead.
             print(f"  `code` is not on PATH; the worktree is at {path}")

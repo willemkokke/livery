@@ -12,7 +12,7 @@ from livery.footman import _script
 BLOCK = """\
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["footman", "rich"]
+# dependencies = ["livery-footman", "rich"]
 # ///
 from livery.footman import task
 
@@ -30,7 +30,10 @@ def _write(tmp_path: Path, text: str, name: str = "tasks.py") -> Path:
 def test_a_block_reads_as_metadata(tmp_path):
     meta, warning = _script.read_block(_write(tmp_path, BLOCK))
     assert warning is None
-    assert meta == {"requires-python": ">=3.11", "dependencies": ["footman", "rich"]}
+    assert meta == {
+        "requires-python": ">=3.11",
+        "dependencies": ["livery-footman", "rich"],
+    }
 
 
 def test_find_uv_falls_back_to_path(tmp_path, monkeypatch):
@@ -51,7 +54,7 @@ def test_a_bare_hash_line_inside_the_block_is_content(tmp_path):
         tmp_path,
         """\
         # /// script
-        # dependencies = ["footman"]
+        # dependencies = ["livery-footman"]
         #
         # requires-python = ">=3.11"
         # ///
@@ -59,7 +62,7 @@ def test_a_bare_hash_line_inside_the_block_is_content(tmp_path):
     )
     meta, warning = _script.read_block(path)
     assert warning is None
-    assert meta == {"dependencies": ["footman"], "requires-python": ">=3.11"}
+    assert meta == {"dependencies": ["livery-footman"], "requires-python": ">=3.11"}
 
 
 def test_a_non_script_block_is_not_ours(tmp_path):
@@ -98,7 +101,7 @@ def test_two_script_blocks_warn_and_decline(tmp_path):
         tmp_path,
         """\
         # /// script
-        # dependencies = ["footman"]
+        # dependencies = ["livery-footman"]
         # ///
         x = 1
         # /// script
@@ -116,7 +119,7 @@ def test_back_to_back_blocks_are_a_read_failure_not_a_silent_drop(tmp_path):
         tmp_path,
         """\
         # /// script
-        # dependencies = ["footman"]
+        # dependencies = ["livery-footman"]
         # ///
         # /// script
         # dependencies = ["rich"]
@@ -331,7 +334,7 @@ def test_the_uv_command_lines():
 # children's half of `_uv_handoff`'s verdict: who owns a directory, when a
 # child changes interpreter, and that healing stays strictly offline.
 
-_PINNING_LOCK = 'version = 1\n\n[[package]]\nname = "footman"\nversion = "1.0"\n'
+_PINNING_LOCK = 'version = 1\n\n[[package]]\nname = "livery-footman"\nversion = "1.0"\n'
 
 
 def test_project_home_wants_a_lock_that_pins_the_dist(tmp_path):
