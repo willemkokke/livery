@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -176,13 +177,7 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
     assert points == ["gate"] * len(seen)
     assert seen == [
         ["hse", "--profile=fm-profile.json", "check"],
-        [
-            "hse",
-            "ci.metrics.leg",
-            "--job=check (ubuntu-latest, 3.14)",
-            "--label=check-ubuntu-latest-3.14",
-        ],
-        ["hse", "coverage.leg"],
+        ["hse", "coverage.leg", "--job=check (ubuntu-latest, 3.14)"],
     ]
     seen.clear()
     _points.run_point(root, "gate", "gate", spawn=green)
@@ -198,6 +193,64 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
         ["hse", "ci.verdict", "--needs=check,docs"],
         ["hse", "ci.verified.stamp"],
     ]
+
+
+def test_the_runner_hands_its_children_one_listing_of_the_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import subprocess
+
+    from livery.workshop._state import SNAPSHOT_VARIABLE
+
+    monkeypatch.delenv(SNAPSHOT_VARIABLE, raising=False)
+    named: list[str] = []
+    present: list[bool] = []
+
+    def green(argv: list[str], env: dict[str, str]) -> int:
+        named.append(env.get(SNAPSHOT_VARIABLE, "<unset>"))
+        present.append(Path(named[-1]).is_file())
+        return 0
+
+    # A root the listing fails on (no origin) publishes nothing: the
+    # children list for themselves, and the runner's own environment
+    # is never written.
+    alone = tmp_path / "alone"
+    alone.mkdir()
+    _points.run_point(
+        _root(alone),
+        "gate",
+        "check",
+        os_label="ubuntu-latest",
+        python="3.14",
+        spawn=green,
+    )
+    assert named == ["<unset>"] * 2 and SNAPSHOT_VARIABLE not in os.environ
+    named.clear()
+    present.clear()
+    origin = tmp_path / "origin.git"
+    subprocess.run(
+        ["git", "init", "-q", "--bare", "--initial-branch=main", str(origin)],
+        check=True,
+        capture_output=True,
+    )
+    work = tmp_path / "work"
+    subprocess.run(
+        ["git", "clone", "-q", str(origin), str(work)], check=True, capture_output=True
+    )
+    _points.run_point(
+        _root(work),
+        "gate",
+        "check",
+        os_label="ubuntu-latest",
+        python="3.14",
+        spawn=green,
+    )
+    # One file for the whole job, named to every child while the job
+    # runs, taken for this checkout, and gone after it.
+    assert len(set(named)) == 1 and named[0] != "<unset>", named
+    assert present == [True, True]
+    assert not Path(named[0]).exists()
+    assert SNAPSHOT_VARIABLE not in os.environ
 
 
 def test_a_push_promotes_the_gate_to_the_merge_point(

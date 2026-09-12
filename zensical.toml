@@ -269,7 +269,6 @@ nav = [
                 { "e2e" = "_generated/packages/workshop/_generated/tasks/ci/e2e.md" },
                 { "logs" = "_generated/packages/workshop/_generated/tasks/ci/logs.md" },
                 { "metrics.collect" = "_generated/packages/workshop/_generated/tasks/ci/metrics/collect.md" },
-                { "metrics.leg" = "_generated/packages/workshop/_generated/tasks/ci/metrics/leg.md" },
                 { "rerun" = "_generated/packages/workshop/_generated/tasks/ci/rerun.md" },
                 { "run" = "_generated/packages/workshop/_generated/tasks/ci/run.md" },
                 { "status" = "_generated/packages/workshop/_generated/tasks/ci/status.md" },

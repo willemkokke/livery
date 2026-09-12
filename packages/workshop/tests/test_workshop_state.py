@@ -180,28 +180,6 @@ def test_an_exhausted_lease_names_the_other_writer(
     assert "c.json" not in (real_read(work, REF).files or {})
 
 
-def test_the_push_is_read_back(
-    repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _, work = repos
-    real_git = _state._git
-
-    def lying_remote(root: Path, *args: str, stdin: str | None = None) -> object:
-        result = real_git(root, *args, stdin=stdin)
-        if args[:2] == ("ls-remote", "origin") and result.stdout.strip():
-            # The readback reads three attributes; the lie is a sha the
-            # push never made.
-            return SimpleNamespace(
-                code=0, stdout="0" * 40 + "\t" + args[2] + "\n", stderr=""
-            )
-        return result
-
-    monkeypatch.setattr(_state, "_git", lying_remote)
-    why = _state.put(work, REF, {"a.json": "1"}, message="a")
-    assert why.startswith("push reported success but")
-    assert "wanted" in why
-
-
 def test_drop_of_a_missing_ref_is_already_done(repos: tuple[Path, Path]) -> None:
     _, work = repos
     assert _state.drop(work, REF) == ""
@@ -555,8 +533,9 @@ def test_a_read_and_a_write_cost_a_fixed_handful_of_processes(
             == ""
         )
     # fetch, rev-parse, ls-tree, cat-file; hash-object, mktree,
-    # commit-tree; push, ls-remote: nine, whatever the size.
-    assert six["git"] == sixty["git"] == 9, (six, sixty)
+    # commit-tree; push: eight, whatever the size, and no readback.
+    assert six["git"] == sixty["git"] == 8, (six, sixty)
+    assert sixty["git ls-remote"] == 0
     with counting_spawns() as reading:
         found = wide.rows(work)
     assert len(found.rows) == 67 and not found.failed
@@ -641,7 +620,7 @@ def test_a_write_inside_a_snapshot_re_lists_on_a_stale_lease_and_records_its_sha
         assert ROWS.put(other, {"b": {"x": 2}}, message="two") == ""
         with counting_spawns() as spawned:
             assert ROWS.put(work, {"c": {"x": 3}}, message="three") == ""
-        assert spawned["git ls-remote"] >= 2  # the re-listing, then the readback
+        assert spawned["git ls-remote"] == 1  # the re-listing alone, no readback
         # The write merged the other writer's row and recorded its own sha.
         found = ROWS.rows(work)
         assert sorted(row.name for row in found.rows) == ["a", "b", "c"]
@@ -650,6 +629,79 @@ def test_a_write_inside_a_snapshot_re_lists_on_a_stale_lease_and_records_its_sha
         assert (
             listed is not None and listed[ROWS.ref] == _state.read(work, ROWS.ref).sha
         )
+
+
+def test_the_listing_carries_the_branches_and_only_them_beside_the_store(
+    repos: tuple[Path, Path],
+) -> None:
+    _, work = repos
+    with counting_spawns() as spawned, _state.remote_snapshot(work):
+        heads = _state.list_refs(work, "refs/heads/")
+        assert heads is not None and "refs/heads/main" in heads
+        assert _state.list_refs(work, "refs/heads/nowhere") == {}
+        # A namespace the listing did not take is asked for on its own.
+        assert _state.list_refs(work, "refs/tags/") == {}
+    assert spawned["git ls-remote"] == 2  # the snapshot's, and the tags'
+
+
+def test_a_published_snapshot_serves_the_children_and_carries_their_writes(
+    repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json as _json
+
+    _, work = repos
+    monkeypatch.delenv(_state.SNAPSHOT_VARIABLE, raising=False)
+    assert ROWS.put(work, {"a": {"x": 1}}, message="one") == ""
+    with _state.remote_snapshot(work, publish=True) as named:
+        assert named is not None
+        # The parent hands the path to its children; a child is
+        # its own process in truth, so here the variable is set by
+        # hand for the blocks below.
+        monkeypatch.setenv(_state.SNAPSHOT_VARIABLE, named)
+        published = _json.loads(Path(named).read_text("utf-8"))
+        assert (
+            published["root"] == str(work.resolve()) and ROWS.ref in published["refs"]
+        )
+        # A child: the same checkout, its own process in truth, its own
+        # block here; it lists nothing and reads what the file says.
+        _state._SNAPSHOTS.clear()
+        with counting_spawns() as child, _state.remote_snapshot(work, fetch=("rows",)):
+            assert [row.name for row in ROWS.rows(work).rows] == ["a"]
+            assert ROWS.put(work, {"b": {"x": 2}}, message="two") == ""
+        assert child["git ls-remote"] == 0, child
+        # The child's write reached the file for the entries after it.
+        after = _json.loads(Path(named).read_text("utf-8"))
+        assert after["refs"][ROWS.ref] != published["refs"][ROWS.ref]
+        _state._SNAPSHOTS.clear()
+        with counting_spawns() as next_child, _state.remote_snapshot(work):
+            assert [row.name for row in ROWS.rows(work).rows] == ["b", "a"]
+        assert next_child["git ls-remote"] == 0 and next_child["git fetch"] == 0
+        monkeypatch.delenv(_state.SNAPSHOT_VARIABLE)
+    assert not Path(named).exists()
+
+
+def test_a_published_snapshot_that_cannot_be_read_or_is_anothers_counts_as_none(
+    repos: tuple[Path, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, work = repos
+    assert ROWS.put(work, {"a": {"x": 1}}, message="one") == ""
+    corrupt = tmp_path / "snapshot.json"
+    corrupt.write_text("{not json")
+    monkeypatch.setenv(_state.SNAPSHOT_VARIABLE, str(corrupt))
+    with counting_spawns() as spawned, _state.remote_snapshot(work):
+        assert [row.name for row in ROWS.rows(work).rows] == ["a"]
+    assert spawned["git ls-remote"] == 1
+    other = tmp_path / "other.json"
+    other.write_text('{"root": "/elsewhere", "refs": {}, "local": []}')
+    monkeypatch.setenv(_state.SNAPSHOT_VARIABLE, str(other))
+    with counting_spawns() as spawned, _state.remote_snapshot(work):
+        assert [row.name for row in ROWS.rows(work).rows] == ["a"]
+    assert spawned["git ls-remote"] == 1
+    # A parent whose listing failed publishes nothing.
+    monkeypatch.delenv(_state.SNAPSHOT_VARIABLE)
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    with _state.remote_snapshot(work, publish=True) as named:
+        assert named is None
 
 
 def test_a_drop_inside_a_snapshot_forgets_the_ref_and_nesting_shares_the_listing(

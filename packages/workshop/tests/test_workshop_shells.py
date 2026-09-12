@@ -360,11 +360,9 @@ def test_ci_verdict_outside_ci_and_inside(
 def test_the_store_shells_outside_ci(
     rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str], tmp_path: Path
 ) -> None:
-    _ci_tasks.ci_metrics_leg(job="check (a, b)", label="check-a-b")
     _ci_tasks.ci_metrics_collect()
     _ci_tasks.ci_timings()
     out = capsys.readouterr().out
-    assert "not a CI run: the leg's timing row is written by CI only" in out
     assert "not a CI run: the run's timing rows are collected by CI only" in out
     assert "no timing rows yet" in out
 

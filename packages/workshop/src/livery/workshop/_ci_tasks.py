@@ -15,9 +15,10 @@ a person. ``ci.dispatch`` starts a point that has a dispatch entry
 (livery.workshop._points), the one verb the emitted shells call;
 ``ci.verdict`` is the gate job's judgement of the jobs it needs.
 ``ci.timings`` prints the timing rows the gate writes on
-that store (livery.workshop._metrics); the two hidden ``ci.metrics``
-verbs are the writers ``ci.run`` schedules. ``doctor`` says who you
-are, which server this is, and what it grants.
+that store (livery.workshop._metrics); the hidden ``ci.metrics.collect``
+is the gate job's writer ``ci.run`` schedules, and a check leg's row
+rides ``coverage.leg``'s one write. ``doctor`` says who you are,
+which server this is, and what it grants.
 """
 
 from __future__ import annotations
@@ -720,40 +721,6 @@ def ci_verified_stamp() -> None:
 
 
 metrics = ci.group("metrics", help="The timing rows CI writes", hidden=True)
-
-
-def metrics_leg_flow(root: Path, *, job: str, label: str, trace: Path) -> None:
-    """Put the leg's timing row, or print why it could not."""
-    from livery.workshop._metrics import put_leg
-    from livery.workshop._state import run_context
-
-    run = run_context()
-    if run is None:
-        print("  not a CI run: the leg's timing row is written by CI only")
-        return
-    why = put_leg(root, run, job=job, label=label, trace=trace)
-    print(f"  {job}: {why or f'timing row recorded for run {run.run_id}'}")
-
-
-@metrics.task(name="leg")
-def ci_metrics_leg(
-    *,
-    job: Annotated[str, doc("the job's name as the forge lists it")],
-    label: Annotated[str, doc("the per-run ref segment for this leg")],
-    trace: Annotated[Path, doc("the trace the profiled gate wrote")] = Path(
-        "fm-profile.json"
-    ),
-) -> None:
-    """Record this leg's timings on its per-run ref for the gate job to collect.
-
-    Runs at the end of every check leg, whatever the gate's verdict.
-    Fails open loudly: a missing trace or a store fault prints its
-    reason and the exit stays 0, so a timing row never reddens a leg.
-    """
-    root = workspace_root()
-    if root is None:
-        fail("no workspace: no workshop.toml above the working directory")
-    metrics_leg_flow(root, job=job, label=label, trace=trace)
 
 
 def metrics_collect_flow(root: Path, repo: Repository, git: GitOps) -> None:

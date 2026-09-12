@@ -7,11 +7,10 @@ module. ``check`` is the whole local gate; CI runs the same command.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from livery.workshop._verified import Verified
 
 import livery.footman as footman
@@ -597,21 +596,39 @@ coverage = group("coverage", help="The measured union and its floors")
 
 
 @coverage.task(name="leg", hidden=True)
-def coverage_leg() -> None:
-    """Put this leg's measured suites on its per-run ref, and combine its data.
+def coverage_leg(
+    *,
+    job: Annotated[str, doc("the job's name as the forge lists it")] = "",
+    trace: Annotated[Path, doc("the trace the profiled gate wrote")] = Path(
+        "fm-profile.json"
+    ),
+) -> None:
+    """Put this leg's measured suites and its timing row on its per-run ref, once.
 
     Runs at the end of a check leg whose tests ran metered: the run
-    left one data file per process; each suite the
-    leg ran is split out and put on the leg's per-run ref with the
-    scope the gate ran, and the parts combine into one ``.coverage``.
-    Refuses when a leg that ran its gate left no data, naming the
-    variable that arms the meter, and when the lines could not be
+    left one data file per process; each suite the leg ran is split
+    out and put on the leg's per-run ref with the scope the gate ran,
+    and the parts combine into one ``.coverage``. With ``--job`` the
+    leg's timing row, read from the trace the profiled gate wrote,
+    rides the same write for the gate job to collect; a trace that
+    cannot be read prints its reason and the write goes on without
+    the row. Refuses when a leg that ran its gate left no data, naming
+    the variable that arms the meter, and when the lines could not be
     put, so a leg that measured is never judged as an empty union.
     """
     root = workspace_root()
     if root is None:
         raise ValueError("no workspace: no workshop.toml above the working directory")
-    _python.combine_leg(root, _packages())
+    timing = None
+    if job:
+        from livery.workshop._metrics import leg_row
+
+        timing, why = leg_row(trace if trace.is_absolute() else root / trace, job=job)
+        if timing is None:
+            print(f"  {job}: {why}; the timing row stays unwritten")
+    _python.combine_leg(root, _packages(), timing=timing)
+    if timing is not None:
+        print(f"  {job}: timing row on the leg's ref")
 
 
 @coverage.task(name="union", hidden=True)

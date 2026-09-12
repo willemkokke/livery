@@ -98,8 +98,9 @@ class Entry:
 #: the release dispatch, green unless a merged release is unpublished.
 BUILTIN: tuple[Entry, ...] = (
     Entry("gate", "check", "check", profiled=True),
-    Entry("gate", "check", "ci.metrics.leg", ("--job={display}", "--label={label}")),
-    Entry("gate", "check", "coverage.leg"),
+    # The leg's one write: its timing row and its measured suites go
+    # on its per-run ref together.
+    Entry("gate", "check", "coverage.leg", ("--job={display}",)),
     Entry("gate", "docs", "docs.build"),
     # The title check first: it reads the pull request's title from
     # the event payload, is green off a release branch, and refuses a
@@ -290,6 +291,8 @@ def run_point(
     environment and returns its exit code; the default is the runner's
     own child.
     """
+    from livery.workshop._state import SNAPSHOT_VARIABLE, remote_snapshot
+
     resolved = effective_point(point)
     entries = entries_for(root, resolved, job)
     if resolved != point:
@@ -297,17 +300,23 @@ def run_point(
     display = f"{job} ({os_label}, {python})" if os_label or python else job
     label = f"{job}-{os_label}-{python}" if os_label or python else job
     facts = {"display": display, "label": label, "os": os_label, "python": python}
-    env = {**os.environ, LEG_VARIABLE: label, POINT_VARIABLE: resolved}
     prog = footman.prog()
-    for entry in entries:
-        argv = [prog]
-        if entry.profiled:
-            argv.append(f"--profile={TRACE}")
-        argv.append(entry.task)
-        argv.extend(arg.format(**facts) for arg in entry.args)
-        print(f"  {resolved}/{job}: {entry.task} ({entry.source})")
-        code = spawn(argv, env)
-        if code != 0:
-            fail(f"{resolved}/{job}: {entry.task} exited {code}")
+    # One listing of the state store's namespace for the whole job:
+    # every entry reads through it and records what it writes for the
+    # entries after it, so the job lists once, not once per entry.
+    with remote_snapshot(root, publish=True) as published:
+        env = {**os.environ, LEG_VARIABLE: label, POINT_VARIABLE: resolved}
+        if published:
+            env[SNAPSHOT_VARIABLE] = published
+        for entry in entries:
+            argv = [prog]
+            if entry.profiled:
+                argv.append(f"--profile={TRACE}")
+            argv.append(entry.task)
+            argv.extend(arg.format(**facts) for arg in entry.args)
+            print(f"  {resolved}/{job}: {entry.task} ({entry.source})")
+            code = spawn(argv, env)
+            if code != 0:
+                fail(f"{resolved}/{job}: {entry.task} exited {code}")
     if not entries:
         print(f"  {resolved}/{job}: nothing scheduled")

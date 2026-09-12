@@ -40,7 +40,10 @@ The rules, ported from hse's stamp transport:
   explicit value), the server refuses a stale write atomically, and
   the loser re-reads, merges, and retries. A concurrency loss costs
   a retry, never a wrong result.
-- The push is read back: a push that reports success can lie.
+- The push's own report is its verdict: git prints which refs moved
+  from the server's report-status, and the compare-and-swap is the
+  guard. A readback through the same git configuration cannot catch
+  what would mislead the push itself.
 - The commit carries its own identity and ``[skip ci]``: the natural
   writer is a CI container with no global git config, and a push to
   this namespace must never start a workflow.
@@ -587,6 +590,7 @@ class _Snapshot:
     refs: dict[str, str] | None
     reason: str = ""
     local: set[str] = field(default_factory=set)
+    published: Path | None = None
 
 
 #: The *fetch* of a `remote_snapshot` that wants every ref of the
@@ -597,14 +601,27 @@ WHOLE: tuple[str, ...] = ("",)
 #: a `remote_snapshot` block is open for it; one per checkout at a time.
 _SNAPSHOTS: dict[Path, _Snapshot] = {}
 
+#: The variable a published snapshot's file is named in: the job
+#: runner takes one listing for the whole job and every entry it
+#: spawns reads through it instead of listing again.
+SNAPSHOT_VARIABLE = "WORKSHOP_SNAPSHOT"
+
+#: The ref namespaces one listing carries: the store's own, and the
+#: branches the coverage families' current keys are told by.
+LISTED = (NAMESPACE, "refs/heads/")
+
 
 def _snapshot(root: Path) -> _Snapshot | None:
     return _SNAPSHOTS.get(root.resolve())
 
 
 def _list_namespace(root: Path) -> tuple[dict[str, str] | None, str]:
-    """Every ref under the remote namespace by sha, or ``(None, reason)``."""
-    listed = _git(root, "ls-remote", "origin", NAMESPACE + "*")
+    """Every ref under the listed namespaces by sha, or ``(None, reason)``.
+
+    One call lists the store's refs and the branches together, so a
+    family's current keys cost no listing of their own.
+    """
+    listed = _git(root, "ls-remote", "origin", *(space + "*" for space in LISTED))
     if listed.code != 0:
         return None, _words(listed)
     refs: dict[str, str] = {}
@@ -638,15 +655,17 @@ def _missing_locally(root: Path, shas: Iterable[str]) -> set[str]:
 
 
 @contextmanager
-def remote_snapshot(root: Path, *, fetch: Iterable[str] = ()) -> Generator[None]:
+def remote_snapshot(
+    root: Path, *, fetch: Iterable[str] = (), publish: bool = False
+) -> Generator[str | None]:
     """Read the remote namespace through one listing for the block.
 
-    One ``ls-remote`` of the whole namespace when the block opens;
-    every read and listing of a remote ref inside answers from it,
-    and a ref whose commit the checkout already holds is read with no
-    network at all. The refs whose names start with a prefix in
-    *fetch* (spelled below the namespace, ``metrics`` or
-    ``run/1400/``) and whose commits the checkout lacks are fetched
+    One ``ls-remote`` of the store's namespace and the branches when
+    the block opens; every read and listing of a remote ref inside
+    answers from it, and a ref whose commit the checkout already
+    holds is read with no network at all. The refs whose names start
+    with a prefix in *fetch* (spelled below the namespace, ``metrics``
+    or ``run/1400/``) and whose commits the checkout lacks are fetched
     together, one round trip, when the block opens; a ref outside
     them is fetched on its own read. A write inside keeps its
     compare-and-swap on the listed sha: a refused push lists again
@@ -655,13 +674,26 @@ def remote_snapshot(root: Path, *, fetch: Iterable[str] = ()) -> Generator[None]
     every read inside a failure naming the reason and every listing
     unlistable, never an absence. A block opened inside another for
     the same checkout shares the outer listing.
+
+    With *publish* the listing is written to a file whose path the
+    block yields, for the caller to hand its child processes under
+    `SNAPSHOT_VARIABLE`: a block a child opens reads that file
+    instead of listing, and the child's writes record their shas in
+    it for the children after it. A listing the parent could not
+    take is not published and the block yields ``None``, so a child
+    lists for itself; a file a child cannot read, or one taken for
+    another checkout, counts as none. Without *publish* the block
+    yields ``None``.
     """
     key = root.resolve()
     if key in _SNAPSHOTS:
-        yield
+        yield None
         return
-    refs, why = _list_namespace(root)
-    snapshot = _Snapshot(refs, why)
+    snapshot = _published_snapshot(key)
+    if snapshot is None:
+        refs, why = _list_namespace(root)
+        snapshot = _Snapshot(refs, why)
+    refs = snapshot.refs
     if refs is not None:
         prefixes = tuple(NAMESPACE + prefix for prefix in fetch)
         wanted = {ref: sha for ref, sha in refs.items() if ref.startswith(prefixes)}
@@ -672,16 +704,63 @@ def remote_snapshot(root: Path, *, fetch: Iterable[str] = ()) -> Generator[None]
             fetched = _git(root, "fetch", "--quiet", "origin", *to_fetch)
             if fetched.code == 0:
                 snapshot.local.update(wanted[ref] for ref in to_fetch)
+    published_here = ""
+    if publish and refs is not None and snapshot.published is None:
+        with tempfile.NamedTemporaryFile(
+            "w", encoding="utf-8", suffix=".json", delete=False
+        ) as handle:
+            snapshot.published = Path(handle.name)
+        _write_published(key, snapshot)
+        published_here = str(snapshot.published)
     _SNAPSHOTS[key] = snapshot
     try:
-        yield
+        yield published_here or None
     finally:
         _SNAPSHOTS.pop(key, None)
+        if published_here:
+            Path(published_here).unlink(missing_ok=True)
+
+
+def _published_snapshot(key: Path) -> _Snapshot | None:
+    """The snapshot a parent published for *key*, or ``None`` when there is none."""
+    named = os.environ.get(SNAPSHOT_VARIABLE, "")
+    if not named:
+        return None
+    try:
+        loaded = json.loads(Path(named).read_text("utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(loaded, dict) or loaded.get("root") != str(key):
+        return None
+    refs = loaded.get("refs")
+    local = loaded.get("local")
+    if not isinstance(refs, dict) or not isinstance(local, list):
+        return None
+    return _Snapshot(
+        {str(name): str(sha) for name, sha in refs.items()},
+        "",
+        {str(sha) for sha in local},
+        Path(named),
+    )
+
+
+def _write_published(key: Path, snapshot: _Snapshot) -> None:
+    """Write *snapshot* to its published file, for the entries after this one."""
+    if snapshot.published is None or snapshot.refs is None:
+        return
+    body = json.dumps(
+        {"root": str(key), "refs": snapshot.refs, "local": sorted(snapshot.local)}
+    )
+    try:
+        snapshot.published.write_text(body, encoding="utf-8")
+    except OSError:
+        snapshot.published = None
 
 
 def _relist(root: Path, snapshot: _Snapshot) -> None:
     """List the namespace again after another writer moved a ref."""
     snapshot.refs, snapshot.reason = _list_namespace(root)
+    _write_published(root.resolve(), snapshot)
 
 
 def _reachable(root: Path, snapshot: _Snapshot, ref: str, sha: str) -> str:
@@ -845,7 +924,7 @@ def list_refs(root: Path, prefix: str) -> dict[str, str] | None:
         )
     else:
         snapshot = _snapshot(root)
-        if snapshot is not None:
+        if snapshot is not None and prefix.startswith(LISTED):
             if snapshot.refs is None:
                 return None
             return {
@@ -1001,7 +1080,7 @@ def put(
                 if _stale(moved):
                     continue
                 return f"update refused: {_words(moved)}"
-            return _readback(root, ref, commit)
+            return ""
         lease = f"--force-with-lease={ref}:{current.sha or ''}"
         pushed = _git(root, "push", "--quiet", lease, "origin", f"{commit}:{ref}")
         snapshot = _snapshot(root)
@@ -1011,11 +1090,11 @@ def put(
                     _relist(root, snapshot)
                 continue
             return f"push refused: {_words(pushed)}"
-        why = _readback(root, ref, commit)
-        if not why and snapshot is not None and snapshot.refs is not None:
+        if snapshot is not None and snapshot.refs is not None:
             snapshot.refs[ref] = commit
             snapshot.local.add(commit)
-        return why
+            _write_published(root.resolve(), snapshot)
+        return ""
     return f"gave up on {ref} after {attempts} attempts: another writer kept moving it"
 
 
@@ -1027,29 +1106,6 @@ def _trim(files: dict[str, str], window: int, order: Order | None) -> dict[str, 
         ranked = sorted((order(name, text), name) for name, text in files.items())
         kept = [name for _, name in ranked[-window:]]
     return {name: files[name] for name in kept}
-
-
-def _readback(root: Path, ref: str, wanted: str) -> str:
-    """Read the ref back after the write: a push that reports success can lie."""
-    if ref.startswith(LOCAL_NAMESPACE):
-        act = "update"
-        check = _git(root, "rev-parse", "--verify", "--quiet", ref)
-        if check.code != 0:
-            return f"readback failed: {_words(check) if check.stderr else 'absent'}"
-        seen = check.stdout.strip()
-    else:
-        act = "push"
-        check = _git(root, "ls-remote", "origin", ref)
-        if check.code != 0:
-            return f"readback failed: {_words(check)}"
-        if not check.stdout.strip():
-            return f"push reported success but {ref} is absent from the remote"
-        seen = check.stdout.split()[0]
-    if seen != wanted:
-        return (
-            f"{act} reported success but {ref} reads {seen[:12]}, wanted {wanted[:12]}"
-        )
-    return ""
 
 
 def drop(root: Path, ref: str) -> str:
@@ -1073,6 +1129,7 @@ def drop(root: Path, ref: str) -> str:
     snapshot = _snapshot(root)
     if snapshot is not None and snapshot.refs is not None:
         snapshot.refs.pop(ref, None)
+        _write_published(root.resolve(), snapshot)
     return ""
 
 
