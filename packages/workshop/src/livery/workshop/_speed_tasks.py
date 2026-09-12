@@ -5,7 +5,8 @@ collected: it judges every check leg's summed test time per package
 against the marks ([livery.workshop._speed][]), records the first marks
 and the ratchets, warns on a run over the mark, and is red on the
 second run over in a row on a reference leg. ``speed.accept`` is the
-person's raise of a mark, with the reason on the record.
+person's raise of a mark, with the reason on the record. Both verbs
+do nothing until the contract declares ``[ci] speed-marks = true``.
 """
 
 from __future__ import annotations
@@ -56,14 +57,22 @@ def judge_flow(root: Path, run: RunContext) -> list[str]:
 def speed_judge() -> None:
     """Judge the run's test times against the speed marks; red on the second run over.
 
-    Runs in the gate job after the timing rows are collected. Outside
-    CI it says so and judges nothing.
+    Runs in the gate job after the timing rows are collected. Off
+    until the contract declares ``[ci] speed-marks = true``, and
+    outside CI, it says so and judges nothing.
     """
+    root = _root()
+    if not _speed.enabled(root):
+        print(
+            f"  speed marks are off: declare [ci] {_speed.ENABLED_KEY} = true"
+            " in workshop.toml to judge test time"
+        )
+        return
     run = run_context()
     if run is None:
         print("  not a CI run: the speed marks are judged by the gate job")
         return
-    red = judge_flow(_root(), run)
+    red = judge_flow(root, run)
     if red:
         fail(
             "test speed over the mark for two runs in a row:\n  "
@@ -86,14 +95,19 @@ def speed_accept(
 
     The mark comes down on its own when the runs beat it; raising it
     is a person's act, so this writes a dated row naming who and why,
-    and the next gated run judges from it. Refuses without a reason,
-    for an unknown package, at or below the current mark, or when the
-    marks cannot be read.
+    and the next gated run judges from it. Refuses while the marks
+    are off, without a reason, for an unknown package, at or below
+    the current mark, or when the marks cannot be read.
     """
     from livery.workshop._points import check_legs
     from livery.workshop._quality import _git_identity
 
     root = _root()
+    if not _speed.enabled(root):
+        fail(
+            f"speed marks are off: declare [ci] {_speed.ENABLED_KEY} = true"
+            " in workshop.toml before accepting a mark"
+        )
     packages = tuple(item.path for item in discover_packages(root))
     legs = check_legs(root)
     chosen = leg or next((item for item in legs if _speed.is_reference(item)), "")

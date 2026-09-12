@@ -176,8 +176,12 @@ further, informational union that includes the live-only code.
 
 ## Test speed
 
-The gate job judges each check leg's summed test time per package
-against a mark on the state store. The mark is the median of the
+The speed marks are off until the contract declares
+`[ci] speed-marks = true`: a hosted runner's test time varies by tens
+of seconds between two runs of one tree, so a mark taken from such
+runs says nothing about the suite. Declare the key on runners that
+keep a steady clock. On, the gate job judges each check leg's summed
+test time per package against a mark on the state store. The mark is the median of the
 leg's last five green runs for the package, recorded once five are
 seen; it moves down when that median beats it by more than five per
 cent, so a suite cannot regress slowly. A run over the mark by more
