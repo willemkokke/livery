@@ -306,8 +306,10 @@ def test_a_workspace_with_no_packages_puts_its_scope_alone(
 ) -> None:
     from livery.workshop._verified import FULL, write_marker
 
-    # A project just born has no packages: its tests ran unmetered,
-    # and there is nothing to union. That is not a dead meter.
+    # A project just born has no packages: its own tests ran unmetered
+    # and reached no package source. That is not a dead meter: the
+    # tests unit is put with no lines, so the union finds what ran.
+    (tmp_path / "tests").mkdir()
     _in_ci(monkeypatch, "check-a")
     write_marker(tmp_path, FULL, leg="check-a")
     put: list[dict[str, object]] = []
@@ -319,7 +321,9 @@ def test_a_workspace_with_no_packages_puts_its_scope_alone(
     monkeypatch.setattr(_coverage_store, "put_run", _capture)
     _python.combine_leg(tmp_path, ())
     assert "no packages to measure" in capsys.readouterr().out
-    assert len(put) == 1 and put[0]["scope"] == "full" and put[0]["packages"] == ()
+    assert len(put) == 1 and put[0]["scope"] == "full"
+    units = [v for v in put[0].values() if isinstance(v, dict) and "tests" in v]
+    assert units and units[0]["tests"] == {}
 
 
 def _in_ci(monkeypatch: pytest.MonkeyPatch, leg: str) -> None:

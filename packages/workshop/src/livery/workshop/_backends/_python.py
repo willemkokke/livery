@@ -628,8 +628,9 @@ def combine_leg(
     gate skipped (a tree already proved, or nothing affected)
     legitimately measured nothing, says so, and puts its scope alone,
     so the union knows the leg skipped rather than died. A workspace
-    with no packages (a project just born) runs its tests unmetered
-    and has nothing to union; that leg puts its scope alone too. The
+    with no packages (a project just born) runs its own tests
+    unmetered, and they reach no package source; that leg puts its
+    units with no lines, so the union finds what the leg ran. The
     leg's
     *timing* row, when it has one, rides the one write with the
     scope; the marker's scope goes on it, as the stamp reads it.
@@ -643,13 +644,17 @@ def combine_leg(
         timing = {**timing, "scope": marker}
     if not parts and not (root / ".coverage").is_file():
         if not packages:
+            # The workspace's own tests ran, unmetered, and reached no
+            # package source: the unit is put with no lines, so the
+            # union finds every unit the leg ran and judges nothing.
             print(
-                print(
-                    "  coverage: the workspace has no packages to measure; nothing to"
-                    " combine"
-                )
+                "  coverage: the workspace has no packages to measure; its own"
+                " tests ran unmetered"
             )
-            _put_leg(root, marker, {}, timing=timing)
+            empty: dict[str, dict[str, list[tuple[int, int]]]] = {
+                unit.path: {} for unit in units_of(root, ())
+            }
+            _put_leg(root, marker, empty, timing=timing)
             return
         if scope not in (VERIFIED, NOTHING):
             fail(
