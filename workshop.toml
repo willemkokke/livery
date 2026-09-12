@@ -35,7 +35,7 @@ approvals = 0
 # slowest by far (a test task of 600 to 800 s against 210 s on
 # ubuntu). The suite is green there; returning the runner, here or
 # at the nightly point, is the owner's call.
-runners = ["ubuntu-latest", "macos-latest"]
+runners = ["ubuntu-latest", "macos-latest", "windows-latest"]
 # A pull request's check legs run the scoped gate against its base:
 # the packages the change can influence run, the others' suites are
 # reused from the coverage store; a push run and a change outside

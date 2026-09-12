@@ -493,10 +493,12 @@ def test_a_blob_whose_bytes_disagree_with_its_size_is_read_on_its_own(
     plain = work / "plain.json"
     plain.write_bytes(b'{"schema": 2, "when": "2026-01-01T00:00:01+00:00", "x": 2}\n')
     blob2 = _git(work, "hash-object", "-w", str(plain)).strip()
+    # NUL-separated, as the store feeds it: a newline through a
+    # text-mode stdin becomes "\r\n" on Windows and names the file "a\r".
     tree = subprocess.run(
-        ["git", "mktree"],
+        ["git", "mktree", "-z"],
         cwd=work,
-        input=f"100644 blob {blob}\ta\n100644 blob {blob2}\tb\n",
+        input=f"100644 blob {blob}\ta\x00100644 blob {blob2}\tb\x00",
         capture_output=True,
         text=True,
         check=True,
