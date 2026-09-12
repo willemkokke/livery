@@ -543,8 +543,13 @@ jobs:
           token: ${{{{ secrets.FORGE_TOKEN || github.token }}}}
 {setup_uv}{collect_step}{rung}{enter}{pin}      - name: Publish the wave
         id: wave
+        # A PYPI_TOKEN secret publishes with a token, which a first
+        # release of a new name needs, since trusted publishing waits
+        # on a pending publisher registered by hand; an empty value
+        # leaves uv on trusted publishing.
         env:
           FORGE_TOKEN: ${{{{ github.token }}}}
+          UV_PUBLISH_TOKEN: ${{{{ secrets.PYPI_TOKEN }}}}
         run: >-
           {prog} workflow.release.publish{prebuilt_flag}
           --ref="${{{{ inputs.ref }}}}"
