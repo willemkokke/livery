@@ -1041,24 +1041,31 @@ def _prove_verified_skip(root: Path, kind: str) -> None:
         ("skipping the gate",),
         forbidden=("measuring:", "coverage store: packages/loop-echo stored"),
     )
+    # The units main's union reuses are the members the workspace has
+    # at this point, plus its own tests: none on a fresh birth, whose
+    # members land through their own pull requests afterwards.
+    from livery.workshop._packages import discover_packages
+
+    members = [package.path for package in discover_packages(root)]
+    reused = len(members) + 1
+    expected = [
+        f"coverage record: main takes {_SETUP_BRANCH}'s record for the tree it proved",
+        *(
+            f"coverage: {path} on check-ubuntu-latest-3.14: reused from run"
+            for path in members
+        ),
+        "coverage: tests on check-ubuntu-latest-3.14: reused from run",
+        *(f"coverage {path}: 100.0% (" for path in members),
+        f"coverage: the union of 0 leg(s) and {reused} reused suite(s)",
+        f"coverage record: main/check-ubuntu-latest-3.14: 0 fresh, {reused} carried,"
+        " 0 removed",
+    ]
     _require_lines(
         repo,
         run,
         logs,
         "gate",
-        (
-            f"coverage record: main takes {_SETUP_BRANCH}'s record for the tree"
-            " it proved",
-            "coverage: packages/loop-echo on check-ubuntu-latest-3.14: reused from run",
-            "coverage: packages/loop-native on check-ubuntu-latest-3.14:"
-            " reused from run",
-            "coverage: tests on check-ubuntu-latest-3.14: reused from run",
-            "coverage packages/loop-echo: 100.0% (floor 100.0%",
-            "coverage packages/loop-native: 100.0% (",
-            "coverage: the union of 0 leg(s) and 3 reused suite(s)",
-            "coverage record: main/check-ubuntu-latest-3.14: 0 fresh, 3 carried,"
-            " 0 removed",
-        ),
+        tuple(expected),
         forbidden=("unjudged this run",),
     )
     print(
