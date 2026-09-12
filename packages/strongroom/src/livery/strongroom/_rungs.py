@@ -9,6 +9,9 @@ nothing created.
 
 Which rung a view reaches on a platform is not conformance material;
 the rules that decide eligibility are, and they live in `_views`.
+
+`remove` and `remove_tree` are the rungs' inverse: they take a path a
+rung made back off the disk whatever mode the rung left on it.
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ import ctypes
 import ctypes.util
 import os
 import shutil
+import stat
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -107,3 +111,56 @@ refusing platform in its place and put it back.
 def copy(source: Path, destination: Path) -> None:
     """The last rung: bytes copied, always available."""
     shutil.copyfile(source, destination)
+
+
+def _unlink(path: Path) -> None:
+    # The Windows seam: unlinking a file whose read-only attribute is
+    # set is refused there, and a view marks every clone, copy, and
+    # hardlink read-only. Tests fake this function to force the retry.
+    os.unlink(path)
+
+
+def _rmtree(path: Path) -> None:
+    # The same seam for a copied directory: one read-only file inside
+    # refuses the whole removal on Windows.
+    shutil.rmtree(path)
+
+
+def _writable(path: Path) -> None:
+    # Adding the owner's write bit clears Windows' read-only attribute
+    # and changes nothing else; a bare S_IWRITE would strip a POSIX
+    # directory's read and search bits and make it untraversable.
+    os.chmod(path, os.stat(path).st_mode | stat.S_IWRITE)
+
+
+def remove(path: Path) -> None:
+    """Remove a file or link a rung made, whatever its mode; a missing path is done.
+
+    A refusal on a read-only file clears the read-only attribute and
+    unlinks again. A hardlink shares that attribute with the store's
+    object, which is left writable afterwards, the state the store
+    keeps its objects in.
+    """
+    try:
+        _unlink(path)
+    except FileNotFoundError:
+        return
+    except PermissionError:
+        _writable(path)
+        _unlink(path)
+
+
+def remove_tree(path: Path) -> None:
+    """Remove a directory a rung copied, whatever the modes inside it.
+
+    A refusal makes every directory and file under *path* writable
+    and removes again.
+    """
+    try:
+        _rmtree(path)
+    except PermissionError:
+        for parent, directories, files in os.walk(path):
+            for name in [*directories, *files]:
+                _writable(Path(parent) / name)
+        _writable(path)
+        _rmtree(path)

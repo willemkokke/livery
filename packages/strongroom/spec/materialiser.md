@@ -95,5 +95,8 @@ directory symlink entry is a junction's case, which this
 implementation does not create yet, so it copies too. Hardlinks work
 on NTFS. ReFS or a Dev Drive gives copy-on-write, which this
 implementation does not wire yet, so the clone rung refuses and the
-view falls through. None of this is proven on a Windows runner; the
-rungs are exercised through their seams.
+view falls through. Windows refuses to unlink a file marked
+read-only, and a view marks every clone, copy, and hardlink so;
+dropping a view and evicting an object clear the mark on refusal and
+remove again. None of this is proven on a Windows runner; the rungs
+are exercised through their seams.

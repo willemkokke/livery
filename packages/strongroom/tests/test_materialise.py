@@ -7,6 +7,7 @@ import os
 import shutil
 import stat
 import sys
+import types
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +49,32 @@ def _fresh(tmp_path: Path, **kwargs: Any) -> Store:
     return Store.create(tmp_path / "s", **kwargs)
 
 
+def _refuse_read_only(monkeypatch: pytest.MonkeyPatch) -> list[Path]:
+    # Windows' rule at the removal seams: a file without its owner's
+    # write bit cannot be unlinked, and one such file inside a
+    # directory refuses the directory's removal.
+    refused: list[Path] = []
+
+    def unlink(path: Path) -> None:
+        if not os.stat(path).st_mode & stat.S_IWUSR:
+            refused.append(path)
+            raise PermissionError(13, "Access is denied", str(path))
+        os.unlink(path)
+
+    def rmtree(path: Path) -> None:
+        for parent, _directories, files in os.walk(path):
+            for name in files:
+                child = Path(parent) / name
+                if not os.stat(child).st_mode & stat.S_IWUSR:
+                    refused.append(child)
+                    raise PermissionError(13, "Access is denied", str(child))
+        shutil.rmtree(path)
+
+    monkeypatch.setattr(_rungs, "_unlink", unlink)
+    monkeypatch.setattr(_rungs, "_rmtree", rmtree)
+    return refused
+
+
 def _tree(store: Store, spec: dict[str, Any]) -> Digest:
     entries: list[Entry | Link] = []
     for name, value in spec.items():
@@ -84,6 +111,40 @@ def sample(store: Store) -> Digest:
 
 
 # Refusals, one per rung, then the plan's own.
+
+
+def test_removal_clears_a_read_only_mark_when_the_platform_refuses_it(
+    store: Store, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    refused = _refuse_read_only(monkeypatch)
+    tree = _tree(
+        store, {"a": b"a", "dir": {"b": b"b"}, "to_dir": Link("to_dir", "dir")}
+    )
+    monkeypatch.setattr(_rungs, "symlink", _refuse)
+    record = store.view(tree, tmp_path / "v")
+    by_path = {entry.path: entry for entry in record.entries}
+    assert by_path["to_dir"].rung == "copy"
+    for name in ("a", "dir/b", "to_dir/b"):
+        assert not os.access(tmp_path / "v" / name, os.W_OK)
+    report = store.drop_view(record.id)
+    assert report.left == ()
+    assert not (tmp_path / "v").exists()
+    assert {path.name for path in refused} == {"a", "b"}
+    # The object a hardlink shared its mark with is writable afterwards,
+    # and evicting a read-only object clears the mark the same way.
+    digest = digest_of(b"a")
+    assert os.access(store.object_path(digest), os.W_OK)
+    os.chmod(store.object_path(digest), 0o444)
+    store.evict(digest)
+    assert store.state(digest) == "absent"
+    assert refused[-1] == store.object_path(digest)
+    _rungs.remove(tmp_path / "never")
+
+
+def test_an_extended_length_target_compares_as_a_plain_path() -> None:
+    assert _views._plain("\\\\?\\C:\\v\\a") == "C:\\v\\a"
+    assert _views._plain("\\\\?\\UNC\\host\\share\\a") == "\\\\host\\share\\a"
+    assert _views._plain("src/main.py") == "src/main.py"
 
 
 def test_view_refuses_a_non_empty_or_non_directory_target(
@@ -302,7 +363,9 @@ def test_collect_refuses_an_absent_path_and_a_bad_link(
     # An absolute target inside the view is content with an unportable
     # spelling; one outside the view is read through as bytes.
     os.symlink(str(at / "file"), at / "abs")
-    with pytest.raises(FormatError, match="absolute"):
+    # Windows reads the target back with backslashes, and that rule
+    # refuses it first.
+    with pytest.raises(FormatError, match=r"absolute|backslash"):
         store.collect(at, ["abs"])
     (tmp_path / "elsewhere").write_bytes(b"outside")
     os.symlink(str(tmp_path / "elsewhere"), at / "out")
@@ -462,15 +525,17 @@ def test_clone_darwin_clones_and_refuses(tmp_path: Path) -> None:
 def test_clone_linux_wires_the_ioctl_and_refuses(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import fcntl
-
+    # A stand-in for the Linux module, so the wiring is proven on a
+    # platform without one too.
+    fcntl = types.ModuleType("fcntl")
+    monkeypatch.setitem(sys.modules, "fcntl", fcntl)
     calls: list[tuple[int, int]] = []
 
     def record(fd: int, request: int, arg: int = 0) -> int:
         calls.append((request, arg))
         return 0
 
-    monkeypatch.setattr(fcntl, "ioctl", record)
+    monkeypatch.setattr(fcntl, "ioctl", record, raising=False)
     (tmp_path / "a").write_bytes(b"x")
     _rungs.clone_linux(tmp_path / "a", tmp_path / "b")
     assert calls[0][0] == 0x40049409

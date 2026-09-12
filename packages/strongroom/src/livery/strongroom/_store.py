@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import IO, Literal
 
 import livery.strongroom._lifecycle as lifecycle
+import livery.strongroom._rungs as rungs
 from livery.strongroom._canonical import FormatError, Value, canonical
 from livery.strongroom._digest import Algorithm, Digest, registered
 from livery.strongroom._errors import (
@@ -838,7 +839,7 @@ class Store:
 
     def evict(self, digest: Digest) -> None:
         """Remove the object's bytes and its marks; the name is untouched."""
-        self.object_path(digest).unlink(missing_ok=True)
+        rungs.remove(self.object_path(digest))
         self._mark(digest).unlink(missing_ok=True)
         self._reference_mark(digest).unlink(missing_ok=True)
 

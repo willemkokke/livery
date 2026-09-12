@@ -429,9 +429,9 @@ def drop_view(store: Store, view_id: str) -> DropReport:
         if entry.rung == "parked" or not _lexists(path):
             continue
         if path.is_dir() and not path.is_symlink():
-            shutil.rmtree(path)
+            rungs.remove_tree(path)
         else:
-            path.unlink()
+            rungs.remove(path)
         removed.append(entry.path)
     for directory in [*reversed(record.directories), "."]:
         path = root / directory
@@ -519,10 +519,21 @@ def _points_inside(at: Path, link: Path) -> bool:
     # The link's own target, one step and no further: a link to a
     # within-view file that is itself the link rung's symlink into the
     # store is still content, because its target is inside the view.
-    raw = os.readlink(link)
+    raw = _plain(os.readlink(link))
     target = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(link)), raw))
     root = os.path.abspath(at)
     return target == root or target.startswith(root + os.sep)
+
+
+def _plain(target: str) -> str:
+    # Windows reads an absolute link back with the extended-length
+    # prefix, which no plain path starts with, so the comparison
+    # against the view's root drops it first.
+    if target.startswith("\\\\?\\UNC\\"):
+        return "\\\\" + target[len("\\\\?\\UNC\\") :]
+    if target.startswith("\\\\?\\"):
+        return target[len("\\\\?\\") :]
+    return target
 
 
 def _land_tree(store: Store, node: _Node) -> Tree:
