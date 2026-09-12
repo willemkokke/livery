@@ -733,6 +733,27 @@ def test_a_given_title_updates_the_reused_pr(
     assert pr is not None and pr.title == "feat: the better title"
 
 
+def test_a_given_body_updates_the_reused_pr_and_a_defaulted_one_keeps_it(
+    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The keep first: a submit without --body leaves the body the
+    # pull request was opened with, even though HEAD's body defaults
+    # the plan's. Then the update, said once, and silent when the
+    # given body already stands.
+    fake, git = rig
+    _submit(fake, git, armed=False, follow_to_verdict=False, body="the first body")
+    _submit(fake, git, armed=False, follow_to_verdict=False)
+    pr = _repo(fake).pr.get(1)
+    assert pr is not None and pr.body == "the first body"
+    assert "body updated" not in capsys.readouterr().out
+    _submit(fake, git, armed=False, follow_to_verdict=False, body="the corrected body")
+    pr = _repo(fake).pr.get(1)
+    assert pr is not None and pr.body == "the corrected body"
+    assert "body updated" in capsys.readouterr().out
+    _submit(fake, git, armed=False, follow_to_verdict=False, body="the corrected body")
+    assert "body updated" not in capsys.readouterr().out
+
+
 def test_submit_fix_amends_rewrites_into_an_unpushed_head(
     rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
 ) -> None:

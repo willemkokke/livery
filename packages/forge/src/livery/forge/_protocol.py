@@ -108,6 +108,15 @@ class PullRequests(Protocol):
         """
         ...
 
+    def update_body(self, number: int, body: str) -> None:
+        """Replace the description of pull request *number*.
+
+        The body is the review-facing text and, on a squash-only
+        repository, the merge armed after this call carries it as the
+        commit message.
+        """
+        ...
+
     def close(self, number: int) -> None:
         """Close pull request *number* without merging."""
         ...
