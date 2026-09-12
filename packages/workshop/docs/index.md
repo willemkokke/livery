@@ -209,7 +209,13 @@ or a write of a series is a fixed handful of git processes whatever
 the series holds: one `cat-file --batch` reads every row, one
 `hash-object --stdin-paths` writes every blob, so a series of three
 hundred rows costs no more processes than one of three (git 2.38 or
-newer).
+newer). A verb that reads several series takes one snapshot of the
+remote namespace: one listing, then one fetch of the refs the
+checkout lacks, and every read inside answers from the local object
+store, so `fm store.ls` and `fm ci.timings` cost two round trips and
+the gate job's union, collect, judge, stamp, and janitor one or two
+each. A write inside the snapshot keeps its compare-and-swap on the
+listed sha and records the sha it pushed, so a read after it sees it.
 
 | series | a row is | window | writer |
 | --- | --- | --- | --- |

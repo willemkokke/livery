@@ -37,14 +37,17 @@ def judge_flow(root: Path, run: RunContext) -> list[str]:
     Prints every verdict and every write. Fails open: a store that
     cannot be read prints its reason and reddens nothing.
     """
-    verdicts, why = _speed.judge_run(root, run)
-    for line in why:
-        print(line)
-    for verdict in verdicts:
-        for line in _speed.render(verdict):
+    from livery.workshop._state import remote_snapshot
+
+    with remote_snapshot(root, fetch=("metrics", "speed/marks")):
+        verdicts, why = _speed.judge_run(root, run)
+        for line in why:
             print(line)
-    for line in _speed.apply(root, verdicts, by=f"run {run.run_id}"):
-        print(line)
+        for verdict in verdicts:
+            for line in _speed.render(verdict):
+                print(line)
+        for line in _speed.apply(root, verdicts, by=f"run {run.run_id}"):
+            print(line)
     return [
         f"{v.sample.package} on {v.sample.leg}: {v.sample.seconds:.1f}s over the"
         f" limit {v.limit:.1f}s for the second run in a row"

@@ -558,6 +558,111 @@ def test_a_read_and_a_write_cost_a_fixed_handful_of_processes(
     assert reading["git"] == 4, reading
 
 
+# --- the snapshot: refusals first, then one listing for a verb ----------------
+
+
+def test_a_snapshot_whose_listing_failed_fails_every_read_and_listing(
+    repos: tuple[Path, Path], tmp_path: Path
+) -> None:
+    _, work = repos
+    assert ROWS.put(work, {"a": {"x": 1}}, message="one") == ""
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    with _state.remote_snapshot(work, fetch=("rows",)):
+        found = _state.read(work, ROWS.ref)
+        assert found.failed and found.reason.startswith(
+            "the remote could not be listed"
+        )
+        assert _state.list_refs(work, _state.NAMESPACE) is None
+        why = ROWS.put(work, {"b": {"x": 2}}, message="two")
+        assert "could not be read" in why and "the remote could not be listed" in why
+        assert _state.drop(work, ROWS.ref).startswith("delete refused")
+
+
+def test_a_snapshot_reads_an_absent_ref_as_absence_without_a_fetch(
+    repos: tuple[Path, Path],
+) -> None:
+    _, work = repos
+    with _state.remote_snapshot(work):
+        with counting_spawns() as spawned:
+            found = _state.read(work, ROWS.ref)
+        assert found == _state.Read(None, None, failed=False)
+        assert spawned["git fetch"] == 0 and spawned["git ls-remote"] == 0
+        assert _state.list_refs(work, _state.NAMESPACE) == {}
+
+
+def test_a_snapshot_lists_once_and_fetches_the_named_series_together(
+    repos: tuple[Path, Path], tmp_path: Path
+) -> None:
+    _, work = repos
+    other = _clone(tmp_path, "other", tmp_path / "origin.git")
+    series = [
+        _state.Series(name, window=50, ci_only=False, schema=2)
+        for name in ("alpha", "beta", "gamma")
+    ]
+    for item in series:
+        assert item.put(other, {"r": {"x": item.name}}, message=item.name) == ""
+    # A checkout that holds none of the commits: one listing, one fetch.
+    with (
+        counting_spawns() as cold,
+        _state.remote_snapshot(work, fetch=("alpha", "beta", "gamma")),
+    ):
+        for item in series:
+            found = item.rows(work)
+            assert [row.data["x"] for row in found.rows] == [item.name]
+        listed = _state.list_refs(work, _state.NAMESPACE)
+        assert listed is not None and set(listed) >= {item.ref for item in series}
+    assert cold["git ls-remote"] == 1 and cold["git fetch"] == 1, cold
+    # The commits are local now: one listing and no fetch at all.
+    with counting_spawns() as warm, _state.remote_snapshot(work, fetch=("alpha",)):
+        for item in series:
+            assert not item.rows(work).failed
+    assert warm["git ls-remote"] == 1 and warm["git fetch"] == 0, warm
+    # Outside a snapshot every read fetches on its own, as before.
+    with counting_spawns() as bare:
+        for item in series:
+            assert not item.rows(work).failed
+    assert bare["git fetch"] == 3
+
+
+def test_a_write_inside_a_snapshot_re_lists_on_a_stale_lease_and_records_its_sha(
+    repos: tuple[Path, Path], tmp_path: Path
+) -> None:
+    _, work = repos
+    other = _clone(tmp_path, "other", tmp_path / "origin.git")
+    assert ROWS.put(work, {"a": {"x": 1}}, message="one") == ""
+    with _state.remote_snapshot(work, fetch=("rows",)):
+        assert [row.name for row in ROWS.rows(work).rows] == ["a"]
+        # Another writer moves the ref after the listing.
+        assert ROWS.put(other, {"b": {"x": 2}}, message="two") == ""
+        with counting_spawns() as spawned:
+            assert ROWS.put(work, {"c": {"x": 3}}, message="three") == ""
+        assert spawned["git ls-remote"] >= 2  # the re-listing, then the readback
+        # The write merged the other writer's row and recorded its own sha.
+        found = ROWS.rows(work)
+        assert sorted(row.name for row in found.rows) == ["a", "b", "c"]
+        assert found.rows[0].name == "c"
+        listed = _state.list_refs(work, ROWS.ref)
+        assert (
+            listed is not None and listed[ROWS.ref] == _state.read(work, ROWS.ref).sha
+        )
+
+
+def test_a_drop_inside_a_snapshot_forgets_the_ref_and_nesting_shares_the_listing(
+    repos: tuple[Path, Path],
+) -> None:
+    _, work = repos
+    assert ROWS.put(work, {"a": {"x": 1}}, message="one") == ""
+    with counting_spawns() as spawned, _state.remote_snapshot(work):
+        with _state.remote_snapshot(work):  # nested: the outer listing serves
+            assert _state.list_refs(work, ROWS.ref) is not None
+        assert _state.drop(work, ROWS.ref) == ""
+        assert _state.list_refs(work, ROWS.ref) == {}
+        assert _state.read(work, ROWS.ref) == _state.Read(None, None, failed=False)
+    assert spawned["git ls-remote"] == 1
+    # The block is closed: the direct path again, and the ref is gone.
+    assert _state.read(work, ROWS.ref) == _state.Read(None, None, failed=False)
+
+
 def test_put_stamps_the_schema_and_the_time_over_what_a_row_carries(
     repos: tuple[Path, Path],
 ) -> None:

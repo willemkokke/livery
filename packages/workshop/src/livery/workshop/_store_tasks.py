@@ -17,7 +17,7 @@ from typing import Annotated, Any
 
 from livery.footman import doc, fail, group
 from livery.workshop._layers import workspace_root
-from livery.workshop._state import Keyed, Series
+from livery.workshop._state import WHOLE, Keyed, Series, remote_snapshot
 
 store = group("store", help="The state store, read by hand")
 
@@ -41,7 +41,17 @@ def _scope(item: Series | Keyed) -> str:
 
 
 def ls_flow(root: Path) -> list[str]:
-    """One line per declared series or family: scope, window, and what it holds."""
+    """One line per declared series or family: scope, window, and what it holds.
+
+    One listing of the remote namespace and one fetch of what the
+    checkout lacks serve every series, so the call costs two round
+    trips whatever the store holds.
+    """
+    with remote_snapshot(root, fetch=WHOLE):
+        return _ls_lines(root)
+
+
+def _ls_lines(root: Path) -> list[str]:
     lines: list[str] = []
     for item in _declared():
         if isinstance(item, Series):
@@ -81,8 +91,16 @@ def show_flow(
 
     Refuses an unknown name (naming the known ones), a family without
     its key (listing the keys it holds), a key of the wrong shape, and
-    a series the store cannot read (with the store's reason).
+    a series the store cannot read (with the store's reason). The
+    read goes through one listing of the remote namespace.
     """
+    with remote_snapshot(root, fetch=(name,)):
+        return _show_lines(root, name, key=key, as_json=as_json)
+
+
+def _show_lines(
+    root: Path, name: str, *, key: str = "", as_json: bool = False
+) -> list[str]:
     declared = _declared()
     item = next((each for each in declared if each.name == name), None)
     if item is None:
