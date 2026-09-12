@@ -5,9 +5,24 @@ nav = [
     # nav:begin tasks
     { "Tasks" = [
         { "Overview" = "_generated/tasks/index.md" },
-        { "toolroom" = [
-            { "Overview" = "_generated/tasks/toolroom/index.md" },
-            { "pages" = "_generated/tasks/toolroom/pages.md" },
+        { "tools" = [
+            { "Overview" = "_generated/tasks/tools/index.md" },
+            { "assemble" = "_generated/tasks/tools/assemble.md" },
+            { "audit" = "_generated/tasks/tools/audit.md" },
+            { "color" = "_generated/tasks/tools/color.md" },
+            { "docs" = "_generated/tasks/tools/docs.md" },
+            { "gather" = "_generated/tasks/tools/gather.md" },
+            { "list" = "_generated/tasks/tools/list.md" },
+            { "observe" = "_generated/tasks/tools/observe.md" },
+            { "owed" = "_generated/tasks/tools/owed.md" },
+            { "pages" = "_generated/tasks/tools/pages.md" },
+            { "prepare-release" = "_generated/tasks/tools/prepare-release.md" },
+            { "prime" = "_generated/tasks/tools/prime.md" },
+            { "provision" = "_generated/tasks/tools/provision.md" },
+            { "refresh" = "_generated/tasks/tools/refresh.md" },
+            { "restub" = "_generated/tasks/tools/restub.md" },
+            { "spec" = "_generated/tasks/tools/spec.md" },
+            { "sync" = "_generated/tasks/tools/sync.md" },
         ] },
     ] },
     # nav:end tasks

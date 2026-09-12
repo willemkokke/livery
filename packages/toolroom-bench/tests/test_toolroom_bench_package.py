@@ -12,6 +12,11 @@ def test_the_version_is_the_installed_distributions() -> None:
 
 
 def test_importing_the_bench_mounts_its_verbs() -> None:
-    assert set(package.__all__) == {"Refreshed", "__version__", "submit_refresh", "tasks"}
+    assert set(package.__all__) == {
+        "Refreshed",
+        "__version__",
+        "submit_refresh",
+        "tasks",
+    }
     assert package.tasks.name == "tools"
     assert "docs" in package.tasks.tasks

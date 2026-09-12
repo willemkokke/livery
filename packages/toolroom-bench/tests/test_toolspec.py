@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import ast
 import os
-import pathlib
 import shutil
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -132,7 +132,6 @@ def _toolroom_root() -> Path:
     import livery.toolroom.tools as tools
 
     return Path(tools.__file__).resolve().parents[4]
-
 
 
 def flags(verb: Verb) -> dict[str, Option]:
@@ -1341,8 +1340,6 @@ def test_a_short_name_is_the_same_home(tmp_path):
     machine's directory again. Case is the same trap: Windows does not
     distinguish it and a comparison does.
     """
-    from pathlib import Path
-
     long = r"C:\Users\Willem Kokke\AppData\Local\Temp\fm-1\docker-29.6.2\home"
     short = r"C:\Users\WILLEM~1\AppData\Local\Temp\fm-1\docker-29.6.2\home"
     spec = ToolSpec(
@@ -1777,7 +1774,6 @@ def test_pages_regenerates_the_tools_nav_between_markers(tmp_path):
 def test_checked_in_tools_nav_lists_every_stubbed_driver():
     # Fails when a driver is added without `fm toolroom.pages` regenerating
     # the sidebar — the drift guard the hardcoded nav never had.
-    from pathlib import Path
 
     from livery.toolroom.bench import _tasks as tools_tasks
 
