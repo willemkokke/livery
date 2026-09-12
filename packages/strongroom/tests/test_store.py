@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -374,6 +375,52 @@ def _dead_pid() -> int:
     child = subprocess.Popen([sys.executable, "-c", "pass"])
     child.wait()
     return child.pid
+
+
+def test_the_windows_probe_reads_the_handle_and_the_exit_code() -> None:
+    class Kernel32:
+        def __init__(self, handle: int, code: int | None) -> None:
+            self.handle, self.code = handle, code
+            self.closed: list[int] = []
+
+        def OpenProcess(self, access: int, inherit: bool, pid: int) -> int:
+            assert access == 0x1000 and inherit is False and pid == 4242
+            return self.handle
+
+        def GetExitCodeProcess(self, handle: int, out: Any) -> int:
+            if self.code is None:
+                return 0
+            getattr(out, "_obj").value = self.code  # noqa: B009
+            return 1
+
+        def CloseHandle(self, handle: int) -> None:
+            self.closed.append(handle)
+
+    def probe(dll: Kernel32, error: int = 0) -> bool:
+        return _store._pid_alive_windows(4242, kernel32=dll, last_error=lambda: error)
+
+    # No handle: access denied is a process that exists; anything else
+    # is none.
+    assert probe(Kernel32(0, None), error=5) is True
+    assert probe(Kernel32(0, None), error=87) is False
+    # A handle: still active is alive, any other exit code is dead, and
+    # a query that fails reads as alive; the handle closes each time.
+    for dll, alive in ((Kernel32(7, 259), True), (Kernel32(7, 0), False)):
+        assert probe(dll) is alive
+        assert dll.closed == [7]
+    failing = Kernel32(7, None)
+    assert probe(failing) is True
+    assert failing.closed == [7]
+    if os.name == "nt":
+        assert _store._pid_alive_windows(os.getpid()) is True
+        assert _store._pid_alive_windows(_dead_pid()) is False
+    else:
+        with pytest.raises(AttributeError):
+            _store._pid_alive_windows(os.getpid())
+        with pytest.raises(AttributeError):
+            _store._last_error()
+    expected = {"posix": _store._pid_alive_posix, "nt": _store._pid_alive_windows}
+    assert _store._PID_ALIVE is expected.get(os.name, _store._pid_alive_unknown)
 
 
 def test_liveness_probes_read_the_kernel_answer(

@@ -563,8 +563,27 @@ Acceptance:
   extended-length prefix is refused as content, not read through;
   the Linux clone test stands a module in for `fcntl`; the
   refused-port test allows Windows' retry and its own words. Two
-  families stay open below: the executable bit and the lock's
-  liveness probe, each a ruling.
+  families stayed open for a ruling, items 7 and 8 below, and the
+  leg found a third, item 9.
+- 2026-09-12, Willem, five rulings (issue #499), built on the same
+  branch. The executable bit is learned by a ladder in `collect`:
+  the caller's declaration on every platform, then the file mode
+  where it carries the bit, then the view record's answer where it
+  does not, then the platform's reading of a new file, the extension
+  on Windows; the record carries the bit for that, and the ruling
+  is that a Windows store exported over HTTP serves trees a Linux
+  consumer can trust. The lock's liveness is probed on Windows
+  through `OpenProcess` and `GetExitCodeProcess`, an extension of the
+  2026-09-11 ruling, since `os.kill` is still never sent there. A
+  symlink entry's target is spelled with the platform's separator on
+  the way out and the tree's on the way back. An absolute link inside
+  a view is content and collects as the relative path from the
+  link's directory. A link never leaves its view: `view` parks an
+  escaping entry on every platform, `collect` refuses an escaping
+  link, and the link rung's own symlink into the store is told apart
+  by the record, or by landing under the store's root. Judged
+  against the view's root, never a subtree's; a subtree viewed alone
+  has no parent.
 
 ## Open
 
@@ -595,25 +614,14 @@ Acceptance:
    `tokens.txt` sits beside them with no `.gitignore`. This plan cites
    the note by path; committing it, with the tokens file ignored, is
    Willem's. Owner: Willem.
-7. **The executable bit on Windows.** `os.chmod` cannot set it and
-   `stat` derives it from the extension, so a view does not keep it
-   and `collect` reports `.exe`, `.bat`, `.cmd`, and `.com` as
-   executable whatever the tree said. The round trip
-   `collect(view(t)) == t` fails there for any tree with an
-   executable entry. The choices: state the loss in the spec and
-   condition the four asserting tests on the platform, or carry the
-   bit outside the mode. Owner: Willem.
-8. **A dead holder's lock on Windows.** No liveness probe is sent
-   there, so a lock left by an exited process is broken by age alone,
-   and the conformance case `refs:lock-broken-only-on-provable-
-   staleness` and `test_a_stale_lock_is_broken_only_on_proof` time
-   out. The choices: a probe through `kernel32.OpenProcess` and
-   `GetExitCodeProcess` behind the `_PID_ALIVE` seam, or the two
-   cases skipped by name on Windows with the spec saying the proof is
-   age alone there. Owner: Willem.
-9. **A symlink entry dangles on Windows.** The hosted runner has the
-   symlink privilege, so the rung succeeds there, but the target
-   keeps the tree's forward slashes and Windows does not resolve it
-   (`WinError 123`). The spelling on the way out and on the way back
-   through `collect` is one change, issue #492. Owner: the agent,
-   once ruled.
+7. **Resolved 2026-09-12.** The executable bit travels outside the
+   file mode on Windows: the view record carries it for paths the
+   view made, and `collect(..., executable=)` carries it for new
+   outputs. The ladder is in the materialiser spec. Issue #499.
+8. **Resolved 2026-09-12.** A dead holder's lock is broken on Windows
+   through a Win32 liveness probe behind the `_PID_ALIVE` seam; the
+   conformance case holds on every platform. Issue #499.
+9. **Resolved 2026-09-12.** A symlink entry's target is spelled with
+   the platform's separator on the way out and the tree's on the way
+   back, so it resolves on Windows and round-trips. Issues #492 and
+   #499.

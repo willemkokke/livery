@@ -248,9 +248,14 @@ def test_copy_is_the_floor_and_keeps_the_executable_bit(
     rungs = {entry.path: entry.rung for entry in record.entries}
     assert rungs["README.md"] == "copy"
     assert rungs["run.sh"] == "copy"
-    assert (tmp_path / "v" / "run.sh").stat().st_mode & stat.S_IXUSR
-    assert not (tmp_path / "v" / "README.md").stat().st_mode & stat.S_IXUSR
+    if _views._MODE_CARRIES_EXECUTABLE:
+        assert (tmp_path / "v" / "run.sh").stat().st_mode & stat.S_IXUSR
+        assert not (tmp_path / "v" / "README.md").stat().st_mode & stat.S_IXUSR
     assert not os.access(tmp_path / "v" / "README.md", os.W_OK)
+    # The record carries the bit for the platform whose mode cannot.
+    by_path = {entry.path: entry for entry in record.entries}
+    assert by_path["run.sh"].executable
+    assert not by_path["README.md"].executable
 
 
 def test_symlink_entries_fall_to_copies_or_park(
@@ -262,7 +267,6 @@ def test_symlink_entries_fall_to_copies_or_park(
             "src": {"main.py": b"main"},
             "to_file": Link("to_file", "src/main.py"),
             "to_dir": Link("to_dir", "src"),
-            "escaping": Link("escaping", "../outside"),
             "dangling": Link("dangling", "src/nothing"),
         },
     )
@@ -274,9 +278,6 @@ def test_symlink_entries_fall_to_copies_or_park(
     assert (tmp_path / "v" / "to_file").read_bytes() == b"main"
     assert by_path["to_dir"].rung == "copy"
     assert (tmp_path / "v" / "to_dir" / "main.py").read_bytes() == b"main"
-    assert by_path["escaping"].rung == "parked"
-    assert by_path["escaping"].note.startswith("target escapes the view")
-    assert not (tmp_path / "v" / "escaping").exists()
     assert by_path["dangling"].rung == "parked"
     assert by_path["dangling"].note.startswith("target is absent in the view")
     # Dropping removes the copies and skips the parked entries.
@@ -284,6 +285,67 @@ def test_symlink_entries_fall_to_copies_or_park(
     assert "to_dir" in report.removed
     assert report.left == ()
     assert not (tmp_path / "v").exists()
+
+
+def test_a_link_never_leaves_its_view(
+    store: Store, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Parked before any rung is tried, on every platform: the symlink
+    # rung is the one seam that would otherwise make it.
+    calls: list[str] = []
+    original = _rungs.symlink
+
+    def counting(target: str | Path, destination: Path, **kwargs: Any) -> None:
+        calls.append(str(target))
+        original(target, destination, **kwargs)
+
+    monkeypatch.setattr(_rungs, "symlink", counting)
+    tree = _tree(
+        store,
+        {
+            "a": b"a",
+            "d": {"up": Link("up", "../a"), "out": Link("out", "../../x")},
+            "escaping": Link("escaping", "../outside"),
+            "root": Link("root", "d/.."),
+        },
+    )
+    record = store.view(tree, tmp_path / "v")
+    by_path = {entry.path: entry for entry in record.entries}
+    for path in ("escaping", "d/out"):
+        assert by_path[path].rung == "parked"
+        assert by_path[path].note.startswith("target escapes the view")
+        assert not (tmp_path / "v" / path).is_symlink()
+    assert by_path["d/up"].rung == "symlink"
+    assert by_path["root"].rung == "symlink"
+    assert sorted(calls) == ["../a", "d/.."]
+    # Collect refuses a link a program made that leaves the view, and
+    # reads through one into the store, the link rung's own shape.
+    os.symlink("../elsewhere", tmp_path / "v" / "hand")
+    with pytest.raises(FormatError, match=r"symlink 'hand' escapes the view"):
+        store.collect(tmp_path / "v", ["hand"])
+    os.symlink(store.object_path(digest_of(b"a")), tmp_path / "v" / "into_store")
+    collected = store.collect(tmp_path / "v", ["into_store", "d"])
+    entry = collected.entries[1]
+    assert isinstance(entry, Entry) and entry.digest == digest_of(b"a")
+    d = Tree.decode(store.read(collected.entries[0].digest))  # type: ignore[union-attr]
+    assert d.entries == (Link("up", "../a"),)
+
+
+def test_a_windows_spelled_link_round_trips(
+    store: Store, sample: Digest, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The target goes out with the platform's separator and comes back
+    # with the tree's; forced here with a separator POSIX allows in a
+    # target, so the link dangles and the spelling alone is under test.
+    monkeypatch.setattr(_views, "_SEP", "\\")
+    record = store.view(sample, tmp_path / "v")
+    assert {e.path: e.rung for e in record.entries}["latest"] == "symlink"
+    assert os.readlink(tmp_path / "v" / "latest") == "src\\main.py"
+    collected = store.collect(tmp_path / "v", ["latest", "srcdir"])
+    assert collected.entries == (
+        Link("latest", "src/main.py"),
+        Link("srcdir", "src"),
+    )
 
 
 # The removal doctrine.
@@ -341,8 +403,16 @@ def test_a_malformed_view_record_is_an_integrity_error(store: Store) -> None:
         store.view_record("bad")
     with pytest.raises(FormatError, match="not a rung"):
         ViewEntry.from_json(
-            {"path": "a", "rung": "teleport", "digest": None, "note": ""}
+            {
+                "path": "a",
+                "rung": "teleport",
+                "digest": None,
+                "note": "",
+                "executable": False,
+            }
         )
+    with pytest.raises(FormatError, match="missing: executable"):
+        ViewEntry.from_json({"path": "a", "rung": "copy", "digest": None, "note": ""})
 
 
 def test_a_view_record_round_trips(
@@ -354,31 +424,36 @@ def test_a_view_record_round_trips(
     assert store.views() == [record]
     assert record.root == tmp_path / "v"
     assert record.created == store.clock()[:16] + record.created[16:]
+    by_path = {entry.path: entry for entry in record.entries}
+    assert by_path["run.sh"].executable and not by_path["README.md"].executable
 
 
 # Collecting.
 
 
-def test_collect_refuses_an_absent_path_and_a_bad_link(
+def test_collect_refuses_an_absent_path_and_normalises_an_absolute_link(
     store: Store, tmp_path: Path
 ) -> None:
     at = tmp_path / "out"
-    at.mkdir()
+    (at / "d").mkdir(parents=True)
     (at / "file").write_bytes(b"f")
     with pytest.raises(FileNotFoundError, match="declared output 'missing' is absent"):
         store.collect(at, ["missing"])
-    # An absolute target inside the view is content with an unportable
-    # spelling; one outside the view is read through as bytes.
+    with pytest.raises(FileNotFoundError, match="declared executable 'gone' is"):
+        store.collect(at, ["file"], executable=["gone"])
+    # An absolute target inside the view is content spelled for one
+    # machine: recorded relative to the link's own directory. One
+    # outside the view, and not into the store, leaves the view.
     os.symlink(str(at / "file"), at / "abs")
-    # Windows reads the target back with backslashes, and that rule
-    # refuses it first.
-    with pytest.raises(FormatError, match=r"absolute|backslash"):
-        store.collect(at, ["abs"])
+    os.symlink(str(at / "file"), at / "d" / "abs")
+    collected = store.collect(at, ["abs", "d"])
+    assert collected.entries[0] == Link("abs", "file")
+    d = Tree.decode(store.read(collected.entries[1].digest))  # type: ignore[union-attr]
+    assert d.entries == (Link("abs", "../file"),)
     (tmp_path / "elsewhere").write_bytes(b"outside")
     os.symlink(str(tmp_path / "elsewhere"), at / "out")
-    collected = store.collect(at, ["out"])
-    entry = collected.entries[0]
-    assert isinstance(entry, Entry) and entry.digest == digest_of(b"outside")
+    with pytest.raises(FormatError, match=r"symlink 'out' escapes the view"):
+        store.collect(at, ["out"])
     (at / "CON").write_bytes(b"")
     with pytest.raises(FormatError, match="Windows-reserved"):
         store.collect(at, ["CON"])
@@ -390,7 +465,10 @@ def test_collect_refuses_a_path_over_the_budget(store: Store, tmp_path: Path) ->
     (tmp_path / "leaf").write_bytes(b"x")
     with pytest.raises(FormatError, match=f"longer than {PATH_BUDGET}"):
         _views._collect_path(
-            store, tmp_path, tmp_path / "leaf", "d" * (PATH_BUDGET + 1)
+            store,
+            _views._Collecting(tmp_path, frozenset(), {}),
+            tmp_path / "leaf",
+            "d" * (PATH_BUDGET + 1),
         )
 
 
@@ -438,7 +516,7 @@ def test_collect_lands_partial_declarations_and_nested_directories(
     (at / "keep" / "b.sh").chmod(0o755)
     (at / "ignore.txt").write_bytes(b"not declared")
     os.symlink("deep/a.txt", at / "keep" / "link")
-    tree = store.collect(at, ["keep", "keep/deep/a.txt"])
+    tree = store.collect(at, ["keep", "keep/deep/a.txt"], executable=["keep/b.sh"])
     names = [entry.name for entry in tree.entries]
     assert names == ["keep"]
     keep = Tree.decode(store.read(tree.entries[0].digest))  # type: ignore[union-attr]
@@ -448,6 +526,65 @@ def test_collect_lands_partial_declarations_and_nested_directories(
     assert isinstance(keep.entries[2], Link)
     assert store.state(digest_of(b"not declared")) == "absent"
     assert store.state(digest_of(b"a")) == "present"
+
+
+def test_collect_learns_the_executable_bit_by_the_ladder(
+    store: Store, sample: Digest, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A writable view copies, so the modes below are the view's own.
+    at = tmp_path / "v"
+    store.view(sample, at, writable=True)
+    (at / "run.sh").chmod(0o644)
+    (at / "README.md").chmod(0o755)
+    (at / "tool.exe").write_bytes(b"MZ")
+    (at / "tool.exe").chmod(0o755)
+    (at / "new.txt").write_bytes(b"n")
+    declared = ["run.sh", "README.md", "tool.exe", "new.txt"]
+
+    def bits(**kwargs: Any) -> dict[str, bool]:
+        tree = store.collect(at, declared, **kwargs)
+        return {e.name: e.executable for e in tree.entries if isinstance(e, Entry)}
+
+    if _views._MODE_CARRIES_EXECUTABLE:
+        # The mode is the truth where it carries the bit; the record
+        # is not consulted.
+        assert bits() == {
+            "README.md": True,
+            "new.txt": False,
+            "run.sh": False,
+            "tool.exe": True,
+        }
+    # Where it does not: the record for what the view made, then the
+    # platform's reading of a new file, which is the extension on
+    # Windows and the mode here.
+    monkeypatch.setattr(_views, "_MODE_CARRIES_EXECUTABLE", False)
+    assert bits() == {
+        "README.md": False,
+        "new.txt": False,
+        "run.sh": True,
+        "tool.exe": True,
+    }
+    # The declaration outranks both, everywhere.
+    assert bits(executable=["README.md", "new.txt"]) == {
+        "README.md": True,
+        "new.txt": True,
+        "run.sh": True,
+        "tool.exe": True,
+    }
+    # A directory viewed again after its first view went keeps the
+    # newest record's answer; the older record waits for the sweep.
+    _rungs.remove_tree(at)
+    again = store.view(_tree(store, {"run.sh": b"#!/bin/sh\n"}), at)
+    assert len(store.views()) == 2
+    tree = store.collect(at, ["run.sh"])
+    assert isinstance(tree.entries[0], Entry) and tree.entries[0].executable
+    assert store.views()[0].id != again.id or store.views()[1].id != again.id
+    # A directory no record covers reads the platform alone.
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / "x.sh").write_bytes(b"x")
+    plain = store.collect(other, ["x.sh"])
+    assert isinstance(plain.entries[0], Entry) and not plain.entries[0].executable
 
 
 # Warming and shedding.
