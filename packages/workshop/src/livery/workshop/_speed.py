@@ -87,6 +87,32 @@ GROWN = 5
 _DISPLAY = re.compile(r"^(?P<job>[^ (]+) \((?P<os>[^,]+), (?P<python>[^)]+)\)$")
 
 
+def drop_marks(root: Path) -> list[str]:
+    """Drop the marks series while the marks are off; the lines to print.
+
+    Rows written before the switch went off would be the marks a
+    later opt-in judges from, so the gate job drops the whole series
+    when it finds any. Fails open: a store that cannot be read, or a
+    delete the remote refuses, prints its reason and drops nothing.
+    Nothing to print when the series is already gone.
+    """
+    from livery.workshop._state import drop
+
+    found = SERIES.rows(root)
+    if found.failed:
+        return [f"  speed marks: not dropped: {found.reason}"]
+    if not found.rows and not found.skipped:
+        return []
+    why = drop(root, SERIES.ref)
+    if why:
+        return [f"  speed marks: not dropped: {why}"]
+    count = len(found.rows) + len(found.skipped)
+    return [
+        f"  speed marks: dropped {count} stale row(s) from {SERIES.ref};"
+        f" the marks are off ([ci] {ENABLED_KEY})"
+    ]
+
+
 def leg_label(display: str) -> str:
     """The leg label of a matrix job's display name; a plain name stands.
 
