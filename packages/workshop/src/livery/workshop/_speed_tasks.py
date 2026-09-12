@@ -61,17 +61,22 @@ def speed_judge() -> None:
     """Judge the run's test times against the speed marks; red on the second run over.
 
     Runs in the gate job after the timing rows are collected. Off
-    until the contract declares ``[ci] speed-marks = true``, and
-    outside CI, it says so and judges nothing.
+    until the contract declares ``[ci] speed-marks = true``: it says
+    so, and in CI drops any marks left from before the switch, so a
+    later opt-in starts from the timings alone. Outside CI it says so
+    and judges nothing.
     """
     root = _root()
+    run = run_context()
     if not _speed.enabled(root):
         print(
             f"  speed marks are off: declare [ci] {_speed.ENABLED_KEY} = true"
             " in workshop.toml to judge test time"
         )
+        if run is not None:
+            for line in _speed.drop_marks(root):
+                print(line)
         return
-    run = run_context()
     if run is None:
         print("  not a CI run: the speed marks are judged by the gate job")
         return

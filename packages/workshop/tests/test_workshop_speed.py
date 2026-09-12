@@ -125,6 +125,50 @@ def test_the_judge_and_the_accept_do_nothing_while_the_marks_are_off(
     _speed_tasks.speed_judge()
 
 
+def test_the_judge_drops_the_stale_marks_in_ci_while_off(
+    work: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from livery.workshop import _speed_tasks
+
+    _contract(work, 'runners = ["ubuntu-latest"]\n')
+    monkeypatch.setattr(_speed_tasks, "workspace_root", lambda: work)
+    assert (
+        _speed.write_mark(
+            work,
+            package="packages/forge",
+            leg=LEG,
+            seconds=100.0,
+            kind="first",
+            by="run 1",
+        )
+        == ""
+    )
+    # Outside CI nothing is dropped: a local run never deletes a
+    # remote series.
+    monkeypatch.setattr(_speed_tasks, "run_context", lambda: None)
+    _speed_tasks.speed_judge()
+    assert "dropped" not in capsys.readouterr().out
+    assert len(_speed.SERIES.rows(work).rows) == 1
+    # A store the transport cannot answer for drops nothing and says why.
+    origin = _git(work, "remote", "get-url", "origin").strip()
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    monkeypatch.setattr(_speed_tasks, "run_context", lambda: RUN)
+    _speed_tasks.speed_judge()
+    assert "speed marks: not dropped:" in capsys.readouterr().out
+    _git(work, "remote", "set-url", "origin", origin)
+    # In CI the series goes, and a second run finds nothing to say.
+    _speed_tasks.speed_judge()
+    out = capsys.readouterr().out
+    assert "speed marks: dropped 1 stale row(s) from refs/workshop/speed/marks" in out
+    found = _speed.SERIES.rows(work)
+    assert found.rows == () and not found.failed
+    _speed_tasks.speed_judge()
+    assert "dropped" not in capsys.readouterr().out
+
+
 # --- the shapes -----------------------------------------------------------------
 
 
