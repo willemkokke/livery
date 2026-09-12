@@ -489,10 +489,13 @@ def test_a_blob_whose_bytes_disagree_with_its_size_is_read_on_its_own(
     ref = _state.LOCAL_NAMESPACE + "legacy"
     crlf = work / "crlf.json"
     crlf.write_bytes(b'{"schema": 2, "when": "2026-01-01T00:00:00+00:00", "x": 1}\r\n')
-    blob = _git(work, "hash-object", "-w", str(crlf)).strip()
+    # As written: hash-object given a path applies core.autocrlf, which
+    # Git for Windows turns on, and would store the row with plain
+    # newlines there.
+    blob = _git(work, "hash-object", "-w", "--no-filters", str(crlf)).strip()
     plain = work / "plain.json"
     plain.write_bytes(b'{"schema": 2, "when": "2026-01-01T00:00:01+00:00", "x": 2}\n')
-    blob2 = _git(work, "hash-object", "-w", str(plain)).strip()
+    blob2 = _git(work, "hash-object", "-w", "--no-filters", str(plain)).strip()
     # NUL-separated, as the store feeds it: a newline through a
     # text-mode stdin becomes "\r\n" on Windows and names the file "a\r".
     tree = subprocess.run(
