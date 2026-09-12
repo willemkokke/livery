@@ -46,12 +46,18 @@ The rules, ported from hse's stamp transport:
   this namespace must never start a workflow.
 
 Plumbing, never porcelain: ``hash-object``, ``mktree``,
-``commit-tree``, ``push``, ``ls-remote``. The working tree and the
-index are never touched, so a write is safe from the middle of any
-job. Payloads are text: a blob is hashed from a temporary file and
-the tree is fed NUL-separated, so no newline ever crosses a text-mode
-stdin, where Windows appends a carriage return that once named a
-file no ``show`` could find.
+``commit-tree``, ``push``, ``ls-remote``, ``cat-file``. The working
+tree and the index are never touched, so a write is safe from the
+middle of any job. A read or a write is a fixed handful of git
+processes whatever the series holds: one ``cat-file --batch`` reads
+every blob of a tree, one ``hash-object --stdin-paths`` writes every
+blob of a commit. The object names go NUL-separated (git 2.38 or
+newer), the paths one per line, which git reads with or without the
+carriage return a text-mode stdin appends on Windows; the tree is fed
+NUL-separated too, so no file name ever crosses a text-mode stdin,
+where that carriage return once named a file no ``show`` could find.
+A blob is hashed from a temporary file written without newline
+translation, so it reads the same bytes on every platform.
 """
 
 from __future__ import annotations
@@ -615,17 +621,77 @@ def read(root: Path, ref: str) -> Read:
 
 
 def _tree_files(root: Path, sha: str) -> Read:
-    """The files of the root commit *sha*, or a failure with git's words."""
+    """The files of the root commit *sha*, or a failure with git's words.
+
+    Two processes whatever the tree holds: one ``ls-tree`` for the
+    names, one ``cat-file --batch`` for every blob, read back by the
+    byte sizes git prints before each. An object git does not have or
+    a stream that ends early is a failure naming the file: a partial
+    tree must never read as the series. A blob whose bytes do not
+    match its size after the pipe's newline translation (a row a
+    Windows checkout wrote with carriage returns, before blobs were
+    written without translation) is read on its own with ``show``,
+    the translation both agree on.
+    """
     listed = _git(root, "ls-tree", "--name-only", sha)
     if listed.code != 0:
         return Read(None, sha, failed=True, reason=_words(listed))
-    files: dict[str, str] = {}
-    for name in listed.stdout.split():
+    names = listed.stdout.split()
+    if not names:
+        return Read({}, sha, failed=False)
+    batch = _git(
+        root,
+        "cat-file",
+        "--batch",
+        "-z",
+        stdin="".join(f"{sha}:{name}\0" for name in names),
+    )
+    if batch.code != 0:
+        return Read(None, sha, failed=True, reason=_words(batch))
+    files, mismatched, why = _split_batch(batch.stdout, names)
+    if why:
+        return Read(None, sha, failed=True, reason=why)
+    for name in mismatched:
         shown = _git(root, "show", f"{sha}:{name}")
         if shown.code != 0:
             return Read(None, sha, failed=True, reason=_words(shown))
         files[name] = shown.stdout
     return Read(files, sha, failed=False)
+
+
+def _split_batch(
+    output: str, names: list[str]
+) -> tuple[dict[str, str], list[str], str]:
+    """The blobs of a ``cat-file --batch`` stream, by *names* in order.
+
+    Returns the files, the names whose bytes did not match their
+    size, and the reason when the stream is not a whole answer: an
+    object git does not have, or a stream that ends before a header.
+    """
+    data = output.encode("utf-8")
+    files: dict[str, str] = {}
+    mismatched: list[str] = []
+    at = 0
+    for name in names:
+        end = data.find(b"\n", at)
+        if end < 0:
+            return {}, [], f"{name}: the batch stream ended before its header"
+        header = data[at:end].decode("utf-8", "replace").split()
+        at = end + 1
+        if len(header) < 3 or header[1] != "blob" or not header[2].isdigit():
+            said = " ".join(header[1:]) or "nothing"
+            return {}, [], f"{name}: git said {said}"
+        size = int(header[2])
+        body = data[at : at + size]
+        if len(body) == size and data[at + size : at + size + 1] == b"\n":
+            files[name] = body.decode("utf-8")
+            at += size + 1
+            continue
+        # The pipe translated a carriage return away: the sizes no
+        # longer index the stream, so the rest is read one by one.
+        mismatched.extend(names[len(files) + len(mismatched) :])
+        break
+    return files, mismatched, ""
 
 
 def list_refs(root: Path, prefix: str) -> dict[str, str] | None:
@@ -649,19 +715,47 @@ def list_refs(root: Path, prefix: str) -> dict[str, str] | None:
 def _build_commit(root: Path, files: dict[str, str], message: str) -> tuple[str, str]:
     """A root commit of *files*; ``(sha, "")`` or ``("", reason)``."""
     entries: list[str] = []
-    for name in sorted(files):
-        # A temporary file, never stdin: text-mode stdin translates
-        # newlines on Windows and the blob would differ per platform.
-        with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
-            handle.write(files[name])
-            path = handle.name
-        try:
-            hashed = _git(root, "hash-object", "-w", path)
-        finally:
+    names = sorted(files)
+    paths: list[str] = []
+    try:
+        for name in names:
+            # A temporary file, never stdin, and written without newline
+            # translation: text-mode stdin translates newlines on
+            # Windows, and a translated file would hash to a different
+            # blob per platform.
+            with tempfile.NamedTemporaryFile(
+                "w", encoding="utf-8", newline="", delete=False
+            ) as handle:
+                handle.write(files[name])
+                paths.append(handle.name)
+        # One path per line: git strips the carriage return a text-mode
+        # stdin appends on Windows, and a temporary file's path holds
+        # no newline of its own.
+        hashed = (
+            _git(
+                root,
+                "hash-object",
+                "-w",
+                "--stdin-paths",
+                stdin="".join(f"{path}\n" for path in paths),
+            )
+            if paths
+            else None
+        )
+    finally:
+        for path in paths:
             os.unlink(path)
+    if hashed is not None:
         if hashed.code != 0:
             return "", f"hash-object failed: {_words(hashed)}"
-        entries.append(f"100644 blob {hashed.stdout.strip()}\t{name}")
+        shas = hashed.stdout.split()
+        if len(shas) != len(paths):
+            return "", (
+                f"hash-object returned {len(shas)} hash(es) for {len(paths)} file(s)"
+            )
+        entries.extend(
+            f"100644 blob {sha}\t{name}" for name, sha in zip(names, shas, strict=True)
+        )
     # NUL-separated entries: no newline crosses stdin, so no platform's
     # text mode can rename a file to "<name>\r".
     tree = _git(root, "mktree", "-z", stdin="\0".join(entries) + "\0")

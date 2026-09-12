@@ -64,8 +64,8 @@ def sanitise_branch(branch: str) -> str:
 def semver_to_pep440(semver: str) -> str:
     """The dev grammar's PEP 440 form; anything else passes through.
 
-    ``1.2.3-dev.feat.x.4+abc1234.20260901`` becomes
-    ``1.2.3.dev4+feat.x.abc1234.20260901``: the branch moves into
+    ``1.2.3-dev.feat.x.4+gabc1234.20260901`` becomes
+    ``1.2.3.dev4+feat.x.gabc1234.20260901``: the branch moves into
     the local segment, because PEP 440's public half accepts only
     ``devN``. A build backend refuses the display form outright, so
     every stamp goes through this.
@@ -106,6 +106,21 @@ def describe_distance(git: GitOps, package: Package) -> tuple[int, str]:
     return (int(count) if count.isdigit() else 0), (sha or "0000000")
 
 
+def unchanged_since_release(root: Path, git: GitOps, package: Package) -> str:
+    """The released version nothing unreleased has touched, or empty.
+
+    Content, not position, judged against the release tag: HEAD can
+    be far past a package's tag with no commit touching it, and
+    git-cliff then answers the released version back. Empty for a
+    package with unreleased changes, or one with no release yet.
+    """
+    released = latest_released(git.tags()).get(package.path, "")
+    derived = _cliff.bumped_version(root, package)
+    if not derived:
+        fail(f"git-cliff derived no version for {package.name}; see its output above.")
+    return released if released and derived == released else ""
+
+
 def dev_version(root: Path, git: GitOps, package: Package, *, stamp: str = "") -> str:
     """Derive *package*'s dev version, refusing an unchanged package.
 
@@ -121,13 +136,15 @@ def dev_version(root: Path, git: GitOps, package: Package, *, stamp: str = "") -
 
     The date *stamp* rides in the local segment so a dev pin's age
     reads offline from a lock file; ``.dirty`` marks a tree whose
-    wheel no commit describes.
+    wheel no commit describes. The sha rides as ``git describe``
+    spells it, ``g`` first: a local segment of digits alone is a
+    number to a version parser, and a build backend drops its
+    leading zero, so a short sha such as ``0442877`` would read back
+    as another commit's.
     """
-    released = latest_released(git.tags()).get(package.path, "")
+    released = unchanged_since_release(root, git, package)
     derived = _cliff.bumped_version(root, package)
-    if not derived:
-        fail(f"git-cliff derived no version for {package.name}; see its output above.")
-    if released and derived == released:
+    if released:
         fail(
             f"nothing unreleased touches {package.name}: a dev build here"
             f" would carry the released code under {released}.dev<N>, which"
@@ -138,7 +155,8 @@ def dev_version(root: Path, git: GitOps, package: Package, *, stamp: str = "") -
     distance, sha = describe_distance(git, package)
     when = stamp or datetime.now(UTC).strftime("%Y%m%d")
     version = (
-        f"{derived}-dev.{sanitise_branch(git.current_branch())}.{distance}+{sha}.{when}"
+        f"{derived}-dev.{sanitise_branch(git.current_branch())}.{distance}"
+        f"+g{sha}.{when}"
     )
     if not git.is_clean():
         version += ".dirty"

@@ -11,11 +11,13 @@ import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
 from livery.workshop import _state
 from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
+from workshop_spawns import counting_spawns
 
 REF = _state.NAMESPACE + "metrics"
 
@@ -441,6 +443,119 @@ def test_a_ci_only_series_refuses_a_local_put_by_its_rule(
     why = guarded.put(work, {"a": {}}, message="a")
     assert "only a CI run writes this series; local runs read" in why
     assert guarded.rows(work) == _state.Rows(())
+
+
+def _batch_faults(monkeypatch: pytest.MonkeyPatch, output: str) -> None:
+    """Make the next ``cat-file --batch`` answer *output* and exit 0."""
+    real = _state._git
+
+    def faulty(root: Path, *args: str, stdin: str | None = None) -> Any:
+        if args[:2] == ("cat-file", "--batch"):
+            return SimpleNamespace(code=0, stdout=output, stderr="")
+        return real(root, *args, stdin=stdin)
+
+    monkeypatch.setattr(_state, "_git", faulty)
+
+
+def test_a_batch_read_that_is_not_whole_fails_naming_the_row(
+    repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, work = repos
+    assert ROWS.put(work, {"a": {"x": 1}, "b": {"x": 2}}, message="two") == ""
+    # An object git does not have: the stream says so, the read fails.
+    _batch_faults(monkeypatch, '0123 blob 8\n{"x": 1}\n0456 missing\n')
+    found = _state.read(work, ROWS.ref)
+    assert found.failed and found.reason == "b: git said missing"
+    # A stream that ends before a header is no answer either.
+    _batch_faults(monkeypatch, '0123 blob 8\n{"x": 1}\n')
+    found = _state.read(work, ROWS.ref)
+    assert (
+        found.failed and found.reason == "b: the batch stream ended before its header"
+    )
+    # A header that is not a blob's is refused with git's words.
+    _batch_faults(monkeypatch, '0123 tree 8\n{"x": 1}\n0456 blob 8\n{"x": 2}\n')
+    found = _state.read(work, ROWS.ref)
+    assert found.failed and found.reason == "a: git said tree 8"
+
+
+def test_a_blob_whose_bytes_disagree_with_its_size_is_read_on_its_own(
+    repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A row written with carriage returns, as a Windows checkout did
+    # before blobs were written without newline translation: the pipe
+    # translates them away, the sizes no longer index the stream, and
+    # the read falls back to one show per remaining file.
+    _, work = repos
+    ref = _state.LOCAL_NAMESPACE + "legacy"
+    crlf = work / "crlf.json"
+    crlf.write_bytes(b'{"schema": 2, "when": "2026-01-01T00:00:00+00:00", "x": 1}\r\n')
+    blob = _git(work, "hash-object", "-w", str(crlf)).strip()
+    plain = work / "plain.json"
+    plain.write_bytes(b'{"schema": 2, "when": "2026-01-01T00:00:01+00:00", "x": 2}\n')
+    blob2 = _git(work, "hash-object", "-w", str(plain)).strip()
+    tree = subprocess.run(
+        ["git", "mktree"],
+        cwd=work,
+        input=f"100644 blob {blob}\ta\n100644 blob {blob2}\tb\n",
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    commit = _git(work, "commit-tree", tree, "-m", "legacy").strip()
+    _git(work, "update-ref", ref, commit)
+    with counting_spawns() as spawned:
+        found = _state.read(work, ref)
+    assert not found.failed and found.files is not None
+    assert found.files["a"].rstrip("\r\n") == crlf.read_bytes().decode().rstrip("\r\n")
+    assert found.files["b"] == plain.read_bytes().decode()
+    # ls-tree, the batch, then one show per file after the mismatch.
+    assert spawned["git"] == 5
+
+
+def test_a_write_whose_hashes_do_not_match_its_files_is_refused(
+    repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, work = repos
+    real = _state._git
+
+    def short(root: Path, *args: str, stdin: str | None = None) -> Any:
+        if args[:2] == ("hash-object", "-w"):
+            return SimpleNamespace(code=0, stdout="0123\n", stderr="")
+        return real(root, *args, stdin=stdin)
+
+    monkeypatch.setattr(_state, "_git", short)
+    why = ROWS.put(work, {"a": {"x": 1}, "b": {"x": 2}}, message="two")
+    assert why == "hash-object returned 1 hash(es) for 2 file(s)"
+
+
+def test_a_read_and_a_write_cost_a_fixed_handful_of_processes(
+    repos: tuple[Path, Path],
+) -> None:
+    # The pin: a series of sixty rows costs the same processes as one
+    # of six. A write is a read, one hash-object for every blob, the
+    # tree, the commit, the push, and the readback.
+    _, work = repos
+    wide = _state.Series("wide", window=400, ci_only=False, schema=2)
+    assert wide.put(work, {"r000": {"x": 0}}, message="one") == ""
+    with counting_spawns() as six:
+        assert (
+            wide.put(work, {f"r{n:03d}": {"x": n} for n in range(1, 7)}, message="six")
+            == ""
+        )
+    with counting_spawns() as sixty:
+        assert (
+            wide.put(
+                work, {f"r{n:03d}": {"x": n} for n in range(7, 67)}, message="sixty"
+            )
+            == ""
+        )
+    # fetch, rev-parse, ls-tree, cat-file; hash-object, mktree,
+    # commit-tree; push, ls-remote: nine, whatever the size.
+    assert six["git"] == sixty["git"] == 9, (six, sixty)
+    with counting_spawns() as reading:
+        found = wide.rows(work)
+    assert len(found.rows) == 67 and not found.failed
+    assert reading["git"] == 4, reading
 
 
 def test_put_stamps_the_schema_and_the_time_over_what_a_row_carries(
