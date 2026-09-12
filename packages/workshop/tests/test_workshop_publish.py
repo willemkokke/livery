@@ -287,6 +287,35 @@ def test_uncut_receipts_are_matched_to_the_requested_set(train) -> None:
     assert uncut_in_set((), (by_name["left"],)) == ()
 
 
+def test_the_recovery_finds_the_requested_sets_own_uncut_squash(train) -> None:
+    # Two uncut squashes at once, the older one another set's: the
+    # set-blind selection answers the older, the set's own selection
+    # answers the squash whose receipts touch the set, and a set with
+    # no uncut receipt anywhere gets None while the others still
+    # stand.
+    from livery.workshop._packages import discover_packages
+    from livery.workshop._release_driver import (
+        pending_release_wave,
+        pending_release_wave_for,
+        pending_release_waves,
+    )
+
+    root, git, _registry, _spans = train
+    by_name = {p.directory.name: p for p in discover_packages(root)}
+    assert pending_release_wave_for(root, git, (by_name["base"],)) is None
+    older = _squash(root, ("base",))
+    newer = _squash(root, ("left", "right"))
+    assert [sha for sha, _ in pending_release_waves(root, git)] == [older, newer]
+    assert pending_release_wave(root, git) == (older, ("packages/base/v0.3.0",))
+    assert pending_release_wave_for(root, git, (by_name["left"],)) == (
+        newer,
+        ("packages/left/v0.3.0", "packages/right/v0.3.0"),
+    )
+    own = pending_release_wave_for(root, git, (by_name["base"],))
+    assert own is not None and own[0] == older
+    assert pending_release_wave_for(root, git, (by_name["apex"],)) is None
+
+
 def test_discovery_ignores_rider_files_and_survives_a_wrong_title(train) -> None:
     # hse's shape: the title is presentation. A rider file in the
     # squash and a hand-mangled title change nothing about what the

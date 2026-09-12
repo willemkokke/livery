@@ -40,7 +40,9 @@ and the job installs that release over the workshop the checkout
 synced; the checkout, the ref and the wheel stay the squash's. A
 later release never strands an earlier died wave: the recovery
 consults every recent release squash and re-dispatches the oldest
-with an uncut receipt.
+with an uncut receipt for a package of the requested set, naming
+any other set's uncut squash for its own recovery. A dispatch with
+no set named takes the oldest uncut squash overall.
 
 Authors are credited by asking the forge, which a private repository
 answers only for a caller it can authenticate. Set the forge's token

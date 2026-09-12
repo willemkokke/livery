@@ -751,24 +751,24 @@ def dispatch_flow(
     ]
 
 
-def pending_release_wave(root: Path, git: GitOps) -> tuple[str, tuple[str, ...]] | None:
-    """The newest release squash whose receipts are not all cut.
+def pending_release_waves(
+    root: Path, git: GitOps
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Every recent release squash whose receipts are not all cut, oldest first.
 
     A merged release whose wave died leaves the squash on the base
     with the stamps and changelogs landed and receipt tags missing.
     Re-preparing from that state derives an empty release (measured:
     an empty pull request the forge never agrees to merge), so the
     recovery is the wave at the squash, never a new pull request.
-    Every release squash in recent history is consulted and the
-    oldest with an uncut receipt answers, so a later release never
-    strands an earlier died wave, and recoveries run in order.
-    Returns the squash sha and the missing receipt tags, or None when
-    nothing is pending.
+    Every release squash in recent history is consulted, so a later
+    release never strands an earlier died wave. Each entry is the
+    squash sha and its missing receipt tags.
     """
     from livery.workshop._publish import discover_release
 
     cut = set(git.remote_tags())
-    pending: tuple[str, tuple[str, ...]] | None = None
+    pending: list[tuple[str, tuple[str, ...]]] = []
     for sha, subject in git.recent_commits(50):
         if not subject.startswith("chore(release): released"):
             continue
@@ -779,8 +779,35 @@ def pending_release_wave(root: Path, git: GitOps) -> tuple[str, tuple[str, ...]]
             if f"{package.path}/v{version}" not in cut
         )
         if missing:
-            pending = (sha, missing)
-    return pending
+            pending.append((sha, missing))
+    pending.reverse()
+    return tuple(pending)
+
+
+def pending_release_wave(root: Path, git: GitOps) -> tuple[str, tuple[str, ...]] | None:
+    """The oldest release squash with an uncut receipt, or None.
+
+    The set-blind selection, for a dispatch with no set named:
+    recoveries run in order, oldest first.
+    """
+    waves = pending_release_waves(root, git)
+    return waves[0] if waves else None
+
+
+def pending_release_wave_for(
+    root: Path, git: GitOps, members: tuple[Package, ...]
+) -> tuple[str, tuple[str, ...]] | None:
+    """The oldest uncut squash whose receipts touch *members*, or None.
+
+    A release of one set must find its own died wave even when an
+    older squash of another set is uncut too: that squash is the
+    other set's recovery, named by the caller, never a reason to
+    prepare this set again from a tree already stamped.
+    """
+    for sha, missing in pending_release_waves(root, git):
+        if uncut_in_set(missing, members):
+            return (sha, missing)
+    return None
 
 
 def uncut_in_set(
@@ -849,9 +876,9 @@ def workflow_release(
         local_release(root, members)
         return
     print(f"  act: release train, from '{branch}'")
-    pending = pending_release_wave(root, git)
+    pending = pending_release_wave_for(root, git, members)
     repo = this_repository(root)
-    if pending is not None and uncut_in_set(pending[1], members):
+    if pending is not None:
         squash, missing = pending
         print(f"  release squash {squash[:12]} has uncut receipts:")
         for name in missing:
@@ -864,10 +891,9 @@ def workflow_release(
             print(line)
         print("  re-run to release work newer than the squash")
         return
-    if pending is not None:
+    for squash, missing in pending_release_waves(root, git):
         # An uncut receipt outside this set is that set's recovery,
         # named so a person can run it; this release goes ahead.
-        squash, missing = pending
         others = " ".join(sorted({tag.split("/")[1] for tag in missing}))
         print(
             f"  release squash {squash[:12]} has uncut receipts outside this"
