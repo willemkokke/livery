@@ -101,9 +101,7 @@ def _build_wheels(source_root: Path, wheelhouse: Path, env: dict[str, str]) -> N
         "packages/workshop",
         "packages/forge",
         "packages/toolroom",
-        "packages/toolroom-compat",
         "packages/footman",
-        "packages/footman-compat",
     )
     for member in members:
         _run(

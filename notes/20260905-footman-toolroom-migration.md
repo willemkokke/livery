@@ -358,6 +358,12 @@ Acceptance:
   workspace PATH made a click tool look installed to a leg whose
   python could not introspect it, and the playground probe needs
   the compat shim the extra now names.
+- 2026-09-12, Willem: the shim distributions `footman` and `toolroom`
+  are discontinued; they only slowed the train and the gate. Both
+  packages leave the workspace (livery#521). The last shims released
+  stay on PyPI as they are, nothing publishes under the old names
+  again, and the project template names `livery-footman` and
+  `livery-toolroom` in a project's dev group.
 
 ## Open
 

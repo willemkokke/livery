@@ -19,15 +19,9 @@ packages:
 - dir: toolroom
   name: livery-toolroom
   dev: livery-toolroom[test]
-- dir: toolroom-compat
-  name: toolroom
-  dev: toolroom
 - dir: footman
   name: livery-footman
   dev: livery-footman[test]
-- dir: footman-compat
-  name: footman
-  dev: footman
 - dir: strongroom
   name: livery-strongroom
   dev: livery-strongroom

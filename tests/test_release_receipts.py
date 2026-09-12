@@ -29,9 +29,29 @@ def _git(*args: str) -> str:
     return result.stdout
 
 
-def _dist_name(package: str) -> str:
+def _dist_name(tag: str, package: str) -> str:
+    """The distribution name the package's contract carried at *tag*.
+
+    Read from the tag's own tree first, so a package that has since
+    left the workspace still names its receipts; then the working
+    tree's, for a tag older than the contract.
+    """
+    shown = subprocess.run(
+        ["git", "show", f"{tag}:packages/{package}/workshop.toml"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if shown.returncode == 0:
+        return str(tomllib.loads(shown.stdout).get("name", ""))
+    # A tag older than the package contract: the working tree's
+    # contract names the package, and a package gone from both is
+    # its tag's own receipt.
     contract = ROOT / "packages" / package / "workshop.toml"
-    return str(tomllib.loads(contract.read_text("utf-8")).get("name", ""))
+    if contract.is_file():
+        return str(tomllib.loads(contract.read_text("utf-8")).get("name", ""))
+    return ""
 
 
 def test_every_release_tag_is_an_annotated_train_receipt() -> None:
@@ -44,7 +64,8 @@ def test_every_release_tag_is_an_annotated_train_receipt() -> None:
         assert kind == "tag", f"{tag}: lightweight; the train cuts annotated tags"
         _, package, version = tag.rsplit("/", 2)
         first_line = _git("tag", "-l", "--format=%(contents:lines=1)", tag).strip()
-        receipts = {tag, f"{_dist_name(package)} {version.lstrip('v')}"}
+        name = _dist_name(tag, package)
+        receipts = {tag} | ({f"{name} {version.lstrip('v')}"} if name else set())
         assert first_line in receipts, (
             f"{tag}: message {first_line!r} is not a train receipt"
         )
