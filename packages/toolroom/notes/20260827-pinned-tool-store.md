@@ -1,6 +1,11 @@
 # A pinned tool store, shared with hse
 
-**Status: PLAN — nothing built yet.** Written 2026-08-27 after reading
+**Status: superseded on the bytes engine, 2026-09-12.** The cache, the
+tiers, the lock and the promote are `livery.strongroom`; the spec,
+the kinds, the pinning and the emission are built over it in
+[20260912-tool-store-over-strongroom.md](20260912-tool-store-over-strongroom.md).
+This note was the fourth implementation of the same store and the
+prompt for the content-addressed store design. Written 2026-08-27 after reading
 both repositories side by side. The question was: hse has a mechanism
 that installs pinned versions of software; toolroom already does most
 of that work in its machinery; should toolroom carry the feature, and
