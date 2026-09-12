@@ -379,7 +379,7 @@ def prepare(
     )
 
 
-def abort_if_merged(repo: Repository, git: GitOps, branch: str) -> None:
+def abort_if_merged(repo: Repository, git: GitOps, branch: str) -> int | None:
     """Stop before pushing into a pull request that already merged.
 
     The merge took the pre-push head, so pushing on would open a
@@ -391,12 +391,19 @@ def abort_if_merged(repo: Repository, git: GitOps, branch: str) -> None:
     pull request whose head branch is already deleted is found by
     head sha instead, and one invisible both ways surfaces later as
     the stray-PR symptom the message names.
+
+    Returns the merged pull request's number when HEAD is the head it
+    merged: there is nothing to push, and the re-run's job is to
+    report the merge. None when no merged pull request claims the
+    branch or the branch is a fresh cycle.
     """
     pr = repo.pr.find_by_head(branch, state="all")
     if pr is None or not pr.merged:
-        return
+        return None
     if pr.head_sha and not git.is_ancestor(pr.head_sha, "HEAD"):
-        return
+        return None
+    if pr.head_sha and pr.head_sha == git.head_sha():
+        return pr.number
     fail(
         f"PR #{pr.number} for {branch} has already merged.\n"
         "  Your commit is NOT in it and has not been pushed: the merge took"
@@ -406,14 +413,16 @@ def abort_if_merged(repo: Repository, git: GitOps, branch: str) -> None:
     )
 
 
-def disarm_before_push(repo: Repository, git: GitOps, branch: str) -> None:
+def disarm_before_push(repo: Repository, git: GitOps, branch: str) -> int | None:
     """Disarm an armed pull request before pushing to it.
 
     A push to an armed pull request races auto-merge: the merge can
     take the pre-push head. The disarm narrows that window; it cannot
     close it, so the merged check runs after it on every path. An
     unreadable arming state must not block the submit; the push itself
-    surfaces a real transport problem.
+    surfaces a real transport problem. Returns what
+    livery.workshop._submit.abort_if_merged returns: the number of a
+    pull request that already merged this very head, else None.
     """
     try:
         pr = repo.pr.find_by_head(branch)
@@ -422,7 +431,7 @@ def disarm_before_push(repo: Repository, git: GitOps, branch: str) -> None:
             print(f"  disarmed PR #{pr.number} before pushing (the race)")
     except ForgeError as exc:
         print(f"  note: could not read the arming state before pushing ({exc})")
-    abort_if_merged(repo, git, branch)
+    return abort_if_merged(repo, git, branch)
 
 
 def _arm_verified(
@@ -634,7 +643,13 @@ def push_and_pr(
 ) -> int:
     """Disarm, push, find-or-open the pull request, arm per *armed*."""
     body = with_closes(plan.body, closes) if closes is not None else plan.body
-    disarm_before_push(repo, git, plan.branch)
+    merged = disarm_before_push(repo, git, plan.branch)
+    if merged is not None:
+        # Re-running the submit is its recovery procedure: a head the
+        # pull request already merged has nothing to push, open, or
+        # arm, and the caller's follow reports the merge.
+        print(f"  PR #{merged} already merged this head; nothing to push")
+        return merged
     # Found by branch name, so no push is needed first - and the
     # refusal below must run before the push: a refusal that leaves a
     # branch on the remote makes the next submit of a rebuilt branch
