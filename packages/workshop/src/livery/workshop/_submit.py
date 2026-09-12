@@ -859,7 +859,7 @@ def _fold_fixes(git: GitOps, base: str) -> None:
         print("  gate fixes amended into HEAD")
 
 
-@submit.default
+@submit.default(serial=True)
 def submit_default(
     title: Annotated[str, doc("PR title; defaults to HEAD's subject")] = "",
     body: Annotated[str, doc("PR body; defaults to HEAD's body")] = "",
@@ -1022,7 +1022,7 @@ def _tidy_after_merge(
             f" `{footman.prog()} abandon` removes it"
         )
         return
-    teardown_branch(repo, git, branch, base, chdir=False)
+    teardown_branch(repo, git, branch, base)
 
 
 def teardown_branch(
@@ -1032,7 +1032,6 @@ def teardown_branch(
     base: str,
     *,
     keep_branches: bool = False,
-    chdir: bool = True,
 ) -> None:
     """The one branch teardown every stop verb wears; idempotent.
 
@@ -1043,11 +1042,13 @@ def teardown_branch(
     gates, forces, and refusals are the calling policy's job
     (livery.workshop._submit.abandon_flow for a feature,
     ``workflow.abort`` for a reserved workflow, ``issue.close`` for
-    an issue), so the policies can never drift apart. *chdir* moves
-    the process into the main checkout after a linked worktree is
-    removed, for a verb that keeps working afterwards; a verb that
-    runs in parallel with others may not move the one real directory
-    (footman refuses it) and passes ``False``, since it ends here.
+    an issue), so the policies can never drift apart. Removing a
+    linked worktree moves the process into the main checkout first:
+    Windows refuses to remove a directory a process stands in, and
+    the shell that ran the verb is told where to go. A real move of
+    the process directory is a serial task's to make (footman refuses
+    it in a parallel one), so every verb that reaches this from
+    inside a worktree is declared ``serial``.
     """
     pr = repo.pr.find_by_head(branch)
     if pr is not None and not pr.merged:
@@ -1069,11 +1070,10 @@ def teardown_branch(
         # it is removed from the main checkout, branch and all. The
         # shell that ran this stands in a deleted directory afterwards
         # and is told where to go.
-        main_root = Path(common_dir).resolve().parent
-        if chdir:
-            import os
+        import os
 
-            os.chdir(main_root)
+        main_root = Path(common_dir).resolve().parent
+        os.chdir(main_root)
         main_git = GitOps(main_root)
         main_git._run("worktree", "remove", "--force", str(git.root))
         if main_git.local_branch_exists(branch):
@@ -1111,7 +1111,7 @@ def abandon_flow(repo: Repository, git: GitOps, branch: str, base: str) -> None:
     teardown_branch(repo, git, branch, base)
 
 
-@footman.task
+@footman.task(serial=True)
 def abandon() -> None:
     """Give up this feature: close the PR, delete the branches, return to base.
 
