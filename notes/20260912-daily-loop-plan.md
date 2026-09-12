@@ -462,3 +462,18 @@ without asking; the child shell stays as the fallback.
   listing thirty seconds later lacked it; the next passes listed the
   ref fine, with a readback beside the put and a raw listing beside
   the union.
+- 2026-09-12, after slice 1 landed (#530, then #532). The first live
+  teardown at a merge, #530's own submit, stopped on footman's refusal
+  of a `chdir` inside a parallel task, after the merge had landed and
+  before the worktree was removed. The move is required: Windows
+  refuses to remove a directory a process stands in, and footman lets
+  only a serial task move the real directory. `submit` and `abandon`
+  are declared serial since #532, `issue.close` already owns the
+  terminal, and a test pins the three declarations; #532's own merge
+  tore its worktree down through the fixed path. Two more facts for
+  the record: the unexplained anomaly showed a second time on the
+  whole fresh pass (main's run 1502 red on its first attempt, green on
+  the re-run), and `fm janitor` asks the forge only in an attended run
+  (a terminal on stdin, without `--no-input`), so the branch rule's
+  first live run over the checkout's merged local branches is a
+  person's, not an agent's.
