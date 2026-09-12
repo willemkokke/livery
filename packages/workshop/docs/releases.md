@@ -54,8 +54,15 @@ authors whether the repository is public or private.
 Where the built wheel goes depends on the forge kind the workspace
 renders:
 
-- github: trusted publishing to PyPI. No token is stored; the
-  workflow's identity is the credential. With nothing declared, reads
+- github: PyPI, with a token when the repository has a `PYPI_TOKEN`
+  secret and trusted publishing otherwise. Trusted publishing stores
+  no token, the workflow's identity is the credential, but a new
+  name publishes only after a pending publisher is registered for it
+  on PyPI by hand; an account-scoped token in `PYPI_TOKEN` creates
+  the project on the first upload instead. The local publish verb
+  reads the same `UV_PUBLISH_TOKEN` through the env cascade
+  (`fm env.set UV_PUBLISH_TOKEN --scope=shared`). With nothing
+  declared, reads
   come from PyPI's simple index and uploads go to its upload endpoint;
   a `[registries.python]` declaration that names only a read index
   refuses to publish, because an upload endpoint is never defaulted

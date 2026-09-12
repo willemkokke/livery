@@ -52,8 +52,13 @@ jobs:
         run: uv pip install "livery-workshop==${{ inputs.workshop }}"
       - name: Publish the wave
         id: wave
+        # A PYPI_TOKEN secret publishes with a token, which a first
+        # release of a new name needs, since trusted publishing waits
+        # on a pending publisher registered by hand; an empty value
+        # leaves uv on trusted publishing.
         env:
           FORGE_TOKEN: ${{ github.token }}
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: >-
           fm workflow.release.publish
           --ref="${{ inputs.ref }}"

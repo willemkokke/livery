@@ -208,6 +208,8 @@ def test_the_rendered_release_workflow_carries_the_driver_pin() -> None:
     # The receipt push needs a credential with the workflows scope at
     # a squash the tip has moved past; the job token cannot push it.
     assert "token: ${{ secrets.FORGE_TOKEN || github.token }}" in release
+    # A token when the repository has one, trusted publishing otherwise.
+    assert "UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}" in release
 
 
 def test_await_wave_answers_a_wave_newer_than_the_merge_or_none(
