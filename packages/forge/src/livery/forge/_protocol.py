@@ -404,6 +404,14 @@ class Issues(Protocol):
         """
         ...
 
+    def reopen(self, number: int) -> None:
+        """Reopen issue *number*; reopening an open issue is a no-op.
+
+        The inverse of `close`, for an issue a merge closed before its
+        work was done. A missing number raises.
+        """
+        ...
+
 
 class Repository(Protocol):
     """One repository on one forge.

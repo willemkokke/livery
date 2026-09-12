@@ -668,3 +668,33 @@ def issue_close(
     repo.issue.comment(number, note)
     repo.issue.close(number)
     print(f"  closed #{number}: {reason}")
+
+
+@issue.task(name="reopen")
+def issue_reopen(
+    ref: Annotated[Arg[str], ask()] = "",
+) -> None:
+    """Reopen a closed issue and put yourself on it, as start does.
+
+    For an issue a merge closed before its work was done (a branch
+    that carried a plan or a pinning test under the issue's number).
+    Reopening an open issue is a no-op, and the assignment follows
+    start's rules: the workspace's limit and a refused write warn
+    and go on.
+    """
+    if not ref:
+        fail(f"name the issue to reopen: `{footman.prog()} issue.reopen 123`")
+    root = _workspace()
+    repo = _repo(root)
+    number, _title = parse_ref(ref)
+    if not number:
+        fail("issue.reopen takes a number; a title names nothing to reopen")
+    work = repo.issue.get(number)
+    if work is None:
+        fail(f"issue #{number} does not exist in this repository")
+    if work.state == "open":
+        print(f"  #{number} is already open")
+    else:
+        repo.issue.reopen(number)
+        print(f"  reopened #{number}: {work.title}")
+    _assign(root, repo, work)

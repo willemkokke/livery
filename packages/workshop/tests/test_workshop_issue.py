@@ -16,6 +16,7 @@ from livery.workshop._issue_tasks import (
     branch_name,
     issue_close,
     issue_create,
+    issue_reopen,
     issue_stop,
     parse_ref,
     start,
@@ -935,3 +936,24 @@ def test_stop_after_a_merge_removes_the_local_copy_without_discard(
     issue_stop(str(number))
     assert "stopped #" in capsys.readouterr().out
     assert not git.local_branch_exists(branch)
+
+
+def test_reopen_refuses_a_missing_issue_then_reopens_and_assigns(
+    rig: tuple[Path, FakeForge, GitOps], capsys: pytest.CaptureFixture[str]
+) -> None:
+    _root, fake, _git = rig
+    repo = fake.repository("willemkokke", "livery")
+    with pytest.raises(_FAILURES, match="name the issue to reopen"):
+        issue_reopen("")
+    with pytest.raises(_FAILURES, match="does not exist"):
+        issue_reopen("999")
+    created = repo.issue.create("closed by a plan-only merge")
+    repo.issue.close(created.number)
+    issue_reopen(str(created.number))
+    out = capsys.readouterr().out
+    assert f"reopened #{created.number}" in out
+    live = repo.issue.get(created.number)
+    assert live is not None and live.state == "open"
+    assert "fake-user" in live.assignees
+    issue_reopen(str(created.number))
+    assert "already open" in capsys.readouterr().out

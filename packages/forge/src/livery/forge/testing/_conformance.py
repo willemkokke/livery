@@ -814,6 +814,24 @@ def _issue_close(driver: ForgeDriver) -> None:
         raise AssertionError("closing a missing issue must raise")
 
 
+def _issue_reopen(driver: ForgeDriver) -> None:
+    """Reopen reopens a closed issue, is idempotent, and a missing number is refused."""
+    repo = driver.fresh_repo()
+    issue = repo.issue.create("closed too soon", body="the order")
+    repo.issue.close(issue.number)
+    repo.issue.reopen(issue.number)
+    repo.issue.reopen(issue.number)  # already open: a no-op
+    fetched = repo.issue.get(issue.number)
+    assert fetched is not None and fetched.state == "open"
+    assert issue.number in [row.number for row in repo.issue.list(state="open")]
+    try:
+        repo.issue.reopen(issue.number + 999)
+    except ForgeError:
+        pass
+    else:
+        raise AssertionError("reopening a missing issue must raise")
+
+
 def _issue_comment(driver: ForgeDriver) -> None:
     """Comment lands on the issue; a missing number is refused."""
     repo = driver.fresh_repo()
@@ -888,6 +906,7 @@ SCENARIOS: tuple[Scenario, ...] = (
     Scenario("issue-assign", _issue_assign),
     Scenario("issue-comment", _issue_comment),
     Scenario("issue-close", _issue_close),
+    Scenario("issue-reopen", _issue_reopen),
     Scenario("governance-listings", _governance_listings),
     Scenario("configure-approvals", _configure_approvals, requires=("min_approvals",)),
     Scenario("approvals-declined", _approvals_declined, forbids=("min_approvals",)),

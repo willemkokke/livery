@@ -1331,3 +1331,13 @@ class _GithubIssues:
             method="PATCH",
             data={"state": "closed"},
         )
+
+    def reopen(self, number: int) -> None:
+        """Reopen issue *number*; an open issue stays open."""
+        if self.get(number) is None:
+            raise ForgeError(f"no issue {number} at {self._base}", status=404)
+        self._client.request(
+            f"{self._base}/issues/{number}",
+            method="PATCH",
+            data={"state": "open"},
+        )
