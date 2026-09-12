@@ -607,11 +607,74 @@ def test_the_toolchain_probe_refuses_a_moved_floor(
     monkeypatch.setattr(
         "livery.workshop._backends._python._dev_pins", _overlapping_pins
     )
+    # The guard is the backstop behind the filter: with the filter
+    # bypassed, an overlapping pin moves the floor and is refused.
+    monkeypatch.setattr(
+        "livery.workshop._backends._python._pins_without", lambda pins, _r: pins
+    )
     with pytest.raises(_FAILURES) as caught:
         _python.run_isolated_test(packages["core"], root, resolution="lowest-direct")
     message = str(caught.value)
     assert "moved direct dependencies" in message
     assert "packaging 24.0 -> 25.0" in message
+
+
+def test_the_toolchain_pins_leave_what_the_leg_resolved(
+    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The leg's floor survives the toolchain install: the lock's pin
+    # on the member's own dependency is dropped from the toolchain,
+    # so the floor leg proves the floor and the guard has nothing to
+    # refuse.
+    from livery.workshop._backends import _python
+
+    _fake, _git_seam, root = workspace
+    member = root / "packages" / "core"
+    (member / "pyproject.toml").write_text(
+        '[project]\nname = "livery-core"\nversion = "0.2.0"\n'
+        'requires-python = ">=3.11"\n'
+        'dependencies = ["packaging>=24.0"]\n'
+        "[build-system]\n"
+        'requires = ["uv_build>=0.7"]\nbuild-backend = "uv_build"\n'
+        "[tool.uv.build-backend]\n"
+        'module-name = "livery.core"\nnamespace = true\n'
+    )
+    packages = {p.directory.name: p for p in discover_packages(root)}
+    _python.build(packages["core"], root)
+
+    def _overlapping_pins(_root: Path, scratch: Path) -> Path:
+        pins = scratch / "dev-pins.txt"
+        pins.write_text("packaging==25.0\npytest\n")
+        return pins
+
+    monkeypatch.setattr(
+        "livery.workshop._backends._python._dev_pins", _overlapping_pins
+    )
+    resolved = _python.run_isolated_test(
+        packages["core"], root, resolution="lowest-direct"
+    )
+    assert resolved["packaging"] == "24.0"
+
+
+def test_pins_without_drops_only_what_the_leg_resolved(tmp_path: Path) -> None:
+    from livery.workshop._backends._python import _pins_without
+
+    pins = tmp_path / "dev-pins.txt"
+    pins.write_text(
+        "packaging==25.0\n"
+        "pytest==8.4.0\n"
+        "PyYAML==6.0.3 ; python_version >= '3.11'\n"
+        "pytest-xdist[psutil]==3.6.1\n"
+        "\n"
+    )
+    _pins_without(
+        pins, {"packaging": "24.0", "pyyaml": "6.0.3", "Livery-Core": "0.2.0"}
+    )
+    assert pins.read_text().splitlines() == [
+        "pytest==8.4.0",
+        "pytest-xdist[psutil]==3.6.1",
+        "",
+    ]
 
 
 def test_the_leg_reads_the_repos_declared_indexes(tmp_path: Path) -> None:
