@@ -1483,6 +1483,24 @@ def _direct_versions(package: Package, resolved: dict[str, str]) -> dict[str, st
     }
 
 
+def _refresh_args(release_dirs: tuple[Path, ...]) -> list[str]:
+    """The ``--refresh-package`` flags for every wheel in *release_dirs*.
+
+    uv keys its wheel cache on the distribution's filename, and a
+    co-released member rebuilt at the same version keeps the same
+    filename: without a refresh the leg installs the first build the
+    cache saw, and every later source fix tests as if it did nothing.
+    One flag per distribution named by a wheel in the set's ``dist/``
+    directories, sorted; empty without any.
+    """
+    names = {
+        wheel.name.split("-", 1)[0].replace("_", "-").lower()
+        for directory in release_dirs
+        for wheel in directory.glob("*.whl")
+    }
+    return [f"--refresh-package={name}" for name in sorted(names)]
+
+
 def run_isolated_test(
     package: Package,
     root: Path,
@@ -1502,6 +1520,9 @@ def run_isolated_test(
     package must never mask that the release needs an unpublished
     dependency version. Everything else resolves from the repo's
     configured indexes, like a real consumer.
+    Each distribution those directories carry is refreshed in uv's
+    cache, so a member rebuilt at the same version installs the wheel
+    just built and never an earlier build of the same filename.
 
     The toolchain installs after the wheel, at the lock's dev-group
     pins where a lock exists (bare pytest otherwise), and a probe
@@ -1563,6 +1584,7 @@ def run_isolated_test(
             str(python),
             f"--resolution={resolution}",
             *[f"--find-links={d}" for d in release_dirs],
+            *_refresh_args(release_dirs),
             *_index_args(root),
             _install_target(package, wheels[0]),
             # The declared dependencies ride the command line so
