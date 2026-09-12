@@ -96,6 +96,8 @@ def _squash(root: Path, members: tuple[str, ...], *, mined_at: str = "") -> str:
         "-m",
         f"Mined-At: {point}",
     )
+    # The squash lives on the base: the recovery walks origin/main.
+    _git(root, "push", "-q", "origin", "HEAD:main")
     return subprocess.run(
         ["git", "rev-parse", "HEAD"],
         cwd=root,
@@ -306,6 +308,11 @@ def test_the_recovery_finds_the_requested_sets_own_uncut_squash(train) -> None:
     older = _squash(root, ("base",))
     newer = _squash(root, ("left", "right"))
     assert [sha for sha, _ in pending_release_waves(root, git)] == [older, newer]
+    # From a release branch cut before the squashes, whose own history
+    # lacks them, the recovery walks origin/main and still finds both.
+    _git(root, "checkout", "-q", "-b", "workflow/release/probe", f"{older}~1")
+    assert [sha for sha, _ in pending_release_waves(root, git)] == [older, newer]
+    _git(root, "checkout", "-q", "main")
     assert pending_release_wave(root, git) == (older, ("packages/base/v0.3.0",))
     assert pending_release_wave_for(root, git, (by_name["left"],)) == (
         newer,

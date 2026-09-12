@@ -304,3 +304,59 @@ def test_parked_content_survives_integrate_and_the_squash(
     # And the squash itself carries the parked change as a diff.
     shown = _git(lander, "show", "HEAD", "--", "notes.md")
     assert "+the parked ruling" in shown
+
+
+def test_a_merged_reserved_branch_is_stepped_off_by_sync(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.forge.testing import FakeForge
+    from livery.workshop import _sync
+
+    clone, _origin = _rig(tmp_path)
+    branch = "workflow/release/x"
+    _git(clone, "checkout", "-b", branch)
+    (clone / "stamp.txt").write_text("s\n")
+    _git(clone, "add", ".")
+    _git(clone, "commit", "-m", "chore(release): livery-x v0.1.0")
+    _git(clone, "push", "-u", "origin", branch)
+    tip = _git(clone, "rev-parse", "HEAD").strip()
+    fake = FakeForge()
+    fake.create_repo("o", "r")
+    repo = fake.repository("o", "r")
+
+    # The forge cannot be asked: the engine owns the branch, nothing moves.
+    def _down(_root: Path) -> object:
+        raise RuntimeError("the forge is down")
+
+    monkeypatch.setattr(_sync, "_repository", _down)
+    bring_current(clone, GitOps(clone), interactive=False)
+    assert "the engine owns it" in capsys.readouterr().out
+    assert _git(clone, "rev-parse", "--abbrev-ref", "HEAD").strip() == branch
+    # The pull request is open: the same.
+    fake.push("o", "r", branch, sha=tip)
+    repo.pr.open(branch, "main", "chore(release): released livery-x v0.1.0")
+    monkeypatch.setattr(_sync, "_repository", lambda _root: repo)
+    bring_current(clone, GitOps(clone), interactive=False)
+    assert "the engine owns it" in capsys.readouterr().out
+    # Merged, with a commit past the merge: kept and named.
+    fake.settle("o", "r", tip)
+    repo.pr.merge_now(1, title="chore(release): released livery-x v0.1.0")
+    (clone / "after.txt").write_text("a\n")
+    _git(clone, "add", ".")
+    _git(clone, "commit", "-m", "chore: after the merge")
+    bring_current(clone, GitOps(clone), interactive=False)
+    out = capsys.readouterr().out
+    assert (
+        "PR #1 merged, but the branch holds 1 commit(s) past the merged head; kept"
+        in out
+    )
+    assert _git(clone, "rev-parse", "--abbrev-ref", "HEAD").strip() == branch
+    # At the merged head: sync steps off and the branch goes.
+    _git(clone, "reset", "--hard", tip)
+    bring_current(clone, GitOps(clone), interactive=False)
+    out = capsys.readouterr().out
+    assert (
+        "PR #1 merged; stepping off" in out and f"deleted {branch}; back on main" in out
+    )
+    assert _git(clone, "rev-parse", "--abbrev-ref", "HEAD").strip() == "main"
+    assert _git(clone, "branch", "--list", branch).strip() == ""

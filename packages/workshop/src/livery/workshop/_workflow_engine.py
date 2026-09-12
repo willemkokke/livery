@@ -184,6 +184,7 @@ def run_workflow(
                     " then arm."
                 )
 
+        started = git.current_branch()
         submission = driver.prepare()
         if submission is None:
             print("  nothing to submit: everything is already current")
@@ -204,9 +205,27 @@ def run_workflow(
             gate=False,
             follow_to_verdict=False,
         )
+        _leave_reserved(git, driver, started)
         if _merged(repo, git, driver.branch):
             driver.on_merged()
         return
+
+
+def _leave_reserved(git: GitOps, driver: WorkflowDriver, started: str) -> None:
+    """Return to the branch the act started from; the reserved branch lives on origin.
+
+    The pull request holds the reserved branch on the remote, and the
+    driver's recovery fetches it from there, so the local copy is a
+    leftover the moment the submit returns. An act started on the
+    reserved branch itself stays there: a person chose it.
+    """
+    if not started or started == driver.branch or git.current_branch() != driver.branch:
+        return
+    git.switch(started)
+    git.delete_local_branch(driver.branch)
+    print(
+        f"  back on {started}; {driver.branch} stays on origin under its pull request"
+    )
 
 
 def tidy_leftover(

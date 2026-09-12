@@ -34,7 +34,7 @@ from typing import Annotated, ParamSpec
 
 import livery.footman as footman
 from livery.footman import doc, fail, group
-from livery.forge import ForgeError, Repository, Unsupported
+from livery.forge import ForgeError, PullRequest, Repository, Unsupported
 from livery.workshop._contract import load_contract, normalise_keys
 from livery.workshop._conventional import TITLE_RE, TYPES
 from livery.workshop._git_ops import GitError, GitOps
@@ -401,8 +401,8 @@ def abort_if_merged(repo: Repository, git: GitOps, branch: str) -> int | None:
     report the merge. None when no merged pull request claims the
     branch or the branch is a fresh cycle.
     """
-    pr = repo.pr.find_by_head(branch, state="all")
-    if pr is None or not pr.merged:
+    pr = merged_pull_request(repo, git, branch)
+    if pr is None:
         return None
     if pr.head_sha and not git.is_ancestor(pr.head_sha, "HEAD"):
         return None
@@ -797,6 +797,7 @@ def submit_flow(
                 )
                 continue
             raise
+        _tidy_after_merge(repo, git, plan.branch, plan.base, number)
         return number
 
 
@@ -909,6 +910,119 @@ def submit_default(
         interval=interval,
         timeout=timeout,
     )
+
+
+def worktree_for(git: GitOps, root: Path, branch: str) -> str:
+    """The linked worktree holding *branch*; "" when none does or *root* does."""
+    listing = git._run("worktree", "list", "--porcelain")
+    tree = ""
+    current: dict[str, str] = {}
+    for line in [*listing.splitlines(), ""]:
+        if not line.strip():
+            if current.get("branch", "").endswith(f"refs/heads/{branch}"):
+                tree = current.get("worktree", "")
+            current = {}
+            continue
+        key, _, value = line.partition(" ")
+        current[key] = value
+    if tree and Path(tree).resolve() == root.resolve():
+        return ""
+    return tree
+
+
+def only_local_work(
+    git: GitOps, root: Path, branch: str, *, merged_head: str = ""
+) -> str:
+    """Why *branch* holds work that exists nowhere else; "" when safe.
+
+    The one keep-or-drop rule: ``fm issue.close``, ``fm issue.stop``,
+    the submit's own teardown after a merge, the sweep, and ``fm sync``
+    all ask it, so what they destroy is decided in one place. Dirt is
+    looked for where the branch actually lives: this checkout when it
+    stands on the branch, the branch's linked worktree otherwise.
+
+    *merged_head* is the head a merged pull request took. A tip equal
+    to it holds nothing only here: the merge took every commit, and
+    the squash rewrote them, so the remote's ancestry says nothing
+    (after a squash the branch's commits are never ancestors of the
+    base, and the forge deletes the remote branch). A tip past it
+    holds the commits made after the merge. A tip the merged head
+    does not reach was rewritten after the merge, and the ancestry
+    rule below judges it. Without a merged head, ahead is measured
+    against the remote branch when one exists, and against the base
+    when none does.
+    """
+    if git.current_branch() == branch and not git.is_clean():
+        return "uncommitted changes"
+    tree = worktree_for(git, root, branch)
+    if tree:
+        status = git._run("-C", tree, "status", "--porcelain").strip()
+        if status:
+            return f"uncommitted changes in the worktree {tree}"
+    if merged_head:
+        tip = git.object_id(f"refs/heads/{branch}")
+        if tip == merged_head:
+            return ""
+        if git.is_ancestor(merged_head, tip):
+            count = git._run("rev-list", "--count", f"{merged_head}..{tip}").strip()
+            return f"{count} commit(s) past the merged head"
+    remote = f"origin/{branch}"
+    upstream = remote if branch in git.remote_branches("") else "origin/main"
+    count = git._run("rev-list", "--count", f"{upstream}..{branch}").strip()
+    if count.isdigit() and int(count) > 0:
+        where = "the remote branch" if upstream == remote else "any remote"
+        return f"{count} commit(s) not on {where}"
+    return ""
+
+
+def merged_pull_request(
+    repo: Repository, git: GitOps, branch: str
+) -> PullRequest | None:
+    """The merged pull request *branch* was the head of, or None.
+
+    By head branch first, then by the branch's head sha: a forge that
+    deletes the head branch on merge may clear the merged pull
+    request's head ref, and the sha persists after the branch is
+    gone. A forge that cannot be asked raises.
+    """
+    pr = repo.pr.find_by_head(branch, state="all")
+    if pr is None:
+        sha = git.any_head(branch)
+        pr = repo.pr.find_by_head_sha(sha) if sha else None
+    return pr if pr is not None and pr.merged else None
+
+
+def _tidy_after_merge(
+    repo: Repository, git: GitOps, branch: str, base: str, number: int
+) -> None:
+    """Remove the linked worktree a merged submission stood in.
+
+    The submit is the flow that opened the tree (through ``fm start``),
+    so it removes the tree when the follow sees the merge, the way
+    ``fm issue.close`` does from inside one; the janitor is the net
+    for a submit that was not followed to the end. A tree that holds
+    something the merge did not take is kept and named. The main
+    checkout keeps its branch: a person reads the run's logs from it,
+    and the janitor's branch rule drops it later.
+    """
+    try:
+        git_dir = git._run("rev-parse", "--git-dir").strip()
+        common_dir = git._run("rev-parse", "--git-common-dir").strip()
+    except GitError:
+        return  # no checkout to speak of, so no linked worktree to remove
+    if git_dir == common_dir:
+        return
+    pr = repo.pr.get(number)
+    merged_head = pr.head_sha if pr is not None and pr.merged else ""
+    why = only_local_work(git, git.root, branch, merged_head=merged_head)
+    if why:
+        print(
+            f"  kept the worktree {git.root}: it holds {why};"
+            f" `{footman.prog()} issue.close --discard` or"
+            f" `{footman.prog()} abandon` removes it"
+        )
+        return
+    teardown_branch(repo, git, branch, base)
 
 
 def teardown_branch(

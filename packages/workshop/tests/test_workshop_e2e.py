@@ -290,6 +290,47 @@ def test_a_red_run_is_re_run_once_and_red_twice_is_the_verdict(
         _e2e._watch("gitea", "url", "e" * 40, timeout=5, interval=0)
 
 
+class _SlowDeleteForge(FakeForge):
+    """A forge whose delete outruns the client; *finishes*: the server completes it."""
+
+    finishes = True
+
+    def delete_repo(self, owner: str, name: str) -> None:
+        from livery.forge import ForgeError
+
+        if self.finishes:
+            super().delete_repo(owner, name)
+        raise ForgeError("server unreachable on DELETE /repos/x: timed out")
+
+
+def test_a_delete_that_outruns_the_client_is_waited_for_or_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.forge import ForgeError
+
+    monkeypatch.setattr(
+        "livery.forge._registry.purge_packages",
+        lambda base, owner, *, token, kind="pypi", api=None: [],
+    )
+    root = tmp_path / "never-born"
+    # The server never finishes: the reset refuses, naming the wait.
+    stuck = _SlowDeleteForge()
+    stuck.finishes = False
+    stuck.create_repo(_e2e.E2E_OWNER, _e2e.E2E_REPO)
+    with pytest.raises(
+        ForgeError, match="still on the dev forge after the delete's wait"
+    ):
+        _e2e.start_over(stuck, "t", root, url="http://gitea", wait=0)
+    # The server finishes after the client gave up: the reset goes on.
+    slow = _SlowDeleteForge()
+    slow.create_repo(_e2e.E2E_OWNER, _e2e.E2E_REPO)
+    lines = _e2e.start_over(slow, "t", root, url="http://gitea", wait=0)
+    assert lines[0].endswith(
+        "(the delete outran the client's wait and finished on the server)"
+    )
+    assert slow.get_repo(_e2e.E2E_OWNER, _e2e.E2E_REPO) is None
+
+
 def test_starting_over_refuses_unpushed_commits_then_deletes_everything(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

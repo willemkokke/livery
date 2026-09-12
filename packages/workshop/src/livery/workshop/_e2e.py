@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 
 import livery.footman as footman
 from livery.footman import fail
+from livery.forge import ForgeError
 from livery.workshop._ci_tasks import ci
 
 if TYPE_CHECKING:
@@ -287,13 +288,18 @@ def _publish_dev_wheels(kind: str) -> dict[str, str]:
     return pins
 
 
-def start_over(lane: Forge, token: str, root: Path, *, url: str) -> list[str]:
+def start_over(
+    lane: Forge, token: str, root: Path, *, url: str, wait: float = 120.0
+) -> list[str]:
     """Delete the loop's repository, its registry releases, and *root*; the lines.
 
     Refuses while *root* holds commits its origin has not seen, since
     the repository they would land in is about to go. A repository or
     a release already gone is not an error: the next birth wants them
-    absent, and a re-run of the reset is the recovery procedure.
+    absent, and a re-run of the reset is the recovery procedure. A
+    delete the forge answers too slowly for the client completes on
+    the server anyway, so the reset waits up to *wait* seconds for
+    the repository to be gone before it refuses.
     """
     from livery.forge._registry import purge_packages
 
@@ -306,8 +312,20 @@ def start_over(lane: Forge, token: str, root: Path, *, url: str) -> list[str]:
                 "  push or discard them before starting over"
             )
     lines: list[str] = []
-    lane.delete_repo(E2E_OWNER, E2E_REPO)
-    lines.append(f"  deleted {E2E_OWNER}/{E2E_REPO} on the dev forge")
+    try:
+        lane.delete_repo(E2E_OWNER, E2E_REPO)
+    except ForgeError as error:
+        if not _gone_within(lane, wait):
+            raise ForgeError(
+                f"{E2E_OWNER}/{E2E_REPO} is still on the dev forge after the"
+                f" delete's wait: {error}"
+            ) from error
+        lines.append(
+            f"  deleted {E2E_OWNER}/{E2E_REPO} on the dev forge (the delete"
+            " outran the client's wait and finished on the server)"
+        )
+    else:
+        lines.append(f"  deleted {E2E_OWNER}/{E2E_REPO} on the dev forge")
     purged = purge_packages(url, E2E_OWNER, token=token)
     lines.append(
         f"  purged {len(purged)} release(s) from the registry"
@@ -317,6 +335,19 @@ def start_over(lane: Forge, token: str, root: Path, *, url: str) -> list[str]:
         _rmtree(root)
         lines.append(f"  removed {root}")
     return lines
+
+
+def _gone_within(lane: Forge, wait: float) -> bool:
+    """Whether the loop's repository is gone from the forge within *wait* seconds."""
+    import time
+
+    deadline = time.monotonic() + wait
+    while True:
+        if lane.get_repo(E2E_OWNER, E2E_REPO) is None:
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(min(5.0, max(0.0, deadline - time.monotonic())))
 
 
 def _rmtree(path: Path) -> None:
@@ -1010,24 +1041,43 @@ def _prove_verified_skip(root: Path, kind: str) -> None:
         ("skipping the gate",),
         forbidden=("measuring:", "coverage store: packages/loop-echo stored"),
     )
+    # The units main's union reuses are the ones the workspace has at
+    # this point: its members and its own tests. A fresh birth has
+    # neither yet (the members and the tests land through their own
+    # pull requests afterwards), and then the union has no unit and
+    # judges nothing, which the run says in as many words.
+    from livery.workshop._coverage_store import workspace_suite
+    from livery.workshop._packages import discover_packages
+
+    members = [package.path for package in discover_packages(root)]
+    units = [*members, *(["tests"] if workspace_suite(root) is not None else [])]
+    record = (
+        f"coverage record: main takes {_SETUP_BRANCH}'s record for the tree it proved"
+    )
+    if units:
+        expected = [
+            record,
+            *(
+                f"coverage: {unit} on check-ubuntu-latest-3.14: reused from run"
+                for unit in units
+            ),
+            *(f"coverage {path}: 100.0% (" for path in members),
+            f"coverage: the union of 0 leg(s) and {len(units)} reused suite(s)",
+            f"coverage record: main/check-ubuntu-latest-3.14: 0 fresh, {len(units)}"
+            " carried, 0 removed",
+        ]
+    else:
+        expected = [
+            record,
+            "coverage: leg check-ubuntu-latest-3.14 ran 'verified': no suite, no data",
+            "coverage: no unit to union; nothing judged",
+        ]
     _require_lines(
         repo,
         run,
         logs,
         "gate",
-        (
-            f"coverage record: main takes {_SETUP_BRANCH}'s record for the tree"
-            " it proved",
-            "coverage: packages/loop-echo on check-ubuntu-latest-3.14: reused from run",
-            "coverage: packages/loop-native on check-ubuntu-latest-3.14:"
-            " reused from run",
-            "coverage: tests on check-ubuntu-latest-3.14: reused from run",
-            "coverage packages/loop-echo: 100.0% (floor 100.0%",
-            "coverage packages/loop-native: 100.0% (",
-            "coverage: the union of 0 leg(s) and 3 reused suite(s)",
-            "coverage record: main/check-ubuntu-latest-3.14: 0 fresh, 3 carried,"
-            " 0 removed",
-        ),
+        tuple(expected),
         forbidden=("unjudged this run",),
     )
     print(

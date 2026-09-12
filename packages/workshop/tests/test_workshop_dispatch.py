@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from livery.footman import Failed
 from livery.forge import ForgeError
 from livery.forge.testing import FakeForge
 from livery.workshop._git_ops import GitOps
@@ -48,7 +49,17 @@ def _stamp(root: Path, fake: FakeForge, *members: tuple[str, str]) -> str:
         json.dumps({"members": [{"dir": d, "version": v} for d, v in members]})
     )
     _git(root, "add", MANIFEST)
-    _git(root, "commit", "-qm", "chore(release): released the members")
+    # A release squash: the pull request body's Mined-At line becomes
+    # the squash's message at the merge.
+    point = _git(root, "rev-parse", "HEAD").strip()
+    _git(
+        root,
+        "commit",
+        "-qm",
+        "chore(release): released the members",
+        "-m",
+        f"Mined-At: {point}",
+    )
     _git(root, "push", "-q", "origin", "main")
     sha = _git(root, "rev-parse", "HEAD").strip()
     fake.push(OWNER, NAME, "main", sha=sha)
@@ -124,6 +135,50 @@ def test_an_accepted_dispatch_without_a_run_times_out_naming_the_rerun(
     (line,) = dispatch_flow(root, repo, git, timeout=0.2, interval=0.05)
     assert "no wave run appeared within 0s" in line
     assert "workflow.release.dispatch" in line
+
+
+def _branch_stamp(root: Path, fake: FakeForge, branch: str) -> str:
+    """A release branch's own stamp commit: the manifest, no Mined-At line."""
+    _git(root, "checkout", "-q", "-b", branch)
+    (root / MANIFEST).write_text(
+        json.dumps({"members": [{"dir": "thing", "version": "1.2.0"}]})
+    )
+    _git(root, "add", MANIFEST)
+    _git(root, "commit", "-qm", "chore(release): livery-thing v1.2.0")
+    _git(root, "push", "-q", "-u", "origin", branch)
+    sha = _git(root, "rev-parse", "HEAD").strip()
+    fake.push(OWNER, NAME, branch, sha=sha)
+    return sha
+
+
+def test_a_dispatch_from_a_release_branch_is_refused_naming_the_squash_on_the_base(
+    rig: tuple[FakeForge, Path, GitOps],
+) -> None:
+    fake, root, git = rig
+    repo = fake.repository(OWNER, NAME)
+    stamp = _branch_stamp(root, fake, "workflow/release/thing")
+    # No squash on the base yet: the refusal says so.
+    with pytest.raises((SystemExit, Failed)) as caught:
+        dispatch_flow(root, repo, git)
+    message = str(caught.value)
+    assert f"{stamp[:12]} carries no Mined-At line" in message
+    assert "origin/main holds no release squash" in message
+    assert repo.checks.runs(event="workflow_dispatch") == ()
+    # The squash lands on main (the pull request body's line rides
+    # into it); the checkout is still on the branch, as an act that
+    # armed and returned once left it.
+    _git(root, "checkout", "-q", "main")
+    squash = _stamp(root, fake, ("thing", "1.2.0"))
+    _git(root, "checkout", "-q", "workflow/release/thing")
+    with pytest.raises((SystemExit, Failed)) as caught:
+        dispatch_flow(root, repo, git)
+    message = str(caught.value)
+    assert f"the newest release squash on origin/main is {squash[:12]}" in message
+    assert f"--at={squash[:12]}" in message
+    assert repo.checks.runs(event="workflow_dispatch") == ()
+    # Named by hand, the squash dispatches from any branch.
+    (line,) = dispatch_flow(root, repo, git, at=squash, timeout=5, interval=0.05)
+    assert line.startswith(f"  dispatched the wave at {squash[:12]}")
 
 
 # --- the dispatch --------------------------------------------------------------

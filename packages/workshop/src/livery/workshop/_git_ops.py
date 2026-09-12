@@ -212,9 +212,11 @@ class GitOps:
                 names.append(ref)
         return tuple(dict.fromkeys(names))
 
-    def recent_commits(self, count: int) -> tuple[tuple[str, str], ...]:
-        """(sha, subject) for the newest *count* commits on HEAD."""
-        out = self._run("log", f"-{count}", "--format=%H%x09%s")
+    def recent_commits(
+        self, count: int, ref: str = "HEAD"
+    ) -> tuple[tuple[str, str], ...]:
+        """(sha, subject) for the newest *count* commits reachable from *ref*."""
+        out = self._run("log", f"-{count}", "--format=%H%x09%s", ref)
         pairs: list[tuple[str, str]] = []
         for line in out.splitlines():
             sha, _, subject = line.partition("\t")

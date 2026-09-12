@@ -505,9 +505,10 @@ def test_one_invocation_parks_waits_refreshes_floors_and_arms_to_merged(
     assert parked is not None and parked.merged
     # The fresh floor landed as a second commit on the update branch
     # before the arm. (The fake's squash never reaches the real
-    # origin, so the branch is where the refresh is observable.)
+    # origin, so the branch is where the refresh is observable; the
+    # act dropped its local copy, so origin's copy is read.)
     log = subprocess.run(
-        ["git", "log", "--format=%s", "--stat", "workflow/update/templates"],
+        ["git", "log", "--format=%s", "--stat", "origin/workflow/update/templates"],
         cwd=root,
         capture_output=True,
         text=True,

@@ -79,7 +79,10 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
   machine. `--armed`
   lets it land, `--fix` heals mechanical gate findings into the
   branch, and the follow classifies the verdict with stable exit
-  codes. `fm submit.merge` lands a green, deliberately-unarmed PR;
+  codes; a follow that sees the merge from a linked worktree removes
+  the tree and its branch, naming the directory to go to, and keeps
+  a tree holding something the merge did not take. `fm submit.merge`
+  lands a green, deliberately-unarmed PR;
   `fm abandon` gives the feature up. `fm status`, `fm ci.*`, and
   `fm doctor` stand beside them, all on
   [livery-forge](https://pypi.org/project/livery-forge/).
@@ -95,8 +98,9 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
 - `fm janitor` sweeps the runner's directories and the state store:
   footman's cache, then what the workshop leaves in the data
   directory (the worktrees of closed issues and merged branches,
-  which `fm issue.start` sweeps first, and files and folders no code
-  writes any more), then every series the workshop keeps, in the
+  which `fm issue.start` sweeps first, the checkout's local branches
+  whose pull request merged, and files and folders no code writes any
+  more), then every series the workshop keeps, in the
   scope the run has: the checkout's local series on a machine, the
   remote series too inside CI, where the merge point's gate job runs
   it after every green run. Windows are enforced, aged rows and

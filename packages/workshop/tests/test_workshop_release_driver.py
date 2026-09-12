@@ -339,12 +339,18 @@ def test_the_driver_prepares_commits_and_the_engine_lands_it(
     assert pr is not None and pr.merged
     assert pr.title == "chore(release): released livery-core v0.3.0, livery-tool v0.3.0"
     assert "- **livery-core** v0.3.0" in pr.body
-    subjects = rig.log_paths("origin/main..HEAD", (".",))
+    # The act returned to main and dropped its local copy of the
+    # reserved branch; origin's copy under the pull request holds it.
+    assert rig.current_branch() == "main"
+    assert not rig.local_branch_exists(driver.branch)
+    subjects = rig.log_paths(f"origin/main..origin/{driver.branch}", (".",))
     assert subjects == (
         "chore(release): livery-tool v0.3.0",
         "chore(release): livery-core v0.3.0",
     )
-    tool_pyproject = (root / "packages" / "tool" / "pyproject.toml").read_text()
+    tool_pyproject = rig.file_at(
+        f"origin/{driver.branch}", "packages/tool/pyproject.toml"
+    )
     assert '"livery-core>=0.3.0"' in tool_pyproject
 
 
@@ -375,9 +381,8 @@ def test_a_release_already_stamped_on_the_base_reprepares_cleanly(
     # a second armed run re-prepares the same release. The merged
     # branch is gone both sides (the forge deletes on merge, and the
     # taught recovery is fm workflow.abort locally).
-    _git(root, "switch", "main")
+    assert rig.current_branch() == "main"
     _git(root, "pull", "origin", "main")
-    _git(root, "branch", "-D", "workflow/release/core")
     _git(root, "push", "origin", "--delete", "workflow/release/core")
     fake.repository(OWNER, NAME).delete_branch("workflow/release/core")
     sha = rig.remote_head("main")
@@ -395,7 +400,7 @@ def test_a_release_already_stamped_on_the_base_reprepares_cleanly(
     # discovery.
     from livery.workshop._publish import MANIFEST, read_manifest
 
-    recorded = read_manifest(rig.file_at("HEAD", MANIFEST))
+    recorded = read_manifest(rig.file_at(f"origin/{driver.branch}", MANIFEST))
     assert recorded == (("core", "0.3.0"),)
 
 

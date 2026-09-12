@@ -508,11 +508,21 @@ class _StubDriver:
         if self._git.current_branch() != self.branch:
             if self._git.local_branch_exists(self.branch):
                 self._git.switch(self.branch)
+            elif self.branch in self._git.remote_branches(""):
+                # As the real drivers do: the engine dropped the local
+                # copy, origin's copy under the pull request resumes.
+                self._git.fetch()
+                self._git._run("checkout", "-b", self.branch, f"origin/{self.branch}")
             else:
                 self._git.create_branch(self.branch)
         marker = self._git.root / "update.txt"
         if not marker.exists():
-            marker.write_text("updated\n")
+            # A fresh nonce per update: two updates cut from the same
+            # base within one second would otherwise be the same commit,
+            # and the fake forge tells pull requests apart by head sha.
+            import time
+
+            marker.write_text(f"updated {time.time_ns()}\n")
             self._git.commit_all("chore: the update")
         return Submission(title="chore: the update", body="")
 
@@ -539,6 +549,28 @@ def test_the_engine_starts_submits_and_runs_on_merged(
     pr = _repo(fake).pr.get(1)
     assert pr is not None and pr.merged
     assert driver.merged_calls == 1
+    # The act returns to the branch it started from and drops its
+    # local copy of the reserved branch: origin's copy under the pull
+    # request is the recovery.
+    assert git.current_branch() == "main"
+    assert not git.local_branch_exists(driver.branch)
+    assert driver.branch in git.remote_branches("")
+
+
+def test_an_act_started_on_the_reserved_branch_stays_there(
+    engine_rig: tuple[FakeForge, _EngineGit],
+) -> None:
+    from livery.workshop._workflow_engine import run_workflow
+
+    fake, git = engine_rig
+    git.create_branch("workflow/update/templates")
+    driver = _StubDriver(git, armed=True)
+    run_workflow(driver, _repo(fake), git, current_user="fake-user")
+    pr = _repo(fake).pr.get(1)
+    assert pr is not None and pr.merged
+    # A person chose the branch; the act does not move them off it.
+    assert git.current_branch() == driver.branch
+    assert git.local_branch_exists(driver.branch)
 
 
 def test_a_checkup_on_an_armed_inflight_workflow_refuses(

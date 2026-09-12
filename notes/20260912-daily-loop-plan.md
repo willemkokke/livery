@@ -325,8 +325,9 @@ or a member's pyproject ends by matching the lock and says so (#356).
 Each lands alone, gate-green, with its refusal tests first, and updates
 this note in the same change.
 
-1. **The teardown and the release act.** `_only_local_work` by the
-   merged head; `submit` tears its worktree down at the merge; the
+1. **The teardown and the release act** (landed 2026-09-12).
+   `only_local_work` by the merged head; `submit` tears its worktree
+   down at the merge; the
    janitor judges by pull request and drops merged local branches; the
    release act switches back and drops its local branch; the dispatch
    guard and the base walk; `sync` steps off a merged reserved branch.
@@ -429,3 +430,35 @@ without asking; the child shell stays as the fallback.
   merge manually as it's ready and that's the intent": a pull request
   already green when `--armed` asks is merged directly; #356 folds into
   slice 6.
+- 2026-09-12, slice 1 landed (#518, #515). `only_local_work` in
+  `_submit` is the one keep-or-drop rule, judging by the merged pull
+  request's head: a tip the merge took holds nothing only here, a tip
+  past it holds the commits after the merge, and a tip the merge does
+  not reach falls to the ancestry rule. `fm issue.close` and
+  `fm issue.stop` pass the merged head; the sweep judges a worktree by
+  it, a tree named after no issue by its pull request alone, and the
+  checkout's local branches by the same rule, naming the checked-out
+  one for `fm sync`. `fm submit` removes the linked worktree it stood
+  in when the follow sees the merge and keeps a tree with something
+  the merge did not take, named; the main checkout keeps its branch
+  for the run's logs. The workflow engine returns to the branch the
+  act started from and drops the local reserved branch, and both
+  drivers resume from origin's copy. The dispatch refuses a stamping
+  commit without a `Mined-At` line and names the newest squash on
+  `origin/main`, which the recovery now walks. `fm sync` steps off a
+  merged reserved branch through the shared teardown. Verified by the
+  suites and the loop, whose first pass caught a fault of #512's
+  snapshot instead (a ref the remote moved past the listing failed
+  its read); fixed in the same change, recorded in the state store
+  plan. The fresh pass, not run since the union and the metering
+  landed, was broken in five places of its own and fixed here too:
+  the repository delete outran the client, a package-less leg read
+  as a dead meter, that leg's unit rows lacked their closure
+  identity, a skipped leg named the tests unit so the union neither
+  collected nor carried it, and the verified-skip proof named members
+  and units a fresh birth does not have yet. One anomaly stayed
+  unexplained: on one pass
+  main's check leg reported its per-run ref put and the gate job's
+  listing thirty seconds later lacked it; the next passes listed the
+  ref fine, with a readback beside the put and a raw listing beside
+  the union.

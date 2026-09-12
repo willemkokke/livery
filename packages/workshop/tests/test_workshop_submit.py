@@ -1537,3 +1537,135 @@ def test_the_self_heal_gate_narrows_the_same_way(
     assert answered == [EXIT_BEHIND]
     assert calls == [{"affected": True, "fix": False, "base": "main"}] * 2
     assert git.behind_base("main") == 0  # the heal integrated the advance
+
+
+# --- the one keep-or-drop rule, and the submit's own teardown ------------------
+
+
+def _squash_and_forget(git: SubmitGit, branch: str) -> str:
+    """Squash *branch* onto origin's main and delete the remote branch; the tip."""
+    tip = _git(git.root, "rev-parse", branch).strip()
+    other = git.root.parent / "squasher"
+    if not other.is_dir():
+        _git(
+            git.root.parent,
+            "clone",
+            "-q",
+            str(git.root.parent / "origin.git"),
+            "squasher",
+        )
+        _git(other, "config", "user.email", "ci@livery.local")
+        _git(other, "config", "user.name", "CI")
+    _git(other, "fetch", "-q", "origin")
+    _git(other, "checkout", "-q", "main")
+    _git(other, "reset", "-q", "--hard", "origin/main")
+    _git(other, "merge", "-q", "--squash", f"origin/{branch}")
+    _git(other, "commit", "-qm", f"squash of {branch}")
+    _git(other, "push", "-q", "origin", "main")
+    _git(other, "push", "-q", "origin", "--delete", branch)
+    _git(git.root, "fetch", "-q", "--prune", "origin")
+    return tip
+
+
+def test_the_rule_keeps_a_tip_past_the_merged_head_and_frees_the_merged_tip(
+    rig: tuple[FakeForge, SubmitGit],
+) -> None:
+    from livery.workshop._submit import only_local_work
+
+    _fake, git = rig
+    git.push("feat/1-first")
+    tip = _squash_and_forget(git, "feat/1-first")
+    # Without the merged head the ancestry rule speaks, and after a
+    # squash it reads every commit as unique: the fallback, pinned.
+    assert (
+        only_local_work(git, git.root, "feat/1-first")
+        == "1 commit(s) not on any remote"
+    )
+    # A commit past the merge is unique work, named as such.
+    (git.root / "after.txt").write_text("a\n")
+    git.commit_all("feat: after the merge")
+    assert (
+        only_local_work(git, git.root, "feat/1-first", merged_head=tip)
+        == "1 commit(s) past the merged head"
+    )
+    _git(git.root, "reset", "-q", "--hard", tip)
+    # The merged head itself holds nothing only here.
+    assert only_local_work(git, git.root, "feat/1-first", merged_head=tip) == ""
+    # Dirt is dirt whatever the head.
+    (git.root / "dirt.txt").write_text("d\n")
+    assert (
+        only_local_work(git, git.root, "feat/1-first", merged_head=tip)
+        == "uncommitted changes"
+    )
+    (git.root / "dirt.txt").unlink()
+
+
+def test_a_merged_submit_in_a_linked_worktree_keeps_a_dirty_tree_and_names_it(
+    rig: tuple[FakeForge, SubmitGit],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.workshop._verdict import follow as real_follow
+
+    fake, git = rig
+    wt = tmp_path / "wt-dirty"
+    _git(git.root, "worktree", "add", str(wt), "-b", "feat/9-linked", "main")
+    (wt / "linked.txt").write_text("w\n")
+    _git(wt, "add", ".")
+    _git(wt, "commit", "-m", "feat: linked work")
+    monkeypatch.chdir(wt)
+    linked = SubmitGit(wt, fake)
+
+    def dirty_follow(*args: object, **kwargs: object) -> object:
+        (wt / "scratch.txt").write_text("s\n")  # dirt arrives while the follow waits
+        return real_follow(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr("livery.workshop._submit.follow", dirty_follow)
+    number = submit_flow(
+        _repo(fake), linked, gate=False, armed=True, interval=0, timeout=5
+    )
+    out = capsys.readouterr().out
+    pr = _repo(fake).pr.get(number)
+    assert pr is not None and pr.merged
+    assert "kept the worktree" in out and "uncommitted changes" in out
+    assert wt.is_dir() and (wt / "scratch.txt").exists()
+
+
+def test_a_merged_submit_in_a_linked_worktree_removes_the_worktree(
+    rig: tuple[FakeForge, SubmitGit],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake, git = rig
+    wt = tmp_path / "wt-merged"
+    _git(git.root, "worktree", "add", str(wt), "-b", "feat/9-linked", "main")
+    (wt / "linked.txt").write_text("w\n")
+    _git(wt, "add", ".")
+    _git(wt, "commit", "-m", "feat: linked work")
+    monkeypatch.chdir(wt)
+    linked = SubmitGit(wt, fake)
+    number = submit_flow(
+        _repo(fake), linked, gate=False, armed=True, interval=0, timeout=5
+    )
+    out = capsys.readouterr().out
+    pr = _repo(fake).pr.get(number)
+    assert pr is not None and pr.merged
+    # The submit opened the tree's work and closes it: the tree and
+    # the local branch are gone, and the shell is told where to go.
+    assert "removed the worktree" in out and "cd " in out
+    assert not wt.exists()
+    assert _git(git.root, "branch", "--list", "feat/9-linked").strip() == ""
+    # The main checkout is not the submit's to move.
+    assert _git(git.root, "rev-parse", "--abbrev-ref", "HEAD").strip() == "feat/1-first"
+
+
+def test_a_merged_submit_in_the_main_checkout_keeps_its_branch(
+    rig: tuple[FakeForge, SubmitGit],
+) -> None:
+    fake, git = rig
+    _submit(fake, git, armed=True)
+    # A person reads the run from here; the janitor's branch rule
+    # drops the branch later.
+    assert git.current_branch() == "feat/1-first"

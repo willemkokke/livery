@@ -39,10 +39,18 @@ in its place, `fm workflow.release <package> --workshop=<version>`,
 and the job installs that release over the workshop the checkout
 synced; the checkout, the ref and the wheel stay the squash's. A
 later release never strands an earlier died wave: the recovery
-consults every recent release squash and re-dispatches the oldest
-with an uncut receipt for a package of the requested set, naming
-any other set's uncut squash for its own recovery. A dispatch with
-no set named takes the oldest uncut squash overall.
+consults every recent release squash on the base and re-dispatches
+the oldest with an uncut receipt for a package of the requested set,
+naming any other set's uncut squash for its own recovery. A dispatch
+with no set named takes the oldest uncut squash overall. The wave is
+sent only to a release squash, recognised by the `Mined-At` line the
+pull request body becomes at the merge: a checkout standing on a
+release branch, whose last stamp commit carries no such line, is
+refused with the squash on the base named, so a wave that would
+refuse is never sent. The release act itself returns to the branch
+it started from once its pull request is armed, and its local copy
+of the reserved branch goes; the pull request holds the branch on
+the remote, and a re-run resumes from there.
 
 Authors are credited by asking the forge, which a private repository
 answers only for a caller it can authenticate. Set the forge's token

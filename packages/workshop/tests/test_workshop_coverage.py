@@ -296,8 +296,49 @@ def test_the_units_a_leg_ran_come_from_its_marker(tmp_path: Path) -> None:
 
 
 def test_a_leg_with_no_metered_data_refuses_naming_the_meter(tmp_path: Path) -> None:
+    x = _package(tmp_path, "x")
     with pytest.raises(BaseException, match="COVERAGE_PROCESS_START"):
-        _python.combine_leg(tmp_path, ())
+        _python.combine_leg(tmp_path, (x,))
+
+
+def test_a_workspace_with_no_packages_puts_its_scope_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop._verified import FULL, write_marker
+
+    # A project just born has no packages: its own tests ran unmetered
+    # and reached no package source. That is not a dead meter: the
+    # tests unit is put with no lines, so the union finds what ran.
+    (tmp_path / "tests").mkdir()
+    _in_ci(monkeypatch, "check-a")
+    monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
+    monkeypatch.setattr(
+        "livery.workshop._git_ops.GitOps.head_sha", lambda self: "a" * 40
+    )
+    write_marker(tmp_path, FULL, leg="check-a")
+    put: list[dict[str, object]] = []
+
+    def _capture(root: Path, run: object, **kw: object) -> str:
+        put.append(kw)
+        return ""
+
+    monkeypatch.setattr(_coverage_store, "put_run", _capture)
+    _python.combine_leg(tmp_path, ())
+    assert "no packages to measure" in capsys.readouterr().out
+    assert len(put) == 1 and put[0]["scope"] == "full"
+    units = put[0]["units"]
+    assert isinstance(units, dict) and list(units) == ["tests"]
+    unit = units["tests"]
+    assert isinstance(unit, _coverage_store.Unit)
+    assert unit.files == {} and unit.closure == "k" * 64 and unit.sha == "a" * 40
+    # A skipped leg names no unit whatever the packages, so the union
+    # carries the tests unit from the record instead of finding it
+    # named and unmeasured.
+    from livery.workshop._verified import VERIFIED
+
+    write_marker(tmp_path, VERIFIED, leg="check-a")
+    _python.combine_leg(tmp_path, ())
+    assert put[1]["scope"] == "verified" and put[1]["units"] == {}
 
 
 def _in_ci(monkeypatch: pytest.MonkeyPatch, leg: str) -> None:

@@ -667,10 +667,13 @@ def remote_snapshot(
     with a prefix in *fetch* (spelled below the namespace, ``metrics``
     or ``run/1400/``) and whose commits the checkout lacks are fetched
     together, one round trip, when the block opens; a ref outside
-    them is fetched on its own read. A write inside keeps its
-    compare-and-swap on the listed sha: a refused push lists again
-    and retries, and a successful write records its new sha, so a
-    read after it sees it. A listing the forge could not answer makes
+    them is fetched on its own read. A ref another writer moved after
+    the listing is listed again and read at its current commit, so a
+    concurrent writer never turns a read into a failure. A write
+    inside keeps its compare-and-swap on the listed sha: a refused
+    push lists again and retries, and a successful write records its
+    new sha, so a read after it sees it. A listing the forge could not
+    answer makes
     every read inside a failure naming the reason and every listing
     unlistable, never an absence. A block opened inside another for
     the same checkout shares the outer listing.
@@ -697,13 +700,7 @@ def remote_snapshot(
     if refs is not None:
         prefixes = tuple(NAMESPACE + prefix for prefix in fetch)
         wanted = {ref: sha for ref, sha in refs.items() if ref.startswith(prefixes)}
-        missing = _missing_locally(root, wanted.values())
-        snapshot.local.update(sha for sha in wanted.values() if sha not in missing)
-        to_fetch = sorted(ref for ref, sha in wanted.items() if sha in missing)
-        if to_fetch:
-            fetched = _git(root, "fetch", "--quiet", "origin", *to_fetch)
-            if fetched.code == 0:
-                snapshot.local.update(wanted[ref] for ref in to_fetch)
+        _bring(root, snapshot, wanted)  # a ref it cannot bring fails at its read
     published_here = ""
     if publish and refs is not None and snapshot.published is None:
         with tempfile.NamedTemporaryFile(
@@ -763,18 +760,63 @@ def _relist(root: Path, snapshot: _Snapshot) -> None:
     _write_published(root.resolve(), snapshot)
 
 
-def _reachable(root: Path, snapshot: _Snapshot, ref: str, sha: str) -> str:
-    """Make *sha* local for a read inside *snapshot*; ``""`` or the reason."""
+def _bring(root: Path, snapshot: _Snapshot, wanted: dict[str, str]) -> dict[str, str]:
+    """Make the listed commits of *wanted* (ref to sha) local; the failures by ref.
+
+    A fetch names the ref and brings whatever the remote holds under it
+    now. A ref another writer moved after the listing brings its new
+    commit, not the listed one, so the listed sha is checked after the
+    fetch and never assumed: the moved refs are listed again, the
+    block's view takes their current commits, and one more round
+    brings those. A ref moved again inside that round is reported;
+    a ref gone from the new listing was dropped, and is left out.
+    """
+    failed: dict[str, str] = {}
+    refs = dict(wanted)
+    for _round in range(2):
+        missing = _missing_locally(root, refs.values())
+        snapshot.local.update(sha for sha in refs.values() if sha not in missing)
+        to_fetch = sorted(ref for ref, sha in refs.items() if sha in missing)
+        if not to_fetch:
+            return failed
+        fetched = _git(root, "fetch", "--quiet", "origin", *to_fetch)
+        if fetched.code != 0:
+            return {ref: _words(fetched) for ref in to_fetch}
+        still = _missing_locally(root, [refs[ref] for ref in to_fetch])
+        snapshot.local.update(refs[ref] for ref in to_fetch if refs[ref] not in still)
+        moved = [ref for ref in to_fetch if refs[ref] in still]
+        if not moved:
+            return failed
+        _relist(root, snapshot)
+        if snapshot.refs is None:
+            reason = f"the remote could not be listed: {snapshot.reason}"
+            return dict.fromkeys(moved, reason)
+        refs = {ref: snapshot.refs[ref] for ref in moved if ref in snapshot.refs}
+    missing = _missing_locally(root, refs.values())
+    return {
+        ref: "another writer kept moving it"
+        for ref, sha in refs.items()
+        if sha in missing
+    }
+
+
+def _reachable(
+    root: Path, snapshot: _Snapshot, ref: str, sha: str
+) -> tuple[str | None, str]:
+    """The commit to read for *ref* inside *snapshot*, made local; or the reason.
+
+    The listed *sha* when the checkout holds it or the fetch brings it;
+    the ref's current commit when the remote moved past the listing;
+    ``None`` with no reason when the ref is gone from the remote.
+    """
     if sha in snapshot.local:
-        return ""
-    if not _missing_locally(root, (sha,)):
-        snapshot.local.add(sha)
-        return ""
-    fetched = _git(root, "fetch", "--quiet", "origin", ref)
-    if fetched.code != 0:
-        return _words(fetched)
-    snapshot.local.add(sha)
-    return ""
+        return sha, ""
+    failed = _bring(root, snapshot, {ref: sha})
+    if ref in failed:
+        return None, failed[ref]
+    if snapshot.refs is None:
+        return None, f"the remote could not be listed: {snapshot.reason}"
+    return snapshot.refs.get(ref), ""
 
 
 def _git(root: Path, *args: str, stdin: str | None = None) -> tools.Result:
@@ -826,12 +868,14 @@ def read(root: Path, ref: str) -> Read:
                 failed=True,
                 reason=f"the remote could not be listed: {snapshot.reason}",
             )
-        sha = snapshot.refs.get(ref)
+        listed = snapshot.refs.get(ref)
+        if listed is None:
+            return Read(None, None, failed=False)
+        sha, why = _reachable(root, snapshot, ref, listed)
+        if why:
+            return Read(None, listed, failed=True, reason=why)
         if sha is None:
             return Read(None, None, failed=False)
-        why = _reachable(root, snapshot, ref, sha)
-        if why:
-            return Read(None, sha, failed=True, reason=why)
         return _tree_files(root, sha)
     fetched = _git(root, "fetch", "--quiet", "origin", ref)
     if fetched.code != 0:
@@ -1141,8 +1185,8 @@ def _commit_time(root: Path, ref: str) -> datetime | None:
         if snapshot is not None:
             if snapshot.refs is None or ref not in snapshot.refs:
                 return None
-            sha = snapshot.refs[ref]
-            if _reachable(root, snapshot, ref, sha):
+            sha, why = _reachable(root, snapshot, ref, snapshot.refs[ref])
+            if why or sha is None:
                 return None
             at = sha
         else:

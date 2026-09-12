@@ -635,7 +635,11 @@ def combine_leg(
     no data, naming the variable that arms the meter; a leg whose
     gate skipped (a tree already proved, or nothing affected)
     legitimately measured nothing, says so, and puts its scope alone,
-    so the union knows the leg skipped rather than died. The leg's
+    so the union knows the leg skipped rather than died. A workspace
+    with no packages (a project just born) runs its own tests
+    unmetered, and they reach no package source; that leg puts its
+    units with no lines, so the union finds what the leg ran. The
+    leg's
     *timing* row, when it has one, rides the one write with the
     scope; the marker's scope goes on it, as the stamp reads it.
     """
@@ -647,17 +651,45 @@ def combine_leg(
     if timing is not None:
         timing = {**timing, "scope": marker}
     if not parts and not (root / ".coverage").is_file():
-        if scope not in (VERIFIED, NOTHING):
-            fail(
-                "this leg left no coverage data: nothing was metered. Inside CI"
-                " the test runner arms COVERAGE_PROCESS_START in pytest's"
-                " environment, so the tests and every process they start are"
-                " metered; a leg that ran its gate and left no data ran no"
-                " metered pytest, and there is nothing to union."
+        if scope in (VERIFIED, NOTHING):
+            # A skipped leg measured nothing and names no unit, so the
+            # union carries every unit from the records.
+            print(f"  coverage: no data, the gate ran {scope!r}; nothing to combine")
+            _put_leg(root, marker, {}, timing=timing)
+            return
+        if not packages:
+            # The workspace's own tests ran, unmetered, and reached no
+            # package source: each unit the leg ran is put with no
+            # lines, so the union finds what ran and judges nothing.
+            from livery.workshop._coverage_store import Unit, closure_id
+            from livery.workshop._git_ops import GitOps
+            from livery.workshop._state import run_context
+
+            print(
+                "  coverage: the workspace has no packages to measure; its own"
+                " tests ran unmetered"
             )
-        print(f"  coverage: no data, the gate ran {scope!r}; nothing to combine")
-        _put_leg(root, marker, {}, timing=timing)
-        return
+            run = run_context()
+            empty: dict[str, Unit] = {}
+            if run is not None:
+                git = GitOps(root)
+                for unit in units_of(root, ()):
+                    empty[unit.path] = Unit(
+                        unit.path,
+                        closure_id(git, (), unit),
+                        run.run_id,
+                        git.head_sha(),
+                        {},
+                    )
+            _put_leg(root, marker, empty, timing=timing)
+            return
+        fail(
+            "this leg left no coverage data: nothing was metered. Inside CI"
+            " the test runner arms COVERAGE_PROCESS_START in pytest's"
+            " environment, so the tests and every process they start are"
+            " metered; a leg that ran its gate and left no data ran no"
+            " metered pytest, and there is nothing to union."
+        )
     store_suites(root, packages, marker=marker, timing=timing)
     if parts:
         result = tools.coverage.opts(
