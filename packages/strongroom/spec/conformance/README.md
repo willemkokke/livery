@@ -57,7 +57,6 @@ arguments and, where the step observes something, an `expect`.
 | [lifecycle.json](lifecycle.json) | the publish sequence, a refused commit, the sweep's re-scan of pending refs, the three object states, dropping refs, pins |
 | [views.json](views.json) | a view round-trips through collect, an executable entry round-trips and a declared output is executable, a live view is a root, drop leaves what it did not create, an escaping symlink is parked whether or not links are refused, an erased entry fails the view |
 | [groups.json](groups.json) | a group of moves: a refused second move moves nothing, replay after a crash, retire refused part-way, the sweep through a group, a single publish is not a group |
-| [views.json](views.json) | a view round-trips through collect, a live view is a root, drop leaves what it did not create, an escaping symlink is parked, an erased entry fails the view |
 
 ## The harness
 
