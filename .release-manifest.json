@@ -2,14 +2,9 @@
  "schema": 1,
  "members": [
   {
-   "dir": "forge",
-   "name": "livery-forge",
-   "version": "0.3.0"
-  },
-  {
-   "dir": "workshop",
-   "name": "livery-workshop",
-   "version": "0.2.0"
+   "dir": "strongroom",
+   "name": "livery-strongroom",
+   "version": "0.1.0"
   }
  ]
 }

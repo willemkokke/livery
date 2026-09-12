@@ -7,7 +7,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-strongroom"
-version = "0.0.0"
+version = "0.1.0"
 description = "Content-addressed storage: one address space, every tenant."
 readme = "README.md"
 license = "MIT"
