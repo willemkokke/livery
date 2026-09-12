@@ -1041,25 +1041,37 @@ def _prove_verified_skip(root: Path, kind: str) -> None:
         ("skipping the gate",),
         forbidden=("measuring:", "coverage store: packages/loop-echo stored"),
     )
-    # The units main's union reuses are the members the workspace has
-    # at this point, plus its own tests: none on a fresh birth, whose
-    # members land through their own pull requests afterwards.
+    # The units main's union reuses are the ones the workspace has at
+    # this point: its members and its own tests. A fresh birth has
+    # neither yet (the members and the tests land through their own
+    # pull requests afterwards), and then the union has no unit and
+    # judges nothing, which the run says in as many words.
+    from livery.workshop._coverage_store import workspace_suite
     from livery.workshop._packages import discover_packages
 
     members = [package.path for package in discover_packages(root)]
-    reused = len(members) + 1
-    expected = [
-        f"coverage record: main takes {_SETUP_BRANCH}'s record for the tree it proved",
-        *(
-            f"coverage: {path} on check-ubuntu-latest-3.14: reused from run"
-            for path in members
-        ),
-        "coverage: tests on check-ubuntu-latest-3.14: reused from run",
-        *(f"coverage {path}: 100.0% (" for path in members),
-        f"coverage: the union of 0 leg(s) and {reused} reused suite(s)",
-        f"coverage record: main/check-ubuntu-latest-3.14: 0 fresh, {reused} carried,"
-        " 0 removed",
-    ]
+    units = [*members, *(["tests"] if workspace_suite(root) is not None else [])]
+    record = (
+        f"coverage record: main takes {_SETUP_BRANCH}'s record for the tree it proved"
+    )
+    if units:
+        expected = [
+            record,
+            *(
+                f"coverage: {unit} on check-ubuntu-latest-3.14: reused from run"
+                for unit in units
+            ),
+            *(f"coverage {path}: 100.0% (" for path in members),
+            f"coverage: the union of 0 leg(s) and {len(units)} reused suite(s)",
+            f"coverage record: main/check-ubuntu-latest-3.14: 0 fresh, {len(units)}"
+            " carried, 0 removed",
+        ]
+    else:
+        expected = [
+            record,
+            "coverage: leg check-ubuntu-latest-3.14 ran 'verified': no suite, no data",
+            "coverage: no unit to union; nothing judged",
+        ]
     _require_lines(
         repo,
         run,
