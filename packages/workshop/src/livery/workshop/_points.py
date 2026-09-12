@@ -27,6 +27,7 @@ from __future__ import annotations
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date, timedelta
 from pathlib import Path
 
 import livery.footman as footman
@@ -80,6 +81,10 @@ class Entry:
         profiled: Whether the task runs under ``--profile``, its
             trace left at `TRACE` for the leg's timing row.
         source: Where the entry was declared.
+        every: The cadence, ``""`` for every run of the point, ``1w``
+            for one run a week, ``2w`` for one run every two weeks;
+            a run on any other day skips the entry and names the day
+            it runs next.
     """
 
     point: str
@@ -88,6 +93,39 @@ class Entry:
     args: tuple[str, ...] = ()
     profiled: bool = False
     source: str = "builtin"
+    every: str = ""
+
+
+#: The cadences an entry may declare, in days.
+CADENCES = {"1w": 7, "2w": 14}
+
+today: Callable[[], date] = date.today
+"""The day a run judges a cadence on, UTC as the runners keep it.
+
+A variable, not a function, so a test fixes the day instead of
+waiting for a Monday.
+"""
+
+
+def due(every: str, on: date) -> tuple[bool, date]:
+    """Whether a cadence runs on *on*, and the day it runs next.
+
+    A weekly entry runs on Mondays; a two-weekly entry on the Monday
+    of an even ISO week, so every workspace agrees on the day without
+    a record of the last run. An empty cadence is due on every run.
+    """
+    if not every:
+        return True, on
+    monday = on - timedelta(days=on.weekday())
+    if every == "1w":
+        return on == monday, (monday if on == monday else monday + timedelta(days=7))
+    even = monday.isocalendar().week % 2 == 0
+    if on == monday and even:
+        return True, on
+    following = monday + timedelta(days=7)
+    if following.isocalendar().week % 2 != 0:
+        following += timedelta(days=7)
+    return False, following
 
 
 #: The workshop's own schedule. The gate's check job runs the gate
@@ -147,9 +185,10 @@ def declared(root: Path) -> tuple[Entry, ...]:
     """The ``[[ci.schedule]]`` entries of *root*'s contract, refusing bad ones.
 
     Each entry names a ``point`` (one of `POINTS`), a ``task``, and
-    optionally a ``job`` (the point's own name when absent) and
-    ``args``. An unknown point, a missing task, or arguments that are
-    not strings refuse at load, naming the entry.
+    optionally a ``job`` (the point's own name when absent), ``args``
+    and ``every``, a cadence from `CADENCES`. An unknown point, a
+    missing task, arguments that are not strings, or a cadence that
+    is not one refuse at load, naming the entry.
     """
     contract = load_contract(root / "workshop.toml")
     raw = (contract.get("ci") or {}).get("schedule") or []
@@ -173,6 +212,12 @@ def declared(root: Path) -> tuple[Entry, ...]:
             fail(
                 f"[[ci.schedule]] entry {index} ({point}, {task}): args must be strings"
             )
+        every = str(item.get("every", ""))
+        if every and every not in CADENCES:
+            fail(
+                f"[[ci.schedule]] entry {index} ({point}, {task}): every {every!r}"
+                f" is not a cadence; the cadences are {', '.join(CADENCES)}"
+            )
         entries.append(
             Entry(
                 point,
@@ -180,6 +225,7 @@ def declared(root: Path) -> tuple[Entry, ...]:
                 task,
                 tuple(args),
                 source="workshop.toml",
+                every=every,
             )
         )
     return tuple(entries)
@@ -282,7 +328,9 @@ def run_point(
 
     *os_label* and *python* are the matrix facts the shell passes for
     a matrix job; they format the entries' arguments and name the
-    leg. A profiled entry runs under ``--profile`` with its trace
+    leg. An entry with a cadence runs only on its day, judged by
+    `today`, and says when it runs next otherwise. A profiled entry
+    runs under ``--profile`` with its trace
     left at `TRACE`. Every child's environment names the leg in
     `livery.workshop._state.LEG_VARIABLE`, the key of the leg's rows
     and stamps, and the resolved point in
@@ -309,6 +357,14 @@ def run_point(
         if published:
             env[SNAPSHOT_VARIABLE] = published
         for entry in entries:
+            if entry.every:
+                is_due, when = due(entry.every, today())
+                if not is_due:
+                    print(
+                        f"  {resolved}/{job}: {entry.task} ({entry.source}) runs"
+                        f" every {entry.every}; next on {when:%Y-%m-%d}, skipped"
+                    )
+                    continue
             argv = [prog]
             if entry.profiled:
                 argv.append(f"--profile={TRACE}")

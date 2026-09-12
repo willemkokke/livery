@@ -443,8 +443,11 @@ jobs:
           # A replay checks the tree out at a release tag.
           fetch-depth: 0
 {setup_uv_leg}{enter_leg}      - name: Nightly
+        # A pull request a scheduled task opens with the job token
+        # starts no workflow, so a FORGE_TOKEN secret carries the
+        # nightly where the repository has one.
         env:
-          FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
+          FORGE_TOKEN: ${{{{ secrets.FORGE_TOKEN || secrets.GITHUB_TOKEN }}}}
         run: >-
           {prog} ci.run --point=nightly --job=nightly
           --python="${{{{ matrix.python }}}}"
@@ -763,8 +766,11 @@ jobs:
           # A replay checks the tree out at a release tag.
           fetch-depth: 0
 {rung}{enter_leg}      - name: Nightly
+        # A pull request a scheduled task opens with the job token
+        # starts no workflow, so a FORGE_TOKEN secret carries the
+        # nightly where the repository has one.
         env:
-          FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
+          FORGE_TOKEN: ${{{{ secrets.FORGE_TOKEN || secrets.GITHUB_TOKEN }}}}
         run: >-
           {prog} ci.run --point=nightly --job=nightly
           --python="${{{{ matrix.python }}}}"

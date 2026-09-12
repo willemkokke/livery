@@ -36,8 +36,11 @@ jobs:
           UV_PYTHON: ${{ matrix.python }}
         run: bash setup.sh github
       - name: Nightly
+        # A pull request a scheduled task opens with the job token
+        # starts no workflow, so a FORGE_TOKEN secret carries the
+        # nightly where the repository has one.
         env:
-          FORGE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN || secrets.GITHUB_TOKEN }}
         run: >-
           fm ci.run --point=nightly --job=nightly
           --python="${{ matrix.python }}"
