@@ -69,6 +69,16 @@ def test_an_unchanged_package_refuses_with_the_pin_teaching(
         dev_version(root, git, packages[0])
     message = str(caught.value)
     assert "sorts below" in message and "Pin the released 0.2.0" in message
+    # The rule itself, for the loop to pin by: the release, or nothing
+    # once the package has unreleased changes.
+    from livery.workshop._dev_release import unchanged_since_release
+
+    assert unchanged_since_release(root, git, packages[0]) == "0.2.0"
+    marker = root / "packages" / "core" / "src" / "livery" / "core" / "grown.py"
+    marker.write_text("x = 1\n")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "feat: widget")
+    assert unchanged_since_release(root, git, packages[0]) == ""
 
 
 def test_a_stamped_ahead_pyproject_is_not_an_unchanged_refusal(
@@ -217,8 +227,8 @@ def test_the_version_grammar_and_its_pep440_form(tmp_path: Path) -> None:
     version = dev_version(root, git, packages[0], stamp="20260901")
     distance, sha = describe_distance(git, packages[0])
     assert distance == 1
-    assert version == f"0.3.0-dev.feat.9-widget.1+{sha}.20260901"
-    assert semver_to_pep440(version) == f"0.3.0.dev1+feat.9-widget.{sha}.20260901"
+    assert version == f"0.3.0-dev.feat.9-widget.1+g{sha}.20260901"
+    assert semver_to_pep440(version) == f"0.3.0.dev1+feat.9-widget.g{sha}.20260901"
     # A dirty tree marks the wheel no commit describes.
     (root / "packages" / "core" / "workshop.toml").write_text(
         'type = "python"\nname = "livery-core"\n# dirt\n'

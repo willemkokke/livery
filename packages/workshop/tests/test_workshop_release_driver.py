@@ -607,11 +607,74 @@ def test_the_toolchain_probe_refuses_a_moved_floor(
     monkeypatch.setattr(
         "livery.workshop._backends._python._dev_pins", _overlapping_pins
     )
+    # The guard is the backstop behind the filter: with the filter
+    # bypassed, an overlapping pin moves the floor and is refused.
+    monkeypatch.setattr(
+        "livery.workshop._backends._python._pins_without", lambda pins, _r: pins
+    )
     with pytest.raises(_FAILURES) as caught:
         _python.run_isolated_test(packages["core"], root, resolution="lowest-direct")
     message = str(caught.value)
     assert "moved direct dependencies" in message
     assert "packaging 24.0 -> 25.0" in message
+
+
+def test_the_toolchain_pins_leave_what_the_leg_resolved(
+    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The leg's floor survives the toolchain install: the lock's pin
+    # on the member's own dependency is dropped from the toolchain,
+    # so the floor leg proves the floor and the guard has nothing to
+    # refuse.
+    from livery.workshop._backends import _python
+
+    _fake, _git_seam, root = workspace
+    member = root / "packages" / "core"
+    (member / "pyproject.toml").write_text(
+        '[project]\nname = "livery-core"\nversion = "0.2.0"\n'
+        'requires-python = ">=3.11"\n'
+        'dependencies = ["packaging>=24.0"]\n'
+        "[build-system]\n"
+        'requires = ["uv_build>=0.7"]\nbuild-backend = "uv_build"\n'
+        "[tool.uv.build-backend]\n"
+        'module-name = "livery.core"\nnamespace = true\n'
+    )
+    packages = {p.directory.name: p for p in discover_packages(root)}
+    _python.build(packages["core"], root)
+
+    def _overlapping_pins(_root: Path, scratch: Path) -> Path:
+        pins = scratch / "dev-pins.txt"
+        pins.write_text("packaging==25.0\npytest\n")
+        return pins
+
+    monkeypatch.setattr(
+        "livery.workshop._backends._python._dev_pins", _overlapping_pins
+    )
+    resolved = _python.run_isolated_test(
+        packages["core"], root, resolution="lowest-direct"
+    )
+    assert resolved["packaging"] == "24.0"
+
+
+def test_pins_without_drops_only_what_the_leg_resolved(tmp_path: Path) -> None:
+    from livery.workshop._backends._python import _pins_without
+
+    pins = tmp_path / "dev-pins.txt"
+    pins.write_text(
+        "packaging==25.0\n"
+        "pytest==8.4.0\n"
+        "PyYAML==6.0.3 ; python_version >= '3.11'\n"
+        "pytest-xdist[psutil]==3.6.1\n"
+        "\n"
+    )
+    _pins_without(
+        pins, {"packaging": "24.0", "pyyaml": "6.0.3", "Livery-Core": "0.2.0"}
+    )
+    assert pins.read_text().splitlines() == [
+        "pytest==8.4.0",
+        "pytest-xdist[psutil]==3.6.1",
+        "",
+    ]
 
 
 def test_the_leg_reads_the_repos_declared_indexes(tmp_path: Path) -> None:
@@ -807,6 +870,74 @@ def test_the_driver_builds_the_whole_set_before_any_leg(
     first_leg = next(i for i, e in enumerate(events) if e.startswith("leg:"))
     builds_before = {e for e in events[:first_leg] if e.startswith("build:")}
     assert builds_before == {"build:livery-core", "build:livery-tool"}
+
+
+def test_refresh_args_name_every_wheel_of_the_set_once(tmp_path: Path) -> None:
+    # The cold cases first: no dirs, and a dir without wheels, name
+    # nothing; a distribution's underscored filename is normalised
+    # and a second wheel of the same distribution adds no flag.
+    from livery.workshop._backends._python import _refresh_args
+
+    assert _refresh_args(()) == []
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert _refresh_args((empty,)) == []
+    core = tmp_path / "core"
+    core.mkdir()
+    (core / "livery_core-0.2.0-py3-none-any.whl").write_bytes(b"")
+    (core / "livery_core-0.2.0-cp311-cp311-macosx_14_0_arm64.whl").write_bytes(b"")
+    tool = tmp_path / "tool"
+    tool.mkdir()
+    (tool / "Livery_Tool-0.1.0-py3-none-any.whl").write_bytes(b"")
+    assert _refresh_args((tool, empty, core)) == [
+        "--refresh-package=livery-core",
+        "--refresh-package=livery-tool",
+    ]
+
+
+def test_the_leg_refreshes_the_co_released_members_before_installing(
+    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # uv serves a cached wheel by filename, and a member rebuilt at
+    # the same version keeps its filename: the first install carries
+    # one refresh flag per co-released distribution, before the
+    # find-links dirs are consulted. The stub answers the venv step
+    # and refuses the install, so the leg stops after the command
+    # under test with its argv recorded.
+    from types import SimpleNamespace
+
+    from livery import toolroom
+    from livery.workshop._backends import _python
+
+    _fake, _git_seam, root = workspace
+    packages = {p.directory.name: p for p in discover_packages(root)}
+    core = packages["core"]
+    dist = core.directory / "dist"
+    dist.mkdir(exist_ok=True)
+    (dist / "livery_core-0.2.0-py3-none-any.whl").write_bytes(b"")
+    sibling = root / "packages" / "tool" / "dist"
+    sibling.mkdir(parents=True, exist_ok=True)
+    (sibling / "livery_tool-0.1.0-py3-none-any.whl").write_bytes(b"")
+    commands: list[tuple[str, ...]] = []
+
+    def _opts(**_kwargs: object) -> object:
+        def _run(*args: str) -> object:
+            commands.append(args)
+            code = 0 if args[0] == "venv" else 1
+            return SimpleNamespace(code=code, stdout="", stderr="refused\n")
+
+        return _run
+
+    monkeypatch.setattr(toolroom, "uv", SimpleNamespace(opts=_opts))
+    with pytest.raises(_FAILURES):
+        _python.run_isolated_test(
+            core, root, release_dirs=(dist, sibling), resolution="lowest-direct"
+        )
+    install = next(args for args in commands if args[:2] == ("pip", "install"))
+    assert "--refresh-package=livery-core" in install
+    assert "--refresh-package=livery-tool" in install
+    # The stub refused the install: nothing after it ran.
+    assert commands[-1] is install
 
 
 def test_the_toolchain_pins_carry_no_workspace_member(tmp_path: Path) -> None:

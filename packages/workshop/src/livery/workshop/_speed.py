@@ -56,6 +56,28 @@ RATCHET = 0.05
 #: leg warns only.
 REFERENCE = "ubuntu"
 
+#: The contract key that turns the speed marks on.
+ENABLED_KEY = "speed-marks"
+
+
+def enabled(root: Path) -> bool:
+    """The contract's ``[ci] speed-marks``; false when undeclared.
+
+    Off by default: a hosted runner's test time varies by tens of
+    seconds between two runs of one tree, and a mark taken from such
+    runs says nothing about the suite. A workspace whose runners keep
+    a steady clock declares the key. Refuses a value that is not a
+    boolean, naming the key.
+    """
+    from livery.workshop._contract import load_contract
+
+    ci = load_contract(root / "workshop.toml").get("ci") or {}
+    declared = ci.get(ENABLED_KEY, False) if isinstance(ci, dict) else False
+    if not isinstance(declared, bool):
+        fail(f"[ci] {ENABLED_KEY} must be true or false, not {declared!r}")
+    return declared
+
+
 #: The slowest tests a leg's row names, and a warning prints.
 SLOWEST = 10
 

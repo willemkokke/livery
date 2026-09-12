@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -1370,6 +1371,30 @@ def _dev_pins(root: Path, scratch: Path) -> Path | None:
     return pins
 
 
+def _pins_without(pins: Path, resolved: dict[str, str]) -> Path:
+    """Rewrite *pins* without the distributions the leg already resolved.
+
+    The dev group's export carries every member's dependencies at the
+    locked version; installed over a leg, those would move the floor
+    or the latest the leg resolved and the two legs would prove one
+    set. The toolchain the tests need is what remains: pytest, its
+    plugins, and whatever else the leg did not resolve, each pinned
+    from the lock. The movement guard stays behind this as the
+    backstop for a tool that genuinely shares a dependency with the
+    member and needs another version of it.
+    """
+    taken = {name.lower().replace("_", "-") for name in resolved}
+    kept: list[str] = []
+    for line in pins.read_text("utf-8").splitlines():
+        head = line.strip().split(";", 1)[0]
+        name = re.split(r"[\s=<>!~\[]", head, maxsplit=1)[0].lower().replace("_", "-")
+        if name and name in taken:
+            continue
+        kept.append(line)
+    pins.write_text("\n".join(kept) + "\n", encoding="utf-8")
+    return pins
+
+
 def _direct_requirements(package: Package) -> tuple[str, ...]:
     """The requirement strings *package*'s ``[project]`` declares.
 
@@ -1458,6 +1483,24 @@ def _direct_versions(package: Package, resolved: dict[str, str]) -> dict[str, st
     }
 
 
+def _refresh_args(release_dirs: tuple[Path, ...]) -> list[str]:
+    """The ``--refresh-package`` flags for every wheel in *release_dirs*.
+
+    uv keys its wheel cache on the distribution's filename, and a
+    co-released member rebuilt at the same version keeps the same
+    filename: without a refresh the leg installs the first build the
+    cache saw, and every later source fix tests as if it did nothing.
+    One flag per distribution named by a wheel in the set's ``dist/``
+    directories, sorted; empty without any.
+    """
+    names = {
+        wheel.name.split("-", 1)[0].replace("_", "-").lower()
+        for directory in release_dirs
+        for wheel in directory.glob("*.whl")
+    }
+    return [f"--refresh-package={name}" for name in sorted(names)]
+
+
 def run_isolated_test(
     package: Package,
     root: Path,
@@ -1477,6 +1520,9 @@ def run_isolated_test(
     package must never mask that the release needs an unpublished
     dependency version. Everything else resolves from the repo's
     configured indexes, like a real consumer.
+    Each distribution those directories carry is refreshed in uv's
+    cache, so a member rebuilt at the same version installs the wheel
+    just built and never an earlier build of the same filename.
 
     The toolchain installs after the wheel, at the lock's dev-group
     pins where a lock exists (bare pytest otherwise), and a probe
@@ -1538,6 +1584,7 @@ def run_isolated_test(
             str(python),
             f"--resolution={resolution}",
             *[f"--find-links={d}" for d in release_dirs],
+            *_refresh_args(release_dirs),
             *_index_args(root),
             _install_target(package, wheels[0]),
             # The declared dependencies ride the command line so
@@ -1545,16 +1592,19 @@ def run_isolated_test(
             # _direct_requirements.
             *_direct_requirements(package),
         )
-        before = _direct_versions(package, _listing())
+        resolved = _listing()
+        before = _direct_versions(package, resolved)
         # The toolchain never rides the starved install: lowest-direct
         # aimed at it once dragged pytest back a decade. Locked pins
-        # where the workspace has them; pytest is a no-op re-request
-        # when the pins already hold it.
+        # where the workspace has them, minus what the leg resolved,
+        # so the leg keeps its floor or its latest; pytest is a no-op
+        # re-request when the pins already hold it.
         # The toolchain resolves from the same indexes as the wheel:
         # the lock's pins name whatever versions the workspace's own
         # index serves, and a bare-PyPI install cannot see those.
         pins = _dev_pins(root, Path(scratch))
         if pins is not None:
+            pins = _pins_without(pins, resolved)
             _run_install(
                 "pip",
                 "install",
@@ -1580,8 +1630,10 @@ def run_isolated_test(
             fail(
                 f"{package.name}: the toolchain install moved direct"
                 f" dependencies the {resolution} leg had resolved: {listed}."
-                " The starvation must stay honest; align the dev-group pin"
-                " with the floor, or release the dependency first."
+                " The starvation must stay honest: a toolchain tool needs"
+                " another version of a dependency the member declares, so"
+                " pin that tool where the two agree, or widen the member's"
+                " floor."
             )
         tests = package.directory / "tests"
         if tests.is_dir():

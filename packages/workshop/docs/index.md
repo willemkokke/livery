@@ -176,8 +176,12 @@ further, informational union that includes the live-only code.
 
 ## Test speed
 
-The gate job judges each check leg's summed test time per package
-against a mark on the state store. The mark is the median of the
+The speed marks are off until the contract declares
+`[ci] speed-marks = true`: a hosted runner's test time varies by tens
+of seconds between two runs of one tree, so a mark taken from such
+runs says nothing about the suite. Declare the key on runners that
+keep a steady clock. On, the gate job judges each check leg's summed
+test time per package against a mark on the state store. The mark is the median of the
 leg's last five green runs for the package, recorded once five are
 seen; it moves down when that median beats it by more than five per
 cent, so a suite cannot regress slowly. A run over the mark by more
@@ -200,7 +204,12 @@ names the local one, and every row carries the schema the store
 stamped and the time it wrote it. The remote series are written by
 CI only, `fm coverage.accept` and `fm speed.accept` the exceptions;
 a local run reads them and writes only the local ones, which the
-checkout's worktrees share and a fresh clone starts without.
+checkout's worktrees share and a fresh clone starts without. A read
+or a write of a series is a fixed handful of git processes whatever
+the series holds: one `cat-file --batch` reads every row, one
+`hash-object --stdin-paths` writes every blob, so a series of three
+hundred rows costs no more processes than one of three (git 2.38 or
+newer).
 
 | series | a row is | window | writer |
 | --- | --- | --- | --- |

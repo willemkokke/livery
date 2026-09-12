@@ -15,7 +15,7 @@ import base64
 import json
 import urllib.error
 import urllib.request
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from html.parser import HTMLParser
 
 from livery.forge._errors import ForgeError
@@ -155,14 +155,18 @@ def purge_packages(
     token: str,
     kind: str = "pypi",
     api: Callable[[str, str, str], tuple[int, object]] | None = None,
+    names: Collection[str] | None = None,
 ) -> list[str]:
     """Delete every *kind* package version *owner* holds on the Gitea at *base*.
 
     The workshop's CI loop publishes rehearsal releases into its dev
     forge's registry, and a rebirth of the loop must publish the same
     versions again, which the registry refuses while they exist.
-    Returns ``name==version`` for each deleted release. *api* is the
-    call seam, ``(method, path, token)`` to ``(status, body)``, with
+    With *names*, only those packages go: the loop pins a released
+    member to its release, and the member's stale rehearsal wheels
+    would shadow that release on a first-index resolve. Returns
+    ``name==version`` for each deleted release. *api* is the call
+    seam, ``(method, path, token)`` to ``(status, body)``, with
     *path* below ``/api/v1``; the default speaks to *base*.
     """
     call = api or (lambda method, path, token: _api_json(base, method, path, token))
@@ -176,6 +180,8 @@ def purge_packages(
                 continue
             name, version = str(item.get("name", "")), str(item.get("version", ""))
             if not name or not version:
+                continue
+            if names is not None and name not in names:
                 continue
             gone, _ = call(
                 "DELETE", f"/packages/{owner}/{kind}/{name}/{version}", token

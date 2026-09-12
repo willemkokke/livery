@@ -23,6 +23,14 @@ not, or when a dependency floor names an unreleased version.
 An entry is written for review, never for trust: read it before the
 tag, and edit what a reader needs said differently.
 
+Before the tag, each member is validated in two isolated
+environments: at every direct dependency's floor, and at the newest
+each allows. The toolchain the tests need comes from the lock, minus
+whatever the leg resolved, so the floor leg proves the floor and the
+latest leg proves the newest, and the lock may sit anywhere between.
+A toolchain tool that needs another version of a dependency the
+member declares is refused by name.
+
 The wave runs at the release squash with the squash's own workshop:
 the checkout, the wheel, the receipt and the driver are all the
 squash's, so a re-run does what the first run did. When the driver

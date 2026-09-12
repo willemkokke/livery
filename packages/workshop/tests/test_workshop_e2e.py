@@ -117,6 +117,85 @@ def test_dev_pins_refuse_a_wheel_another_commit_built(tmp_path: Path) -> None:
         _e2e._dev_pins(tmp_path, HEAD)
 
 
+def test_dev_pins_read_a_sha_of_digits_alone_through_its_g(tmp_path: Path) -> None:
+    # A build backend reads a local segment of digits alone as a
+    # number and drops its leading zero; the g git describe puts first
+    # keeps the sha a word, and the pin reads it back through the g.
+    head = "0442877" + "a" * 33
+    for member in _e2e.DEV_MEMBERS:
+        _wheel(tmp_path, member, "0.3.0.dev6+feat.486.store.g0442877.20260912")
+    pins = _e2e._dev_pins(tmp_path, head)
+    assert pins["livery-workshop"] == "0.3.0.dev6+feat.486.store.g0442877.20260912"
+
+
+def test_dev_pins_read_only_the_members_asked_for(tmp_path: Path) -> None:
+    for member in ("workshop", "toolroom", "footman"):
+        _wheel(tmp_path, member, "0.2.0.dev72+feat.314.profile.05482de.20260909")
+    # forge built nothing, and is not asked for: no refusal.
+    pins = _e2e._dev_pins(tmp_path, HEAD, ("workshop", "toolroom", "footman"))
+    assert set(pins) == {"livery-workshop", "livery-toolroom", "livery-footman"}
+
+
+def test_the_dev_act_pins_a_released_member_and_drops_its_stale_wheels(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from types import SimpleNamespace
+
+    for member in _e2e.DEV_MEMBERS:
+        home = tmp_path / "packages" / member
+        home.mkdir(parents=True)
+        (home / "workshop.toml").write_text(
+            f'type = "python"\nname = "livery-{member}"\n'
+        )
+        (home / "pyproject.toml").write_text(
+            f'[project]\nname = "livery-{member}"\nversion = "0"\n'
+        )
+    (tmp_path / "workshop.toml").write_text("[workspace]\n")
+    monkeypatch.setattr(
+        "livery.workshop._layers.workspace_root", lambda start=None: tmp_path
+    )
+    monkeypatch.setattr(_e2e, "_dev_forge", lambda kind: (None, "t"))
+    monkeypatch.setattr(
+        "livery.workshop._git_ops.GitOps",
+        lambda root: SimpleNamespace(head_sha=lambda: HEAD),
+    )
+    monkeypatch.setattr(
+        "livery.workshop._dev_release.unchanged_since_release",
+        lambda root, git, package: "0.3.0" if package.name == "livery-forge" else "",
+    )
+    ran: list[list[str]] = []
+    monkeypatch.setattr("livery.footman.run", lambda argv, **kwargs: ran.append(argv))
+    purged: list[tuple[str, object]] = []
+
+    def _purge(base: str, owner: str, **kwargs: object) -> list[str]:
+        purged.append((owner, kwargs.get("names")))
+        return ["livery-forge==0.3.0.dev4"]
+
+    monkeypatch.setattr("livery.forge._registry.purge_packages", _purge)
+    monkeypatch.setattr(
+        _e2e,
+        "_dev_pins",
+        lambda root, head, members: {f"livery-{m}": "dev" for m in members},
+    )
+    monkeypatch.setenv("GITEA_URL", "http://localhost:3000")
+    pins = _e2e._publish_dev_wheels("gitea")
+    # forge is pinned to its release, the others rebuilt, and the
+    # forge rehearsal wheels go so the release resolves past them.
+    assert ran == [
+        ["fm", "--yes", "workflow.release", "workshop", "toolroom", "footman"]
+    ]
+    assert purged == [("livery", {"livery-forge": "0.3.0"})]
+    assert pins == {
+        "livery-workshop": "dev",
+        "livery-toolroom": "dev",
+        "livery-footman": "dev",
+        "livery-forge": "0.3.0",
+    }
+    out = capsys.readouterr().out
+    assert "forge: nothing unreleased since 0.3.0; the loop pins the release" in out
+    assert "1 stale rehearsal release(s)" in out
+
+
 def test_dev_pins_read_this_commits_newest_wheel(tmp_path: Path) -> None:
     for member in _e2e.DEV_MEMBERS:
         _wheel(tmp_path, member, "0.2.0.dev96+feat.289.loop.9f8f0d0.20260907", age=60)
