@@ -645,15 +645,28 @@ def combine_leg(
     if not parts and not (root / ".coverage").is_file():
         if not packages:
             # The workspace's own tests ran, unmetered, and reached no
-            # package source: the unit is put with no lines, so the
-            # union finds every unit the leg ran and judges nothing.
+            # package source: each unit the leg ran is put with no
+            # lines, so the union finds what ran and judges nothing.
+            from livery.workshop._coverage_store import Unit, closure_id
+            from livery.workshop._git_ops import GitOps
+            from livery.workshop._state import run_context
+
             print(
                 "  coverage: the workspace has no packages to measure; its own"
                 " tests ran unmetered"
             )
-            empty: dict[str, dict[str, list[tuple[int, int]]]] = {
-                unit.path: {} for unit in units_of(root, ())
-            }
+            run = run_context()
+            empty: dict[str, Unit] = {}
+            if run is not None:
+                git = GitOps(root)
+                for unit in units_of(root, ()):
+                    empty[unit.path] = Unit(
+                        unit.path,
+                        closure_id(git, (), unit),
+                        run.run_id,
+                        git.head_sha(),
+                        {},
+                    )
             _put_leg(root, marker, empty, timing=timing)
             return
         if scope not in (VERIFIED, NOTHING):

@@ -311,6 +311,10 @@ def test_a_workspace_with_no_packages_puts_its_scope_alone(
     # tests unit is put with no lines, so the union finds what ran.
     (tmp_path / "tests").mkdir()
     _in_ci(monkeypatch, "check-a")
+    monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
+    monkeypatch.setattr(
+        "livery.workshop._git_ops.GitOps.head_sha", lambda self: "a" * 40
+    )
     write_marker(tmp_path, FULL, leg="check-a")
     put: list[dict[str, object]] = []
 
@@ -322,8 +326,11 @@ def test_a_workspace_with_no_packages_puts_its_scope_alone(
     _python.combine_leg(tmp_path, ())
     assert "no packages to measure" in capsys.readouterr().out
     assert len(put) == 1 and put[0]["scope"] == "full"
-    units = [v for v in put[0].values() if isinstance(v, dict) and "tests" in v]
-    assert units and units[0]["tests"] == {}
+    units = put[0]["units"]
+    assert isinstance(units, dict) and list(units) == ["tests"]
+    unit = units["tests"]
+    assert isinstance(unit, _coverage_store.Unit)
+    assert unit.files == {} and unit.closure == "k" * 64 and unit.sha == "a" * 40
 
 
 def _in_ci(monkeypatch: pytest.MonkeyPatch, leg: str) -> None:
