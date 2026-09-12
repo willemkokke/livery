@@ -155,7 +155,7 @@ def test_a_render_is_made_once_per_input_and_again_after_an_edit(
 ) -> None:
     import time
 
-    from livery import toolroom
+    from livery.toolroom import tools as toolroom
     from livery.workshop._templates import render
 
     template = tmp_path / "template"

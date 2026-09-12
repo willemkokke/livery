@@ -47,8 +47,8 @@ uv add --dev footman        # or: pip install footman
 ```python
 # tasks.py
 from typing import Literal
-from footman import task, group, run
-from toolroom import pytest, ruff
+from livery.footman import task, group, run
+from livery.toolroom.tools import pytest, ruff
 
 
 @task
@@ -94,7 +94,7 @@ fm: deploy: <target> must be one of dev|staging|prod (got 'produ') — did you m
 $ fm --install-completion               # detects your shell; TAB answers from the cache
 ```
 
-> That `from toolroom import …` is optional.
+> That `from livery.toolroom.tools import …` is optional.
 > [toolroom](https://willemkokke.github.io/toolroom/) makes command-line
 > calls Python: it wraps **any** program, not a fixed list, with keyword
 > arguments becoming flags — `toolroom.terraform("plan")` runs whether or
@@ -117,10 +117,10 @@ project at all — drop it in any directory and run it:
 ```python
 #!/usr/bin/env -S uv run --script
 # /// script
-# dependencies = ["footman", "httpx"]
+# dependencies = ["livery-footman", "httpx"]
 # ///
-import footman
-from footman import task
+from livery import footman
+from livery.footman import task
 
 
 @task

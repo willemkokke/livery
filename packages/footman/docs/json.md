@@ -119,7 +119,7 @@ no context API: the `return` statement is the whole feature.
 
 ```python
 from pathlib import Path
-from footman import task
+from livery.footman import task
 
 
 @task
@@ -161,7 +161,7 @@ signature is the input contract. No decorator, no schema language:
 
 ```python
 from dataclasses import dataclass
-from footman import task
+from livery.footman import task
 
 
 @dataclass
@@ -290,7 +290,7 @@ A task can declare that its return value *is* the document on stdout, in
 the signature, where the rest of its contract lives:
 
 ```python
-from footman import Stdout, task
+from livery.footman import Stdout, task
 
 
 @task

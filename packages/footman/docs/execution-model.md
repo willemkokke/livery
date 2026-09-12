@@ -39,7 +39,7 @@ prerequisite you also call hands back what it already produced, which is how a
 task reads a value `pre=` cannot pass:
 
 ```python
-from footman import run, task
+from livery.footman import run, task
 
 
 @task
@@ -79,7 +79,7 @@ asked for:
 <!-- example: fragment -->
 ```python
 from typing import Annotated
-from footman import env, task
+from livery.footman import env, task
 
 
 @task
@@ -152,7 +152,7 @@ code*, in one name and three positions:
 ```python
 import shutil
 
-from footman import step
+from livery.footman import step
 
 
 @step  # 1. a function that IS a step
@@ -224,7 +224,7 @@ in a block or out of one:
 
 <!-- example: fragment -->
 ```python
-from footman import parallel, task
+from livery.footman import parallel, task
 
 with parallel() as p:
     build("web")

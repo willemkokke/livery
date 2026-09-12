@@ -1860,7 +1860,7 @@ def _pins_the_runner(root: Path) -> bool:
     """Whether *root*'s lockfile pins this runner — the question that decides
     whether the invocation belongs to that project's environment. The read
     lives in `_script`, shared with the completion children."""
-    return _script.pins_dist(root, _brand.dist or "footman")
+    return _script.pins_dist(root, _brand.dist or "livery-footman")
 
 
 def _note_ignored_block(g: dict[str, object], probe: Path) -> None:
@@ -1912,7 +1912,7 @@ def _script_handoff(argv: list[str], g: dict[str, object], probe: Path) -> int |
 
     A tasks file that declares `dependencies` carries its own world: uv
     materialises it (`uv sync --script`), and this invocation continues
-    inside it (`uv python find --script` → `python -m footman …`). One
+    inside it (`uv python find --script` → `python -m livery.footman …`). One
     portable file then runs anywhere the runner is installed, no project
     needed. Returns `None` to say "not my business, carry on"; an exit code
     when this invocation is over — a refusal, or uv's own failure.
@@ -1991,13 +1991,13 @@ def _script_handoff(argv: list[str], g: dict[str, object], probe: Path) -> int |
     if found.returncode != 0 or not python:
         return None
     os.environ[_paths.env_var("UV_REEXEC")] = "1"
-    if _brand.dist == "footman":
-        _reexec([python, "-m", "footman", *argv])
+    if _brand.dist == "livery-footman":
+        _reexec([python, "-m", "livery.footman", *argv])
     else:
-        # `-m footman` is the *stock* CLI, so a branded child re-ran this
+        # `-m livery.footman` is the *stock* CLI, so a branded child re-ran this
         # handoff — its belt variable above is scoped to the brand, so the
         # one just set didn't count — and then refused, because the script
-        # declares the brand's dist and not 'footman'. The brand's door in
+        # declares the brand's dist and not 'livery-footman'. The brand's door in
         # the script environment is its own console script; loading the
         # entry point by name runs exactly what that script runs, on any
         # platform, without guessing at the environment's bin layout.

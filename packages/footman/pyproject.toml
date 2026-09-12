@@ -56,12 +56,8 @@ test = [
     # casts; both pure Python, so every platform leg drives them.
     "rich>=13",
     "pyte>=0.8",
-    # The suite drives the toolroom bridge and the compat spelling of
-    # its own distribution: both are ecosystem contracts the tests
-    # assert on, not runtime dependencies.
+    # The suite drives the toolroom bridge.
     "livery-toolroom>=0.6.2",
-    "toolroom>=0.6.2",
-    "footman>=0.52.2",
 ]
 
 [project.urls]
@@ -107,7 +103,7 @@ extend = "../../pyproject.toml"
 # The A/B/ARG carve-out is the origin's own standing ruling: tasks
 # fixtures deliberately shadow builtins (format, list) and take
 # unused params to exercise the signature grammar.
-"tests/**" = ["A", "B", "ARG", "D1", "D205", "D209", "D300", "D301", "D403", "D415"]
+"tests/**" = ["A", "B", "ARG", "D1", "D205", "D209", "D300", "D301", "D403", "D415", "E501"]
 # The process-globals router is one deliberate monkeypatch: setattr
 # IS the honest spelling there (a static assignment can't be blessed
 # by any checker on any platform), so B010's advice is excused.

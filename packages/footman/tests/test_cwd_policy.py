@@ -319,12 +319,14 @@ def test_serial_lane_per_call_unmanaged_is_the_applied_cwd(tmp_path):
 
 def test_config_cwd_root_threads_to_the_task(tmp_path, monkeypatch, capsys):
     (tmp_path / ".git").mkdir()
-    (tmp_path / "tasks.py").write_text("from footman import task\n", encoding="utf-8")
+    (tmp_path / "tasks.py").write_text(
+        "from livery.footman import task\n", encoding="utf-8"
+    )
     pkg = tmp_path / "pkg"
     pkg.mkdir()
     (pkg / "tasks.py").write_text(
-        "from footman import task\n"
-        "from footman.context import current\n"
+        "from livery.footman import task\n"
+        "from livery.footman.context import current\n"
         "@task\n"
         "def where():\n"
         "    print(current().cwd)\n",
@@ -351,7 +353,8 @@ def test_config_cwd_root_threads_to_the_task(tmp_path, monkeypatch, capsys):
 def test_config_cwd_rejects_a_relative_value(tmp_path, monkeypatch, capsys):
     (tmp_path / ".git").mkdir()
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n@task\ndef hi():\n    pass\n", encoding="utf-8"
+        "from livery.footman import task\n@task\ndef hi():\n    pass\n",
+        encoding="utf-8",
     )
     (tmp_path / "pyproject.toml").write_text(
         "[tool.footman]\ncwd = 'somewhere/relative'\n", encoding="utf-8"

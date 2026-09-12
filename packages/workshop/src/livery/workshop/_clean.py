@@ -23,8 +23,8 @@ from pathlib import Path
 from typing import Annotated
 
 import livery.footman as footman
-from livery import toolroom
 from livery.footman import doc, fail
+from livery.toolroom import tools
 
 #: Never removed, at any depth, under any flag. A machine secret is
 #: the one thing here that no checkout can restore.
@@ -45,8 +45,8 @@ class CleanPlan:
         return not (self.modified or self.untracked)
 
 
-def _query(root: Path, *args: str) -> toolroom.Result:
-    return toolroom.git.opts(cwd=root, nofail=True, recorded=False)(*args)
+def _query(root: Path, *args: str) -> tools.Result:
+    return tools.git.opts(cwd=root, nofail=True, recorded=False)(*args)
 
 
 def _protected(path: str) -> bool:

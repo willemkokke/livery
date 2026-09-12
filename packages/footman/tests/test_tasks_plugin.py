@@ -19,7 +19,7 @@ from livery.footman._executor import TaskResult
 def plugin_project(tmp_path, monkeypatch):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from footman import group, plugin, task\n"
+        "from livery.footman import group, plugin, task\n"
         "# mounted FIRST on purpose: the local group() below adopts the\n"
         "# mounted docs group — order must not matter\n"
         "plugin('footman.docs')\n"
@@ -42,7 +42,7 @@ def plugin_project(tmp_path, monkeypatch):
 
 def test_bare_import_never_loads_first_party_tasks():
     # Hot-path guard: `import footman` must not import the plugin package.
-    probe = "import footman, sys; print('livery.footman.tasks' in sys.modules)"
+    probe = "import livery.footman, sys; print('livery.footman.tasks' in sys.modules)"
     out = subprocess.run(
         [sys.executable, "-c", probe], capture_output=True, text=True, check=True
     )
@@ -325,7 +325,7 @@ def test_page_follows_the_sort_setting(plugin_project, capsys):
         "[project]\nname='x'\n[tool.footman]\nsort = true\n"
     )
     (plugin_project / "tasks.py").write_text(
-        "from footman import plugin, task\n"
+        "from livery.footman import plugin, task\n"
         "plugin('footman.docs')\n"
         "@task\n"
         "def zebra(): ...\n"

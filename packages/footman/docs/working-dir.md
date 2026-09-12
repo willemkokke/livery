@@ -41,7 +41,7 @@ replaces a farther one, never stacks. A relative `cwd=`, an absolute `rel=`,
 and `rel=` under `unmanaged` are errors that say what to use instead.
 
 ```python
-from footman import run, task
+from livery.footman import run, task
 
 
 @task(cwd="root", rel="services/api")
@@ -53,7 +53,7 @@ Inside the body, `ctx.cwd` is always a concrete `Path`, and
 `footman.cwd()` hands it to you for path arithmetic:
 
 ```python
-import footman
+from livery import footman
 
 
 @task
@@ -65,7 +65,7 @@ def bundle():
 Per call, `run()` and the toolroom handles take the same pair:
 
 ```python
-import toolroom as tools
+from livery.toolroom import tools
 
 run("npm run build", rel="web")  # this one call, in <cwd>/web
 tools.npm.opts(rel="web").run("build")  # same, through the handle
@@ -191,7 +191,7 @@ is an error naming both sites:
 
 <!-- example: fragment -->
 ```python
-from footman import lane, task
+from livery.footman import lane, task
 
 db = lane("database", reason="serialises the shared dev DB")
 

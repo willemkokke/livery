@@ -30,8 +30,8 @@ from typing import Annotated, Any
 import yaml
 
 import livery.footman as footman
-from livery import toolroom
 from livery.footman import doc, fail, group
+from livery.toolroom import tools
 from livery.workshop._contract import load_contract
 from livery.workshop._layers import layer_entries, workspace_root
 from livery.workshop._materialise import write_lf
@@ -365,7 +365,7 @@ def render(
         data_file = handle.name
     pinned = ["--vcs-ref", ref] if ref else []
     try:
-        result = toolroom.copier(
+        result = tools.copier(
             "copy",
             "--defaults",
             "--trust",

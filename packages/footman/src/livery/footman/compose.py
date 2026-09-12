@@ -106,7 +106,7 @@ def _reconstruct(module: ModuleType) -> Group | None:
 
     The import that should have fired inside a proper load's capture is
     spent, and the capture it actually fired in is gone (it happened: a
-    bare `import footman.env_files` anywhere in the process left the scan
+    bare `import livery.footman.env_files` anywhere in the process left the scan
     unable to see `--env-file`, an order-dependent flake in the suite and a
     dead end for any later mount). But the declarations survive as
     module-level names, each carrying its own receipt: a `GlobalOption` is

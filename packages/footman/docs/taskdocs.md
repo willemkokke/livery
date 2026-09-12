@@ -32,7 +32,7 @@ dependency.)
 The plugin mounts like any other, in one line in your tasks file:
 
 ```python
-from footman import plugin
+from livery.footman import plugin
 
 plugin("footman.docs")
 ```
@@ -163,7 +163,7 @@ functions, so footman's own docs task calls them directly. Copy the shape:
 
 ```python
 from pathlib import Path
-from footman import group
+from livery.footman import group
 
 docs = group("docs", help="Documentation")
 
@@ -171,8 +171,8 @@ docs = group("docs", help="Documentation")
 @docs.task(name="build")
 def docs_build(check: bool = False):
     "Build the docs site; regenerates the task reference first."
-    from footman.tasks.docs import globals_, page, site
-    from toolroom import zensical
+    from livery.footman.tasks.docs import globals_, page, site
+    from livery.toolroom.tools import zensical
 
     site(Path("docs/tasks"))
     page(target="docs", heading=3, out=Path("_generated/tasks-page.md"))

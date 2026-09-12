@@ -84,7 +84,7 @@ def test_the_completion_hot_path_imports_no_framework_and_no_tasks(tmp_path):
     # either way — which is exactly the invariant.
     probe = (
         "import json, sys\n"
-        "from footman import main\n"
+        "from livery.footman import main\n"
         "try:\n"
         "    main()\n"
         "except SystemExit:\n"
@@ -154,7 +154,7 @@ def test_a_warm_tab_pays_for_no_heavyweight_stdlib(tmp_path, monkeypatch):
 
     probe = (
         "import json, sys\n"
-        "from footman import main\n"
+        "from livery.footman import main\n"
         "try:\n"
         "    main()\n"
         "except SystemExit:\n"
@@ -172,19 +172,12 @@ def test_a_warm_tab_pays_for_no_heavyweight_stdlib(tmp_path, monkeypatch):
     # entirely: a dev venv's .pth hooks (coverage-enable-subprocess
     # imports coverage, and with it pathlib and typing, at every
     # interpreter start) would otherwise stand in for footman's own
-    # imports. PYTHONPATH hands the child exactly the two packages a
-    # wheel install would put on sys.path.
-    import footman as _shim
-
+    # imports. PYTHONPATH hands the child exactly the package a wheel
+    # install would put on sys.path.
     env = {
         **os.environ,
         "FOOTMAN_CACHE_DIR": str(tmp_path / "cache"),
-        "PYTHONPATH": os.pathsep.join(
-            (
-                str(Path(__file__).resolve().parents[1] / "src"),
-                str(Path(_shim.__file__).resolve().parents[1]),
-            )
-        ),
+        "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
     }
     for key in list(env):
         if key.startswith(("COVERAGE_", "COV_CORE_")):

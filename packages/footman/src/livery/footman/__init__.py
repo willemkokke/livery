@@ -9,7 +9,7 @@ background rebuild once the cache goes stale.
 The console-script entry lives here and is deliberately thin: completion must
 dispatch to the stdlib-only hot path before importing the framework or the
 user's tasks, so `main` checks `--complete` first and everything else is
-imported lazily. A bare `import footman` pays for nothing but this module.
+imported lazily. A bare `from livery import footman` pays for nothing but this module.
 """
 
 from __future__ import annotations
@@ -318,11 +318,11 @@ def main(tasks_file: str | None = None) -> None:
     # `App` that keeps the `fm` command gets them, this one included.
     # `fm self.*` in an empty directory: footman declares its own built-in,
     # the same way any branded CLI would.
-    raise SystemExit(App(dist="footman", builtin=BUILTIN).run(argv))
+    raise SystemExit(App(dist="livery-footman", builtin=BUILTIN).run(argv))
 
 
 def __getattr__(name: str) -> object:
-    # Lazy re-export: `from footman import task, group` works without paying the
+    # Lazy re-export: `from livery.footman import task, group` works without paying the
     # registry import on a bare `import footman` (the completion hot path).
     if name in (
         "task",
@@ -461,4 +461,4 @@ def __getattr__(name: str) -> object:
         from livery.footman import invocation
 
         return invocation.Invocation
-    raise AttributeError(f"module 'footman' has no attribute {name!r}")
+    raise AttributeError(f"module 'livery.footman' has no attribute {name!r}")

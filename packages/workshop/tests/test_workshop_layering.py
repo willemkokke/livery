@@ -113,11 +113,23 @@ def test_the_dev_plugin_may_import_its_two_tools_and_nothing_else(
     _forge_stub(tmp_path)
     plugin_dir = tmp_path / "packages" / "forge" / "src" / "livery" / "forge" / "_dev"
     plugin_dir.mkdir(parents=True)
-    (plugin_dir / "__init__.py").write_text("import footman\nimport toolroom\n")
-    verify_workspace(tmp_path)
-    (plugin_dir / "__init__.py").write_text("import footman\nimport requests\n")
+    # The refusals first: a forge module outside the plugin importing
+    # the runner, and the plugin importing a third-party package.
+    bad = tmp_path / "packages" / "forge" / "src" / "livery" / "forge" / "_bad.py"
+    bad.write_text("from livery import footman\n")
+    with pytest.raises(ValueError, match=r"imports 'livery\.footman'"):
+        verify_workspace(tmp_path)
+    bad.unlink()
+    (plugin_dir / "__init__.py").write_text(
+        "from livery import footman\nimport requests\n"
+    )
     with pytest.raises(ValueError, match="stdlib-only at import time"):
         verify_workspace(tmp_path)
+    (plugin_dir / "__init__.py").write_text(
+        "from livery import footman\nfrom livery.toolroom import tools\n"
+        "from livery.forge import Forge\n"
+    )
+    verify_workspace(tmp_path)
 
 
 def test_a_clean_tree_passes(tmp_path: Path) -> None:

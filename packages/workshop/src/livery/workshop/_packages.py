@@ -242,7 +242,7 @@ _FORGE_LAZY_EXTRAS = frozenset({"nacl"})
 #: and only a workshop workspace mounts layers, so both are present
 #: whenever it loads and livery-forge still declares no dependency.
 _FORGE_PLUGIN_DIR = "packages/forge/src/livery/forge/_dev"
-_FORGE_PLUGIN_IMPORTS = frozenset({"footman", "toolroom"})
+_FORGE_PLUGIN_IMPORTS = frozenset({"livery.footman", "livery.toolroom"})
 
 
 def _forge_is_stdlib_only(root: Path) -> list[str]:
@@ -252,19 +252,31 @@ def _forge_is_stdlib_only(root: Path) -> list[str]:
     plugin_dir = root / _FORGE_PLUGIN_DIR
     problems = []
     for source in sorted((root / "packages/forge/src").rglob("*.py")):
-        allowed_here = allowed
+        # Under the namespace the top-level name says nothing: the
+        # dotted path is judged, livery.forge everywhere and the dev
+        # plugin's two tools in its own subtree only.
+        livery_ok = {"livery.forge"}
         if source.is_relative_to(plugin_dir):
-            allowed_here = allowed | _FORGE_PLUGIN_IMPORTS
+            livery_ok |= _FORGE_PLUGIN_IMPORTS
         tree = ast.parse(source.read_text("utf-8"), filename=str(source))
         for node in ast.walk(tree):
             names: list[str] = []
             if isinstance(node, ast.Import):
                 names = [alias.name for alias in node.names]
             elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-                names = [node.module]
+                if node.module == "livery" or node.module.startswith("livery."):
+                    names = [f"{node.module}.{alias.name}" for alias in node.names]
+                else:
+                    names = [node.module]
             for name in names:
                 top = name.split(".")[0]
-                if top not in allowed_here:
+                if top == "livery":
+                    fine = any(
+                        name == ok or name.startswith(ok + ".") for ok in livery_ok
+                    )
+                else:
+                    fine = top in allowed
+                if not fine:
                     problems.append(
                         f"{source.relative_to(root)} imports {name!r}:"
                         " livery.forge is stdlib-only at import time"

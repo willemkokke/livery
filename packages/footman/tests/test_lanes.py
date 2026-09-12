@@ -58,7 +58,7 @@ def _fm(tmp_path, *argv: str, timeout: float = 30.0):
     env.pop("PYTHONPATH", None)
     try:
         return subprocess.run(
-            [sys.executable, "-m", "footman", *argv],
+            [sys.executable, "-m", "livery.footman", *argv],
             cwd=tmp_path,
             env=env,
             capture_output=True,
@@ -129,7 +129,7 @@ def test_two_claimants_serialise_and_unrelated_work_overlaps():
 def test_redeclaring_a_taken_name_is_a_provenance_refusal():
     lane("test-unique")
     with pytest.raises(ValueError, match=r"already declared at .*test_lanes"):
-        exec("from footman import lane\nlane('test-unique')")  # a second site
+        exec("from livery.footman import lane\nlane('test-unique')")  # a second site
 
 
 def test_the_cwd_lane_applies_the_directory_for_the_hold(tmp_path):

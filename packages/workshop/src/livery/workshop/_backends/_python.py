@@ -24,9 +24,17 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import livery.footman as footman
-from livery import toolroom
 from livery.footman import fail
-from livery.toolroom import basedpyright, mypy, pyrefly, pytest, ruff, ruff_format, ty
+from livery.toolroom import tools
+from livery.toolroom.tools import (
+    basedpyright,
+    mypy,
+    pyrefly,
+    pytest,
+    ruff,
+    ruff_format,
+    ty,
+)
 from livery.workshop._contract import load_contract
 from livery.workshop._packages import Package
 from livery.workshop._state import RunContext, slug
@@ -337,7 +345,7 @@ def measured_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, fl
         for key, value in os.environ.items()
         if not key.startswith(("COVERAGE_", "COV_CORE_"))
     }
-    result = toolroom.coverage.opts(cwd=root, env=scrubbed)("json", "-o", report)
+    result = tools.coverage.opts(cwd=root, env=scrubbed)("json", "-o", report)
     if result.code != 0:
         fail(f"coverage json exited {result.code}:\n{result.stdout}{result.stderr}")
     data = json.loads(Path(report).read_text("utf-8"))
@@ -652,7 +660,7 @@ def combine_leg(
         return
     store_suites(root, packages, marker=marker, timing=timing)
     if parts:
-        result = toolroom.coverage.opts(
+        result = tools.coverage.opts(
             cwd=root, env=_unmetered(), nofail=True, recorded=False
         )("combine")
         if result.code != 0:
@@ -836,14 +844,14 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
         print("  coverage: no unit to union; nothing judged")
         return ()
     scrubbed = _unmetered()
-    result = toolroom.coverage.opts(
-        cwd=root, env=scrubbed, nofail=True, recorded=False
-    )("combine", *(str(path) for path in collected + reused))
+    result = tools.coverage.opts(cwd=root, env=scrubbed, nofail=True, recorded=False)(
+        "combine", *(str(path) for path in collected + reused)
+    )
     if result.code != 0:
         fail(f"coverage combine exited {result.code}:\n{result.stdout}{result.stderr}")
-    report = toolroom.coverage.opts(
-        cwd=root, env=scrubbed, nofail=True, recorded=False
-    )("report", "--sort=cover")
+    report = tools.coverage.opts(cwd=root, env=scrubbed, nofail=True, recorded=False)(
+        "report", "--sort=cover"
+    )
     print(report.stdout.rstrip())
     print(f"  coverage: the union of {ran} leg(s) and {len(reused)} reused suite(s)")
     if not target:
@@ -1299,9 +1307,9 @@ def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
     env = dict(os.environ)
     if epoch:
         env["SOURCE_DATE_EPOCH"] = str(epoch)
-    result = toolroom.uv.opts(
-        cwd=package.directory, nofail=True, recorded=False, env=env
-    )("build", "--out-dir", str(dist))
+    result = tools.uv.opts(cwd=package.directory, nofail=True, recorded=False, env=env)(
+        "build", "--out-dir", str(dist)
+    )
     if result.code != 0:
         fail(
             f"uv build ({package.name}) exited {result.code}:\n"
@@ -1365,7 +1373,7 @@ def _dev_pins(root: Path, scratch: Path) -> Path | None:
     falls back to a bare pytest install.
     """
     pins = scratch / "dev-pins.txt"
-    result = toolroom.uv.opts(cwd=root, nofail=True, recorded=False)(
+    result = tools.uv.opts(cwd=root, nofail=True, recorded=False)(
         "export",
         "--format",
         "requirements-txt",
@@ -1571,7 +1579,7 @@ def run_isolated_test(
         python = venv_python(venv)
 
         def _run_install(*args: str) -> None:
-            result = toolroom.uv.opts(cwd=scratch, nofail=True, recorded=False)(*args)
+            result = tools.uv.opts(cwd=scratch, nofail=True, recorded=False)(*args)
             if result.code != 0:
                 fail(
                     f"{package.name} isolated install ({resolution}) exited"
@@ -1579,7 +1587,7 @@ def run_isolated_test(
                 )
 
         def _listing() -> dict[str, str]:
-            listing = toolroom.uv.opts(cwd=scratch, nofail=True, recorded=False)(
+            listing = tools.uv.opts(cwd=scratch, nofail=True, recorded=False)(
                 "pip", "list", "--python", str(python), "--format", "json"
             )
             versions: dict[str, str] = {}

@@ -133,7 +133,7 @@ class Brand:
     prog: str = "fm"
     version: str = __version__
     tasks_file: str = "tasks.py"
-    dist: str | None = "footman"
+    dist: str | None = "livery-footman"
     cache_dir: Path | None = None
     data_dir: Path | None = None
     env_prefix: str | None = None

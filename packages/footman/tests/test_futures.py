@@ -55,7 +55,7 @@ def test_a_base_exception_answers_the_cell_it_claimed(tmp_path):
     env.pop("VIRTUAL_ENV", None)
     try:
         done = subprocess.run(
-            [sys.executable, "-m", "footman", "claimant", "sharer"],
+            [sys.executable, "-m", "livery.footman", "claimant", "sharer"],
             cwd=tmp_path,
             env=env,
             capture_output=True,

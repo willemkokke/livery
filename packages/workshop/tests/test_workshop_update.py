@@ -578,7 +578,7 @@ def test_new_package_renders_and_wires(
     from types import SimpleNamespace
 
     monkeypatch.setattr(
-        "livery.workshop._uv.toolroom",
+        "livery.workshop._uv.tools",
         SimpleNamespace(
             uv=SimpleNamespace(
                 opts=lambda **_k: (

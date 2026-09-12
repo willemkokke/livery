@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from livery import toolroom as tools
 from livery.footman.testing import recording
+from livery.toolroom import tools
 
 
 def _one(call) -> str:
@@ -203,7 +203,7 @@ def test_verb_scoped_colour_flag_rides_with_the_flags(monkeypatch):
 
 
 def test_off_sentinel_emits_the_negation():
-    from livery.toolroom import off
+    from livery.toolroom.tools import off
 
     # `off` disables a default-on flag; equivalent to naming it directly.
     assert _one(lambda: tools.zensical.build(clean=True, strict=off)) == (
@@ -215,7 +215,7 @@ def test_off_sentinel_emits_the_negation():
 
 
 def test_off_can_be_variable_driven():
-    from livery.toolroom import off
+    from livery.toolroom.tools import off
 
     def render(directory_urls: bool):
         return _one(lambda: tools.mkdocs.build(directory_urls=directory_urls or off))
@@ -249,7 +249,7 @@ def test_shell_tools_run_a_command_string_through_the_shell(monkeypatch):
 
 
 def test_manual_source_driver_is_never_extracted():
-    from livery.toolroom._machinery import _drivers
+    from livery.toolroom.tools._machinery import _drivers
 
     bash = _drivers.find("bash")
     assert bash is not None and bash.source == "manual"
@@ -417,7 +417,7 @@ def test_one_parser_serves_the_extractor_and_the_bridge():
     disagree about *which binary* they asked — `_resolve` prefers a Homebrew
     keg for host-read tools — but never about how a version string reads.
     """
-    from livery.toolroom._machinery import _drivers
+    from livery.toolroom.tools._machinery import _drivers
 
     assert _drivers.version.__globals__  # imported lazily inside the function
     for text in ("git version 2.55.0", "gh version 2.96.0 (2026-01-01)"):
@@ -807,7 +807,7 @@ def test_off_uses_the_tools_own_negation():
     flag is `--dirty`. The exceptions are extracted from the tools, not
     guessed.
     """
-    from livery.toolroom import _flags, off
+    from livery.toolroom.tools import _flags, off
 
     assert _flags({"clean": off}, "mkdocs") == ["--dirty"]
     assert _flags({"use_directory_urls": off}, "mkdocs") == ["--no-directory-urls"]
@@ -827,7 +827,7 @@ def test_click_extraction_reads_the_real_negations():
     # can drive.
     import mkdocs.__main__ as entry
 
-    from livery.toolroom._machinery._toolspec import from_click
+    from livery.toolroom.tools._machinery._toolspec import from_click
 
     spec = from_click(entry.cli, name="mkdocs")
     assert spec.name == "mkdocs" and spec.in_process is True
@@ -853,8 +853,8 @@ def test_negation_table_matches_what_the_tools_say():
     # can drive.
     import mkdocs.__main__ as entry
 
-    from livery.toolroom import _NEGATIONS
-    from livery.toolroom._machinery._toolspec import from_click
+    from livery.toolroom.tools import _NEGATIONS
+    from livery.toolroom.tools._machinery._toolspec import from_click
 
     assert from_click(entry.cli, name="mkdocs").negations() == _NEGATIONS["mkdocs"]
 
@@ -894,7 +894,7 @@ def test_in_process_call_shows_the_command_not_the_flattened_title():
 
 
 def test_show_parts_tag_each_token_with_its_role():
-    from livery.toolroom import _show_parts
+    from livery.toolroom.tools import _show_parts
 
     parts = _show_parts("ruff", ["check"], ("src",), {"fix": True, "select": ["E"]})
     assert parts == (
@@ -910,7 +910,7 @@ def test_show_parts_tag_each_token_with_its_role():
 def test_the_shown_form_is_separated_the_executed_form_is_attached():
     # `_emit` is the single source both draw from. `_flags` (executed)
     # attaches long values; `_show_parts` (shown) keeps them separated.
-    from livery.toolroom import _emit, _flags, _show_parts
+    from livery.toolroom.tools import _emit, _flags, _show_parts
 
     kwargs = {"select": ["E", "F"], "fix": True}
     assert list(_emit(kwargs, "ruff")) == [
@@ -924,7 +924,7 @@ def test_the_shown_form_is_separated_the_executed_form_is_attached():
 
 
 def test_execution_attaches_only_where_a_space_would_break():
-    from livery.toolroom import _flags, _show_parts
+    from livery.toolroom.tools import _flags, _show_parts
 
     def shown(**kw):
         return " ".join(t for _, t in _show_parts("git", ["log"], (), kw))
@@ -1059,8 +1059,8 @@ def test_wrappers_table_matches_what_the_tools_declare():
     # The runtime table is hand-written; this mirrors `fm toolroom.audit`,
     # so drift fails fast in the local `fm check` gate. Skipped in CI (marker
     # above): CI's tool versions differ from the curated table.
-    from livery.toolroom import _WRAPPERS
-    from livery.toolroom._machinery import _drivers
+    from livery.toolroom.tools import _WRAPPERS
+    from livery.toolroom.tools._machinery import _drivers
 
     for driver in _drivers.DRIVERS:
         if driver.base or not _drivers.installed(driver):

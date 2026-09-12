@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 import pytest
-import toolroom as tools
 
 from livery.footman import _manifest
 from livery.footman._executor import run_chain
@@ -27,6 +26,7 @@ from livery.footman.context import (
 )
 from livery.footman.params import Many, Secret, ask, between, suggest
 from livery.footman.registry import Group
+from livery.toolroom import tools
 
 
 def drive(build, line, **cfg):
@@ -1438,7 +1438,7 @@ def test_fail_is_a_function_so_it_is_lint_clean_for_consumers(tmp_path):
         pytest.skip("ruff not on PATH")
     snippet = tmp_path / "consumer_task.py"
     snippet.write_text(
-        "import footman\n\n\ndef t() -> None:\n    footman.fail('a literal reason')\n"
+        "from livery import footman\n\n\ndef t() -> None:\n    footman.fail('a literal reason')\n"
     )
     proc = subprocess.run(
         [ruff, "check", "--isolated", "--select", "EM,TRY", str(snippet)],
@@ -2793,9 +2793,8 @@ def test_to_argv_returns_what_ran_as_requotable_tokens():
     # `.raw` is quoted for the machine footman is standing on; to_argv() is
     # the tokens themselves, which serialise for whichever shell will parse
     # them — the one that matters when the string is going somewhere else.
-    from toolroom import git
-
     from livery.footman.testing import recording
+    from livery.toolroom.tools import git
 
     with recording():
         result = git.commit(m="a message")
@@ -2817,9 +2816,8 @@ def test_to_argv_teaches_when_no_argv_was_recorded():
 
 def test_run_takes_a_built_command_line_as_its_argv():
     # An Argv IS run()'s input type — no adapter between building and running.
-    from toolroom import docker
-
     from livery.footman.testing import recording
+    from livery.toolroom.tools import docker
 
     payload = docker.compose.up.argv(detach=True)
     with recording() as steps:
@@ -2830,9 +2828,8 @@ def test_run_takes_a_built_command_line_as_its_argv():
 def test_run_serialised_payloads_spell_the_boundary():
     # A payload inside a hand-written list crosses a machine boundary as one
     # quoted token, named at the call site.
-    from toolroom import docker
-
     from livery.footman.testing import recording
+    from livery.toolroom.tools import docker
 
     payload = docker.compose.up.argv(detach=True)
     with recording() as steps:
@@ -2844,7 +2841,7 @@ def test_run_refuses_a_bare_container_in_its_list():
     # Stringified it becomes the one token "['a', 'b']", which fails late at
     # the tool; `*` and `.posix()` are the two meant spellings, and the
     # refusal names them.
-    from toolroom import docker
+    from livery.toolroom.tools import docker
 
     payload = docker.compose.up.argv(detach=True)
     with pytest.raises(TypeError, match=r"splat it \(`\*cmd`\)"):
@@ -3096,7 +3093,7 @@ def test_ctrl_c_reaps_the_child_a_task_was_waiting_on(tmp_path):
     env = {**os.environ, "FOOTMAN_CACHE_DIR": str(tmp_path / ".cache")}
     env.pop("VIRTUAL_ENV", None)
     runner = subprocess.Popen(
-        [sys.executable, "-m", "footman", "slow"],
+        [sys.executable, "-m", "livery.footman", "slow"],
         cwd=tmp_path,
         env=env,
         stdout=subprocess.PIPE,
@@ -3181,7 +3178,7 @@ def test_ctrl_c_does_not_wait_out_an_in_body_parallel(tmp_path):
     env = {**os.environ, "FOOTMAN_CACHE_DIR": str(tmp_path / ".cache")}
     env.pop("VIRTUAL_ENV", None)
     runner = subprocess.Popen(
-        [sys.executable, "-m", "footman", "slow"],
+        [sys.executable, "-m", "livery.footman", "slow"],
         cwd=tmp_path,
         env=env,
         stdout=subprocess.PIPE,

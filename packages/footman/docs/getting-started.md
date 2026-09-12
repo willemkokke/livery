@@ -43,7 +43,7 @@ Tasks are plain functions. A `@task` decorator registers one; a `group()` opens
 a nested command group. Put a `tasks.py` at your project root:
 
 ```python
-from footman import task, group
+from livery.footman import task, group
 
 
 @task

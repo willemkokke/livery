@@ -180,7 +180,7 @@ def test_hook_completes_the_tail_of_a_csv_path_value(shell):
 def test_cli_install_end_to_end(home, tmp_path, monkeypatch, capsys):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n@task\ndef t(): ...\n"
+        "from livery.footman import task\n@task\ndef t(): ...\n"
     )
     monkeypatch.chdir(tmp_path)
     assert _app.run(["--install-completion=fish"]) == 0
@@ -194,7 +194,7 @@ def test_install_completion_yields_to_help(home, tmp_path, monkeypatch, capsys):
     # nothing on disk. `fm --install-completion fish --help` prints help.
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n@task\ndef t(): ...\n"
+        "from livery.footman import task\n@task\ndef t(): ...\n"
     )
     monkeypatch.chdir(tmp_path)
     assert _app.run(["--install-completion=fish", "--help"]) == 0
@@ -235,7 +235,7 @@ def test_setup_completion_alias_and_yields_to_help(home, tmp_path, monkeypatch, 
     assert "completions.external.completer" in capsys.readouterr().out
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n@task\ndef t(): ...\n"
+        "from livery.footman import task\n@task\ndef t(): ...\n"
     )
     monkeypatch.chdir(tmp_path)
     assert _app.run(["--setup-completion=zsh", "--help"]) == 0
@@ -354,7 +354,7 @@ def test_pwsh_uninstall_when_shell_is_gone_still_removes_script(home, monkeypatc
 def test_uninstall_via_cli_unknown_shell_teaches(home, tmp_path, monkeypatch, capsys):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n@task\ndef t(): ...\n"
+        "from livery.footman import task\n@task\ndef t(): ...\n"
     )
     monkeypatch.chdir(tmp_path)
     assert _app.run(["--uninstall-completion=tcsh"]) == EX_USAGE
@@ -364,7 +364,7 @@ def test_uninstall_via_cli_unknown_shell_teaches(home, tmp_path, monkeypatch, ca
 def test_uninstall_via_cli(home, tmp_path, monkeypatch, capsys):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n@task\ndef t(): ...\n"
+        "from livery.footman import task\n@task\ndef t(): ...\n"
     )
     monkeypatch.chdir(tmp_path)
     assert _app.run(["--install-completion=bash"]) == 0
@@ -378,7 +378,7 @@ def test_uninstall_via_cli(home, tmp_path, monkeypatch, capsys):
 def test_pwsh_missing_is_a_taught_error(home, tmp_path, monkeypatch, capsys):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n@task\ndef t(): ...\n"
+        "from livery.footman import task\n@task\ndef t(): ...\n"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_shellcomp.shutil, "which", lambda _: None)
@@ -414,7 +414,7 @@ def fm_project_dir(home, tmp_path, monkeypatch):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
         "from pathlib import Path\n"
-        "from footman import group, task\n\n"
+        "from livery.footman import group, task\n\n"
         "@task\ndef lint(fix: bool = False, paths: list[Path] | None = None):\n"
         '    "Lint."\n\n'
         'docs = group("docs", help="Docs")\n\n'
@@ -651,7 +651,7 @@ def test_bash_completes_the_tail_after_a_comma(home, fm_project_dir):
 def test_bare_install_detects_and_installs(home, tmp_path, monkeypatch, capsys):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n@task\ndef t(): ...\n"
+        "from livery.footman import task\n@task\ndef t(): ...\n"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_shellcomp, "detect_shell", lambda: "fish")
@@ -664,7 +664,7 @@ def test_bare_install_detects_and_installs(home, tmp_path, monkeypatch, capsys):
 def test_bare_install_undetectable_teaches(home, tmp_path, monkeypatch, capsys):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n@task\ndef t(): ...\n"
+        "from livery.footman import task\n@task\ndef t(): ...\n"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_shellcomp, "detect_shell", lambda: None)
@@ -682,7 +682,7 @@ def test_detection_through_a_real_shell(home, tmp_path, monkeypatch):
     exec'd-away shell is genuinely not in the process tree any more."""
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n@task\ndef t(): ...\n"
+        "from livery.footman import task\n@task\ndef t(): ...\n"
     )
     monkeypatch.setenv("SHELL", "/bin/false")  # the login shell must not win
     venv_bin = Path(sys.executable).parent
@@ -816,7 +816,7 @@ def test_nushell_install_writes_script_and_config_line(home, monkeypatch):
 def test_nu_missing_is_a_taught_error(home, tmp_path, monkeypatch, capsys):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n@task\ndef t(): ...\n"
+        "from livery.footman import task\n@task\ndef t(): ...\n"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_shellcomp.shutil, "which", lambda _: None)
@@ -830,7 +830,7 @@ def test_nushell_completion_functional(home, tmp_path, monkeypatch):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
         "from pathlib import Path\n"
-        "from footman import group, task\n\n"
+        "from livery.footman import group, task\n\n"
         "@task\ndef lint(fix: bool = False, paths: list[Path] | None = None):\n"
         '    "Lint."\n\n'
         'docs = group("docs", help="Docs")\n\n'
@@ -882,7 +882,7 @@ def test_pwsh_completion_functional(home, tmp_path, monkeypatch):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
         "from pathlib import Path\n"
-        "from footman import group, task\n\n"
+        "from livery.footman import group, task\n\n"
         "@task\ndef lint(fix: bool = False, paths: list[Path] | None = None):\n"
         '    "Lint."\n\n'
         'docs = group("docs", help="Docs")\n\n'
@@ -976,7 +976,7 @@ def test_zsh_cast_records_an_animated_completion(home, tmp_path, monkeypatch):
     composed into one animated SVG."""
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from footman import plugin, task\n\n"
+        "from livery.footman import plugin, task\n\n"
         "plugin('footman.docs', into='footman')\n\n"
         '@task\ndef lint(fix: bool = False):\n    "Lint."\n'
     )
@@ -1054,7 +1054,7 @@ def test_cast_completes_in_every_posix_shell(shell: str, home, tmp_path, monkeyp
         pytest.skip(f"{exe} not installed")
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from footman import plugin, task\n\n"
+        "from livery.footman import plugin, task\n\n"
         "plugin('footman.docs', into='footman')\n\n"
         '@task\ndef lint(fix: bool = False):\n    "Lint."\n'
     )
@@ -1277,7 +1277,7 @@ def fm_csv_project_dir(home, tmp_path, monkeypatch):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
         "from typing import Literal\n"
-        "from footman import task\n\n"
+        "from livery.footman import task\n\n"
         "@task\n"
         "def deploy(regions: list[Literal['eu', 'us', 'ap']] | None = None):\n"
         '    "Deploy."\n'
@@ -1458,7 +1458,9 @@ def broken_project_dir(home, tmp_path, monkeypatch):
     from livery.footman._complete import complete_cli
 
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
-    (tmp_path / "tasks.py").write_text("import footman\n\nthis is a syntax error\n")
+    (tmp_path / "tasks.py").write_text(
+        "from livery import footman\n\nthis is a syntax error\n"
+    )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("XDG_CACHE_HOME", str(home / ".cache"))
     monkeypatch.setattr(_complete, "_COLD_TIMEOUT", 30.0)

@@ -13,8 +13,8 @@ Every repo deserves one command that answers "is this fine?". Give the
 independent checks to `parallel()` and let the machine use its cores:
 
 ```python
-from footman import task, parallel
-from toolroom import basedpyright, pytest, ruff
+from livery.footman import task, parallel
+from livery.toolroom.tools import basedpyright, pytest, ruff
 
 
 @task
@@ -117,8 +117,8 @@ each failure is a taught error, not a traceback:
 ```python
 from pathlib import Path
 from typing import Annotated
-from footman import task, run
-from footman.params import between, check, env, isfile
+from livery.footman import task, run
+from livery.footman.params import between, check, env, isfile
 
 
 def semver(value: str) -> None:
@@ -155,8 +155,8 @@ the package named in an earlier argument, looked up at run time.
 
 ```python
 from typing import Annotated
-from footman import task
-from footman.params import check
+from livery.footman import task
+from livery.footman.params import check
 
 
 def current_version(name: str) -> str: ...  # your lookup (pyproject, git…)
@@ -204,9 +204,9 @@ never a stale snapshot:
 
 ```python
 from typing import Annotated
-from footman import task, run
-from footman.params import suggest
-from toolroom import docker
+from livery.footman import task, run
+from livery.footman.params import suggest
+from livery.toolroom.tools import docker
 
 
 def branches() -> list[str]:
@@ -280,7 +280,7 @@ once per invocation:
 
 <!-- example: fresh-session -->
 ```python
-from footman import run, task
+from livery.footman import run, task
 
 
 @task
@@ -324,7 +324,7 @@ every failure instead of stopping at the first:
 
 <!-- example: fresh-session -->
 ```python
-from footman import parallel, run, task
+from livery.footman import parallel, run, task
 
 TARGETS = ("linux-x86_64", "linux-arm64", "darwin-arm64")
 
@@ -376,7 +376,7 @@ subcommands; keyword arguments translate mechanically (`detach=True` →
 `--detach`, lists repeat, trailing `_` escapes Python keywords):
 
 ```python
-from toolroom import docker, mkdocs, terraform
+from livery.toolroom.tools import docker, mkdocs, terraform
 
 
 @task
@@ -412,7 +412,7 @@ The cwd is policy, not an accident: root a task anywhere on the ladder, and
 suffix one call without ceremony.
 
 ```python
-from footman import task, run
+from livery.footman import task, run
 
 
 @task(cwd="root", rel="services/api")
@@ -435,7 +435,7 @@ anchors on — the highest tasks file's directory in the cascade — readable
 from any body, whatever the task's own cwd policy says:
 
 ```python
-from footman import project_root, task, run
+from livery.footman import project_root, task, run
 
 
 @task
@@ -457,8 +457,8 @@ A helper that genuinely chdirs, or drives a library that only reads the
 process state, declares it and gets the real globals, safely:
 
 ```python
-import footman
-from footman import task, run
+from livery import footman
+from livery.footman import task, run
 
 
 @task(serial=True)
@@ -503,7 +503,7 @@ environment, or in a default means no question at all.
 
 ```python
 from typing import Annotated
-from footman import ask, task, run
+from livery.footman import ask, task, run
 
 
 @task(confirm="Publish to PyPI?")
@@ -544,9 +544,9 @@ project at all: drop it in any directory and run it:
 ```python
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["footman", "httpx"]
+# dependencies = ["livery-footman", "httpx"]
 # ///
-from footman import task
+from livery.footman import task
 
 
 @task
@@ -591,10 +591,10 @@ Two touches make it a command in its own right:
 ```python
 #!/usr/bin/env -S uv run --script
 # /// script
-# dependencies = ["footman", "httpx"]
+# dependencies = ["livery-footman", "httpx"]
 # ///
-import footman
-from footman import task
+from livery import footman
+from livery.footman import task
 
 
 @task
@@ -622,7 +622,7 @@ you the task you shadow, as the plain function it is.
 
 ```python
 # svc/api/tasks.py; the repo root also defines `check`
-from footman import inherited, run, task
+from livery.footman import inherited, run, task
 
 
 @task
@@ -677,7 +677,7 @@ bar fills from the truth:
 
 ```python
 from pathlib import Path
-from footman import task, track, progress
+from livery.footman import task, track, progress
 
 
 def load_records() -> list: ...  # your own work, whatever shape it takes
@@ -712,7 +712,7 @@ artifacts for deleted projects clean themselves up.
 
 ```python
 from pathlib import Path
-from footman import fetch, parallel, step, task
+from livery.footman import fetch, parallel, step, task
 
 TOOLCHAIN = {
     "protoc": ("https://example.com/protoc-27.tar.gz", "9f86d081884c…"),
@@ -814,7 +814,7 @@ fixtures scaffold whole projects:
 
 <!-- example: fragment -->
 ```python
-from footman import recording
+from livery.footman import recording
 from tasks import deploy
 
 
@@ -827,8 +827,8 @@ def test_deploy_passes_the_workers_flag():
 def test_release_refuses_bad_versions(fm_project):
     fm = fm_project("""
         from typing import Annotated
-        from footman import task
-        from footman.params import check
+        from livery.footman import task
+        from livery.footman.params import check
 
         def semver(v):
             import re
@@ -854,7 +854,7 @@ completion, same docs machinery, answering as itself:
 
 ```python
 # acme_cli.py
-from footman import App
+from livery.footman import App
 
 app = App(name="Acme", prog="acme", version="1.4.0")
 

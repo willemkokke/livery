@@ -16,7 +16,7 @@ def test_this_workspace_declares_the_workshop_as_its_base() -> None:
     assert layer_names(ROOT) == (
         "livery.workshop",
         "livery.forge",
-        "livery.toolroom",
+        "livery.toolroom.tools",
         "livery.footman",
     )
 
@@ -38,7 +38,11 @@ def test_the_workshop_never_mounts_itself() -> None:
 def _the_workshop_never_mounts_itself() -> None:
     # The walk skips this package (importing it IS the base layer
     # arriving) and grafts only the further layers the contract names.
-    assert mount_layers(ROOT) == ("livery.forge", "livery.toolroom", "livery.footman")
+    assert mount_layers(ROOT) == (
+        "livery.forge",
+        "livery.toolroom.tools",
+        "livery.footman",
+    )
 
 
 def test_a_contract_without_layers_names_none(tmp_path: Path) -> None:

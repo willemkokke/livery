@@ -198,7 +198,7 @@ _tasks_file = DEFAULT_TASKS_FILE
 _prog = "fm"
 _brand_version = ""
 _builtin: tuple[str, ...] = ()
-_dist: str | None = "footman"
+_dist: str | None = "livery-footman"
 
 
 class LocationError(Exception):
@@ -215,7 +215,7 @@ def configure(
     prog: str = "fm",
     brand_version: str = "",
     builtin: tuple[str, ...] = (),
-    dist: str | None = "footman",
+    dist: str | None = "livery-footman",
 ) -> None:
     """Point this CLI's locations at one brand's world.
 
@@ -247,7 +247,7 @@ def builtin() -> tuple[str, ...]:
 def dist() -> str:
     """The distribution the lock rule pins on — never empty.
 
-    The run path spells the same fallback (`_brand.dist or "footman"`), so
+    The run path spells the same fallback (`_brand.dist or "livery-footman"`), so
     a completion child and the run it stands in for can never disagree
     about which package makes a project's lockfile authoritative.
     """

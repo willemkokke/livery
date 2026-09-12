@@ -184,14 +184,14 @@ def test_start_opens_a_worktree_by_default_and_provisions_it(
     created = repo.issue.create("tree work")
     provisioned: list[str] = []
 
-    from livery import toolroom
+    from livery.toolroom import tools as toolroom
 
     def _uv(*args: str) -> SimpleNamespace:
         provisioned.append("uv " + " ".join(args))
         return SimpleNamespace(code=0, stdout="", stderr="")
 
     monkeypatch.setattr(
-        "livery.workshop._issue_tasks.toolroom",
+        "livery.workshop._issue_tasks.tools",
         SimpleNamespace(
             uv=SimpleNamespace(opts=lambda **_k: _uv),
             code=toolroom.code,
@@ -537,7 +537,7 @@ def _started_in_worktree(
     repo = fake.repository("willemkokke", "livery")
     created = repo.issue.create(title)
     monkeypatch.setattr(
-        "livery.workshop._issue_tasks.toolroom",
+        "livery.workshop._issue_tasks.tools",
         SimpleNamespace(
             uv=SimpleNamespace(
                 opts=lambda **_k: (
@@ -742,7 +742,7 @@ def test_the_provision_failure_is_a_note_not_a_refusal(
     repo = fake.repository("willemkokke", "livery")
     created = repo.issue.create("cold tree")
     monkeypatch.setattr(
-        "livery.workshop._issue_tasks.toolroom",
+        "livery.workshop._issue_tasks.tools",
         SimpleNamespace(
             uv=SimpleNamespace(
                 opts=lambda **_k: (
@@ -776,7 +776,7 @@ def test_open_code_missing_binary_is_a_note(
 ) -> None:
     from types import SimpleNamespace
 
-    from livery import toolroom
+    from livery.toolroom import tools as toolroom
     from livery.workshop._issue_tasks import _open_work
 
     def _missing(*_a: object, **_k: object) -> object:
@@ -785,7 +785,7 @@ def test_open_code_missing_binary_is_a_note(
         raise FileNotFoundError("code")
 
     monkeypatch.setattr(
-        "livery.workshop._issue_tasks.toolroom",
+        "livery.workshop._issue_tasks.tools",
         SimpleNamespace(
             code=SimpleNamespace(opts=lambda **_k: _missing),
             ToolError=toolroom.ToolError,

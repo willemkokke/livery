@@ -59,7 +59,7 @@ def _runner(
     }
     environ.pop("VIRTUAL_ENV", None)
     return subprocess.Popen(
-        [sys.executable, "-m", "footman", *args],
+        [sys.executable, "-m", "livery.footman", *args],
         cwd=tmp_path,
         env=environ,
         stdout=subprocess.PIPE,

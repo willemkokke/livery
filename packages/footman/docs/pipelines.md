@@ -7,7 +7,7 @@ signature, both directions:
 
 ```python
 from typing import Annotated
-from footman import Stdout, stdin, task
+from livery.footman import Stdout, stdin, task
 
 
 @task
@@ -126,7 +126,7 @@ one, a task also *writes* a child's standard input, because some payloads have n
 argv spelling at all (`uv pip install -r -` reads its requirements there):
 
 ```python
-from footman import run, task
+from livery.footman import run, task
 
 
 @task

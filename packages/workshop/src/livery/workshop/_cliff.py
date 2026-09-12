@@ -15,8 +15,8 @@ import tomllib
 from pathlib import Path
 
 import livery.footman as footman
-from livery import toolroom
 from livery.footman import fail
+from livery.toolroom import tools
 from livery.workshop._packages import Package
 
 #: Where a package's changelog contract lives.
@@ -136,7 +136,7 @@ def _run(root: Path, package: Package, *args: str) -> str:
             nofail=True,
             recorded=False,
         )
-    except (FileNotFoundError, toolroom.ToolError):
+    except (FileNotFoundError, tools.ToolError):
         fail(
             "git-cliff is not installed: it writes the changelogs, and the"
             f" dev group declares it. Run `{footman.prog()} sync`."

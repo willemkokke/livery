@@ -14,7 +14,7 @@ from livery.footman.tasks import self_
 RECEIPT = """\
 [tool]
 requirements = [
-    { name = "footman" },
+    { name = "livery-footman" },
     { name = "uv" },
     { name = "acme-devkit" },
 ]
@@ -24,7 +24,7 @@ requirements = [
 @pytest.fixture
 def tool_env(tmp_path, monkeypatch):
     """A uv tools directory with footman installed and one package added."""
-    env = tmp_path / "tools" / "footman"
+    env = tmp_path / "tools" / "livery-footman"
     env.mkdir(parents=True)
     (env / "uv-receipt.toml").write_text(RECEIPT, encoding="utf-8")
     monkeypatch.setattr(self_, "_tool_dir", lambda: tmp_path / "tools")
@@ -55,7 +55,7 @@ def spawned(monkeypatch):
 def test_extras_are_the_receipt_minus_what_the_runner_needs(tool_env):
     # The distribution is the thing being installed and `uv` is bundled so
     # the handoffs work without one on PATH — neither is yours to drop.
-    assert self_._receipt_requirements() == ("footman", "uv", "acme-devkit")
+    assert self_._receipt_requirements() == ("livery-footman", "uv", "acme-devkit")
     assert self_._extras() == ("acme-devkit",)
     assert self_._added() == ["acme-devkit"]  # exactly what completion offers
 
@@ -76,7 +76,7 @@ def test_install_carries_your_packages_over(tool_env, spawned):
     # upgrade that forgot the extras would silently drop them.
     self_.install()
     (cmd,) = [c for c in spawned if "install" in c]
-    assert cmd[:5] == ["/fake/uv", "tool", "install", "--upgrade", "footman"]
+    assert cmd[:5] == ["/fake/uv", "tool", "install", "--upgrade", "livery-footman"]
     assert cmd.count("--with") == 2
     assert "uv" in cmd and "acme-devkit" in cmd
 
@@ -255,7 +255,7 @@ def test_the_group_answers_inside_a_project(tmp_path, monkeypatch):
 
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        'from footman import task\n\n@task\ndef build():\n    """Build."""\n'
+        'from livery.footman import task\n\n@task\ndef build():\n    """Build."""\n'
     )
     monkeypatch.setenv("FOOTMAN_CACHE_DIR", str(tmp_path / "cache"))
     runner = Runner(App(dist="footman", builtin=("footman.self",)))

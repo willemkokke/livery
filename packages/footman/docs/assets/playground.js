@@ -33,8 +33,8 @@ const REVISION_MARK = "example: revision";
 
 const DEFAULT_FILES = {
   "tasks.py": `from typing import Literal
-from footman import fail, run, task
-from toolroom import pytest, ruff
+from livery.footman import fail, run, task
+from livery.toolroom.tools import pytest, ruff
 
 @task
 def lint(fix: bool = False):
@@ -488,7 +488,7 @@ def _fm_invoke(files_json, line, columns=80):
     for name, content in files.items():
         Path(name).write_text(content, encoding="utf-8")
     try:
-        from footman.testing import Runner
+        from livery.footman.testing import Runner
         result = Runner().invoke(
             _fm_sandbox_line(line),
             tasks=Path("tasks.py"),
@@ -1275,7 +1275,7 @@ function loadRuntime(status) {
       status("installing footman + toolroom…");
       await pyodide.loadPackage("micropip");
       const micropip = pyodide.pyimport("micropip");
-      await micropip.install(["footman", "toolroom"]);
+      await micropip.install(["livery-footman", "livery-toolroom"]);
       pyodide.runPython(BOOTSTRAP);
       return pyodide;
     })();

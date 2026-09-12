@@ -12,7 +12,7 @@ still footman underneath.
 
 ```python
 # acme/cli.py
-from footman import App
+from livery.footman import App
 
 app = App(
     name="Acme",  # long / display name  → the --version banner
@@ -52,7 +52,7 @@ if __name__ == "__main__":
 
 That matters more than it looks. Anything that has to *wrap* your CLI in
 another process reaches for the module form — `coverage run -m acme
-check`, a profiler, a sandbox — and `python -m footman` runs **stock
+check`, a profiler, a sandbox — and `python -m livery.footman` runs **stock
 footman**, not your brand: it would lose your built-ins, your
 `[tool.acme]` table and your `ACME_*` variables, silently, because it is
 a different runner wearing the same import. Meter your own module, or the
@@ -183,8 +183,8 @@ None of the above is a task author's problem. They ask for the kind of folder
 they want and get one that exists:
 
 ```python
-import footman
-from footman import task
+from livery import footman
+from livery.footman import task
 
 
 @task

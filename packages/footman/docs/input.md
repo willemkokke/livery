@@ -20,7 +20,7 @@ as a flag:
 
 ```python
 from typing import Annotated, Literal
-from footman import ask, task
+from livery.footman import ask, task
 
 
 @task
@@ -54,7 +54,7 @@ The choices can be computed at run time, too: pair `ask()` with a
 numbered menu, asked up front like every other `ask()`:
 
 ```python
-from footman import suggest
+from livery.footman import suggest
 
 
 def stale_branches() -> list[str]:
@@ -95,7 +95,7 @@ Two halves of the same idea: how a value is *collected*, and how it is
 
 ```python
 from typing import Annotated
-from footman import Secret, Stdout, ask, run, task
+from livery.footman import Secret, Stdout, ask, run, task
 
 
 @task
@@ -190,7 +190,7 @@ genuinely runs a wizard or a REPL declares itself interactive, and then owns the
 real terminal, uncaptured, with sole stdio:
 
 ```python
-from footman import prompt, select, task
+from livery.footman import prompt, select, task
 
 
 @task(interactive=True)
@@ -235,7 +235,7 @@ ownership window, so nothing scribbles over a prompt.
 Three readers answer "who is on the other end?", each a different question:
 
 ```python
-from footman import attended, colored, tty
+from livery.footman import attended, colored, tty
 
 
 @task(interactive=True)

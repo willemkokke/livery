@@ -1,12 +1,12 @@
 # Testing
 
 Code that calls tools through toolroom is tested with
-`livery.toolroom.testing.answers()`: a context manager that answers every
+`livery.toolroom.tools.testing.answers()`: a context manager that answers every
 bridge call from a table instead of spawning, and records what would
 have run.
 
 ```python
-from toolroom.testing import answers
+from livery.toolroom.tools.testing import answers
 
 with answers(
     {

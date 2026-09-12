@@ -29,9 +29,9 @@ from pathlib import Path
 from typing import Annotated
 
 import livery.footman as footman
-from livery import toolroom
 from livery.footman import doc, fail
 from livery.forge import Repository
+from livery.toolroom import tools
 from livery.workshop._contract import migrate_contracts
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import discover_packages
@@ -221,7 +221,7 @@ def run_gate(root: Path) -> None:
     workflow branch: fix the tree there and run the same update verb
     again, it resumes from that state.
     """
-    result = toolroom.uv.opts(cwd=root, nofail=True, recorded=False)(
+    result = tools.uv.opts(cwd=root, nofail=True, recorded=False)(
         "run", "fm", "check", "--fix"
     )
     if result.code != 0:

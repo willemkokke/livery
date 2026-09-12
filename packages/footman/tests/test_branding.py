@@ -60,7 +60,7 @@ def test_app_complete_dispatches(capsys, tmp_path, monkeypatch):
 def test_default_app_runs_tasks_like_fm(tmp_path):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n@task\ndef hi():\n    print('hello')\n"
+        "from livery.footman import task\n@task\ndef hi():\n    print('hello')\n"
     )
     result = Runner().invoke("hi", cwd=tmp_path)
     assert result.ok
@@ -70,7 +70,7 @@ def test_default_app_runs_tasks_like_fm(tmp_path):
 def test_custom_brand_runs_tasks_from_cascade(tmp_path):
     (tmp_path / ".git").mkdir()
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n@task\ndef ship():\n    print('shipped')\n"
+        "from livery.footman import task\n@task\ndef ship():\n    print('shipped')\n"
     )
     acme = Runner(App(name="Acme", prog="acme", version="1.4.0"))
     result = acme.invoke("ship", cwd=tmp_path)  # cascade discovery, rebranded
@@ -81,7 +81,7 @@ def test_custom_brand_runs_tasks_from_cascade(tmp_path):
 def test_help_globals_row_uses_brand(tmp_path):
     (tmp_path / ".git").mkdir()
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n@task\ndef hi():\n    print('hi')\n"
+        "from livery.footman import task\n@task\ndef hi():\n    print('hi')\n"
     )
     acme = Runner(App(name="Acme", prog="acme", version="1.4.0"))
     result = acme.invoke("--help", cwd=tmp_path)
@@ -97,10 +97,10 @@ def test_brand_renames_the_default_tasks_file(tmp_path, monkeypatch):
 
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "acmetasks.py").write_text(
-        'from footman import task\n\n@task\ndef ship():\n    "Ship it."\n'
+        'from livery.footman import task\n\n@task\ndef ship():\n    "Ship it."\n'
     )
     (tmp_path / "tasks.py").write_text(
-        'from footman import task\n\n@task\ndef wrong():\n    "Not this one."\n'
+        'from livery.footman import task\n\n@task\ndef wrong():\n    "Not this one."\n'
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -121,7 +121,7 @@ def test_brand_tasks_file_rides_in_the_manifest(tmp_path, monkeypatch):
 
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "acmetasks.py").write_text(
-        'from footman import task\n\n@task\ndef ship():\n    "Ship it."\n'
+        'from livery.footman import task\n\n@task\ndef ship():\n    "Ship it."\n'
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -144,7 +144,7 @@ def test_brand_tasks_file_rides_in_the_manifest(tmp_path, monkeypatch):
 # location and every environment variable it touches must derive from the
 # brand — and stock footman must be exactly what it always was.
 
-TASKS = 'from footman import task\n\n@task\ndef ship():\n    "Ship it."\n'
+TASKS = 'from livery.footman import task\n\n@task\ndef ship():\n    "Ship it."\n'
 
 
 def _project(tmp_path, body: str = "") -> None:
@@ -299,7 +299,7 @@ def test_the_config_table_is_the_brands(tmp_path, monkeypatch):
     )
     (tmp_path / "mine.py").write_text(TASKS)
     (tmp_path / "theirs.py").write_text(
-        'from footman import task\n\n@task\ndef wrong():\n    "Not this one."\n'
+        'from livery.footman import task\n\n@task\ndef wrong():\n    "Not this one."\n'
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -386,7 +386,7 @@ def test_a_projects_tasks_key_cannot_rename_the_users_own_file(tmp_path, monkeyp
         '[project]\nname = "p"\n\n[tool.acme]\ntasks = "chores.py"\n'
     )
     (project / "chores.py").write_text(
-        'from footman import task\n\n\n@task\ndef sweep():\n    "Sweep."\n'
+        'from livery.footman import task\n\n\n@task\ndef sweep():\n    "Sweep."\n'
     )
     monkeypatch.setenv("XDG_CONFIG_HOME", str(cfg))
     monkeypatch.chdir(project)
@@ -424,7 +424,7 @@ def test_the_config_file_variable_is_finer_than_the_dir(tmp_path, monkeypatch):
     finer.write_text('tasks = "mine.py"\n')
     (tmp_path / "mine.py").write_text(TASKS)
     (tmp_path / "wrong.py").write_text(
-        'from footman import task\n\n@task\ndef wrong():\n    "Not this one."\n'
+        'from livery.footman import task\n\n@task\ndef wrong():\n    "Not this one."\n'
     )
     monkeypatch.setenv("ACME_CONFIG_DIR", str(d))
     monkeypatch.setenv("ACME_CONFIG", str(finer))
@@ -454,7 +454,7 @@ def test_the_user_rung_merges_and_the_project_shadows(tmp_path, monkeypatch):
     cfg = tmp_path / "cfg"
     (cfg / "acme").mkdir(parents=True)
     (cfg / "acme" / "tasks.py").write_text(
-        'from footman import task\n\n@task\ndef mine():\n    "Personal."\n\n'
+        'from livery.footman import task\n\n@task\ndef mine():\n    "Personal."\n\n'
         '@task\ndef ship():\n    "Shadowed by the project."\n'
     )
     monkeypatch.setenv("XDG_CONFIG_HOME", str(cfg))
@@ -550,7 +550,7 @@ def test_a_project_name_shadows_a_builtin_of_the_same_name(tmp_path, monkeypatch
     # by name exactly as the cascade already resolves its own rungs.
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        'from footman import task\n\n@task\ndef docs():\n    "Ours, not theirs."\n'
+        'from livery.footman import task\n\n@task\ndef docs():\n    "Ours, not theirs."\n'
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -565,7 +565,7 @@ def test_the_user_rung_overlays_the_builtins(tmp_path, monkeypatch):
     cfg = tmp_path / "cfg"
     (cfg / "acme").mkdir(parents=True)
     (cfg / "acme" / "tasks.py").write_text(
-        'from footman import task\n\n@task\ndef mine():\n    "Personal."\n'
+        'from livery.footman import task\n\n@task\ndef mine():\n    "Personal."\n'
     )
     empty = tmp_path / "empty"
     empty.mkdir()
@@ -630,7 +630,7 @@ def test_a_plugin_with_no_tasks_still_reports_mounted(tmp_path, monkeypatch):
     # the state is the plain word: nothing to say "at" about.
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        'from footman import plugin\n\nplugin("footman.profile")\n'
+        'from livery.footman import plugin\n\nplugin("footman.profile")\n'
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -647,7 +647,7 @@ def test_a_family_mounted_piecemeal_speaks_with_its_own_voice(tmp_path, monkeypa
     # with the family's advertised help instead.
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from footman import plugin\n\n"
+        "from livery.footman import plugin\n\n"
         'plugin("footman.docs.page")\nplugin("footman.docs.site")\n'
     )
     monkeypatch.chdir(tmp_path)
@@ -722,7 +722,7 @@ def test_a_user_tasks_cwd_root_means_the_project_it_landed_in(tmp_path, monkeypa
     cfg = tmp_path / "cfg"
     (cfg / "acme").mkdir(parents=True)
     (cfg / "acme" / "tasks.py").write_text(
-        "import footman\nfrom footman import task\n\n"
+        "from livery import footman\nfrom livery.footman import task\n\n"
         '@task(cwd="root")\ndef whereami():\n    print(f"at={footman.cwd()}")\n'
     )
     monkeypatch.setenv("XDG_CONFIG_HOME", str(cfg))
@@ -757,7 +757,7 @@ def test_child_argv_carries_the_resolved_locations(tmp_path):
             "fm",
             "",
             "",
-            "footman",
+            "livery-footman",
         ]
         _paths.configure_child(*_paths.child_args())
         assert _paths.env_var("NO_GC") == "ACME_NO_GC"
@@ -778,7 +778,7 @@ def test_a_brand_teaches_footmans_plugins_without_naming_a_distribution(tmp_path
     from livery.footman import _split
 
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n\n@task\ndef go(): ...\n"
+        "from livery.footman import task\n\n@task\ndef go(): ...\n"
     )
     _split._OWN_FLAGS.clear()
     acme = Runner(App(name="Acme", prog="acme", version="1.4.0"))
@@ -799,7 +799,7 @@ def test_a_brand_that_names_its_distribution_teaches_its_own_plugins_too(tmp_pat
     from livery.footman import _split
 
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n\n@task\ndef go(): ...\n"
+        "from livery.footman import task\n\n@task\ndef go(): ...\n"
     )
     _split._OWN_FLAGS.clear()
     acme = Runner(App(name="Acme", prog="acme", version="1.4.0", dist="footman"))
@@ -815,7 +815,7 @@ def test_a_brand_never_speaks_for_a_third_partys_flag(tmp_path):
     from livery.footman import _split
 
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n\n@task\ndef go(): ...\n"
+        "from livery.footman import task\n\n@task\ndef go(): ...\n"
     )
     _split._OWN_FLAGS.clear()
     acme = Runner(App(name="Acme", prog="acme", version="1.4.0", dist="acme-cli"))
@@ -834,7 +834,7 @@ def test_an_invocation_puts_the_brand_back(tmp_path):
     from livery.footman import _app
 
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n\n@task\ndef go(): ...\n"
+        "from livery.footman import task\n\n@task\ndef go(): ...\n"
     )
     before = _app._brand
     Runner(App(name="Acme", prog="acme", version="1.4.0", dist="acme-cli")).invoke(
@@ -850,7 +850,7 @@ def test_a_branded_run_does_not_decide_what_the_next_one_teaches(tmp_path):
     from livery.footman import _split
 
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n\n@task\ndef go(): ...\n"
+        "from livery.footman import task\n\n@task\ndef go(): ...\n"
     )
     Runner(App(name="Acme", prog="acme", version="1.4.0", dist="acme-cli")).invoke(
         "go", cwd=tmp_path
@@ -871,7 +871,7 @@ def test_a_branded_run_does_not_decide_what_the_next_one_teaches(tmp_path):
 # downstream can filter them, and footman already owns "is there a project".
 
 PERSONAL = (
-    "from footman import task\n\n"
+    "from livery.footman import task\n\n"
     "@task\n"
     "def scratch():\n"
     '    "Rides everywhere."\n\n'
@@ -946,7 +946,7 @@ def test_inside_a_project_nothing_is_hidden(tmp_path, monkeypatch):
     proj.mkdir()
     (proj / "pyproject.toml").write_text("[project]\nname='x'\n")
     (proj / "tasks.py").write_text(
-        "from footman import task\n\n@task\ndef build():\n    'Build.'\n"
+        "from livery.footman import task\n\n@task\ndef build():\n    'Build.'\n"
     )
     monkeypatch.setenv("XDG_CONFIG_HOME", str(cfg))
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -977,7 +977,7 @@ def test_a_group_answers_for_its_subtree(tmp_path, monkeypatch):
     """One line covers a subtree, and a child can still say otherwise — the
     same tri-state `hidden` has."""
     body = (
-        "from footman import group, task\n\n"
+        "from livery.footman import group, task\n\n"
         'ci = group("ci", expose="project_only")\n\n'
         "@ci.task\n"
         "def lint():\n"
@@ -1049,7 +1049,7 @@ def test_a_global_only_task_refuses_by_name_inside_a_project(tmp_path, monkeypat
     # came from — never a "no task named", because the task does exist.
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n\n"
+        "from livery.footman import task\n\n"
         '@task(expose="global_only")\n'
         "def bootstrap():\n"
         '    """Set up a new project."""\n',
@@ -1114,7 +1114,7 @@ def test_dash_f_still_means_no_base(tmp_path, monkeypatch):
     either, which is the same promise it always made."""
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "only.py").write_text(
-        'from footman import task\n\n@task\ndef solo():\n    "Just me."\n'
+        'from livery.footman import task\n\n@task\ndef solo():\n    "Just me."\n'
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -1214,7 +1214,7 @@ def test_prog_and_dist_follow_the_installed_brand():
 
     DEFAULT_BRAND.install()
     assert footman.prog() == "fm"
-    assert footman.dist() == "footman"
+    assert footman.dist() == "livery-footman"
 
 
 def test_dist_is_none_when_the_brand_never_declared_one():
@@ -1233,7 +1233,7 @@ def test_a_task_reads_the_same_name_from_its_context(tmp_path, monkeypatch):
     # own, not process state — and the two must agree.
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "import footman\nfrom footman import Context, task\n\n"
+        "from livery import footman\nfrom livery.footman import Context, task\n\n"
         "@task\n"
         "def whoami(ctx: Context):\n"
         '    """Say the brand."""\n'

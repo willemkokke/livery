@@ -26,8 +26,8 @@ that say what their parameters are.
 # tasks.py
 from typing import Annotated, Literal
 
-from footman import doc, suggest, task
-from toolroom import git
+from livery.footman import doc, suggest, task
+from livery.toolroom.tools import git
 
 
 def branches() -> list[str]:
@@ -170,7 +170,7 @@ bash, zsh, fish, PowerShell and nushell.
 Write a `tasks.py` in your project root:
 
 ```python
-from footman import task, group
+from livery.footman import task, group
 
 
 @task
@@ -207,8 +207,8 @@ Python:
 
 <!-- example: fragment -->
 ```python
-from footman import task
-from toolroom import ruff
+from livery.footman import task
+from livery.toolroom.tools import ruff
 
 
 @task

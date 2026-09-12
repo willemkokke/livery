@@ -21,8 +21,8 @@ manifest, or any task. It is footman's `pytest_collection_modifyitems`.
 
 ```python
 # repo/tasks.py
-import footman
-from footman import task
+from livery import footman
+from livery.footman import task
 
 
 @task
@@ -106,7 +106,7 @@ worker thread, in parallel across tasks:
 
 <!-- example: fragment -->
 ```python
-import footman
+from livery import footman
 
 
 @footman.pre_task
@@ -314,7 +314,7 @@ a timing collector, or a CI annotator. A rule about *one* task belongs on that
 task, and every task's handle carries its own lifecycle for exactly this:
 
 ```python
-from footman import fail, task
+from livery.footman import fail, task
 
 
 @task
@@ -366,7 +366,7 @@ mounted, and an unmounted owner's option is an unknown option, taught.
 
 ```python
 from pathlib import Path
-from footman import GlobalOption
+from livery.footman import GlobalOption
 
 ENV_FILE = GlobalOption("env-file", Path, help="load this .env file first")
 AUDIT = GlobalOption("audit", help="report, change nothing")  # bool → a flag
@@ -402,7 +402,7 @@ of everything above (a lifecycle hook, a `GlobalOption`, an optional
 dependency):
 
 ```python
-from footman.compose import plugin
+from livery.footman.compose import plugin
 
 plugin("footman.env_files")
 ```

@@ -19,9 +19,9 @@ from pathlib import Path
 from typing import Annotated
 
 import livery.footman as footman
-from livery import toolroom
 from livery.footman import doc, fail
 from livery.forge import ForgeError, Repository, Run
+from livery.toolroom import tools
 from livery.workshop import _cliff
 from livery.workshop._backends import _python, backend_for
 from livery.workshop._git_ops import GitOps
@@ -204,13 +204,11 @@ def rollback_prepare(root: Path, members: tuple[Package, ...]) -> None:
             paths.extend(
                 p.relative_to(root).as_posix() for p in src.rglob("__init__.py")
             )
-    toolroom.git.opts(cwd=root, nofail=True, recorded=False)("checkout", "--", *paths)
+    tools.git.opts(cwd=root, nofail=True, recorded=False)("checkout", "--", *paths)
     # The lock the stamp refreshed, restored alone: an untracked lock
     # in the same pathspec would refuse the whole checkout, taking
     # every other restore down with it.
-    toolroom.git.opts(cwd=root, nofail=True, recorded=False)(
-        "checkout", "--", "uv.lock"
-    )
+    tools.git.opts(cwd=root, nofail=True, recorded=False)("checkout", "--", "uv.lock")
 
 
 def _wheel_dists(plans: tuple[MemberPlan, ...]) -> tuple[Path, ...]:

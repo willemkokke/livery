@@ -17,8 +17,8 @@ from typing import Any
 
 import pytest
 
-from livery.toolroom._machinery import _toolhistory
-from livery.toolroom._machinery._toolspec import Option, ToolSpec, Verb
+from livery.toolroom.tools._machinery import _toolhistory
+from livery.toolroom.tools._machinery._toolspec import Option, ToolSpec, Verb
 
 
 def test_a_reading_that_lost_bytes_is_refused(tmp_path):
@@ -244,8 +244,8 @@ def test_the_checked_in_history_regenerates_its_stub(key):
     """
     import ast
 
-    from livery.toolroom._machinery import _stubgen
-    from livery.toolroom._machinery import _tasks as tools_tasks
+    from livery.toolroom.tools._machinery import _stubgen
+    from livery.toolroom.tools._machinery import _tasks as tools_tasks
 
     stub = tools_tasks._stub_path(key)
     doc = _toolhistory.load(tools_tasks._history_path(key))
@@ -318,7 +318,7 @@ def test_releases_break_a_same_day_tie_by_version(monkeypatch):
     import io
     import json as _json
 
-    from livery.toolroom._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
 
     index = {
         "releases": {
@@ -346,7 +346,7 @@ def test_only_listable_tiers_are_primed():
     """A tool footman cannot enumerate is named and skipped, never treated as
     a tool with no history.
     """
-    from livery.toolroom._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
 
     uv_tier = _drivers.find("prek")
     manual = _drivers.find("bash")
@@ -366,7 +366,7 @@ def test_release_is_read_in_the_era_it_shipped_in():
     release in its own era records what it actually printed, and the
     surface corrects itself as the walk crosses October 2024.
     """
-    from livery.toolroom._machinery._toolfetch import (
+    from livery.toolroom.tools._machinery._toolfetch import (
         PYTHON_RELEASES,
         READ_PYTHON,
         read_python,
@@ -402,7 +402,7 @@ def test_cutoff_takes_the_far_edge_of_the_publishing_window(monkeypatch):
     import io
     import json as _json
 
-    from livery.toolroom._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
 
     index = {
         "releases": {
@@ -437,7 +437,7 @@ def test_release_date_cutoff_is_spelled_in_utc(monkeypatch, tmp_path):
     0.11.32 went up at 23:05Z against a 23:00Z cutoff in BST, and resolved
     to "no version of uv==0.11.32". On a UTC CI runner it would have passed.
     """
-    from livery.toolroom._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
 
     calls: list[list[str]] = []
 
@@ -466,7 +466,7 @@ def test_releases_older_than_the_interpreter_are_not_offered(monkeypatch):
     import io
     import json as _json
 
-    from livery.toolroom._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
 
     index = {
         "releases": {
@@ -500,7 +500,7 @@ def test_walk_caches_nothing_it_will_not_reread(tmp_path):
     """
     import os
 
-    from livery.toolroom._machinery._tasks import _sandboxed
+    from livery.toolroom.tools._machinery._tasks import _sandboxed
 
     with _sandboxed(tmp_path):
         assert os.environ["UV_NO_CACHE"] == "1"
@@ -513,7 +513,7 @@ def test_the_primed_history_ships_a_contiguous_chain():
     """What is checked in must replay end to end — a hole would mean a delta
     computed against a release that is not its neighbour.
     """
-    from livery.toolroom._machinery import _tasks as tools_tasks
+    from livery.toolroom.tools._machinery import _tasks as tools_tasks
 
     doc = _toolhistory.load(tools_tasks._history_path("prek"))
     assert doc is not None
@@ -636,8 +636,8 @@ def test_every_checked_in_observation_names_its_platforms():
     from; a later multi-platform refresh reads this to decide what is an
     exclusion and what was simply never looked at.
     """
-    from livery.toolroom._machinery import _drivers
-    from livery.toolroom._machinery import _tasks as tools_tasks
+    from livery.toolroom.tools._machinery import _drivers
+    from livery.toolroom.tools._machinery import _tasks as tools_tasks
 
     for driver in _drivers.DRIVERS:
         doc = _toolhistory.load(tools_tasks._history_path(driver.key))
@@ -654,7 +654,7 @@ def test_priming_rewrites_the_stub_it_invalidates(monkeypatch, tmp_path):
     rendering of the record, so extending the record rewrites it rather than
     waiting for someone to remember a `sync`.
     """
-    from livery.toolroom._machinery import _tasks as tools_tasks
+    from livery.toolroom.tools._machinery import _tasks as tools_tasks
 
     doc = _toolhistory.load(tools_tasks._history_path("prek"))
     assert doc is not None
@@ -676,8 +676,8 @@ def test_an_older_reading_never_becomes_the_head(tmp_path, monkeypatch):
     change did exactly that: ruff's history ended up with 0.16.0 as both the
     base and one of its own ancestors.
     """
-    from livery.toolroom._machinery import _drivers
-    from livery.toolroom._machinery import _tasks as tools_tasks
+    from livery.toolroom.tools._machinery import _drivers
+    from livery.toolroom.tools._machinery import _tasks as tools_tasks
 
     monkeypatch.setattr(tools_tasks, "_HISTORY", tmp_path)
     driver = _drivers.find("prek")
@@ -705,7 +705,7 @@ def _index(monkeypatch, payload):
     import io
     import json as _json
 
-    from livery.toolroom._machinery import _toolfetch
+    from livery.toolroom.tools._machinery import _toolfetch
 
     monkeypatch.setattr(
         _toolfetch.urllib.request,
@@ -718,7 +718,7 @@ def test_npm_releases_come_from_the_time_map(monkeypatch):
     """Npm keeps publication dates in `time`, alongside two entries that are
     not versions at all.
     """
-    from livery.toolroom._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
 
     _index(
         monkeypatch,
@@ -746,7 +746,7 @@ def test_github_releases_normalise_the_tag_and_drop_the_unreleased(monkeypatch):
     binary reports the bare number — and the history keys on what the binary
     says, or a primed release never matches the base it belongs under.
     """
-    from livery.toolroom._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
 
     _index(
         monkeypatch,
@@ -778,7 +778,7 @@ def _dirlisting(monkeypatch, html):
     """
     import io
 
-    from livery.toolroom._machinery import _toolfetch
+    from livery.toolroom.tools._machinery import _toolfetch
 
     monkeypatch.setattr(
         _toolfetch.urllib.request,
@@ -806,7 +806,7 @@ def test_docker_reads_its_versions_from_a_directory_listing(monkeypatch):
     same folder and none of them is a docker release: the rootless extras,
     the 2017 `-ce` spelling, and a `-2` rebuild of a version already there.
     """
-    from livery.toolroom._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
 
     _dirlisting(monkeypatch, DOCKER_LISTING)
     driver = _drivers.find("docker")
@@ -822,7 +822,7 @@ def test_docker_index_is_chosen_by_platform_and_architecture(monkeypatch):
     """
     import platform as _platform_mod
 
-    from livery.toolroom._machinery import _toolfetch
+    from livery.toolroom.tools._machinery import _toolfetch
 
     def channel(platform, machine, windows):
         monkeypatch.setattr(_toolfetch.sys, "platform", platform)
@@ -839,7 +839,7 @@ def test_docker_is_fetched_rather_than_read_from_the_host():
     """It used to be a `system` tool, read from whatever the laptop had
     installed — so its history could only ever hold one version.
     """
-    from livery.toolroom._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
 
     driver = _drivers.find("docker")
     assert driver is not None
@@ -857,7 +857,7 @@ COMPOSE_RELEASES = [
 
 def _plugin_fetch(monkeypatch, placed):
     """Serve the compose listing, and record what was asked for."""
-    from livery.toolroom._machinery import _provision, _toolfetch
+    from livery.toolroom.tools._machinery import _provision, _toolfetch
 
     _index(monkeypatch, COMPOSE_RELEASES)
     monkeypatch.setattr(_toolfetch, "_LISTINGS", {})
@@ -893,7 +893,7 @@ def test_a_plugin_is_paired_with_the_release_that_shipped_alongside(
     — but "what a user of that docker would have had" is a fact the two
     dates settle between them, the same answer every time.
     """
-    from livery.toolroom._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
 
     asked = _plugin_fetch(monkeypatch, placed=True)
     docker = _drivers.find("docker")
@@ -908,7 +908,7 @@ def test_an_era_before_the_plugin_existed_pairs_with_nothing(monkeypatch, tmp_pa
     compose` did not exist until 2.0, and dropping a 1.x binary into the
     plugin directory would not make it one.
     """
-    from livery.toolroom._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
 
     asked = _plugin_fetch(monkeypatch, placed=True)
     docker = _drivers.find("docker")
@@ -923,7 +923,7 @@ def test_a_plugin_that_cannot_be_fetched_is_unreachable_not_absent(
     """A rate limit read past becomes "this docker had no compose" — a
     different claim, and one the history would write down as a removal.
     """
-    from livery.toolroom._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
 
     _plugin_fetch(monkeypatch, placed=False)
     docker = _drivers.find("docker")
@@ -945,7 +945,7 @@ def test_a_gateway_timeout_on_an_index_is_retried(monkeypatch):
     import email.message
     import urllib.error
 
-    from livery.toolroom._machinery import _toolfetch
+    from livery.toolroom.tools._machinery import _toolfetch
 
     calls = []
 
@@ -992,7 +992,7 @@ def test_a_listing_is_read_once_per_process(monkeypatch):
     """Every release of a walk asks the same question of the same
     repository, and the answer cannot change while the walk runs.
     """
-    from livery.toolroom._machinery import _toolfetch
+    from livery.toolroom.tools._machinery import _toolfetch
 
     calls: list[tuple[object, ...]] = []
     _index(monkeypatch, COMPOSE_RELEASES)
@@ -1015,7 +1015,7 @@ def test_docker_dates_come_from_the_engine_not_the_upload(monkeypatch):
     including 20.10.6, which shipped in April 2021. Those dates decide which
     compose a release is paired with.
     """
-    from livery.toolroom._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
 
     _dirlisting(monkeypatch, DOCKER_LISTING)
     monkeypatch.setattr(
@@ -1035,8 +1035,8 @@ def test_man_index_reads_a_dated_and_an_undated_listing(monkeypatch):
     kernel.org on the row itself, OpenSSH in the next cell a line below, which
     is why its pattern crosses newlines where kernel.org's need not.
     """
-    from livery.toolroom._machinery import _toolfetch
-    from livery.toolroom._machinery._drivers import Driver, Manual, Provision
+    from livery.toolroom.tools._machinery import _toolfetch
+    from livery.toolroom.tools._machinery._drivers import Driver, Manual, Provision
 
     kernel = (
         '<a href="git-manpages-2.50.0.tar.gz">x</a> 16-Jun-2025 16:31\n'
@@ -1107,8 +1107,8 @@ def test_install_man_pulls_named_pages_from_a_source_tarball(tmp_path, monkeypat
     import io
     import tarfile
 
-    from livery.toolroom._machinery import _provision, _toolfetch
-    from livery.toolroom._machinery._drivers import Driver, Manual, Provision
+    from livery.toolroom.tools._machinery import _provision, _toolfetch
+    from livery.toolroom.tools._machinery._drivers import Driver, Manual, Provision
 
     archive = tmp_path / "openssh-9.9p2.tar.gz"
     with tarfile.open(archive, "w:gz") as tar:
@@ -1144,8 +1144,8 @@ def test_man_tier_merges_every_tools_pages(tmp_path, monkeypatch):
     """The man tier holds more than one tool's pages: a second driver merges
     into the shared tree rather than replacing the first's.
     """
-    from livery.toolroom._machinery import _provision, _toolfetch
-    from livery.toolroom._machinery._drivers import Driver, Manual, Provision
+    from livery.toolroom.tools._machinery import _provision, _toolfetch
+    from livery.toolroom.tools._machinery._drivers import Driver, Manual, Provision
 
     manual = Manual(index="https://x/", archive="{version}.tar.gz", listing="x")
     drivers = [
@@ -1172,7 +1172,7 @@ def test_man_tier_merges_every_tools_pages(tmp_path, monkeypatch):
 
 
 def test_gitlab_releases_read_their_own_field_names(monkeypatch):
-    from livery.toolroom._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
 
     _index(
         monkeypatch,
@@ -1191,8 +1191,8 @@ def test_gitea_releases_read_the_github_shape(monkeypatch):
     """Gitea's API answers with GitHub's field names — one reading serves
     both hosts, and the prerelease/draft filter applies the same way.
     """
-    from livery.toolroom._machinery import _toolfetch
-    from livery.toolroom._machinery._drivers import Driver, Provision
+    from livery.toolroom.tools._machinery import _toolfetch
+    from livery.toolroom.tools._machinery._drivers import Driver, Provision
 
     _index(
         monkeypatch,
@@ -1219,7 +1219,7 @@ def test_observe_carries_every_release_field_through(tmp_path, monkeypatch):
     cmake 4.3.1 kept resolving at the near edge and holing — while the
     identical install ran clean by hand.
     """
-    from livery.toolroom._machinery import _tasks as tools_tasks
+    from livery.toolroom.tools._machinery import _tasks as tools_tasks
 
     seen: list[Any] = []
 
@@ -1227,7 +1227,9 @@ def test_observe_carries_every_release_field_through(tmp_path, monkeypatch):
         seen.append(release)
         return None  # stop before extraction — the release is the assertion
 
-    monkeypatch.setattr("livery.toolroom._machinery._toolfetch.install", fake_install)
+    monkeypatch.setattr(
+        "livery.toolroom.tools._machinery._toolfetch.install", fake_install
+    )
     monkeypatch.setattr(tools_tasks, "_refuse_a_broken_environment", lambda p: None)
     tools_tasks.observe(
         "cmake",
@@ -1247,7 +1249,7 @@ def test_a_provision_floor_takes_releases_out_of_scope(monkeypatch):
     `deferred` the tool stays curated; its history just starts at the
     floor. tea's sits at 0.15.0, above the console-hang band.
     """
-    from livery.toolroom._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
 
     _index(
         monkeypatch,
@@ -1275,7 +1277,7 @@ def test_an_unreadable_index_is_not_an_empty_one(monkeypatch):
     A prime still skips such a tool rather than failing the run, but it has
     to *choose* to, which is the point of raising.
     """
-    from livery.toolroom._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
 
     def boom(*a, **k):
         raise _toolfetch.urllib.error.URLError("no network")
@@ -1291,7 +1293,7 @@ def test_which_tiers_can_be_listed():
     """Every tier that can name its past releases. A hand-written stub has
     nothing to read at all, and a deferred tool is parked on purpose.
     """
-    from livery.toolroom._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
 
     expected = {
         "prek": True,  # uv
@@ -1314,7 +1316,7 @@ def test_which_tiers_can_be_listed():
 
 
 def test_installing_an_unlistable_tier_declines(tmp_path):
-    from livery.toolroom._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
 
     # No curated tool sits in a tier that cannot be fetched any more — git
     # was the last, and it is read from kernel.org's manuals now (the
@@ -1332,7 +1334,7 @@ def test_the_npm_tier_needs_bun_and_says_so(tmp_path, monkeypatch):
     """
     import shutil
 
-    from livery.toolroom._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
 
     monkeypatch.setattr(shutil, "which", lambda _name: None)
     driver = _drivers.find("cspell")
@@ -1345,8 +1347,8 @@ def test_the_npm_tier_needs_bun_and_says_so(tmp_path, monkeypatch):
     # gather with no bun reported 23 releases across cspell and
     # markdownlint as holes — "these could not be had" — when every one of
     # them reads fine the moment bun is on PATH.
-    from livery.toolroom._machinery import _toolfetch as fetch
-    from livery.toolroom._machinery._tasks import _curated
+    from livery.toolroom.tools._machinery import _toolfetch as fetch
+    from livery.toolroom.tools._machinery._tasks import _curated
 
     chosen, skipped = _curated("", fetch)
     assert "cspell (no bun to install with)" in skipped
@@ -1361,7 +1363,7 @@ def _uv_listing(monkeypatch, entries):
     """Serve *entries* as `uv python list --output-format json` would."""
     import json as _json
 
-    from livery.toolroom._machinery import _toolfetch
+    from livery.toolroom.tools._machinery import _toolfetch
 
     monkeypatch.setattr(_toolfetch, "_capture", lambda _argv: _json.dumps(entries))
 
@@ -1383,7 +1385,7 @@ def test_the_python_listing_keeps_only_what_is_a_release(monkeypatch):
     free-threaded build is a build of a release rather than one of its own,
     and pypy is a different tool.
     """
-    from livery.toolroom._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
 
     _uv_listing(
         monkeypatch,
@@ -1405,7 +1407,7 @@ def test_the_python_listing_asks_only_for_downloads(monkeypatch):
     would therefore make the index answer differently on every machine — and a
     prime would erase releases from the listing it is walking.
     """
-    from livery.toolroom._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
 
     seen: list[list[str]] = []
 
@@ -1424,7 +1426,7 @@ def test_a_uv_that_will_not_answer_is_unreachable_not_empty(monkeypatch):
     """Uv carries the index inside itself, so "no uv" is "nothing seen" — and
     emphatically not "CPython has no releases".
     """
-    from livery.toolroom._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
 
     monkeypatch.setattr(_toolfetch, "_capture", lambda _argv: "")
     driver = _drivers.find("python")
@@ -1434,7 +1436,7 @@ def test_a_uv_that_will_not_answer_is_unreachable_not_empty(monkeypatch):
 
 
 def _drivers_find(key):
-    from livery.toolroom._machinery import _drivers
+    from livery.toolroom.tools._machinery import _drivers
 
     driver = _drivers.find(key)
     assert driver is not None, key
@@ -1451,7 +1453,7 @@ def test_a_chain_is_ordered_by_version_not_by_publication_date(monkeypatch):
     interval derived from that chain is then wrong. The history answers a
     version question, so version is what orders it.
     """
-    from livery.toolroom._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
 
     _uv_listing(
         monkeypatch,
@@ -1479,7 +1481,7 @@ def test_a_tie_the_comparator_cannot_break_leaves_the_base_alone(tmp_path, monke
     stale checkout promote `wk.3` over the recorded `wk.5` and push the newer
     build down the chain — the exact rewrite the guard exists to refuse.
     """
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     surface = _toolhistory.surface_of(
         _spec(verbs=(Verb(name="", options=(Option("fix", ("--fix",)),)),))
@@ -1546,7 +1548,7 @@ def test_an_entry_names_what_changed_and_counts_what_it_will_not_list():
     without changing what the tool accepts, and listing those turns a release
     note into a diff dump.
     """
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     doc, versions = _chain(
         _with("quiet", "install_hooks"),
@@ -1565,7 +1567,7 @@ def test_an_entry_spans_from_the_release_before_the_first_change():
     is exactly what a bullet saying "changes its option surface" looked
     like.
     """
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     doc, versions = _chain(_with("quiet"), _with("quiet", "fix"))
     assert "adds `--fix`" in tools._entry_for("demo", doc, [versions[1]])
@@ -1575,7 +1577,7 @@ def test_an_entry_names_a_flag_once_however_many_verbs_carry_it():
     """The same flag on the bare command and on one of its verbs is two keys
     in the surface and one thing to tell a reader about.
     """
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     def both(*names):
         return _toolhistory.surface_of(
@@ -1600,7 +1602,7 @@ def test_the_entry_lands_under_unreleased_changed(tmp_path):
     — footman itself added nothing. And under `[Unreleased]`, never the
     released section above it, which is where a careless insert lands.
     """
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     path = tmp_path / "CHANGELOG.md"
     path.write_text(
@@ -1620,7 +1622,7 @@ def test_the_entry_lands_under_unreleased_changed(tmp_path):
 
 
 def test_an_entry_joins_a_changed_section_that_already_exists(tmp_path):
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     path = tmp_path / "CHANGELOG.md"
     path.write_text(
@@ -1638,7 +1640,7 @@ def test_a_changelog_with_nowhere_to_write_says_so(tmp_path):
     """Reported rather than guessed at: a caller must not read "no entry
     written" as "there was nothing to write".
     """
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     path = tmp_path / "CHANGELOG.md"
     path.write_text("# Changelog\n\n## [0.23.0]\n\n- Released.\n", encoding="utf-8")
@@ -1653,7 +1655,7 @@ def test_an_entry_tells_commands_apart_from_their_descriptions():
     first two are news — the third is a rewording, and counting it as a lost
     command would be a lie in both directions.
     """
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     def tree(*verbs):
         return _toolhistory.surface_of(
@@ -1681,7 +1683,7 @@ def test_an_entry_tells_commands_apart_from_their_descriptions():
 
 
 def test_a_bullet_joins_several_names_and_clauses_readably():
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     assert tools._names(["--a"]) == "`--a`"
     assert tools._names(["--a", "--b"]) == "`--a` and `--b`"
@@ -1707,7 +1709,7 @@ def test_a_prime_keeps_uv_downloads_inside_its_own_scratch(tmp_path):
     """
     import os
 
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     was = {k: os.environ.get(k) for k in ("UV_CACHE_DIR", "UV_PYTHON_INSTALL_DIR")}
     with tools._sandboxed(tmp_path):
@@ -1722,7 +1724,7 @@ def test_an_overlay_restores_a_variable_that_was_not_set(tmp_path):
     """
     import os
 
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     os.environ.pop("FOOTMAN_TEST_ABSENT", None)
     with tools._overlay(FOOTMAN_TEST_ABSENT="x"):
@@ -1735,7 +1737,7 @@ def test_a_release_is_discarded_once_its_surface_is_read(tmp_path):
     holds everything it ever fetched until the run ends — ruff alone would
     stand up 416 environments at once.
     """
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     release = tmp_path / "1.2.3"
     (release / "bin").mkdir(parents=True)
@@ -1894,7 +1896,7 @@ def _tools_run(line):
     is about.
     """
     from livery.footman.testing import Runner
-    from livery.toolroom._machinery._tasks import tasks as tools_group
+    from livery.toolroom.tools._machinery._tasks import tasks as tools_group
 
     return Runner().invoke(line, tasks=tools_group)
 
@@ -1916,7 +1918,7 @@ def _serve(monkeypatch, listings, surfaces, installed=None):
     Called from worker threads, so mutation is `list.append`-shaped. An
     absent (tool, version) makes the install fail — a hole.
     """
-    from livery.toolroom._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
 
     installed = installed if installed is not None else []
     monkeypatch.setattr(
@@ -1960,8 +1962,8 @@ def test_a_refresh_reads_every_release_it_missed_not_just_the_newest(
     not at 1.0.3. The observations run in parallel and land in whatever order
     the pool finishes; the chain assembles the same either way.
     """
-    from livery.toolroom._machinery import _tasks as tools
-    from livery.toolroom._machinery import _toolfetch
+    from livery.toolroom.tools._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _toolfetch
 
     _isolate(tools, monkeypatch, tmp_path)
     _toolhistory.save(
@@ -2009,8 +2011,8 @@ def test_a_release_that_will_not_install_is_a_hole_not_a_dead_walk(
     fills it through `insert` — at which point its changes are attributed
     exactly.
     """
-    from livery.toolroom._machinery import _tasks as tools
-    from livery.toolroom._machinery import _toolfetch
+    from livery.toolroom.tools._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _toolfetch
 
     _isolate(tools, monkeypatch, tmp_path)
     _toolhistory.save(
@@ -2062,8 +2064,8 @@ def test_a_release_that_will_not_install_is_a_hole_not_a_dead_walk(
 
 
 def test_a_refresh_with_nothing_new_warrants_no_release(tmp_path, monkeypatch):
-    from livery.toolroom._machinery import _tasks as tools
-    from livery.toolroom._machinery import _toolfetch
+    from livery.toolroom.tools._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _toolfetch
 
     _isolate(tools, monkeypatch, tmp_path)
     _toolhistory.save(
@@ -2092,8 +2094,8 @@ def test_a_refresh_that_could_not_look_does_not_report_nothing_new(
     not answer exits 75 (EX_TEMPFAIL) and names the tool, instead of reading
     as a tool with nothing new.
     """
-    from livery.toolroom._machinery import _tasks as tools
-    from livery.toolroom._machinery import _toolfetch
+    from livery.toolroom.tools._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _toolfetch
 
     _isolate(tools, monkeypatch, tmp_path)
     _toolhistory.save(
@@ -2118,8 +2120,8 @@ def test_a_refresh_that_could_not_look_does_not_report_nothing_new(
 
 
 def test_a_refresh_writes_its_own_events_into_the_changelog(tmp_path, monkeypatch):
-    from livery.toolroom._machinery import _tasks as tools
-    from livery.toolroom._machinery import _toolfetch
+    from livery.toolroom.tools._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _toolfetch
 
     _isolate(tools, monkeypatch, tmp_path)
     _toolhistory.save(
@@ -2151,8 +2153,8 @@ def test_the_pre_pass_answers_without_installing_anything(tmp_path, monkeypatch)
     to observe, which is most weeks. Listing is network and nothing else,
     so the question can be answered before the work is prepared for.
     """
-    from livery.toolroom._machinery import _tasks as tools
-    from livery.toolroom._machinery import _toolfetch
+    from livery.toolroom.tools._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _toolfetch
 
     _isolate(tools, monkeypatch, tmp_path)
     _toolhistory.save(
@@ -2187,8 +2189,8 @@ def test_an_unreadable_index_is_not_nothing_to_do(tmp_path, monkeypatch):
     index cannot say the index has nothing new, so the caller is told
     separately rather than reading a total of zero as "all quiet".
     """
-    from livery.toolroom._machinery import _tasks as tools
-    from livery.toolroom._machinery import _toolfetch
+    from livery.toolroom.tools._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _toolfetch
 
     _isolate(tools, monkeypatch, tmp_path)
     _toolhistory.save(
@@ -2224,8 +2226,8 @@ def test_a_backfill_is_recorded_but_never_announced(tmp_path, monkeypatch):
     reports a release nobody had seen before, not one footman had not got
     around to reading.
     """
-    from livery.toolroom._machinery import _tasks as tools
-    from livery.toolroom._machinery import _toolfetch
+    from livery.toolroom.tools._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _toolfetch
 
     _isolate(tools, monkeypatch, tmp_path)
     _toolhistory.save(
@@ -2271,8 +2273,8 @@ def test_a_release_above_the_chain_is_still_announced_beside_a_backfill(
     """The rule is about direction, not about how much a run read: one run
     can do both, and only the release nobody had seen is news.
     """
-    from livery.toolroom._machinery import _tasks as tools
-    from livery.toolroom._machinery import _toolfetch
+    from livery.toolroom.tools._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _toolfetch
 
     _isolate(tools, monkeypatch, tmp_path)
     _toolhistory.save(
@@ -2312,8 +2314,8 @@ def test_a_refresh_with_no_events_writes_no_note(tmp_path, monkeypatch):
     """A new release that changed nothing is recorded — an empty delta — and
     warrants neither a release nor a line about one.
     """
-    from livery.toolroom._machinery import _tasks as tools
-    from livery.toolroom._machinery import _toolfetch
+    from livery.toolroom.tools._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _toolfetch
 
     _isolate(tools, monkeypatch, tmp_path)
     _toolhistory.save(
@@ -2347,8 +2349,8 @@ def test_a_prime_reaches_below_the_floor_and_only_below_it(tmp_path, monkeypatch
     """The backward walk: newer releases are the refresh's business, and a
     prime must never lift the head — only deepen the tail, up to its count.
     """
-    from livery.toolroom._machinery import _tasks as tools
-    from livery.toolroom._machinery import _toolfetch
+    from livery.toolroom.tools._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _toolfetch
 
     _isolate(tools, monkeypatch, tmp_path)
     _toolhistory.save(
@@ -2387,8 +2389,8 @@ def test_a_floor_the_index_cannot_place_refuses_the_tool(tmp_path, monkeypatch):
     """A stub synced from an outdated binary leaves a floor no listing holds;
     priming from the top would file the newest release as the oldest.
     """
-    from livery.toolroom._machinery import _tasks as tools
-    from livery.toolroom._machinery import _toolfetch
+    from livery.toolroom.tools._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _toolfetch
 
     _isolate(tools, monkeypatch, tmp_path)
     _toolhistory.save(
@@ -2419,8 +2421,8 @@ def test_parallel_observations_each_own_their_environment(tmp_path, monkeypatch)
     import os
     import threading
 
-    from livery.toolroom._machinery import _drivers, _toolfetch
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     _isolate(tools, monkeypatch, tmp_path)
     _toolhistory.save(
@@ -2480,8 +2482,8 @@ def test_the_same_release_is_observed_once_per_run(tmp_path, monkeypatch):
     """
     from livery.footman.registry import Group
     from livery.footman.testing import Runner
-    from livery.toolroom._machinery import _tasks as tools
-    from livery.toolroom._machinery import _toolfetch
+    from livery.toolroom.tools._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _toolfetch
 
     _isolate(tools, monkeypatch, tmp_path)
     installed: list[str] = []
@@ -2492,7 +2494,7 @@ def test_the_same_release_is_observed_once_per_run(tmp_path, monkeypatch):
         return into / "bin"
 
     monkeypatch.setattr(_toolfetch, "install", install)
-    from livery.toolroom._machinery import _drivers
+    from livery.toolroom.tools._machinery import _drivers
 
     monkeypatch.setattr(
         _drivers,
@@ -2523,7 +2525,7 @@ def test_a_bare_call_is_refused_with_directions(tmp_path, monkeypatch):
     degrading into the exact race it was built to remove.
     """
     from livery.footman.context import Failed
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     _isolate(tools, monkeypatch, tmp_path)
     with pytest.raises(Failed, match=r"footman\.testing\.Runner"):
@@ -2894,7 +2896,7 @@ def _elsewhere() -> str:
     The tests run on all three, so "a platform that has not looked" cannot
     be spelled with a literal — on the Linux runner, `"Linux"` is the host.
     """
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     return next(p for p in ("Linux", "Windows", "macOS") if p != tools._platform())
 
@@ -2905,8 +2907,8 @@ def test_gather_writes_a_document_another_machine_can_fold(tmp_path, monkeypatch
     self-describing document — copied off that machine by hand if that is
     how the week goes — and the assembler folds it wherever the store is.
     """
-    from livery.toolroom._machinery import _tasks as tools
-    from livery.toolroom._machinery import _toolfetch
+    from livery.toolroom.tools._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _toolfetch
 
     _isolate(tools, monkeypatch, tmp_path)
     _toolhistory.save(
@@ -2963,7 +2965,7 @@ def test_a_correction_below_the_head_is_saved_and_stamped():
     say so, or `_plan_gather` offers it again every run and the walk that
     heals the store never records that it healed it.
     """
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     def surface(text):
         return {"help": text, "verbs": {"": {"help": text, "options": {}}}}
@@ -3004,7 +3006,7 @@ def test_two_platforms_fold_into_one_release_with_the_exception_named(
     """The whole point: one release, two witnesses, one record — and the
     option only one of them has is the exception the store keeps.
     """
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     _isolate(tools, monkeypatch, tmp_path)
     _toolhistory.save(
@@ -3072,8 +3074,8 @@ def test_a_platform_new_to_a_tool_backfills_the_version_people_run(
     otherwise its coverage would begin at whatever ships next, and the
     version everyone is actually running would stay unaccounted for.
     """
-    from livery.toolroom._machinery import _tasks as tools
-    from livery.toolroom._machinery import _toolfetch
+    from livery.toolroom.tools._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _toolfetch
 
     _isolate(tools, monkeypatch, tmp_path)
     _toolhistory.save(
@@ -3140,7 +3142,7 @@ def test_a_stub_only_release_is_a_patch_and_moves_what_must_agree(
     """The tools moved, toolroom did not. Two files must agree or the
     release workflow refuses the tag.
     """
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     root = _repo(tmp_path)
     monkeypatch.setattr(tools, "_HISTORY", root / "tool-history")
@@ -3165,7 +3167,7 @@ def test_a_minor_release_rolls_the_readme_pin(tmp_path, monkeypatch):
     is the one move that dates it, so the roll rewrites it in the same
     breath as the two version files.
     """
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     root = _repo(tmp_path)
     monkeypatch.setattr(tools, "_HISTORY", root / "tool-history")
@@ -3180,7 +3182,7 @@ def test_a_minor_release_rolls_the_readme_pin(tmp_path, monkeypatch):
 def test_rolling_the_changelog_dates_the_release_and_repoints_the_links(
     tmp_path, monkeypatch
 ):
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     root = _repo(tmp_path)
     monkeypatch.setattr(tools, "_HISTORY", root / "tool-history")
@@ -3203,7 +3205,7 @@ def test_a_release_is_refused_when_there_is_nothing_to_release(tmp_path, monkeyp
     noise every week it finds none.
     """
     from livery.footman.context import Failed
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     root = _repo(tmp_path, entries=())
     monkeypatch.setattr(tools, "_HISTORY", root / "tool-history")
@@ -3226,7 +3228,7 @@ def test_the_walk_answers_to_node_when_only_bun_is_installed(tmp_path, monkeypat
     import os
     import shutil
 
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     fake_bun = tmp_path / "bun"
     fake_bun.write_text("#!/bin/sh\nexit 0\n")
@@ -3253,7 +3255,7 @@ def test_a_machine_with_real_node_is_left_alone(tmp_path, monkeypatch):
     import os
     import shutil
 
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     monkeypatch.setattr(shutil, "which", lambda name: f"/usr/bin/{name}")
     before = os.environ["PATH"]
@@ -3269,7 +3271,7 @@ def test_no_bun_and_no_node_is_no_worse_than_before(tmp_path, monkeypatch):
     import os
     import shutil
 
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     monkeypatch.setattr(shutil, "which", lambda _name: None)
     before = os.environ["PATH"]
@@ -3401,8 +3403,8 @@ def test_a_reading_must_describe_a_tool_to_count_as_one(help_text, options, verd
     tool that never ran. An observation has to be a description, not merely
     output.
     """
-    from livery.toolroom._machinery import _tasks as tools
-    from livery.toolroom._machinery._toolspec import ToolSpec, Verb
+    from livery.toolroom.tools._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery._toolspec import ToolSpec, Verb
 
     spec = ToolSpec(
         name="cspell",
@@ -3422,7 +3424,7 @@ def test_a_reading_must_describe_a_tool_to_count_as_one(help_text, options, verd
 
 
 def _gathered(observed: int, missed: int, **over):
-    from livery.toolroom._machinery._tasks import Gathered
+    from livery.toolroom.tools._machinery._tasks import Gathered
 
     return Gathered(
         platform="Linux",
@@ -3441,7 +3443,7 @@ def test_a_run_whose_holes_outnumber_its_readings_fails(capsys):
     mean the machine, not the tools.
     """
     from livery.footman.context import Failed
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     with pytest.raises(Failed) as failed:
         tools._report_gather(_gathered(observed=33, missed=330))
@@ -3455,7 +3457,7 @@ def test_an_ordinary_hole_is_not_a_failure(capsys):
     teach a weekly job's readers to ignore the exit code, which is the only
     way the majority case can go unnoticed.
     """
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     tools._report_gather(_gathered(observed=300, missed=2))  # no raise
     out = capsys.readouterr().out
@@ -3467,7 +3469,7 @@ def test_the_counts_are_stated_together(capsys):
     """Both numbers on one line: a truncated read of a long log still shows
     what was missed beside what was found.
     """
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     tools._report_gather(_gathered(observed=5, missed=0))
     assert "Linux: 5 observed, 0 holes" in capsys.readouterr().out
@@ -3486,7 +3488,7 @@ def test_a_disk_with_no_room_stops_the_walk_instead_of_recording_holes(
     import shutil
 
     from livery.footman.context import Failed
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     Usage = collections.namedtuple("Usage", "total used free")
     monkeypatch.setattr(shutil, "disk_usage", lambda _p: Usage(1, 1, 4 * 1024 * 1024))
@@ -3509,7 +3511,7 @@ def test_a_skip_only_some_legs_reported_says_which():
     been read on both Linux and macOS. A skip every leg reported needs no
     attribution: it is a fact about the tool, not about a box.
     """
-    from livery.toolroom._machinery._tasks import _attributed
+    from livery.toolroom.tools._machinery._tasks import _attributed
 
     lines = _attributed(
         {
@@ -3532,8 +3534,8 @@ def test_a_hand_written_stub_is_not_a_uv_tier_tool():
     asking it names the `uv` tier for a shell nobody fetches — six of them in
     every document's skipped list.
     """
-    from livery.toolroom._machinery import _toolfetch
-    from livery.toolroom._machinery._tasks import _curated
+    from livery.toolroom.tools._machinery import _toolfetch
+    from livery.toolroom.tools._machinery._tasks import _curated
 
     _, skipped = _curated("", _toolfetch)
     assert "bash (hand-written)" in skipped
@@ -3551,8 +3553,8 @@ def test_a_reading_older_than_the_extractor_is_offered_again(monkeypatch):
     appearing to disagree, which is a divergence report for a bug. A reading
     is only as good as the extractor that took it.
     """
-    from livery.toolroom._machinery import _tasks as tools
-    from livery.toolroom._machinery import _toolfetch
+    from livery.toolroom.tools._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _toolfetch
 
     surface = _with_flags("quiet")
     doc = _toolhistory.new(
@@ -3586,7 +3588,7 @@ def test_a_re_read_clears_a_claim_the_older_extractor_caused(monkeypatch):
     better extractor settles it — no hand-editing of the store, which is the
     one thing a record of observations must never need.
     """
-    from livery.toolroom._machinery import _tasks as tools
+    from livery.toolroom.tools._machinery import _tasks as tools
 
     here = tools._platform()
     blind = _toolhistory.surface_of(_spec(verbs=(Verb(name="", options=()),)))
@@ -3613,7 +3615,7 @@ def test_bin_on_path_overlays_the_directory_itself(tmp_path):
     """
     import os
 
-    from livery.toolroom._machinery._tasks import _bin_on_path
+    from livery.toolroom.tools._machinery._tasks import _bin_on_path
 
     scripts = tmp_path / "Scripts"
     scripts.mkdir()
@@ -3628,7 +3630,7 @@ def test_observe_rejects_a_reading_of_the_wrong_binary(tmp_path, monkeypatch):
     Windows a whole platform's uv tier read as one tool, no holes to show
     for it. A reading that names a different version must be a hole.
     """
-    from livery.toolroom._machinery import _tasks as tools_tasks
+    from livery.toolroom.tools._machinery import _tasks as tools_tasks
 
     bindir = tmp_path / "release" / "bin"
 
@@ -3636,7 +3638,9 @@ def test_observe_rejects_a_reading_of_the_wrong_binary(tmp_path, monkeypatch):
         bindir.mkdir(parents=True, exist_ok=True)
         return bindir
 
-    monkeypatch.setattr("livery.toolroom._machinery._toolfetch.install", fake_install)
+    monkeypatch.setattr(
+        "livery.toolroom.tools._machinery._toolfetch.install", fake_install
+    )
     monkeypatch.setattr(
         tools_tasks._drivers, "extract", lambda driver: _spec(version="0.99.9")
     )
@@ -3655,7 +3659,7 @@ def test_npm_install_spawns_the_resolved_bun(tmp_path, monkeypatch):
     every npm-tier release on the platform read as a hole. The spawn must
     use the path `which` resolved.
     """
-    from livery.toolroom._machinery import _drivers, _toolfetch
+    from livery.toolroom.tools._machinery import _drivers, _toolfetch
 
     fake = tmp_path / "bun.exe"
     calls: list[list[str]] = []
@@ -3680,7 +3684,7 @@ def test_observe_accepts_a_repack_wheel_version(tmp_path, monkeypatch):
     dotted prefix though, and never the reverse: a binary reporting *more*
     components than its release is some other binary.
     """
-    from livery.toolroom._machinery import _tasks as tools_tasks
+    from livery.toolroom.tools._machinery import _tasks as tools_tasks
 
     bindir = tmp_path / "release" / "bin"
 
@@ -3688,7 +3692,9 @@ def test_observe_accepts_a_repack_wheel_version(tmp_path, monkeypatch):
         bindir.mkdir(parents=True, exist_ok=True)
         return bindir
 
-    monkeypatch.setattr("livery.toolroom._machinery._toolfetch.install", fake_install)
+    monkeypatch.setattr(
+        "livery.toolroom.tools._machinery._toolfetch.install", fake_install
+    )
     monkeypatch.setattr(
         tools_tasks._drivers, "extract", lambda driver: _spec(version="1.11.1")
     )
@@ -3705,7 +3711,7 @@ def test_python_find_ignores_the_cwd_project(monkeypatch, tmp_path):
     inside footman's own checkout — whose `requires-python` has opinions.
     `--no-project` keeps the answer about the version that was asked.
     """
-    from livery.toolroom._machinery import _toolfetch
+    from livery.toolroom.tools._machinery import _toolfetch
 
     calls: list[list[str]] = []
 
@@ -3726,7 +3732,7 @@ def test_python_installs_into_a_private_store(monkeypatch, tmp_path):
     chain into holes. Each release installs into a store inside its own
     throwaway directory — discarded with the release, contended by nobody.
     """
-    from livery.toolroom._machinery import _toolfetch
+    from livery.toolroom.tools._machinery import _toolfetch
 
     envs: list[dict[str, str] | None] = []
 

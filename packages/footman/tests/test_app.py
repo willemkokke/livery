@@ -161,7 +161,7 @@ def test_dry_run_runs_bodies_and_fakes_footmans_work(project, capsys):
     # The rehearsal: inline code executes (it was never footman's to fake);
     # the recorded run() is faked into a receipt and no subprocess spawns.
     (project / "tasks.py").write_text(
-        "from footman import run, task\n"
+        "from livery.footman import run, task\n"
         "@task\n"
         "def ship():\n"
         "    print('inline ran')\n"
@@ -507,7 +507,7 @@ def test_a_wrong_case_file_mid_cascade_is_complained_about(
     # top missed exactly the monorepo case, where the file that is not
     # loading is a package's own, several levels down from either.
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
-    (tmp_path / "tasks.py").write_text("from footman import task\n")
+    (tmp_path / "tasks.py").write_text("from livery.footman import task\n")
     middle = tmp_path / "packages" / "web"
     deep = middle / "src"
     deep.mkdir(parents=True)
@@ -577,14 +577,14 @@ def test_listings_split_project_from_global(tmp_path, monkeypatch, capsys):
     config = tmp_path / "config" / "footman"
     config.mkdir(parents=True)
     (config / "tasks.py").write_text(
-        "from footman import task\n\n@task\ndef scratch():\n    'Mine, everywhere.'\n"
+        "from livery.footman import task\n\n@task\ndef scratch():\n    'Mine, everywhere.'\n"
     )
     monkeypatch.setenv("FOOTMAN_CONFIG_DIR", str(config))
     proj = tmp_path / "proj"
     proj.mkdir()
     (proj / "pyproject.toml").write_text("[project]\nname='x'\n")
     (proj / "tasks.py").write_text(
-        "from footman import task\n\n@task\ndef build():\n    'Build it.'\n"
+        "from livery.footman import task\n\n@task\ndef build():\n    'Build it.'\n"
     )
     monkeypatch.chdir(proj)
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -607,7 +607,7 @@ def test_one_section_is_not_labelled_as_one_of_two(tmp_path, monkeypatch, capsys
     # there — and never prints a heading over blank space.
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n\n@task\ndef build():\n    'Build it.'\n"
+        "from livery.footman import task\n\n@task\ndef build():\n    'Build it.'\n"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -626,7 +626,7 @@ def test_a_group_straddling_the_split_heads_both_sections(
     config = tmp_path / "config"
     (config / "footman").mkdir(parents=True)
     (config / "footman" / "tasks.py").write_text(
-        "from footman import group\n\n"
+        "from livery.footman import group\n\n"
         "docs = group('docs')\n\n"
         "@docs.task\ndef notes():\n    'Personal notes.'\n"
     )
@@ -634,7 +634,7 @@ def test_a_group_straddling_the_split_heads_both_sections(
     (tmp_path / "proj").mkdir()
     (tmp_path / "proj" / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "proj" / "tasks.py").write_text(
-        "from footman import group\n\n"
+        "from livery.footman import group\n\n"
         "docs = group('docs')\n\n"
         "@docs.task\ndef build():\n    'Build the docs.'\n"
     )
@@ -692,8 +692,8 @@ def test_binding_refusals_exit_usage_end_to_end(tmp_path, monkeypatch):
     (tmp_path / "tasks.py").write_text(
         "import uuid\n"
         "from typing import Annotated\n"
-        "from footman import task\n"
-        "from footman.params import between, env\n"
+        "from livery.footman import task\n"
+        "from livery.footman.params import between, env\n"
         "@task\n"
         "def ident(id: uuid.UUID): ...\n"
         "@task\n"
@@ -735,7 +735,7 @@ def test_tasks_file_does_not_poison_completion_cache(project):
     assert "hi" in before
 
     other = project / "other.py"
-    other.write_text("from footman import task\n@task\ndef solo(): ...\n")
+    other.write_text("from livery.footman import task\n@task\ndef solo(): ...\n")
     assert _app.run([f"-f={other}", "solo"]) == 0
     after = cache.read_text()
     assert after == before  # cache untouched
@@ -764,7 +764,9 @@ def test_directory_restores_cwd(project):
 
     sub = project / "sub"
     sub.mkdir()
-    (sub / "tasks.py").write_text("from footman import task\n@task\ndef t(): ...\n")
+    (sub / "tasks.py").write_text(
+        "from livery.footman import task\n@task\ndef t(): ...\n"
+    )
     before = os.getcwd()
     assert _app.run([f"-C={sub}", "t"]) == 0
     assert os.getcwd() == before
@@ -834,7 +836,7 @@ def test_tasks_file_override(tmp_path, monkeypatch, capsys):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     alt = tmp_path / "custom.py"
     alt.write_text(
-        "from footman import task\n\n@task\ndef only():\n    print('only-ran')\n"
+        "from livery.footman import task\n\n@task\ndef only():\n    print('only-ran')\n"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -847,7 +849,7 @@ def test_config_tasks_file(tmp_path, monkeypatch, capsys):
         "[project]\nname='x'\n[tool.footman]\ntasks = 'custom.py'\n"
     )
     (tmp_path / "custom.py").write_text(
-        "from footman import task\n\n@task\ndef only():\n    print('cfg-ran')\n"
+        "from livery.footman import task\n\n@task\ndef only():\n    print('cfg-ran')\n"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -1148,7 +1150,7 @@ def test_tasks_syntax_error_reported_cleanly(tmp_path, monkeypatch, capsys):
 def test_duplicate_task_name_is_a_user_error(tmp_path, monkeypatch, capsys):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n"
+        "from livery.footman import task\n"
         "@task\n"
         "def build(): ...\n"
         "@task(name='build')\n"
@@ -1226,7 +1228,7 @@ def test_missing_explicit_config_is_an_error(project, capsys):
 def test_keyboard_interrupt_exits_130(tmp_path, monkeypatch, capsys):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n@task\ndef stop():\n    raise KeyboardInterrupt\n"
+        "from livery.footman import task\n@task\ndef stop():\n    raise KeyboardInterrupt\n"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -1244,7 +1246,7 @@ def test_a_generator_exit_is_not_a_task_failure(tmp_path, monkeypatch):
     # door like an interrupt, rather than becoming a receipt.
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n@task\ndef stop():\n    raise GeneratorExit\n"
+        "from livery.footman import task\n@task\ndef stop():\n    raise GeneratorExit\n"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -1388,7 +1390,7 @@ def test_jobs_changes_the_timing_key(project):
 def test_progress_false_task_opts_the_run_out(tmp_path, monkeypatch):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n"
+        "from livery.footman import task\n"
         "@task(progress=False)\n"
         "def odd():\n"
         '    "No rhyme nor reason to its duration."\n'
@@ -1457,8 +1459,8 @@ def test_json_step_rows_redact_a_secret_argument(tmp_path):
     from livery.footman.testing import Runner
 
     (tmp_path / "tasks.py").write_text(
-        "from footman import run, task\n"
-        "from footman.params import Secret\n"
+        "from livery.footman import run, task\n"
+        "from livery.footman.params import Secret\n"
         "\n"
         "@task\n"
         "def login():\n"
@@ -1515,7 +1517,7 @@ def test_json_dry_run_emits_the_report_envelope(project, capsys):
 def test_json_interrupt_envelope(tmp_path, monkeypatch, capsys):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n@task\ndef stop():\n    raise KeyboardInterrupt\n"
+        "from livery.footman import task\n@task\ndef stop():\n    raise KeyboardInterrupt\n"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_paths, "cache_home", lambda: tmp_path / ".cache")
@@ -1567,7 +1569,7 @@ def test_json_returned_mirrors_coercion_types(tmp_path, monkeypatch, capsys):
     (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
     (tmp_path / "tasks.py").write_text(
         "import dataclasses, datetime, decimal, enum, pathlib, uuid\n"
-        "from footman import task\n"
+        "from livery.footman import task\n"
         "class Colour(enum.Enum):\n"
         "    RED = 'red'\n"
         "@dataclasses.dataclass\n"
@@ -1723,7 +1725,7 @@ def test_color_always_paints_when_piped(project, capsys):
     # (a pipe into `less -R`). capsys' stdout fails isatty, yet the rehearsed
     # receipt paints.
     (project / "tasks.py").write_text(
-        "from footman import run, task\n@task\ndef ship():\n    run('touch x')\n"
+        "from livery.footman import run, task\n@task\ndef ship():\n    run('touch x')\n"
     )
     assert _app.run(["--color=always", "-n", "ship"]) == 0
     out = capsys.readouterr().out
@@ -1765,7 +1767,7 @@ def test_force_color_env_paints_when_piped(project, monkeypatch, capsys):
     # FORCE_COLOR is the environment rung of `always`; NO_COLOR (higher, and the
     # never rung) still wins over it.
     (project / "tasks.py").write_text(
-        "from footman import run, task\n@task\ndef ship():\n    run('touch x')\n"
+        "from livery.footman import run, task\n@task\ndef ship():\n    run('touch x')\n"
     )
     monkeypatch.delenv("NO_COLOR", raising=False)
     monkeypatch.setenv("FORCE_COLOR", "1")
@@ -1788,7 +1790,7 @@ def test_piped_output_stays_plain(project, capsys):
 # environment. These pin the rule's every edge: it fires with exactly the
 # right argv, terminates, and stays out of the way everywhere else.
 
-_UV_LOCK = 'version = 1\n\n[[package]]\nname = "footman"\nversion = "0.13.0"\n'
+_UV_LOCK = 'version = 1\n\n[[package]]\nname = "livery-footman"\nversion = "0.13.0"\n'
 
 
 @pytest.fixture
@@ -1957,7 +1959,7 @@ def test_a_failed_plugin_import_retries_too(stale_project, monkeypatch):
     # The #530 shape: the tasks file imports fine, a mounted module doesn't.
     (stale_project / "helper.py").write_text("import missing_module_xyz\n")
     (stale_project / "tasks.py").write_text(
-        "from footman.compose import include\ninclude('helper')\n"
+        "from livery.footman.compose import include\ninclude('helper')\n"
     )
     calls = _capture_exec(monkeypatch)
     with pytest.raises(SystemExit):
@@ -2026,9 +2028,9 @@ def test_the_retry_never_fires_from_runner_invoke(stale_project, monkeypatch, ca
 
 _SCRIPT_BLOCK = '''\
 # /// script
-# dependencies = ["footman", "cowsay"]
+# dependencies = ["livery-footman", "cowsay"]
 # ///
-from footman import task
+from livery.footman import task
 
 @task
 def hi(name: str = "world"):
@@ -2075,13 +2077,13 @@ def test_script_handoff_execs_the_scripts_own_interpreter(script_project, monkey
     assert "--quiet" in ran[0]  # silent unless asked
     assert ran[1][:4] == ["/fake/uv", "python", "find", "--script"]
     # ...and the invocation continues inside it, argv verbatim.
-    assert calls == [["/env/bin/python", "-m", "footman", "hi", "--name=x"]]
+    assert calls == [["/env/bin/python", "-m", "livery.footman", "hi", "--name=x"]]
 
 
 def test_script_handoff_reenters_the_brand_not_stock_footman(
     script_project, monkeypatch
 ):
-    # `-m footman` is the *stock* CLI: a branded child re-ran the handoff —
+    # `-m livery.footman` is the *stock* CLI: a branded child re-ran the handoff —
     # its belt variable is scoped to the brand, so the parent's didn't
     # count — and died on the mismatch refusal, because the script declares
     # the brand's dist and not 'footman'. The brand re-enters through its
@@ -2089,7 +2091,7 @@ def test_script_handoff_reenters_the_brand_not_stock_footman(
     from livery.footman.app import App
 
     (script_project / "tasks.py").write_text(
-        _SCRIPT_BLOCK.replace('"footman"', '"acme-cli"'), encoding="utf-8"
+        _SCRIPT_BLOCK.replace('"livery-footman"', '"acme-cli"'), encoding="utf-8"
     )
     calls = _capture_exec(monkeypatch)
     _fake_uv(monkeypatch)
@@ -2194,20 +2196,21 @@ def test_a_block_without_the_runner_is_refused(script_project, monkeypatch, caps
     # The one refusal: an environment that provably cannot import the
     # runner. Named, with the fix.
     (script_project / "tasks.py").write_text(
-        _SCRIPT_BLOCK.replace('["footman", "cowsay"]', '["cowsay"]'), encoding="utf-8"
+        _SCRIPT_BLOCK.replace('["livery-footman", "cowsay"]', '["cowsay"]'),
+        encoding="utf-8",
     )
     calls = _capture_exec(monkeypatch)
     ran = _fake_uv(monkeypatch)
     assert _app.run(["hi"]) == EX_USAGE
     err = capsys.readouterr().err
-    assert "declares script dependencies but not 'footman'" in err
+    assert "declares script dependencies but not 'livery-footman'" in err
     assert calls == [] and ran == []
 
 
 def test_a_block_with_no_dependencies_asks_for_no_world(script_project, monkeypatch):
     (script_project / "tasks.py").write_text(
         '# /// script\n# requires-python = ">=3.11"\n# ///\n'
-        'from footman import task\n\n@task\ndef hi(name: str = "world"):\n'
+        'from livery.footman import task\n\n@task\ndef hi(name: str = "world"):\n'
         '    """Say hello."""\n    print(f"hello {name}")\n',
         encoding="utf-8",
     )
@@ -2222,7 +2225,7 @@ def test_a_malformed_block_warns_once_and_runs_anyway(
 ):
     (script_project / "tasks.py").write_text(
         "# /// script\n# dependencies = [oops\n# ///\n"
-        'from footman import task\n\n@task\ndef hi(name: str = "world"):\n'
+        'from livery.footman import task\n\n@task\ndef hi(name: str = "world"):\n'
         '    """Say hello."""\n    print(f"hello {name}")\n',
         encoding="utf-8",
     )
@@ -2253,7 +2256,7 @@ def test_script_handoff_takes_the_dash_f_file(project, tmp_path_factory, monkeyp
     with pytest.raises(SystemExit):
         _app.run([f"-f={script}", "hi"])
     assert ran[0][3] == str(script)  # that file's environment, not the cwd's
-    assert calls == [["/env/bin/python", "-m", "footman", f"-f={script}", "hi"]]
+    assert calls == [["/env/bin/python", "-m", "livery.footman", f"-f={script}", "hi"]]
 
 
 def test_a_failed_script_import_teaches_where_the_environment_went(
@@ -2263,7 +2266,8 @@ def test_a_failed_script_import_teaches_where_the_environment_went(
     # declared dependency fails. The refusal says why, and how out.
     (script_project / "tasks.py").write_text(
         _SCRIPT_BLOCK.replace(
-            "from footman import task", "import cowsay\nfrom footman import task"
+            "from livery.footman import task",
+            "import cowsay\nfrom livery.footman import task",
         ),
         encoding="utf-8",
     )
@@ -2613,7 +2617,7 @@ def test_a_mistyped_tasks_config_key_refuses_loudly(tmp_path):
     from livery.footman.testing import Runner
 
     (tmp_path / "tasks.py").write_text(
-        "from footman import task\n\n\n@task\ndef hi():\n    print('hi')\n"
+        "from livery.footman import task\n\n\n@task\ndef hi():\n    print('hi')\n"
     )
     (tmp_path / "footman.toml").write_text("tasks = 123\n")
     r = Runner().invoke("--list", cwd=tmp_path)
@@ -2639,7 +2643,7 @@ def test_a_deleted_working_directory_is_one_taught_line(tmp_path):
         os.chdir(sys.argv[1])
         os.rmdir(sys.argv[1])
         r = subprocess.run(
-            [sys.executable, "-m", "footman", "--list"],
+            [sys.executable, "-m", "livery.footman", "--list"],
             capture_output=True, text=True,
         )
         print(r.returncode)

@@ -906,7 +906,7 @@ def test_the_leg_refreshes_the_co_released_members_before_installing(
     # under test with its argv recorded.
     from types import SimpleNamespace
 
-    from livery import toolroom
+    from livery.toolroom import tools as toolroom
     from livery.workshop._backends import _python
 
     _fake, _git_seam, root = workspace

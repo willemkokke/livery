@@ -15,9 +15,9 @@ from typing import Any
 
 import pytest
 
-from livery import toolroom as tools
-from livery.toolroom import Result, ToolError, _host
-from livery.toolroom.testing import UnservedAnswers, answers
+from livery.toolroom import tools
+from livery.toolroom.tools import Result, ToolError, _host
+from livery.toolroom.tools.testing import UnservedAnswers, answers
 
 
 def test_no_table_is_a_pure_recorder():
@@ -267,10 +267,10 @@ def test_answers_wins_inside_a_recording():
 
 
 def test_from_toolroom_import_testing_is_the_module():
-    # `from livery.toolroom import X` consults the package's __getattr__ before the
+    # `from livery.toolroom.tools import X` consults the package's __getattr__ before the
     # import system tries the submodule — without the redirect this would be
     # Tool("testing").
-    from livery.toolroom import testing as mod
+    from livery.toolroom.tools import testing as mod
 
     assert mod.answers is answers
     assert not isinstance(mod, tools.Tool)

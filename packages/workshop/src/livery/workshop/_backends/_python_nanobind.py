@@ -16,8 +16,8 @@ import sysconfig
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from livery import toolroom
 from livery.footman import fail
+from livery.toolroom import tools
 from livery.workshop._backends import _python
 
 if TYPE_CHECKING:
@@ -122,17 +122,17 @@ def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
     # two candidates for one venv. The skip follows the host's libc;
     # the release matrix sets its own build set explicitly.
     env.setdefault("CIBW_SKIP", "*-manylinux_*" if host_is_musl() else "*-musllinux_*")
-    result = toolroom.uv.opts(
-        cwd=package.directory, env=env, nofail=True, recorded=False
-    )("tool", "run", "--from", CIBUILDWHEEL, "cibuildwheel", "--output-dir", str(dist))
+    result = tools.uv.opts(cwd=package.directory, env=env, nofail=True, recorded=False)(
+        "tool", "run", "--from", CIBUILDWHEEL, "cibuildwheel", "--output-dir", str(dist)
+    )
     if result.code != 0:
         fail(
             f"cibuildwheel ({package.name}) exited {result.code}:\n"
             f"{result.stdout[-4000:]}{result.stderr[-2000:]}"
         )
-    sdist = toolroom.uv.opts(
-        cwd=package.directory, env=env, nofail=True, recorded=False
-    )("build", "--sdist", "--out-dir", str(dist))
+    sdist = tools.uv.opts(cwd=package.directory, env=env, nofail=True, recorded=False)(
+        "build", "--sdist", "--out-dir", str(dist)
+    )
     if sdist.code != 0:
         fail(
             f"uv build --sdist ({package.name}) exited {sdist.code}:\n"

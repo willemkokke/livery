@@ -65,7 +65,7 @@ adds is that somebody named it, which `given()` reports:
 <!-- example: fragment -->
 
 ```python
-from footman import task, given
+from livery.footman import task, given
 
 
 @task
@@ -156,7 +156,7 @@ parameter into a position or a flag reads the *default*, not the
 annotation. This is a working CLI:
 
 ```python
-from footman import task
+from livery.footman import task
 
 
 @task
@@ -211,7 +211,7 @@ value wins (`int` → `float` → `Path` → `str`, with `str` as the universal
 fallback):
 
 ```python
-from footman import task
+from livery.footman import task
 
 
 @task
@@ -224,7 +224,7 @@ bare `list[T]` at a positional). Required when positional, so at least one value
 must be given:
 
 ```python
-from footman import Many
+from livery.footman import Many
 
 
 @task
@@ -260,7 +260,7 @@ When a value may itself contain a comma, mark the parameter `nosplit`: then only
 the repeated flag adds items, and a comma stays literal.
 
 ```python
-from footman import NoSplit
+from livery.footman import NoSplit
 
 
 @task
@@ -296,7 +296,7 @@ work:
 
 ```python
 from typing import NamedTuple
-from footman import task
+from livery.footman import task
 
 
 class Size(NamedTuple):
@@ -442,7 +442,7 @@ Eager, taught validation is the whole pitch, so constraints ride in
 ```python
 from pathlib import Path
 from typing import Annotated
-from footman import task, between, check, doc, env, isfile
+from livery.footman import task, between, check, doc, env, isfile
 
 
 def semver(value: str) -> None: ...  # your validator: raise ValueError to refuse
@@ -515,8 +515,8 @@ else:
 
 ```python
 from typing import Annotated
-from footman import task
-from footman.params import hidden
+from livery.footman import task
+from livery.footman.params import hidden
 
 
 @task
@@ -626,7 +626,7 @@ what you are reading is this moment's answer, not a fixed set.
 
 ```python
 from typing import Annotated
-from footman import task, suggest
+from livery.footman import task, suggest
 
 
 def shares() -> list[str]:
