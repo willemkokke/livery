@@ -326,7 +326,8 @@ Each lands alone, gate-green, with its refusal tests first, and updates
 this note in the same change.
 
 1. **The teardown and the release act** (landed 2026-09-12).
-   `only_local_work` by the merged head; `submit` tears its worktree down at the merge; the
+   `only_local_work` by the merged head; `submit` tears its worktree
+   down at the merge; the
    janitor judges by pull request and drops merged local branches; the
    release act switches back and drops its local branch; the dispatch
    guard and the base walk; `sync` steps off a merged reserved branch.
@@ -446,4 +447,7 @@ without asking; the child shell stays as the fallback.
   commit without a `Mined-At` line and names the newest squash on
   `origin/main`, which the recovery now walks. `fm sync` steps off a
   merged reserved branch through the shared teardown. Verified by the
-  suites and the loop.
+  suites and the loop, whose first pass caught a fault of #512's
+  snapshot instead (a ref the remote moved past the listing failed
+  its read); fixed in the same change, recorded in the state store
+  plan.

@@ -461,3 +461,15 @@ a day, before 6 or after it.
   `WORKSHOP_SNAPSHOT`, so the gate job lists once instead of once per
   entry, and an entry's write records its sha for the entries after
   it.
+- 2026-09-12, the loop's setup proof on the first pass after #512: a
+  fetch by ref name brings the remote's current commit, and the
+  snapshot marked the listed sha as local without checking. Two runs
+  stamped `verified` within a second (1441 at 17:54:58, 1443 at
+  17:54:59); 1443's job had listed before 1441 wrote, its fetch
+  brought 1441's commit, and its read of the listed one failed with
+  git's "not a tree object", so the stamp refused to write and main
+  paid the full gate. Now the listed sha is checked after every fetch,
+  a ref the remote moved past the listing is listed again and read at
+  its current commit, and a write inside leases on that. Pinned by a
+  clone made before the store's first write, since a local clone
+  copies the whole object store and would hide the miss.

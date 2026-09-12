@@ -631,6 +631,58 @@ def test_a_write_inside_a_snapshot_re_lists_on_a_stale_lease_and_records_its_sha
         )
 
 
+def test_a_read_of_a_ref_the_remote_moved_past_the_listing_takes_the_current_commit(
+    repos: tuple[Path, Path], tmp_path: Path
+) -> None:
+    _, work = repos
+    other = _clone(tmp_path, "other", tmp_path / "origin.git")
+    # A clone made before the store's first write holds none of its
+    # commits (a local clone copies the whole object store, so the
+    # order matters): the listing names the ref's commit, and the
+    # read has to fetch it.
+    fresh = _clone(tmp_path, "fresh", tmp_path / "origin.git")
+    assert ROWS.put(work, {"a": {"x": 1}}, message="one") == ""
+    with _state.remote_snapshot(fresh):
+        # Another writer moves the ref between the listing and the read,
+        # so a fetch by the ref's name brings the new commit and not
+        # the listed one; a read of the listed sha would fail with
+        # git's "not a tree object".
+        assert ROWS.put(other, {"b": {"x": 2}}, message="two") == ""
+        with counting_spawns() as spawned:
+            found = ROWS.rows(fresh)
+        assert not found.failed, found.reason
+        assert sorted(row.name for row in found.rows) == ["a", "b"]
+        assert found.rows[0].name == "b"
+        # One fetch, and one listing again for the moved ref.
+        assert spawned["git fetch"] == 1 and spawned["git ls-remote"] == 1, spawned
+        # A write inside leases on the current commit and lands.
+        assert ROWS.put(fresh, {"c": {"x": 3}}, message="three") == ""
+    assert sorted(row.name for row in ROWS.rows(fresh).rows) == ["a", "b", "c"]
+
+
+def test_a_published_listing_opened_after_a_move_reads_the_current_rows(
+    repos: tuple[Path, Path], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The CI shape: the job runner lists once, an earlier run's gate
+    # job moves a ref a second later, and an entry opens the published
+    # listing naming the family it prefetches.
+    _, work = repos
+    other = _clone(tmp_path, "other", tmp_path / "origin.git")
+    fresh = _clone(tmp_path, "fresh", tmp_path / "origin.git")
+    assert ROWS.put(work, {"a": {"x": 1}}, message="one") == ""
+    monkeypatch.delenv(_state.SNAPSHOT_VARIABLE, raising=False)
+    with _state.remote_snapshot(fresh, publish=True) as named:
+        assert named is not None
+        monkeypatch.setenv(_state.SNAPSHOT_VARIABLE, named)
+        assert ROWS.put(other, {"b": {"x": 2}}, message="two") == ""
+        _state._SNAPSHOTS.clear()
+        with _state.remote_snapshot(fresh, fetch=("rows",)):
+            found = ROWS.rows(fresh)
+            assert not found.failed, found.reason
+            assert found.rows[0].name == "b"
+        monkeypatch.delenv(_state.SNAPSHOT_VARIABLE)
+
+
 def test_the_listing_carries_the_branches_and_only_them_beside_the_store(
     repos: tuple[Path, Path],
 ) -> None:
