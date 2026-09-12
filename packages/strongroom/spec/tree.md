@@ -74,10 +74,11 @@ portable-names spirit:
 - relative always: a target starting with `/`, a drive letter and
   colon, or `\\` is refused. It names one machine's disk.
 
-`..` steps are allowed in a target. Whether a target may escape its
-view is the view's policy, decided by the materialiser, never by the
-format. Two links to the same target dedup as part of their tree like
-any other entry.
+`..` steps are allowed in a target, because a subtree cannot know
+where it is mounted. A target that leaves the view it is made in is
+parked by the materialiser and refused on collect
+([materialiser.md](materialiser.md)), never by the format. Two links
+to the same target dedup as part of their tree like any other entry.
 
 ## Refusals
 

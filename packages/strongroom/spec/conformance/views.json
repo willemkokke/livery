@@ -17,6 +17,22 @@
       ]
     },
     {
+      "id": "an-executable-entry-round-trips-and-a-declared-output-is-executable",
+      "namespaces": [],
+      "steps": [
+        {"op": "put", "data": "#!/bin/sh\n", "as": "S"},
+        {"op": "put", "data": "not the view's", "as": "N"},
+        {"op": "tree", "entries": {"run.sh": "S"}, "executable": ["run.sh"], "as": "T"},
+        {"op": "view", "tree": "T", "at": "v", "as": "V"},
+        {"op": "collect", "at": "v", "declared": ["run.sh"], "expect": "T"},
+        {"op": "stray", "at": "v", "path": "made.sh"},
+        {"op": "tree", "entries": {"run.sh": "S", "made.sh": "N"}, "executable": ["run.sh"], "as": "T2"},
+        {"op": "collect", "at": "v", "declared": ["run.sh", "made.sh"], "expect": "T2"},
+        {"op": "tree", "entries": {"run.sh": "S", "made.sh": "N"}, "executable": ["run.sh", "made.sh"], "as": "T3"},
+        {"op": "collect", "at": "v", "declared": ["run.sh", "made.sh"], "executable": ["made.sh"], "expect": "T3"}
+      ]
+    },
+    {
       "id": "a-live-view-is-a-root",
       "namespaces": [],
       "steps": [
@@ -54,6 +70,20 @@
         {"op": "entry", "view": "V", "path": "in", "expect_rung": ["copy"]},
         {"op": "exists", "at": "v", "path": "out", "expect": false},
         {"op": "exists", "at": "v", "path": "in", "expect": true}
+      ]
+    },
+    {
+      "id": "an-escaping-symlink-is-parked-on-every-platform",
+      "namespaces": [],
+      "steps": [
+        {"op": "put", "data": "a", "as": "A"},
+        {"op": "tree", "entries": {"a": "A"}, "links": {"out": "../elsewhere", "in": "a"}, "as": "T"},
+        {"op": "view", "tree": "T", "at": "v", "as": "V"},
+        {"op": "entry", "view": "V", "path": "out", "expect_rung": ["parked"]},
+        {"op": "entry", "view": "V", "path": "in", "expect_rung": ["symlink", "copy"]},
+        {"op": "exists", "at": "v", "path": "out", "expect": false},
+        {"op": "exists", "at": "v", "path": "in", "expect": true},
+        {"op": "drop-view", "view": "V", "expect_left": []}
       ]
     },
     {

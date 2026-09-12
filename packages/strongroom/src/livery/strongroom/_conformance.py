@@ -163,7 +163,9 @@ class StoreLike(Protocol):
 
     def view(self, tree: Digest, at: Path) -> ViewRecord: ...
 
-    def collect(self, at: Path, declared: Iterable[str]) -> Tree: ...
+    def collect(
+        self, at: Path, declared: Iterable[str], *, executable: Iterable[str] = ()
+    ) -> Tree: ...
 
     def drop_view(self, view_id: str) -> DropReport: ...
 
@@ -409,9 +411,18 @@ class _Run:
 
     def op_tree(self, step: dict[str, Any]) -> None:
         entries: list[Entry | Link] = []
+        executable = set(step.get("executable", []))
         for name, blob in step["entries"].items():
             digest = self.named(blob)
-            entries.append(Entry(name, "blob", digest, len(self.store.read(digest))))
+            entries.append(
+                Entry(
+                    name,
+                    "blob",
+                    digest,
+                    len(self.store.read(digest)),
+                    name in executable,
+                )
+            )
         for name, subtree in step.get("subtrees", {}).items():
             digest = self.named(subtree)
             entries.append(Entry(name, "tree", digest, len(self.store.read(digest))))
@@ -598,7 +609,11 @@ class _Run:
         )
 
     def op_collect(self, step: dict[str, Any]) -> None:
-        tree = self.store.collect(self.base / step["at"], step["declared"])
+        tree = self.store.collect(
+            self.base / step["at"],
+            step["declared"],
+            executable=step.get("executable", []),
+        )
         wanted = self.named(step["expect"])
         self.check(tree.digest() == wanted, f"collected {tree.digest()}, not {wanted}")
 

@@ -100,15 +100,19 @@ are the pieces underneath, for a group that spans processes.
 
 ```python
 record = store.view(tree, Path("work/bun"))
-outputs = store.collect(Path("work/out"), ["result.bin", "logs"])
+outputs = store.collect(
+    Path("work/out"), ["result.bin", "logs", "run.sh"], executable=["run.sh"]
+)
 store.drop_view(record.id)
 ```
 
 `view` fills a directory by the cheapest safe rung per entry and
 records which one it used; the view is a root while its directory
 exists. `collect` reads declared outputs back into a tree, landing
-every object. `drop_view` removes only what the record lists and
-names what it leaves.
+every object; `executable` names the outputs that are executable
+where the file mode cannot say, so one call lands one tree on every
+platform. `drop_view` removes only what the record lists and names
+what it leaves.
 
 ## Maintenance
 

@@ -1089,6 +1089,42 @@ def test_a_build_that_left_no_site_is_red(tmp_path: Path) -> None:
     require_site(tmp_path)
 
 
+def test_a_checkout_without_the_site_sources_is_refused_before_the_build(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._docs import require_sources, source_summary
+
+    with pytest.raises(_FAILURES, match=r"docs, zensical\.toml missing"):
+        require_sources(tmp_path)
+    (tmp_path / "docs").mkdir()
+    with pytest.raises(_FAILURES, match=r"zensical\.toml missing"):
+        require_sources(tmp_path)
+    (tmp_path / "zensical.toml").write_text("[project]\n")
+    require_sources(tmp_path)
+    assert source_summary(tmp_path) == (
+        "  site sources: 0 page(s) under docs/, zensical.toml present"
+    )
+    (tmp_path / "docs" / "index.md").write_text("# hi\n")
+    (tmp_path / "docs" / "deep").mkdir()
+    (tmp_path / "docs" / "deep" / "page.md").write_text("# deep\n")
+    assert source_summary(tmp_path).startswith("  site sources: 2 page(s)")
+
+
+def test_the_generators_output_is_printed_in_ci_only() -> None:
+    from livery.workshop._docs import generator_lines
+
+    assert generator_lines("Build started\n", "", in_ci=False) == []
+    assert generator_lines("", "", in_ci=True) == []
+    both = generator_lines(
+        "Build started\nBuild finished in 0.04s\n", "warn\n", in_ci=True
+    )
+    assert both == [
+        "    Build started",
+        "    Build finished in 0.04s",
+        "    warn",
+    ]
+
+
 def test_the_store_is_pulled_only_in_the_merge_points_deploy_job(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

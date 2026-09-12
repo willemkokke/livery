@@ -274,10 +274,12 @@ def test_fetch_url_refuses_every_non_200_and_every_failure(tmp_path: Path) -> No
             pass
         with fetch_url(f"{base}/ok?x=1", connect_timeout=1, transfer_timeout=1) as got:
             assert got.read() == b"ok"
+    # Windows retries a refused connection for about a second before
+    # reporting it, in its own words.
     with (
-        pytest.raises(Unreachable, match="Connection refused"),
+        pytest.raises(Unreachable, match=r"Connection refused|actively refused"),
         fetch_url(
-            f"http://127.0.0.1:{_closed_port()}/", connect_timeout=1, transfer_timeout=1
+            f"http://127.0.0.1:{_closed_port()}/", connect_timeout=5, transfer_timeout=1
         ),
     ):
         pass

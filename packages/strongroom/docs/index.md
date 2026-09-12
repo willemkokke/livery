@@ -96,6 +96,8 @@ as a marked copy where the platform refuses, or a parked refusal when
 the target escapes the view. The record lists every path and rung and
 is a root while the view's directory exists; `drop_view` removes only
 what the record lists and names what it leaves. `collect` reads
-declared outputs back into a tree, landing every object. `prefetch`
+declared outputs back into a tree, landing every object; the caller
+names the outputs that are executable where the file mode cannot say,
+and a link that leaves the directory is refused. `prefetch`
 warms everything one digest reaches, and `shed` evicts local copies a
 named source holds, except what a live view depends on.
