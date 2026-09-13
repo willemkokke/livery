@@ -356,7 +356,11 @@ def measured_coverage(
         for key, value in os.environ.items()
         if not key.startswith(("COVERAGE_", "COV_CORE_"))
     }
-    result = tools.coverage.opts(cwd=root, env=scrubbed)("json", "-o", report)
+    # nofail: the exit code is read here, so a run that left no data
+    # is told apart from a broken read instead of ending the gate.
+    result = tools.coverage.opts(cwd=root, env=scrubbed, nofail=True)(
+        "json", "-o", report
+    )
     if result.code != 0:
         if none_ok and NO_DATA in result.stdout + result.stderr:
             return {}

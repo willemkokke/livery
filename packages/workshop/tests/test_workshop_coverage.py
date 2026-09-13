@@ -248,20 +248,11 @@ def test_the_preview_tolerates_a_run_that_measured_nothing(
 ) -> None:
     # A selection of tests that reached no source leaves coverage with
     # no data: the preview says so, and a judged read still refuses.
-    from types import SimpleNamespace
-
+    # The real tool, on a directory without a data file: the toolroom
+    # raises on a non-zero exit unless told not to, and a fake that
+    # returned a result would hide that.
+    del monkeypatch
     package = _package(tmp_path, "thing", "[qa]\ncoverage-floor = 1\n")
-
-    class _NoData:
-        def opts(self, **_kwargs: object) -> _NoData:
-            return self
-
-        def __call__(self, *args: str) -> SimpleNamespace:
-            return SimpleNamespace(code=1, stdout="No data to report.\n", stderr="")
-
-    from livery.toolroom import tools as toolroom
-
-    monkeypatch.setattr(toolroom, "coverage", _NoData())
     _python.report_coverage(tmp_path, (package,))
     assert "nothing measured by this run" in capsys.readouterr().out
     with pytest.raises(_FAILURES, match="coverage json exited 1"):
