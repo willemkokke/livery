@@ -10,8 +10,8 @@ sealed record's writes, `confirm=` on a step maker) are pinned by the
 executed suites instead.
 """
 
+from footman_typecheck_workitem import lint
 from livery.footman import Result, ResultView, parallel, step
-from typecheck_workitem import lint
 
 
 def _declared_means_recorded() -> None:

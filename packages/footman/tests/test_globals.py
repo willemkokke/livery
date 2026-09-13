@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from footman_workers import read_force_color as _mp_read_force_color
 from livery.footman import _globals, _manifest
 from livery.footman._executor import run_chain
 from livery.footman._split import split_chain
@@ -1082,13 +1083,6 @@ def test_zero_arg_entry_parallelises_via_the_router(monkeypatch):
     assert all(r.ok for r in results.values()), [str(r.error) for r in results.values()]
     assert seen["a"] == ["tool-a", "--x"]
     assert seen["b"] == ["tool-b"]
-
-
-def _mp_read_force_color(path):
-    import os as _os
-
-    with open(path, "w", encoding="utf-8") as fh:
-        fh.write(str(_os.environ.get("FORCE_COLOR")))
 
 
 def test_multiprocessing_workers_inherit_the_run_wide_colour(tmp_path, monkeypatch):

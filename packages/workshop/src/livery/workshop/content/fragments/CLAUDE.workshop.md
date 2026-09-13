@@ -109,6 +109,13 @@ This is the final form; there are no typing clean-up passes later.
 
 - Public is what a package's `__init__` re-exports in `__all__`. Every
   other module is underscore-named. A test pins both.
+- Test modules are named by their path (pytest's importlib mode), so
+  two packages may both have a `tests/test_lifecycle.py`, and a test
+  module never imports another. A helper module in a package's
+  `tests/` carries the package's name (`workshop_seeds.py`), since
+  every tests directory shares one `pythonpath`; the session refuses
+  to start otherwise, naming the module and the name it wants. A
+  function a test hands to a spawned process lives in such a helper.
 - Four type checkers gate, none advisory: basedpyright with warnings
   as errors, mypy strict on the namespace (linux, darwin, and win32),
   ty, and pyrefly. `fm typecomplete` requires every public API to be

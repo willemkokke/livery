@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from _gitlab_driver import GitlabConformanceDriver
+from forge_gitlab_driver import GitlabConformanceDriver
 from livery.forge import Unsupported
 from livery.forge.testing import (
     SCENARIOS,

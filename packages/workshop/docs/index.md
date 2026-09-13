@@ -69,6 +69,10 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
   `[ci] windows-temp = "system"` leaves the system temp, for a runner
   without a separate working drive; `"runner"` asks for the move on
   any forge.
+  Tests are namespaced by their path (pytest's importlib mode, set by
+  the project template), so two packages may share a test file's
+  name; a helper module in a package's `tests/` carries the package's
+  name, and the session refuses to start otherwise.
 - `fm start`: open the work. An issue number assigns and branches
   `<kind>/<number>-<slug>`, a quoted title files the issue first, and
   `<kind>/<slug>` starts a branch that belongs to no issue, whose
@@ -170,7 +174,8 @@ that is judged is the CI union: on every leg the tests run measured,
 each process a test starts included and the gate's own driver never,
 so a line counts only when a test reached it, and the gate job
 combines all platforms before enforcing, so the floors are
-deterministic per change and never depend on one machine's view. Coverage stays global under the
+deterministic per change and never depend on one machine's view. Coverage stays global
+under the
 affected mode: in a check leg's one measured run every test records
 under a context named by its node id (the workshop's own pytest
 plugin, quiet outside a measured run), the leg splits the run's data

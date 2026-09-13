@@ -276,7 +276,12 @@ packages = ["packages/", "packages\\"]
 
 [tool.pytest.ini_options]
 testpaths = [{% if packages %}"packages", {% endif %}"tests"]
+# Test modules are named by their path (`--import-mode=importlib`), so
+# two packages may both have a tests/test_lifecycle.py. That leaves the
+# tests directories off sys.path, so they go on pythonpath for the
+# helper modules, which carry their package's name and so never clash.
+pythonpath = [{% for package in py %}"packages/{{ package.dir }}/tests", {% endfor %}"tests"]
 # `-n auto` fans the suite across cores; `worksteal` because durations
 # are uneven (footman measured it; the choice carries until we measure
 # here).
-addopts = "-q -n auto --dist=worksteal"
+addopts = "-q -n auto --dist=worksteal --import-mode=importlib"

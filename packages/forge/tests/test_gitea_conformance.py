@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from _gitea_driver import GiteaConformanceDriver
+from forge_gitea_driver import GiteaConformanceDriver
 from livery.forge import Unsupported
 from livery.forge.testing import (
     SCENARIOS,
