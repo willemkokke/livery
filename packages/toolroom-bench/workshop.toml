@@ -15,7 +15,7 @@ floor = "0.7.0"
 [[depends]]
 path = "packages/footman"
 kind = "runtime"
-floor = "0.52.2"
+floor = "0.53.0"
 
 [qa]
 # The coverage high-water mark the gate enforces; raise it as the

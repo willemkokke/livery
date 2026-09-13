@@ -5,6 +5,25 @@ All notable changes to toolroom are documented here. The format follows
 [SemVer](https://semver.org/) — pre-1.0, minor versions may include
 breaking changes.
 
+## [0.7.0] - 2026-09-13
+
+### Added
+
+- Contract keys are kebab-case; one loader refuses underscores, the render verbs migrate by @willemkokke
+- Livery.toolroom is a namespace, the handles live in livery.toolroom.tools by @willemkokke
+- A schedule entry runs every week or every two weeks, and the refresh submits what moved by @willemkokke
+- The stub machinery is livery.toolroom.bench, its own distribution by @willemkokke
+- Tests are namespaced by their path, and a helper carries its package's name by @willemkokke
+
+### Changed
+
+- The remaining quick wins on the leg's profile by @willemkokke
+- Plan the tool store over strongroom by @willemkokke
+- The tool store plan gains windows-arm and the checkout's bin directory by @willemkokke
+- The tool store plan names its packages and keeps interpreters with uv by @willemkokke
+- The README's beta note carries no literal minor to roll by @willemkokke
+- The tool store plan records phases 0 and 1 as landed by @willemkokke
+
 ## [0.6.2] - 2026-09-06
 
 ### Added
