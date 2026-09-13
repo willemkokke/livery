@@ -148,6 +148,7 @@ def test_a_fix_run_records_the_tree_the_rewriters_left(
     subprocess.run(["git", "init", "-q"], cwd=root, check=True)
     monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: root)
     monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
+    monkeypatch.delenv("CI", raising=False)  # the fix guard is its own test
 
     def _plan(root: Path, git: object, *, base: str = "main") -> _gate_record.Plan:
         return _gate_record.Plan(
