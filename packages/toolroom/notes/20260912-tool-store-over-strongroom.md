@@ -315,9 +315,18 @@ Deliverables:
 - `_pick_asset(assets, host=...)` and the host table in
   `livery.toolroom.bench`; `fm tools.pin` there, writing a spec;
   `fm tools.fetch [--host ...] [--into DIR]` in the store.
-- A recorded HTTP fixture for the forge asset listings and the five
-  downloads; `fm tools.pin bun 1.3.14` reproduces hse's `bun.json`
-  but for key order.
+- The digest per host: taken from the listing where the forge
+  publishes one, computed by downloading and hashing once where it
+  does not. Either way the spec's value is what every later install
+  verifies against. GitHub carries `digest` on a release asset for
+  releases from mid-2025 onward, GitLab publishes `checksums.txt` as
+  a release asset, and Gitea's download host puts a `.sha256` beside
+  each file.
+- Listing fixtures under the bench's tests: small JSON trimmed from
+  real responses, replacing the listing seam the way `_provision`'s
+  tests already replace `_get_json`. `fm tools.pin bun 1.3.14`
+  reproduces hse's `bun.json` but for key order. No artifact bytes
+  are recorded; the store's own tests build archives and hash them.
 - `specs/` in this repository for uv, bun, ruff, ty, pyrefly and
   git-cliff.
 
@@ -435,6 +444,15 @@ Acceptance:
   asked for; their tests and docs page live there rather than under
   `packages/toolroom/`. The held ref lock refusal of phase 1's list
   has no test yet and stays open.
+- 2026-09-13, Willem: a version's digest is ingested from the host
+  where the host publishes one and hashed by us where it does not,
+  and from then on it is the value every install is verified
+  against. So pin records a digest rather than trusting each fetch,
+  and phase 2 records no artifact downloads: the digest comes from
+  the listing on GitHub, from `checksums.txt` on GitLab, and from a
+  `.sha256` sibling on Gitea's download host. Recording downloads
+  was never open to us anyway, since the cassette layer stores a
+  response body as text and one artifact runs to tens of megabytes.
 
 ## Open
 
