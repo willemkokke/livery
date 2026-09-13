@@ -340,7 +340,9 @@ def test_an_install_lands_extracts_hoists_collects_and_views(
     again = store.ensure(spec)
     assert not again.installed and again.tree == ensured.tree
     assert [e.action for e in events] == ["probe"]
-    # A damaged view is made whole again through its own record.
+    # A damaged view is made whole again through its own record. The
+    # view's file is read-only, and Windows refuses to unlink one.
+    tool.chmod(tool.stat().st_mode | stat.S_IWUSR)
     tool.unlink()
     assert store.probe(spec) is None
     repaired = store.ensure(spec)
