@@ -11,10 +11,11 @@ Reach for [livery.toolroom.store.Home][] and its `open_store`.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-from livery.strongroom import Namespace, Store
+from livery.strongroom import Namespace, Source, Store
 
 TOOLS = "tools"
 """The namespace of installed tools: `tools/<name>@<version>` names the
@@ -64,14 +65,22 @@ class Home:
         """The view of *name* at *version*."""
         return self.tools / f"{name}@{version}"
 
-    def open_store(self) -> Store:
+    def open_store(
+        self, *, sources: Iterable[Source] = (), offline: bool = False
+    ) -> Store:
         """Open the home's strongroom store, creating it on first use.
 
         A store that exists is opened with the same namespaces it was
         created with; a directory that holds another layout refuses
-        as strongroom refuses it.
+        as strongroom refuses it. *sources* are the tiers the store
+        consults for an object it lacks, and *offline* keeps it from
+        every origin.
         """
         if (self.store / "strongroom.json").is_file():
-            return Store.open(self.store, namespaces=NAMESPACES)
+            return Store.open(
+                self.store, namespaces=NAMESPACES, sources=sources, offline=offline
+            )
         self.root.mkdir(parents=True, exist_ok=True)
-        return Store.create(self.store, namespaces=NAMESPACES)
+        return Store.create(
+            self.store, namespaces=NAMESPACES, sources=sources, offline=offline
+        )

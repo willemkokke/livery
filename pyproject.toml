@@ -303,7 +303,7 @@ testpaths = ["packages", "tests"]
 # two packages may both have a tests/test_lifecycle.py. That leaves the
 # tests directories off sys.path, so they go on pythonpath for the
 # helper modules, which carry their package's name and so never clash.
-pythonpath = ["packages/forge/tests", "packages/workshop/tests", "packages/toolroom/tests", "packages/footman/tests", "packages/strongroom/tests", "packages/toolroom-bench/tests", "tests"]
+pythonpath = ["packages/forge/tests", "packages/workshop/tests", "packages/toolroom/tests", "packages/footman/tests", "packages/strongroom/tests", "packages/toolroom-bench/tests", "packages/toolroom-store/tests", "tests"]
 # `-n auto` fans the suite across cores; `worksteal` because durations
 # are uneven (footman measured it; the choice carries until we measure
 # here).

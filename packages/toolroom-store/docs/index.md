@@ -8,23 +8,43 @@ pin, extracts it, collects it as a tree, and names the tree under
 by every checkout on it. The spec format is byte-compatible with
 hse's, so a spec moves between the two without an edit.
 
-This release carries the spec model and the home's layout:
+The store installs, links, emits and fetches:
 
 ```python
 from pathlib import Path
 
-from livery.toolroom.store import Home, Spec, host_key
+from livery.strongroom import FolderSource
+from livery.toolroom.store import Home, Spec, Store
 
-spec = Spec.load(Path("specs/bun.json"))
-definition = spec.definition_for(host_key("Darwin", "arm64"))
-store = Home(Path.home() / ".local/share/toolroom").open_store()
+store = Store(
+    Home(Path.home() / ".local/share/toolroom"),
+    sources=[FolderSource(Path("/mirrors/tools/store"))],
+)
+ensured = [store.ensure(Spec.load(path)) for path in Path("specs").glob("*.json")]
+store.link(ensured, Path(".workshop/bin"))
+delta = store.delta(ensured, Path(".workshop/bin"))
 ```
+
+`ensure` lands the pinned artifact through the sources in order and
+through the origin URL unless the store is offline; a mismatch at any
+tier is refused naming the tier, and an offline miss names
+`<name>@<version>` and the origin. The archive is extracted, its root
+hoisted, a binary placed as its `exe`, the shims made, the directory
+collected as a tree, `tools/<name>@<version>` moved to it write-once,
+and the tree viewed at the home's tool directory. A second `ensure`
+is a probe that answers offline. A directory the store did not make
+is never removed.
+
+`link` fills a bin directory with one link per executable the specs'
+`paths` name, a launcher where the platform refuses a link, and
+removes only links it made; `delta` is the one PATH prepend and the
+env with `$package` replaced by the tool directory. `fetch` lands
+every host's artifact into a store at another root, a mirror by
+construction, for an offline install elsewhere.
 
 A definition with a URL and no sha256 refuses at load. A host the
 spec does not carry refuses by name, naming the hosts it does. The
 six host keys are `macos-arm`, `macos-x64`, `linux-x64`,
-`linux-arm`, `windows-x64` and `windows-arm`.
-
-Installing, emitting the PATH delta, fetching every host's artifact
-into a mirror, and the `fm tools.*` verbs follow in the next phases
-of the plan in toolroom's notes.
+`linux-arm`, `windows-x64` and `windows-arm`. The delegated kinds,
+`uv-tool`, `uv-python`, `bun-install` and `system-check`, and the
+`fm tools.*` verbs follow in the plan's next phases.
