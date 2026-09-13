@@ -521,8 +521,80 @@ def test_the_isolated_legs_run_for_real_on_a_dependency_free_member(
     assert list((member / "dist").glob("*.whl"))
 
 
+PROBE = "leg-probe"
+"""The stand-in distribution the isolated legs resolve, built in the test.
+
+A leg that resolves a real distribution reaches an index, so a network
+fault fails the test on the fetch rather than on the property it pins.
+"""
+
+
+def _wheel(directory: Path, name: str, version: str) -> Path:
+    """Write a minimal installable wheel for *name* at *version*.
+
+    Metadata and an empty module, which is all a resolution reads. The
+    wheel exists so an isolated leg can resolve with no index at all.
+    """
+    import base64
+    import hashlib
+    import zipfile
+
+    module = name.replace("-", "_")
+    dist = f"{module}-{version}"
+    path = directory / f"{module}-{version}-py3-none-any.whl"
+    records: list[str] = []
+
+    def _add(archive: zipfile.ZipFile, arcname: str, data: bytes) -> None:
+        archive.writestr(arcname, data)
+        digest = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b"=")
+        records.append(f"{arcname},sha256={digest.decode()},{len(data)}")
+
+    with zipfile.ZipFile(path, "w") as archive:
+        _add(archive, f"{module}/__init__.py", f'__version__ = "{version}"\n'.encode())
+        _add(
+            archive,
+            f"{dist}.dist-info/METADATA",
+            f"Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n".encode(),
+        )
+        _add(
+            archive,
+            f"{dist}.dist-info/WHEEL",
+            b"Wheel-Version: 1.0\nGenerator: livery\nRoot-Is-Purelib: true\n"
+            b"Tag: py3-none-any\n",
+        )
+        records.append(f"{dist}.dist-info/RECORD,,")
+        archive.writestr(f"{dist}.dist-info/RECORD", "\n".join(records) + "\n")
+    return path
+
+
+def _starve(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, *versions: str) -> Path:
+    """Let the isolated legs resolve from local wheels and nothing else.
+
+    Every install the leg runs carries the index arguments, so replacing
+    them with ``--no-index`` and a find-links directory closes each
+    reach at once. The toolchain's bare pytest resolves from the same
+    directory; a seeded member has no tests directory, so it is never
+    run.
+    """
+    from livery.workshop._backends import _python
+
+    links = tmp_path / "links"
+    links.mkdir(exist_ok=True)
+    for version in versions:
+        _wheel(links, PROBE, version)
+    _wheel(links, "pytest", "9.0.0")
+    monkeypatch.setattr(
+        _python,
+        "_index_args",
+        lambda _root: ("--no-index", f"--find-links={links}"),
+    )
+    return links
+
+
 def test_the_toolchain_probe_refuses_a_moved_floor(
-    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+    workspace: tuple[FakeForge, GitOps, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     # The deliberate overlap, forced first: a toolchain pin that
     # names one of the package's own floored dependencies lifts it
@@ -535,18 +607,19 @@ def test_the_toolchain_probe_refuses_a_moved_floor(
     (member / "pyproject.toml").write_text(
         '[project]\nname = "livery-core"\nversion = "0.2.0"\n'
         'requires-python = ">=3.11"\n'
-        'dependencies = ["packaging>=24.0"]\n'
+        f'dependencies = ["{PROBE}>=24.0"]\n'
         "[build-system]\n"
         'requires = ["uv_build>=0.7"]\nbuild-backend = "uv_build"\n'
         "[tool.uv.build-backend]\n"
         'module-name = "livery.core"\nnamespace = true\n'
     )
+    _starve(monkeypatch, tmp_path, "24.0", "25.0")
     packages = {p.directory.name: p for p in discover_packages(root)}
     _python.build(packages["core"], root)
 
     def _overlapping_pins(_root: Path, scratch: Path) -> Path:
         pins = scratch / "dev-pins.txt"
-        pins.write_text("packaging==25.0\npytest\n")
+        pins.write_text(f"{PROBE}==25.0\npytest\n")
         return pins
 
     monkeypatch.setattr(
@@ -561,11 +634,13 @@ def test_the_toolchain_probe_refuses_a_moved_floor(
         _python.run_isolated_test(packages["core"], root, resolution="lowest-direct")
     message = str(caught.value)
     assert "moved direct dependencies" in message
-    assert "packaging 24.0 -> 25.0" in message
+    assert f"{PROBE} 24.0 -> 25.0" in message
 
 
 def test_the_toolchain_pins_leave_what_the_leg_resolved(
-    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+    workspace: tuple[FakeForge, GitOps, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     # The leg's floor survives the toolchain install: the lock's pin
     # on the member's own dependency is dropped from the toolchain,
@@ -578,18 +653,19 @@ def test_the_toolchain_pins_leave_what_the_leg_resolved(
     (member / "pyproject.toml").write_text(
         '[project]\nname = "livery-core"\nversion = "0.2.0"\n'
         'requires-python = ">=3.11"\n'
-        'dependencies = ["packaging>=24.0"]\n'
+        f'dependencies = ["{PROBE}>=24.0"]\n'
         "[build-system]\n"
         'requires = ["uv_build>=0.7"]\nbuild-backend = "uv_build"\n'
         "[tool.uv.build-backend]\n"
         'module-name = "livery.core"\nnamespace = true\n'
     )
+    _starve(monkeypatch, tmp_path, "24.0", "25.0")
     packages = {p.directory.name: p for p in discover_packages(root)}
     _python.build(packages["core"], root)
 
     def _overlapping_pins(_root: Path, scratch: Path) -> Path:
         pins = scratch / "dev-pins.txt"
-        pins.write_text("packaging==25.0\npytest\n")
+        pins.write_text(f"{PROBE}==25.0\npytest\n")
         return pins
 
     monkeypatch.setattr(
@@ -598,7 +674,7 @@ def test_the_toolchain_pins_leave_what_the_leg_resolved(
     resolved = _python.run_isolated_test(
         packages["core"], root, resolution="lowest-direct"
     )
-    assert resolved["packaging"] == "24.0"
+    assert resolved[PROBE] == "24.0"
 
 
 def test_pins_without_drops_only_what_the_leg_resolved(tmp_path: Path) -> None:
@@ -739,6 +815,8 @@ def test_dev_pins_export_the_locks_resolution_or_none(tmp_path: Path) -> None:
 
 def test_an_unresolvable_floor_fails_the_floor_leg_by_name(
     workspace: tuple[FakeForge, GitOps, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     # A solo release whose declared floor names a version no index
     # serves: the floor leg's install refuses, and the refusal is the
@@ -756,6 +834,7 @@ def test_an_unresolvable_floor_fails_the_floor_leg_by_name(
         "[tool.uv.build-backend]\n"
         'module-name = "livery.tool"\nnamespace = true\n'
     )
+    _starve(monkeypatch, tmp_path)
     packages = {p.directory.name: p for p in discover_packages(root)}
     _python.build(packages["tool"], root)
     with pytest.raises(_FAILURES) as caught:
