@@ -89,6 +89,8 @@ def test_json_that_is_not_a_spec_is_refused_naming_where() -> None:
         Spec.from_json({"name": "t", "homepage": "x"})
     with pytest.raises(SpecError, match="spec: no name"):
         Spec.from_json({})
+    with pytest.raises(SpecError, match="spec name: not a string"):
+        Spec.from_json({"name": 5})
     with pytest.raises(SpecError, match=r"spec versions\[1.0\]: no version"):
         Spec.from_json({"name": "t", "versions": {"1.0": {}}})
     with pytest.raises(SpecError, match=r"definitions\[macos-arm\]: no arch"):
