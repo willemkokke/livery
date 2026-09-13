@@ -8,8 +8,12 @@ from pathlib import Path
 import pytest
 
 from livery.workshop._git_ops import GitOps
-from livery.workshop._graph import affected_packages, dependents_closure
-from livery.workshop._packages import discover_packages
+from livery.workshop._graph import (
+    affected_from_paths,
+    affected_packages,
+    dependents_closure,
+)
+from livery.workshop._packages import Package, discover_packages
 
 
 def _git(cwd: Path, *args: str) -> None:
@@ -193,3 +197,89 @@ def test_a_site_only_change_affects_nothing(
     affected = affected_packages(root, GitOps(root))
     assert affected is not None
     assert [p.path for p in affected] == ["packages/mid", "packages/top"]
+
+
+# --- what a change reaches, by the kind's classification -------------------------
+
+
+def _paths(root: Path, *paths: str) -> None:
+    for path in paths:
+        target = root / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("x = 1\n")
+
+
+def test_the_python_kind_classifies_tests_support_source_and_configuration() -> None:
+    from livery.workshop._backends import _python
+    from livery.workshop._kinds import CONFIGURATION, SOURCE, TEST, TEST_SUPPORT
+
+    package = Package(Path("packages/x"), "packages/x", "livery-x", "python", ())
+    assert _python.classify(package, "tests/test_a.py") == TEST
+    assert _python.classify(package, "tests/deep/a_test.py") == TEST
+    assert _python.classify(package, "tests/conftest.py") == TEST_SUPPORT
+    assert _python.classify(package, "tests/x_seeds.py") == TEST_SUPPORT
+    assert _python.classify(package, "tests/data/test_a.json") == TEST_SUPPORT
+    assert _python.classify(package, "src/livery/x/mod.py") == SOURCE
+    assert _python.classify(package, "pyproject.toml") == CONFIGURATION
+    assert _python.classify(package, "workshop.toml") == CONFIGURATION
+
+
+def test_a_test_file_reaches_its_package_alone_and_runs_alone(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    _paths(root, "packages/mid/tests/test_a.py")
+    packages = discover_packages(root)
+    scope = affected_from_paths(root, packages, ["packages/mid/tests/test_a.py"])
+    assert scope is not None
+    assert [p.path for p in scope.packages] == ["packages/mid"]
+    assert scope.tests == {"packages/mid": ("packages/mid/tests/test_a.py",)}
+    # Test support and configuration widen to the suite and the dependents.
+    for path in ("packages/mid/tests/conftest.py", "packages/mid/pyproject.toml"):
+        scope = affected_from_paths(root, packages, [path])
+        assert scope is not None and scope.tests == {}
+        assert [p.path for p in scope.packages] == ["packages/mid", "packages/top"]
+    # A test beside a source change of its package runs the suite.
+    scope = affected_from_paths(
+        root, packages, ["packages/mid/tests/test_a.py", "packages/mid/thing.py"]
+    )
+    assert scope is not None and scope.tests == {}
+    assert [p.path for p in scope.packages] == ["packages/mid", "packages/top"]
+    # A dependency's source change reaches the dependent's suite over its
+    # own test selection.
+    scope = affected_from_paths(
+        root, packages, ["packages/core/thing.py", "packages/top/tests/test_a.py"]
+    )
+    assert scope is not None and scope.tests == {}
+    assert [p.path for p in scope.packages] == [
+        "packages/core",
+        "packages/mid",
+        "packages/top",
+    ]
+    # Two packages' tests alone: each runs its own files.
+    scope = affected_from_paths(
+        root,
+        packages,
+        ["packages/aside/tests/test_z.py", "packages/mid/tests/test_a.py"],
+    )
+    assert scope is not None
+    assert [p.path for p in scope.packages] == ["packages/aside", "packages/mid"]
+    assert scope.tests == {
+        "packages/aside": ("packages/aside/tests/test_z.py",),
+        "packages/mid": ("packages/mid/tests/test_a.py",),
+    }
+
+
+def test_the_workspace_tests_unit_runs_its_changed_files_alone_or_its_suite(
+    tmp_path: Path,
+) -> None:
+    root = _workspace(tmp_path)
+    _paths(root, "tests/test_all.py")
+    packages = discover_packages(root)
+    scope = affected_from_paths(root, packages, ["tests/test_all.py"])
+    assert scope is not None
+    assert [p.path for p in scope.packages] == ["tests"]
+    assert scope.tests == {"tests": ("tests/test_all.py",)}
+    scope = affected_from_paths(
+        root, packages, ["tests/conftest.py", "tests/test_all.py"]
+    )
+    assert scope is not None and scope.tests == {}
+    assert [p.path for p in scope.packages] == ["tests"]

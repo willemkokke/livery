@@ -40,7 +40,13 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
   delta can influence (their dependents' closure over the `[[depends]]` graph),
   and records the working tree as proved, so the tenth commit of a
   branch pays for what the tenth commit touched and a tree the record
-  already proves runs nothing; `--full` runs everything. The chain of
+  already proves runs nothing; `--full` runs everything. A delta
+  confined to a package's test files runs those files alone, after
+  the kind's gate build when its tests run on a build (a C++
+  package's ctest); a changed conftest or helper widens to the suite,
+  and a source change runs the suite and its dependents'. A machine's
+  test run sets the runner's variables, so a test that reads them is
+  judged here as on the legs. The chain of
   records rests on a full gate here or on the nearest tree in HEAD's
   history that CI's record holds: a fresh branch off main starts
   proved, and one cut before main's own run is green pays for that
