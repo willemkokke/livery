@@ -128,10 +128,13 @@ Commands:
 
 
 def _toolroom_root() -> Path:
-    """The toolroom package directory, whose docs and stubs the bench writes."""
-    import livery.toolroom.tools as tools
+    """The toolroom package directory in this checkout, whose docs the bench writes.
 
-    return Path(tools.__file__).resolve().parents[4]
+    Resolved from this file, never from the installed module: an isolated
+    install of the wheel has the module under site-packages, where the
+    checkout is nowhere near.
+    """
+    return Path(__file__).resolve().parents[2] / "toolroom"
 
 
 def flags(verb: Verb) -> dict[str, Option]:
@@ -2534,8 +2537,11 @@ def test_a_nested_class_flags_returns_self():
     """A nested class cannot name itself from inside its own body, and `Self`
     is what the chain means anyway: `docker.flags(host=…).compose.up()`.
     """
+    import livery.toolroom.tools as tools
+
+    # The stub ships in the wheel, so the installed copy is the one to read.
     source = (
-        _toolroom_root() / "src/livery/toolroom/tools/_stubs/docker.pyi"
+        Path(tools.__file__).resolve().parent / "_stubs" / "docker.pyi"
     ).read_text()
     assert "-> Self:" in source
     assert "-> Docker:" not in source and "-> DockerCompose:" not in source
