@@ -243,6 +243,22 @@ def test_inside_ci_the_tests_run_metered_and_the_gate_itself_does_not(
     assert not any("--cov" in args for args, _env in fake.calls)
 
 
+def test_the_preview_tolerates_a_run_that_measured_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A selection of tests that reached no source leaves coverage with
+    # no data: the preview says so, and a judged read still refuses.
+    # The real tool, on a directory without a data file: the toolroom
+    # raises on a non-zero exit unless told not to, and a fake that
+    # returned a result would hide that.
+    del monkeypatch
+    package = _package(tmp_path, "thing", "[qa]\ncoverage-floor = 1\n")
+    _python.report_coverage(tmp_path, (package,))
+    assert "nothing measured by this run" in capsys.readouterr().out
+    with pytest.raises(_FAILURES, match="coverage json exited 1"):
+        _python.measured_coverage(tmp_path, (package,))
+
+
 def test_without_a_parent_the_meter_and_the_preview_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -269,6 +285,45 @@ def test_without_a_parent_the_meter_and_the_preview_run(
     assert any(arg == "--cov" for arg in seen[0])
     assert "packages/thing/tests" not in seen[0]  # no tests dir exists
     assert enforced == [tmp_path]
+
+
+def test_a_machines_run_takes_the_runners_shape_and_a_selection_stands_in(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    thing = _suite(tmp_path, "thing")
+    other = _suite(tmp_path, "other")
+    (tmp_path / "tests").mkdir()
+    fake = _FakePytest()
+    monkeypatch.setattr(_python, "pytest", fake)
+    monkeypatch.setattr(_python, "report_coverage", lambda root, packages: None)
+    for name in ("CI", "GITHUB_ACTIONS", "GITEA_ACTIONS", "GITLAB_CI"):
+        monkeypatch.delenv(name, raising=False)
+    selection = {
+        "packages/thing": ("packages/thing/tests/test_a.py",),
+        "tests": ("tests/test_all.py",),
+    }
+    _python.run_test(
+        packages=(thing, other), root=tmp_path, scoped=True, selection=selection
+    )
+    args, env = fake.calls[0]
+    assert args[:3] == (
+        "packages/thing/tests/test_a.py",
+        "packages/other/tests",
+        "tests/test_all.py",
+    )
+    assert "--cov" in args
+    # The runner's variables are set in pytest's environment alone, so
+    # a test that reads them is judged here as on the leg.
+    assert env is not None and env["CI"] == "true"
+    assert env["GITHUB_ACTIONS"] == "true"
+    assert "GITHUB_ACTIONS" not in os.environ
+    # The kind's own test call: the selection is the package's alone.
+    fake.calls.clear()
+    _python.test(thing, tmp_path, selection=("tests/test_b.py",))
+    assert fake.calls[0][0][:2] == ("packages/thing/tests/test_b.py", "tests")
+    fake.calls.clear()
+    _python.test(thing, tmp_path)
+    assert fake.calls[0][0][:2] == ("packages/thing/tests", "tests")
 
 
 # --- the leg: its refusal, then what it stores --------------------------------

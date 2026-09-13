@@ -102,6 +102,44 @@ def test_build_refuses_without_conan(
         _cpp_conan.build(package, tmp_path)
 
 
+def test_the_cpp_kind_classifies_tests_support_source_and_configuration(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._kinds import CONFIGURATION, SOURCE, TEST, TEST_SUPPORT
+
+    package = _package(tmp_path / "packages" / "native", "acme-native", "cpp-conan")
+    assert _cpp_conan.classify(package, "tests/test_native.cpp") == TEST
+    assert _cpp_conan.classify(package, "tests/helpers.hpp") == TEST_SUPPORT
+    assert _cpp_conan.classify(package, "src/native.cpp") == SOURCE
+    assert _cpp_conan.classify(package, "include/acme/native.hpp") == SOURCE
+    assert _cpp_conan.classify(package, "CMakeLists.txt") == CONFIGURATION
+    assert _cpp_conan.classify(package, "conanfile.py") == CONFIGURATION
+    # The kind's tests run on a build; python's run on source.
+    assert kind_for("cpp-conan").tests_need_build
+    assert not kind_for("python").tests_need_build
+
+
+@needs_toolchain
+def test_a_selection_no_ctest_answers_to_is_a_refusal(tmp_path: Path) -> None:
+    package = _render_cpp(tmp_path)
+    _cpp_conan.gate_build(package, tmp_path)
+    with pytest.raises(_FAILURES, match="no ctest is named test_missing"):
+        _cpp_conan.test(package, tmp_path, selection=("tests/test_missing.cpp",))
+
+
+@needs_toolchain
+def test_a_selected_test_runs_its_ctest_on_the_gate_build(tmp_path: Path) -> None:
+    package = _render_cpp(tmp_path)
+    _cpp_conan.gate_build(package, tmp_path)
+    _cpp_conan.test(package, tmp_path, selection=("tests/test_native.cpp",))
+    test_file = package.directory / "tests" / "test_native.cpp"
+    test_file.write_text(test_file.read_text().replace("return 0;", "return 1;"))
+    # The rebuild after the edit is what the reflex runs before the tests.
+    _cpp_conan.gate_build(package, tmp_path)
+    with pytest.raises(_FAILURES, match="ctest failed"):
+        _cpp_conan.test(package, tmp_path, selection=("tests/test_native.cpp",))
+
+
 @needs_toolchain
 def test_a_red_ctest_is_a_refusal(tmp_path: Path) -> None:
     package = _render_cpp(tmp_path)
@@ -177,6 +215,17 @@ def test_kind_checks_announce_and_dispatch(
         def check(self, package: Package, root: Path) -> None:
             checked.append(package.name)
 
+        def classify(self, package: Package, path: str) -> str:
+            return "source"
+
+        def gate_build(self, package: Package, root: Path) -> None:
+            checked.append(f"build {package.name}")
+
+        def test(
+            self, package: Package, root: Path, *, selection: tuple[str, ...] = ()
+        ) -> None:
+            checked.append(f"test {package.name} {' '.join(selection)}")
+
         def current_version(self, package: Package) -> str:
             return "0.0.1"
 
@@ -196,6 +245,7 @@ def test_kind_checks_announce_and_dispatch(
             host_tools=record.host_tools,
             managed=record.managed,
             ci=record.ci,
+            tests_need_build=record.tests_need_build,
         )
     )
     native = _package(tmp_path / "packages" / "native", "acme-native", "cpp-conan")
@@ -204,6 +254,20 @@ def test_kind_checks_announce_and_dispatch(
     assert "packages/native (cpp-conan): configure, build, ctest run" in out
     assert "typecheck, typecomplete, test skip" in out
     assert checked == ["acme-native"]
+    # A selection: the gate build first, since the kind's tests run on
+    # a build, then those files alone.
+    checked.clear()
+    run_kind_checks(
+        (native,),
+        tmp_path,
+        tests={"packages/native": ("packages/native/tests/test_native.cpp",)},
+    )
+    out = capsys.readouterr().out
+    assert (
+        "packages/native (cpp-conan): gate build, then the tests of"
+        " tests/test_native.cpp run" in out
+    )
+    assert checked == ["build acme-native", "test acme-native tests/test_native.cpp"]
 
 
 def test_host_tools_are_named_when_missing(restored_registry, tmp_path: Path) -> None:
@@ -232,6 +296,17 @@ def test_host_tools_are_named_when_missing(restored_registry, tmp_path: Path) ->
             local: bool,
         ) -> bool:
             return True
+
+        def classify(self, package: Package, path: str) -> str:
+            return "source"
+
+        def gate_build(self, package: Package, root: Path) -> None:
+            return None
+
+        def test(
+            self, package: Package, root: Path, *, selection: tuple[str, ...] = ()
+        ) -> None:
+            return None
 
         def check(self, package: Package, root: Path) -> None:
             return None

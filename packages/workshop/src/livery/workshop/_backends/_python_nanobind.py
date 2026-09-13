@@ -26,6 +26,9 @@ if TYPE_CHECKING:
     from livery.workshop._packages import Package
 
 check = _python.check
+classify = _python.classify
+gate_build = _python.gate_build
+test = _python.test
 current_version = _python.current_version
 stamp_version = _python.stamp_version
 publish_artifact = _python.publish_artifact

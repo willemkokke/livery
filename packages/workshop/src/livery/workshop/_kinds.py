@@ -37,6 +37,15 @@ class Stamper(Protocol):
         ...
 
 
+#: What a path is to its kind, as `Backend.classify` answers: a
+#: change to a test runs that test alone; a change to anything else
+#: runs the package's suite and its dependents'.
+SOURCE = "source"
+TEST = "test"
+TEST_SUPPORT = "test-support"
+CONFIGURATION = "configuration"
+
+
 class Backend(Protocol):
     """The callables every kind's backend module exposes.
 
@@ -84,6 +93,37 @@ class Backend(Protocol):
         ``kind_verbs``: a kind whose verbs run at workspace scope
         (python's checkers cover every python package in one
         invocation) declares none and is never called here.
+        """
+        ...
+
+    def classify(self, package: Package, path: str) -> str:
+        """What *path*, relative to the package, is to the kind.
+
+        `SOURCE`, `TEST` (a file that is a test and nothing imports),
+        `TEST_SUPPORT` (a conftest, a helper, a fixture the tests
+        read), or `CONFIGURATION` (the manifest, the build script).
+        The reflex runs a changed test alone and widens anything else
+        to the package's suite and its dependents'.
+        """
+        ...
+
+    def gate_build(self, package: Package, root: Path) -> None:
+        """Build what the kind's tests run on, into the gate's build directory.
+
+        Incremental, so a rebuild after one edit costs that edit. A
+        kind whose tests run on source does nothing here, and its
+        record says so in ``tests_need_build``.
+        """
+        ...
+
+    def test(
+        self, package: Package, root: Path, *, selection: tuple[str, ...] = ()
+    ) -> None:
+        """Run the kind's tests of *package*; a refusal is the verdict.
+
+        Every test, or with *selection* the tests of the named files
+        alone, relative to the package. A selection the kind cannot
+        map to a test is a refusal, never a silent empty run.
         """
         ...
 
@@ -139,6 +179,9 @@ class KindRecord:
         wheel_identity: What a built wheel's tag must say:
             ``pure`` refuses a platform tag, ``platform`` refuses
             ``none-any``, empty skips the guard (no wheels).
+        tests_need_build: Whether the kind's tests run on a build
+            rather than on source, so a test step is preceded by the
+            backend's ``gate_build``.
     """
 
     name: str
@@ -151,6 +194,7 @@ class KindRecord:
     ci: CiContract = field(default_factory=CiContract)
     artifact: str = "python"
     wheel_identity: str = "pure"
+    tests_need_build: bool = False
 
 
 _KINDS: dict[str, KindRecord] = {}
@@ -368,6 +412,7 @@ def _register_builtin() -> None:
             ),
             artifact="conan",
             wheel_identity="",
+            tests_need_build=True,
         )
     )
 

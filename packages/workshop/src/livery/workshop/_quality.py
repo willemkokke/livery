@@ -7,6 +7,7 @@ module. ``check`` is the whole local gate; CI runs the same command.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
@@ -33,12 +34,19 @@ def _packages() -> tuple[Package, ...]:
     return packages
 
 
-def run_kind_checks(packages: tuple[Package, ...], root: Path) -> None:
+def run_kind_checks(
+    packages: tuple[Package, ...],
+    root: Path,
+    *,
+    tests: Mapping[str, tuple[str, ...]] | None = None,
+) -> None:
     """Run each kind's own per-package gate, in package order.
 
     Only kinds whose contract names ``kind_verbs`` take part; the
     announcement carries the package and the verbs, so the gate
-    output says what ran beside what skipped.
+    output says what ran beside what skipped. A package named in
+    *tests* runs those files alone, after the kind's gate build when
+    its tests run on a build.
     """
     from livery.workshop._kinds import CiContract, kind_for
 
@@ -48,12 +56,24 @@ def run_kind_checks(packages: tuple[Package, ...], root: Path) -> None:
         if not record.ci.kind_verbs:
             continue
         skipped = [v for v in default_verbs if v not in record.ci.check_verbs]
+        selection = (tests or {}).get(package.path)
+        if selection is None:
+            print(
+                f"  {package.path} ({record.name}):"
+                f" {', '.join(record.ci.kind_verbs)} run;"
+                f" {', '.join(skipped)} skip"
+            )
+            record.backend.check(package, root)
+            continue
+        relative = tuple(path[len(package.path) + 1 :] for path in selection)
+        build = "gate build, then " if record.tests_need_build else ""
         print(
-            f"  {package.path} ({record.name}):"
-            f" {', '.join(record.ci.kind_verbs)} run;"
-            f" {', '.join(skipped)} skip"
+            f"  {package.path} ({record.name}): {build}the tests of"
+            f" {', '.join(relative)} run; {', '.join(skipped)} skip"
         )
-        record.backend.check(package, root)
+        if record.tests_need_build:
+            record.backend.gate_build(package, root)
+        record.backend.test(package, root, selection=relative)
 
 
 def _refuse_both(fix: bool, safe_fix: bool) -> None:
@@ -365,10 +385,11 @@ def check(
                     f"  since tree {reflex.base_tree[:12]}: {len(reflex.paths)}"
                     " path(s) changed"
                 )
-                subset = affected_from_paths(root_for_ci, packages, reflex.paths)
-                if subset is not None:
+                scope = affected_from_paths(root_for_ci, packages, reflex.paths)
+                if scope is not None:
                     from livery.workshop._coverage_store import WORKSPACE_TESTS
 
+                    subset = scope.packages
                     members = [p for p in subset if p.path != WORKSPACE_TESTS]
                     if not subset:
                         print(
@@ -383,14 +404,19 @@ def check(
                             base_tree=reflex.base_tree,
                         )
                         return
-                    if len(members) < len(packages):
+                    if len(members) < len(packages) or scope.tests:
                         names = ", ".join(package.path for package in subset)
                         print(f"  affected: {names}")
+                        for path, files in sorted(scope.tests.items()):
+                            print(
+                                f"  {path}: {len(files)} test file(s) changed and"
+                                " nothing else; they run alone"
+                            )
                         tree = reflex.tree
                         if fix:
                             _python.scoped_rewrite(subset)
                             tree = _rewritten_tree(root_for_ci, run, tree)
-                        _scoped_check(subset, fix=fix, rewritten=fix)
+                        _scoped_check(subset, fix=fix, rewritten=fix, tests=scope.tests)
                         # The render and provenance checks are the gate
                         # job's in CI, once per run; a local narrowed gate
                         # runs them too, since a new module changes the
@@ -644,7 +670,11 @@ def _measure_unrecorded(root: Path, run: RunContext, *, bases: tuple[str, ...]) 
 
 
 def _scoped_check(
-    subset: tuple[Package, ...], *, fix: bool = False, rewritten: bool = False
+    subset: tuple[Package, ...],
+    *,
+    fix: bool = False,
+    rewritten: bool = False,
+    tests: Mapping[str, tuple[str, ...]] | None = None,
 ) -> None:
     """The gate over *subset* only: this routes, the backends compose.
 
@@ -655,7 +685,9 @@ def _scoped_check(
     before any check reads the tree, exactly as the whole gate does,
     unless ``rewritten`` says the caller ran them already, to measure
     the tree they left; what each kind checks, and in what parallel
-    shape, is its backend's knowledge, not this router's.
+    shape, is its backend's knowledge, not this router's. *tests*
+    names, per package path, the test files that stand for the
+    package's suite in this run.
     """
     from livery.footman import step
 
@@ -671,10 +703,10 @@ def _scoped_check(
     with parallel() as p:
         p(
             step(_python.scoped_gate, title="python")(
-                subset, root=root, check_style=not fix
+                subset, root=root, check_style=not fix, tests=tests
             )
         )
-        run_kind_checks(members, root)
+        run_kind_checks(members, root, tests=tests)
 
 
 coverage = group("coverage", help="The measured union and its floors")

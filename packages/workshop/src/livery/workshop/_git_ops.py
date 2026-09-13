@@ -67,7 +67,17 @@ class GitOps:
         with tempfile.TemporaryDirectory() as scratch:
             copy = Path(scratch) / "index"
             if real.is_file():
-                shutil.copy(real, copy)
+                # copy2, so the copy keeps the index's own timestamps.
+                # git trusts a cached stat only when the entry is older
+                # than the index file; an entry as new as the index is
+                # racily clean and its content is read again. A copy
+                # stamped with the time of the copy looks newer than
+                # every entry, which switches that rule off, and a
+                # rewrite of the same size in the same second as the
+                # cached stat then reads as no change at all (git
+                # compares whole seconds where it is built without
+                # nanosecond stat, as it is on macOS).
+                shutil.copy2(real, copy)
             env = {**os.environ, "GIT_INDEX_FILE": str(copy)}
             git = tools.git.opts(cwd=self.root, env=env, nofail=True, recorded=False)
             for args in (("add", "-A"), ("write-tree",)):

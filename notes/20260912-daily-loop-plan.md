@@ -356,7 +356,7 @@ this note in the same change.
    `--full`. Acceptance: one tree pays one gate; the tenth commit of a
    branch gates only what it touched; the loop's scoped-leg proof
    unchanged.
-5. **The kind seam.** `classify`, `test(selection)`, `tests_need_build`
+5. **The kind seam** (landed 2026-09-13). `classify`, `test(selection)`, `tests_need_build`
    in the python and cpp-conan backends; test-only steps; the two
    environment runs inside every step. Acceptance: a test-only edit in
    workshop runs its file and records the step; a cpp package rebuilds
@@ -558,5 +558,47 @@ without asking; the child shell stays as the fallback.
   re-run's union reads what the first attempt left; the janitor in the
   merge gate sweeps per-run refs older than six hours. The same shape
   held on every forge: a "re-run failed jobs" after any red sibling
-  job left the gate unable to union. Slice 5 (the kind seam, test-only
-  steps) and slice 6 (the environment guard) are next.
+  job left the gate unable to union.
+- 2026-09-13, slice 5 landed. The backend protocol gained `classify`
+  (source, test, test support, configuration), `gate_build`, and
+  `test(selection)`, and the kind record `tests_need_build`
+  (cpp-conan true: cmake configures and ninja builds, incrementally,
+  before ctest; python false). The affected computation classifies
+  each changed path by its package's kind: a test file reaches its
+  package alone, since nothing imports a test, and when a package's
+  changed files are tests and nothing else the reflex runs those
+  files, python through pytest on the files and cpp-conan through
+  ctest by the file's stem after the gate build; a conftest, a
+  helper, a source or a configuration file widens to the suite and
+  the dependents. CI's legs keep package granularity, since the union
+  records a package's suite. A machine's test run sets the runner's
+  variables (CI, GITHUB_ACTIONS), so a test that reads them is judged
+  here as on the legs. The scrubbed second run the design named is
+  not added: it would double every local gate's test time (the full
+  gate's 4m49s of tests, twice) to guard a pytest run outside the
+  gate; one word here adds it. A test-only step whose tests reach no
+  source measures no coverage, and the local preview says so instead
+  of failing, which the loop's tests-leg proof found. Open: the
+  python-nanobind kind's
+  extension is built by `fm sync` alone, so a C++ source edit there
+  needs a sync before the reflex sees it, and its `tests_need_build`
+  stays false until the kind gains an incremental gate build. Slice 6
+  (the environment guard) is next.
+- 2026-09-13, the working tree's id read a rewrite as no change, about
+  one run in ten. The id is taken through a scratch copy of the index,
+  and the copy was made with `shutil.copy`, which stamps it with the
+  time of the copy. git trusts a cached stat only while the entry is
+  older than the index file; an entry as new as the index is racily
+  clean, and its content is read again. A copy stamped now looks newer
+  than every entry, so that rule never fired, and a rewrite of the same
+  size in the same second as the cached stat read as no change (git
+  compares whole seconds where it is built without nanosecond stat, as
+  on macOS). It surfaced as a flaky gate-record assertion on the pull
+  request, and it would have let a `--fix` run record a tree the
+  rewriters had already moved past. The copy keeps the index's
+  timestamps now, which restores git's own rule: 40 rounds of the
+  gate's own sequence missed nothing, where the old copy missed one,
+  and the previously flaky test passed 20 runs out of 20. A test forces
+  the shape directly, with the cached stat and the rewrite made
+  identical.
+
