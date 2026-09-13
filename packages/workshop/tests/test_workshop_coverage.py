@@ -243,6 +243,31 @@ def test_inside_ci_the_tests_run_metered_and_the_gate_itself_does_not(
     assert not any("--cov" in args for args, _env in fake.calls)
 
 
+def test_the_preview_tolerates_a_run_that_measured_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A selection of tests that reached no source leaves coverage with
+    # no data: the preview says so, and a judged read still refuses.
+    from types import SimpleNamespace
+
+    package = _package(tmp_path, "thing", "[qa]\ncoverage-floor = 1\n")
+
+    class _NoData:
+        def opts(self, **_kwargs: object) -> _NoData:
+            return self
+
+        def __call__(self, *args: str) -> SimpleNamespace:
+            return SimpleNamespace(code=1, stdout="No data to report.\n", stderr="")
+
+    from livery.toolroom import tools as toolroom
+
+    monkeypatch.setattr(toolroom, "coverage", _NoData())
+    _python.report_coverage(tmp_path, (package,))
+    assert "nothing measured by this run" in capsys.readouterr().out
+    with pytest.raises(_FAILURES, match="coverage json exited 1"):
+        _python.measured_coverage(tmp_path, (package,))
+
+
 def test_without_a_parent_the_meter_and_the_preview_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

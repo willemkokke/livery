@@ -327,12 +327,22 @@ def coverage_floor(package: Package) -> float | None:
     return None if policy is None else policy.floor
 
 
-def measured_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, float]:
+#: What coverage.py says when the run left no data: a selection of
+#: tests that reached no source measures nothing, which a preview
+#: reports and a judged leg refuses.
+NO_DATA = "No data to report"
+
+
+def measured_coverage(
+    root: Path, packages: tuple[Package, ...], *, none_ok: bool = False
+) -> dict[str, float]:
     """Per-package coverage from the run's ``.coverage`` data, statements and branches.
 
     A package's percentage is the statements and branches of its
     files the data reached, over all of them, the figure coverage.py
     reports as a file's total; a package with none to reach is 100.
+    A run that left no data (`NO_DATA`) is empty under *none_ok* and
+    a refusal otherwise.
     """
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as handle:
         report = handle.name
@@ -348,6 +358,8 @@ def measured_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, fl
     }
     result = tools.coverage.opts(cwd=root, env=scrubbed)("json", "-o", report)
     if result.code != 0:
+        if none_ok and NO_DATA in result.stdout + result.stderr:
+            return {}
         fail(f"coverage json exited {result.code}:\n{result.stdout}{result.stderr}")
     data = json.loads(Path(report).read_text("utf-8"))
     Path(report).unlink(missing_ok=True)
@@ -379,7 +391,13 @@ def report_coverage(root: Path, packages: tuple[Package, ...]) -> None:
     """
     from livery.workshop._coverage_store import WORKSPACE_TESTS
 
-    measured = measured_coverage(root, packages)
+    measured = measured_coverage(root, packages, none_ok=True)
+    if not measured:
+        print(
+            "  coverage: nothing measured by this run (its tests reached no"
+            " source); the CI union judges the floors"
+        )
+        return
     for package in packages:
         if package.path == WORKSPACE_TESTS:
             continue  # a unit of the union, never a package with a floor

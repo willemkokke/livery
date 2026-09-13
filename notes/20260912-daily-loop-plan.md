@@ -576,7 +576,10 @@ without asking; the child shell stays as the fallback.
   here as on the legs. The scrubbed second run the design named is
   not added: it would double every local gate's test time (the full
   gate's 4m49s of tests, twice) to guard a pytest run outside the
-  gate; one word here adds it. Open: the python-nanobind kind's
+  gate; one word here adds it. A test-only step whose tests reach no
+  source measures no coverage, and the local preview says so instead
+  of failing, which the loop's tests-leg proof found. Open: the
+  python-nanobind kind's
   extension is built by `fm sync` alone, so a C++ source edit there
   needs a sync before the reflex sees it, and its `tests_need_build`
   stays false until the kind gains an incremental gate build. Slice 6
