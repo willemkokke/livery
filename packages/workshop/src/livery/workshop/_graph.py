@@ -9,11 +9,12 @@ the root configuration, the templates, the workspace tests, affects
 everything, because the root files configure every gate.
 
 ``fm graph.affected`` prints the verdict; the quality family's
-``--affected`` flag scopes work to it.
+the reflex and the CI legs scope work to it.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 
 from livery.footman import group
@@ -89,7 +90,6 @@ def affected_packages(
     anyway, so no package's suite has to run for it. An empty tuple
     means the branch changes nothing a gate reads.
     """
-    from livery.workshop._coverage_store import WORKSPACE_TESTS, workspace_suite
     from livery.workshop._kinds import kind_names
 
     packages = discover_packages(root)
@@ -104,9 +104,24 @@ def affected_packages(
                 " registered kind; failing open to everything"
             )
             return None
+    return affected_from_paths(root, packages, git.changed_paths(base))
+
+
+def affected_from_paths(
+    root: Path, packages: tuple[Package, ...], paths: Iterable[str]
+) -> tuple[Package, ...] | None:
+    """The packages a change to *paths* can influence, and the workspace's own tests.
+
+    The classification `affected_packages` applies to a branch's
+    changes, for any set of paths: the reflex hands it the paths
+    between a proved tree and the working tree. ``None`` means
+    everything, an empty tuple nothing a gate reads.
+    """
+    from livery.workshop._coverage_store import WORKSPACE_TESTS, workspace_suite
+
     seeds: set[str] = set()
     tests_changed = False
-    for path in git.changed_paths(base):
+    for path in paths:
         if is_prose(path) or is_site(path):
             continue
         if path.startswith(WORKSPACE_TESTS + "/"):

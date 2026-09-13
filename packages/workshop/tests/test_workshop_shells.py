@@ -135,10 +135,16 @@ def test_check_affected_scopes_or_says_nothing(
     # The block contract runs unstubbed, deliberately: stubbing
     # parallel and step here once certified a gate whose steps were
     # built and never run (livery#291). Execution is the property.
-    # Nothing changed: the affected gate says so and runs nothing.
-    _quality.check(affected=True)
+    # A tree the record proves runs nothing: the reflex says so.
+    from livery.workshop import _gate_record
+    from livery.workshop._git_ops import GitOps
+    from livery.workshop._verified import tree_id
+
+    git = GitOps(root)
+    _gate_record.remember(root, git, tree=tree_id(git), packages=None)
+    _quality.check()
     out = capsys.readouterr().out
-    assert "nothing affected" in out
+    assert "proved: tree" in out and "nothing to run" in out
     assert ran == []
     # A one-package change: the scoped verbs run.
     (root / "packages" / "thing" / "src" / "livery" / "thing" / "mod.py").write_text(
@@ -164,7 +170,7 @@ def test_check_affected_scopes_or_says_nothing(
             ),
         ),
     )
-    _quality.check(affected=True)
+    _quality.check()
     out = capsys.readouterr().out
     assert "affected: packages/thing" in out
     assert set(ran) == {"format", "lint", "types", "complete", "test"}
@@ -210,7 +216,8 @@ def test_check_fix_rewrites_serially_then_judges_the_rest(
     assert {name for name, _ in calls[2:]} == {"types", "complete", "test", "render"}
     calls.clear()
     # Without --fix nothing rewrites: format checks and lint reports.
-    _quality.check()
+    # The tree is proved by now, so the run is asked for in full.
+    _quality.check(full=True)
     by_name = dict(calls)
     fmt, lnt = by_name["format"], by_name["lint"]
     assert isinstance(fmt, dict) and fmt["check"] is True

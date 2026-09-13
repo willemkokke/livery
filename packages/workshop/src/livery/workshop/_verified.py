@@ -26,6 +26,7 @@ nothing.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -154,6 +155,21 @@ def record(root: Path, tree: str) -> tuple[Verified | None, str]:
         ),
         "",
     )
+
+
+def held(root: Path, trees: Iterable[str]) -> tuple[set[str], str]:
+    """The trees among *trees* the record holds, in one read.
+
+    ``(set(), reason)`` when the record could not be read. A file that
+    is not a row of the record's schema is skipped the way every read
+    skips it, so its tree reads as not held; an absent record holds
+    nothing, without a reason.
+    """
+    found = SERIES.rows(root)
+    if found.failed:
+        return set(), found.reason
+    names = {row.name for row in found.rows}
+    return {tree for tree in trees if tree in names}, ""
 
 
 def stamp(

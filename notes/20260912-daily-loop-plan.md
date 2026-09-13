@@ -351,7 +351,7 @@ this note in the same change.
    naming rule; the open half of #454 closes as unnecessary.
    Acceptance: two packages each with `tests/test_lifecycle.py` collect
    and pass in one session.
-4. **The proof chain.** Working-tree ids, rows against any proved tree,
+4. **The proof chain** (landed 2026-09-13). Working-tree ids, rows against any proved tree,
    the chain walk in `submit`, `check` edit-scoped by default with
    `--full`. Acceptance: one tree pays one gate; the tenth commit of a
    branch gates only what it touched; the loop's scoped-leg proof
@@ -512,3 +512,34 @@ without asking; the child shell stays as the fallback.
   collection check the plan once proposed, and #454's open half, are
   not built: the collision class is gone. Not run: the loop, since
   nothing here touches a CI mechanism.
+- 2026-09-13, slice 4 landed. The gate record is a chain: a row
+  proves its tree against the proved tree its delta was taken from,
+  rooted at a full gate on the machine or at a tree CI's record holds,
+  and the rows key the working tree's id (a scratch index, `add -A`,
+  `write-tree`), which a commit that takes everything shares. `fm
+  check` is edit-scoped by default: the plan proves the working tree
+  by its chain, else gates the delta from the proved tree with the
+  fewest changed paths, among HEAD's first-parent history (fifty deep)
+  and the newest twenty rows' trees, so a green check of a dirty tree
+  is the next check's base after one more edit, else runs everything
+  and roots a chain; `--full` runs everything, and
+  `--affected` is retired. `fm submit` walks the chain from HEAD's
+  tree and skips its gate when it reaches a root, naming the chain,
+  and runs the reflex otherwise, whatever the contract's affected-legs
+  key says, since the chain proves the same set by composition. Inside
+  CI nothing changed: the legs gate the pull request's changes against
+  its base or the whole workspace, and the local record is never read
+  or written there. The commit verb runs the reflex too.
+- 2026-09-13, the reflex's first run rooted 13 commits back. Main's
+  tip ran red in CI on a render drift: the toolroom-store birth was
+  gated on a branch cut before slice 3 rendered the pytest pythonpath,
+  and the two green merges composed a `pyproject.toml` that differs
+  from its render, so CI's record lacked the tip's tree. The roots
+  were the merge base's tree alone, so the chain fell back to a local
+  full row 13 commits back and gated 405 paths. The roots are now every
+  tree CI's record holds among the merge base and HEAD's first-parent
+  history, fifty deep, in one read of the record: a branch cut while
+  main's own run is red or still running steps from the parent's tree
+  and pays for that merge's changes once. The render lands with this
+  slice. Slice 5 (the kind seam, test-only steps) and slice 6 (the
+  environment guard) are next.

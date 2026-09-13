@@ -94,33 +94,42 @@ def test_a_missing_merge_base_falls_open_to_everything_with_gits_words(
 # --- the happy path ----------------------------------------------------------
 
 
-def test_a_local_affected_gate_narrows_against_the_base_it_is_given(
+def test_a_local_gate_is_the_reflex_and_hands_its_base_to_the_plan(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # Outside CI the caller names the base: the submit hands over the
-    # branch its pull request merges into. Without one, main.
+    # Outside CI the gate is the reflex: the plan names what changed
+    # since the nearest proved tree, and the base the caller names is
+    # where the chain's root is looked for (the submit hands over the
+    # branch its pull request merges into; without one, main).
+    from livery.workshop import _gate_record
+
     root = _root(tmp_path, "affected-legs = true\n")
     monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: root)
     monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
     bases: list[str] = []
 
-    def _subset(base: str = "main") -> tuple[()]:
+    def _plan(root: Path, git: object, *, base: str = "main") -> _gate_record.Plan:
         bases.append(base)
-        return ()
+        return _gate_record.Plan(
+            "step", "t" * 40, base_tree="b" * 40, paths=("notes/x.md",)
+        )
 
-    monkeypatch.setattr("livery.workshop._quality._affected", _subset)
-    reasons: list[str] = []
+    monkeypatch.setattr(_gate_record, "plan", _plan)
+    recorded: list[dict[str, object]] = []
 
-    def _reason(base: str) -> str:
-        reasons.append(base)
-        return "the branch changes no files"
+    def _remember(root: Path, git: object, **kw: object) -> str:
+        recorded.append(kw)
+        return "  gate record: recorded"
 
-    monkeypatch.setattr("livery.workshop._quality._nothing_reason", _reason)
-    _quality.check(affected=True, base="develop")
+    monkeypatch.setattr(_gate_record, "remember", _remember)
+    monkeypatch.setattr("livery.workshop._quality._packages", lambda: ())
+    _quality.check(base="develop")
     assert bases == ["develop"]
-    assert reasons == ["develop"]
-    assert "nothing affected: the branch changes no files" in capsys.readouterr().out
-    _quality.check(affected=True)
+    out = capsys.readouterr().out
+    assert "since tree bbbbbbbbbbbb: 1 path(s) changed" in out
+    assert "nothing affected: only prose and site files changed" in out
+    assert recorded == [{"tree": "t" * 40, "packages": (), "base_tree": "b" * 40}]
+    _quality.check()
     assert bases == ["develop", "main"]
 
 
