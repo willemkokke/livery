@@ -1,0 +1,1 @@
+{"branch": "feat/namespaced-tests", "forge": "github", "legs": ["check (macos-latest, 3.14)", "check (ubuntu-latest, 3.14)", "check (windows-latest, 3.14)"], "run": "34731576615", "schema": 1, "scope": "full", "sha": "dd0d92716492f3ec053e17f447ef54eea53951a9", "tree": "f2da1fd9857c02dbaf5e273458ff1e1e46aca62a", "when": "2026-09-13T02:02:17.032804+00:00"}

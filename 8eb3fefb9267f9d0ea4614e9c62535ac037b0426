@@ -1,0 +1,1 @@
+{"branch": "chore/471-the-lock-holds-copier-9-18-1-while-the-w", "forge": "github", "legs": ["check (macos-latest, 3.14)", "check (ubuntu-latest, 3.14)"], "run": "34646489586", "schema": 1, "scope": "full", "sha": "dc5325934921bbce323f9f7908f5330c9b917685", "tree": "8eb3fefb9267f9d0ea4614e9c62535ac037b0426", "when": "2026-09-11T21:00:18.544345+00:00"}

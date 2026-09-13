@@ -1,0 +1,1 @@
+{"branch": "workflow/release/strongroom", "forge": "github", "legs": ["check (macos-latest, 3.14)", "check (ubuntu-latest, 3.14)", "check (windows-latest, 3.14)"], "run": "34674327120", "schema": 1, "scope": "full", "sha": "f764c292645cb73e927be4b48e40a9380700fc3a", "tree": "cc250cd622b7866690f7e866b086270f1519f1f7", "when": "2026-09-12T05:06:47.547841+00:00"}

@@ -1,0 +1,1 @@
+{"branch": "fix/480-the-wave-s-ambient-token-cannot-push-a-r", "forge": "github", "legs": ["check (macos-latest, 3.14)", "check (ubuntu-latest, 3.14)"], "run": "34653203701", "schema": 1, "scope": "full", "sha": "4e508f2606db364823e2680b9ecdbcbd71ec66e3", "tree": "bfe0985238a8c6afd46833bfae06a723e24ff3ef", "when": "2026-09-11T22:21:27.181664+00:00"}
