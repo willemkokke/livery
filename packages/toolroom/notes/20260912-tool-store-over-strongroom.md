@@ -218,10 +218,22 @@ outside toolroom.
 
 `fm tools.pin <tool> <version>`, machinery, forge-aware: the driver's
 `Provision` and `assets_for`, a `_pick_asset(assets, host=...)` that
-takes the target host instead of reading `platform.system()`, then
-the five downloads, hashed, each archive inspected for `root` and
-`exe`, and the spec written. `fm tools.pin` runs against a recorded
-HTTP fixture in tests, never the network.
+takes the target host instead of reading `platform.system()`, then a
+digest per host, each archive inspected for `root` and `exe`, and the
+spec written.
+
+The digest comes from the host where the host publishes one: GitHub
+carries `digest` on a release asset for releases from mid-2025 onward,
+GitLab publishes `checksums.txt` as a release asset, and Gitea's
+download host puts a `.sha256` beside each file. Where none of those
+answer, pin downloads once and hashes. Either way the spec's value is
+what every later install verifies against, so an artifact is fetched
+at pin time only when its digest cannot be read.
+
+A spec carries up to six hosts, so a pin reads up to six digests. `fm
+tools.pin` runs in tests against listing fixtures, small JSON trimmed
+from real responses, never the network; no artifact bytes are
+recorded.
 
 ### Kinds
 
