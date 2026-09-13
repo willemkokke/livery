@@ -249,8 +249,6 @@ def test_a_terminal_no_skips_the_member_and_continues(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from types import SimpleNamespace
-
     root = _workspace(tmp_path)
     _grow_on_branch(root)
     git = GitOps(root)
@@ -258,17 +256,43 @@ def test_a_terminal_no_skips_the_member_and_continues(
     monkeypatch.setattr(
         "livery.workshop._dev_release.footman.confirm", lambda *a, **k: False
     )
-    # A real terminal said no: skip that member, never a refusal.
-    monkeypatch.setattr(
-        "livery.workshop._dev_release.sys",
-        SimpleNamespace(stdin=SimpleNamespace(isatty=lambda: True)),
-    )
+    # A person was asked and said no: skip that member, never a refusal.
+    monkeypatch.setattr("livery.workshop._dev_release.footman.attended", lambda: True)
     monkeypatch.setattr(
         "livery.workshop._dev_release.build_dev",
         lambda *a, **k: pytest.fail("a declined member must not build"),
     )
     dev_release(root, git, discover_packages(root))
     assert "skipped livery-core" in capsys.readouterr().out
+
+
+def test_no_input_at_a_terminal_refuses_instead_of_skipping(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # `--no-input` makes confirm take its default no without asking
+    # anyone, while the terminal is still real. Judged by the terminal
+    # alone that read as a person declining, and the publish was
+    # skipped in silence, which is what the refusal exists to prevent.
+    root = _workspace(tmp_path)
+    _grow_on_branch(root)
+    git = GitOps(root)
+    monkeypatch.setenv("PYTHON_PUBLISH_INDEX", "https://example.test/simple")
+    monkeypatch.setattr(
+        "livery.workshop._dev_release.footman.confirm", lambda *a, **k: False
+    )
+    monkeypatch.setattr("livery.workshop._dev_release.footman.attended", lambda: False)
+    # The terminal is real; only the flag makes the question unanswerable,
+    # which is what judging by the terminal alone could not see.
+    from types import SimpleNamespace
+
+    monkeypatch.setattr("sys.stdin", SimpleNamespace(isatty=lambda: True))
+    monkeypatch.setattr(
+        "livery.workshop._dev_release.build_dev",
+        lambda *a, **k: pytest.fail("silence must never build"),
+    )
+    with pytest.raises(SystemExit) as caught:
+        dev_release(root, git, discover_packages(root))
+    assert "--yes" in str(caught.value)
 
 
 def test_a_failing_build_restores_the_dirty_tree_from_snapshots(
