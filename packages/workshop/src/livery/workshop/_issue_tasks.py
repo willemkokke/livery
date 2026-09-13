@@ -438,6 +438,15 @@ def _launch_agent(
 
 
 def _open_work(path: Path, how: str) -> None:
+    from livery.workshop._env_tasks import START_PATH_VARIABLE
+
+    target = os.environ.get(START_PATH_VARIABLE, "")
+    if target and not how:
+        # The shell function around `start` names a file: the caller's
+        # own shell enters the worktree, so no child shell is opened.
+        Path(target).write_text(str(path), "utf-8")
+        print(f"  the worktree is at {path}; this shell enters it")
+        return
     mode = how or ("shell" if sys.stdout.isatty() else "none")
     if mode == "code":
         try:

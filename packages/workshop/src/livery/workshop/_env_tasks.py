@@ -279,6 +279,56 @@ _COMPLETION_HOOK = (
     'case $- in *i*) eval "$({prog} --setup-completion)";; esac'
 )
 
+#: The variable ``start`` reads for the file it writes the worktree's
+#: path to, when the shell function below runs the verb: the function
+#: then enters the worktree in the caller's own shell, since a child
+#: process cannot change its parent's directory.
+START_PATH_VARIABLE = "WORKSHOP_START_PATH_FILE"
+
+_START_HOOK = (
+    "# `{prog} start` enters the worktree in this shell: the verb writes the\n"
+    "# path to a file this function names, and the shell changes into it\n"
+    "# and evaluates its environment. A pipe or script never gets it.\n"
+    "case $- in *i*) {prog}() {{\n"
+    '    if [ "$1" = start ]; then\n'
+    "        local _f _p _rc\n"
+    '        _f="$(mktemp)" || {{ command {prog} "$@"; return; }}\n'
+    '        {variable}="$_f" command {prog} "$@"\n'
+    "        _rc=$?\n"
+    '        _p="$(cat "$_f" 2>/dev/null)"; rm -f "$_f"\n'
+    '        if [ "$_rc" -eq 0 ] && [ -n "$_p" ]; then\n'
+    '            cd "$_p" && eval "$(command {prog} --quiet env.emit posix)"\n'
+    "        fi\n"
+    '        return "$_rc"\n'
+    "    fi\n"
+    '    command {prog} "$@"\n'
+    "}};; esac"
+)
+
+_START_PWSH = (
+    "# `{prog} start` enters the worktree in this session: the verb writes the\n"
+    "# path to a file this function names, and the session changes into it\n"
+    "# and evaluates its environment.\n"
+    "function {prog} {{\n"
+    "    $app = Get-Command {prog} -CommandType Application | Select-Object -First 1\n"
+    "    if ($args.Count -gt 0 -and $args[0] -eq 'start') {{\n"
+    "        $f = [System.IO.Path]::GetTempFileName()\n"
+    "        $env:{variable} = $f\n"
+    "        & $app @args\n"
+    "        $rc = $LASTEXITCODE\n"
+    "        Remove-Item Env:{variable} -ErrorAction SilentlyContinue\n"
+    "        $p = Get-Content $f -ErrorAction SilentlyContinue\n"
+    "        Remove-Item $f -ErrorAction SilentlyContinue\n"
+    "        if ($rc -eq 0 -and $p) {{\n"
+    "            Set-Location $p\n"
+    '            (& $app --quiet env.emit pwsh) -join "`n" | Invoke-Expression\n'
+    "        }}\n"
+    "        return\n"
+    "    }}\n"
+    "    & $app @args\n"
+    "}}"
+)
+
 # MenuComplete, because registering completions is only half the job:
 # PSReadLine's default Tab handler cycles candidates one keypress at a
 # time and shows neither the list nor the per-item help, so a shell
@@ -381,6 +431,8 @@ def env_emit(
     lines = emit_lines(delta, dialect)
     hook = _COMPLETION_PWSH if dialect == "pwsh" else _COMPLETION_HOOK
     lines.append(hook.format(prog=footman.prog()))
+    enter = _START_PWSH if dialect == "pwsh" else _START_HOOK
+    lines.append(enter.format(prog=footman.prog(), variable=START_PATH_VARIABLE))
     return "\n".join(lines)
 
 

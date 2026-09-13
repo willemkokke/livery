@@ -29,14 +29,49 @@ _GUARD = "WORKSHOP_RECONCILE_REEXEC"
 #: file after its own sync, so the two mechanisms share one record.
 RECEIPT_NAME = ".workshop-sync-receipt"
 
+#: The second receipt: a digest of the root manifest and every
+#: member's, as the venv last installed them. The lock records
+#: dependencies, not a member's entry points or its version, so a
+#: HEAD move that changes a member's ``pyproject.toml`` without
+#: moving the lock would leave the venv's metadata stale (a new
+#: ``pytest11`` entry point the venv never learned) with the lock
+#: receipt still matching.
+MANIFESTS_RECEIPT_NAME = ".workshop-manifests-receipt"
+
 
 def receipt_path(root: Path) -> Path:
     """Where *root*'s sync receipt lives."""
     return root / ".venv" / RECEIPT_NAME
 
 
+def manifests_receipt_path(root: Path) -> Path:
+    """Where *root*'s manifests receipt lives."""
+    return root / ".venv" / MANIFESTS_RECEIPT_NAME
+
+
+def manifests_digest(root: Path) -> str:
+    """A digest of the root ``pyproject.toml`` and every ``packages/*/pyproject.toml``.
+
+    Path order, each path and its bytes, so a member added, removed,
+    or edited changes the digest.
+    """
+    import hashlib
+
+    digest = hashlib.sha256()
+    manifests = sorted(
+        [root / "pyproject.toml", *root.glob("packages/*/pyproject.toml")]
+    )
+    for path in manifests:
+        if path.is_file():
+            digest.update(path.relative_to(root).as_posix().encode("utf-8"))
+            digest.update(b"\0")
+            digest.update(path.read_bytes())
+            digest.update(b"\0")
+    return digest.hexdigest()
+
+
 def record_receipt(root: Path) -> None:
-    """Record ``uv.lock`` as the venv's sync receipt; silent otherwise.
+    """Record ``uv.lock`` and the manifests as the venv's receipts; silent otherwise.
 
     Called after every successful sync so the next command's compare
     is a no-op instead of a second sync.
@@ -44,6 +79,7 @@ def record_receipt(root: Path) -> None:
     lock = root / "uv.lock"
     if lock.is_file() and (root / ".venv").is_dir():
         receipt_path(root).write_bytes(lock.read_bytes())
+        manifests_receipt_path(root).write_text(manifests_digest(root), "utf-8")
 
 
 def is_cli_process() -> bool:
@@ -77,7 +113,7 @@ class Reconciled:
     """False when the workspace has no lock or no venv and nothing
     was tried; footman's uv handoff owns those cold states."""
     drifted: bool = False
-    """True when the receipt disagreed with the lock."""
+    """True when a receipt disagreed with the lock or the manifests."""
     synced: bool = False
     """True when the drift sync succeeded and the receipt was
     rewritten."""
@@ -112,8 +148,18 @@ def reconcile(root: Path) -> Reconciled:
     result = Reconciled(ran=True)
     lock_bytes = lock.read_bytes()
     receipt = receipt_path(root)
+    digest = manifests_digest(root)
+    manifests = manifests_receipt_path(root)
     if receipt.is_file() and receipt.read_bytes() == lock_bytes:
-        return result
+        if not manifests.is_file():
+            # A venv synced before the manifests receipt existed, or
+            # the emitted setup script's fresh venv: the manifests
+            # installed are the ones on disk, so they are adopted and
+            # the next move is seen.
+            manifests.write_text(digest, "utf-8")
+            return result
+        if manifests.read_text("utf-8") == digest:
+            return result
     result.drifted = True
     before = installed_distributions(root)
     from livery.toolroom import tools as toolroom
@@ -125,6 +171,7 @@ def reconcile(root: Path) -> Reconciled:
         )
         return result
     receipt.write_bytes(lock_bytes)
+    manifests.write_text(digest, "utf-8")
     result.synced = True
     after = installed_distributions(root)
     result.changed = tuple(sorted(before ^ after))
