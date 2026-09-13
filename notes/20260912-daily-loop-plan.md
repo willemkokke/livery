@@ -361,7 +361,7 @@ this note in the same change.
    environment runs inside every step. Acceptance: a test-only edit in
    workshop runs its file and records the step; a cpp package rebuilds
    and runs its tests through the same path.
-6. **The environment guard.** The venv refusal, `start`'s shell,
+6. **The environment guard** (landed 2026-09-13, reshaped). The venv refusal, `start`'s shell,
    `integrate` and `sync` matching the lock (#356: a merge of main
    brought a new `pytest11` entry point, the worktree's venv kept the
    pre-merge metadata, and the next gate went red until `fm sync`;
@@ -601,4 +601,33 @@ without asking; the child shell stays as the fallback.
   and the previously flaky test passed 20 runs out of 20. A test forces
   the shape directly, with the cached stat and the rewrite made
   identical.
+- 2026-09-13, slice 6 landed, without the venv refusal. What landed:
+  a second receipt beside the lock's, a digest of the root manifest
+  and every member's, so a HEAD move that changes a member's
+  `pyproject.toml` without moving the lock is drift and the venv is
+  synced (#356's shape: a merge brought a new `pytest11` entry point,
+  the lock never moved, and the venv kept metadata that made the next
+  gate red). A venv with no such receipt adopts what is on disk, so a
+  venv built before this, or by the emitted setup script, syncs once
+  and no more. `fm integrate` ends by matching the lock when the merge
+  touched the lock, the root manifest, or a member's, and says which.
+  `fm start` enters the worktree in the caller's own shell where the
+  shell hook is installed: the verb writes the path to the file the
+  emitted function names, and the function changes directory and
+  evaluates the environment; without the hook it still opens a child
+  shell, and an agent still gets the path printed.
+- 2026-09-13, the venv refusal is unnecessary, and the code for it was
+  removed after it was written. footman's own uv handoff already moves
+  a command into the environment of the workspace it runs in, before
+  the workshop's pre-tasks hook runs. Three probes said so: the main
+  checkout's `fm` run inside a worktree arrived as that worktree's own
+  `fm` at that worktree's prefix; the worktree's `fm` run inside the
+  main checkout never reached the workshop's hook at all, having been
+  relocated to the main checkout's environment; and with `VIRTUAL_ENV`
+  and `PATH` exported to another checkout, the process still ran the
+  worktree's own venv. A refusal there could never fire, and a guard
+  that cannot fire is worse than none: it reads as protection. The
+  `export VIRTUAL_ENV=... PATH=...` prefix in the daily loop is still
+  needed for a raw `python -m pytest`, which no handoff touches; every
+  `fm` verb is covered without it.
 

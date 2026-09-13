@@ -389,5 +389,33 @@ def integrate() -> None:
         )
     if git.head_sha() == before:
         print("  already current with origin/main")
-    else:
-        print(f"  merged origin/main into {branch}")
+        return
+    print(f"  merged origin/main into {branch}")
+    match_lock(root, git, since=before)
+
+
+#: The files whose change across a HEAD move leaves the venv behind:
+#: the lock, the root manifest, and every member's.
+LOCK_FILES = ("uv.lock", "pyproject.toml", "packages/*/pyproject.toml")
+
+
+def match_lock(root: Path, git: GitOps, *, since: str) -> None:
+    """Match the venv to the lock when HEAD moved across a change to it; say so.
+
+    *since* is the commit HEAD moved from. A merge that changed the
+    lock, the root manifest, or a member's manifest leaves the venv
+    installed from the old ones (a new entry point the venv never
+    learned made the next gate red until a sync); the sync runs here,
+    at the verb's end, and the receipts record it, so the next
+    command's reconcile finds nothing to do.
+    """
+    from livery.workshop._reconcile import record_receipt
+    from livery.workshop._uv import run_uv
+
+    changed = git.changed_between(since, "HEAD", LOCK_FILES)
+    if not changed:
+        return
+    print(f"  matching the lock: the merge changed {', '.join(changed)}")
+    run_uv("sync", root=root)
+    record_receipt(root)
+    print("  matched the lock; the environment agrees with the merge")

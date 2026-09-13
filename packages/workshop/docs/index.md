@@ -93,15 +93,27 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
   `<kind>/<slug>` starts a branch that belongs to no issue, whose
   submit closes nothing. Every form branches from a fetched
   `origin/main` into a worktree under the runner's home, provisioned
-  and entered in a shell when a person is at the terminal
-  (`--open=code` opens the editor, `--open=none` prints the path);
-  `--no-worktree` reuses this checkout.
+  and entered when a person is at the terminal: where the shell hook
+  is installed the worktree is entered in that shell, with its
+  environment loaded and nothing to leave, and without the hook a
+  child shell opens there instead (`--open=code` opens the editor,
+  `--open=none` prints the path); `--no-worktree` reuses this
+  checkout.
 - `fm commit <type> "<subject>"`: a conventional commit on a proved
   tree. It stages the change (`--only` narrows), derives the scope
   from the packages the change touches, runs the affected gate first
   in its fix mode (`--no-check` skips), validates the subject the way
   `fm submit` validates a title, and refuses on `main` and on a
   reserved branch. `git commit` keeps working.
+- `fm integrate`: bring `origin/main` into the branch by merge. A
+  merge rewrites nothing, so every other copy of the branch stays
+  valid, and the squash erases it at landing; a conflict stops with
+  git's own words. When the merge moved `uv.lock`, the root
+  manifest, or a member's, the verb matches the environment to it and
+  names what moved, so the next gate runs on the merged environment.
+  Every command makes that check before it runs: the venv follows the
+  lock and the manifests, and one that drifted is synced, then the
+  command runs again on the installed code.
 - `fm submit`: get the branch onto the remote, verified. Its local
   gate is the reflex; when the chain of this machine's green gates
   proves HEAD's tree, back to a full gate here or a tree in HEAD's

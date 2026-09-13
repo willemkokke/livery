@@ -734,6 +734,12 @@ def test_emit_appends_the_dialects_own_completion_hook(
     assert "MenuComplete" in pwsh and "case $-" not in pwsh
     agent = _env_tasks.env_emit("", agent=True)
     assert "case $-" not in agent  # an env file evaluates no hooks
+    # The shell function that enters a started worktree in place rides
+    # the same emission, and never the agent's env file.
+    variable = _env_tasks.START_PATH_VARIABLE
+    assert f'{variable}="$_f" command' in posix and "env.emit posix" in posix
+    assert f"$env:{variable} = $f" in pwsh and "Set-Location $p" in pwsh
+    assert variable not in agent
 
 
 def test_clean_declined_confirm_leaves_everything_alone(

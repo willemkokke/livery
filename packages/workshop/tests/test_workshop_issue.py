@@ -879,6 +879,27 @@ def test_open_code_missing_binary_is_a_note(
     assert "not on PATH" in capsys.readouterr().out
 
 
+def test_start_writes_the_path_for_the_shell_function_and_opens_no_shell(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop._env_tasks import START_PATH_VARIABLE
+    from livery.workshop._issue_tasks import _open_work
+
+    def _no_shell(kind: str = "") -> None:
+        raise AssertionError("the caller's shell enters the worktree; none is opened")
+
+    monkeypatch.setattr("livery.workshop._shell.launch_shell", _no_shell)
+    target = tmp_path / "start-path"
+    monkeypatch.setenv(START_PATH_VARIABLE, str(target))
+    worktree = tmp_path / "wt"
+    _open_work(worktree, "")
+    assert target.read_text("utf-8") == str(worktree)
+    assert "this shell enters it" in capsys.readouterr().out
+    # An explicit mode still wins over the variable.
+    _open_work(worktree, "none")
+    assert "the worktree is at" in capsys.readouterr().out
+
+
 def test_the_agent_not_installed_teaching(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

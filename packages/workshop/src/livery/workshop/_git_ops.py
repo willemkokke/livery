@@ -183,6 +183,17 @@ class GitOps:
         self.fetch()
         self._run("merge", "--no-edit", f"origin/{base}")
 
+    def changed_between(
+        self, old: str, new: str, patterns: tuple[str, ...]
+    ) -> list[str]:
+        """The paths matching *patterns* that differ between *old* and *new*.
+
+        Repo-relative, as git prints them; empty when nothing matching
+        changed.
+        """
+        out = self._run("diff", "--name-only", old, new, "--", *patterns)
+        return [line.strip() for line in out.splitlines() if line.strip()]
+
     def is_clean(self) -> bool:
         """Whether the working tree has no changes, staged or not."""
         return not self._run("status", "--porcelain").strip()

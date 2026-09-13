@@ -309,6 +309,56 @@ def test_a_current_receipt_is_a_no_op(
     assert result.ran and not result.drifted
 
 
+def test_a_missing_manifests_receipt_is_adopted_and_a_moved_manifest_is_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.toolroom import tools as toolroom
+    from livery.workshop import _reconcile
+
+    (tmp_path / "uv.lock").write_text(LOCK)
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "ws"\n')
+    member = tmp_path / "packages" / "x"
+    member.mkdir(parents=True)
+    (member / "pyproject.toml").write_text('[project]\nname = "x"\n')
+    _venv_site(tmp_path, "something-1.0.0")
+    _reconcile.receipt_path(tmp_path).write_bytes((tmp_path / "uv.lock").read_bytes())
+
+    def _explode(*args: object, **kwargs: object) -> object:
+        raise AssertionError("uv must not run when the lock receipt is current")
+
+    monkeypatch.setattr(toolroom, "uv", SimpleNamespace(opts=_explode))
+    # No manifests receipt yet: the manifests on disk are adopted as
+    # the venv's, written, and nothing syncs.
+    manifests = _reconcile.manifests_receipt_path(tmp_path)
+    assert not manifests.is_file()
+    result = _reconcile.reconcile(tmp_path)
+    assert result.ran and not result.drifted
+    assert manifests.read_text("utf-8") == _reconcile.manifests_digest(tmp_path)
+    # A member's manifest moved without the lock (a new entry point):
+    # drift, and the sync rewrites the manifests receipt.
+    (member / "pyproject.toml").write_text(
+        '[project]\nname = "x"\n[project.entry-points.pytest11]\nx = "x"\n'
+    )
+    synced: list[tuple[str, ...]] = []
+
+    def _opts(**kwargs: object) -> object:
+        def _sync(*args: str) -> object:
+            synced.append(args)
+            return SimpleNamespace(code=0, stdout="", stderr="")
+
+        return _sync
+
+    monkeypatch.setattr(toolroom, "uv", SimpleNamespace(opts=_opts))
+    result = _reconcile.reconcile(tmp_path)
+    assert result.drifted and result.synced
+    assert synced == [("sync", "--frozen")]
+    assert manifests.read_text("utf-8") == _reconcile.manifests_digest(tmp_path)
+    # record_receipt writes both receipts.
+    manifests.unlink()
+    _reconcile.record_receipt(tmp_path)
+    assert manifests.read_text("utf-8") == _reconcile.manifests_digest(tmp_path)
+
+
 def test_drift_syncs_records_and_names_the_changed_code(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

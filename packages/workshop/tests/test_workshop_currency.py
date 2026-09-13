@@ -360,3 +360,36 @@ def test_a_merged_reserved_branch_is_stepped_off_by_sync(
     )
     assert _git(clone, "rev-parse", "--abbrev-ref", "HEAD").strip() == "main"
     assert _git(clone, "branch", "--list", branch).strip() == ""
+
+
+def test_integrate_matches_the_lock_when_the_move_touched_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop import _reconcile, _sync, _uv
+
+    clone, _origin = _rig(tmp_path)
+    before = _git(clone, "rev-parse", "HEAD").strip()
+    synced: list[Path] = []
+    recorded: list[Path] = []
+    monkeypatch.setattr(_uv, "run_uv", lambda *args, root: synced.append(root))
+    monkeypatch.setattr(
+        _reconcile, "record_receipt", lambda root: recorded.append(root)
+    )
+    # A move that touched nothing the venv reads: nothing happens.
+    (clone / "notes.md").write_text("n\n")
+    _git(clone, "add", ".")
+    _git(clone, "commit", "-m", "docs: notes")
+    _sync.match_lock(clone, GitOps(clone), since=before)
+    assert synced == [] and "matching the lock" not in capsys.readouterr().out
+    # A member's manifest changed across the move: the sync runs at
+    # the verb's end and the receipts record it.
+    member = clone / "packages" / "x"
+    member.mkdir(parents=True)
+    (member / "pyproject.toml").write_text('[project]\nname = "x"\n')
+    _git(clone, "add", ".")
+    _git(clone, "commit", "-m", "feat: x")
+    _sync.match_lock(clone, GitOps(clone), since=before)
+    out = capsys.readouterr().out
+    assert "matching the lock: the merge changed packages/x/pyproject.toml" in out
+    assert "matched the lock" in out
+    assert synced == [clone] and recorded == [clone]
