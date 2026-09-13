@@ -1,6 +1,12 @@
 # The tool store over strongroom
 
-Status: proposed 2026-09-12, awaiting Willem's ruling. Nothing built.
+Status: phases 0 and 1 landed 2026-09-13 in `packages/toolroom-store/`
+(the spec, the home, the engine: `Store.ensure`, `link`, `delta`,
+`fetch`, kinds `archive` and `binary`). The package's own tests and
+docs page carry them (`packages/toolroom-store/tests/`,
+`packages/toolroom-store/docs/index.md`), not the toolroom paths the
+phases named. Deferred from phase 1's list: the held ref lock refusal
+has no test yet. Phase 2 next, on Willem's go.
 Supersedes the bytes engine of
 [20260827-pinned-tool-store.md](20260827-pinned-tool-store.md); the
 tool store of that note stays and is built here over
@@ -424,6 +430,11 @@ Acceptance:
   blob with extraction as the one materialisation, was set aside
   because it forgoes the ladder's zero-copy views and the tree digest
   the evaluator's key may fold in.
+- 2026-09-13, the agent: phases 0 and 1 landed (livery#541, livery#549)
+  in `packages/toolroom-store/`, the package the 2026-09-12 ruling
+  asked for; their tests and docs page live there rather than under
+  `packages/toolroom/`. The held ref lock refusal of phase 1's list
+  has no test yet and stays open.
 
 ## Open
 
