@@ -62,6 +62,17 @@ class _FakeBackend:
     def check(self, package: Package, root: Path) -> None:
         return None
 
+    def classify(self, package: Package, path: str) -> str:
+        return "source"
+
+    def gate_build(self, package: Package, root: Path) -> None:
+        return None
+
+    def test(
+        self, package: Package, root: Path, *, selection: tuple[str, ...] = ()
+    ) -> None:
+        return None
+
     def current_version(self, package: Package) -> str:
         return "0.0.1"
 

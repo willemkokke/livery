@@ -164,9 +164,11 @@ def test_a_fix_run_records_the_tree_the_rewriters_left(
 
     monkeypatch.setattr(_gate_record, "remember", _remember)
     monkeypatch.setattr("livery.workshop._quality._packages", lambda: (x, y))
+    from livery.workshop._graph import Scope
+
     monkeypatch.setattr(
         "livery.workshop._graph.affected_from_paths",
-        lambda root, packages, paths: (x,),
+        lambda root, packages, paths: Scope((x,)),
     )
 
     def _rewrite(subset: tuple[Package, ...]) -> None:
@@ -176,7 +178,9 @@ def test_a_fix_run_records_the_tree_the_rewriters_left(
     judged: list[bool] = []
     monkeypatch.setattr(
         "livery.workshop._quality._scoped_check",
-        lambda subset, *, fix=False, rewritten=False: judged.append(rewritten),
+        lambda subset, *, fix=False, rewritten=False, tests=None: judged.append(
+            rewritten
+        ),
     )
     monkeypatch.setattr("livery.workshop._quality.template_check", lambda: None)
     monkeypatch.setattr("livery.workshop._provenance.provenance_check", lambda: None)
@@ -194,6 +198,61 @@ def test_a_fix_run_records_the_tree_the_rewriters_left(
     _quality.check()
     assert judged == [False]
     assert recorded[0]["tree"] == "t" * 40
+
+
+def test_a_test_only_delta_runs_its_files_and_not_the_dependents(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop import _gate_record
+
+    root = _root(tmp_path, "affected-legs = true\n")
+    x, y = _member(root, "x"), _member(root, "y")
+    monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: root)
+    monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
+    paths = ["packages/x/tests/test_a.py"]
+
+    def _plan(root: Path, git: object, *, base: str = "main") -> _gate_record.Plan:
+        return _gate_record.Plan(
+            "step", "t" * 40, base_tree="b" * 40, paths=tuple(paths)
+        )
+
+    monkeypatch.setattr(_gate_record, "plan", _plan)
+    monkeypatch.setattr(
+        _gate_record, "remember", lambda root, git, **kw: "  gate record: recorded"
+    )
+    monkeypatch.setattr("livery.workshop._quality._packages", lambda: (x, y))
+    seen: list[tuple[tuple[str, ...], dict[str, tuple[str, ...]]]] = []
+
+    def _scoped(
+        subset: tuple[Package, ...],
+        *,
+        fix: bool = False,
+        rewritten: bool = False,
+        tests: dict[str, tuple[str, ...]] | None = None,
+    ) -> None:
+        seen.append((tuple(p.path for p in subset), dict(tests or {})))
+
+    monkeypatch.setattr("livery.workshop._quality._scoped_check", _scoped)
+    monkeypatch.setattr("livery.workshop._quality.template_check", lambda: None)
+    monkeypatch.setattr("livery.workshop._provenance.provenance_check", lambda: None)
+    _quality.check()
+    out = capsys.readouterr().out
+    assert "affected: packages/x" in out
+    assert "packages/x: 1 test file(s) changed and nothing else; they run alone" in out
+    assert seen == [(("packages/x",), {"packages/x": ("packages/x/tests/test_a.py",)})]
+    # Test files in every package: still their files, never everything.
+    seen.clear()
+    paths.append("packages/y/tests/test_b.py")
+    _quality.check()
+    assert seen == [
+        (
+            ("packages/x", "packages/y"),
+            {
+                "packages/x": ("packages/x/tests/test_a.py",),
+                "packages/y": ("packages/y/tests/test_b.py",),
+            },
+        )
+    ]
 
 
 def test_a_pull_request_with_a_declared_key_narrows_against_its_base(
@@ -286,7 +345,7 @@ def test_a_suite_the_store_holds_stays_skipped_and_a_miss_runs(
     gated: list[tuple[str, ...]] = []
     monkeypatch.setattr(
         "livery.workshop._quality._scoped_check",
-        lambda subset, *, fix=False, rewritten=False: gated.append(
+        lambda subset, *, fix=False, rewritten=False, tests=None: gated.append(
             tuple(p.path for p in subset)
         ),
     )
@@ -400,7 +459,7 @@ def test_a_workspace_tests_change_narrows_to_that_unit(
     gated: list[tuple[str, ...]] = []
     monkeypatch.setattr(
         "livery.workshop._quality._scoped_check",
-        lambda subset, *, fix=False, rewritten=False: gated.append(
+        lambda subset, *, fix=False, rewritten=False, tests=None: gated.append(
             tuple(p.path for p in subset)
         ),
     )

@@ -11,6 +11,7 @@ without conan gets the install command, never a stack trace.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -271,12 +272,36 @@ class ConanRegistry:
         return tuple(sorted(versions))
 
 
-def check(package: Package, root: Path) -> None:
-    """Configure, build, and ctest *package*; a refusal is the verdict.
+#: The extensions of a C or C++ test source under ``tests/``.
+TEST_SOURCES = (".cpp", ".cc", ".cxx", ".c")
+
+
+def classify(package: Package, path: str) -> str:
+    """What *path*, relative to *package*, is to the cpp-conan kind.
+
+    A C or C++ source under ``tests/`` is a test, one ctest per file
+    named after its stem, as the template registers them; any other
+    file there is test support; ``src/`` and ``include/`` are source;
+    everything else (``CMakeLists.txt``, the conanfile, the contract)
+    is configuration.
+    """
+    from livery.workshop._kinds import CONFIGURATION, SOURCE, TEST, TEST_SUPPORT
+
+    del package
+    parts = path.split("/")
+    if parts[0] == "tests" and len(parts) > 1:
+        return TEST if parts[-1].endswith(TEST_SOURCES) else TEST_SUPPORT
+    if parts[0] in ("src", "include"):
+        return SOURCE
+    return CONFIGURATION
+
+
+def gate_build(package: Package, root: Path) -> None:
+    """Configure and build *package* into the gate's build directory.
 
     The dependency-free library needs no conan at gate time: cmake
-    configures against the host toolchain, ninja builds, and the
-    generated ``test`` target runs ctest. A package that declares
+    configures against the host toolchain and ninja builds, so a
+    rebuild after one edit costs that edit. A package that declares
     conan requirements gains a conan install step when the
     cross-kind dependency lands; today a missing generator file
     fails the configure with cmake's own message.
@@ -286,21 +311,65 @@ def check(package: Package, root: Path) -> None:
     cmake = tools.cmake.opts(cwd=package.directory)
     cmake("-S", ".", "-B", str(build_dir), "-G", "Ninja")
     cmake("--build", str(build_dir))
-    # The Ninja generator's `test` target runs ctest with the
-    # verdict in the exit code; CTEST_OUTPUT_ON_FAILURE makes a red
-    # test print its output instead of a bare summary line. The env
-    # rides whole: standalone toolroom passes `env=` as the child's
-    # entire environment, never a merge over the parent's.
-    result = tools.cmake.opts(
-        cwd=package.directory,
-        env={**os.environ, "CTEST_OUTPUT_ON_FAILURE": "1"},
-        nofail=True,
-    )("--build", str(build_dir), "--target", "test")
-    if result.code != 0:
+
+
+def test(package: Package, root: Path, *, selection: tuple[str, ...] = ()) -> None:
+    """Run ctest over the gate build: every test, or *selection*'s alone.
+
+    A selected test file maps to the ctest named after its stem
+    (``tests/test_acme.cpp`` runs ``test_acme``), which is how the
+    template registers tests; a selection no ctest answers to is a
+    refusal naming the rule.
+    """
+    del root
+    build_dir = package.directory / GATE_BUILD_DIR
+    if not selection:
+        # The Ninja generator's `test` target runs ctest with the
+        # verdict in the exit code; CTEST_OUTPUT_ON_FAILURE makes a red
+        # test print its output instead of a bare summary line. The env
+        # rides whole: standalone toolroom passes `env=` as the child's
+        # entire environment, never a merge over the parent's.
+        result = tools.cmake.opts(
+            cwd=package.directory,
+            env={**os.environ, "CTEST_OUTPUT_ON_FAILURE": "1"},
+            nofail=True,
+        )("--build", str(build_dir), "--target", "test")
+        if result.code != 0:
+            fail(
+                f"{package.name}: ctest failed (exit {result.code}):\n"
+                f"{result.stdout[-4000:]}{result.stderr[-2000:]}"
+            )
+        return
+    if shutil.which("ctest") is None:
         fail(
-            f"{package.name}: ctest failed (exit {result.code}):\n"
-            f"{result.stdout[-4000:]}{result.stderr[-2000:]}"
+            f"{package.name}: ctest is not on PATH beside cmake; the selected"
+            " tests need it, so install cmake's tools and re-run"
         )
+    names = [Path(path).stem for path in selection]
+    pattern = "^(" + "|".join(re.escape(name) for name in names) + ")$"
+    ran = footman.run(
+        ["ctest", "--test-dir", str(build_dir), "-R", pattern, "--output-on-failure"],
+        cwd=package.directory,
+        nofail=True,
+        recorded=False,
+    )
+    if "No tests were found" in ran.stdout + ran.stderr:
+        fail(
+            f"{package.name}: no ctest is named {', '.join(names)}; the cpp-conan"
+            " kind maps a test file to the ctest of its stem"
+            " (add_test(NAME <stem> ...)), so register it or run the suite"
+        )
+    if ran.code != 0:
+        fail(
+            f"{package.name}: ctest failed (exit {ran.code}):\n"
+            f"{ran.stdout[-4000:]}{ran.stderr[-2000:]}"
+        )
+
+
+def check(package: Package, root: Path) -> None:
+    """Configure, build, and ctest *package*; a refusal is the verdict."""
+    gate_build(package, root)
+    test(package, root)
 
 
 def build(package: Package, root: Path, *, epoch: int = 0) -> Path:

@@ -14,7 +14,8 @@ the reflex and the CI legs scope work to it.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from livery.footman import group
@@ -104,44 +105,90 @@ def affected_packages(
                 " registered kind; failing open to everything"
             )
             return None
-    return affected_from_paths(root, packages, git.changed_paths(base))
+    scope = affected_from_paths(root, packages, git.changed_paths(base))
+    return None if scope is None else scope.packages
+
+
+@dataclass(frozen=True)
+class Scope:
+    """What a change reaches: the packages, and the tests that stand for some.
+
+    Attributes:
+        packages: The packages to gate, in discovery order, the
+            workspace's own tests unit last when its files changed.
+        tests: For a package whose changed files are tests and
+            nothing else, those files, repo-relative; a package absent
+            here runs its suite.
+    """
+
+    packages: tuple[Package, ...]
+    tests: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 def affected_from_paths(
     root: Path, packages: tuple[Package, ...], paths: Iterable[str]
-) -> tuple[Package, ...] | None:
-    """The packages a change to *paths* can influence, and the workspace's own tests.
+) -> Scope | None:
+    """What a change to *paths* reaches: the packages, and the tests that stand alone.
 
     The classification `affected_packages` applies to a branch's
     changes, for any set of paths: the reflex hands it the paths
-    between a proved tree and the working tree. ``None`` means
-    everything, an empty tuple nothing a gate reads.
+    between a proved tree and the working tree. Each path is
+    classified by its package's kind: a test file reaches its own
+    package alone, since nothing imports a test, and that package
+    runs those files when they are all that changed in it; source,
+    test support, and configuration reach the package's dependents
+    and run the suites. ``None`` means everything, an empty scope
+    nothing a gate reads.
     """
+    from livery.workshop._backends import _python
     from livery.workshop._coverage_store import WORKSPACE_TESTS, workspace_suite
+    from livery.workshop._kinds import TEST, backend_for
 
     seeds: set[str] = set()
+    picked: dict[str, list[str]] = {}
     tests_changed = False
+    unit_suite = False
     for path in paths:
         if is_prose(path) or is_site(path):
             continue
         if path.startswith(WORKSPACE_TESTS + "/"):
             tests_changed = True
+            if _python.classify(workspace_suite(root) or packages[0], path) == TEST:
+                picked.setdefault(WORKSPACE_TESTS, []).append(path)
+            else:
+                unit_suite = True
             continue
         for package in packages:
             if path.startswith(package.path + "/"):
-                seeds.add(package.path)
+                relative = path[len(package.path) + 1 :]
+                if backend_for(package).classify(package, relative) == TEST:
+                    picked.setdefault(package.path, []).append(path)
+                else:
+                    seeds.add(package.path)
                 break
         else:
             print(f"  {path}: outside the packages; everything runs")
             return None
-    affected = dependents_closure(packages, seeds)
+    reached = {package.path for package in dependents_closure(packages, seeds)}
+    tests = {
+        path: tuple(files)
+        for path, files in picked.items()
+        if path != WORKSPACE_TESTS and path not in reached
+    }
+    members = tuple(
+        package
+        for package in packages
+        if package.path in reached or package.path in tests
+    )
     if not tests_changed:
-        return affected
+        return Scope(members, tests)
     unit = workspace_suite(root)
     if unit is None:
         print(f"  {WORKSPACE_TESTS}/: changed and gone; everything runs")
         return None
-    return (*affected, unit)
+    if not unit_suite and WORKSPACE_TESTS in picked:
+        tests[WORKSPACE_TESTS] = tuple(picked[WORKSPACE_TESTS])
+    return Scope((*members, unit), tests)
 
 
 @graph.task(name="affected")

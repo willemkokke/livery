@@ -19,6 +19,7 @@ import shutil
 import sys
 import tempfile
 import tomllib
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -1134,8 +1135,53 @@ def scoped_rewrite(subset: tuple[Package, ...]) -> None:
         run_lint(fix=True, paths=paths)
 
 
+def classify(package: Package, path: str) -> str:
+    """What *path*, relative to *package*, is to the python kind.
+
+    A ``test_*.py`` or ``*_test.py`` under ``tests/`` is a test; any
+    other file there (a conftest, a helper module, a fixture) is test
+    support, since the tests import or read it; ``src/`` is source;
+    everything else (the manifest, the contract, the changelog
+    configuration) is configuration. The workspace's own tests unit
+    is classified by the same rule on its repo-relative paths.
+    """
+    from livery.workshop._kinds import CONFIGURATION, SOURCE, TEST, TEST_SUPPORT
+
+    del package
+    parts = path.split("/")
+    if parts[0] == "tests" and len(parts) > 1:
+        name = parts[-1]
+        is_test = name.endswith(".py") and (
+            name.startswith("test_") or name.endswith("_test.py")
+        )
+        return TEST if is_test else TEST_SUPPORT
+    if parts[0] == "src":
+        return SOURCE
+    return CONFIGURATION
+
+
+def gate_build(package: Package, root: Path) -> None:
+    """Nothing: python tests run on source, so there is nothing to build."""
+    del package, root
+
+
+def test(package: Package, root: Path, *, selection: tuple[str, ...] = ()) -> None:
+    """Run *package*'s tests: its suite, or the files in *selection* alone."""
+    files = tuple(f"{package.path}/{path}" for path in selection)
+    run_test(
+        packages=(package,),
+        root=root,
+        scoped=True,
+        selection={package.path: files} if files else None,
+    )
+
+
 def scoped_gate(
-    subset: tuple[Package, ...], *, root: Path, check_style: bool = True
+    subset: tuple[Package, ...],
+    *,
+    root: Path,
+    check_style: bool = True,
+    tests: Mapping[str, tuple[str, ...]] | None = None,
 ) -> None:
     """Run the python kind's checks over *subset*, composed here.
 
@@ -1144,7 +1190,8 @@ def scoped_gate(
     [livery.workshop._backends._python.run_typecheck][] nests its
     own fan-out inside. ``check_style`` is off when a rewrite pass
     already ran, where re-judging the style it just wrote would
-    only spend time agreeing.
+    only spend time agreeing. *tests* names, per package path, the
+    test files that stand for the package's suite in this run.
 
     The steps are built at call time, so the property tests that
     patch this module's verbs keep gating the composition.
@@ -1167,7 +1214,22 @@ def scoped_gate(
             p(step(run_lint, title="lint")(paths=paths))
         p(step(run_typecheck, title="typecheck")(paths=type_paths))
         p(step(run_typecomplete, title="typecomplete")(complete))
-        p(step(run_test, title="test")(packages=tested, root=root, scoped=True))
+        p(
+            step(run_test, title="test")(
+                packages=tested, root=root, scoped=True, selection=tests
+            )
+        )
+
+
+#: The variables that tell a test it runs on a forge's runner. A
+#: machine's gate sets them, so a test that reads them fails here the
+#: way it would fail on the runner, instead of one push later.
+RUNNER_VARIABLES = ("CI", "GITHUB_ACTIONS")
+
+
+def runner_shaped(env: Mapping[str, str]) -> dict[str, str]:
+    """*env* with the runner's variables set, as the check legs see the suite."""
+    return {**env, **dict.fromkeys(RUNNER_VARIABLES, "true")}
 
 
 def run_test(
@@ -1175,15 +1237,20 @@ def run_test(
     packages: tuple[Package, ...] = (),
     root: Path | None = None,
     scoped: bool = False,
+    selection: Mapping[str, tuple[str, ...]] | None = None,
 ) -> None:
     """Run the test suite; *pytest_args* forwarded verbatim.
 
     With *packages* and *root*, the run measures coverage over
     ``livery``: inside CI the tests run metered for the gate job's
-    union, and on a machine the run enforces each package's committed
-    floor afterwards. *scoped* additionally narrows collection to
-    those packages' own test directories (the affected mode). Without
-    them the arguments pass through untouched.
+    union, and on a machine the run prints each package's number
+    beside its floor. *scoped* additionally narrows collection to
+    those packages' own test directories (the affected mode), and
+    *selection* names, per package path, the test files that stand
+    for the package's directory. A machine's run sets the runner's
+    variables (`RUNNER_VARIABLES`), so the suite is judged the way
+    the legs judge it. Without *packages* the arguments pass through
+    untouched.
     """
     if not packages or root is None:
         pytest.opts(in_process=False)(*pytest_args)
@@ -1195,11 +1262,16 @@ def run_test(
         # them as a unit keyed by the whole tree.
         from livery.workshop._coverage_store import WORKSPACE_TESTS
 
-        dirs = tuple(
-            f"{package.path}/tests"
-            for package in packages
-            if (package.directory / "tests").is_dir()
-        ) + ((WORKSPACE_TESTS,) if (root / WORKSPACE_TESTS).is_dir() else ())
+        chosen = selection or {}
+        picked: list[str] = []
+        for package in packages:
+            if package.path == WORKSPACE_TESTS:
+                continue
+            if (package.directory / "tests").is_dir():
+                picked.extend(chosen.get(package.path) or (f"{package.path}/tests",))
+        if (root / WORKSPACE_TESTS).is_dir():
+            picked.extend(chosen.get(WORKSPACE_TESTS) or (WORKSPACE_TESTS,))
+        dirs = tuple(picked)
     from livery.workshop._pytest_contexts import ARMED
     from livery.workshop._pytest_speed import FILE_VARIABLE
     from livery.workshop._state import run_context
@@ -1230,8 +1302,9 @@ def run_test(
             else:
                 # Bare --cov: the measured source is [tool.coverage.run]
                 # source, the namespace the render derived, never a
-                # spelled module.
-                pytest.opts(in_process=False, env=env)(
+                # spelled module. The runner's variables are set, so
+                # a test that reads them is judged here as on the leg.
+                pytest.opts(in_process=False, env=runner_shaped(env))(
                     *dirs, "--cov", "--cov-report=", *pytest_args
                 )
         finally:
