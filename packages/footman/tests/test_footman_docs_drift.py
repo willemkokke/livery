@@ -119,26 +119,6 @@ def test_every_public_symbol_is_documented():
     assert not missing, f"public symbols undocumented in docs/: {missing}"
 
 
-def _current_minor_pin() -> str:
-    major, minor, *_ = footman.__version__.split(".")
-    return f"footman~={major}.{minor}.0"
-
-
-@pytest.mark.parametrize("rel", ["../README.md", "index.md", "stability.md"])
-def test_minor_pin_example_tracks_the_release(rel):
-    """The `pin the minor` example (README, docs home, stability page)
-    tracks __version__, so it can't sit several minors stale after a bump."""
-    text = (DOCS / rel).resolve().read_text(encoding="utf-8")
-    pin = _current_minor_pin()
-    assert pin in text, f"{rel}: expected the pin example {pin!r} to be current"
-
-
-def test_json_version_example_is_current():
-    """The --version JSON example on the JSON page tracks __version__."""
-    text = (DOCS / "json.md").read_text(encoding="utf-8")
-    assert f'"version": "{footman.__version__}"' in text
-
-
 KINDS = frozenset(
     {
         "Added",

@@ -17,7 +17,7 @@ stdlib TOML reading — that floor is what buys the zero).
 > may still include breaking changes — always called out in the
 > [changelog](https://github.com/willemkokke/footman/blob/main/CHANGELOG.md),
 > never in a patch release. Pin the minor
-> (`footman~=0.52.0`) if you build on it. What is covered, what is internal,
+> (`livery-footman~=<minor>.0`) if you build on it. What is covered, what is internal,
 > and what has to be true before 1.0 are written down in the
 > [stability promise](https://willemkokke.github.io/footman/stability/).
 

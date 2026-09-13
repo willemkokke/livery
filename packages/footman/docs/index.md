@@ -122,7 +122,7 @@ this site.)
     footman is pre-1.0: the surface is settling, but minor versions may still
     include breaking changes, always called out in the
     [changelog](changelog.md), never in a patch release. Pin the minor
-    (`footman~=0.52.0`) if you build on it. What is covered, what is
+    (`livery-footman~=<minor>.0`) if you build on it. What is covered, what is
     internal, and what has to be true before 1.0 are written down in the
     [stability promise](stability.md).
 
