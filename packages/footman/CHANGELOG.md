@@ -5,6 +5,32 @@ All notable changes to footman are documented here. The format is based on
 [Semantic Versioning](https://semver.org/). While footman is pre-1.0, minor
 versions may include breaking changes.
 
+## [0.53.0] - 2026-09-13
+
+### Added
+
+- [ci] python-versions, matrices as contract config; a one-leg loop by @willemkokke
+- Contract keys are kebab-case; one loader refuses underscores, the render verbs migrate by @willemkokke
+- The wheels matrix reads wheel-platforms; the loop builds a nanobind wheel through the docker socket by @willemkokke
+- The runner's directories are swept through a plugin surface by @willemkokke
+- Every test runs apart from the live runner state, and the registry stays clean by @willemkokke
+- One janitor sweeps the runner's directories and the store by @willemkokke
+- Dispatch and read the nightly, ride out dropped connections, merge notes by union, judge the task nav by @willemkokke
+- Livery.toolroom is a namespace, the handles live in livery.toolroom.tools by @willemkokke
+- Tests are namespaced by their path, and a helper carries its package's name by @willemkokke
+
+### Fixed
+
+- The reaper test tolerates load; flake forensics ride failures by @willemkokke
+- The completion test heals no real project; the dev build keeps timestamps by @willemkokke
+- Six frictions of the daily loop, and workshop's floor at 83 by @willemkokke
+
+### Changed
+
+- The remaining quick wins on the leg's profile by @willemkokke
+- Remove the footman and toolroom compat shim packages by @willemkokke
+- The docs carry no literal version to roll by @willemkokke
+
 ## [0.52.2] - 2026-09-06
 
 ### Added

@@ -61,7 +61,7 @@ from livery.toolroom.tools._host import Argv as Argv
 from livery.toolroom.tools._host import Result as Result
 from livery.toolroom.tools._host import ToolError as ToolError
 
-__version__ = "0.6.2"
+__version__ = "0.7.0"
 
 _QUIET = {"GH_NO_UPDATE_NOTIFIER": "1"}
 """Told not to phone home while being read — see `_toolhelp.QUIET`."""

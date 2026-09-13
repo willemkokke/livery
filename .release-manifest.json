@@ -2,9 +2,19 @@
  "schema": 1,
  "members": [
   {
-   "dir": "strongroom",
-   "name": "livery-strongroom",
-   "version": "0.1.0"
+   "dir": "toolroom",
+   "name": "livery-toolroom",
+   "version": "0.7.0"
+  },
+  {
+   "dir": "footman",
+   "name": "livery-footman",
+   "version": "0.53.0"
+  },
+  {
+   "dir": "toolroom-bench",
+   "name": "livery-toolroom-bench",
+   "version": "0.0.0"
   }
  ]
 }
