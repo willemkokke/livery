@@ -54,8 +54,9 @@ jobs:
         id: wave
         # A PYPI_TOKEN secret publishes with a token, which a first
         # release of a new name needs, since trusted publishing waits
-        # on a pending publisher registered by hand; an empty value
-        # leaves uv on trusted publishing.
+        # on a pending publisher registered by hand. An absent secret
+        # arrives as an empty string, which the publish verb drops
+        # before it spawns uv, so uv stays on trusted publishing.
         env:
           FORGE_TOKEN: ${{ github.token }}
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
