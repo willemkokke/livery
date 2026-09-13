@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import os
 import re
-import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -445,7 +444,7 @@ def _open_work(path: Path, how: str) -> None:
         Path(target).write_text(str(path), "utf-8")
         print(f"  the worktree is at {path}; this shell enters it")
         return
-    mode = how or ("shell" if sys.stdout.isatty() else "none")
+    mode = how or ("shell" if footman.attended() else "none")
     if mode == "code":
         try:
             tools.code.opts(nofail=True, recorded=False)(str(path))

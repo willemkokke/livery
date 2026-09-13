@@ -23,7 +23,6 @@ from __future__ import annotations
 import os
 import pathlib
 import subprocess
-import sys
 import time
 from pathlib import Path
 from typing import Annotated
@@ -306,7 +305,7 @@ def _drive(
     # re-run re-prepares (fresh floors included) and arms.
     if not _live_releases(repo, git):
         return
-    interactive = sys.stdin.isatty()
+    interactive = footman.attended()
     # timeout and poll read at call time so a bounded test can move them.
     if wait_for_releases(
         repo, git, interactive=interactive, timeout=BOUNDED_WAIT, poll=WAIT_POLL

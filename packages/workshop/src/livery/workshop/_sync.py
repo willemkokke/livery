@@ -333,15 +333,13 @@ def sync() -> None:
     environment agrees with ``uv.lock``. Idempotent: re-running it
     is the recovery procedure.
     """
-    import sys
-
     from livery.workshop._git_ops import GitOps
     from livery.workshop._uv import run_uv
 
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
-    bring_current(root, GitOps(root), interactive=sys.stdin.isatty())
+    bring_current(root, GitOps(root), interactive=footman.attended())
     for line in sync_workspace(root):
         print(line)
     run_uv("sync", root=root)

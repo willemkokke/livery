@@ -199,6 +199,7 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
 
     problems.extend(_cycles(packages))
     problems.extend(_forge_is_stdlib_only(root))
+    problems.extend(_terminal_is_asked_through_the_runner(root, packages))
     if problems:
         raise ValueError(
             "the workspace breaks its layering:\n  " + "\n  ".join(problems)
@@ -243,6 +244,90 @@ _FORGE_LAZY_EXTRAS = frozenset({"nacl"})
 #: whenever it loads and livery-forge still declares no dependency.
 _FORGE_PLUGIN_DIR = "packages/forge/src/livery/forge/_dev"
 _FORGE_PLUGIN_IMPORTS = frozenset({"livery.footman", "livery.toolroom"})
+
+
+#: The runner's distribution name. It implements the terminal
+#: questions, so its own sources are the one place that may ask one.
+_RUNNER_DIST = "livery-footman"
+
+#: What a module that imports the runner must never call: a terminal
+#: says nothing about ``--no-input`` or ``--dry-run``.
+_TERMINAL_CALLS = ("sys.stdin.isatty", "sys.stdout.isatty")
+
+
+def _imports_the_runner(tree: ast.Module) -> bool:
+    """Whether the module imports the runner, in any spelling."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            if any(
+                alias.name == "livery.footman"
+                or alias.name.startswith("livery.footman.")
+                for alias in node.names
+            ):
+                return True
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            if node.module == "livery.footman" or node.module.startswith(
+                "livery.footman."
+            ):
+                return True
+            if node.module == "livery" and any(
+                alias.name == "footman" for alias in node.names
+            ):
+                return True
+    return False
+
+
+def _terminal_calls(tree: ast.Module) -> list[str]:
+    """Every call in the module that asks a terminal directly."""
+    bare = {
+        alias.asname or alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module == "sys"
+        for alias in node.names
+        if alias.name in ("stdin", "stdout")
+    }
+    found: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        spelling = ast.unparse(node.func)
+        named = spelling.endswith(".isatty") and spelling.split(".")[0] in bare
+        if spelling in _TERMINAL_CALLS or named:
+            found.append(spelling)
+    return found
+
+
+def _terminal_is_asked_through_the_runner(
+    root: Path, packages: tuple[Package, ...]
+) -> list[str]:
+    """Violations of the one-answer rule: ask the runner, never the terminal.
+
+    A module that imports the runner has [livery.footman.attended][]
+    in reach, which knows ``--no-input`` and ``--dry-run`` as well as
+    the terminal, where asking the terminal ignores both in silence.
+    The runner's own sources implement that answer and are exempt, and
+    a module that never imports it is the workspace's own business.
+    """
+    problems: list[str] = []
+    sources = [root / "tasks.py"]
+    for package in packages:
+        if package.name == _RUNNER_DIST:
+            continue
+        sources.extend(sorted((package.directory / "src").rglob("*.py")))
+    for source in sources:
+        if not source.is_file():
+            continue
+        tree = ast.parse(source.read_text("utf-8"), filename=str(source))
+        if not _imports_the_runner(tree):
+            continue
+        problems.extend(
+            f"{source.relative_to(root)} asks the terminal with {spelling}():"
+            " a module that imports the runner asks"
+            " livery.footman.attended() instead, which knows --no-input"
+            " and --dry-run as well"
+            for spelling in _terminal_calls(tree)
+        )
+    return problems
 
 
 def _forge_is_stdlib_only(root: Path) -> list[str]:

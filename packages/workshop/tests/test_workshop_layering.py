@@ -99,6 +99,73 @@ def test_a_cycle_is_refused(tmp_path: Path) -> None:
         verify_workspace(tmp_path)
 
 
+def _module(root: Path, package: str, name: str, body: str) -> Path:
+    src = root / "packages" / package / "src"
+    src.mkdir(parents=True, exist_ok=True)
+    path = src / name
+    path.write_text(body)
+    return path
+
+
+def test_a_module_importing_the_runner_may_not_ask_the_terminal(
+    tmp_path: Path,
+) -> None:
+    _package(tmp_path, "tool")
+    _module(
+        tmp_path,
+        "tool",
+        "verbs.py",
+        "import sys\nimport livery.footman as footman\n\n"
+        "def go() -> bool:\n    return sys.stdin.isatty()\n",
+    )
+    with pytest.raises(ValueError, match=r"attended\(\)") as caught:
+        verify_workspace(tmp_path)
+    assert "sys.stdin.isatty()" in str(caught.value)
+    # The stdout spelling is the same question, and so is a name
+    # imported from sys directly.
+    _module(
+        tmp_path,
+        "tool",
+        "verbs.py",
+        "from sys import stdout\nfrom livery import footman\n\n"
+        "def go() -> bool:\n    return stdout.isatty()\n",
+    )
+    with pytest.raises(ValueError, match=r"attended\(\)"):
+        verify_workspace(tmp_path)
+
+
+def test_the_runner_and_plain_application_code_may_ask(tmp_path: Path) -> None:
+    # The runner implements the answer, so its own sources ask freely.
+    _package(tmp_path, "footman")
+    _module(
+        tmp_path,
+        "footman",
+        "context.py",
+        "import sys\nfrom livery.footman import task\n\n"
+        "def attended() -> bool:\n    return sys.stdin.isatty()\n",
+    )
+    # A module that never imports the runner is the workspace's own
+    # business, whatever it asks.
+    _package(tmp_path, "app")
+    _module(
+        tmp_path,
+        "app",
+        "ui.py",
+        "import sys\n\ndef colour() -> bool:\n    return sys.stdout.isatty()\n",
+    )
+    verify_workspace(tmp_path)
+    # And the runner's own answer is what a task module should call.
+    _package(tmp_path, "tool")
+    _module(
+        tmp_path,
+        "tool",
+        "verbs.py",
+        "import livery.footman as footman\n\n"
+        "def go() -> bool:\n    return footman.attended()\n",
+    )
+    verify_workspace(tmp_path)
+
+
 def test_a_forge_third_party_import_is_refused(tmp_path: Path) -> None:
     _forge_stub(tmp_path)
     src = tmp_path / "packages" / "forge" / "src"
