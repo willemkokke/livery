@@ -20,6 +20,7 @@ duplicate-tolerant publish making that safe.
 
 from __future__ import annotations
 
+import os
 import re
 import threading
 import time
@@ -286,7 +287,15 @@ def publish_wheels(package: Package, *, index_url: str = "", token: str = "") ->
         # receipts, --json, and recordings alike.
         command += ["--token", token]
     command += [str(path) for path in sorted((package.directory / "dist").glob("*"))]
-    result = tools.uv.opts(cwd=package.directory, nofail=True, recorded=False)(*command)
+    # CI renders UV_PUBLISH_TOKEN from a secret that may be absent, and
+    # an absent secret arrives as an empty string. uv treats a set but
+    # empty token as a credential rather than as none: trusted
+    # publishing is skipped and the index refuses the empty token. The
+    # child sees the variable only when it carries a value.
+    env = {k: v for k, v in os.environ.items() if k != "UV_PUBLISH_TOKEN" or v}
+    result = tools.uv.opts(cwd=package.directory, nofail=True, recorded=False, env=env)(
+        *command
+    )
     if result.code == 0:
         return True
     output = f"{result.stdout}{result.stderr}"

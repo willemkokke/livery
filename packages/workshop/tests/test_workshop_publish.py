@@ -178,6 +178,53 @@ def test_publish_refuses_without_an_upload_address(tmp_path: Path) -> None:
     assert "[registries.python] publish" in message
 
 
+def test_an_empty_publish_token_variable_never_reaches_uv(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The fallback first: CI renders UV_PUBLISH_TOKEN from a secret that
+    # may be absent, which arrives as an empty string, and uv treats a
+    # set but empty token as a credential, skipping trusted publishing.
+    # The empty variable is dropped from the child; a carried value and
+    # an explicit token both stay.
+    from types import SimpleNamespace
+    from typing import cast
+
+    from livery.toolroom import tools
+    from livery.workshop._publish import publish_wheels
+
+    package = Package(
+        directory=tmp_path,
+        path="packages/thing",
+        name="thing",
+        type="python",
+        depends=(),
+    )
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "dist" / "thing-0.1.0-py3-none-any.whl").write_bytes(b"")
+    seen: list[tuple[object, tuple[str, ...]]] = []
+
+    def _opts(**kwargs: object) -> object:
+        def _run(*args: str) -> object:
+            seen.append((kwargs.get("env"), args))
+            return SimpleNamespace(code=0, stdout="", stderr="")
+
+        return _run
+
+    monkeypatch.setattr(tools, "uv", SimpleNamespace(opts=_opts))
+    monkeypatch.setenv("UV_PUBLISH_TOKEN", "")
+    assert publish_wheels(package, index_url="https://index.test/upload") is True
+    env = cast("dict[str, str]", seen[-1][0])
+    assert "UV_PUBLISH_TOKEN" not in env
+    assert "--token" not in seen[-1][1]
+    monkeypatch.setenv("UV_PUBLISH_TOKEN", "carried")
+    publish_wheels(package, index_url="https://index.test/upload")
+    env = cast("dict[str, str]", seen[-1][0])
+    assert env["UV_PUBLISH_TOKEN"] == "carried"
+    publish_wheels(package, index_url="https://index.test/upload", token="given")
+    args = seen[-1][1]
+    assert args[args.index("--token") + 1] == "given"
+
+
 def test_a_garbled_manifest_falls_back_to_the_diff() -> None:
     # The fallback first: unreadable content answers None and the
     # caller keeps the diff-derived discovery for legacy squashes.
