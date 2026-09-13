@@ -626,8 +626,8 @@ without asking; the child shell stays as the fallback.
   relocated to the main checkout's environment; and with `VIRTUAL_ENV`
   and `PATH` exported to another checkout, the process still ran the
   worktree's own venv. A refusal there could never fire, and a guard
-  that cannot fire is worse than none: it reads as protection. The
-  `export VIRTUAL_ENV=... PATH=...` prefix in the daily loop is still
-  needed for a raw `python -m pytest`, which no handoff touches; every
-  `fm` verb is covered without it.
+  that cannot fire is worse than none: it reads as protection. No `fm` verb needs an environment prefix, from
+  any directory and whatever the shell exports, and the loop needs no
+  other tool of its own: the gate is the reflex, so a bare
+  `python -m pytest` has no place in it.
 
