@@ -237,8 +237,11 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
 
     Every line names what was done or why not. Nothing is written
     when no leg left a row, and a per-run ref is dropped only after
-    the run's file landed, so a failed put keeps the halves for a
-    re-run. A job the forge does not know keeps its trace half and
+    the run's file landed and while no completed job is red: a failed
+    put or a red sibling job keeps the halves, since the forge's
+    re-run of the failed jobs runs the gate again without its legs,
+    and that union reads what the first attempt left. A job the forge
+    does not know keeps its trace half and
     is named; a row of another schema is skipped and named. The run
     is looked up under the head the runner's event names, because a
     pull request's checkout is a merge commit the forge never files
@@ -350,6 +353,16 @@ def collect(root: Path, repo: Repository, run: RunContext, *, sha: str) -> list[
     lines.append(
         f"  {SERIES.ref}: run {run.run_id} recorded, {len(entry['jobs'])} job(s)"
     )
+    red = sorted(
+        f"{name}: {job.conclusion}"
+        for name, job in jobs.items()
+        if job.status == "completed" and job.conclusion not in ("success", "skipped")
+    )
+    if red:
+        lines.append(
+            "  the per-run refs stay for a re-run of the gate: " + ", ".join(red)
+        )
+        return lines
     for ref in sorted(refs):
         gone = drop(root, ref)
         lines.append(f"  {ref}: {gone or 'dropped'}")

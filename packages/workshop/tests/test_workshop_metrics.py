@@ -255,6 +255,75 @@ def test_collect_names_a_job_the_forge_does_not_know(
     assert _state.list_refs(work, _state.RUN_PREFIX) == {}
 
 
+def test_collect_keeps_the_halves_while_a_completed_job_is_red(
+    work: Path, tmp_path: Path
+) -> None:
+    # A sibling job's failure turns the gate's verdict red, and the
+    # forge's re-run of the failed jobs runs the gate again without
+    # the legs: the halves must still be there for that union.
+    from typing import Any, cast
+
+    from livery.forge import Repository
+    from livery.forge._types import Job, Run
+
+    sha = "e" * 40
+    run = _state.RunContext("gitea", "78", "push", "refs/heads/main")
+    forge_run = Run(
+        id=78,
+        workflow="ci.yml",
+        head_sha=sha,
+        event="push",
+        status="running",
+        conclusion="",
+        created_at="2026-09-10T10:00:00Z",
+        started_at="2026-09-10T10:00:05Z",
+    )
+    jobs = (
+        Job(
+            1,
+            "check (a)",
+            "completed",
+            "success",
+            "2026-09-10T10:00:10Z",
+            "2026-09-10T10:02:10Z",
+            (),
+        ),
+        Job(
+            2,
+            "docs",
+            "completed",
+            "failure",
+            "2026-09-10T10:00:12Z",
+            "2026-09-10T10:00:27Z",
+            (),
+        ),
+        Job(3, "gate", "running", "", "2026-09-10T10:03:20Z", "", ()),
+        Job(4, "deploy", "queued", "", "", "", ()),
+        Job(5, "govern", "completed", "skipped", "", "", ()),
+    )
+
+    class _Checks:
+        def runs(self, *, head_sha: str = "", event: str = "") -> tuple[Run, ...]:
+            return (forge_run,)
+
+        def jobs(self, run_id: int) -> tuple[Job, ...]:
+            return jobs
+
+    class _Repo:
+        checks = _Checks()
+
+    trace = _trace(tmp_path / "t.json", tasks={"check": 100.0})
+    assert (
+        _metrics.put_leg(work, run, job="check (a)", label="check-a", trace=trace) == ""
+    )
+    ref = _metrics.run_ref(run, "check-a")
+    lines = _metrics.collect(work, cast(Repository, cast(Any, _Repo())), run, sha=sha)
+    assert f"  {_metrics.SERIES.ref}: run 78 recorded, 5 job(s)" in lines
+    assert "  the per-run refs stay for a re-run of the gate: docs: failure" in lines
+    assert f"  {ref}: dropped" not in lines
+    assert _state.read(work, ref).files is not None
+
+
 def test_collect_joins_the_forge_times_and_drops_the_halves(
     work: Path, tmp_path: Path
 ) -> None:

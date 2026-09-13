@@ -456,12 +456,11 @@ without asking; the child shell stays as the fallback.
   as a dead meter, that leg's unit rows lacked their closure
   identity, a skipped leg named the tests unit so the union neither
   collected nor carried it, and the verified-skip proof named members
-  and units a fresh birth does not have yet. One anomaly stayed
-  unexplained: on one pass
-  main's check leg reported its per-run ref put and the gate job's
-  listing thirty seconds later lacked it; the next passes listed the
-  ref fine, with a readback beside the put and a raw listing beside
-  the union.
+  and units a fresh birth does not have yet. One anomaly stayed open
+  here: on one pass main's check leg reported its per-run ref put and
+  the gate job's listing thirty seconds later lacked it. It is
+  explained under slice 4: a first gate attempt had already collected
+  and dropped the ref.
 - 2026-09-12, after slice 1 landed (#530, then #532). The first live
   teardown at a merge, #530's own submit, stopped on footman's refusal
   of a `chdir` inside a parallel task, after the merge had landed and
@@ -529,7 +528,11 @@ without asking; the child shell stays as the fallback.
   key says, since the chain proves the same set by composition. Inside
   CI nothing changed: the legs gate the pull request's changes against
   its base or the whole workspace, and the local record is never read
-  or written there. The commit verb runs the reflex too.
+  or written there. The commit verb runs the reflex too. A fix run
+  records the tree the rewriters left, measured before the judges
+  read it: the first run recorded the tree the plan measured, one
+  reformat behind the commit that followed, and the submit found no
+  chain for it.
 - 2026-09-13, the reflex's first run rooted 13 commits back. Main's
   tip ran red in CI on a render drift: the toolroom-store birth was
   gated on a branch cut before slice 3 rendered the pytest pythonpath,
@@ -541,5 +544,19 @@ without asking; the child shell stays as the fallback.
   history, fifty deep, in one read of the record: a branch cut while
   main's own run is red or still running steps from the parent's tree
   and pays for that merge's changes once. The render lands with this
-  slice. Slice 5 (the kind seam, test-only steps) and slice 6 (the
-  environment guard) are next.
+  slice.
+- 2026-09-13, the loop's red main runs explained (runs 1471, 1502 and
+  1515). The loop runner's docs job fails now and then on a build that
+  left nothing, which is why the loop re-runs a red run once. The gate
+  job runs whatever its needed jobs did, to report the verdict: on
+  1515 its union read the check leg's row, its collection put the
+  run's metrics and dropped the per-run refs, and its verdict went red
+  over the docs job. The forge's re-run of the failed jobs ran docs
+  and the gate again, without the check leg, and the second union
+  found no leg row: red twice, as on 1471. The collection now keeps
+  the per-run refs while any completed job of the run is red, so the
+  re-run's union reads what the first attempt left; the janitor in the
+  merge gate sweeps per-run refs older than six hours. The same shape
+  held on every forge: a "re-run failed jobs" after any red sibling
+  job left the gate unable to union. Slice 5 (the kind seam, test-only
+  steps) and slice 6 (the environment guard) are next.

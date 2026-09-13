@@ -180,11 +180,15 @@ def test_check_fix_rewrites_serially_then_judges_the_rest(
     rig: tuple[FakeForge, Path],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _ = rig
+    _, root = rig
     calls: list[tuple[str, object]] = []
-    monkeypatch.setattr(
-        _python, "run_format", lambda **kwargs: calls.append(("format", kwargs))
-    )
+
+    def _format(**kwargs: object) -> None:
+        calls.append(("format", kwargs))
+        module = root / "packages" / "thing" / "src" / "livery" / "thing" / "mod.py"
+        module.write_text("x = 2\n")
+
+    monkeypatch.setattr(_python, "run_format", _format)
     monkeypatch.setattr(
         _python, "run_lint", lambda **kwargs: calls.append(("lint", kwargs))
     )
@@ -214,6 +218,12 @@ def test_check_fix_rewrites_serially_then_judges_the_rest(
     assert name0 == "format" and isinstance(kw0, dict) and kw0["check"] is False
     assert name1 == "lint" and isinstance(kw1, dict) and kw1["fix"] is True
     assert {name for name, _ in calls[2:]} == {"types", "complete", "test", "render"}
+    # The row names the tree the rewrite left, not the one the plan measured.
+    from livery.workshop import _gate_record
+    from livery.workshop._git_ops import GitOps
+
+    rows, why = _gate_record.rows(root)
+    assert why == "" and rows[0].tree == GitOps(root).working_tree_id()
     calls.clear()
     # Without --fix nothing rewrites: format checks and lint reports.
     # The tree is proved by now, so the run is asked for in full.

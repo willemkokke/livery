@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from livery.workshop import _coverage_store, _quality, _verified
-from livery.workshop._git_ops import GitError
+from livery.workshop._backends import _python
+from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._packages import Package
 from livery.workshop._state import RunContext
 from livery.workshop._verified import read_marker
@@ -133,6 +135,66 @@ def test_a_local_gate_is_the_reflex_and_hands_its_base_to_the_plan(
     assert bases == ["develop", "main"]
 
 
+def test_a_fix_run_records_the_tree_the_rewriters_left(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The plan measures the tree before the rewriters run. The row
+    # names the tree the judges read, so a fix that moves a file does
+    # not leave the proved tree one rewrite behind the commit.
+    from livery.workshop import _gate_record
+
+    root = _root(tmp_path, "affected-legs = true\n")
+    x, y = _member(root, "x"), _member(root, "y")
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: root)
+    monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
+
+    def _plan(root: Path, git: object, *, base: str = "main") -> _gate_record.Plan:
+        return _gate_record.Plan(
+            "step", "t" * 40, base_tree="b" * 40, paths=("packages/x/a.py",)
+        )
+
+    monkeypatch.setattr(_gate_record, "plan", _plan)
+    recorded: list[dict[str, object]] = []
+
+    def _remember(root: Path, git: object, **kw: object) -> str:
+        recorded.append(kw)
+        return "  gate record: recorded"
+
+    monkeypatch.setattr(_gate_record, "remember", _remember)
+    monkeypatch.setattr("livery.workshop._quality._packages", lambda: (x, y))
+    monkeypatch.setattr(
+        "livery.workshop._graph.affected_from_paths",
+        lambda root, packages, paths: (x,),
+    )
+
+    def _rewrite(subset: tuple[Package, ...]) -> None:
+        (root / "packages" / "x" / "a.py").write_text("x = 2\n")
+
+    monkeypatch.setattr(_python, "scoped_rewrite", _rewrite)
+    judged: list[bool] = []
+    monkeypatch.setattr(
+        "livery.workshop._quality._scoped_check",
+        lambda subset, *, fix=False, rewritten=False: judged.append(rewritten),
+    )
+    monkeypatch.setattr("livery.workshop._quality.template_check", lambda: None)
+    monkeypatch.setattr("livery.workshop._provenance.provenance_check", lambda: None)
+    _quality.check(fix=True)
+    # The router is told the rewriters ran, and the row names their tree.
+    assert judged == [True]
+    left = GitOps(root).working_tree_id()
+    assert left != "t" * 40
+    assert recorded == [
+        {"tree": left, "packages": ("packages/x",), "base_tree": "b" * 40}
+    ]
+    # Without --fix nothing rewrites, and the plan's tree is the row's.
+    judged.clear()
+    recorded.clear()
+    _quality.check()
+    assert judged == [False]
+    assert recorded[0]["tree"] == "t" * 40
+
+
 def test_a_pull_request_with_a_declared_key_narrows_against_its_base(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -223,7 +285,9 @@ def test_a_suite_the_store_holds_stays_skipped_and_a_miss_runs(
     gated: list[tuple[str, ...]] = []
     monkeypatch.setattr(
         "livery.workshop._quality._scoped_check",
-        lambda subset, *, fix=False: gated.append(tuple(p.path for p in subset)),
+        lambda subset, *, fix=False, rewritten=False: gated.append(
+            tuple(p.path for p in subset)
+        ),
     )
     _quality.check()
     out = capsys.readouterr().out
@@ -335,7 +399,9 @@ def test_a_workspace_tests_change_narrows_to_that_unit(
     gated: list[tuple[str, ...]] = []
     monkeypatch.setattr(
         "livery.workshop._quality._scoped_check",
-        lambda subset, *, fix=False: gated.append(tuple(p.path for p in subset)),
+        lambda subset, *, fix=False, rewritten=False: gated.append(
+            tuple(p.path for p in subset)
+        ),
     )
     _quality.check()
     out = capsys.readouterr().out

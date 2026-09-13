@@ -386,7 +386,11 @@ def check(
                     if len(members) < len(packages):
                         names = ", ".join(package.path for package in subset)
                         print(f"  affected: {names}")
-                        _scoped_check(subset, fix=fix)
+                        tree = reflex.tree
+                        if fix:
+                            _python.scoped_rewrite(subset)
+                            tree = _rewritten_tree(root_for_ci, run, tree)
+                        _scoped_check(subset, fix=fix, rewritten=fix)
                         # The render and provenance checks are the gate
                         # job's in CI, once per run; a local narrowed gate
                         # runs them too, since a new module changes the
@@ -399,7 +403,7 @@ def check(
                         _remember_local(
                             root_for_ci,
                             run,
-                            tree=reflex.tree,
+                            tree=tree,
                             packages=tuple(package.path for package in subset),
                             base_tree=reflex.base_tree,
                         )
@@ -420,6 +424,7 @@ def check(
         format(fix=True)
         lint(fix=True)
         provenance_check(fix=True)
+        proved_tree = _rewritten_tree(root_for_ci, run, proved_tree)
         with parallel():
             typecheck()
             typecomplete()
@@ -438,6 +443,22 @@ def check(
         template_check()
         provenance_check()
     _remember_local(root_for_ci, run, tree=proved_tree, packages=None)
+
+
+def _rewritten_tree(root: Path | None, run: RunContext | None, tree: str) -> str:
+    """The working tree's id after the rewriters ran: the tree the judges read.
+
+    The plan measures the tree before a fix run rewrites files, and a
+    row naming that tree would leave the proved tree one rewrite
+    behind the commit that follows. Measured between the rewriters and
+    the judges, so an edit made while the judges run stays unproved.
+    Outside a local run there is no row, and *tree* stands as given.
+    """
+    if root is None or run is not None or not tree:
+        return tree
+    from livery.workshop._git_ops import GitOps
+
+    return GitOps(root).working_tree_id()
 
 
 def _remember_local(
@@ -622,22 +643,25 @@ def _measure_unrecorded(root: Path, run: RunContext, *, bases: tuple[str, ...]) 
     _python.run_test(packages=units, root=root, scoped=True)
 
 
-def _scoped_check(subset: tuple[Package, ...], *, fix: bool = False) -> None:
+def _scoped_check(
+    subset: tuple[Package, ...], *, fix: bool = False, rewritten: bool = False
+) -> None:
     """The gate over *subset* only: this routes, the backends compose.
 
     The render gate is skipped: its inputs are the root answers and
     the template source, which a package-scoped change cannot touch
     (touching them makes the change root-scoped, and the full gate
     runs instead). ``fix`` runs every kind's rewriters serially
-    before any check reads the tree, exactly as the whole gate does;
-    what each kind checks, and in what parallel shape, is its
-    backend's knowledge, not this router's.
+    before any check reads the tree, exactly as the whole gate does,
+    unless ``rewritten`` says the caller ran them already, to measure
+    the tree they left; what each kind checks, and in what parallel
+    shape, is its backend's knowledge, not this router's.
     """
     from livery.footman import step
 
     root = workspace_root()
     assert root is not None
-    if fix:
+    if fix and not rewritten:
         _python.scoped_rewrite(subset)
     from livery.workshop._coverage_store import WORKSPACE_TESTS
 
