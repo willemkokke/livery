@@ -347,7 +347,7 @@ this note in the same change.
    traceback on PR #229 where `fm submit.merge` finished it).
    Acceptance: a notes-only change and an issue's change both run
    start, check, commit, submit, sync with no raw git but the commit.
-3. **Namespaced tests.** importlib mode, `pythonpath`, the helper
+3. **Namespaced tests** (landed 2026-09-13). importlib mode, `pythonpath`, the helper
    naming rule; the open half of #454 closes as unnecessary.
    Acceptance: two packages each with `tests/test_lifecycle.py` collect
    and pass in one session.
@@ -498,3 +498,17 @@ without asking; the child shell stays as the fallback.
   the completion snippet, no nested shell) is still to do; the child
   shell is the form that landed. The loop was not run: the slice
   touches no CI mechanism.
+- 2026-09-13, slice 3 landed. The project template sets pytest's
+  importlib mode and puts every package's tests directory on
+  `pythonpath`; a layout plugin on the `pytest11` entry point refuses
+  a session whose helper modules lack their package's name. The rule
+  found three kinds of leftover in the suites: the forge's conformance
+  drivers and the footman and toolroom typing samples renamed, the
+  release-driver tests' member helper moved into the workshop's seeds
+  module (a test module may not import another in importlib mode),
+  and the worker a footman test spawns moved into a helper, since a
+  spawned process cannot import a module named by its path. The full
+  gate ran every suite under the new mode. The cross-package
+  collection check the plan once proposed, and #454's open half, are
+  not built: the collision class is gone. Not run: the loop, since
+  nothing here touches a CI mechanism.
