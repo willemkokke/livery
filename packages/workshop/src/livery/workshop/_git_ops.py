@@ -9,6 +9,9 @@ use.
 
 from __future__ import annotations
 
+import os
+import shutil
+import tempfile
 from pathlib import Path
 
 from livery.toolroom import tools
@@ -49,6 +52,48 @@ class GitOps:
             GitError: When *spec* names nothing.
         """
         return self._run("rev-parse", "--verify", "--quiet", spec).strip()
+
+    def working_tree_id(self) -> str:
+        """The tree id of the working tree as it stands.
+
+        Tracked changes and untracked files count and ignored files do
+        not, the view ``status`` gives, written through a scratch copy
+        of the index so the real index is never touched. A clean
+        checkout answers HEAD's tree, so a commit that takes everything
+        has the id a check on the dirty tree recorded.
+        """
+        index = self._run("rev-parse", "--git-path", "index").strip()
+        real = Path(index) if Path(index).is_absolute() else self.root / index
+        with tempfile.TemporaryDirectory() as scratch:
+            copy = Path(scratch) / "index"
+            if real.is_file():
+                shutil.copy(real, copy)
+            env = {**os.environ, "GIT_INDEX_FILE": str(copy)}
+            git = tools.git.opts(cwd=self.root, env=env, nofail=True, recorded=False)
+            for args in (("add", "-A"), ("write-tree",)):
+                result = git(*args)
+                if result.code != 0:
+                    raise GitError(
+                        f"git {' '.join(args)} exited {result.code}:"
+                        f"\n{result.stdout}{result.stderr}"
+                    )
+            return result.stdout.strip()
+
+    def tree_diff(self, old: str, new: str) -> list[str]:
+        """The paths differing between the trees *old* and *new*.
+
+        A rename is both sides.
+        """
+        out = self._run("diff-tree", "-r", "--name-only", "--no-renames", old, new)
+        return sorted({line.strip() for line in out.splitlines() if line.strip()})
+
+    def first_parent_trees(self, count: int) -> list[str]:
+        """HEAD's tree id and its first-parent ancestors', newest first.
+
+        *count* commits deep at most.
+        """
+        out = self._run("log", "--first-parent", f"-{count}", "--format=%T", "HEAD")
+        return [line.strip() for line in out.splitlines() if line.strip()]
 
     def head_sha(self) -> str:
         """The commit HEAD points at."""

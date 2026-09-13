@@ -104,6 +104,18 @@ def test_an_unreadable_store_and_a_foreign_entry_name_their_reason(
     assert found is None and "could not be read" in why
 
 
+def test_held_answers_for_many_trees_in_one_read_and_falls_open(
+    work: Path, tmp_path: Path
+) -> None:
+    tree = _verified.tree_id(GitOps(work))
+    assert _verified.held(work, [tree, "f" * 40]) == (set(), "")
+    assert _verified.stamp(work, RUN, tree=tree, sha="a" * 40, legs=("check",)) == ""
+    assert _verified.held(work, [tree, "f" * 40, tree]) == ({tree}, "")
+    _rmtree(tmp_path / "origin.git")
+    found, why = _verified.held(work, [tree])
+    assert found == set() and "could not be read" in why
+
+
 def test_the_stamp_refuses_outside_ci(
     work: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

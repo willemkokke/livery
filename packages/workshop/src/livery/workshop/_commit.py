@@ -41,7 +41,7 @@ def _run_check() -> None:
     """The reflex before a commit: the affected gate in its fix mode."""
     from livery.workshop._quality import check
 
-    check(affected=True, fix=True)
+    check(fix=True)
 
 
 @footman.task(serial=True)

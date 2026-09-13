@@ -33,10 +33,19 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
 
 - `fm check`: format, lint, four gating type checkers, public-API
   type-completeness, the tests with per-package coverage floors, and
-  the render gate, in parallel. `--affected` narrows the gate to the
-  packages the branch's changes can influence (their dependents'
-  closure over the `[[depends]]` graph); a change outside the
-  packages runs everything, with two exceptions. Prose and the site's
+  the render gate, in parallel. On a machine the gate is the reflex:
+  it runs what the working tree changed since the nearest tree this
+  checkout's own green gates proved (the one with the fewest changed
+  paths, a green check of the dirty tree included), the packages that
+  delta can influence (their dependents' closure over the `[[depends]]` graph),
+  and records the working tree as proved, so the tenth commit of a
+  branch pays for what the tenth commit touched and a tree the record
+  already proves runs nothing; `--full` runs everything. The chain of
+  records rests on a full gate here or on the nearest tree in HEAD's
+  history that CI's record holds: a fresh branch off main starts
+  proved, and one cut before main's own run is green pays for that
+  merge's changes in its first step. A change outside the packages
+  runs everything and roots a new chain, with two exceptions. Prose and the site's
   own files, a file under `notes/`, a markdown file anywhere, the root
   `docs/` tree, or the root `zensical.toml`, affect no package, so a
   diff confined to them runs no gate and the site build judges them.
@@ -88,13 +97,12 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
   `fm submit` validates a title, and refuses on `main` and on a
   reserved branch. `git commit` keeps working.
 - `fm submit`: get the branch onto the remote, verified. Its local
-  gate is the one the CI legs run: the whole workspace, or the
-  affected gate against the base branch when the contract declares
-  `[ci] affected-legs`, and it says which; when a green `fm check` on
-  this machine already proved the same tree at a covering scope
-  within the week, it skips that gate and names the check, from a
-  record in the checkout's git directory that never leaves the
-  machine. `--armed`
+  gate is the reflex; when the chain of this machine's green gates
+  proves HEAD's tree, back to a full gate here or a tree in HEAD's
+  history that CI's record holds, it skips the gate and names the chain, from a record in
+  the checkout's git directory that never leaves the machine. A row
+  proves its tree for a week: the tree id covers the pins, not the
+  machine's tools. `--armed`
   lets it land, `--fix` heals mechanical gate findings into the
   branch, and the follow classifies the verdict with stable exit
   codes; a follow that sees the merge from a linked worktree removes

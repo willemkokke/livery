@@ -244,26 +244,33 @@ def _affected(base: str = "main") -> tuple[Package, ...] | None:
 
 @task
 def check(
-    affected: Annotated[
-        bool, doc("scope the gate to the branch's affected packages")
-    ] = False,
+    full: Annotated[bool, doc("run everything, whatever the record proves")] = False,
     fix: Forward[bool] = False,
-    base: Annotated[str, doc("the branch --affected narrows against")] = "main",
+    base: Annotated[str, doc("the branch the chain's root is taken from")] = "main",
 ) -> None:
     """Run the gate: format, lint, types, tests, render gate, in parallel.
+
+    On a machine the gate is the reflex: it runs what the working
+    tree changed since the nearest tree this checkout's own green
+    gates proved, the packages that delta can influence (their
+    dependents' closure), and records the working tree as proved on
+    the local gate record ([livery.workshop._gate_record][]). A tree
+    the record already proves runs nothing. The chain of records
+    rests on a full gate here or on CI's record of the merge base
+    with ``--base``, so a fresh branch off main starts proved. A
+    change outside the packages configures every gate, so it runs
+    everything and roots a new chain; ``--full`` runs everything
+    whatever the record says. ty and pyrefly always check their
+    configured whole either way.
+
+    Inside CI the legs gate the pull request's own changes against its
+    base when the contract declares ``[ci] affected-legs``, or the
+    whole workspace; the local record is never read or written there.
 
     ``--fix`` runs format and lint in their fix modes: each prints
     what it found, rewrites what is mechanical, and still fails on
     what is not. The two rewrite the same files, so under ``--fix``
     they run one after the other before the rest of the gate.
-
-    ``--affected`` narrows every verb to the packages this branch's
-    changes can influence (their dependents' closure). A change
-    outside the packages configures every gate, so the narrowing
-    falls back to everything; ty and pyrefly always check their
-    configured whole either way. ``--base`` names the branch the
-    narrowing compares against, ``main`` when absent; inside CI a
-    pull request's own base wins.
 
     ``--fix`` refuses inside CI: a runner's checkout is judged,
     never rewritten, because a fix there mutates a copy nobody
@@ -303,56 +310,109 @@ def check(
                 return
     ci_base = (
         ci_affected_base(root_for_ci, run)
-        if not affected and not nightly and root_for_ci is not None
+        if not nightly and root_for_ci is not None and run is not None
         else ""
     )
     if ci_base:
         print(f"  affected-legs: the scoped gate against origin/{ci_base}")
-        affected = True
-    subset = _affected(ci_base or base) if affected else None
-    if affected and subset is not None:
-        packages = _packages()
-        if root_for_ci is not None and run is not None:
-            subset = _with_unstored_suites(root_for_ci, run, packages, subset)
-        if not subset:
-            print(f"  nothing affected: {_nothing_reason(ci_base or base)}")
+        subset = _affected(ci_base)
+        if subset is not None:
+            packages = _packages()
             if root_for_ci is not None and run is not None:
-                _verified.write_marker(root_for_ci, _verified.NOTHING, leg=run.leg)
-            return
-        # Narrowed when some package's gate is skipped: the workspace's
-        # own tests in the subset are a unit beside the packages, not
-        # one of them, and a subset of every package plus that unit is
-        # the whole gate, which runs those tests anyway.
-        from livery.workshop._coverage_store import WORKSPACE_TESTS
+                subset = _with_unstored_suites(root_for_ci, run, packages, subset)
+            if not subset:
+                print(f"  nothing affected: {_nothing_reason(ci_base)}")
+                if root_for_ci is not None and run is not None:
+                    _verified.write_marker(root_for_ci, _verified.NOTHING, leg=run.leg)
+                return
+            from livery.workshop._coverage_store import WORKSPACE_TESTS
 
-        members = [package for package in subset if package.path != WORKSPACE_TESTS]
-        if len(members) < len(packages):
-            names = ", ".join(package.path for package in subset)
-            print(f"  affected: {names}")
-            if root_for_ci is not None and run is not None:
-                _verified.write_marker(
-                    root_for_ci,
-                    _verified.AFFECTED,
-                    tuple(package.path for package in subset),
-                    leg=run.leg,
+            members = [p for p in subset if p.path != WORKSPACE_TESTS]
+            if len(members) < len(packages):
+                names = ", ".join(package.path for package in subset)
+                print(f"  affected: {names}")
+                if root_for_ci is not None and run is not None:
+                    _verified.write_marker(
+                        root_for_ci,
+                        _verified.AFFECTED,
+                        tuple(package.path for package in subset),
+                        leg=run.leg,
+                    )
+                _scoped_check(subset, fix=fix)
+                return
+    proved_tree = ""
+    if run is None and root_for_ci is not None:
+        from livery.workshop import _gate_record
+        from livery.workshop._git_ops import GitOps
+        from livery.workshop._graph import affected_from_paths
+
+        git = GitOps(root_for_ci)
+        if full:
+            proved_tree = git.working_tree_id()
+            print("  full: everything runs, whatever the record proves")
+        else:
+            reflex = _gate_record.plan(root_for_ci, git, base=base)
+            proved_tree = reflex.tree
+            if reflex.mode == "proved":
+                print(
+                    f"  proved: tree {reflex.tree[:12]} is green already"
+                    f" ({reflex.why}); nothing to run"
                 )
-            _scoped_check(subset, fix=fix)
-            # The render and provenance checks are the gate job's in CI,
-            # once per run; a local narrowed gate runs them too, since a
-            # new module changes the generated site configuration and the
-            # drift would otherwise surface only in CI's gate job.
-            if run is None:
-                from livery.workshop._provenance import provenance_check
+                return
+            if reflex.mode == "step":
+                packages = _packages()
+                print(
+                    f"  since tree {reflex.base_tree[:12]}: {len(reflex.paths)}"
+                    " path(s) changed"
+                )
+                subset = affected_from_paths(root_for_ci, packages, reflex.paths)
+                if subset is not None:
+                    from livery.workshop._coverage_store import WORKSPACE_TESTS
 
-                template_check()
-                provenance_check()
-            _remember_local(
-                root_for_ci,
-                run,
-                packages=tuple(package.path for package in subset),
-                base=ci_base or base,
-            )
-            return
+                    members = [p for p in subset if p.path != WORKSPACE_TESTS]
+                    if not subset:
+                        print(
+                            "  nothing affected: only prose and site files changed"
+                            " since the proved tree"
+                        )
+                        _remember_local(
+                            root_for_ci,
+                            run,
+                            tree=reflex.tree,
+                            packages=(),
+                            base_tree=reflex.base_tree,
+                        )
+                        return
+                    if len(members) < len(packages):
+                        names = ", ".join(package.path for package in subset)
+                        print(f"  affected: {names}")
+                        tree = reflex.tree
+                        if fix:
+                            _python.scoped_rewrite(subset)
+                            tree = _rewritten_tree(root_for_ci, run, tree)
+                        _scoped_check(subset, fix=fix, rewritten=fix)
+                        # The render and provenance checks are the gate
+                        # job's in CI, once per run; a local narrowed gate
+                        # runs them too, since a new module changes the
+                        # generated site configuration and the drift
+                        # would otherwise surface only in CI's gate job.
+                        from livery.workshop._provenance import provenance_check
+
+                        template_check()
+                        provenance_check()
+                        _remember_local(
+                            root_for_ci,
+                            run,
+                            tree=tree,
+                            packages=tuple(package.path for package in subset),
+                            base_tree=reflex.base_tree,
+                        )
+                        return
+                    print("  every package is affected: everything runs")
+                else:
+                    print("  everything runs, and roots a new chain")
+            else:
+                print(f"  full: {reflex.why}")
     # The marker is a CI leg's fact for its metrics row and the stamp;
     # a local run leaves none, since an untracked root file would read
     # as a root change on the next affected gate.
@@ -364,13 +424,14 @@ def check(
         format(fix=True)
         lint(fix=True)
         provenance_check(fix=True)
+        proved_tree = _rewritten_tree(root_for_ci, run, proved_tree)
         with parallel():
             typecheck()
             typecomplete()
             test()
             kindcheck()
             template_check()
-        _remember_local(root_for_ci, run, packages=None, base=base)
+        _remember_local(root_for_ci, run, tree=proved_tree, packages=None)
         return
     with parallel():
         format()
@@ -381,23 +442,44 @@ def check(
         kindcheck()
         template_check()
         provenance_check()
-    _remember_local(root_for_ci, run, packages=None, base=base)
+    _remember_local(root_for_ci, run, tree=proved_tree, packages=None)
+
+
+def _rewritten_tree(root: Path | None, run: RunContext | None, tree: str) -> str:
+    """The working tree's id after the rewriters ran: the tree the judges read.
+
+    The plan measures the tree before a fix run rewrites files, and a
+    row naming that tree would leave the proved tree one rewrite
+    behind the commit that follows. Measured between the rewriters and
+    the judges, so an edit made while the judges run stays unproved.
+    Outside a local run there is no row, and *tree* stands as given.
+    """
+    if root is None or run is not None or not tree:
+        return tree
+    from livery.workshop._git_ops import GitOps
+
+    return GitOps(root).working_tree_id()
 
 
 def _remember_local(
     root: Path | None,
     run: RunContext | None,
     *,
+    tree: str,
     packages: tuple[str, ...] | None,
-    base: str,
+    base_tree: str = "",
 ) -> None:
     """Record a green local gate on this machine's gate record; CI never writes it."""
-    if root is None or run is not None:
+    if root is None or run is not None or not tree:
         return
     from livery.workshop import _gate_record
     from livery.workshop._git_ops import GitOps
 
-    print(_gate_record.remember(root, GitOps(root), packages=packages, base=base))
+    print(
+        _gate_record.remember(
+            root, GitOps(root), tree=tree, packages=packages, base_tree=base_tree
+        )
+    )
 
 
 def _current_point() -> str:
@@ -561,22 +643,25 @@ def _measure_unrecorded(root: Path, run: RunContext, *, bases: tuple[str, ...]) 
     _python.run_test(packages=units, root=root, scoped=True)
 
 
-def _scoped_check(subset: tuple[Package, ...], *, fix: bool = False) -> None:
+def _scoped_check(
+    subset: tuple[Package, ...], *, fix: bool = False, rewritten: bool = False
+) -> None:
     """The gate over *subset* only: this routes, the backends compose.
 
     The render gate is skipped: its inputs are the root answers and
     the template source, which a package-scoped change cannot touch
     (touching them makes the change root-scoped, and the full gate
     runs instead). ``fix`` runs every kind's rewriters serially
-    before any check reads the tree, exactly as the whole gate does;
-    what each kind checks, and in what parallel shape, is its
-    backend's knowledge, not this router's.
+    before any check reads the tree, exactly as the whole gate does,
+    unless ``rewritten`` says the caller ran them already, to measure
+    the tree they left; what each kind checks, and in what parallel
+    shape, is its backend's knowledge, not this router's.
     """
     from livery.footman import step
 
     root = workspace_root()
     assert root is not None
-    if fix:
+    if fix and not rewritten:
         _python.scoped_rewrite(subset)
     from livery.workshop._coverage_store import WORKSPACE_TESTS
 

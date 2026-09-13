@@ -351,7 +351,7 @@ this note in the same change.
    naming rule; the open half of #454 closes as unnecessary.
    Acceptance: two packages each with `tests/test_lifecycle.py` collect
    and pass in one session.
-4. **The proof chain.** Working-tree ids, rows against any proved tree,
+4. **The proof chain** (landed 2026-09-13). Working-tree ids, rows against any proved tree,
    the chain walk in `submit`, `check` edit-scoped by default with
    `--full`. Acceptance: one tree pays one gate; the tenth commit of a
    branch gates only what it touched; the loop's scoped-leg proof
@@ -456,12 +456,11 @@ without asking; the child shell stays as the fallback.
   as a dead meter, that leg's unit rows lacked their closure
   identity, a skipped leg named the tests unit so the union neither
   collected nor carried it, and the verified-skip proof named members
-  and units a fresh birth does not have yet. One anomaly stayed
-  unexplained: on one pass
-  main's check leg reported its per-run ref put and the gate job's
-  listing thirty seconds later lacked it; the next passes listed the
-  ref fine, with a readback beside the put and a raw listing beside
-  the union.
+  and units a fresh birth does not have yet. One anomaly stayed open
+  here: on one pass main's check leg reported its per-run ref put and
+  the gate job's listing thirty seconds later lacked it. It is
+  explained under slice 4: a first gate attempt had already collected
+  and dropped the ref.
 - 2026-09-12, after slice 1 landed (#530, then #532). The first live
   teardown at a merge, #530's own submit, stopped on footman's refusal
   of a `chdir` inside a parallel task, after the merge had landed and
@@ -512,3 +511,52 @@ without asking; the child shell stays as the fallback.
   collection check the plan once proposed, and #454's open half, are
   not built: the collision class is gone. Not run: the loop, since
   nothing here touches a CI mechanism.
+- 2026-09-13, slice 4 landed. The gate record is a chain: a row
+  proves its tree against the proved tree its delta was taken from,
+  rooted at a full gate on the machine or at a tree CI's record holds,
+  and the rows key the working tree's id (a scratch index, `add -A`,
+  `write-tree`), which a commit that takes everything shares. `fm
+  check` is edit-scoped by default: the plan proves the working tree
+  by its chain, else gates the delta from the proved tree with the
+  fewest changed paths, among HEAD's first-parent history (fifty deep)
+  and the newest twenty rows' trees, so a green check of a dirty tree
+  is the next check's base after one more edit, else runs everything
+  and roots a chain; `--full` runs everything, and
+  `--affected` is retired. `fm submit` walks the chain from HEAD's
+  tree and skips its gate when it reaches a root, naming the chain,
+  and runs the reflex otherwise, whatever the contract's affected-legs
+  key says, since the chain proves the same set by composition. Inside
+  CI nothing changed: the legs gate the pull request's changes against
+  its base or the whole workspace, and the local record is never read
+  or written there. The commit verb runs the reflex too. A fix run
+  records the tree the rewriters left, measured before the judges
+  read it: the first run recorded the tree the plan measured, one
+  reformat behind the commit that followed, and the submit found no
+  chain for it.
+- 2026-09-13, the reflex's first run rooted 13 commits back. Main's
+  tip ran red in CI on a render drift: the toolroom-store birth was
+  gated on a branch cut before slice 3 rendered the pytest pythonpath,
+  and the two green merges composed a `pyproject.toml` that differs
+  from its render, so CI's record lacked the tip's tree. The roots
+  were the merge base's tree alone, so the chain fell back to a local
+  full row 13 commits back and gated 405 paths. The roots are now every
+  tree CI's record holds among the merge base and HEAD's first-parent
+  history, fifty deep, in one read of the record: a branch cut while
+  main's own run is red or still running steps from the parent's tree
+  and pays for that merge's changes once. The render lands with this
+  slice.
+- 2026-09-13, the loop's red main runs explained (runs 1471, 1502 and
+  1515). The loop runner's docs job fails now and then on a build that
+  left nothing, which is why the loop re-runs a red run once. The gate
+  job runs whatever its needed jobs did, to report the verdict: on
+  1515 its union read the check leg's row, its collection put the
+  run's metrics and dropped the per-run refs, and its verdict went red
+  over the docs job. The forge's re-run of the failed jobs ran docs
+  and the gate again, without the check leg, and the second union
+  found no leg row: red twice, as on 1471. The collection now keeps
+  the per-run refs while any completed job of the run is red, so the
+  re-run's union reads what the first attempt left; the janitor in the
+  merge gate sweeps per-run refs older than six hours. The same shape
+  held on every forge: a "re-run failed jobs" after any red sibling
+  job left the gate unable to union. Slice 5 (the kind seam, test-only
+  steps) and slice 6 (the environment guard) are next.

@@ -744,8 +744,10 @@ def ci_metrics_collect() -> None:
     Runs in the gate job before its verdict. Reads the per-run refs
     the legs wrote, asks the forge for the run's jobs and their
     steps, puts the run's file on the metrics series under its
-    window, and drops the per-run refs. Fails open loudly: every
-    reason is printed and the exit stays 0.
+    window, and drops the per-run refs when every completed job is
+    green; a red job keeps them, since the forge's re-run of the
+    failed jobs runs this gate again without its legs. Fails open
+    loudly: every reason is printed and the exit stays 0.
     """
     repo, git = _resolved()
     metrics_collect_flow(git.root, repo, git)

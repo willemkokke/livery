@@ -1407,8 +1407,8 @@ def test_the_rename_heal_skips_a_forge_that_names_no_contexts(
 
 
 def _recording_check(calls: list[dict[str, object]]):
-    def _check(affected: bool = False, fix: bool = False, base: str = "main") -> None:
-        calls.append({"affected": affected, "fix": fix, "base": base})
+    def _check(full: bool = False, fix: bool = False, base: str = "main") -> None:
+        calls.append({"full": full, "fix": fix, "base": base})
 
     return _check
 
@@ -1420,26 +1420,26 @@ def _declare(git: SubmitGit, contract: str) -> None:
     _git(git.root, "commit", "--amend", "--no-edit")
 
 
-def test_the_gate_pays_the_whole_workspace_without_the_contract_key(
+def test_the_gate_is_the_reflex_whatever_the_contract_declares(
     rig: tuple[FakeForge, SubmitGit],
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    # A contract without the key pays the full gate, with and without
-    # --fix, and the submit says which gate it ran and why.
+    # With or without the affected-legs key, the submit's gate is the
+    # reflex fm check runs on a machine, with and without --fix, and
+    # the submit says why the chain did not spare it.
     fake, git = rig
     calls: list[dict[str, object]] = []
     monkeypatch.setattr("livery.workshop._quality.check", _recording_check(calls))
     _declare(git, '[workspace]\n\n[ci]\nrunners = ["ubuntu-latest"]\n')
     _submit(fake, git, gate=True, armed=False, follow_to_verdict=False)
-    assert calls == [{"affected": False, "fix": False, "base": "main"}]
+    assert calls == [{"full": False, "fix": False, "base": "main"}]
     out = capsys.readouterr().out
-    assert "gate: the whole workspace" in out
-    assert "affected-legs" in out
+    assert "gate: no chain of green gates reaches tree" in out
+    assert "running the gate" in out
     calls.clear()
     _submit(fake, git, gate=True, fix=True, armed=False, follow_to_verdict=False)
-    assert calls == [{"affected": False, "fix": True, "base": "main"}]
-    assert "gate: the whole workspace" in capsys.readouterr().out
+    assert calls == [{"full": False, "fix": True, "base": "main"}]
 
 
 def test_the_gate_skips_a_tree_this_machines_check_proved(
@@ -1458,11 +1458,15 @@ def test_the_gate_skips_a_tree_this_machines_check_proved(
     # skipped, with and without --fix, and the line names the check.
     _submit(fake, git, gate=True, armed=False, follow_to_verdict=False)
     assert len(calls) == 1
-    assert "recorded" in _gate_record.remember(git.root, git, packages=None)
+    from livery.workshop._verified import tree_id
+
+    assert "recorded" in _gate_record.remember(
+        git.root, git, tree=tree_id(git), packages=None
+    )
     calls.clear()
     _submit(fake, git, gate=True, fix=True, armed=False, follow_to_verdict=False)
     assert calls == []
-    assert "proved green by fm check at" in capsys.readouterr().out
+    assert "proved green by fm check (a full gate of" in capsys.readouterr().out
     # A new commit is another tree: the gate runs again.
     (git.root / "more.txt").write_text("more\n")
     _git(git.root, "add", ".")
@@ -1496,10 +1500,9 @@ def test_the_gate_narrows_against_the_base_when_the_legs_do(
     )
     # The same narrowing the CI legs apply, against the branch the pull
     # request merges into, with the fix mode the caller asked for.
-    assert calls == [{"affected": True, "fix": True, "base": "develop"}]
+    assert calls == [{"full": False, "fix": True, "base": "develop"}]
     out = capsys.readouterr().out
-    assert "gate: the affected gate against origin/develop" in out
-    assert "as the CI legs run it" in out
+    assert "no chain of green gates reaches tree" in out
 
 
 def test_the_self_heal_gate_narrows_the_same_way(
@@ -1535,7 +1538,7 @@ def test_the_self_heal_gate_narrows_the_same_way(
     git.auto_settle = False  # CI never settles, so the PR waits for the heal
     _submit(fake, git, gate=True, armed=True)
     assert answered == [EXIT_BEHIND]
-    assert calls == [{"affected": True, "fix": False, "base": "main"}] * 2
+    assert calls == [{"full": False, "fix": False, "base": "main"}] * 2
     assert git.behind_base("main") == 0  # the heal integrated the advance
 
 

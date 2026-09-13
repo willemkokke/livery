@@ -135,10 +135,16 @@ def test_check_affected_scopes_or_says_nothing(
     # The block contract runs unstubbed, deliberately: stubbing
     # parallel and step here once certified a gate whose steps were
     # built and never run (livery#291). Execution is the property.
-    # Nothing changed: the affected gate says so and runs nothing.
-    _quality.check(affected=True)
+    # A tree the record proves runs nothing: the reflex says so.
+    from livery.workshop import _gate_record
+    from livery.workshop._git_ops import GitOps
+    from livery.workshop._verified import tree_id
+
+    git = GitOps(root)
+    _gate_record.remember(root, git, tree=tree_id(git), packages=None)
+    _quality.check()
     out = capsys.readouterr().out
-    assert "nothing affected" in out
+    assert "proved: tree" in out and "nothing to run" in out
     assert ran == []
     # A one-package change: the scoped verbs run.
     (root / "packages" / "thing" / "src" / "livery" / "thing" / "mod.py").write_text(
@@ -164,7 +170,7 @@ def test_check_affected_scopes_or_says_nothing(
             ),
         ),
     )
-    _quality.check(affected=True)
+    _quality.check()
     out = capsys.readouterr().out
     assert "affected: packages/thing" in out
     assert set(ran) == {"format", "lint", "types", "complete", "test"}
@@ -174,11 +180,15 @@ def test_check_fix_rewrites_serially_then_judges_the_rest(
     rig: tuple[FakeForge, Path],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _ = rig
+    _, root = rig
     calls: list[tuple[str, object]] = []
-    monkeypatch.setattr(
-        _python, "run_format", lambda **kwargs: calls.append(("format", kwargs))
-    )
+
+    def _format(**kwargs: object) -> None:
+        calls.append(("format", kwargs))
+        module = root / "packages" / "thing" / "src" / "livery" / "thing" / "mod.py"
+        module.write_text("x = 2\n")
+
+    monkeypatch.setattr(_python, "run_format", _format)
     monkeypatch.setattr(
         _python, "run_lint", lambda **kwargs: calls.append(("lint", kwargs))
     )
@@ -208,9 +218,16 @@ def test_check_fix_rewrites_serially_then_judges_the_rest(
     assert name0 == "format" and isinstance(kw0, dict) and kw0["check"] is False
     assert name1 == "lint" and isinstance(kw1, dict) and kw1["fix"] is True
     assert {name for name, _ in calls[2:]} == {"types", "complete", "test", "render"}
+    # The row names the tree the rewrite left, not the one the plan measured.
+    from livery.workshop import _gate_record
+    from livery.workshop._git_ops import GitOps
+
+    rows, why = _gate_record.rows(root)
+    assert why == "" and rows[0].tree == GitOps(root).working_tree_id()
     calls.clear()
     # Without --fix nothing rewrites: format checks and lint reports.
-    _quality.check()
+    # The tree is proved by now, so the run is asked for in full.
+    _quality.check(full=True)
     by_name = dict(calls)
     fmt, lnt = by_name["format"], by_name["lint"]
     assert isinstance(fmt, dict) and fmt["check"] is True

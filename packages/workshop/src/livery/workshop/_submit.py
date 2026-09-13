@@ -831,38 +831,31 @@ def submit_flow(
 def _gate(fix: bool = False, *, root: Path, base: str = "main") -> None:
     """The local gate; red raises before any network call.
 
-    The gate the CI legs run: the whole workspace, or, when the
-    contract declares ``[ci] affected-legs``, the affected packages
-    against *base*, the branch the pull request merges into, so the
-    submit proves what CI verifies and pays for nothing more. Says
-    which one it runs and why, and skips it when this machine's own
-    ``fm check`` already proved the same tree at a covering scope
-    (`livery.workshop._gate_record`). *fix* runs format and lint in their
-    fix modes, so mechanical findings heal instead of failing; the
-    caller folds any rewrites into the branch before pushing.
+    The chain of this machine's own green gates
+    (`livery.workshop._gate_record`) is walked from HEAD's tree: a
+    chain that reaches a root, a full gate here or a tree in HEAD's
+    history that CI's record holds, proves the tree and the gate is
+    skipped, saying so. Otherwise the reflex runs, ``fm check`` as a person
+    runs it, which gates the delta from the nearest proved tree and
+    records HEAD's tree at its end. *fix* runs format and lint in
+    their fix modes, so mechanical findings heal instead of failing;
+    the caller folds any rewrites into the branch before pushing.
     """
     from livery.workshop._gate_record import covering
-    from livery.workshop._quality import affected_legs, check
+    from livery.workshop._quality import check
 
-    narrowed = affected_legs(root)
     git = GitOps(root)
-    if narrowed:
-        with contextlib.suppress(GitError):
-            git.fetch()
-    row, why = covering(git, affected=narrowed, base=base)
-    if row is not None:
+    with contextlib.suppress(GitError):
+        git.fetch()
+    proof, why = covering(git, base=base)
+    if proof is not None:
+        by = " by fm check" if proof.steps else ""
         print(
-            f"  gate: tree {row.tree[:12]} proved green by fm check at {row.when}"
-            f" ({row.scope}); skipping"
+            f"  gate: tree {proof.tree[:12]} proved green{by}"
+            f" ({proof.describe()}); skipping"
         )
         return
-    if why:
-        print(f"  gate: {why}; running the gate")
-    if narrowed:
-        print(f"  gate: the affected gate against origin/{base}, as the CI legs run it")
-        check(affected=True, fix=fix, base=base)
-        return
-    print("  gate: the whole workspace (the contract declares no [ci] affected-legs)")
+    print(f"  gate: {why}; running the gate")
     check(fix=fix, base=base)
 
 

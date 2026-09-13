@@ -117,7 +117,8 @@ def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
     # The serial rewrites were the silent half of the drift: built
     # outside the block, dropped without even a refusal.
     ran, calls = _record(monkeypatch, tmp_path)
-    _quality._scoped_check((_package(tmp_path),), fix=True)
+    package = _package(tmp_path)
+    _quality._scoped_check((package,), fix=True)
     assert ran[:2] == ["format", "lint"]
     assert sorted(ran) == [
         "format",
@@ -130,6 +131,11 @@ def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
     rewrites = {c["verb"]: c for c in calls[:2]}
     assert rewrites["format"]["check"] is False
     assert rewrites["lint"]["fix"] is True
+    # A caller that ran the rewriters itself, to measure the tree they
+    # left, says so: the checks run and the rewriters do not run twice.
+    ran.clear()
+    _quality._scoped_check((package,), fix=True, rewritten=True)
+    assert sorted(ran) == ["kindcheck", "test", "typecheck", "typecomplete"]
 
 
 def test_the_module_derives_from_the_src_tree_not_the_dist_name(
