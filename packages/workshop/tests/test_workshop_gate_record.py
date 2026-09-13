@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -87,6 +88,30 @@ def test_the_working_tree_id_is_heads_when_clean_and_moves_with_the_files(
     _git(work, "commit", "-qm", "feat: dirt")
     assert tree_id(git) == with_ignore
     assert git.tree_diff(dirty, with_ignore) == [".gitignore"]
+
+
+def test_the_working_tree_id_reads_a_rewrite_the_cached_stat_calls_clean(
+    work: Path,
+) -> None:
+    # The forcing: a rewrite of the same size whose stat is identical to
+    # the one the index cached, so nothing but git's racy-clean rule can
+    # tell it apart. ctime cannot be set from here, so it leaves the
+    # comparison the way a repository may configure it.
+    git = GitOps(work)
+    _git(work, "config", "core.trustctime", "false")
+    module = work / "mod.py"
+    module.write_text("x = 1\n")
+    # Stamped well before the measurement, so the scratch copy of the
+    # index is taken in a later second than the cached stat.
+    stamp = os.stat(module).st_mtime_ns - 5_000_000_000
+    os.utime(module, ns=(stamp, stamp))
+    _git(work, "add", "-A")
+    _git(work, "commit", "-qm", "feat: mod")
+    committed = tree_id(git)
+    module.write_text("x = 2\n")
+    os.utime(module, ns=(stamp, stamp))
+    os.utime(work / ".git" / "index", ns=(stamp, stamp))
+    assert git.working_tree_id() != committed
 
 
 # --- refusals: what proves nothing ------------------------------------------------

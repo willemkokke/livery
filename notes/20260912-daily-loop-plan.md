@@ -584,3 +584,21 @@ without asking; the child shell stays as the fallback.
   needs a sync before the reflex sees it, and its `tests_need_build`
   stays false until the kind gains an incremental gate build. Slice 6
   (the environment guard) is next.
+- 2026-09-13, the working tree's id read a rewrite as no change, about
+  one run in ten. The id is taken through a scratch copy of the index,
+  and the copy was made with `shutil.copy`, which stamps it with the
+  time of the copy. git trusts a cached stat only while the entry is
+  older than the index file; an entry as new as the index is racily
+  clean, and its content is read again. A copy stamped now looks newer
+  than every entry, so that rule never fired, and a rewrite of the same
+  size in the same second as the cached stat read as no change (git
+  compares whole seconds where it is built without nanosecond stat, as
+  on macOS). It surfaced as a flaky gate-record assertion on the pull
+  request, and it would have let a `--fix` run record a tree the
+  rewriters had already moved past. The copy keeps the index's
+  timestamps now, which restores git's own rule: 40 rounds of the
+  gate's own sequence missed nothing, where the old copy missed one,
+  and the previously flaky test passed 20 runs out of 20. A test forces
+  the shape directly, with the cached stat and the rewrite made
+  identical.
+
