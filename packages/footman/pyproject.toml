@@ -57,7 +57,7 @@ test = [
     "rich>=13",
     "pyte>=0.8",
     # The suite drives the toolroom bridge.
-    "livery-toolroom>=0.6.2",
+    "livery-toolroom>=0.7.0",
 ]
 
 [project.urls]

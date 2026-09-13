@@ -25,7 +25,7 @@ classifiers = [
 # livery.toolroom.tools: both are runtime dependencies, and a consumer
 # of the handles never installs the bench.
 dependencies = [
-    "livery-footman>=0.52.2",
+    "livery-footman>=0.53.0",
     "livery-toolroom>=0.7.0",
 ]
 
