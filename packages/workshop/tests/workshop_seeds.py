@@ -131,3 +131,65 @@ def seed_copier(_seed_home: Path, tmp_path: Path) -> Seeds:
         return copy_seed(_seed_home, key, build, tmp_path)
 
     return get
+
+
+def cliff_config(name: str) -> str:
+    """A member's ``cliff.toml``: its own tag pattern and paths, the house groups."""
+    body = (
+        'body = """\n'
+        '{% if version %}## [{{ version | split(pat="/") | last'
+        ' | trim_start_matches(pat="v") }}] - '
+        '{{ timestamp | date(format="%Y-%m-%d") }}'
+        "{% else %}## [Unreleased]{% endif %}\n"
+        '{% for group, commits in commits | group_by(attribute="group") %}\n'
+        "### {{ group | striptags | trim }}\n"
+        "{% for commit in commits %}\n"
+        "- {{ commit.message | upper_first }}\n"
+        "{%- endfor %}\n"
+        "{% endfor %}\n"
+        '"""\n'
+    )
+    return (
+        "[bump]\n"
+        "features_always_bump_minor = true\n"
+        "breaking_always_bump_major = false\n"
+        f'initial_tag = "packages/{name}/v0.0.0"\n'
+        "\n[git]\n"
+        f'tag_pattern = "^packages/{name}/v?(.+)$"\n'
+        f'include_paths = ["packages/{name}/**"]\n'
+        "conventional_commits = true\n"
+        "filter_unconventional = false\n"
+        'sort_commits = "oldest"\n'
+        "commit_parsers = [\n"
+        '  { message = "^chore\\\\(release\\\\)", skip = true },\n'
+        '  { message = "^feat", group = "<!-- 0 -->Added" },\n'
+        '  { message = "^fix", group = "<!-- 1 -->Fixed" },\n'
+        '  { message = ".*", group = "<!-- 2 -->Changed" },\n'
+        "]\n"
+        "\n[changelog]\n"
+        'header = "# Changelog\\n"\n' + body + "trim = true\n"
+    )
+
+
+def member(root: Path, name: str, *, floor_on: str = "") -> None:
+    """A python member *name* under *root* at 0.2.0, with a floor on *floor_on*."""
+    directory = root / "packages" / name
+    (directory / "src" / "livery" / name).mkdir(parents=True)
+    depends = (
+        f'[[depends]]\npath = "packages/{floor_on}"\nkind = "build"\nfloor = "0.1.0"\n'
+        if floor_on
+        else ""
+    )
+    requirement = f'"livery-{floor_on}>=0.1.0"' if floor_on else ""
+    (directory / "workshop.toml").write_text(
+        f'type = "python"\nname = "livery-{name}"\n{depends}'
+    )
+    (directory / "pyproject.toml").write_text(
+        f'[project]\nname = "livery-{name}"\nversion = "0.2.0"\n'
+        f"dependencies = [{requirement}]\n"
+    )
+    (directory / "CHANGELOG.md").write_text("# Changelog\n\n## 0.2.0\n\n- x\n")
+    (directory / "src" / "livery" / name / "__init__.py").write_text(
+        '__version__ = "0.2.0"\n'
+    )
+    (directory / "cliff.toml").write_text(cliff_config(name))

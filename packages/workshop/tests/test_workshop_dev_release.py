@@ -20,7 +20,7 @@ from livery.workshop._dev_release import (
 )
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import discover_packages
-from test_workshop_release_driver import _member
+from workshop_seeds import member
 
 _FAILURES = (SystemExit, Failed)
 
@@ -38,7 +38,7 @@ def _workspace(tmp_path: Path) -> Path:
     _git(root, "config", "user.email", "t@livery.local")
     _git(root, "config", "user.name", "T")
     (root / "workshop.toml").write_text("[workspace]\n")
-    _member(root, "core")
+    member(root, "core")
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "chore: seed")
     _git(root, "tag", "packages/core/v0.2.0")

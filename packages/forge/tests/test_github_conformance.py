@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from _github_driver import GithubConformanceDriver
+from forge_github_driver import GithubConformanceDriver
 from livery.forge import Unsupported
 from livery.forge._github import _resolve_token
 from livery.forge.testing import (
