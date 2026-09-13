@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import os
 import re
-import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -218,9 +217,13 @@ def dev_release(
     Every member's version derives before anything builds, so a
     refusal costs nothing. With ``local`` (or with no custom index
     configured, which degrades to the same run and says so) nothing
-    leaves the machine and nothing is asked. A publish always
-    confirms per member; headless, ``livery.footman.confirm`` answers its
-    default no, and the refusal teaches the explicit ``--yes``.
+    leaves the machine and nothing is asked. A publish always confirms
+    per member. Where nobody can answer, ``livery.footman.confirm``
+    takes its default no and the refusal teaches the explicit
+    ``--yes``: a decline and an unanswered question are told apart by
+    [livery.footman.attended][], which knows about ``--no-input`` and
+    ``--dry-run`` as well as the terminal, so silence never publishes
+    under any of them.
     """
     branch = git.current_branch()
     index = os.environ.get(INDEX_VAR, "")
@@ -245,9 +248,9 @@ def dev_release(
             f"Publish a dev release of {plan.package.name}"
             f" {plan.version} from '{branch}'?"
         ):
-            if not sys.stdin.isatty():
+            if not footman.attended():
                 raise SystemExit(
-                    "a dev release without a terminal needs the explicit"
+                    "a dev release nobody was asked about needs the explicit"
                     f" --yes global (`{footman.prog()} --yes workflow.release ...`);"
                     " silence never publishes."
                 )
