@@ -4,8 +4,8 @@ The runner's data directory holds the workshop's durable state: the
 issue worktrees under ``worktrees/<repo>/`` and the loop's workspace.
 footman's collector never touches it, by design. This module is the
 workshop's sweeper, registered under footman's ``footman.sweepers``
-entry point and run by ``fm janitor``, by the daily collector child
-unattended, and, for the worktrees alone, by every ``fm start``.
+entry point and run by ``fm janitor``, by the daily collector child,
+and, for the worktrees alone, by every ``fm start``.
 It also runs the state store's own janitor over every series the
 workshop keeps ([livery.workshop._series][]), in the scope the run
 has: the checkout's local series on a machine, the remote series too
@@ -14,7 +14,7 @@ inside CI.
 The rules, each saying what went or why it stayed:
 
 - A worktree whose linked git directory is gone (its checkout was
-  deleted) goes. This rule is quick and offline, so it runs unattended.
+  deleted) goes. This rule is quick and offline: no forge is asked.
 - A worktree whose issue is closed, or whose branch's pull request
   merged, goes when the branch holds nothing that exists nowhere else,
   decided by the one keep-or-drop rule ``fm issue.close`` uses
@@ -24,7 +24,7 @@ The rules, each saying what went or why it stayed:
   stays and is named, and so is a tree whose issue is open or whose
   forge cannot be asked. A tree whose name carries no issue number is
   judged by its branch's pull request alone. This rule asks the forge,
-  so it runs on demand only.
+  since asking is what proves the removal safe.
 - A local branch of the checkout whose pull request merged and took
   its tip goes by the same rule; the branch a linked worktree holds
   belongs to the worktree rule, and the branch the checkout stands on
@@ -66,7 +66,6 @@ def sweep(
     data_dir: Path,
     config_dir: Path,
     dry_run: bool,
-    unattended: bool,
     now: datetime,
     **facts: Any,
 ) -> list[str]:
@@ -79,15 +78,12 @@ def sweep(
     from livery.workshop._layers import workspace_root
 
     root = facts["root"] if "root" in facts else workspace_root()
-    lines = sweep_worktrees(
-        data_dir / WORKTREES, dry_run=dry_run, unattended=unattended
-    )
-    lines += sweep_branches(root, dry_run=dry_run, unattended=unattended)
+    lines = sweep_worktrees(data_dir / WORKTREES, dry_run=dry_run)
+    lines += sweep_branches(root, dry_run=dry_run)
     lines += sweep_leftovers(data_dir, dry_run=dry_run)
     lines += sweep_store(root, dry_run=dry_run, now=now)
-    if not unattended:
-        lines += report_config(config_dir)
-        lines += report_loop(data_dir / LOOP)
+    lines += report_config(config_dir)
+    lines += report_loop(data_dir / LOOP)
     return lines
 
 
@@ -163,7 +159,7 @@ def _done(
     return False, f"issue #{number} is open", ""
 
 
-def sweep_worktrees(home: Path, *, dry_run: bool, unattended: bool) -> list[str]:
+def sweep_worktrees(home: Path, *, dry_run: bool) -> list[str]:
     """Sweep every ``<repo>/<number>-<slug>`` worktree under *home*; the lines."""
     from livery.workshop._submit import only_local_work
 
@@ -182,8 +178,6 @@ def sweep_worktrees(home: Path, *, dry_run: bool, unattended: bool) -> list[str]
                 lines.append(f"worktree {name}: its checkout is gone; {verb}")
                 if not dry_run:
                     _remove_worktree(tree, None)
-                continue
-            if unattended:
                 continue
             head, _, _rest = tree.name.partition("-")
             number = int(head) if head.isdigit() else None
@@ -211,16 +205,16 @@ def sweep_worktrees(home: Path, *, dry_run: bool, unattended: bool) -> list[str]
     return lines
 
 
-def sweep_branches(root: Path | None, *, dry_run: bool, unattended: bool) -> list[str]:
+def sweep_branches(root: Path | None, *, dry_run: bool) -> list[str]:
     """Drop the checkout's local branches whose pull request merged and took their tip.
 
     A branch a linked worktree holds is the worktree rule's; the base
     branch is never touched; the branch the checkout stands on is
     named, since a sweep never moves a person's HEAD. Asks the forge,
-    so nothing runs unattended. The lines say what went and why the
-    rest stayed.
+    since asking is what proves the removal safe. The lines say what
+    went and why the rest stayed.
     """
-    if root is None or unattended:
+    if root is None:
         return []
     from livery.workshop._submit import (
         merged_pull_request,

@@ -7,13 +7,13 @@ registers under the ``footman.sweepers`` entry-point group, and prints
 each line of what happened.
 
 A sweeper is a callable taking the keyword arguments ``data_dir``,
-``cache_dir``, ``config_dir``, ``dry_run``, ``unattended``, and ``now``,
-and returning the lines it wants printed. ``dry_run`` asks it to say
-what would go and remove nothing. ``unattended`` is true when nobody
-is watching: the daily child, a run with no terminal on stdin, or one
-under ``--no-input``. A sweeper then keeps to what is quick, offline,
-and certain, and leaves the rules that ask a forge for the attended
-run. A sweeper that raises is named and the
+``cache_dir``, ``config_dir``, ``dry_run``, and ``now``, and returning
+the lines it wants printed. ``dry_run`` asks it to say what would go
+and remove nothing. A sweeper does the same work wherever it runs:
+what is safe to remove is decided by its own rule, never by who is
+watching, and a sweeper wanting a quieter voice asks
+[livery.footman.attended][] like anything else.
+A sweeper that raises is named and the
 rest still run; one whose entry point cannot load is named and
 skipped. The convention for what a sweeper may touch is footman's own:
 its package's files under the directories, never another's.
@@ -21,7 +21,6 @@ its package's files under the directories, never another's.
 
 from __future__ import annotations
 
-import sys
 from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 from importlib.metadata import entry_points
@@ -52,12 +51,12 @@ def _sweepers() -> list[tuple[str, Sweeper | str]]:
     return found
 
 
-def run_sweepers(*, dry_run: bool, unattended: bool) -> list[str]:
+def run_sweepers(*, dry_run: bool) -> list[str]:
     """footman's own collect, then every sweeper; the lines to print.
 
     Under ``dry_run`` the collector is left to the daily child, since
     it can only remove; the sweepers hear the flag and say what would
-    go. Under ``unattended`` the sweepers hear that too.
+    go.
     """
     lines: list[str] = []
     cache = _paths.footman_cache_dir()
@@ -73,7 +72,6 @@ def run_sweepers(*, dry_run: bool, unattended: bool) -> list[str]:
         "cache_dir": cache,
         "config_dir": _paths.footman_config_dir(),
         "dry_run": dry_run,
-        "unattended": unattended,
         "now": datetime.now(UTC),
     }
     for name, sweeper in _sweepers():
@@ -90,28 +88,16 @@ def run_sweepers(*, dry_run: bool, unattended: bool) -> list[str]:
     return lines
 
 
-def unattended() -> bool:
-    """Whether nobody is watching: stdin is no terminal, or the run said ``--no-input``.
-
-    The daily child and a CI job take the quiet path without a flag; a
-    person at a terminal gets the rules that ask a forge. A dry run is
-    a person asking what would go, so it does not count.
-    """
-    from livery.footman import context
-
-    return context.current().no_input or not sys.stdin.isatty()
-
-
 @tasks.default(expose="always")
 def janitor(
     dry_run: Annotated[bool, doc("say what would go, remove nothing")] = False,
 ) -> None:
     """Sweep the runner's directories: footman's cache, then every plugin's state.
 
-    Every line names what went or why it stayed. A run with no
-    terminal on stdin, or under ``--no-input``, is unattended and
-    keeps to the quick, offline rules. Idempotent: a second sweep
-    finds nothing to do.
+    Every line names what went or why it stayed. The same work runs
+    wherever it is called from: what is safe to remove is decided by
+    each sweeper's rule, not by who is watching. Idempotent: a second
+    sweep finds nothing to do.
     """
-    for line in run_sweepers(dry_run=dry_run, unattended=unattended()):
+    for line in run_sweepers(dry_run=dry_run):
         print(line)

@@ -99,11 +99,10 @@ an installed package registers under the `footman.sweepers` entry-point
 group, printing each line of what went or why it stayed; `--dry-run`
 says what would go and removes nothing. A sweeper is a callable taking
 the keyword arguments `data_dir`, `cache_dir`, `config_dir`, `dry_run`,
-`unattended`, and `now` and returning the lines it wants printed.
-`unattended` is true when nobody is watching: the daily collector child
-runs it so, and so does a run with no terminal on stdin or under
-`--no-input`; keep to what is quick, offline, and certain there, and
-leave the rules that ask a forge for the attended run. A sweeper that
+and `now` and returning the lines it wants printed. A sweeper does the
+same work wherever it runs: what is safe to remove is decided by its
+own rule, never by who is watching, and a sweeper wanting a quieter
+voice asks `attended()` like anything else. A sweeper that
 raises is named and the rest still run. A sweeper touches its own
 package's files and nobody else's.
 

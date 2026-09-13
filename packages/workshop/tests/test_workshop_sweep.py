@@ -96,7 +96,7 @@ def test_a_tree_holding_work_or_an_open_issue_stays_and_is_named(
     monkeypatch.setattr(
         _sweep, "_repository", lambda tree: _forge(closed=frozenset({1, 2}))
     )
-    lines = _sweep.sweep_worktrees(home, dry_run=False, unattended=False)
+    lines = _sweep.sweep_worktrees(home, dry_run=False)
     assert (
         "worktree livery/1-thing: issue #1 is closed, but it holds uncommitted"
         " changes; kept" in lines
@@ -110,14 +110,14 @@ def test_a_tree_holding_work_or_an_open_issue_stays_and_is_named(
     assert dirty.is_dir() and unpushed.is_dir() and open_issue.is_dir()
     # The forge down: everything stays, and the reason is the forge's.
     monkeypatch.setattr(_sweep, "_repository", lambda tree: _forge(broken=True))
-    lines = _sweep.sweep_worktrees(home, dry_run=False, unattended=False)
+    lines = _sweep.sweep_worktrees(home, dry_run=False)
     assert lines and all(
         "the forge could not be asked" in line and line.endswith("kept")
         for line in lines
     )
 
 
-def test_unattended_never_asks_the_forge_and_removes_only_the_gone(
+def test_a_forge_that_cannot_be_asked_keeps_the_tree_and_says_why(
     checkout: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     home = tmp_path / "home" / "worktrees"
@@ -127,17 +127,18 @@ def test_unattended_never_asks_the_forge_and_removes_only_the_gone(
     (gone / ".git").write_text("gitdir: /nowhere/.git/worktrees/5-thing\n")
     (home / checkout.name / "notes").mkdir()
 
-    def _never(tree: Path) -> Any:
-        raise AssertionError("the forge was asked unattended")
+    def _down(tree: Path) -> Any:
+        raise RuntimeError("the forge is down")
 
-    monkeypatch.setattr(_sweep, "_repository", _never)
-    lines = _sweep.sweep_worktrees(home, dry_run=True, unattended=True)
-    assert "worktree livery/5-thing: its checkout is gone; would remove" in lines
-    assert gone.is_dir()  # a dry run removes nothing
-    lines = _sweep.sweep_worktrees(home, dry_run=False, unattended=True)
+    monkeypatch.setattr(_sweep, "_repository", _down)
+    lines = _sweep.sweep_worktrees(home, dry_run=False)
+    # The rule that needs no forge runs wherever it is called from.
     assert "worktree livery/5-thing: its checkout is gone; removed" in lines
-    assert not gone.exists() and closed.is_dir()
+    assert not gone.exists()
     assert "worktree livery/notes: not a linked worktree; kept" in lines
+    # The rule that does need it keeps the tree and names the reason.
+    assert closed.is_dir()
+    assert any("4-thing" in line and "kept" in line for line in lines)
 
 
 def test_a_closed_clean_pushed_tree_goes_through_its_checkouts_git(
@@ -151,7 +152,7 @@ def test_a_closed_clean_pushed_tree_goes_through_its_checkouts_git(
         "_repository",
         lambda t: _forge(closed=frozenset({6}), merged=frozenset({"feat/7-thing"})),
     )
-    lines = _sweep.sweep_worktrees(home, dry_run=False, unattended=False)
+    lines = _sweep.sweep_worktrees(home, dry_run=False)
     assert (
         "worktree livery/6-thing: issue #6 is closed, nothing only here; removed"
         in lines
@@ -160,7 +161,7 @@ def test_a_closed_clean_pushed_tree_goes_through_its_checkouts_git(
     assert not tree.exists() and not merged.exists()
     assert "6-thing" not in _git(checkout, "worktree", "list")
     # Idempotent: nothing left to sweep.
-    assert _sweep.sweep_worktrees(home, dry_run=False, unattended=False) == []
+    assert _sweep.sweep_worktrees(home, dry_run=False) == []
 
 
 def test_the_store_is_swept_in_the_checkouts_local_scope(
@@ -175,7 +176,7 @@ def test_the_store_is_swept_in_the_checkouts_local_scope(
         "now": datetime.now(UTC),
         "root": checkout,
     }
-    lines = _sweep.sweep(dry_run=False, unattended=True, **facts)
+    lines = _sweep.sweep(dry_run=False, **facts)
     for name in ("gate-record", "diagnostics"):
         assert (
             f"state store: refs/workshop-local/{name}: 0 row(s), within its bounds"
@@ -207,13 +208,13 @@ def test_the_rest_of_the_data_directory_is_bounded_or_reported(tmp_path: Path) -
         "root": None,
     }
     # A dry run first: it says, and changes nothing.
-    said = _sweep.sweep(dry_run=True, unattended=False, **facts)
+    said = _sweep.sweep(dry_run=True, **facts)
     assert "state store: no checkout here; nothing swept" in said
     for name in ("checkouts.txt", "diagnostics", "livery-workshop"):
         assert f"{name}: no code writes it any more; would remove" in said
         assert (data / name).exists()
     # Then for real: gone, the config directory reported only, the loop kept.
-    done = _sweep.sweep(dry_run=False, unattended=False, **facts)
+    done = _sweep.sweep(dry_run=False, **facts)
     for name in ("checkouts.txt", "diagnostics", "livery-workshop"):
         assert f"{name}: no code writes it any more; removed" in done
         assert not (data / name).exists()
@@ -226,9 +227,11 @@ def test_the_rest_of_the_data_directory_is_bounded_or_reported(tmp_path: Path) -
         line.startswith("loop workspace: 2 MB") and "kept" in line for line in done
     )
     assert loop.is_dir()
-    # Unattended, the reports are left to a person.
-    quiet = _sweep.sweep(dry_run=False, unattended=True, **facts)
-    assert not any(line.startswith(("config:", "loop workspace:")) for line in quiet)
+    # A second sweep finds nothing left to remove, and still reports.
+    again = _sweep.sweep(dry_run=False, **facts)
+    assert not any("no code writes it any more" in line for line in again)
+    assert any(line.startswith("config: birth-e2e") for line in again)
+    assert any(line.startswith("loop workspace:") for line in again)
 
 
 def _squash_onto_main(checkout: Path, branch: str) -> None:
@@ -258,7 +261,7 @@ def test_a_squash_merged_tree_is_judged_by_its_merged_head(
             merged=frozenset({"feat/8-thing"}), heads={"feat/8-thing": tip}
         ),
     )
-    lines = _sweep.sweep_worktrees(home, dry_run=False, unattended=False)
+    lines = _sweep.sweep_worktrees(home, dry_run=False)
     assert (
         "worktree livery/8-thing: PR #9 merged, but it holds 1 commit(s) past the"
         " merged head; kept" in lines
@@ -267,7 +270,7 @@ def test_a_squash_merged_tree_is_judged_by_its_merged_head(
     # At the merged head: nothing only here, whatever the squash did
     # to the ancestry (the branch's commit is no ancestor of main).
     _git(tree, "reset", "-q", "--hard", tip)
-    lines = _sweep.sweep_worktrees(home, dry_run=False, unattended=False)
+    lines = _sweep.sweep_worktrees(home, dry_run=False)
     assert "worktree livery/8-thing: PR #9 merged, nothing only here; removed" in lines
     assert not tree.exists()
 
@@ -285,7 +288,7 @@ def test_a_tree_named_after_no_issue_is_judged_by_its_pull_request(
     _git(tree, "push", "-q", "-u", "origin", "docs/thing")
     tip = _git(tree, "rev-parse", "HEAD")
     monkeypatch.setattr(_sweep, "_repository", lambda _tree: _forge())
-    lines = _sweep.sweep_worktrees(home, dry_run=False, unattended=False)
+    lines = _sweep.sweep_worktrees(home, dry_run=False)
     assert "worktree livery/docs-thing: no merged pull request; kept" in lines
     assert tree.is_dir()
     _squash_onto_main(checkout, "docs/thing")
@@ -296,7 +299,7 @@ def test_a_tree_named_after_no_issue_is_judged_by_its_pull_request(
             merged=frozenset({"docs/thing"}), heads={"docs/thing": tip}
         ),
     )
-    lines = _sweep.sweep_worktrees(home, dry_run=False, unattended=False)
+    lines = _sweep.sweep_worktrees(home, dry_run=False)
     assert (
         "worktree livery/docs-thing: PR #9 merged, nothing only here; removed" in lines
     )
@@ -329,9 +332,7 @@ def test_merged_local_branches_of_the_checkout_are_swept(
     monkeypatch.setattr(
         _sweep, "_repository", lambda _root: _forge(merged=merged, heads=heads)
     )
-    # Unattended never asks the forge.
-    assert _sweep.sweep_branches(checkout, dry_run=True, unattended=True) == []
-    lines = _sweep.sweep_branches(checkout, dry_run=True, unattended=False)
+    lines = _sweep.sweep_branches(checkout, dry_run=True)
     assert "branch docs/one: PR #9 merged, nothing only here; would remove" in lines
     assert (
         "branch docs/two: PR #9 merged, but it holds 1 commit(s) past the merged"
@@ -341,20 +342,20 @@ def test_merged_local_branches_of_the_checkout_are_swept(
     assert "docs/one" in _git(checkout, "branch", "--list", "docs/one")  # a dry run
     # Standing on the merged branch: named for sync, never moved.
     _git(checkout, "switch", "-q", "docs/one")
-    lines = _sweep.sweep_branches(checkout, dry_run=False, unattended=False)
+    lines = _sweep.sweep_branches(checkout, dry_run=False)
     assert (
         "branch docs/one: PR #9 merged, but the checkout stands on it;"
         " `fm sync` steps off it" in lines
     )
     _git(checkout, "switch", "-q", "main")
-    lines = _sweep.sweep_branches(checkout, dry_run=False, unattended=False)
+    lines = _sweep.sweep_branches(checkout, dry_run=False)
     assert "branch docs/one: PR #9 merged, nothing only here; removed" in lines
     assert _git(checkout, "branch", "--list", "docs/one") == ""
     assert "docs/two" in _git(checkout, "branch", "--list", "docs/two")
     # The forge down: every branch stays, and the reason is the forge's.
     monkeypatch.setattr(_sweep, "_repository", lambda _root: _forge(broken=True))
 
-    lines = _sweep.sweep_branches(checkout, dry_run=False, unattended=False)
+    lines = _sweep.sweep_branches(checkout, dry_run=False)
     assert lines and all(
         "the forge could not be asked" in line and line.endswith("kept")
         for line in lines
