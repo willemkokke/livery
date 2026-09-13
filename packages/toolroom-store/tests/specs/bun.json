@@ -1,0 +1,69 @@
+{
+  "name": "bun",
+  "description": "Node-compatible runtime for the node lint tools (no node binary; a node shim resolves to bun)",
+  "kind": "archive",
+  "pinned": "1.3.14",
+  "min_version": "",
+  "versions": {
+    "1.3.14": {
+      "version": "1.3.14",
+      "definitions": {
+        "macos-arm": {
+          "platform": "macos",
+          "arch": "arm",
+          "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-darwin-aarch64.zip",
+          "sha256": "d8b96221828ad6f97ac7ac0ab7e95872341af763001e8803e8267652c2652620",
+          "root": "bun-darwin-aarch64",
+          "exe": "",
+          "paths": ["."],
+          "env": {},
+          "shims": { "node": "bun" }
+        },
+        "macos-x64": {
+          "platform": "macos",
+          "arch": "x64",
+          "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-darwin-x64.zip",
+          "sha256": "4183df3374623e5bab315c547cfa0974533cd457d86b73b639f7a87974cd6633",
+          "root": "bun-darwin-x64",
+          "exe": "",
+          "paths": ["."],
+          "env": {},
+          "shims": { "node": "bun" }
+        },
+        "linux-x64": {
+          "platform": "linux",
+          "arch": "x64",
+          "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-x64.zip",
+          "sha256": "951ee2aee855f08595aeec6225226a298d3fea83a3dcd6465c09cbccdf7e848f",
+          "root": "bun-linux-x64",
+          "exe": "",
+          "paths": ["."],
+          "env": {},
+          "shims": { "node": "bun" }
+        },
+        "linux-arm": {
+          "platform": "linux",
+          "arch": "arm",
+          "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-linux-aarch64.zip",
+          "sha256": "a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b",
+          "root": "bun-linux-aarch64",
+          "exe": "",
+          "paths": ["."],
+          "env": {},
+          "shims": { "node": "bun" }
+        },
+        "windows-x64": {
+          "platform": "windows",
+          "arch": "x64",
+          "url": "https://github.com/oven-sh/bun/releases/download/bun-v1.3.14/bun-windows-x64.zip",
+          "sha256": "0a0620930b6675d7ba440e81f4e0e00d3cfbe096c4b140d3fff02205e9e18922",
+          "root": "bun-windows-x64",
+          "exe": "",
+          "paths": ["."],
+          "env": {},
+          "shims": { "node": "bun" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,53 @@
+# Seeded from the template channel (package-python kind) at
+# birth; this file is the workspace's own. Edit it directly:
+# the template never rewrites it.
+[build-system]
+requires = ["uv_build>=0.11,<0.13"]
+build-backend = "uv_build"
+
+[project]
+name = "livery-toolroom-store"
+version = "0.0.0"
+description = "The pinned tool store over strongroom: specs, a machine-wide home, verified installs."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Willem Kokke", email = "mail@willem.net" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Typing :: Typed",
+]
+
+# The handles for the delegated kinds and strongroom for the objects,
+# refs and views; footman only where a verb runs, through a test extra
+# and the plugin entry that a later phase adds.
+dependencies = [
+    "livery-strongroom>=0.1.0",
+    "livery-toolroom>=0.7.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "livery-footman>=0.52.2",
+]
+
+[project.urls]
+Repository = "https://github.com/willemkokke/livery"
+
+[tool.uv.build-backend]
+# PEP 420 namespace: the importable package is livery.toolroom_store and
+# there is no livery/__init__.py anywhere in this repository.
+# PEP 420 namespaces: livery and livery.toolroom carry no __init__.py.
+module-name = "livery.toolroom.store"
+namespace = true
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+
+[tool.ruff.lint.per-file-ignores]
+# The suite's refusal tests quote the messages they expect in full,
+# which runs past the column; the messages are the contract.
+"tests/**" = ["D1", "E501"]

@@ -28,3 +28,6 @@ packages:
 - dir: toolroom-bench
   name: livery-toolroom-bench
   dev: livery-toolroom-bench
+- dir: toolroom-store
+  name: livery-toolroom-store
+  dev: livery-toolroom-store
