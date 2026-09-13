@@ -896,7 +896,7 @@ docs = [
 
 [[package]]
 name = "livery-footman"
-version = "0.52.2"
+version = "0.53.0"
 source = { editable = "packages/footman" }
 
 [package.optional-dependencies]
