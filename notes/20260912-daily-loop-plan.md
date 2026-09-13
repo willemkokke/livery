@@ -630,4 +630,25 @@ without asking; the child shell stays as the fallback.
   any directory and whatever the shell exports, and the loop needs no
   other tool of its own: the gate is the reflex, so a bare
   `python -m pytest` has no place in it.
+- 2026-09-13, the plan is landed through slice 6, and its acceptance
+  stands as follows. One tree pays one gate: every submit of the last
+  day skipped its own gate and named the chain that proved the tree.
+  The loop of a change is start, check, commit, submit, sync. No
+  worktree and no local branch outlived a merge: #557, #563 and #564
+  each tore their own down. No cross-package check runs on any gate.
+  `fm ci.e2e` stays whole, at 6m22s and 7m32s on the day's passes.
+  The first line is the one that fails. A one-module edit in workshop
+  is not proved in under a minute: five runs measured 2m24s to 2m33s,
+  because the package is the unit and workshop's suite is the largest
+  here. A test-only edit is proved in 27s, a prose-only edit in 5.8s,
+  and a tree the record already proves runs nothing at all.
+- 2026-09-13, slice 7 is the open question, on the condition the plan
+  set for it: finer selection than the package opens only if slices 4
+  and 5 leave the reflex above the target for a one-module edit, and
+  they do, by a factor of two and a half. The choice is a ruling, not
+  a finding: file-level inference for python with per-test-file proofs
+  keyed by the closure's digest, and conservative widening for the
+  tests that spawn `fm` children, against leaving the package as the
+  sound unit and paying 2m30s for a source edit. This line stays open
+  until that ruling lands.
 
