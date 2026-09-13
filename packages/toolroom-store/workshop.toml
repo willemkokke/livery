@@ -1,0 +1,23 @@
+# Seeded from the template channel (package-python kind) at
+# birth; this file is the workspace's own. Edit it directly:
+# the template never rewrites it.
+# The package contract: everything the workshop knows about this
+# package it learns here. Declare dependencies on other workspace
+# members as [[depends]] edges with a kind and a floor.
+type = "python"
+name = "livery-toolroom-store"
+
+[[depends]]
+path = "packages/toolroom"
+kind = "runtime"
+floor = "0.7.0"
+
+[[depends]]
+path = "packages/strongroom"
+kind = "runtime"
+floor = "0.1.0"
+
+[qa]
+# The coverage high-water mark the gate enforces; raise it as the
+# suite grows, lower it only deliberately.
+coverage-floor = 100

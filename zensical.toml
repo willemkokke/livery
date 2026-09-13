@@ -266,6 +266,15 @@ nav = [
             { "livery.toolroom.bench._toolspec" = "_generated/api/toolroom-bench/_toolspec.md" },
         ] },
     ] },
+    { "toolroom-store" = [
+        { "Index" = "_generated/packages/toolroom-store/index.md" },
+        { "Changelog" = "_generated/packages/toolroom-store/changelog.md" },
+        { "API" = [
+            { "livery.toolroom.store" = "_generated/api/toolroom-store/index.md" },
+            { "livery.toolroom.store._home" = "_generated/api/toolroom-store/_home.md" },
+            { "livery.toolroom.store._spec" = "_generated/api/toolroom-store/_spec.md" },
+        ] },
+    ] },
     { "workshop" = [
         { "Index" = "_generated/packages/workshop/index.md" },
         { "Releases" = "_generated/packages/workshop/releases.md" },
@@ -573,6 +582,7 @@ base_path = [
     "packages/strongroom/_generated",
     "packages/toolroom/_generated",
     "packages/toolroom-bench/_generated",
+    "packages/toolroom-store/_generated",
     "packages/workshop/_generated",
 ]
 check_paths = true
@@ -581,7 +591,7 @@ auto_append = [
 ]
 
 [project.plugins.mkdocstrings.handlers.python]
-paths = ["packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom-bench/src", "packages/workshop/src"]
+paths = ["packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/workshop/src"]
 inventories = ["https://docs.python.org/3/objects.inv", "https://willemkokke.github.io/footman/objects.inv", "https://willemkokke.github.io/toolroom/objects.inv"]
 
 [project.plugins.mkdocstrings.handlers.python.options]

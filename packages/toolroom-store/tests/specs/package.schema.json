@@ -1,0 +1,169 @@
+{
+  "$defs": {
+    "Arch": {
+      "description": "CPU architectures the engine provisions for.",
+      "enum": [
+        "x64",
+        "arm"
+      ],
+      "title": "Arch",
+      "type": "string"
+    },
+    "Kind": {
+      "description": "Installer kinds \u2014 the typed replacement for free-form commands.\n\n``archive`` and ``binary`` download-and-place from a definition's\nURL. ``uv-tool`` and ``uv-python`` delegate to uv (PyPI / managed\ninterpreters \u2014 uv verifies hashes through its own resolver, so\nthose specs carry versions only). ``bun-install`` installs node\ntools from a ``.config/node/*-package.json`` (the package.json\nstays the pin source). ``system-check`` verifies a system-supplied\ntool against a version floor, with an optional per-platform vendor\ndefinition as the fallback (Windows PortableGit).",
+      "enum": [
+        "archive",
+        "binary",
+        "uv-tool",
+        "uv-python",
+        "bun-install",
+        "system-check"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "PackageDefinition": {
+      "additionalProperties": false,
+      "description": "One platform/arch's artifact and layout for a package version.",
+      "properties": {
+        "platform": {
+          "$ref": "#/$defs/Platform"
+        },
+        "arch": {
+          "$ref": "#/$defs/Arch"
+        },
+        "url": {
+          "default": "",
+          "title": "Url",
+          "type": "string"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sha256"
+        },
+        "root": {
+          "default": "",
+          "title": "Root",
+          "type": "string"
+        },
+        "exe": {
+          "default": "",
+          "title": "Exe",
+          "type": "string"
+        },
+        "paths": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Paths",
+          "type": "array"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "title": "Env",
+          "type": "object"
+        },
+        "shims": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "title": "Shims",
+          "type": "object"
+        }
+      },
+      "required": [
+        "platform",
+        "arch"
+      ],
+      "title": "PackageDefinition",
+      "type": "object"
+    },
+    "PackageVersion": {
+      "additionalProperties": false,
+      "description": "A version of a package: one definition per supported platform.",
+      "properties": {
+        "version": {
+          "title": "Version",
+          "type": "string"
+        },
+        "definitions": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PackageDefinition"
+          },
+          "default": {},
+          "title": "Definitions",
+          "type": "object"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "title": "PackageVersion",
+      "type": "object"
+    },
+    "Platform": {
+      "description": "Operating systems the engine provisions for.",
+      "enum": [
+        "windows",
+        "macos",
+        "linux"
+      ],
+      "title": "Platform",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A tool the engine can supply, across versions and platforms.",
+  "properties": {
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/Kind",
+      "default": "archive"
+    },
+    "pinned": {
+      "default": "",
+      "title": "Pinned",
+      "type": "string"
+    },
+    "min_version": {
+      "default": "",
+      "title": "Min Version",
+      "type": "string"
+    },
+    "versions": {
+      "additionalProperties": {
+        "$ref": "#/$defs/PackageVersion"
+      },
+      "default": {},
+      "title": "Versions",
+      "type": "object"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "title": "Package",
+  "type": "object"
+}

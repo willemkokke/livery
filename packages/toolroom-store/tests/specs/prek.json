@@ -1,0 +1,69 @@
+{
+  "name": "prek",
+  "description": "pre-commit runner, installed from the prebuilt release binary",
+  "kind": "archive",
+  "pinned": "0.4.8",
+  "min_version": "",
+  "versions": {
+    "0.4.8": {
+      "version": "0.4.8",
+      "definitions": {
+        "macos-arm": {
+          "platform": "macos",
+          "arch": "arm",
+          "url": "https://github.com/j178/prek/releases/download/v0.4.8/prek-aarch64-apple-darwin.tar.gz",
+          "sha256": "f0084a9b5ce467c00306b2b329cc929744e2723ed1e7c369929a60ab10196fcc",
+          "root": "prek-aarch64-apple-darwin",
+          "exe": "",
+          "paths": ["."],
+          "env": {},
+          "shims": {}
+        },
+        "macos-x64": {
+          "platform": "macos",
+          "arch": "x64",
+          "url": "https://github.com/j178/prek/releases/download/v0.4.8/prek-x86_64-apple-darwin.tar.gz",
+          "sha256": "dc402357bc5074791f4f1bcf5ce8622da38272e210ff84a551d3044e8da6f05d",
+          "root": "prek-x86_64-apple-darwin",
+          "exe": "",
+          "paths": ["."],
+          "env": {},
+          "shims": {}
+        },
+        "linux-x64": {
+          "platform": "linux",
+          "arch": "x64",
+          "url": "https://github.com/j178/prek/releases/download/v0.4.8/prek-x86_64-unknown-linux-gnu.tar.gz",
+          "sha256": "9b6a7c2e825c1b916ab3bb843505902c07f3937975f935294852643510d721db",
+          "root": "prek-x86_64-unknown-linux-gnu",
+          "exe": "",
+          "paths": ["."],
+          "env": {},
+          "shims": {}
+        },
+        "linux-arm": {
+          "platform": "linux",
+          "arch": "arm",
+          "url": "https://github.com/j178/prek/releases/download/v0.4.8/prek-aarch64-unknown-linux-gnu.tar.gz",
+          "sha256": "4a4d6ee04ed8b9142548d52e9d1f3c22055a333af72022b52d3610a62ae084de",
+          "root": "prek-aarch64-unknown-linux-gnu",
+          "exe": "",
+          "paths": ["."],
+          "env": {},
+          "shims": {}
+        },
+        "windows-x64": {
+          "platform": "windows",
+          "arch": "x64",
+          "url": "https://github.com/j178/prek/releases/download/v0.4.8/prek-x86_64-pc-windows-msvc.zip",
+          "sha256": "7c17dba682812ab24e04a4982dccc228dbf74b695444bd9fa8cbb8c1dc78664c",
+          "root": "",
+          "exe": "",
+          "paths": ["."],
+          "env": {},
+          "shims": {}
+        }
+      }
+    }
+  }
+}

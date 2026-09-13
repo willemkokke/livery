@@ -1,0 +1,27 @@
+{
+  "name": "git",
+  "description": "System git at the floor version; Windows vendors the pinned PortableGit when no suitable Git for Windows is present",
+  "kind": "system-check",
+  "pinned": "2.55.0.windows.2",
+  "min_version": "2.43.0",
+  "versions": {
+    "2.55.0.windows.2": {
+      "version": "2.55.0.windows.2",
+      "definitions": {
+        "windows-x64": {
+          "platform": "windows",
+          "arch": "x64",
+          "url": "https://github.com/git-for-windows/git/releases/download/v2.55.0.windows.2/PortableGit-2.55.0.2-64-bit.7z.exe",
+          "sha256": "b20d42da3afa228e9fa6174480de820282667e799440d655e308f700dfa0d0df",
+          "root": "",
+          "exe": "",
+          "paths": ["cmd", "bin"],
+          "env": {
+            "CLAUDE_CODE_GIT_BASH_PATH": "$package/bin/bash.exe"
+          },
+          "shims": {}
+        }
+      }
+    }
+  }
+}

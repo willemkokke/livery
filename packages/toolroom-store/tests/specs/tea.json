@@ -1,0 +1,149 @@
+{
+  "name": "tea",
+  "description": "Gitea CLI",
+  "kind": "binary",
+  "pinned": "0.15.0",
+  "min_version": "",
+  "versions": {
+    "0.14.2": {
+      "version": "0.14.2",
+      "definitions": {
+        "macos-arm": {
+          "platform": "macos",
+          "arch": "arm",
+          "url": "https://dl.gitea.com/tea/0.14.2/tea-0.14.2-darwin-arm64",
+          "sha256": "d7622137aa36e44bf0632fed506b80b2c88e6ef6f25f314fb7688279c8731109",
+          "root": "",
+          "exe": "tea",
+          "paths": [
+            "."
+          ],
+          "env": {},
+          "shims": {}
+        },
+        "macos-x64": {
+          "platform": "macos",
+          "arch": "x64",
+          "url": "https://dl.gitea.com/tea/0.14.2/tea-0.14.2-darwin-amd64",
+          "sha256": "fba8e4288c6067b6338e07bd6c23c1f020441ef3c2f647dd44a74418225af855",
+          "root": "",
+          "exe": "tea",
+          "paths": [
+            "."
+          ],
+          "env": {},
+          "shims": {}
+        },
+        "linux-x64": {
+          "platform": "linux",
+          "arch": "x64",
+          "url": "https://dl.gitea.com/tea/0.14.2/tea-0.14.2-linux-amd64",
+          "sha256": "be4ab135752825ab223cfa87d30e7f328312a24120b70176b67c1bd4aba19cc3",
+          "root": "",
+          "exe": "tea",
+          "paths": [
+            "."
+          ],
+          "env": {},
+          "shims": {}
+        },
+        "linux-arm": {
+          "platform": "linux",
+          "arch": "arm",
+          "url": "https://dl.gitea.com/tea/0.14.2/tea-0.14.2-linux-arm64",
+          "sha256": "f201f6ba4136f1129e99e6318af07900c0c16a92030648bd186ff27067b34568",
+          "root": "",
+          "exe": "tea",
+          "paths": [
+            "."
+          ],
+          "env": {},
+          "shims": {}
+        },
+        "windows-x64": {
+          "platform": "windows",
+          "arch": "x64",
+          "url": "https://dl.gitea.com/tea/0.14.2/tea-0.14.2-windows-amd64.exe",
+          "sha256": "51f6e03fb6b7a542c51d3b307075bc5fdc9874c1cc2ced3b2ee5add2da235d88",
+          "root": "",
+          "exe": "tea.exe",
+          "paths": [
+            "."
+          ],
+          "env": {},
+          "shims": {}
+        }
+      }
+    },
+    "0.15.0": {
+      "version": "0.15.0",
+      "definitions": {
+        "macos-arm": {
+          "platform": "macos",
+          "arch": "arm",
+          "url": "https://dl.gitea.com/tea/0.15.0/tea-0.15.0-darwin-arm64",
+          "sha256": "dc3470b75028a7e63e1166e9468ecd2a87a8d311456f1729fd04b52b335162c2",
+          "root": "",
+          "exe": "tea",
+          "paths": [
+            "."
+          ],
+          "env": {},
+          "shims": {}
+        },
+        "macos-x64": {
+          "platform": "macos",
+          "arch": "x64",
+          "url": "https://dl.gitea.com/tea/0.15.0/tea-0.15.0-darwin-amd64",
+          "sha256": "72e62636a9d86e26bebc9fb35df436a89395bafce308253d01598cc0a24bb315",
+          "root": "",
+          "exe": "tea",
+          "paths": [
+            "."
+          ],
+          "env": {},
+          "shims": {}
+        },
+        "linux-x64": {
+          "platform": "linux",
+          "arch": "x64",
+          "url": "https://dl.gitea.com/tea/0.15.0/tea-0.15.0-linux-amd64",
+          "sha256": "d7e47fbe7809e4db6a6d830989b0e1776ed5943bb08dccbe0ed166e2594126e2",
+          "root": "",
+          "exe": "tea",
+          "paths": [
+            "."
+          ],
+          "env": {},
+          "shims": {}
+        },
+        "linux-arm": {
+          "platform": "linux",
+          "arch": "arm",
+          "url": "https://dl.gitea.com/tea/0.15.0/tea-0.15.0-linux-arm64",
+          "sha256": "6bdb9a44e0263f104fd396b690e0376d2a27a183abae557452b31e39d6f35ba3",
+          "root": "",
+          "exe": "tea",
+          "paths": [
+            "."
+          ],
+          "env": {},
+          "shims": {}
+        },
+        "windows-x64": {
+          "platform": "windows",
+          "arch": "x64",
+          "url": "https://dl.gitea.com/tea/0.15.0/tea-0.15.0-windows-amd64.exe",
+          "sha256": "77f781de26085b5c1c70f4d27896fcab14c7439cf8fe59da0fcabfdbe26dceb7",
+          "root": "",
+          "exe": "tea.exe",
+          "paths": [
+            "."
+          ],
+          "env": {},
+          "shims": {}
+        }
+      }
+    }
+  }
+}

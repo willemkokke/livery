@@ -1,0 +1,69 @@
+{
+  "name": "eclint",
+  "description": "EditorConfig linter (willemkokke fork)",
+  "kind": "archive",
+  "pinned": "0.6.0-wk.5",
+  "min_version": "",
+  "versions": {
+    "0.6.0-wk.5": {
+      "version": "0.6.0-wk.5",
+      "definitions": {
+        "macos-arm": {
+          "platform": "macos",
+          "arch": "arm",
+          "url": "https://gitlab.com/willemkokke/eclint/-/releases/v0.6.0-wk.5/downloads/eclint_Darwin_arm64.tar.gz",
+          "sha256": "304cced214e36d7f8e09d3233bd91225984d21fcf7525ecba985d41eef48d817",
+          "root": "",
+          "exe": "",
+          "paths": ["."],
+          "env": {},
+          "shims": {}
+        },
+        "macos-x64": {
+          "platform": "macos",
+          "arch": "x64",
+          "url": "https://gitlab.com/willemkokke/eclint/-/releases/v0.6.0-wk.5/downloads/eclint_Darwin_x86_64.tar.gz",
+          "sha256": "1f042029160dabe6e28aa0b30e8a49ba26a040d38cab517e545db5d33a2fff36",
+          "root": "",
+          "exe": "",
+          "paths": ["."],
+          "env": {},
+          "shims": {}
+        },
+        "linux-x64": {
+          "platform": "linux",
+          "arch": "x64",
+          "url": "https://gitlab.com/willemkokke/eclint/-/releases/v0.6.0-wk.5/downloads/eclint_Linux_x86_64.tar.gz",
+          "sha256": "492fea2b15fc07920960d5de0c405af24c537393cc4a5b04392097b009546311",
+          "root": "",
+          "exe": "",
+          "paths": ["."],
+          "env": {},
+          "shims": {}
+        },
+        "linux-arm": {
+          "platform": "linux",
+          "arch": "arm",
+          "url": "https://gitlab.com/willemkokke/eclint/-/releases/v0.6.0-wk.5/downloads/eclint_Linux_arm64.tar.gz",
+          "sha256": "1aa3b7f02174b4d59328c54fa0bb3582e7b0b970cbe68efc79bceff639c0a9a0",
+          "root": "",
+          "exe": "",
+          "paths": ["."],
+          "env": {},
+          "shims": {}
+        },
+        "windows-x64": {
+          "platform": "windows",
+          "arch": "x64",
+          "url": "https://gitlab.com/willemkokke/eclint/-/releases/v0.6.0-wk.5/downloads/eclint_Windows_x86_64.tar.gz",
+          "sha256": "8d22700a739714f4ebaa677910567bc1dcd2b51090102a0fe975b93d6edee00e",
+          "root": "",
+          "exe": "",
+          "paths": ["."],
+          "env": {},
+          "shims": {}
+        }
+      }
+    }
+  }
+}
