@@ -40,7 +40,7 @@ def test_a_raising_or_unloadable_sweeper_never_stops_the_rest(
     monkeypatch.setattr(
         janitor._paths, "footman_config_dir", lambda: tmp_path / "config"
     )
-    lines = janitor.run_sweepers(dry_run=True, unattended=False)
+    lines = janitor.run_sweepers(dry_run=True)
     assert lines[0].startswith("  cache: ") and "nothing removed" in lines[0]
     assert (
         "  acme.bad: raised RuntimeError: the sweeper broke;"
@@ -49,7 +49,7 @@ def test_a_raising_or_unloadable_sweeper_never_stops_the_rest(
     assert "  acme.good: one line" in lines and "  acme.good: two lines" in lines
     assert "  acme.gone: could not load (ImportError: no module); skipped" in lines
     (facts,) = seen
-    assert facts["dry_run"] is True and facts["unattended"] is False
+    assert facts["dry_run"] is True and "unattended" not in facts
     assert (
         facts["data_dir"] == tmp_path / "data"
         and facts["config_dir"] == tmp_path / "config"
@@ -57,7 +57,7 @@ def test_a_raising_or_unloadable_sweeper_never_stops_the_rest(
     assert facts["cache_dir"] == tmp_path / "cache" and facts["now"].tzinfo is not None
 
 
-def test_the_daily_child_runs_the_sweepers_unattended_and_silently(
+def test_the_daily_child_runs_the_sweepers_silently(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     seen: list[dict[str, Any]] = []
@@ -78,7 +78,7 @@ def test_the_daily_child_runs_the_sweepers_unattended_and_silently(
     _gc.main()
     assert capsys.readouterr().out == ""
     (facts,) = seen
-    assert facts["unattended"] is True and facts["dry_run"] is False
+    assert facts["dry_run"] is False and "unattended" not in facts
 
 
 def test_a_sweep_without_sweepers_still_collects_the_cache(
@@ -92,29 +92,5 @@ def test_a_sweep_without_sweepers_still_collects_the_cache(
     monkeypatch.setattr(
         janitor._paths, "footman_config_dir", lambda: tmp_path / "config"
     )
-    lines = janitor.run_sweepers(dry_run=False, unattended=False)
+    lines = janitor.run_sweepers(dry_run=False)
     assert lines == [f"  cache: 0 file(s) collected from {cache}"]
-
-
-def test_unattended_is_no_terminal_or_no_input(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from types import SimpleNamespace
-
-    from livery.footman import context
-
-    class _Stdin:
-        def __init__(self, tty: bool) -> None:
-            self.tty = tty
-
-        def isatty(self) -> bool:
-            return self.tty
-
-    monkeypatch.setattr(context, "current", lambda: SimpleNamespace(no_input=False))
-    monkeypatch.setattr(sys, "stdin", _Stdin(tty=True))
-    assert janitor.unattended() is False
-    monkeypatch.setattr(sys, "stdin", _Stdin(tty=False))
-    assert janitor.unattended() is True
-    monkeypatch.setattr(context, "current", lambda: SimpleNamespace(no_input=True))
-    monkeypatch.setattr(sys, "stdin", _Stdin(tty=True))
-    assert janitor.unattended() is True

@@ -154,8 +154,9 @@ managed `CLAUDE.md` stub whose imports end at the instance's own
   it after every green run. Windows are enforced, aged rows and
   orphaned refs go, anything holding work stays and is named, the
   config directory is reported and never touched, and `--dry-run`
-  says what would go. A run with no terminal on stdin, the daily
-  collector child and a CI job, keeps to the offline rules.
+  says what would go. The same work runs wherever it is called from:
+  what is safe to remove is decided by the rule that proves it, never
+  by who is watching.
 - `fm update` brings an instance up to date: floors to the latest
   released tags, content, render, then the submit flow. Nothing
   changed means nothing happens.

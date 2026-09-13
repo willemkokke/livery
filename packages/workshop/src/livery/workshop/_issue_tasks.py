@@ -315,9 +315,7 @@ def start(
     if worktree:
         from livery.workshop._sweep import sweep_worktrees
 
-        for line in sweep_worktrees(
-            worktree_home(root).parent, dry_run=False, unattended=False
-        ):
+        for line in sweep_worktrees(worktree_home(root).parent, dry_run=False):
             print(f"  {line}")
         if path.is_dir() or git.local_branch_exists(branch):
             print(f"  already started: {branch} at {path}")

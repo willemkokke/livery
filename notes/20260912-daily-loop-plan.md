@@ -651,4 +651,23 @@ without asking; the child shell stays as the fallback.
   tests that spawn `fm` children, against leaving the package as the
   sound unit and paying 2m30s for a source edit. This line stays open
   until that ruling lands.
+- 2026-09-13, the janitor's attended gate is removed, and with it a
+  second implementation of a concept footman already had. The sweep
+  asked the forge only when stdin was a terminal, which meant an agent
+  could never sweep and the checkout's merged branches piled up until
+  a person ran it by hand: 89 of them, by the time it did. Willem:
+  "this is MEANT to clean up things that are safe to clean up", and
+  the gate was never protecting judgement, since nothing in the sweep
+  prompts and every line is printed only after the last removal has
+  already happened. Safety comes from the keep-or-drop rule alone: a
+  branch or worktree whose pull request merged and whose tip the merge
+  took holds nothing that exists nowhere else, and everything else is
+  kept and named. Asking the forge is a read, and it is what proves
+  the removal safe, so gating it inverted the point. The flag leaves
+  the sweeper contract entirely. A sweeper that wants a quieter voice
+  calls `livery.footman.attended`, which is public, documented for
+  exactly this, and says what it means: whether a prompt would reach a
+  human. An agent is not attended by that test and should not be: it
+  cannot answer a question, though it reads every line and every exit
+  code. One concept, one implementation.
 
