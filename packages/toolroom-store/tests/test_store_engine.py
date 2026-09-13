@@ -29,6 +29,9 @@ from livery.toolroom.store import (
 
 HOST = "linux-x64"
 OTHER = "macos-arm"
+# The fixtures are Linux-shaped; on Windows the engine judges an
+# executable by its suffix, so the fixtures carry one there.
+EXE = ".exe" if sys.platform == "win32" else ""
 
 
 def _zip(files: dict[str, bytes], *, executable: tuple[str, ...] = ()) -> bytes:
@@ -120,10 +123,10 @@ def home(tmp_path: Path) -> Home:
 def _tool(name: str = "tool") -> tuple[dict[str, bytes], bytes]:
     data = _zip(
         {
-            f"{name}-1.0.0/bin/{name}": b"#!/bin/sh\necho hi\n",
+            f"{name}-1.0.0/bin/{name}{EXE}": b"#!/bin/sh\necho hi\n",
             f"{name}-1.0.0/README": b"r",
         },
-        executable=(f"{name}-1.0.0/bin/{name}",),
+        executable=(f"{name}-1.0.0/bin/{name}{EXE}",),
     )
     return {HOST: data, OTHER: data + b"\n"}, data
 
@@ -317,11 +320,13 @@ def test_an_install_lands_extracts_hoists_collects_and_views(
     store = Store(home, host=HOST, progress=events.append)
     ensured = store.ensure(spec)
     assert ensured.installed and ensured.version == "1.0.0"
-    tool = ensured.tool_dir / "bin" / "tool"
+    tool = ensured.tool_dir / "bin" / f"tool{EXE}"
     assert tool.read_bytes() == b"#!/bin/sh\necho hi\n"
     if sys.platform != "win32":
         assert tool.stat().st_mode & stat.S_IXUSR
         assert (ensured.tool_dir / "alias").is_symlink()
+    else:
+        assert (ensured.tool_dir / "alias.exe").read_bytes() == tool.read_bytes()
     assert (ensured.tool_dir / "README").read_text() == "r"
     assert store.objects.ref("tools", "tool@1.0.0") == ensured.tree
     assert ensured.paths == (ensured.tool_dir / "bin",)
@@ -390,14 +395,14 @@ def test_link_fills_the_bin_directory_and_removes_only_what_it_made(
     bin_dir.mkdir()
     (bin_dir / "mine").write_text("a person's file")
     made = store.link(installs, bin_dir)
-    assert [p.name for p in made] == ["tool", "other"]
+    assert [p.name for p in made] == [f"tool{EXE}", f"other{EXE}"]
     if sys.platform != "win32":
         assert (bin_dir / "tool").is_symlink()
         assert os.access(bin_dir / "tool", os.X_OK)
     # The pins change: only the store's links move; the person's file stays.
     made = store.link(installs[1:], bin_dir)
-    assert [p.name for p in made] == ["other"]
-    assert not (bin_dir / "tool").exists()
+    assert [p.name for p in made] == [f"other{EXE}"]
+    assert not (bin_dir / f"tool{EXE}").exists()
     assert (bin_dir / "mine").read_text() == "a person's file"
     delta = store.delta(installs, bin_dir)
     assert delta.paths == (bin_dir,)
@@ -516,12 +521,12 @@ def test_link_skips_what_is_not_an_executable_file_or_a_name_taken(
 ) -> None:
     data = _zip(
         {
-            "t/bin/tool": b"#!/bin/sh\n",
+            f"t/bin/tool{EXE}": b"#!/bin/sh\n",
             "t/bin/README": b"prose",
-            "t/bin/sub/inner": b"#!/bin/sh\n",
+            f"t/bin/sub/inner{EXE}": b"#!/bin/sh\n",
             "t/lib/only": b"",
         },
-        executable=("t/bin/tool", "t/bin/sub/inner"),
+        executable=(f"t/bin/tool{EXE}", f"t/bin/sub/inner{EXE}"),
     )
     spec = _spec("first", {HOST: data}, root="t", paths=("bin", "missing"))
     _serve(origin, spec, {HOST: data})
@@ -533,10 +538,10 @@ def test_link_skips_what_is_not_an_executable_file_or_a_name_taken(
     made = store.link(installs, bin_dir)
     # One link: README is not executable, sub is a directory, the twin's
     # tool is a name already taken, and "missing" is no directory.
-    assert [p.name for p in made] == ["tool"]
+    assert [p.name for p in made] == [f"tool{EXE}"]
     # A link the manifest names but that is already gone is no error.
-    (bin_dir / "tool").unlink()
-    assert [p.name for p in store.link(installs, bin_dir)] == ["tool"]
+    (bin_dir / f"tool{EXE}").unlink()
+    assert [p.name for p in store.link(installs, bin_dir)] == [f"tool{EXE}"]
     # The same install twice contributes its directory once.
     assert store.delta([installs[0], installs[0]]).paths == installs[0].paths
 
@@ -545,8 +550,8 @@ def test_fetch_skips_a_delegated_kind_and_a_shim_never_overwrites(
     home: Home, origin: dict[str, bytes], tmp_path: Path
 ) -> None:
     data = _zip(
-        {"t/bin/bun": b"#!/bin/sh\n", "t/node": b"already here"},
-        executable=("t/bin/bun",),
+        {f"t/bin/bun{EXE}": b"#!/bin/sh\n", f"t/node{EXE}": b"already here"},
+        executable=(f"t/bin/bun{EXE}",),
     )
     spec = _spec("bun", {HOST: data}, root="t", shims={"node": "bin/bun"})
     _serve(origin, spec, {HOST: data})
@@ -554,6 +559,6 @@ def test_fetch_skips_a_delegated_kind_and_a_shim_never_overwrites(
     store = Store(home, host=HOST)
     ensured = store.ensure(spec)
     # The archive carried a `node` of its own: the shim leaves it alone.
-    assert (ensured.tool_dir / "node").read_bytes() == b"already here"
+    assert (ensured.tool_dir / f"node{EXE}").read_bytes() == b"already here"
     fetched = store.fetch([delegated, spec], into=tmp_path / "mirror")
     assert [f.name for f in fetched] == ["bun"]
