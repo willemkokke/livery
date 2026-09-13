@@ -50,6 +50,12 @@ with `origin/main`.
   in the runner's config directory, so every checkout and worktree
   starts warm; `fm env.set KEY --scope=shared` writes it.
 - Failure reasons are printed verbatim, never read as booleans.
+- Whether a person is there is one question with one answer:
+  `livery.footman.attended()`, which knows `--no-input` and
+  `--dry-run` as well as the terminal. A module that imports the
+  runner never asks the terminal itself, because a hand-rolled check
+  ignores those flags in silence, and the layering lint refuses one.
+  What a workspace builds, importing no runner, is its own business.
 - Never pipe the output of a command whose verdict you depend on: a
   pipe replaces its exit code with the filter's and truncates the
   failing lines. Redirect to a file and slice the file instead.

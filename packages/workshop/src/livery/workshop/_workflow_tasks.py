@@ -172,8 +172,6 @@ def workflow_abort(
     workflow that had moved settings forward cannot leave protection
     demanding contexts that never report again.
     """
-    import sys
-
     repo, git = _resolved()
     states = workflow_states(repo, git)
     abort_policy(
@@ -182,7 +180,7 @@ def workflow_abort(
         states,
         name,
         force=force,
-        interactive=sys.stdin.isatty(),
+        interactive=footman.attended(),
     )
 
 

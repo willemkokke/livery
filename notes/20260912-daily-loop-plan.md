@@ -670,4 +670,28 @@ without asking; the child shell stays as the fallback.
   human. An agent is not attended by that test and should not be: it
   cannot answer a question, though it reads every line and every exit
   code. One concept, one implementation.
+- 2026-09-13, the terminal is asked in one place. Four verbs decided
+  whether a person was there with their own `sys.stdin.isatty()`, so
+  none of them honoured `--no-input` or `--dry-run`: `fm sync`, the
+  update driver, the workflow abort policy, and `start`'s open mode.
+  All four now ask `livery.footman.attended()`. The history is worth
+  recording: every one was written on 1 or 2 September, four to five
+  days before `attended()` was reachable here, so they were artefacts
+  of ordering rather than of carelessness. The janitor's own copy was
+  not: it was written on 10 September with the helper already
+  available, and it is the copy that produced a sweep no agent could
+  run. Remembering the rule failed once already, so the layering lint
+  enforces it now, beside the rule that keeps `livery.forge` on the
+  standard library: a module that imports the runner may not call
+  `sys.stdin.isatty` or `sys.stdout.isatty`, and asks
+  `livery.footman.attended` instead. The runner's own sources are
+  exempt, since they implement the answer. Two earlier placements were
+  wrong and are worth recording. A ban in the project template reached
+  every consumer's application code, which is none of the workshop's
+  business. Scoping it by decorator would have missed half of what we
+  just fixed: of the four sites, only `sync` and `workflow.abort` sit
+  in a decorated function, while the update driver's and `start`'s
+  live in plain helpers a task calls. The module's imports are the
+  honest scope, and they carry to third-party tasks for free, since
+  the shipped workspace test calls the same lint.
 
