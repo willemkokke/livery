@@ -10,6 +10,7 @@ import pytest
 from livery.footman import Failed
 from livery.workshop import _commit
 from livery.workshop._commit import commit, scope_of
+from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
 
@@ -20,13 +21,8 @@ def _git(cwd: Path, *args: str) -> str:
     ).stdout
 
 
-def _rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """A workspace with one package, seeded on main, on a feature branch."""
-    root = tmp_path / "ws"
-    root.mkdir()
-    _git(root, "init", "-q", "--initial-branch=main")
-    _git(root, "config", "user.name", "T")
-    _git(root, "config", "user.email", "t@livery.local")
+def _workspace(root: Path) -> None:
+    """A workspace with one python package, the shape commit's scope reads."""
     (root / "workshop.toml").write_text(
         '[workspace]\nlayers = ["livery.workshop"]\n\n[forge]\nkind = "gitea"\n'
         'owner = "owner"\n'
@@ -39,9 +35,25 @@ def _rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     )
     (package / "a.py").write_text("A = 1\n")
     (root / "README.md").write_text("the repository\n")
+
+
+def _build(base: Path) -> None:
+    # No origin: commit gates and writes locally, and a remote would
+    # give these tests a push path the verb never takes.
+    root = base / "ws"
+    root.mkdir()
+    _git(root, "init", "-q", "--initial-branch=main")
+    _git(root, "config", "user.name", "T")
+    _git(root, "config", "user.email", "t@livery.local")
+    _workspace(root)
     _git(root, "add", "-A")
     _git(root, "commit", "-qm", "chore: seed")
     _git(root, "checkout", "-qb", "feat/1-x")
+
+
+def _rig(seeds: Seeds, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A workspace with one package, seeded on main, on a feature branch."""
+    root = seeds("workspace", _build) / "ws"
     monkeypatch.chdir(root)
     return root
 
@@ -56,9 +68,9 @@ def _subject_and_body(root: Path) -> tuple[str, str]:
 
 
 def test_the_type_and_subject_are_refused_before_anything_moves(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = _rig(tmp_path, monkeypatch)
+    root = _rig(seeds, monkeypatch)
     (root / "packages" / "x" / "b.py").write_text("B = 2\n")
     with pytest.raises(_FAILURES, match="the type is one of feat, fix"):
         commit("wat", "does a thing", check=False)
@@ -68,9 +80,9 @@ def test_the_type_and_subject_are_refused_before_anything_moves(
 
 
 def test_main_and_a_reserved_branch_refuse(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = _rig(tmp_path, monkeypatch)
+    root = _rig(seeds, monkeypatch)
     _git(root, "checkout", "-q", "main")
     (root / "packages" / "x" / "b.py").write_text("B = 2\n")
     with pytest.raises(_FAILURES, match="on main: start a branch first"):
@@ -81,9 +93,9 @@ def test_main_and_a_reserved_branch_refuse(
 
 
 def test_nothing_to_commit_refuses(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _rig(tmp_path, monkeypatch)
+    _rig(seeds, monkeypatch)
     with pytest.raises(_FAILURES, match="nothing to commit"):
         commit("feat", "adds nothing", check=False)
 
@@ -92,9 +104,9 @@ def test_nothing_to_commit_refuses(
 
 
 def test_the_scope_is_the_packages_the_staged_change_touches(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = _rig(tmp_path, monkeypatch)
+    root = _rig(seeds, monkeypatch)
     (root / "packages" / "y").mkdir()
     (root / "packages" / "y" / "workshop.toml").write_text(
         'type = "python"\nname = "livery-y"\n'
@@ -109,9 +121,9 @@ def test_the_scope_is_the_packages_the_staged_change_touches(
 
 
 def test_a_commit_runs_the_check_stages_everything_and_names_the_scope(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    seeds: Seeds, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    root = _rig(tmp_path, monkeypatch)
+    root = _rig(seeds, monkeypatch)
     checks: list[str] = []
     monkeypatch.setattr(_commit, "_run_check", lambda: checks.append("ran"))
     (root / "packages" / "x" / "b.py").write_text("B = 2\n")
@@ -130,9 +142,9 @@ def test_a_commit_runs_the_check_stages_everything_and_names_the_scope(
 
 
 def test_a_given_scope_a_break_and_only_win(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = _rig(tmp_path, monkeypatch)
+    root = _rig(seeds, monkeypatch)
     (root / "packages" / "x" / "b.py").write_text("B = 2\n")
     (root / "packages" / "x" / "c.py").write_text("C = 3\n")
     commit(
@@ -151,9 +163,9 @@ def test_a_given_scope_a_break_and_only_win(
 
 
 def test_a_red_check_stops_before_anything_is_staged(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = _rig(tmp_path, monkeypatch)
+    root = _rig(seeds, monkeypatch)
 
     def _red() -> None:
         raise SystemExit("  check: red")

@@ -12,6 +12,7 @@ from livery.forge.testing import FakeForge
 from livery.workshop import _replay
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package
+from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
 
 _FAILURES = (BaseException,)
 
@@ -30,10 +31,9 @@ def _git(cwd: Path, *args: str) -> str:
     ).stdout
 
 
-@pytest.fixture
-def released(tmp_path: Path) -> tuple[Path, GitOps, Package]:
-    """A workspace whose member thing is released at v1.2.0 and tagged."""
-    root = tmp_path / "ws"
+def _build(base: Path) -> None:
+    # No origin: replay reads tags and trees, never a remote.
+    root = base / "ws"
     src = root / "packages" / "thing" / "src" / "livery" / "thing"
     src.mkdir(parents=True)
     (src / "__init__.py").write_text("x = 1\n")
@@ -47,6 +47,12 @@ def released(tmp_path: Path) -> tuple[Path, GitOps, Package]:
     _git(root, "add", "-A")
     _git(root, "commit", "-qm", "chore(release): released livery-thing v1.2.0")
     _git(root, "tag", "-a", "packages/thing/v1.2.0", "-m", "receipt")
+
+
+@pytest.fixture
+def released(seeds: Seeds) -> tuple[Path, GitOps, Package]:
+    """A workspace whose member thing is released at v1.2.0 and tagged."""
+    root = seeds("released", _build) / "ws"
     package = Package(
         directory=root / "packages" / "thing",
         path="packages/thing",

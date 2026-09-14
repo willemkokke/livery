@@ -238,7 +238,7 @@ def test_a_dirty_behind_main_names_the_refusal_not_local_commits(
 
 
 def test_local_commits_on_main_still_teach_the_branch_move(
-    seeds: Seeds, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    seeds: Seeds, capsys: pytest.CaptureFixture[str]
 ) -> None:
     clone, _origin = _rig(seeds)
     (clone / "extra.txt").write_text("x\n")
@@ -303,7 +303,6 @@ def test_parked_content_survives_integrate_and_the_squash(
 
 def test_a_merged_reserved_branch_is_stepped_off_by_sync(
     seeds: Seeds,
-    tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -362,7 +361,6 @@ def test_a_merged_reserved_branch_is_stepped_off_by_sync(
 
 def test_integrate_matches_the_lock_when_the_move_touched_it(
     seeds: Seeds,
-    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:

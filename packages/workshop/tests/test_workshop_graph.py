@@ -14,20 +14,15 @@ from livery.workshop._graph import (
     dependents_closure,
 )
 from livery.workshop._packages import Package, discover_packages
+from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 
 def _git(cwd: Path, *args: str) -> None:
     subprocess.run(["git", *args], cwd=cwd, capture_output=True, check=True)
 
 
-def _workspace(tmp_path: Path) -> Path:
-    origin = tmp_path / "origin.git"
-    origin.mkdir()
-    _git(origin, "init", "--bare", "--initial-branch=main")
-    root = tmp_path / "ws"
-    _git(tmp_path, "clone", str(origin), "ws")
-    _git(root, "config", "user.email", "t@livery.local")
-    _git(root, "config", "user.name", "T")
+def _packages(root: Path) -> None:
+    """Four packages: a chain of three, and one beside it."""
     (root / "workshop.toml").write_text("[workspace]\n")
     for name, extra in (
         ("core", ""),
@@ -44,15 +39,20 @@ def _workspace(tmp_path: Path) -> Path:
             f'[project]\nname = "livery-{name}"\ndependencies = []\n'
         )
         (directory / "thing.py").write_text("x = 1\n")
-    _git(root, "add", "-A")
-    _git(root, "commit", "-m", "chore: seed")
-    _git(root, "push", "-u", "origin", "main")
+
+
+def _build(base: Path) -> None:
+    root = pushed(base, clone="ws", fill=_packages)
     _git(root, "checkout", "-b", "feat/change")
-    return root
 
 
-def test_the_closure_follows_reversed_edges(tmp_path: Path) -> None:
-    root = _workspace(tmp_path)
+def _workspace(seeds: Seeds) -> Path:
+    """The four-package workspace on a feature branch, copied for this test."""
+    return seeds("graph", _build) / "ws"
+
+
+def test_the_closure_follows_reversed_edges(seeds: Seeds) -> None:
+    root = _workspace(seeds)
     packages = discover_packages(root)
     closure = dependents_closure(packages, {"packages/core"})
     assert [p.path for p in closure] == [
@@ -65,8 +65,8 @@ def test_the_closure_follows_reversed_edges(tmp_path: Path) -> None:
     ]
 
 
-def test_a_leaf_change_affects_only_its_closure(tmp_path: Path) -> None:
-    root = _workspace(tmp_path)
+def test_a_leaf_change_affects_only_its_closure(seeds: Seeds) -> None:
+    root = _workspace(seeds)
     (root / "packages" / "mid" / "thing.py").write_text("x = 2\n")
     affected = affected_packages(root, GitOps(root))
     assert affected is not None
@@ -74,9 +74,9 @@ def test_a_leaf_change_affects_only_its_closure(tmp_path: Path) -> None:
 
 
 def test_a_workspace_tests_change_affects_that_unit_alone(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    seeds: Seeds, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    root = _workspace(tmp_path)
+    root = _workspace(seeds)
     # Refusals first: the directory changed and gone is a root change,
     # since the unit cannot run.
     (root / "tests").mkdir()
@@ -107,20 +107,20 @@ def test_a_workspace_tests_change_affects_that_unit_alone(
     assert affected_packages(root, GitOps(root)) is None
 
 
-def test_a_root_change_affects_everything(tmp_path: Path) -> None:
-    root = _workspace(tmp_path)
+def test_a_root_change_affects_everything(seeds: Seeds) -> None:
+    root = _workspace(seeds)
     (root / "workshop.toml").write_text("[workspace]\n# touched\n")
     assert affected_packages(root, GitOps(root)) is None
 
 
-def test_no_change_affects_nothing(tmp_path: Path) -> None:
-    root = _workspace(tmp_path)
+def test_no_change_affects_nothing(seeds: Seeds) -> None:
+    root = _workspace(seeds)
     affected = affected_packages(root, GitOps(root))
     assert affected == ()
 
 
-def test_committed_and_uncommitted_changes_both_count(tmp_path: Path) -> None:
-    root = _workspace(tmp_path)
+def test_committed_and_uncommitted_changes_both_count(seeds: Seeds) -> None:
+    root = _workspace(seeds)
     (root / "packages" / "aside" / "thing.py").write_text("x = 3\n")
     _git(root, "commit", "-am", "feat: aside moves")
     (root / "packages" / "core" / "thing.py").write_text("x = 4\n")
@@ -137,10 +137,10 @@ def test_committed_and_uncommitted_changes_both_count(tmp_path: Path) -> None:
 # --- prose affects no package ----------------------------------------------------
 
 
-def test_a_prose_only_change_affects_nothing(tmp_path: Path) -> None:
+def test_a_prose_only_change_affects_nothing(seeds: Seeds) -> None:
     from livery.workshop._graph import is_prose
 
-    root = _workspace(tmp_path)
+    root = _workspace(seeds)
     (root / "notes").mkdir()
     (root / "notes" / "plan.md").write_text("# a plan\n")
     (root / "README.md").write_text("# the readme\n")
@@ -152,9 +152,9 @@ def test_a_prose_only_change_affects_nothing(tmp_path: Path) -> None:
 
 
 def test_a_mixed_change_narrows_to_its_packages_and_a_root_file_still_widens(
-    tmp_path: Path,
+    seeds: Seeds,
 ) -> None:
-    root = _workspace(tmp_path)
+    root = _workspace(seeds)
     (root / "notes").mkdir()
     (root / "notes" / "plan.md").write_text("# a plan\n")
     (root / "packages" / "mid" / "thing.py").write_text("x = 2\n")
@@ -169,13 +169,13 @@ def test_a_mixed_change_narrows_to_its_packages_and_a_root_file_still_widens(
 
 
 def test_a_site_only_change_affects_nothing(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    seeds: Seeds, capsys: pytest.CaptureFixture[str]
 ) -> None:
     # Refusals first: another root file still widens to everything,
     # and the reason names the file, so a widened gate is never silent.
     from livery.workshop._graph import is_site
 
-    root = _workspace(tmp_path)
+    root = _workspace(seeds)
     (root / "pyproject.toml").write_text("[project]\nname = 'x'\n")
     assert affected_packages(root, GitOps(root)) is None
     assert "pyproject.toml: outside the packages" in capsys.readouterr().out
@@ -224,8 +224,8 @@ def test_the_python_kind_classifies_tests_support_source_and_configuration() -> 
     assert _python.classify(package, "workshop.toml") == CONFIGURATION
 
 
-def test_a_test_file_reaches_its_package_alone_and_runs_alone(tmp_path: Path) -> None:
-    root = _workspace(tmp_path)
+def test_a_test_file_reaches_its_package_alone_and_runs_alone(seeds: Seeds) -> None:
+    root = _workspace(seeds)
     _paths(root, "packages/mid/tests/test_a.py")
     packages = discover_packages(root)
     scope = affected_from_paths(root, packages, ["packages/mid/tests/test_a.py"])
@@ -269,9 +269,9 @@ def test_a_test_file_reaches_its_package_alone_and_runs_alone(tmp_path: Path) ->
 
 
 def test_the_workspace_tests_unit_runs_its_changed_files_alone_or_its_suite(
-    tmp_path: Path,
+    seeds: Seeds,
 ) -> None:
-    root = _workspace(tmp_path)
+    root = _workspace(seeds)
     _paths(root, "tests/test_all.py")
     packages = discover_packages(root)
     scope = affected_from_paths(root, packages, ["tests/test_all.py"])

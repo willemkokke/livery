@@ -14,6 +14,7 @@ from livery.forge.testing import FakeForge
 from livery.workshop._git_ops import GitOps
 from livery.workshop._publish import MANIFEST
 from livery.workshop._release_driver import await_wave, dispatch_flow
+from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 OWNER, NAME = "owner", "repo"
 
@@ -25,18 +26,9 @@ def _git(cwd: Path, *args: str) -> str:
 
 
 @pytest.fixture
-def rig(tmp_path: Path) -> tuple[FakeForge, Path, GitOps]:
+def rig(seeds: Seeds) -> tuple[FakeForge, Path, GitOps]:
     """A clone with main pushed, and a fake forge knowing the same main."""
-    origin = tmp_path / "origin.git"
-    _git(tmp_path, "init", "-q", "--bare", "--initial-branch=main", str(origin))
-    root = tmp_path / "ws"
-    _git(tmp_path, "clone", "-q", str(origin), str(root))
-    _git(root, "config", "user.name", "tester")
-    _git(root, "config", "user.email", "tester@example.invalid")
-    (root / "README.md").write_text("the repository\n")
-    _git(root, "add", "README.md")
-    _git(root, "commit", "-qm", "init")
-    _git(root, "push", "-q", "-u", "origin", "main")
+    root = seeds("pushed", pushed) / "work"
     fake = FakeForge()
     fake.create_repo(OWNER, NAME)
     fake.push(OWNER, NAME, "main", sha=_git(root, "rev-parse", "HEAD").strip())
@@ -192,7 +184,8 @@ def test_the_wave_is_dispatched_at_the_stamping_commit_and_confirmed(
     # An unrelated merge lands after the stamp: the wave still goes
     # to the stamping commit, never to HEAD.
     (root / "README.md").write_text("moved on\n")
-    _git(root, "commit", "-qam", "docs: unrelated")
+    _git(root, "add", "README.md")
+    _git(root, "commit", "-qm", "docs: unrelated")
     _git(root, "push", "-q", "origin", "main")
     fake.push(OWNER, NAME, "main", sha=_git(root, "rev-parse", "HEAD").strip())
     repo = fake.repository(OWNER, NAME)
