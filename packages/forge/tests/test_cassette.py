@@ -68,7 +68,9 @@ def _requests(base: str, token: str) -> list[urllib.request.Request]:
 def _record(tmp_path: Path) -> tuple[Path, str]:
     """Record the three exchanges; return the cassette path and the base URL."""
     server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    # A short poll interval: `serve_forever` reads its stop flag once
+    # per interval, and the default half second is paid by every stop.
+    thread = threading.Thread(target=server.serve_forever, args=(0.01,), daemon=True)
     thread.start()
     try:
         base = f"http://127.0.0.1:{server.server_port}"
@@ -86,6 +88,7 @@ def _record(tmp_path: Path) -> tuple[Path, str]:
     finally:
         server.shutdown()
         thread.join()
+        server.server_close()
 
 
 def test_recording_scrubs_every_secret(tmp_path: Path) -> None:
@@ -145,7 +148,9 @@ def test_a_foreign_format_number_is_refused(tmp_path: Path) -> None:
 
 def test_a_volatile_body_matches_by_method_and_url(tmp_path: Path) -> None:
     server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    # A short poll interval: `serve_forever` reads its stop flag once
+    # per interval, and the default half second is paid by every stop.
+    thread = threading.Thread(target=server.serve_forever, args=(0.01,), daemon=True)
     thread.start()
     try:
         base = f"http://127.0.0.1:{server.server_port}"
@@ -158,6 +163,7 @@ def test_a_volatile_body_matches_by_method_and_url(tmp_path: Path) -> None:
     finally:
         server.shutdown()
         thread.join()
+        server.server_close()
     assert cassette.exchanges[0].request_body == VOLATILE
     replay = ReplayOpener(cassette)
     differing = urllib.request.Request(

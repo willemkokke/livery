@@ -100,11 +100,14 @@ def server(tmp_path, monkeypatch):
     _Handler.release = threading.Event()
     # Threaded: a stalled request must not hold up the one racing it.
     httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
-    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    # `serve_forever` reads its stop flag once per poll interval, and the
+    # default is half a second, which every teardown would then wait out.
+    thread = threading.Thread(target=httpd.serve_forever, args=(0.01,), daemon=True)
     thread.start()
     yield f"http://127.0.0.1:{httpd.server_port}/file.bin"
     _Handler.release.set()  # never leave a parked handler behind
     httpd.shutdown()
+    httpd.server_close()  # shutdown stops the loop; the socket is still open
 
 
 # --- the backend conformance table --------------------------------------------
