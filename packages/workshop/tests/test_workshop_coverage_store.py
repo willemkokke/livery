@@ -252,6 +252,39 @@ def test_the_closure_id_refuses_a_directory_head_lacks(work: Path) -> None:
         _coverage_store.closure_id(GitOps(work), (base, ghost), ghost)
 
 
+def test_the_closure_id_answers_without_a_root_pin(work: Path) -> None:
+    # A tree that holds no lock is not an error: the pin contributes
+    # nothing and the rest of the identity still stands.
+    base, top = _packages(work)
+    git = GitOps(work)
+    pinned = _coverage_store.closure_id(git, (base, top), base)
+    _git(work, "rm", "-q", "uv.lock")
+    _git(work, "commit", "-qm", "the lock goes")
+    unpinned = _coverage_store.closure_id(git, (base, top), base)
+    assert unpinned and unpinned != pinned
+
+
+def test_the_closure_id_reads_the_tree_in_one_process(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The cost is the process, not the read: a call per path spent 28 git
+    # processes on this workspace's own seven packages, and several times
+    # that in wall clock on Windows. One `ls-tree` answers the closure and
+    # the pins together, and nothing here may go back to a call per path.
+    base, top = _packages(work)
+    calls: list[tuple[str, ...]] = []
+    original = GitOps._run
+
+    def counted(self: GitOps, *args: str) -> str:
+        calls.append(args)
+        return original(self, *args)
+
+    monkeypatch.setattr(GitOps, "_run", counted)
+    _coverage_store.closure_id(GitOps(work), (base, top), top)
+    assert len(calls) == 1, calls
+    assert calls[0][0] == "ls-tree"
+
+
 # --- the identity -------------------------------------------------------------
 
 

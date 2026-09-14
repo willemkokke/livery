@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
 
 from livery.toolroom import tools
@@ -52,6 +53,37 @@ class GitOps:
             GitError: When *spec* names nothing.
         """
         return self._run("rev-parse", "--verify", "--quiet", spec).strip()
+
+    def object_ids(self, ref: str, paths: Sequence[str]) -> dict[str, str]:
+        """The object ids *ref* holds at *paths*, read in one process.
+
+        One `ls-tree` answers whatever the caller asks for, where a
+        read per path is a git process per path: the process is the
+        cost, several times over on Windows.
+
+        Args:
+            ref: The commit or tree to read, `HEAD` for the tip.
+            paths: Repository-relative paths, files or directories.
+
+        Returns:
+            Each path the tree holds, mapped to its object id: a tree
+            id for a directory, a blob id for a file. A path the tree
+            lacks is absent, so a caller that tolerates one reads the
+            mapping and a caller that does not raises on its own
+            behalf.
+        """
+        if not paths:
+            return {}
+        # -z, so a name is never C-quoted and a path with a space or a
+        # backslash reads back as it was written.
+        out = self._run("ls-tree", "-z", ref, "--", *paths)
+        found: dict[str, str] = {}
+        for record in out.split("\0"):
+            entry, _, name = record.partition("\t")
+            fields = entry.split()
+            if name and len(fields) == 3:
+                found[name] = fields[2]
+        return found
 
     def working_tree_id(self) -> str:
         """The tree id of the working tree as it stands.

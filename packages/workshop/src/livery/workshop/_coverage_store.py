@@ -35,6 +35,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from operator import attrgetter
 from pathlib import Path
 from typing import Any
 
@@ -246,24 +247,21 @@ def closure_id(git: GitOps, packages: tuple[Package, ...], package: Package) -> 
     Raises:
         GitError: When a closure directory is not in ``HEAD``.
     """
-    parts: list[str] = []
     if package.path == WORKSPACE_TESTS:
-        for member in sorted(packages, key=lambda item: item.path):
-            parts.append(f"{member.path}={git.object_id(f'HEAD:{member.path}')}")
-        parts.append(f"{WORKSPACE_TESTS}={git.object_id(f'HEAD:{WORKSPACE_TESTS}')}")
-        for pin in ROOT_PINS:
-            try:
-                parts.append(f"{pin}={git.object_id(f'HEAD:{pin}')}")
-            except GitError:
-                continue
-        return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
-    for member in closure(packages, package):
-        parts.append(f"{member.path}={git.object_id(f'HEAD:{member.path}')}")
-    for pin in ROOT_PINS:
-        try:
-            parts.append(f"{pin}={git.object_id(f'HEAD:{pin}')}")
-        except GitError:
-            continue
+        required = [member.path for member in sorted(packages, key=attrgetter("path"))]
+        required.append(WORKSPACE_TESTS)
+    else:
+        required = [member.path for member in closure(packages, package)]
+    # One process whatever the closure holds: the ids of every required
+    # directory and every pin come back together, and a pin the tree
+    # lacks is simply absent.
+    ids = git.object_ids("HEAD", [*required, *ROOT_PINS])
+    parts: list[str] = []
+    for path in required:
+        if path not in ids:
+            raise GitError(f"HEAD holds no {path}")
+        parts.append(f"{path}={ids[path]}")
+    parts.extend(f"{pin}={ids[pin]}" for pin in ROOT_PINS if pin in ids)
     return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
 
 
