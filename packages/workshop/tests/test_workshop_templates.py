@@ -22,6 +22,7 @@ from livery.workshop._templates import (
     read_answers,
     render,
 )
+from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[3]
 TEMPLATES = ROOT / "packages/workshop/src/livery/workshop/templates"
@@ -682,14 +683,18 @@ def test_the_gitignore_header_speaks_the_brand() -> None:
     assert "`hse sync`" in _GITIGNORE_HEADER.format(prog="hse")
 
 
-def _instance_from_git_template(tmp_path: Path) -> tuple[Path, Path]:
-    """A scratch git template repo and an instance rendered from it."""
+def _build_instance_from_git_template(base: Path) -> None:
+    """A scratch git template repo and an instance rendered from it.
+
+    A seed build: two repositories, a whole-tree copy and a render,
+    none of which any test needs repeated.
+    """
     import shutil
     import subprocess
 
     from livery.workshop import __version__
 
-    repo = tmp_path / "template-repo"
+    repo = base / "template-repo"
     shutil.copytree(TEMPLATES, repo)
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
     subprocess.run(["git", "config", "user.email", "t@l"], cwd=repo, check=True)
@@ -697,7 +702,7 @@ def _instance_from_git_template(tmp_path: Path) -> tuple[Path, Path]:
     subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
     subprocess.run(["git", "commit", "-qm", "seed"], cwd=repo, check=True)
     subprocess.run(["git", "tag", f"v{__version__}"], cwd=repo, check=True)
-    instance = tmp_path / "instance"
+    instance = base / "instance"
     answers = read_answers(ROOT / ".copier-answers.yml")
     render(repo, instance, {**answers, "runner_prog": "fm"})
     # The contract is a birth-time seed the render never writes; the
@@ -716,20 +721,20 @@ def _instance_from_git_template(tmp_path: Path) -> tuple[Path, Path]:
     subprocess.run(["git", "config", "user.name", "T"], cwd=instance, check=True)
     subprocess.run(["git", "add", "-A"], cwd=instance, check=True)
     subprocess.run(["git", "commit", "-qm", "seed"], cwd=instance, check=True)
-    return repo, instance
 
 
 def test_the_remote_update_arm_brands_and_reemits(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # The arm every instance takes: no local template directory, the
     # source is a git repository, and rebranding is exactly this run
     # under the branded CLI.
     import livery.footman as footman
     from livery.workshop import _templates
-    from livery.workshop._update import refresh_rendered
+    from livery.workshop._update import _align_answers_source, refresh_rendered
 
-    repo, instance = _instance_from_git_template(tmp_path)
+    made = seeds("template-instance", _build_instance_from_git_template)
+    repo, instance = made / "template-repo", made / "instance"
     assert "Run with ``fm <task>``" in (instance / "tasks.py").read_text()
     contract = (instance / "workshop.toml").read_text()
     lines = [
@@ -740,6 +745,10 @@ def test_the_remote_update_arm_brands_and_reemits(
     ]
     assert any(line.startswith("templates = ") for line in lines)
     (instance / "workshop.toml").write_text("\n".join(lines) + "\n")
+    # The answers follow the contract in the same commit: the copied
+    # seed still records the seed's own source, and the refresh aligns
+    # it on the way past, which would leave the tree dirty under copier.
+    _align_answers_source(instance, str(repo))
     import subprocess
 
     subprocess.run(["git", "add", "-A"], cwd=instance, check=True)
@@ -798,13 +807,18 @@ def test_no_runtime_string_spells_the_default_brand() -> None:
     assert offenders == [], offenders
 
 
-def _template_repo(tmp_path: Path, *, tagged: bool = True) -> Path:
-    """The template source as a git repository, the artifact's shape."""
+def _build_template_repo(base: Path, *, tagged: bool = True) -> None:
+    """The template source as a git repository, the artifact's shape.
+
+    A seed build: the copy of the whole template tree and the five git
+    processes around it cost the same whoever asks, so the `seeds`
+    fixture builds it once per session and copies it per test.
+    """
     import shutil
     import subprocess
     from importlib.metadata import version
 
-    repo = tmp_path / "artifact-repo"
+    repo = base / "artifact-repo"
     shutil.copytree(TEMPLATES, repo)
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
     subprocess.run(["git", "config", "user.email", "t@l"], cwd=repo, check=True)
@@ -815,7 +829,11 @@ def _template_repo(tmp_path: Path, *, tagged: bool = True) -> Path:
         subprocess.run(
             ["git", "tag", f"v{version('livery-workshop')}"], cwd=repo, check=True
         )
-    return repo
+
+
+def _build_untagged_repo(base: Path) -> None:
+    """The same source, with no release tag: the missing-tag arm's shape."""
+    _build_template_repo(base, tagged=False)
 
 
 def _wheel_instance(tmp_path: Path, source: str) -> Path:
@@ -846,14 +864,14 @@ def _wheel_instance(tmp_path: Path, source: str) -> Path:
 
 
 def test_new_package_renders_from_the_artifact_repository(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # The known gap carried since the 0831 plan closes: a wheel
     # instance (no templates/ directory) renders a member from the
     # remote source at the resolved tag.
     from livery.workshop._templates import new_package
 
-    repo = _template_repo(tmp_path)
+    repo = seeds("template-repo", _build_template_repo) / "artifact-repo"
     root = _wheel_instance(tmp_path, f"git+file://{repo}")
     monkeypatch.setattr(
         "livery.workshop._templates.workspace_root", lambda start=None: root
@@ -889,11 +907,11 @@ def test_an_unreachable_source_teaches_source_and_ref(
 
 
 def test_a_missing_artifact_tag_names_the_release(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop._templates import new_package
 
-    repo = _template_repo(tmp_path, tagged=False)
+    repo = seeds("template-repo-untagged", _build_untagged_repo) / "artifact-repo"
     root = _wheel_instance(tmp_path, f"git+file://{repo}")
     monkeypatch.setattr(
         "livery.workshop._templates.workspace_root", lambda start=None: root
@@ -905,14 +923,14 @@ def test_a_missing_artifact_tag_names_the_release(
 
 
 def test_a_source_without_the_kind_teaches(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     import shutil
     import subprocess
 
     from livery.workshop._templates import new_package
 
-    repo = _template_repo(tmp_path)
+    repo = seeds("template-repo", _build_template_repo) / "artifact-repo"
     shutil.rmtree(repo / "package-python")
     subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
     subprocess.run(["git", "commit", "-qm", "drop the kind"], cwd=repo, check=True)
@@ -932,10 +950,12 @@ def _ref() -> str:
     return f"v{version('livery-workshop')}"
 
 
-def test_repeated_render_at_one_tag_is_byte_identical(tmp_path: Path) -> None:
+def test_repeated_render_at_one_tag_is_byte_identical(
+    seeds: Seeds, tmp_path: Path
+) -> None:
     import filecmp
 
-    repo = _template_repo(tmp_path)
+    repo = seeds("template-repo", _build_template_repo) / "artifact-repo"
     data = {
         "kind": "project",
         "project_name": "acme-tools",
@@ -973,7 +993,7 @@ def test_a_declared_but_absent_local_source_teaches(tmp_path: Path) -> None:
     reason="git for Windows reads a file URL that carries userinfo as a path",
 )
 def test_a_credentialled_source_never_reaches_a_rendered_byte(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Tokens are environment facts and should never sit in the
     # contract; when one does anyway, the rendered headers and the
@@ -982,7 +1002,7 @@ def test_a_credentialled_source_never_reaches_a_rendered_byte(
 
     assert redacted_source("http://user:secret@host/o/r.git") == "http://host/o/r.git"
     assert redacted_source("git+file:///tmp/repo") == "git+file:///tmp/repo"
-    repo = _template_repo(tmp_path)
+    repo = seeds("template-repo", _build_template_repo) / "artifact-repo"
     root = _wheel_instance(
         tmp_path, f"git+file://user:sekrit@/{repo.as_posix().lstrip('/')}"
     )
