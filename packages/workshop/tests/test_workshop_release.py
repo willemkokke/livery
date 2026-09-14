@@ -21,55 +21,13 @@ from livery.workshop._release import (
     verify_release,
 )
 from livery.workshop._update import bump_floors, latest_released
-from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
+from workshop_seeds import Seeds, _seed_home, cliff_config, seed_copier  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
 
 
 def _git(cwd: Path, *args: str) -> None:
     subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=True)
-
-
-def _cliff_config(name: str) -> str:
-    """The changelog contract, as the package template renders it.
-
-    Offline: no ``[remote]`` section, so nothing reaches for a forge
-    while the suite runs.
-    """
-    body = (
-        'body = """\n'
-        '{% if version %}## [{{ version | split(pat="/") | last'
-        ' | trim_start_matches(pat="v") }}] - '
-        '{{ timestamp | date(format="%Y-%m-%d") }}'
-        "{% else %}## [Unreleased]{% endif %}\n"
-        '{% for group, commits in commits | group_by(attribute="group") %}\n'
-        "### {{ group | striptags | trim }}\n"
-        "{% for commit in commits %}\n"
-        "- {{ commit.message | upper_first }}\n"
-        "{%- endfor %}\n"
-        "{% endfor %}\n"
-        '"""\n'
-    )
-    return (
-        "[bump]\n"
-        "features_always_bump_minor = true\n"
-        "breaking_always_bump_major = false\n"
-        f'initial_tag = "packages/{name}/v0.0.0"\n'
-        "\n[git]\n"
-        f'tag_pattern = "^packages/{name}/v?(.+)$"\n'
-        f'include_paths = ["packages/{name}/**"]\n'
-        "conventional_commits = true\n"
-        "filter_unconventional = false\n"
-        "protect_breaking_commits = true\n"
-        'sort_commits = "oldest"\n'
-        "commit_parsers = [\n"
-        '  { message = "^feat", group = "<!-- 0 -->Added" },\n'
-        '  { message = "^fix", group = "<!-- 1 -->Fixed" },\n'
-        '  { message = ".*", group = "<!-- 2 -->Changed" },\n'
-        "]\n"
-        "\n[changelog]\n"
-        'header = "# Changelog\\n"\n' + body + "trim = true\n"
-    )
 
 
 def _build(base: Path) -> None:
@@ -102,7 +60,7 @@ def _build(base: Path) -> None:
         (directory / "src" / "livery" / name / "__init__.py").write_text(
             '__version__ = "0.2.0"\n'
         )
-        (directory / "cliff.toml").write_text(_cliff_config(name))
+        (directory / "cliff.toml").write_text(cliff_config(name))
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "chore: seed")
     _git(root, "tag", "packages/core/v0.1.0")

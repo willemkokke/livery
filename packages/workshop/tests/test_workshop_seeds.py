@@ -5,7 +5,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from workshop_seeds import copy_seed, pushed
+from workshop_seeds import cliff_config, copy_seed, pushed
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -71,3 +71,35 @@ def test_the_copy_keeps_a_tracked_lock_and_drops_only_gits_own(tmp_path: Path) -
     assert not (copy / "clone" / ".git" / "index.lock").exists()
     assert not (copy / "origin.git" / "gc.pid.lock").exists()
     assert _git(copy / "clone", "status", "--porcelain") == ""
+
+
+TEMPLATE = (
+    Path(__file__).resolve().parents[3]
+    / "packages/workshop/src/livery/workshop/templates"
+    / "package-python/cliff.toml.jinja"
+)
+
+
+def test_the_cliff_helper_carries_every_rule_the_template_decides_by() -> None:
+    # The helper stands in for the rendered contract, so every rule
+    # that decides a version or a changelog entry is the template's
+    # own. Drift here passes a suite while the real train behaves
+    # differently. What it leaves out is what needs a forge.
+    rendered = cliff_config("thing")
+    template = TEMPLATE.read_text("utf-8")
+    for rule in (
+        "features_always_bump_minor = true",
+        "breaking_always_bump_major = false",
+        "conventional_commits = true",
+        "filter_unconventional = false",
+        "protect_breaking_commits = true",
+        'sort_commits = "oldest"',
+        '{ message = "^chore\\\\(release\\\\)", skip = true },',
+        '{ message = "^feat", group = "<!-- 0 -->Added" },',
+        '{ message = "^fix", group = "<!-- 1 -->Fixed" },',
+        '{ message = ".*", group = "<!-- 2 -->Changed" },',
+    ):
+        assert rule in template, rule
+        assert rule in rendered, rule
+    assert "[remote" not in rendered
+    assert "commit_preprocessors" not in rendered

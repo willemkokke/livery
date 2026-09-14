@@ -196,7 +196,13 @@ def _git(cwd: Path, *args: str) -> None:
 
 
 def cliff_config(name: str) -> str:
-    """A member's `cliff.toml`: its own tag pattern and paths, the house groups."""
+    """A member's `cliff.toml`, as the package template renders it.
+
+    Reduced to what runs offline: no `[remote]` section, so nothing
+    reaches for a forge while the suite runs, and no pull request
+    preprocessor, which needs the forge's web root. Every rule that
+    decides a version or a changelog entry is the template's own.
+    """
     body = (
         'body = """\n'
         '{% if version %}## [{{ version | split(pat="/") | last'
@@ -221,6 +227,7 @@ def cliff_config(name: str) -> str:
         f'include_paths = ["packages/{name}/**"]\n'
         "conventional_commits = true\n"
         "filter_unconventional = false\n"
+        "protect_breaking_commits = true\n"
         'sort_commits = "oldest"\n'
         "commit_parsers = [\n"
         '  { message = "^chore\\\\(release\\\\)", skip = true },\n'
