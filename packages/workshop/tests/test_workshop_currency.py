@@ -11,6 +11,7 @@ from livery.footman import Failed
 from livery.workshop._git_ops import GitOps
 from livery.workshop._submit import prepare
 from livery.workshop._sync import bring_current, integrate
+from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
 
@@ -21,19 +22,10 @@ def _git(cwd: Path, *args: str) -> str:
     ).stdout
 
 
-def _rig(tmp_path: Path) -> tuple[Path, Path]:
-    origin = tmp_path / "origin.git"
-    origin.mkdir()
-    _git(origin, "init", "--bare", "--initial-branch=main")
-    clone = tmp_path / "clone"
-    _git(tmp_path, "clone", str(origin), "clone")
-    _git(clone, "config", "user.email", "me@livery.local")
-    _git(clone, "config", "user.name", "Me")
-    (clone / "seed.txt").write_text("seed\n")
-    _git(clone, "add", ".")
-    _git(clone, "commit", "-m", "chore: seed")
-    _git(clone, "push", "-u", "origin", "main")
-    return clone, origin
+def _rig(seeds: Seeds) -> tuple[Path, Path]:
+    """The shared clone and the bare origin behind it, copied for this test."""
+    root = seeds("pushed", pushed)
+    return root / "work", root / "origin.git"
 
 
 def _other(tmp_path: Path, origin: Path, email: str = "them@livery.local") -> Path:
@@ -56,9 +48,9 @@ def _advance_main(tmp_path: Path, origin: Path, name: str = "upstream.txt") -> N
 
 
 def test_a_conflicted_rebase_parks_and_restores_the_branch(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    seeds: Seeds, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    clone, origin = _rig(tmp_path)
+    clone, origin = _rig(seeds)
     _git(clone, "checkout", "-b", "feat/1-work")
     (clone / "seed.txt").write_text("mine\n")
     _git(clone, "commit", "-am", "feat: my side")
@@ -76,9 +68,9 @@ def test_a_conflicted_rebase_parks_and_restores_the_branch(
 
 
 def test_foreign_commits_gate_the_rebase_and_teach_integrate(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    seeds: Seeds, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    clone, origin = _rig(tmp_path)
+    clone, origin = _rig(seeds)
     _git(clone, "checkout", "-b", "feat/1-shared")
     (clone / "mine.txt").write_text("m\n")
     _git(clone, "add", ".")
@@ -101,9 +93,9 @@ def test_foreign_commits_gate_the_rebase_and_teach_integrate(
 
 
 def test_a_clean_rebase_lands_and_the_remote_follows_leased(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    seeds: Seeds, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    clone, origin = _rig(tmp_path)
+    clone, origin = _rig(seeds)
     _git(clone, "checkout", "-b", "feat/1-work")
     (clone / "mine.txt").write_text("m\n")
     _git(clone, "add", ".")
@@ -122,9 +114,9 @@ def test_a_clean_rebase_lands_and_the_remote_follows_leased(
 
 
 def test_a_moved_remote_branch_fast_forwards_when_behind_only(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    seeds: Seeds, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    clone, origin = _rig(tmp_path)
+    clone, origin = _rig(seeds)
     _git(clone, "checkout", "-b", "feat/1-shared")
     _git(clone, "push", "-u", "origin", "feat/1-shared")
     other = _other(tmp_path, origin)
@@ -139,9 +131,9 @@ def test_a_moved_remote_branch_fast_forwards_when_behind_only(
 
 
 def test_main_only_ever_fast_forwards(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    seeds: Seeds, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    clone, origin = _rig(tmp_path)
+    clone, origin = _rig(seeds)
     _advance_main(tmp_path, origin)
     bring_current(clone, GitOps(clone), interactive=False)
     assert (clone / "upstream.txt").is_file()
@@ -157,9 +149,9 @@ def test_main_only_ever_fast_forwards(
 
 
 def test_the_untouchables_skip_with_their_notes(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    seeds: Seeds, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    clone, origin = _rig(tmp_path)
+    clone, origin = _rig(seeds)
     _advance_main(tmp_path, origin)
     # A workflow branch belongs to the engine.
     _git(clone, "checkout", "-b", "workflow/update/templates")
@@ -179,11 +171,12 @@ def test_the_untouchables_skip_with_their_notes(
 
 
 def test_integrate_merges_the_base_in_and_teaches_on_conflict(
+    seeds: Seeds,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    clone, origin = _rig(tmp_path)
+    clone, origin = _rig(seeds)
     monkeypatch.setattr(
         "livery.workshop._sync.workspace_root", lambda start=None: clone
     )
@@ -211,9 +204,10 @@ def test_integrate_merges_the_base_in_and_teaches_on_conflict(
 
 
 def test_merge_subjects_never_default_the_title_or_count(
+    seeds: Seeds,
     tmp_path: Path,
 ) -> None:
-    clone, origin = _rig(tmp_path)
+    clone, origin = _rig(seeds)
     _git(clone, "checkout", "-b", "feat/1-work")
     (clone / "mine.txt").write_text("m\n")
     _git(clone, "add", ".")
@@ -226,12 +220,12 @@ def test_merge_subjects_never_default_the_title_or_count(
 
 
 def test_a_dirty_behind_main_names_the_refusal_not_local_commits(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    seeds: Seeds, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     # Issue #123: behind-plus-dirty was read as "local commits". The
     # two states need different acts, so each gets its own words and
     # the fast-forward refusal carries git's reason verbatim.
-    clone, origin = _rig(tmp_path)
+    clone, origin = _rig(seeds)
     other = _other(tmp_path, origin, email="ci@livery.local")
     (other / "seed.txt").write_text("moved\n")
     _git(other, "commit", "-am", "feat: main moves")
@@ -244,9 +238,9 @@ def test_a_dirty_behind_main_names_the_refusal_not_local_commits(
 
 
 def test_local_commits_on_main_still_teach_the_branch_move(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    seeds: Seeds, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    clone, _origin = _rig(tmp_path)
+    clone, _origin = _rig(seeds)
     (clone / "extra.txt").write_text("x\n")
     _git(clone, "add", ".")
     _git(clone, "commit", "-m", "feat: committed straight to main")
@@ -256,6 +250,7 @@ def test_local_commits_on_main_still_teach_the_branch_move(
 
 
 def test_parked_content_survives_integrate_and_the_squash(
+    seeds: Seeds,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
@@ -265,7 +260,7 @@ def test_parked_content_survives_integrate_and_the_squash(
     # main in, and the squash-merge landing. The parked content must
     # be in the squash; the incident lost a plan-note edit somewhere
     # on this path and its drop point was never proven.
-    clone, origin = _rig(tmp_path)
+    clone, origin = _rig(seeds)
     note = clone / "notes.md"
     note.write_text("top line\n\nmiddle\n\nbottom line\n")
     _git(clone, "add", ".")
@@ -307,12 +302,15 @@ def test_parked_content_survives_integrate_and_the_squash(
 
 
 def test_a_merged_reserved_branch_is_stepped_off_by_sync(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from livery.forge.testing import FakeForge
     from livery.workshop import _sync
 
-    clone, _origin = _rig(tmp_path)
+    clone, _origin = _rig(seeds)
     branch = "workflow/release/x"
     _git(clone, "checkout", "-b", branch)
     (clone / "stamp.txt").write_text("s\n")
@@ -363,11 +361,14 @@ def test_a_merged_reserved_branch_is_stepped_off_by_sync(
 
 
 def test_integrate_matches_the_lock_when_the_move_touched_it(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    seeds: Seeds,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     from livery.workshop import _reconcile, _sync, _uv
 
-    clone, _origin = _rig(tmp_path)
+    clone, _origin = _rig(seeds)
     before = _git(clone, "rev-parse", "HEAD").strip()
     synced: list[Path] = []
     recorded: list[Path] = []
