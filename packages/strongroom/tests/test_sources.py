@@ -66,7 +66,9 @@ def _serve(directory: Path) -> Iterator[str]:
     server = http.server.ThreadingHTTPServer(
         ("127.0.0.1", 0), lambda *args: handler(*args, directory=str(directory))
     )
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    # A short poll interval: `serve_forever` reads its stop flag once
+    # per interval, and the default half second is paid by every stop.
+    thread = threading.Thread(target=server.serve_forever, args=(0.01,), daemon=True)
     thread.start()
     try:
         yield f"http://127.0.0.1:{server.server_address[1]}"
