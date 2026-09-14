@@ -16,6 +16,7 @@ from livery.workshop._templates import new_package
 from livery.workshop._update import _align_answers_source
 from livery.workshop._update_driver import UpdateDriver, run_gate, wait_for_releases
 from livery.workshop._workflow_engine import run_workflow
+from workshop_seeds import Seeds, _seed_home, seed_copier  # noqa: F401
 
 # Bound before the autouse no-op fixture patches the module attribute,
 # so the red-gate test can put the real gate back.
@@ -31,13 +32,18 @@ def _git(cwd: Path, *args: str) -> None:
     subprocess.run(["git", *args], cwd=cwd, capture_output=True, check=True)
 
 
-def _instance(tmp_path: Path) -> Path:
-    """A clean clone of a bare origin, current with its own render."""
-    origin = tmp_path / "origin.git"
+def _build(base: Path) -> None:
+    """A clean clone of a bare origin, current with its own render.
+
+    Built once per session by the `seeds` fixture and copied per test:
+    the render and the sync inside it cost more than the git processes
+    around them, and no test needs either repeated.
+    """
+    origin = base / "origin.git"
     origin.mkdir()
     _git(origin, "init", "--bare", "--initial-branch=main")
-    root = tmp_path / "ws"
-    _git(tmp_path, "clone", str(origin), "ws")
+    root = base / "ws"
+    _git(base, "clone", str(origin), "ws")
     _git(root, "config", "user.email", "t@livery.local")
     _git(root, "config", "user.name", "T")
     import shutil
@@ -64,7 +70,6 @@ def _instance(tmp_path: Path) -> Path:
     _git(root, "add", "-A")
     _git(root, "commit", "-m", "chore: seed")
     _git(root, "push", "-u", "origin", "main")
-    return root
 
 
 class _UpdateGit(GitOps):
@@ -151,9 +156,9 @@ def _finish_release(fake: FakeForge, root: Path) -> None:
 
 
 def test_a_current_instance_updates_to_nothing(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    seeds: Seeds, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    root = _instance(tmp_path)
+    root = seeds("update", _build) / "ws"
     fake, git = _fake_pair(root)
     driver = UpdateDriver(root, git, "templates", armed=False)
     run_workflow(
@@ -165,9 +170,10 @@ def test_a_current_instance_updates_to_nothing(
 
 
 def test_the_driver_refuses_a_feature_branch_and_a_dirty_tree(
+    seeds: Seeds,
     tmp_path: Path,
 ) -> None:
-    root = _instance(tmp_path)
+    root = seeds("update", _build) / "ws"
     fake, git = _fake_pair(root)
     git.create_branch("feat/elsewhere")
     driver = UpdateDriver(root, git, "templates", armed=False)
@@ -192,9 +198,10 @@ def test_the_driver_refuses_a_feature_branch_and_a_dirty_tree(
 
 
 def test_a_changed_instance_submits_through_the_engine(
+    seeds: Seeds,
     tmp_path: Path,
 ) -> None:
-    root = _instance(tmp_path)
+    root = seeds("update", _build) / "ws"
     # Drift one rendered file; the update re-renders and submits.
     pyproject = root / "pyproject.toml"
     pyproject.write_text(pyproject.read_text() + "# drift\n")
@@ -211,11 +218,12 @@ def test_a_changed_instance_submits_through_the_engine(
 
 
 def test_a_killed_update_resumes_without_redoing_the_work(
+    seeds: Seeds,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    root = _instance(tmp_path)
+    root = seeds("update", _build) / "ws"
     pyproject = root / "pyproject.toml"
     pyproject.write_text(pyproject.read_text() + "# drift\n")
     _git(root, "commit", "-am", "chore: drift")
@@ -243,9 +251,10 @@ def test_a_killed_update_resumes_without_redoing_the_work(
 
 
 def test_foreign_commits_on_the_update_branch_stop_with_options(
+    seeds: Seeds,
     tmp_path: Path,
 ) -> None:
-    root = _instance(tmp_path)
+    root = seeds("update", _build) / "ws"
     _fake, git = _fake_pair(root)
     git.create_branch("workflow/update/templates")
     (root / "hand.txt").write_text("hand-made\n")
@@ -259,11 +268,11 @@ def test_foreign_commits_on_the_update_branch_stop_with_options(
 
 
 def test_named_dependencies_route_siblings_to_floors_only(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from types import SimpleNamespace
 
-    root = _instance(tmp_path)
+    root = seeds("update", _build) / "ws"
     _fake, git = _fake_pair(root)
     invoked: list[tuple[str, ...]] = []
     floors: list[tuple[str, ...]] = []
@@ -296,11 +305,12 @@ def test_named_dependencies_route_siblings_to_floors_only(
 
 
 def test_the_parked_update_waits_and_the_bounded_wait_parks(
+    seeds: Seeds,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    root = _instance(tmp_path)
+    root = seeds("update", _build) / "ws"
     fake, git = _fake_pair(root)
     repo = fake.repository("willemkokke", "livery")
     _open_release(fake, git, root)
@@ -316,11 +326,11 @@ def test_the_parked_update_waits_and_the_bounded_wait_parks(
 
 
 def test_a_red_gate_stops_before_the_commit_with_the_resume_teaching(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from types import SimpleNamespace
 
-    root = _instance(tmp_path)
+    root = seeds("update", _build) / "ws"
     _fake, git = _fake_pair(root)
     pyproject = root / "pyproject.toml"
     pyproject.write_text(pyproject.read_text() + "# drift\n")
@@ -344,9 +354,9 @@ def test_a_red_gate_stops_before_the_commit_with_the_resume_teaching(
 
 
 def test_sync_and_the_gate_run_between_the_work_and_the_commit(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = _instance(tmp_path)
+    root = seeds("update", _build) / "ws"
     _fake, git = _fake_pair(root)
     pyproject = root / "pyproject.toml"
     pyproject.write_text(pyproject.read_text() + "# drift\n")
@@ -369,9 +379,9 @@ def test_sync_and_the_gate_run_between_the_work_and_the_commit(
 
 
 def test_the_reexec_guard_prevents_a_loop(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = _instance(tmp_path)
+    root = seeds("update", _build) / "ws"
     _fake, git = _fake_pair(root)
     pyproject = root / "pyproject.toml"
     pyproject.write_text(pyproject.read_text() + "# drift\n")
@@ -397,9 +407,9 @@ def test_the_reexec_guard_prevents_a_loop(
 
 
 def test_an_update_moving_the_workshop_finishes_in_a_fresh_interpreter(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = _instance(tmp_path)
+    root = seeds("update", _build) / "ws"
     _fake, git = _fake_pair(root)
     pyproject = root / "pyproject.toml"
     pyproject.write_text(pyproject.read_text() + "# drift\n")
@@ -428,13 +438,14 @@ def test_an_update_moving_the_workshop_finishes_in_a_fresh_interpreter(
 
 
 def test_a_non_interactive_drive_parks_at_exit_zero_with_the_prose(
+    seeds: Seeds,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from livery.workshop._update_driver import _drive
 
-    root = _instance(tmp_path)
+    root = seeds("update", _build) / "ws"
     fake, git = _fake_pair(root)
     repo = fake.repository("willemkokke", "livery")
     _wire_drive(monkeypatch, root, repo, git)
@@ -452,13 +463,14 @@ def test_a_non_interactive_drive_parks_at_exit_zero_with_the_prose(
 
 
 def test_one_invocation_parks_waits_refreshes_floors_and_arms_to_merged(
+    seeds: Seeds,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import livery.workshop._update_driver as ud
 
-    root = _instance(tmp_path)
+    root = seeds("update", _build) / "ws"
     fake, git = _fake_pair(root)
     repo = fake.repository("willemkokke", "livery")
     _wire_drive(monkeypatch, root, repo, git)
@@ -519,12 +531,13 @@ def test_one_invocation_parks_waits_refreshes_floors_and_arms_to_merged(
 
 
 def test_a_rerun_after_the_wait_was_killed_resumes_from_parked(
+    seeds: Seeds,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from livery.workshop._update_driver import _drive
 
-    root = _instance(tmp_path)
+    root = seeds("update", _build) / "ws"
     fake, git = _fake_pair(root)
     repo = fake.repository("willemkokke", "livery")
     _wire_drive(monkeypatch, root, repo, git)
@@ -571,9 +584,9 @@ def test_the_arming_ladder_names_its_level(
 
 
 def test_new_package_renders_and_wires(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = _instance(tmp_path)
+    root = seeds("update", _build) / "ws"
     monkeypatch.chdir(root)
 
     from types import SimpleNamespace
@@ -599,9 +612,9 @@ def test_new_package_renders_and_wires(
 
 
 def test_the_work_migrates_contract_keys_before_the_floors_read_them(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = _instance(tmp_path)
+    root = seeds("update", _build) / "ws"
     _fake, git = _fake_pair(root)
     contract = root / "workshop.toml"
     contract.write_text(

@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 from livery.workshop import _sweep
+from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -19,20 +20,16 @@ def _git(cwd: Path, *args: str) -> str:
     ).stdout.strip()
 
 
+def _build(base: Path) -> None:
+    # Named for the checkout it stands in for: every message this suite
+    # asserts on prints the worktree's path under the checkout's name.
+    pushed(base, clone="livery")
+
+
 @pytest.fixture
-def checkout(tmp_path: Path) -> Path:
+def checkout(seeds: Seeds) -> Path:
     """A checkout with an origin, the base of every linked worktree."""
-    origin = tmp_path / "origin.git"
-    _git(tmp_path, "init", "-q", "--bare", "--initial-branch=main", str(origin))
-    root = tmp_path / "livery"
-    _git(tmp_path, "clone", "-q", str(origin), str(root))
-    _git(root, "config", "user.name", "T")
-    _git(root, "config", "user.email", "t@livery.local")
-    (root / "seed.txt").write_text("seed\n")
-    _git(root, "add", ".")
-    _git(root, "commit", "-qm", "chore: seed")
-    _git(root, "push", "-q", "-u", "origin", "main")
-    return root
+    return seeds("livery", _build) / "livery"
 
 
 def _worktree(checkout: Path, home: Path, number: int, *, push: bool = True) -> Path:

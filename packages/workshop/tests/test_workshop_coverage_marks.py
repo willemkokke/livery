@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from livery.workshop import _coverage_marks, _state
+from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -18,18 +19,9 @@ def _git(cwd: Path, *args: str) -> str:
 
 
 @pytest.fixture
-def work(tmp_path: Path) -> Path:
-    origin = tmp_path / "origin.git"
-    _git(tmp_path, "init", "-q", "--bare", "--initial-branch=main", str(origin))
-    work = tmp_path / "work"
-    _git(tmp_path, "clone", "-q", str(origin), str(work))
-    _git(work, "config", "user.name", "tester")
-    _git(work, "config", "user.email", "tester@example.invalid")
-    (work / "README.md").write_text("the repository\n")
-    _git(work, "add", "README.md")
-    _git(work, "commit", "-qm", "init")
-    _git(work, "push", "-q", "-u", "origin", "main")
-    return work
+def work(seeds: Seeds) -> Path:
+    """A clone of a bare origin, one commit on main, pushed."""
+    return seeds("pushed", pushed) / "work"
 
 
 # --- nothing to judge by, and nothing to write from --------------------------

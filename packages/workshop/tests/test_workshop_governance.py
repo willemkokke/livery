@@ -18,6 +18,7 @@ from livery.workshop._governance import (
     owners_of,
     unknown_owners,
 )
+from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
 
@@ -146,30 +147,30 @@ def test_the_admin_ladder_prefers_the_admin_variable(
     assert var == "FORGE_ADMIN_TOKEN"
 
 
-def _reconcile_rig(tmp_path: Path) -> tuple[Path, GitOps]:
-    origin = tmp_path / "origin.git"
-    origin.mkdir()
-    _git(origin, "init", "--bare", "--initial-branch=main")
-    clone = tmp_path / "clone"
-    _git(tmp_path, "clone", str(origin), "clone")
-    _git(clone, "config", "user.email", "t@l")
-    _git(clone, "config", "user.name", "T")
+def _contract(clone: Path) -> None:
+    """The workspace contract the reconcile verbs read, and a file to move."""
     (clone / "workshop.toml").write_text(
         '[workspace]\n\n[forge]\nkind = "github"\nowner = "acme"\n'
     )
     (clone / "seed.txt").write_text("s\n")
-    _git(clone, "add", "-A")
-    _git(clone, "commit", "-m", "chore: seed")
-    _git(clone, "push", "-u", "origin", "main")
+
+
+def _build(base: Path) -> None:
+    pushed(base, clone="clone", fill=_contract)
+
+
+def _reconcile_rig(seeds: Seeds) -> tuple[Path, GitOps]:
+    """The clone whose contract names a forge, copied for this test."""
+    clone = seeds("contract", _build) / "clone"
     return clone, GitOps(clone)
 
 
 def test_the_reconcile_is_silent_when_provably_unneeded(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop import _workflow_tasks
 
-    root, git = _reconcile_rig(tmp_path)
+    root, git = _reconcile_rig(seeds)
     monkeypatch.setattr(
         "livery.workshop._layers.workspace_root", lambda start=None: root
     )
@@ -195,7 +196,7 @@ def test_the_reconcile_is_silent_when_provably_unneeded(
 
 
 def test_the_reconcile_runs_when_governance_paths_moved(
-    tmp_path: Path,
+    seeds: Seeds,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -203,7 +204,7 @@ def test_the_reconcile_runs_when_governance_paths_moved(
 
     from livery.workshop import _workflow_tasks
 
-    root, git = _reconcile_rig(tmp_path)
+    root, git = _reconcile_rig(seeds)
     monkeypatch.setattr(
         "livery.workshop._layers.workspace_root", lambda start=None: root
     )
@@ -242,13 +243,13 @@ def test_the_reconcile_runs_when_governance_paths_moved(
 
 
 def test_the_check_title_task_refuses_a_drifted_title(
-    tmp_path: Path,
+    seeds: Seeds,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from livery.workshop._release_driver import workflow_release_check_title
 
-    root, _git_seam = _reconcile_rig(tmp_path)
+    root, _git_seam = _reconcile_rig(seeds)
     monkeypatch.setattr(
         "livery.workshop._layers.workspace_root", lambda start=None: root
     )
@@ -271,12 +272,12 @@ def test_the_check_title_task_refuses_a_drifted_title(
 
 
 def test_awaiting_approvals_is_a_clean_stop_naming_the_reviewers(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.forge import Protection
     from livery.workshop._verdict import classify
 
-    root, git = _reconcile_rig(tmp_path)
+    root, git = _reconcile_rig(seeds)
     (root / "workshop.toml").write_text(
         '[workspace]\n\n[forge]\nkind = "github"\nowner = "acme"\n\n'
         '[owners]\nusers = ["alice", "author"]\n'
@@ -323,11 +324,11 @@ def test_awaiting_approvals_is_a_clean_stop_naming_the_reviewers(
 
 
 def test_unreadable_protection_never_asserts_a_review_blocker(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop._verdict import classify
 
-    root, git = _reconcile_rig(tmp_path)
+    root, git = _reconcile_rig(seeds)
     monkeypatch.setattr(
         "livery.workshop._layers.workspace_root", lambda start=None: root
     )
@@ -656,7 +657,7 @@ def test_ambient_tokens_mount_as_forge_token(tmp_path: Path) -> None:
 
 
 def test_a_lagging_pr_head_stays_in_flight(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Right after a push the forge's pull request read can still
     # report the previous head; a verdict on that head judges the
@@ -664,7 +665,7 @@ def test_a_lagging_pr_head_stays_in_flight(
     # from the stale run, and a fresh red green).
     from livery.workshop._verdict import classify
 
-    root, git = _reconcile_rig(tmp_path)
+    root, git = _reconcile_rig(seeds)
     monkeypatch.setattr(
         "livery.workshop._layers.workspace_root", lambda start=None: root
     )
@@ -704,14 +705,14 @@ def test_a_lagging_pr_head_stays_in_flight(
 
 
 def test_a_disarmed_behind_pr_teaches_integrate(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    seeds: Seeds, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Without the behind arm, the parked answer said "merge it" while
     # the merge verb refused behindness, and the two pointed at each
     # other with no exit.
     from livery.workshop._verdict import classify
 
-    root, git = _reconcile_rig(tmp_path)
+    root, git = _reconcile_rig(seeds)
     monkeypatch.setattr(
         "livery.workshop._layers.workspace_root", lambda start=None: root
     )

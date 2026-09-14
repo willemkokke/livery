@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -28,6 +29,9 @@ Build = Callable[[Path], object]
 
 #: What the `seeds` fixture hands a test: copy the *key* seed, built by *build*.
 Seeds = Callable[[str, Build], Path]
+
+#: Writes the files of a seed's first commit into the clone it is given.
+Fill = Callable[[Path], None]
 
 
 def copy_seed(home: Path, key: str, build: Build, destination: Path) -> Path:
@@ -98,8 +102,16 @@ def _without_auto_maintenance(build: Build, seed: Path) -> None:
 
 
 def _copy(seed: Path, destination: Path) -> None:
-    """Copy the seed, lock files left out, retried once over a git still writing."""
-    ignore = shutil.ignore_patterns("*.lock")
+    """Copy the seed, git's locks left out, retried once over a git still writing."""
+
+    def ignore(directory: str, names: list[str]) -> set[str]:
+        # Only git's own lock files go: a `uv.lock` in the work tree is
+        # a file the repository tracks, and a copy without it leaves
+        # the clone one deletion away from clean.
+        if not _inside_git(Path(directory), seed):
+            return set()
+        return {name for name in names if name.endswith(".lock")}
+
     for attempt in range(3):
         try:
             shutil.copytree(
@@ -110,6 +122,22 @@ def _copy(seed: Path, destination: Path) -> None:
             if attempt == 2:
                 raise
             time.sleep(0.5)
+
+
+def _inside_git(directory: Path, seed: Path) -> bool:
+    """Whether *directory* is one of git's own, or lies inside one.
+
+    A git directory is `.git`, or a bare repository, which is any
+    directory holding a `HEAD` file. The walk stops at *seed*, so a
+    directory outside it is never read.
+    """
+    current = directory
+    while True:
+        if current.name == ".git" or (current / "HEAD").is_file():
+            return True
+        if current == seed or current.parent == current:
+            return False
+        current = current.parent
 
 
 @pytest.fixture(scope="session")
@@ -133,8 +161,48 @@ def seed_copier(_seed_home: Path, tmp_path: Path) -> Seeds:
     return get
 
 
+def pushed(base: Path, *, clone: str = "work", fill: Fill | None = None) -> Path:
+    """Make a bare origin under *base* and a clone of it whose main is pushed.
+
+    The clone has a committer identity and one commit. Returns the
+    clone, which sits at `base / clone`, beside `base / "origin.git"`.
+
+    Args:
+        base: the directory the origin and the clone are made under.
+        clone: the clone's directory name, which a suite asserting on
+            paths chooses to read well in its own messages.
+        fill: writes the first commit's files into the clone. The
+            default writes one `seed.txt`, which a test may edit and
+            commit with `-a`.
+    """
+    origin = base / "origin.git"
+    _git(base, "init", "-q", "--bare", "--initial-branch=main", str(origin))
+    repo = base / clone
+    _git(base, "clone", "-q", str(origin), str(repo))
+    _git(repo, "config", "user.name", "tester")
+    _git(repo, "config", "user.email", "tester@example.invalid")
+    if fill is None:
+        (repo / "seed.txt").write_text("seed\n")
+    else:
+        fill(repo)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "chore: seed")
+    _git(repo, "push", "-q", "-u", "origin", "main")
+    return repo
+
+
+def _git(cwd: Path, *args: str) -> None:
+    subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=True)
+
+
 def cliff_config(name: str) -> str:
-    """A member's ``cliff.toml``: its own tag pattern and paths, the house groups."""
+    """A member's `cliff.toml`, as the package template renders it.
+
+    Reduced to what runs offline: no `[remote]` section, so nothing
+    reaches for a forge while the suite runs, and no pull request
+    preprocessor, which needs the forge's web root. Every rule that
+    decides a version or a changelog entry is the template's own.
+    """
     body = (
         'body = """\n'
         '{% if version %}## [{{ version | split(pat="/") | last'
@@ -159,6 +227,7 @@ def cliff_config(name: str) -> str:
         f'include_paths = ["packages/{name}/**"]\n'
         "conventional_commits = true\n"
         "filter_unconventional = false\n"
+        "protect_breaking_commits = true\n"
         'sort_commits = "oldest"\n'
         "commit_parsers = [\n"
         '  { message = "^chore\\\\(release\\\\)", skip = true },\n'

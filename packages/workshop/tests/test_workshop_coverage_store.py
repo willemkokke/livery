@@ -11,6 +11,7 @@ import pytest
 from livery.workshop import _coverage_store, _state
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._packages import Edge, Package
+from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 LEG = "check-linux-3.14"
 RUN = _state.RunContext("gitea", "1013", "push", "refs/heads/main", leg=LEG)
@@ -45,22 +46,22 @@ def _package(root: Path, name: str, depends: tuple[str, ...] = ()) -> Package:
     )
 
 
+def _workspace(repo: Path) -> None:
+    """A two-package workspace, `top` over `base`, with a lock beside them."""
+    (repo / "pyproject.toml").write_text("[project]\nname = 'w'\n")
+    (repo / "uv.lock").write_text("version = 1\n")
+    _package(repo, "base")
+    _package(repo, "top", ("base",))
+
+
+def _build(base: Path) -> None:
+    pushed(base, fill=_workspace)
+
+
 @pytest.fixture
-def work(tmp_path: Path) -> Path:
-    origin = tmp_path / "origin.git"
-    _git(tmp_path, "init", "-q", "--bare", "--initial-branch=main", str(origin))
-    work = tmp_path / "work"
-    _git(tmp_path, "clone", "-q", str(origin), str(work))
-    _git(work, "config", "user.name", "tester")
-    _git(work, "config", "user.email", "tester@example.invalid")
-    (work / "pyproject.toml").write_text("[project]\nname = 'w'\n")
-    (work / "uv.lock").write_text("version = 1\n")
-    _package(work, "base")
-    _package(work, "top", ("base",))
-    _git(work, "add", ".")
-    _git(work, "commit", "-qm", "init")
-    _git(work, "push", "-q", "-u", "origin", "main")
-    return work
+def work(seeds: Seeds) -> Path:
+    """A clone of a bare origin holding the workspace, pushed to main."""
+    return seeds("workspace", _build) / "work"
 
 
 @pytest.fixture(autouse=True)

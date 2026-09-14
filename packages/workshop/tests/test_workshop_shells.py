@@ -18,6 +18,7 @@ from livery.forge.testing import FakeForge
 from livery.workshop import _ci_tasks, _graph, _quality
 from livery.workshop._backends import _python
 from livery.workshop._packages import Package
+from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
 _FAILURES = (SystemExit, Failed)
 
@@ -28,16 +29,8 @@ def _git(cwd: Path, *args: str) -> None:
     subprocess.run(["git", *args], cwd=cwd, capture_output=True, check=True)
 
 
-@pytest.fixture
-def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[FakeForge, Path]:
-    """A workspace clone on a feature branch, resolution faked."""
-    origin = tmp_path / "origin.git"
-    origin.mkdir()
-    _git(origin, "init", "--bare", "--initial-branch=main")
-    root = tmp_path / "ws"
-    _git(tmp_path, "clone", str(origin), "ws")
-    _git(root, "config", "user.email", "t@livery.local")
-    _git(root, "config", "user.name", "T")
+def _workspace(root: Path) -> None:
+    """One python package in a workspace, the shape the ci verbs read."""
     (root / "workshop.toml").write_text("[workspace]\n")
     package = root / "packages" / "thing"
     (package / "src" / "livery" / "thing").mkdir(parents=True)
@@ -46,10 +39,17 @@ def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[FakeForge, Pat
         '[project]\nname = "livery-thing"\ndependencies = []\n'
     )
     (package / "src" / "livery" / "thing" / "mod.py").write_text("x = 1\n")
-    _git(root, "add", "-A")
-    _git(root, "commit", "-m", "chore: seed")
-    _git(root, "push", "-u", "origin", "main")
+
+
+def _build(base: Path) -> None:
+    root = pushed(base, clone="ws", fill=_workspace)
     _git(root, "checkout", "-b", "feat/1-thing")
+
+
+@pytest.fixture
+def rig(seeds: Seeds, monkeypatch: pytest.MonkeyPatch) -> tuple[FakeForge, Path]:
+    """A workspace clone on a feature branch, resolution faked."""
+    root = seeds("workspace-branched", _build) / "ws"
     fake = FakeForge()
     fake.create_repo(OWNER, NAME, private=True, description="t")
     repo = fake.repository(OWNER, NAME)
@@ -375,7 +375,7 @@ def test_ci_verdict_outside_ci_and_inside(
 
 
 def test_the_store_shells_outside_ci(
-    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str], tmp_path: Path
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
     _ci_tasks.ci_metrics_collect()
     _ci_tasks.ci_timings()
