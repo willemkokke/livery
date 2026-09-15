@@ -122,6 +122,11 @@ def _compose_file() -> Path:
     return Path(str(resources.files(__name__))) / "compose.yaml"
 
 
+def _docker_overlay() -> Path:
+    """The compose overlay that mounts the host's docker socket into the runners."""
+    return Path(str(resources.files(__name__))) / "compose.docker.yaml"
+
+
 def _workspace_root() -> Path:
     """The nearest ancestor carrying a ``workshop.toml``, or fail.
 
@@ -163,13 +168,19 @@ def _compose_env() -> dict[str, str]:
     return merged
 
 
-def _compose_cmd(*args: str) -> list[str]:
+def _compose_cmd(*args: str, with_docker: bool = False) -> list[str]:
     """The docker arguments addressing the packaged compose file.
 
     The compose file pins its own project name, so where it lives on
-    disk never changes which containers it addresses.
+    disk never changes which containers it addresses. *with_docker*
+    adds the socket overlay, which only an ``up`` of the runners
+    needs: a stop, a removal or a restart addresses the containers as
+    they were created.
     """
-    return ["compose", "-f", str(_compose_file()), *args]
+    files = ["-f", str(_compose_file())]
+    if with_docker:
+        files += ["-f", str(_docker_overlay())]
+    return ["compose", *files, *args]
 
 
 def _docker(*args: str, env: dict[str, str] | None = None) -> tools.Result:
@@ -184,9 +195,11 @@ def _docker(*args: str, env: dict[str, str] | None = None) -> tools.Result:
     return tools.docker.opts(env=merged, nofail=True, recorded=False)(*args)
 
 
-def _compose(*args: str, env: dict[str, str] | None = None) -> str:
+def _compose(
+    *args: str, env: dict[str, str] | None = None, with_docker: bool = False
+) -> str:
     """Run docker compose, returning stdout; a failure is fatal, verbatim."""
-    result = _docker(*_compose_cmd(*args), env=env)
+    result = _docker(*_compose_cmd(*args, with_docker=with_docker), env=env)
     if result.code != 0:
         fail(
             f"docker compose {' '.join(args)} exited "
@@ -275,12 +288,21 @@ def _wait_for_gitea() -> None:
 @dev.task(name="up")
 def dev_up(
     profile: Annotated[str, doc("which forges: gitea, gitlab, or all")] = "all",
+    with_docker: Annotated[
+        bool, doc("mount the host's docker socket into the runners")
+    ] = False,
 ) -> None:
     """Start and seed the local forge containers, then their runners.
 
     Idempotent: re-running it is the recovery procedure. Each runner
     starts after its seed because the registration token is minted by
     the seed. GitLab is long-lived and takes minutes on first boot.
+    ``--with-docker`` mounts the host's docker socket into both
+    runners, for the jobs that build images: cibuildwheel's build
+    containers and the container publish seam. Without it the runners
+    have no docker, and a seam declared none skips green; the flag's
+    state is the runners' own, so an ``up`` that changes it recreates
+    them.
     """
     if profile not in ("gitea", "gitlab", "all"):
         fail(f"unknown profile {profile}: use gitea, gitlab, or all")
@@ -301,11 +323,13 @@ def dev_up(
             "--build",
             "act_runner",
             env={"GITEA_RUNNER_TOKEN": token},
+            with_docker=with_docker,
         )
         print(f"  gitea: {_GITEA_URL}  credentials: {_dev_env_path().name}")
     if profile in ("gitlab", "all"):
         _compose("--profile", "gitlab", "up", "-d", "--wait", "gitlab")
         _seed_gitlab()
+        # --build, as for act_runner: the two services share the image.
         _compose(
             "--profile",
             "gitlab",
@@ -313,10 +337,14 @@ def dev_up(
             "gitlab-runner",
             "up",
             "-d",
+            "--build",
             "gitlab-runner",
+            with_docker=with_docker,
         )
         _register_gitlab_runner()
         print(f"  gitlab: {_GITLAB_URL}  credentials: {_dev_env_path().name}")
+    if with_docker:
+        print("  runners: the host's docker socket is mounted")
 
 
 @dev.task(name="seed")

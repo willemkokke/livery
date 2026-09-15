@@ -222,6 +222,41 @@ def test_a_hostless_alias_teaches_the_one_liner(
     _e2e._require_host_alias("gitlab")
 
 
+def test_the_runner_probe_refuses_a_missing_runner_and_a_missing_socket(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The refusals first: a runner that is not up, then one without
+    # the socket, each teaching the up verb with its flag; a mounted
+    # socket passes quietly.
+    from types import SimpleNamespace
+
+    from livery.toolroom import tools
+
+    answer = {"code": 1, "stdout": ""}
+    seen: list[tuple[str, ...]] = []
+
+    def _opts(**kwargs: object) -> object:
+        def _run(*args: str) -> object:
+            seen.append(args)
+            return SimpleNamespace(code=answer["code"], stdout=answer["stdout"])
+
+        return _run
+
+    monkeypatch.setattr(tools, "docker", SimpleNamespace(opts=_opts))
+    with pytest.raises(_FAILURES, match=r"gitlab-runner-1\) is not up"):
+        _e2e._require_runner_docker("gitlab")
+    assert seen[-1][-1] == "livery-forge-dev-gitlab-runner-1"
+    answer.update(code=0, stdout='[{"Destination": "/etc/gitlab-runner"}]')
+    with pytest.raises(_FAILURES, match="--profile=gitlab --with-docker"):
+        _e2e._require_runner_docker("gitlab")
+    answer.update(stdout="not json")
+    with pytest.raises(_FAILURES, match="has no docker socket"):
+        _e2e._require_runner_docker("gitea")
+    assert seen[-1][-1] == "livery-forge-dev-act_runner-1"
+    answer.update(stdout='[{"Destination": "/var/run/docker.sock", "Type": "bind"}]')
+    _e2e._require_runner_docker("gitea")
+
+
 # --- the dev-wheel pins: refusals first, then the read -----------------------
 
 HEAD = "05482de" + "0" * 33

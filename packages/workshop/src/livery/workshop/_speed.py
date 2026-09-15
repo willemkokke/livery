@@ -25,6 +25,7 @@ from __future__ import annotations
 import re
 import statistics
 from collections import defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -123,6 +124,20 @@ def leg_label(display: str) -> str:
     if match is None:
         return display
     return f"{match['job']}-{match['os']}-{match['python']}"
+
+
+def leg_of(job: str, row: Mapping[str, Any]) -> str:
+    """The leg a run's job row measured: the row's own label, or the name's.
+
+    A check leg writes its label (``check-ubuntu-latest-3.14``) into
+    its row under ``scope.leg``, and that spelling holds on every
+    forge; the job's display name carries the matrix on GitHub and
+    Gitea alone, and on GitLab is the bare ``check``, which would name
+    no runner and never count as the reference.
+    """
+    scope = row.get("scope")
+    label = str(scope.get("leg") or "") if isinstance(scope, Mapping) else ""
+    return label or leg_label(job)
 
 
 def is_reference(leg: str) -> bool:
@@ -375,7 +390,7 @@ def samples(entries: list[dict[str, Any]], run_id: str) -> list[Sample]:
     for job, row in sorted((current.get("jobs") or {}).items()):
         if not job.startswith("check") or not isinstance(row, dict):
             continue
-        leg = leg_label(job)
+        leg = leg_of(job, row)
         now_slowest = _slowest(row)
         for package, (seconds, tests) in sorted(_package_times(row).items()):
             previous: list[float] = []
@@ -581,7 +596,7 @@ def render_marks(root: Path) -> list[str]:
         for job, row in (newest.get("jobs") or {}).items():
             if isinstance(row, dict):
                 for package, (seconds, _tests) in _package_times(row).items():
-                    latest[(package, leg_label(job))] = seconds
+                    latest[(package, leg_of(job, row))] = seconds
     lines = ["  speed marks", f"    {'package on leg':<52} {'mark':>8} {'latest':>8}"]
     for (package, leg), mark in sorted(current.items()):
         now = latest.get((package, leg))

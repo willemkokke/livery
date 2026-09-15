@@ -164,6 +164,17 @@ def test_the_judge_drops_the_stale_marks_in_ci_while_off(
 # --- the shapes -----------------------------------------------------------------
 
 
+def test_a_rows_own_label_names_the_leg_before_the_display_name() -> None:
+    # GitLab names the check job by its key alone, so the display name
+    # says nothing of the runner; the leg's row carries its label, and
+    # that is what the judge and the reference rule read.
+    assert _speed.leg_of("check", {"scope": {"leg": LEG}}) == LEG
+    assert _speed.is_reference(_speed.leg_of("check", {"scope": {"leg": LEG}}))
+    assert _speed.leg_of("check", {}) == "check"
+    assert _speed.leg_of("check", {"scope": "full"}) == "check"
+    assert _speed.leg_of(UBUNTU, {}) == LEG
+
+
 def test_leg_label_reads_a_matrix_display_name_and_keeps_a_plain_one() -> None:
     assert _speed.leg_label(UBUNTU) == LEG
     assert _speed.leg_label("check (macos-latest, 3.11)") == "check-macos-latest-3.11"

@@ -1,0 +1,14 @@
+# The docker socket overlay: `fm forge.dev.up --with-docker` adds this
+# file to the compose set, so the jobs that build images reach the
+# host's daemon on either lane (cibuildwheel's manylinux and musllinux
+# containers, the container publish seam). cibuildwheel copies the
+# project in over the daemon rather than bind-mounting it, so a
+# socket-only daemon is enough. Without the flag the runners have no
+# docker, and a seam declared none skips green.
+services:
+  act_runner:
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+  gitlab-runner:
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

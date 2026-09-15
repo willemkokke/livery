@@ -131,3 +131,18 @@ def test_restart_restarts_each_forges_runner_and_names_it(
     out = capsys.readouterr().out
     assert "gitea: runner act_runner restarted" in out
     assert "gitlab: runner gitlab-runner restarted" in out
+
+
+def test_the_docker_overlay_rides_only_with_the_flag(dev: ModuleType) -> None:
+    # Without the flag the compose set is the one packaged file; with
+    # it, the socket overlay follows, before the subcommand.
+    plain = dev._compose_cmd("ps")
+    assert plain[:2] == ["compose", "-f"]
+    assert plain[2].endswith("compose.yaml")
+    assert plain[3:] == ["ps"]
+    armed = dev._compose_cmd("ps", with_docker=True)
+    assert armed[:3] == plain[:3]
+    assert armed[3] == "-f"
+    assert armed[4].endswith("compose.docker.yaml")
+    assert armed[5:] == ["ps"]
+    assert dev._docker_overlay().is_file()
