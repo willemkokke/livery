@@ -226,3 +226,28 @@ on that package's changes, and the loop keeps proving the kind end to
 end through `loop-native`, from the layer's released wheel rather
 than a dev wheel. Meanwhile the build runs at the nightly point only
 (ruled the same evening).
+
+## 2026-09-16: the runner image from the tool record
+
+Willem, on the dev rig's one runner image serving both Gitea's
+act_runner and GitLab's shell executor: if the tool record carried
+each tool's installation package, the image could be derived to hold
+only what the workspaces require. The image's list has two halves.
+Runner plumbing (node for `actions/checkout`, bash for run steps, curl
+for the uv installer, `gitlab-runner` for the GitLab service) belongs
+to the rig and stays fixed. Workspace tools (git, docker, cmake, the
+C++ toolchain) are what the kinds and seams declare today, so the
+image could be the plumbing plus the union of the packages each
+declared tool names, rendered from the record and tagged by the
+record's hash so a change rebuilds it. The record would carry a
+package name per platform per tool: apk for the image, and apt, brew
+and winget if the same fact is to feed `fm doctor` and `fm sync` on a
+developer's machine and top up a hosted runner missing a tool, which
+is the larger win; the image alone is eight packages that move with
+the kinds. Two things to settle first: the rig serves every workspace
+on the machine, so the list is the union over the workspaces it is up
+for or the image goes per workspace; and apk installs the Alpine
+release's version where the record pins one, so either the image
+installs the pinned build or the record says the image's version is
+the distribution's. Not now; raw material for the tool record plan's
+open questions.
