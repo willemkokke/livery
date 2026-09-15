@@ -312,13 +312,20 @@ def test_the_gitlab_document_names_its_pipelines_and_runs_every_declared_job(
     prog = footman.prog()
     text = generate(_root(tmp_path, "gitlab"))[".gitlab-ci.yml"]
     doc = _doc(text)
+    # Every pipeline is named after its workflow file: a dispatch or
+    # the clock carries the variable, and a merge request or a push to
+    # main sets it to the gate's file through the rule that admits it.
     assert doc["workflow"]["name"] == "$FORGE_WORKFLOW"
-    rules = [rule["if"] for rule in doc["workflow"]["rules"]]
-    assert rules == [
-        '$CI_PIPELINE_SOURCE == "merge_request_event"',
-        '$CI_COMMIT_BRANCH == "main"',
-        '$CI_PIPELINE_SOURCE == "schedule"',
-        "$FORGE_WORKFLOW",
+    assert doc["workflow"]["rules"] == [
+        {"if": "$FORGE_WORKFLOW"},
+        {
+            "if": '$CI_PIPELINE_SOURCE == "merge_request_event"',
+            "variables": {"FORGE_WORKFLOW": "ci.yml"},
+        },
+        {
+            "if": '$CI_COMMIT_BRANCH == "main"',
+            "variables": {"FORGE_WORKFLOW": "ci.yml"},
+        },
     ]
     jobs = {k: v for k, v in doc.items() if k not in ("workflow", "stages")}
     # The declared jobs in order, the deploy as GitLab Pages' own job,
@@ -412,6 +419,15 @@ def test_the_gitlab_document_names_its_pipelines_and_runs_every_declared_job(
         {"if": '$FORGE_WORKFLOW == "release.yml"'},
     ]
     assert "CI_COMMIT_TITLE" not in text
+
+    # The job token cannot push: every job that writes the store or
+    # pushes rewrites origin with the push token before its call, and
+    # no other job does.
+    def rewrites(name: str) -> bool:
+        return any("GITLAB_PUSH_TOKEN" in line for line in jobs[name]["script"])
+
+    assert {name for name in jobs if rewrites(name)} == {"check", "gate", "publish"}
+    assert jobs["check"]["script"][0].startswith("git remote set-url origin")
     # The admin token reaches govern alone; the checkouts are as deep
     # as the verbs need.
     assert jobs["govern"]["variables"] == {

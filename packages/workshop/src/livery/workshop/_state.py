@@ -536,12 +536,27 @@ def _event_head_ref(env: Mapping[str, str]) -> str:
     return env.get("GITHUB_HEAD_REF", "")
 
 
+#: GitLab's pipeline sources in the one event vocabulary the verbs
+#: read: a merge request pipeline is a pull request run, and an API-,
+#: trigger- or web-created pipeline is a dispatch, as the forge
+#: backend maps a listed pipeline. A source not named here (``push``,
+#: ``schedule``) is already the vocabulary's word.
+GITLAB_EVENTS = {
+    "merge_request_event": "pull_request",
+    "api": "workflow_dispatch",
+    "trigger": "workflow_dispatch",
+    "web": "workflow_dispatch",
+}
+
+
 def run_context(environ: dict[str, str] | None = None) -> RunContext | None:
     """The CI run this process runs in, or ``None`` outside CI.
 
     GitHub and Gitea both speak the ``GITHUB_*`` variables (the
     act_runner keeps GitHub's names and adds ``GITEA_ACTIONS``);
-    GitLab speaks ``GITLAB_CI`` and ``CI_*``.
+    GitLab speaks ``GITLAB_CI`` and ``CI_*``, and its pipeline source
+    is read through `GITLAB_EVENTS`, so a merge request pipeline
+    narrows, records and checks titles the way a pull request run does.
     """
     env = os.environ if environ is None else environ
     if env.get("GITHUB_ACTIONS") == "true":
@@ -557,10 +572,11 @@ def run_context(environ: dict[str, str] | None = None) -> RunContext | None:
             _event_head_ref(env),
         )
     if env.get("GITLAB_CI") == "true":
+        source = env.get("CI_PIPELINE_SOURCE", "")
         return RunContext(
             "gitlab",
             env.get("CI_PIPELINE_ID", ""),
-            env.get("CI_PIPELINE_SOURCE", ""),
+            GITLAB_EVENTS.get(source, source),
             env.get("CI_COMMIT_REF_NAME", ""),
             env.get("CI_COMMIT_SHA", ""),
             env.get("CI_MERGE_REQUEST_TARGET_BRANCH_NAME", ""),

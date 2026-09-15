@@ -72,7 +72,11 @@ if _FORGE_TESTS.is_dir():
         base_env = {**os.environ, "FORGE_RECORD": "1"}
 
         def run_tests(*args: str, env: dict[str, str]) -> None:
-            tools.pytest.opts(env=env, capture=False)(*args)
+            # A child, never in this process: pytest-xdist hands its
+            # workers the session's option dict, which in the runner's
+            # own process carries footman's argv proxy and cannot be
+            # serialised.
+            tools.pytest.opts(env=env, capture=False, in_process=False)(*args)
 
         only = ("-k", scenario) if scenario else ()
         backends = (backend,) if backend else ("gitea", "gitlab", "github")
