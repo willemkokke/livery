@@ -364,6 +364,20 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
         ["hse", "--profile=fm-profile.json", "check"],
         ["hse", "coverage.leg", "--job=check (ubuntu-latest, 3.14)"],
     ]
+    # On GitLab the job is named by its key alone, the leg's label
+    # unchanged: the collect step joins the row with the forge's job
+    # by that name.
+    seen.clear()
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.setenv("GITLAB_CI", "true")
+    monkeypatch.setenv("CI_PIPELINE_SOURCE", "merge_request_event")
+    _points.run_point(
+        root, "gate", "check", os_label="ubuntu-latest", python="3.14", spawn=green
+    )
+    assert seen[-1] == ["hse", "coverage.leg", "--job=check"]
+    assert legs[-1] == "check-ubuntu-latest-3.14"
+    monkeypatch.delenv("GITLAB_CI")
+    monkeypatch.delenv("CI_PIPELINE_SOURCE")
     seen.clear()
     _points.run_point(root, "gate", "gate", spawn=green)
     # The render gate and the provenance check live in the gate job,

@@ -428,6 +428,13 @@ def test_the_gitlab_document_names_its_pipelines_and_runs_every_declared_job(
 
     assert {name for name in jobs if rewrites(name)} == {"check", "gate", "publish"}
     assert jobs["check"]["script"][0].startswith("git remote set-url origin")
+    # The address is the server's own protocol, host and port: an
+    # instance off 443 is unreachable at a bare https host.
+    assert jobs["check"]["script"][0] == (
+        'git remote set-url origin "${CI_SERVER_PROTOCOL}://oauth2:'
+        "${GITLAB_PUSH_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/"
+        '${CI_PROJECT_PATH}.git"'
+    )
     # The admin token reaches govern alone; the checkouts are as deep
     # as the verbs need.
     assert jobs["govern"]["variables"] == {

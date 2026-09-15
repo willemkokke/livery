@@ -166,6 +166,9 @@ def provision(kind: str = "gitea") -> None:
     else:
         print(f"  reusing {E2E_OWNER}/{E2E_REPO}")
     repo = forge.repository(E2E_OWNER, E2E_REPO)
+    if kind == "gitlab":
+        _make_project_public(os.environ.get(_lane(kind).url_var, ""), token)
+        print("  project: public, so its registry reads without a credential")
     # Three secrets, all the lane token: the registry credential the
     # publish reads, the forge lane's everyday token, and the admin
     # ladder's, because the emitted governance job asks for it and
@@ -210,6 +213,24 @@ def _gitlab_call(
             return int(response.status), (json.loads(text) if text else None)
     except urllib.error.HTTPError as exc:
         return exc.code, exc.read().decode(errors="replace")
+
+
+def _make_project_public(url: str, token: str, api: GitlabCall | None = None) -> None:
+    """Make the loop's GitLab project public, so its registry reads anonymously.
+
+    The runner installs the dev wheels from the project's PyPI index
+    and the loop locks against it here, both without a credential, as
+    both read Gitea's owner registry. A private project's index
+    answers 401 to both, whatever the group's visibility. *api* is the
+    call, the live one by default.
+    """
+    from urllib.parse import quote
+
+    api = api or _gitlab_call
+    path = f"{url}/api/v4/projects/{quote(f'{E2E_OWNER}/{E2E_REPO}', safe='')}"
+    status, body = api("PUT", path, token, {"visibility": "public"})
+    if status != 200:
+        fail(f"making {E2E_OWNER}/{E2E_REPO} public answered HTTP {status}: {body}")
 
 
 def _mint_push_token(url: str, token: str, api: GitlabCall | None = None) -> str:
@@ -306,6 +327,10 @@ def _require_host_alias(kind: str = "gitea") -> None:
     try:
         with urllib.request.urlopen(lane.alias + lane.version_path, timeout=2):
             return
+    except urllib.error.HTTPError:
+        # The host answered: GitLab's version endpoint refuses an
+        # anonymous read with 401, and the alias resolved all the same.
+        return
     except (urllib.error.URLError, TimeoutError, OSError):
         fail(
             f"the host cannot reach {lane.alias}, the compose"
@@ -316,11 +341,16 @@ def _require_host_alias(kind: str = "gitea") -> None:
         )
 
 
-def _loop_home() -> Path:
-    """Where the loop's workspace lives: durable, per machine."""
+def _loop_home(kind: str) -> Path:
+    """Where the lane's workspace lives: durable, per machine and per forge.
+
+    One directory per lane: the workspaces have different remotes,
+    different registries and different histories, and one pass must
+    never adopt the other lane's checkout.
+    """
     from livery.footman.context import data_dir
 
-    return data_dir() / "workshop-e2e"
+    return data_dir() / "workshop-e2e" / kind
 
 
 def _dev_pins(
@@ -365,8 +395,11 @@ def _publish_dev_wheels(kind: str) -> dict[str, str]:
     publishes fresh dev wheels first: a lock pinned to an older dev
     version would test yesterday's code with today's templates. The
     dev act is idempotent at a given commit, and a re-publish of the
-    same version walks past. Returns the published versions by
-    distribution name, for the loop's lock to pin exactly.
+    same version walks past. A dirty tree is the exception: its dev
+    version is the same for every edit, so the wheels it published
+    before are dropped first, and the pass installs the tree as it is
+    now. Returns the published versions by distribution name, for the
+    loop's lock to pin exactly.
     """
     from livery.footman import run
     from livery.workshop._dev_release import unchanged_since_release
@@ -404,6 +437,17 @@ def _publish_dev_wheels(kind: str) -> dict[str, str]:
         print(
             f"  registry: {len(purged)} stale rehearsal release(s) of the pinned"
             " member(s) dropped"
+        )
+    if changed and not git.is_clean():
+        purged = _purge(
+            kind,
+            os.environ.get(_lane(kind).url_var, ""),
+            token,
+            names={packages[member].name for member in changed},
+        )
+        print(
+            f"  registry: {len(purged)} dev wheel(s) of the dirty tree dropped,"
+            " so this pass installs the tree as it is now"
         )
     if changed:
         run(
@@ -544,7 +588,7 @@ def _birth(kind: str, url: str) -> Path:
 
     from livery.workshop._new_project import new_project
 
-    home = _loop_home()
+    home = _loop_home(kind)
     home.mkdir(parents=True, exist_ok=True)
     with contextlib.chdir(home):
         new_project(
@@ -2081,11 +2125,10 @@ if _WORKSHOP_TESTS.is_dir():
         url = os.environ.get(_lane(forge).url_var, "")
         _require_host_alias(forge)
         lane, lane_token = _dev_forge(forge)
-        root = _loop_home() / E2E_REPO
+        root = _loop_home(forge) / E2E_REPO
         if fresh:
             for line in start_over(lane, lane_token, root, url=url, kind=forge):
                 print(line)
-        pins = _publish_dev_wheels(forge)
         if (root / ".git").is_dir():
             # A resumed birth pushes before it returns, so an
             # existing workspace authenticates first; birth resets
@@ -2107,6 +2150,10 @@ if _WORKSHOP_TESTS.is_dir():
         root = _birth(forge, url)
         _authenticate_remote(root, lane_token, forge)
         provision(forge)
+        # After the project exists: GitLab's registry belongs to the
+        # project, and a fresh start's delete is asynchronous, so a
+        # publish before the birth lands in the project being deleted.
+        pins = _publish_dev_wheels(forge)
         sha = _eat_dev_wheels(root, pins, forge)
         print(f"  watching {sha[:12]} on the runner")
         from livery.workshop._new_project import _SETUP_BRANCH

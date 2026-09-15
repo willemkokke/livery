@@ -63,14 +63,21 @@ def test_gitlab_provisioning_mints_the_push_token_and_sets_it_masked(
             return 200, [{"id": 4, "name": "livery-loop-push", "active": True}]
         if method == "DELETE":
             return 204, None
+        if method == "PUT":
+            return 200, {"visibility": "public"}
         return 201, {"id": 5, "token": "glpat-minted"}
 
     mint = _e2e._mint_push_token
     monkeypatch.setattr(
         _e2e, "_mint_push_token", lambda url, token: mint(url, token, api)
     )
+    public = _e2e._make_project_public
+    monkeypatch.setattr(
+        _e2e, "_make_project_public", lambda url, token: public(url, token, api)
+    )
     _e2e.provision("gitlab")
     out = capsys.readouterr().out
+    assert "project: public" in out
     assert (
         "secrets set: UV_PUBLISH_TOKEN, FORGE_TOKEN, FORGE_ADMIN_TOKEN,"
         " GITLAB_PUSH_TOKEN" in out
@@ -82,10 +89,12 @@ def test_gitlab_provisioning_mints_the_push_token_and_sets_it_masked(
     # minted with the push scope, since a value is readable at minting alone.
     methods = [(method, url.rsplit("/", 1)[-1]) for method, url, _ in calls]
     assert methods == [
+        ("PUT", "livery%2Fci-e2e-loop"),
         ("GET", "access_tokens"),
         ("DELETE", "4"),
         ("POST", "access_tokens"),
     ]
+    assert calls[0][2] == {"visibility": "public"}
     assert calls[-1][2] == {
         "name": "livery-loop-push",
         "scopes": ["api", "write_repository"],
@@ -93,6 +102,19 @@ def test_gitlab_provisioning_mints_the_push_token_and_sets_it_masked(
         "expires_at": calls[-1][2]["expires_at"],  # type: ignore[index]
     }
     assert "livery%2Fci-e2e-loop" in calls[0][1]
+
+
+def test_a_refused_visibility_change_names_the_status() -> None:
+    # The refusal first: a project that stays private serves its index
+    # to nobody without a credential, so the failure names the status.
+    def api(
+        method: str, url: str, token: str, body: object = None
+    ) -> tuple[int, object]:
+        return 403, {"message": "403 Forbidden"}
+
+    with pytest.raises(_FAILURES) as caught:
+        _e2e._make_project_public("http://gitlab.example", "t", api)
+    assert "public answered HTTP 403" in str(caught.value)
 
 
 def test_a_refused_mint_names_the_status(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -184,6 +206,20 @@ def test_a_hostless_alias_teaches_the_one_liner(
     monkeypatch.setattr(urllib.request, "urlopen", refuse)
     with pytest.raises(_FAILURES, match="/etc/hosts"):
         _e2e._require_host_alias()
+    with pytest.raises(_FAILURES, match=r"echo \"127.0.0.1 gitlab\""):
+        _e2e._require_host_alias("gitlab")
+    # An HTTP refusal is an answer: the host resolved the alias, and
+    # GitLab's version endpoint answers an anonymous read with 401.
+    import urllib.error
+    from email.message import Message
+
+    def answer_401(*args: object, **kwargs: object) -> object:
+        raise urllib.error.HTTPError(
+            "http://gitlab:8929", 401, "Unauthorized", Message(), None
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", answer_401)
+    _e2e._require_host_alias("gitlab")
 
 
 # --- the dev-wheel pins: refusals first, then the read -----------------------
@@ -238,8 +274,12 @@ def test_dev_pins_read_only_the_members_asked_for(tmp_path: Path) -> None:
     assert set(pins) == {"livery-workshop", "livery-toolroom", "livery-footman"}
 
 
+@pytest.mark.parametrize("clean", [False, True], ids=["dirty", "clean"])
 def test_the_dev_act_pins_a_released_member_and_drops_its_stale_wheels(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    clean: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     from types import SimpleNamespace
 
@@ -259,7 +299,7 @@ def test_the_dev_act_pins_a_released_member_and_drops_its_stale_wheels(
     monkeypatch.setattr(_e2e, "_dev_forge", lambda kind: (None, "t"))
     monkeypatch.setattr(
         "livery.workshop._git_ops.GitOps",
-        lambda root: SimpleNamespace(head_sha=lambda: HEAD),
+        lambda root: SimpleNamespace(head_sha=lambda: HEAD, is_clean=lambda: clean),
     )
     monkeypatch.setattr(
         "livery.workshop._dev_release.unchanged_since_release",
@@ -286,7 +326,10 @@ def test_the_dev_act_pins_a_released_member_and_drops_its_stale_wheels(
     assert ran == [
         ["fm", "--yes", "workflow.release", "workshop", "toolroom", "footman"]
     ]
-    assert purged == [("livery", {"livery-forge": "0.3.0"})]
+    # A dirty tree's dev version never changes, so its earlier wheels
+    # go before the act, and the rebuilt members are the ones dropped.
+    dirty = [("livery", {"livery-workshop", "livery-toolroom", "livery-footman"})]
+    assert purged == [("livery", {"livery-forge": "0.3.0"}), *([] if clean else dirty)]
     assert pins == {
         "livery-workshop": "dev",
         "livery-toolroom": "dev",
@@ -296,6 +339,7 @@ def test_the_dev_act_pins_a_released_member_and_drops_its_stale_wheels(
     out = capsys.readouterr().out
     assert "forge: nothing unreleased since 0.3.0; the loop pins the release" in out
     assert "1 stale rehearsal release(s)" in out
+    assert ("dev wheel(s) of the dirty tree dropped" in out) is not clean
 
 
 def test_dev_pins_read_this_commits_newest_wheel(tmp_path: Path) -> None:

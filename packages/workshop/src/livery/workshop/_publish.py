@@ -299,11 +299,23 @@ def publish_wheels(package: Package, *, index_url: str = "", token: str = "") ->
     if result.code == 0:
         return True
     output = f"{result.stdout}{result.stderr}"
-    if "already exists" in output or "duplicate" in output.lower():
+    if _is_duplicate(output):
         print(f"  {package.name}: already published; walking past")
         return False
     fail(f"uv publish ({package.name}) exited {result.code}:\n{output}")
     return False  # unreachable; fail raises
+
+
+#: How each index refuses a file it already serves. Gitea and PyPI
+#: say the version already exists, twine-style indexes say duplicate,
+#: GitLab's package registry says the file name is taken.
+_DUPLICATE_PHRASES = ("already exists", "duplicate", "file name has already been taken")
+
+
+def _is_duplicate(output: str) -> bool:
+    """Whether *output*, an upload's refusal, means the file is already served."""
+    lowered = output.lower()
+    return any(phrase in lowered for phrase in _DUPLICATE_PHRASES)
 
 
 def probe_until_served(

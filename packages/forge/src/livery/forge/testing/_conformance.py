@@ -220,6 +220,11 @@ def _repo_lifecycle(driver: ForgeDriver) -> None:
     assert info.owner == owner
     assert info.name == name
     assert info.default_branch != ""
+    # A created repository is its creator's to push over: no protection
+    # on the default branch until the caller configures one. GitLab
+    # protects a new project's default branch on creation; the backend
+    # removes that rule, and this pins it.
+    assert forge.repository(owner, name).protection(info.default_branch) is None
     try:
         forge.create_repo(owner, name)
     except ForgeError:
@@ -436,6 +441,9 @@ def _pr_merge_now(driver: ForgeDriver) -> None:
     sha = driver.push(repo.owner, repo.name, "feature")
     pr = repo.pr.open("feature", _default_branch(driver, repo), "feat: merge", "")
     driver.await_mergeable(repo.owner, repo.name, pr.number)
+    # The published hold of a mergeable pull request is the forge's
+    # go word, or empty on a forge that publishes none.
+    assert repo.pr.merge_hold(pr.number) in ("", "mergeable", "clean", "unstable")
     repo.pr.merge_now(pr.number, title="feat: merge")
     driver.await_merged(repo.owner, repo.name, pr.number)
     merged = repo.pr.get(pr.number)

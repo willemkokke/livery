@@ -37,6 +37,67 @@ def test_an_unmapped_answer_refuses_loudly_never_waits() -> None:
         assert "never" in text and "map" in text
 
 
+def test_a_refusal_on_gitlab_or_github_classifies_the_published_hold() -> None:
+    # The refusal first: without the published hold, a GitLab or
+    # GitHub refusal is unmapped and never waited on. With it, the
+    # hold decides, the forge's words ride along, and the go word
+    # under a refusal is the recompute the refusal raced.
+    from livery.forge import classify_merge_refusal
+
+    common = {"combined": _combined("success"), "item_state": "open", "merged": False}
+    for kind in ("gitlab", "github"):
+        with pytest.raises(ForgeError) as caught:
+            classify_merge_refusal(kind, "Branch cannot be merged", **common)  # type: ignore[arg-type]
+        assert "never" in str(caught.value)
+    computing = classify_merge_refusal(
+        "gitlab",
+        "Branch cannot be merged",
+        hold="mergeable",
+        **common,  # type: ignore[arg-type]
+    )
+    assert computing.state == "computing"
+    assert computing.native == "Branch cannot be merged"
+    checking = classify_merge_refusal(
+        "gitlab",
+        "Branch cannot be merged",
+        hold="checking",
+        **common,  # type: ignore[arg-type]
+    )
+    assert checking.category == "in-progress"
+    red = classify_merge_refusal(
+        "gitlab",
+        "Branch cannot be merged",
+        hold="ci_must_pass",
+        **common,  # type: ignore[arg-type]
+    )
+    assert (red.state, red.category) == ("checks-red", "recoverable")
+    assert red.native == "Branch cannot be merged"
+    raced = classify_merge_refusal(
+        "github",
+        "Base branch was modified",
+        hold="clean",
+        **common,  # type: ignore[arg-type]
+    )
+    assert raced.state == "computing"
+    behind = classify_merge_refusal(
+        "github",
+        "Base branch was modified",
+        hold="behind",
+        **common,  # type: ignore[arg-type]
+    )
+    assert behind.state == "behind"
+    # The identity states win over any hold.
+    done = classify_merge_refusal(
+        "gitlab",
+        "405",
+        hold="not_open",
+        combined=_combined("success"),
+        item_state="closed",
+        merged=True,
+    )
+    assert done.category == "success"
+
+
 def test_every_documented_gitlab_value_maps() -> None:
     # The whole published enumeration, the unstageable values
     # included: mapping complete is the contract, staging them is

@@ -1,8 +1,10 @@
 # GitLab, a first-class citizen again: the loop's GitLab lane
 
 Status: ruled 2026-09-15. Phase 1 landed 2026-09-15 (livery#598); phase 2
-in progress (livery#600), its live pass waiting on the `gitlab` hosts
-entry; phases 3 to 5 not started.
+landed 2026-09-15 (livery#600): `fm ci.e2e --forge=gitlab` merges the
+setup pull request on the real runner and proves the verified skip, then
+stops at the native member, phase 3's first act; phases 3 to 5 not
+started.
 Closes the two open lines of [CI declared, contributed, and dispatched on
 command][ci-plan]: the live GitLab pipeline through `ci.run`, and the
 schedules reconcile creating a real pipeline schedule.
@@ -158,18 +160,23 @@ Deliverables:
   `point_runs` and `Run.workflow`, the same on both forges.
 - `_merge_setup` merges through the protocol's `merge_now`, which on
   GitLab is the merge request.
-- livery#590: `fm forge.dev.down --profile=<forge>` stops one forge and
-  its runner, and `fm forge.dev.restart --profile=<forge>` restarts one
-  forge's runner, discarding its jobs.
-- livery#591 and livery#495: the loop's push cancels the branch's runs
-  on the commits it supersedes, and a re-run of a red run waits until
-  every job of it has completed, naming the job it waits on.
+- The loop's workspace lives per lane, `workshop-e2e/<forge>/`, so a
+  pass never adopts the other lane's checkout and re-points it.
+- The publish step walks past GitLab's duplicate refusal ("File name
+  has already been taken") as it walks past Gitea's "already exists".
+- `create_repo` on GitLab waits for, then removes, the protection GitLab puts on a new
+  project's default branch, so birth's force push over the init commit
+  lands as it does on Gitea and GitHub; the conformance suite pins an
+  open default branch on every backend.
 
 Acceptance:
 
 - `uv run fm ci.e2e --forge=gitlab` prints `setup PR #1: merged; the
   gate is proven` and `verified skip: proven on main's run <n>`, then
-  fails by name at the first act phase 3 delivers.
+  fails by name at the first act phase 3 delivers. Met 2026-09-15: a
+  fresh pass printed both (main's run 1271), and stopped at the member
+  pull request, whose gate failed to configure `loop-native` on the
+  stock `gitlab-runner` image.
 - `uv run fm ci.e2e --forge=gitea` is unchanged: exit 0.
 
 ### Phase 3: the members and the three legs on GitLab
@@ -258,6 +265,30 @@ Acceptance:
   id does. The provisioning ran live twice: the project created then
   reused, four masked variables, the push token minted and the previous
   one revoked by name.
+- 2026-09-15, the agent, at phase 2's live pass: three facts measured on
+  the local GitLab 18.9 that the plan assumed otherwise. A new project's
+  default branch is protected by a background job 0.2 to 0.9 s after
+  the create returns on an idle instance, and later under load, so
+  `create_repo` reads the namespace's default and waits for the rule
+  before removing it, and the conformance suite pins an open default
+  branch on every backend. A private project's PyPI index answers 401
+  anonymously whatever the group's visibility, so the provisioning
+  makes the loop's project public. The registry refuses a re-upload of
+  a file name it holds with 400 "File name has already been taken",
+  which the publish step walks past as it walks past Gitea's 409. And
+  the registry's simple index links every file at the instance's
+  `external_url`, so the runner's `uv sync` was sent to
+  `localhost:8929`, itself; the dev compose now sets `external_url`
+  to `http://gitlab:8929`, as Gitea's `ROOT_URL` is `http://gitea:3000/`.
+  Three more from the same pass: the merge of a green merge request
+  answers 422 "Branch cannot be merged" for a beat while
+  `detailed_merge_status` is `checking`, so the protocol grew
+  `merge_hold` and the classifier reads it; a GitLab job is named by
+  its key alone, so the leg's row is keyed `check`, not GitHub's
+  `check (ubuntu-latest, 3.14)`, or the collect step's join leaves the
+  stamp without a scope; and a project delete is asynchronous, the old
+  path answering an upload for a moment, so the dev wheels publish
+  after the birth on every lane.
 - 2026-09-15, the agent: the loop's run selection by workflow file name
   is kept, and GitLab meets it by naming every pipeline, rather than the
   loop growing a per-forge selection. The same choice serves
@@ -265,12 +296,10 @@ Acceptance:
 
 ## Open
 
-1. **The upload credential's form on GitLab's PyPI registry.** `uv
-   publish` sends `UV_PUBLISH_TOKEN` as the password with a fixed
-   username; GitLab's registry documents a personal or project access
-   token with the account's username, and the `__token__` form is not
-   documented. Settled on the local instance in phase 4. Owner: the
-   agent.
+1. **The upload credential's form on GitLab's PyPI registry.** Settled
+   2026-09-15 by the dev act in phase 2: `uv publish` with
+   `UV_PUBLISH_TOKEN` alone, uv's fixed `__token__` username, uploads to
+   the project registry on the local GitLab 18.9.
 2. **Which shape the GitLab runner takes.** The Gitea runner's jobs run
    in host mode inside its container, whose image carries node, git,
    bash, curl, the docker CLI, a C++ toolchain and cmake on Alpine, with

@@ -193,8 +193,10 @@ def _follow_merge_state(
 ) -> None:
     """Drive *act* to a decided state; merge means as soon as possible.
 
-    A 405 classifies through [livery.forge.classify_merge_refusal][]
-    with the pull request and its combined status fetched fresh.
+    A 405, or the 422 GitLab answers while its mergeability recompute
+    runs, classifies through [livery.forge.classify_merge_refusal][]
+    with the pull request, its combined status and the forge's
+    published hold fetched fresh.
     In-progress states follow through to completion, the task's own
     timeout the only backstop; recoverable and terminal states fail
     with the user-facing message and the forge's words verbatim;
@@ -212,7 +214,7 @@ def _follow_merge_state(
             act(*args, **kwargs)
             return
         except ForgeError as exc:
-            if exc.status != 405:
+            if exc.status not in (405, 422):
                 raise
             pr = repo.pr.get(number)
             if pr is None:
@@ -223,6 +225,7 @@ def _follow_merge_state(
                 combined=repo.checks.status(pr.head_sha),
                 item_state=pr.state,
                 merged=pr.merged,
+                hold=repo.pr.merge_hold(number),
             )
             if hold.category == "success":
                 print(f"  PR #{number}: {hold.message}; walking past")

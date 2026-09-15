@@ -692,10 +692,13 @@ def _gitlab_job(
         lines.append("    - git fetch --tags\n")
     if job.pushes or job.writes:
         # The job token cannot push: a store write, a receipt tag and
-        # the template artifact all ride the push token.
+        # the template artifact all ride the push token. The address
+        # is the server's own protocol, host and port: an instance
+        # off 443 (the local one) is unreachable at a bare https host.
         lines.append(
-            '    - git remote set-url origin "https://oauth2:${GITLAB_PUSH_TOKEN}'
-            '@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"\n'
+            '    - git remote set-url origin "${CI_SERVER_PROTOCOL}://oauth2:'
+            "${GITLAB_PUSH_TOKEN}@${CI_SERVER_HOST}:${CI_SERVER_PORT}/"
+            '${CI_PROJECT_PATH}.git"\n'
         )
     if job.docs_tools and tools:
         lines.append(f"    - apt-get update -q && apt-get install -y -q {tools}\n")

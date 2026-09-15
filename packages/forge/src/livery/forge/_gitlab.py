@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from collections.abc import Mapping
 from typing import Any
 from urllib.parse import quote
@@ -332,7 +333,11 @@ class GitlabForge:
 
         ``initialize_with_readme`` gives it the default branch the
         protocol requires. A group or subgroup owner resolves to its
-        namespace id first.
+        namespace id first. GitLab protects a new project's default
+        branch on creation (the instance or group default, maintainers
+        push and no force push); that rule is removed, so the creator
+        can push its history over the init commit, as on every other
+        forge, and protection starts when the caller configures it.
         """
         body: dict[str, Any] = {
             "name": name,
@@ -341,10 +346,59 @@ class GitlabForge:
             "description": description,
             "initialize_with_readme": True,
         }
-        if owner != self.whoami():
+        me = self.whoami()
+        if owner != me:
             body["namespace_id"] = self._namespace_id(owner)
-        self._client.request("/projects", method="POST", data=body)
+        created = self._client.request("/projects", method="POST", data=body)
+        branch = str((created or {}).get("default_branch") or "main")
+        if self._default_branch_protected(owner, me):
+            self._unprotect_new_default(owner, name, branch)
         return self.repository(owner, name)
+
+    def _default_branch_protected(self, owner: str, me: str) -> bool:
+        """Whether a new project under *owner* gets a default branch rule.
+
+        A group carries its own default (``default_branch_protection``,
+        0 for none); a personal namespace follows the instance setting,
+        which only an administrator can read. What cannot be read
+        reads as protected, so the create waits for a rule that may
+        never come rather than push into one it did not remove.
+        """
+        if owner != me:
+            group = self._client.request(
+                f"/groups/{quote(owner, safe='')}", none_on=(404,)
+            )
+            if group is None:
+                return True
+            return int(group.get("default_branch_protection") or 0) != 0
+        settings = self._client.request("/application/settings", none_on=(403,))
+        if settings is None:
+            return True
+        return int(settings.get("default_branch_protection") or 0) != 0
+
+    def _unprotect_new_default(self, owner: str, name: str, branch: str) -> None:
+        """Remove the protection GitLab puts on a new project's default branch.
+
+        The rule is written by a background job after the create
+        returns: under a second on an idle local instance, several
+        seconds under load. The removal waits for it to appear, up to
+        a budget; a create that gave up early would hand the caller a
+        branch that closes a moment later.
+        """
+        rules_path = f"/projects/{_path(owner, name)}/protected_branches"
+        deadline = time.monotonic() + _NEW_PROTECTION_WAIT
+        while True:
+            rules = self._client.request(rules_path) or []
+            if any(rule.get("name") == branch for rule in rules):
+                self._client.request(
+                    f"{rules_path}/{quote(branch, safe='')}",
+                    method="DELETE",
+                    none_on=(404,),
+                )
+                return
+            if time.monotonic() >= deadline:
+                return
+            time.sleep(_NEW_PROTECTION_POLL)
 
     def _namespace_id(self, owner: str) -> int:
         """The namespace id for a group or subgroup path."""
@@ -406,6 +460,12 @@ class GitlabForge:
             if already_deleting or already_marked:
                 return
             raise
+
+
+#: How long a new project's default branch protection may take to appear
+#: before the create stops waiting for it, and how often it looks.
+_NEW_PROTECTION_WAIT = 60.0
+_NEW_PROTECTION_POLL = 0.5
 
 
 def _path(owner: str, name: str) -> str:
@@ -846,7 +906,10 @@ class _GitlabPullRequests:
 
         GitLab refuses the second merge with a 405, so the refusal is
         absorbed only after verifying the merge request really merged;
-        every other 405 passes through verbatim. The head sha rides
+        every other refusal passes through verbatim, the 422 "Branch
+        cannot be merged" it answers while the mergeability recompute
+        runs after a pipeline included; a caller classifies that one
+        through livery.forge.PullRequests.merge_hold. The head sha rides
         along: newer GitLab refuses a merge without one ("SHA must be
         provided when merging"), and pinning it also means the merge
         takes exactly the head this call read, never a racing push.
@@ -871,6 +934,15 @@ class _GitlabPullRequests:
             if exc.status == 405 and already is not None and already.merged:
                 return
             raise
+
+    def merge_hold(self, number: int) -> str:
+        """The merge request's ``detailed_merge_status``, verbatim."""
+        data = self._client.request(
+            f"{self._base}/merge_requests/{number}", none_on=(404,)
+        )
+        if data is None:
+            raise ForgeError(f"no merge request {number} at {self._base}", status=404)
+        return str(data.get("detailed_merge_status") or "")
 
     def arm(self, number: int, *, title: str, message: str = "") -> None:
         """Merge when the pipeline succeeds, on the merge request itself.

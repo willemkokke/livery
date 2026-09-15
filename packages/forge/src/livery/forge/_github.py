@@ -653,13 +653,15 @@ class _GithubRepository:
 
         Reading protection needs an administrating token; GitHub
         answers 404 both for "no protection" and for a repository the
-        token cannot administer, so both read None here. ``strict`` on
-        the required checks is the up-to-date-before-merge rule, the
-        protocol's ``block_on_outdated``.
+        token cannot administer, and 403 on a private repository of a
+        plan without branch protection, where none can exist. All three
+        read None here: what cannot be read reads as inert. ``strict``
+        on the required checks is the up-to-date-before-merge rule,
+        the protocol's ``block_on_outdated``.
         """
         data = self._client.request(
             f"{self._base}/branches/{quote(branch, safe='')}/protection",
-            none_on=(404,),
+            none_on=(403, 404),
         )
         if data is None:
             return None
@@ -880,6 +882,13 @@ class _GithubPullRequests:
         if data is None:
             raise ForgeError(f"no pull request {number} at {self._base}", status=404)
         return data.get("state") == "open" and data.get("auto_merge") is not None
+
+    def merge_hold(self, number: int) -> str:
+        """The pull request's ``mergeable_state``, verbatim."""
+        data = self._client.request(f"{self._base}/pulls/{number}", none_on=(404,))
+        if data is None:
+            raise ForgeError(f"no pull request {number} at {self._base}", status=404)
+        return str(data.get("mergeable_state") or "")
 
     def reviews(self, number: int) -> tuple[Review, ...]:
         """The submitted reviews on pull request *number*."""

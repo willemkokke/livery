@@ -86,8 +86,15 @@ services:
     profiles: [gitlab]
     shm_size: 512m
     environment:
+      # The service name, not localhost, for the same reason as
+      # Gitea's ROOT_URL: every address GitLab writes into a payload
+      # comes from this value, the package registry's file links
+      # included, and a job on the runner downloads those links from
+      # inside its container. Host-side clients reach the published
+      # port on localhost either way; the loop reaches it by the
+      # `gitlab` hosts entry.
       GITLAB_OMNIBUS_CONFIG: |
-        external_url 'http://localhost:8929'
+        external_url 'http://gitlab:8929'
         gitlab_rails['initial_root_password'] = 'livery-dev-password'
         prometheus_monitoring['enable'] = false
     ports:
