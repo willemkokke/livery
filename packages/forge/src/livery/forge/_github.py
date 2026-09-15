@@ -34,7 +34,15 @@ from urllib.parse import quote
 
 from livery.forge._errors import ForgeError, Unsupported
 from livery.forge._http import JsonClient, Opener
-from livery.forge._protocol import Checks, Issues, PullRequests, Releases, Repository
+from livery.forge._protocol import (
+    Checks,
+    Issues,
+    PullRequests,
+    Releases,
+    Repository,
+    Schedules,
+)
+from livery.forge._schedules import DeclinedSchedules
 from livery.forge._types import (
     Capability,
     CheckState,
@@ -397,6 +405,7 @@ class _GithubRepository:
         self.checks: Checks = _GithubChecks(forge, client, self._base)
         self.issue: Issues = _GithubIssues(forge, client, self._base)
         self.release: Releases = _GithubReleases(client, self._base)
+        self.schedule: Schedules = DeclinedSchedules("github")
 
     @property
     def owner(self) -> str:

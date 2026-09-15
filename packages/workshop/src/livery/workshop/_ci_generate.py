@@ -1,4 +1,4 @@
-"""The CI workflow emitters: forge-dependent mechanics, generated.
+"""The CI workflow renderers: the declared points, in each forge's words.
 
 Workflow files are mechanical forge knowledge, emitted here from the
 workspace contract (``workshop.toml``) and the derived Python matrix,
@@ -26,6 +26,7 @@ from typing import Any
 
 import livery.footman as footman
 from livery.workshop._contract import load_contract
+from livery.workshop._points import DECLARED, EVENT_NAMES, POINT_BY_NAME, Job, Point
 from livery.workshop._pythons import gate_pythons, python_matrix
 
 #: Pinned action shas, one place; version comments ride each use.
@@ -227,186 +228,6 @@ def _csv(values: list[Any], *, quoted: bool = False) -> str:
     return ", ".join(f'"{v}"' if quoted else str(v) for v in values)
 
 
-def _github_gate(answers: dict[str, Any], prog: str) -> str:
-    context = answers.get("required_context", "gate")
-    runners = _csv(list(answers.get("runners", ["ubuntu-latest"])))
-    # The check legs run the gate's Pythons; the nightly runs the matrix.
-    pythons = _csv(list(answers.get("gate_pythons", ["3.11"])), quoted=True)
-    setup_uv = _setup_uv_step(answers)
-    setup_uv_leg = _setup_uv_step(
-        answers, cache_suffix="${{ matrix.os }}-${{ matrix.python }}"
-    )
-    setup_uv_docs = _setup_uv_step(answers, cache_suffix="docs")
-    requirements = _docs_requirements_step(answers)
-    # The pages seam is the forge's own act: the grant, the
-    # environment, and the two pages actions after the verb; another
-    # seam runs the verb alone, which publishes or says why not.
-    pages = answers.get("publish_seam", "pages") == "pages"
-    deploy_grant = (
-        """    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    concurrency:
-      group: pages
-      cancel-in-progress: false
-"""
-        if pages
-        else ""
-    )
-    pages_steps = (
-        """      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
-        with:
-          path: site
-      - id: deployment
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
-"""
-        if pages
-        else ""
-    )
-    enter = _enter_step()
-    enter_leg = _enter_step(matrix_python=True)
-    return f"""name: ci
-
-# A pull request, a push to main, and a dispatch by hand. A
-# dispatched run pays the full gate: the check verb reads the event
-# and narrows on a pull request alone, so every event spells the
-# same call.
-on:
-  pull_request:
-  push:
-    branches: [main]
-  workflow_dispatch:
-
-jobs:
-  check:
-    # The leg pushes its timing row to the state store's namespace;
-    # the ambient token needs the grant declared, since organisation
-    # defaults are read-only.
-    permissions:
-      contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [{runners}]
-        python: [{pythons}]
-    runs-on: ${{{{ matrix.os }}}}
-    steps:
-      - uses: {CHECKOUT}
-        with:
-          # The scoped gate diffs against the merge base with the
-          # pull request's base branch, which a shallow clone lacks.
-          fetch-depth: 0
-{setup_uv_leg}{enter_leg}      - name: Check
-        # The tests run metered, and only they: the test runner arms
-        # coverage's process-start variable in pytest's environment,
-        # so the tests and every process they start record, and the
-        # gate's own driver does not. The leg's measured suites ride
-        # its per-run ref on the state store, and the gate job below
-        # unions them with main's record and judges once.
-        run: >-
-          {prog} ci.run --point=gate --job=check
-          --os="${{{{ matrix.os }}}}" --python="${{{{ matrix.python }}}}"
-      # The run as a Chrome trace, one artifact per leg: every task,
-      # step, lane wait, and pytest test as slices. Observational, so
-      # it runs on a red gate too (the run worth reading) and its own
-      # exit never decides the leg.
-      - name: Upload the run profile
-        if: always()
-        continue-on-error: true
-        uses: {UPLOAD}
-        with:
-          name: profile-${{{{ matrix.os }}}}-${{{{ matrix.python }}}}
-          path: fm-profile.json
-          if-no-files-found: ignore
-
-  # The strict site build: broken links and orphan pages go red
-  # here, required through the gate context below, never inside the
-  # local check.
-  docs:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: {CHECKOUT}
-{setup_uv_docs}{requirements}{enter}      - name: Docs
-        run: {prog} ci.run --point=gate --job=docs
-
-  # The one required context. Branch protection points here, so the
-  # matrix can grow or shrink without touching repository settings.
-  # Its entries union the legs' measured suites with main's coverage
-  # record and judge the floors, collect the run's timing rows, ask
-  # the forge for the jobs it needs, and stamp the tree a green run
-  # proved; always(), so a red run is judged too. The state store's
-  # pushes need the grant, since organisation defaults are read-only.
-  {context}:
-    if: always()
-    needs: [check, docs]
-    permissions:
-      contents: write
-    runs-on: ubuntu-latest
-    steps:
-      - uses: {CHECKOUT}
-        with:
-          # The stamp composes a narrowed run with its base tree's
-          # record through the merge base, which a shallow clone lacks.
-          fetch-depth: 0
-{setup_uv}{enter}      - name: Verdict
-        env:
-          FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
-        run: {prog} ci.run --point=gate --job=gate
-
-  # The merge point's own jobs, on the push alone: the site's deploy
-  # through the contract's seam, the repository settings reconciled
-  # when the merge changed a contract or the owners file, and the
-  # release wave dispatched when a merged release is unpublished.
-  deploy:
-    if: github.event_name == 'push'
-    needs: [{context}]
-    runs-on: ubuntu-latest
-{deploy_grant}    steps:
-      - uses: {CHECKOUT}
-        with:
-          # The release view reads the receipt tags; a shallow
-          # tagless clone renders its no-tags fallback page instead.
-          fetch-tags: true
-{setup_uv_docs}{requirements}{enter}      - name: Deploy
-        env:
-          FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
-        run: {prog} ci.run --point=merge --job=deploy
-{pages_steps}  govern:
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: {CHECKOUT}
-        with:
-          # The commit's own file list decides whether anything is
-          # governed; a depth of one would read a squash as a root.
-          fetch-depth: 2
-{setup_uv}{enter}      - name: Govern
-        env:
-          FORGE_ADMIN_TOKEN: ${{{{ secrets.FORGE_ADMIN_TOKEN }}}}
-        run: {prog} ci.run --point=merge --job=govern
-  # The release wave is dispatched from here, after main's own
-  # verdict: the verb reads the manifest at HEAD and the receipts on
-  # the remote, and is green unless a merged release is unpublished.
-  dispatch:
-    if: github.event_name == 'push'
-    needs: [{context}]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: {CHECKOUT}
-        with:
-          # The commit that stamped the manifest can be far back.
-          fetch-depth: 0
-{setup_uv}{enter}      - name: Dispatch
-        env:
-          FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
-        run: {prog} ci.run --point=merge --job=dispatch
-"""
-
-
 def _wheel_runners(answers: dict[str, Any]) -> list[str]:
     """The runner labels that build platform wheels; empty for a pure workspace.
 
@@ -416,47 +237,6 @@ def _wheel_runners(answers: dict[str, Any]) -> list[str]:
     workflow says so by shape.
     """
     return [str(label) for label in answers.get("wheel_runners", []) or []]
-
-
-def _github_nightly(answers: dict[str, Any], prog: str) -> str:
-    """The nightly point's shell for GitHub: the clock, a dispatch, one verb per python."""
-    pythons = _csv(list(answers.get("python_versions", ["3.11"])), quoted=True)
-    first = next(iter(answers.get("runners", ["ubuntu-latest"])))
-    setup_uv_leg = _setup_uv_step(answers, cache_suffix="nightly-${{ matrix.python }}")
-    enter_leg = _enter_step(matrix_python=True)
-    return f"""name: nightly
-
-# The nightly point: the clock and a manual trigger, one
-# `{prog} ci.run` per python. What the point runs is data, the
-# workshop's builtin schedule plus [[ci.schedule]] in workshop.toml,
-# and the tests that declare the nightly point are selected in.
-on:
-  schedule:
-    - cron: "17 4 * * *"
-  workflow_dispatch:
-
-jobs:
-  nightly:
-    strategy:
-      fail-fast: false
-      matrix:
-        python: [{pythons}]
-    runs-on: {first}
-    steps:
-      - uses: {CHECKOUT}
-        with:
-          # A replay checks the tree out at a release tag.
-          fetch-depth: 0
-{setup_uv_leg}{enter_leg}      - name: Nightly
-        # A pull request a scheduled task opens with the job token
-        # starts no workflow, so a FORGE_TOKEN secret carries the
-        # nightly where the repository has one.
-        env:
-          FORGE_TOKEN: ${{{{ secrets.FORGE_TOKEN || secrets.GITHUB_TOKEN }}}}
-        run: >-
-          {prog} ci.run --point=nightly --job=nightly
-          --python="${{{{ matrix.python }}}}"
-"""
 
 
 def _github_release(answers: dict[str, Any], prog: str) -> str:
@@ -594,198 +374,6 @@ jobs:
     )
 
 
-def _gitea_gate(answers: dict[str, Any], prog: str) -> str:
-    """The gate and merge points' shell: a trigger, a checkout, an enter, one verb.
-
-    Every job runs ``ci.run`` for its point and job; what the job does
-    is the schedule (livery.workshop._points), and a push to main
-    promotes the gate to the merge point inside the verb. The only
-    conditions are event filters and the verdict job's ``always()``.
-    """
-    context = answers.get("required_context", "gate")
-    runners = _csv(list(answers.get("runners", ["ubuntu-latest"])))
-    # The check legs run the gate's Pythons; the nightly runs the matrix.
-    pythons = _csv(list(answers.get("gate_pythons", ["3.11"])), quoted=True)
-    first = next(iter(answers.get("runners", ["ubuntu-latest"])))
-    rung = _rung_step(answers)
-    requirements = _docs_requirements_step(answers)
-    enter = _enter_step()
-    enter_leg = _enter_step(matrix_python=True)
-    return f"""name: ci
-
-# The gate and merge points: a trigger, a checkout, an enter, and one
-# `{prog} ci.run` per job. What a job does is data, the workshop's
-# builtin schedule plus [[ci.schedule]] in workshop.toml, and a push
-# to main is the merge point, promoted inside the verb. The only
-# conditions here are event filters and the verdict job's always().
-# A dispatched run pays the full gate: the check verb reads the event
-# and narrows on a pull request alone.
-on:
-  pull_request:
-  push:
-    branches: [main]
-  workflow_dispatch:
-
-jobs:
-  check:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [{runners}]
-        python: [{pythons}]
-    runs-on: ${{{{ matrix.os }}}}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          # The scoped gate diffs against the merge base with the
-          # pull request's base branch, which a shallow clone lacks.
-          fetch-depth: 0
-      # act_runner host mode: no setup actions. The entry script
-      # installs the lock's pinned uv itself where the host has none.
-{rung}{enter_leg}      - name: Check
-        # The tests run metered, and only they: the test runner arms
-        # coverage's process-start variable in pytest's environment,
-        # so the tests and every process they start record, and the
-        # gate's own driver does not. The leg's measured suites ride
-        # its per-run ref on the state store, and the gate job unions
-        # them with main's record and judges once.
-        run: >-
-          {prog} ci.run --point=gate --job=check
-          --os="${{{{ matrix.os }}}}" --python="${{{{ matrix.python }}}}"
-      # The run as a Chrome trace, one artifact per leg: every task,
-      # step, lane wait, and pytest test as slices. Observational, so
-      # it runs on a red gate too (the run worth reading) and its own
-      # exit never decides the leg: an act_runner that delivers dashed
-      # inputs empty makes the action exit 1 after a successful
-      # upload, one that carries them lets it exit 0, and the gate's
-      # verdict is the leg's either way.
-      - name: Upload the run profile
-        if: always()
-        continue-on-error: true
-        uses: {GITEA_UPLOAD}
-        with:
-          name: profile-${{{{ matrix.os }}}}-${{{{ matrix.python }}}}
-          path: fm-profile.json
-          if-no-files-found: ignore
-
-  # The strict site build, required through the gate context below.
-  docs:
-    runs-on: {first}
-    steps:
-      - uses: actions/checkout@v4
-{requirements}{enter}      - name: Docs
-        run: {prog} ci.run --point=gate --job=docs
-
-  # The one required context. Branch protection points here, so the
-  # matrix can grow or shrink without touching repository settings.
-  # It unions the legs' measured suites with main's coverage record,
-  # collects the run's timing rows, then judges the jobs it needs by
-  # asking the forge; always(), so a red run is judged too.
-  {context}:
-    if: always()
-    needs: [check, docs]
-    runs-on: {first}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          # The stamp composes a narrowed run with its base tree's
-          # record through the merge base, which a shallow clone lacks.
-          fetch-depth: 0
-{rung}{enter}      - name: Verdict
-        env:
-          FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
-        run: {prog} ci.run --point=gate --job=gate
-
-  # The merge point's own jobs, on the push alone: the site's deploy
-  # through the contract's seam, and the repository settings
-  # reconciled when the merge changed a contract or the owners file.
-  deploy:
-    if: github.event_name == 'push'
-    needs: [{context}]
-    runs-on: {first}
-    steps:
-      - uses: actions/checkout@v4
-{requirements}{enter}      - name: Deploy
-        env:
-          FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
-        run: {prog} ci.run --point=merge --job=deploy
-  govern:
-    if: github.event_name == 'push'
-    runs-on: {first}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          # The commit's own file list decides whether anything is
-          # governed; a depth of one would read a squash as a root.
-          fetch-depth: 2
-{enter}      - name: Govern
-        env:
-          FORGE_ADMIN_TOKEN: ${{{{ secrets.FORGE_ADMIN_TOKEN }}}}
-        run: {prog} ci.run --point=merge --job=govern
-  # The release wave is dispatched from here, after main's own
-  # verdict: the verb reads the manifest at HEAD and the receipts on
-  # the remote, and is green unless a merged release is unpublished.
-  dispatch:
-    if: github.event_name == 'push'
-    needs: [{context}]
-    runs-on: {first}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          # The commit that stamped the manifest can be far back.
-          fetch-depth: 0
-{enter}      - name: Dispatch
-        env:
-          FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
-        run: {prog} ci.run --point=merge --job=dispatch
-"""
-
-
-def _gitea_nightly(answers: dict[str, Any], prog: str) -> str:
-    """The nightly point's shell: the clock, a dispatch entry, one verb per python.
-
-    What runs is the schedule's business: the shell is green and
-    empty until a ``[[ci.schedule]]`` entry attaches a task to the
-    nightly point, and a person dispatches it by hand to prove one.
-    """
-    pythons = _csv(list(answers.get("python_versions", ["3.11"])), quoted=True)
-    first = next(iter(answers.get("runners", ["ubuntu-latest"])))
-    rung = _rung_step(answers)
-    enter_leg = _enter_step(matrix_python=True)
-    return f"""name: nightly
-
-# The nightly point: the clock and a dispatch entry, one `{prog} ci.run`
-# per python. What runs is [[ci.schedule]] in workshop.toml; the shell
-# is green and empty until an entry attaches a task.
-on:
-  schedule:
-    - cron: "17 4 * * *"
-  workflow_dispatch:
-
-jobs:
-  nightly:
-    strategy:
-      fail-fast: false
-      matrix:
-        python: [{pythons}]
-    runs-on: {first}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          # A replay checks the tree out at a release tag.
-          fetch-depth: 0
-{rung}{enter_leg}      - name: Nightly
-        # A pull request a scheduled task opens with the job token
-        # starts no workflow, so a FORGE_TOKEN secret carries the
-        # nightly where the repository has one.
-        env:
-          FORGE_TOKEN: ${{{{ secrets.FORGE_TOKEN || secrets.GITHUB_TOKEN }}}}
-        run: >-
-          {prog} ci.run --point=nightly --job=nightly
-          --python="${{{{ matrix.python }}}}"
-"""
-
-
 def _gitea_release(answers: dict[str, Any], prog: str) -> str:
     first = next(iter(answers.get("runners", ["ubuntu-latest"])))
     rung = _rung_step(answers)
@@ -912,41 +500,368 @@ def _gitlab_image(answers: dict[str, Any], python: str) -> str:
     return f"ghcr.io/astral-sh/uv:{prefix}python{python}-bookworm"
 
 
-def _gitlab_pipeline(answers: dict[str, Any], prog: str) -> str:
-    context = answers.get("required_context", "gate")
-    python = next(iter(answers.get("python_versions", ["3.11"])))
+def _comment(text: str, indent: str = "") -> str:
+    """*text* as YAML comment lines under *indent*; empty for empty."""
+    import textwrap
+
+    if not text:
+        return ""
+    width = max(40, 72 - len(indent))
+    return "".join(f"{indent}# {line}\n" for line in textwrap.wrap(text, width=width))
+
+
+def _renders(job: Job, answers: dict[str, Any]) -> bool:
+    """Whether *job* exists for this workspace: its ``only`` against the facts."""
+    if job.only == "wheels":
+        return bool(_wheel_runners(answers))
+    if job.only == "home":
+        return bool(answers.get("templates_artifact")) and bool(
+            answers.get("templates_publisher")
+        )
+    return True
+
+
+def _points_of(workflow: str) -> tuple[Point, ...]:
+    """The declared points whose shell *workflow* is, in declaration order."""
+    return tuple(point for point in DECLARED if point.workflow == workflow)
+
+
+def _event_filter(point: Point) -> str:
+    """The Actions condition admitting *point*'s events alone."""
+    return " || ".join(f"github.event_name == '{event}'" for event in point.events)
+
+
+def _call_step(prog: str, point: Point, job: Job) -> str:
+    """The one call: ``ci.run`` for the point and job, the matrix facts passed."""
+    call = f"{prog} ci.run --point={point.name} --job={job.name}"
+    if job.matrix == "legs":
+        return (
+            "        run: >-\n"
+            f"          {call}\n"
+            '          --os="${{ matrix.os }}" --python="${{ matrix.python }}"\n'
+        )
+    if job.matrix == "pythons":
+        return f'        run: >-\n          {call}\n          --python="${{{{ matrix.python }}}}"\n'
+    return f"        run: {call}\n"
+
+
+def _token_env(job: Job) -> str:
+    """The credential the call sees, in the Actions secrets' words."""
+    if job.token == "job":
+        value = "FORGE_TOKEN: ${{ secrets.GITHUB_TOKEN }}"
+    elif job.token == "repository":
+        value = "FORGE_TOKEN: ${{ secrets.FORGE_TOKEN || secrets.GITHUB_TOKEN }}"
+    elif job.token == "secret":
+        value = "FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}"
+    elif job.token == "admin":
+        value = "FORGE_ADMIN_TOKEN: ${{ secrets.FORGE_ADMIN_TOKEN }}"
+    else:
+        return ""
+    return f"        env:\n          {value}\n"
+
+
+def _checkout_step(point: Point, job: Job, *, forge: str) -> str:
+    """The checkout, as deep as the job's verbs need."""
+    action = CHECKOUT if forge == "github" else "actions/checkout@v4"
+    with_lines: list[str] = []
+    if point.ref_input:
+        with_lines.append(f"          ref: ${{{{ inputs.{point.ref_input} }}}}")
+    if job.fetch == "full":
+        with_lines.append("          fetch-depth: 0")
+    elif job.fetch == "tags":
+        with_lines.append("          fetch-tags: true")
+    elif job.fetch:
+        with_lines.append(f"          fetch-depth: {job.fetch}")
+    lines = [f"      - uses: {action}\n"]
+    if with_lines:
+        lines.append("        with:\n")
+        lines.extend(line + "\n" for line in with_lines)
+    return "".join(lines)
+
+
+def _profile_step(forge: str) -> str:
+    """The run's Chrome trace kept as an artifact, whatever the verdict."""
+    action = UPLOAD if forge == "github" else GITEA_UPLOAD
+    return (
+        "      # The run as a Chrome trace, one artifact per leg. Observational,\n"
+        "      # so it runs on a red gate too and its own exit never decides\n"
+        "      # the leg.\n"
+        "      - name: Upload the run profile\n"
+        "        if: always()\n"
+        "        continue-on-error: true\n"
+        f"        uses: {action}\n"
+        "        with:\n"
+        "          name: profile-${{ matrix.os }}-${{ matrix.python }}\n"
+        "          path: fm-profile.json\n"
+        "          if-no-files-found: ignore\n"
+    )
+
+
+_PAGES_GRANT = """    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+"""
+
+_PAGES_STEPS = """      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4.0.0
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
+"""
+
+
+def _actions_job(
+    answers: dict[str, Any], prog: str, point: Point, job: Job, *, forge: str
+) -> str:
+    """One job of *point* for GitHub or Gitea, from its declaration.
+
+    A job of a point that shares its file with a point nobody
+    inherits from runs on its own point's events alone; the gate's
+    jobs carry no filter, since the merge point inherits them.
+    """
+    runners = [str(runner) for runner in answers.get("runners", ["ubuntu-latest"])]
+    first = runners[0]
+    pages = forge == "github" and job.deploy and answers.get("publish_seam") == "pages"
+    lines = [_comment(job.note, "  "), f"  {job.name}:\n"]
+    conditions = []
+    if job.always:
+        conditions.append("always()")
+    shared = [other for other in _points_of(point.workflow) if other.name != point.name]
+    if shared and not any(other.inherits == point.name for other in shared):
+        conditions.append(_event_filter(point))
+    if conditions:
+        lines.append(f"    if: {' && '.join(conditions)}\n")
+    needs = [
+        need
+        for need in job.needs
+        if any(_renders(other, answers) for other in point.jobs if other.name == need)
+        or any(other.name == need for other in _inherited_jobs(point))
+    ]
+    if needs:
+        lines.append(f"    needs: [{', '.join(needs)}]\n")
+    if forge == "github":
+        if pages:
+            lines.append(_PAGES_GRANT)
+        elif job.writes:
+            lines.append("    permissions:\n      contents: write\n")
+        if job.environment:
+            lines.append(f"    environment: {job.environment}\n")
+    if job.matrix == "legs":
+        pythons = _csv(list(answers.get("gate_pythons", ["3.11"])), quoted=True)
+        lines.append(
+            "    strategy:\n      fail-fast: false\n      matrix:\n"
+            f"        os: [{_csv(runners)}]\n        python: [{pythons}]\n"
+            "    runs-on: ${{ matrix.os }}\n"
+        )
+        cache = "${{ matrix.os }}-${{ matrix.python }}"
+    elif job.matrix == "pythons":
+        pythons = _csv(list(answers.get("python_versions", ["3.11"])), quoted=True)
+        lines.append(
+            "    strategy:\n      fail-fast: false\n      matrix:\n"
+            f"        python: [{pythons}]\n    runs-on: {first}\n"
+        )
+        cache = f"{point.name}-${{{{ matrix.python }}}}"
+    elif job.matrix == "wheels":
+        lines.append(
+            "    strategy:\n      fail-fast: false\n      matrix:\n"
+            f"        os: [{_csv(_wheel_runners(answers))}]\n"
+            "    runs-on: ${{ matrix.os }}\n"
+        )
+        cache = ""
+    else:
+        lines.append(f"    runs-on: {first}\n")
+        cache = "docs" if job.docs_tools else ""
+    lines.append("    steps:\n")
+    lines.append(_checkout_step(point, job, forge=forge))
+    lines.append(_rung_step(answers))
+    if forge == "github":
+        lines.append(_setup_uv_step(answers, cache_suffix=cache))
+    if job.docs_tools:
+        lines.append(_docs_requirements_step(answers))
+    lines.append(_enter_step(matrix_python=job.matrix in ("legs", "pythons")))
+    if job.driver_pin:
+        lines.append(_pin_driver_step())
+    lines.append(f"      - name: {job.step or job.name.capitalize()}\n")
+    lines.append(_token_env(job))
+    lines.append(_call_step(prog, point, job))
+    if job.profile:
+        lines.append(_profile_step(forge))
+    if pages:
+        lines.append(_PAGES_STEPS)
+    return "".join(lines)
+
+
+def _inherited_jobs(point: Point) -> tuple[Job, ...]:
+    """The jobs *point* runs before its own, from the point it inherits."""
+    return POINT_BY_NAME[point.inherits].jobs if point.inherits else ()
+
+
+def _actions_workflow(
+    answers: dict[str, Any], prog: str, workflow: str, *, forge: str
+) -> str:
+    """The workflow file *workflow* for GitHub or Gitea, from the points that share it."""
+    points = _points_of(workflow)
+    lines = [f"name: {workflow.removesuffix('.yml')}\n\n"]
+    for point in points:
+        lines.append(_comment(point.note))
+    lines.append("on:\n")
+    for event in EVENT_NAMES:
+        owners = [point for point in points if event in point.events]
+        if not owners:
+            continue
+        if event == "pull_request":
+            lines.append("  pull_request:\n")
+        elif event == "push":
+            lines.append("  push:\n    branches: [main]\n")
+        elif event == "schedule":
+            lines.append(f'  schedule:\n    - cron: "{owners[0].cron}"\n')
+        else:
+            inputs = owners[0].inputs
+            if not inputs:
+                lines.append("  workflow_dispatch:\n")
+                continue
+            lines.append("  workflow_dispatch:\n    inputs:\n")
+            for item in inputs:
+                lines.append(f"      {item.name}:\n")
+                lines.append(f"        description: {item.description}\n")
+                lines.append(
+                    f"        required: {'true' if item.required else 'false'}\n"
+                )
+                if not item.required:
+                    lines.append(f'        default: "{item.default}"\n')
+    lines.append("\njobs:\n")
+    for point in points:
+        for job in point.jobs:
+            if _renders(job, answers):
+                lines.append(_actions_job(answers, prog, point, job, forge=forge))
+    return "".join(lines)
+
+
+def _gitlab_rules(point: Point) -> str:
+    """The rules admitting *point*'s runs, and those of the points inheriting it."""
+    events: list[str] = list(point.events)
+    for other in DECLARED:
+        if other.inherits == point.name:
+            events.extend(event for event in other.events if event not in events)
+    lines = ["  rules:\n", "    - if: $CI_COMMIT_TAG\n      when: never\n"]
+    for event in events:
+        if event == "pull_request":
+            condition = '$CI_PIPELINE_SOURCE == "merge_request_event"'
+        elif event == "push":
+            condition = '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
+        elif event == "schedule":
+            condition = (
+                '$CI_PIPELINE_SOURCE == "schedule"'
+                f' && $FORGE_WORKFLOW == "{point.workflow}"'
+            )
+        else:
+            condition = f'$FORGE_WORKFLOW == "{point.workflow}"'
+        lines.append(f"    - if: '{condition}'\n")
+    return "".join(lines)
+
+
+def _gitlab_job(
+    answers: dict[str, Any], prog: str, point: Point, job: Job, *, image: str
+) -> str:
+    """One job of *point* in the GitLab document, from its declaration.
+
+    One executor, one image: a ``legs`` matrix is one leg on the first
+    runner's label and the first gate Python, so its rows key the same
+    leg the union expects; a ``pythons`` matrix is the first Python.
+    """
+    tools = " ".join(str(t) for t in answers.get("docs_requirements", []))
+    first = str(next(iter(answers.get("runners", ["ubuntu-latest"]))))
+    stage = "check" if point.name in ("gate", "nightly") else "release"
+    lines = [
+        _comment(job.note),
+        f"{job.name}:\n",
+        f"  stage: {stage}\n",
+        f"  image: {image}\n",
+    ]
+    needs = [
+        need
+        for need in job.needs
+        if any(o.name == need for o in (*_inherited_jobs(point), *point.jobs))
+    ]
+    if needs:
+        lines.append(f"  needs: [{', '.join(needs)}]\n")
+    variables: list[str] = []
+    if job.fetch in ("full", "tags"):
+        variables.append('    GIT_DEPTH: "0"')
+    elif job.fetch:
+        variables.append(f'    GIT_DEPTH: "{job.fetch}"')
+    if job.token == "admin":
+        variables.append("    FORGE_ADMIN_TOKEN: $FORGE_ADMIN_TOKEN")
+    if variables:
+        lines.append("  variables:\n" + "".join(v + "\n" for v in variables))
+    rules = _gitlab_rules(point)
+    if job.always:
+        rules = rules.replace("    - if: '", "    - when: always\n      if: '")
+    lines.append(rules)
+    lines.append("  script:\n")
+    if job.docs_tools and tools:
+        lines.append(f"    - apt-get update -q && apt-get install -y -q {tools}\n")
+    lines.append("    - source setup.sh\n")
+    call = f"{prog} ci.run --point={point.name} --job={job.name}"
+    if job.matrix == "legs":
+        python = str(next(iter(answers.get("gate_pythons", ["3.11"]))))
+        call += f' --os="{first}" --python="{python}"'
+    elif job.matrix == "pythons":
+        python = str(next(iter(answers.get("python_versions", ["3.11"]))))
+        call += f' --python="{python}"'
+    lines.append(f"    - {call}\n")
+    return "".join(lines) + "\n"
+
+
+def _gitlab_document(answers: dict[str, Any], prog: str) -> str:
+    """The one GitLab document: every declared job, the pages seam, the wave.
+
+    The deploy job is GitLab Pages' own: a job named ``pages``
+    publishing ``public/`` is the seam, so the merge point's deploy
+    renders as that job. The wave keeps its shape until the release
+    point's jobs are entries.
+    """
+    python = str(next(iter(answers.get("python_versions", ["3.11"]))))
     image = _gitlab_image(answers, python)
     tools = " ".join(str(t) for t in answers.get("docs_requirements", []))
     install = (
         f"    - apt-get update -q && apt-get install -y -q {tools}\n" if tools else ""
     )
-    return f"""# The gate and the train, GitLab-shaped, generated by the workshop.
-# One pipeline definition: workflow rules admit merge requests, main,
-# and FORGE_WORKFLOW-routed manual pipelines, which the pipeline's
-# name carries so a dispatched gate is told from a dispatched wave.
-# Every job sources the entry script in its own shell, then calls the
-# runner bare.
+    lines = [
+        """# The gate, the merge point, the nightly and the train, GitLab-shaped,
+# generated by the workshop. One pipeline definition: workflow rules
+# admit merge requests, main, the clock, and FORGE_WORKFLOW-routed
+# pipelines, which the pipeline's name carries so a dispatched gate is
+# told from a dispatched wave. Every job sources the entry script in
+# its own shell, then calls the runner bare. The clock itself is a
+# pipeline schedule, a project setting the governance reconcile
+# creates, never a line here.
 workflow:
   name: $FORGE_WORKFLOW
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $FORGE_WORKFLOW
 
 stages: [check, release]
 
-{context}:
-  stage: check
-  image: {image}
-  rules:
-    - if: $CI_COMMIT_TAG
-      when: never
-    - when: on_success
-  script:
-    - source setup.sh
-    - {prog} check
-
-# The pages seam: GitLab Pages serves the artifact of a job named
+"""
+    ]
+    for point in DECLARED:
+        if point.name == "release":
+            continue
+        for job in point.jobs:
+            if job.deploy:
+                lines.append(
+                    f"""# The pages seam: GitLab Pages serves the artifact of a job named
 # ``pages`` publishing ``public/``; main only, after the checks.
 pages:
   stage: release
@@ -960,20 +875,12 @@ pages:
   artifacts:
     paths: [public]
 
-# The strict site build: a merge waits on the pipeline, so a broken
-# link blocks it here without any aggregation job.
-docs:
-  stage: check
-  image: {image}
-  rules:
-    - if: $CI_COMMIT_TAG
-      when: never
-    - when: on_success
-  script:
-{install}    - source setup.sh
-    - {prog} docs.build
-
-# The merge-triggered train: the squash of a workflow.release PR
+"""
+                )
+                continue
+            lines.append(_gitlab_job(answers, prog, point, job, image=image))
+    lines.append(
+        f"""# The merge-triggered train: the squash of a workflow.release PR
 # lands on main, its changed changelogs stating the release, and the
 # wave publishes it, cutting receipt tags after the index confirms
 # each member. Token publishing; pushing tags needs GITLAB_PUSH_TOKEN
@@ -994,35 +901,8 @@ release-publish:
   # step is emitted here. Masking is GitLab's flag-and-constraint
   # model: mark each variable masked where its value allows it.
 """
-
-
-_CODEOWNERS_PATH = {
-    "github": ".github/CODEOWNERS",
-    "gitea": ".gitea/CODEOWNERS",
-    "gitlab": ".gitlab/CODEOWNERS",
-}
-
-
-def _gitlab_governance(answers: dict[str, Any], prog: str) -> str:
-    """GitLab's spelling: a pipeline job on the same pinned image."""
-    python = next(iter(answers.get("python_versions", ["3.11"])))
-    image = _gitlab_image(answers, python)
-    return f"""
-governance-apply:
-  stage: release
-  image: {image}
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
-      changes:
-        - workshop.toml
-        - packages/*/workshop.toml
-        - {_CODEOWNERS_PATH["gitlab"]}
-  script:
-    - source setup.sh
-    - {prog} workflow.configure
-  variables:
-    FORGE_ADMIN_TOKEN: $FORGE_ADMIN_TOKEN
-"""
+    )
+    return "".join(lines)
 
 
 def generate(root: Path) -> dict[str, str]:
@@ -1045,25 +925,22 @@ def generate(root: Path) -> dict[str, str]:
     kind = str(facts["forge_kind"])
     header = generated_header("#")
     site = {"zensical.toml": zensical_config(root)}
-    if kind == "github":
+    if kind in ("github", "gitea"):
+        # One file per declared workflow: the gate and the merge point
+        # share ci.yml, the nightly has its own, and the release keeps
+        # its emitter until its jobs are entries.
+        release = _github_release if kind == "github" else _gitea_release
         files = {
-            ".github/workflows/ci.yml": _github_gate(facts, prog),
-            ".github/workflows/release.yml": _github_release(facts, prog),
-            ".github/workflows/nightly.yml": _github_nightly(facts, prog),
-        }
-    elif kind == "gitea":
-        # The docs deploy and the governance reconcile are merge-point
-        # jobs of ci.yml: three files, whatever the seam.
-        files = {
-            ".gitea/workflows/ci.yml": _gitea_gate(facts, prog),
-            ".gitea/workflows/release.yml": _gitea_release(facts, prog),
-            ".gitea/workflows/nightly.yml": _gitea_nightly(facts, prog),
+            f".{kind}/workflows/ci.yml": _actions_workflow(
+                facts, prog, "ci.yml", forge=kind
+            ),
+            f".{kind}/workflows/release.yml": release(facts, prog),
+            f".{kind}/workflows/nightly.yml": _actions_workflow(
+                facts, prog, "nightly.yml", forge=kind
+            ),
         }
     else:
-        files = {
-            ".gitlab-ci.yml": _gitlab_pipeline(facts, prog)
-            + _gitlab_governance(facts, prog)
-        }
+        files = {".gitlab-ci.yml": _gitlab_document(facts, prog)}
     files["setup.sh"] = entry_script(root)
     files.update(site)
     rendered = {path: header + content for path, content in files.items()}

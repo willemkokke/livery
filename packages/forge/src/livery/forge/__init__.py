@@ -43,6 +43,7 @@ from livery.forge._protocol import (
     Registry,
     Releases,
     Repository,
+    Schedules,
 )
 from livery.forge._registry import SimpleRegistry
 from livery.forge._types import (
@@ -65,6 +66,7 @@ from livery.forge._types import (
     ReviewState,
     Run,
     RunStatus,
+    Schedule,
     ScheduleEvent,
     ScheduleEventKind,
     StateFilter,
@@ -106,8 +108,10 @@ __all__ = [
     "ReviewState",
     "Run",
     "RunStatus",
+    "Schedule",
     "ScheduleEvent",
     "ScheduleEventKind",
+    "Schedules",
     "SimpleRegistry",
     "StateFilter",
     "Step",

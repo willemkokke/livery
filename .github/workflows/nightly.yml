@@ -3,16 +3,19 @@
 # `fm template.apply`; an edit here is drift.
 name: nightly
 
-# The nightly point: the clock and a manual trigger, one
-# `fm ci.run` per python. What the point runs is data, the
-# workshop's builtin schedule plus [[ci.schedule]] in workshop.toml,
-# and the tests that declare the nightly point are selected in.
+# The nightly point: the clock and a dispatch entry, one call per Python.
+# What runs is the workshop's builtin schedule plus [[ci.schedule]] in
+# workshop.toml, and the tests that declare the nightly point are selected
+# in.
 on:
   schedule:
     - cron: "17 4 * * *"
   workflow_dispatch:
 
 jobs:
+  # A replay checks the tree out at a release tag. A pull request a
+  # scheduled task opens with the job token starts no workflow, so the
+  # repository's token carries the nightly where there is one.
   nightly:
     strategy:
       fail-fast: false
@@ -22,7 +25,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # A replay checks the tree out at a release tag.
           fetch-depth: 0
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
@@ -36,9 +38,6 @@ jobs:
           UV_PYTHON: ${{ matrix.python }}
         run: bash setup.sh github
       - name: Nightly
-        # A pull request a scheduled task opens with the job token
-        # starts no workflow, so a FORGE_TOKEN secret carries the
-        # nightly where the repository has one.
         env:
           FORGE_TOKEN: ${{ secrets.FORGE_TOKEN || secrets.GITHUB_TOKEN }}
         run: >-

@@ -182,6 +182,11 @@ unless `--ref` names another, and follows the run to its verdict;
 `fm ci.status --point=nightly` and `fm ci.logs --point=nightly` read
 the newest nightly run by workflow rather than by commit, so a
 failure only the nightly meets reaches a person through `fm`.
+On GitLab the clock is a pipeline schedule, a project setting rather
+than a line in the pipeline document: `fm workflow.configure` creates
+one per point that runs on the clock, named `workshop: <point>`, and
+deletes the ones it named for points no longer declared. GitHub and
+Gitea keep the clock in the workflow file and reconcile nothing.
 `fm ci.dispatch --point=gate` starts the gate the same way. A
 dispatched gate is the full gate: the check verb reads the event and
 narrows on a pull request alone, and it sets the verified record

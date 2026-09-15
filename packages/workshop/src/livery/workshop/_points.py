@@ -102,6 +102,8 @@ class Job:
         only: When the job exists at all: ``wheels`` where a member
             declares wheel platforms, ``home`` where the workspace
             publishes a template artifact, ``""`` always.
+        step: What the forge's run page calls the one call; the job's
+            name capitalised when empty.
         note: The comment the rendered shell prints above the job.
     """
 
@@ -121,6 +123,7 @@ class Job:
     deploy_key: str = ""
     driver_pin: bool = False
     only: str = ""
+    step: str = ""
     note: str = ""
 
 
@@ -144,6 +147,11 @@ class Point:
             dispatched by a verb that supplies them, never by hand.
         ref_input: The input naming the commit the jobs check out,
             ``""`` for the run's own commit.
+        cron: When the clock starts the point, for a point whose
+            events include ``schedule``, in cron's five fields, UTC.
+            GitHub and Gitea read it from the workflow file; on
+            GitLab the clock is a pipeline schedule the governance
+            reconcile creates from it.
         note: The comment the rendered shell prints under its name.
     """
 
@@ -154,6 +162,7 @@ class Point:
     inherits: str = ""
     inputs: tuple[Input, ...] = ()
     ref_input: str = ""
+    cron: str = ""
     note: str = ""
 
 
@@ -201,6 +210,7 @@ DECLARED: tuple[Point, ...] = (
                 fetch="full",
                 token="job",
                 writes=True,
+                step="Verdict",
                 note=(
                     "The one required context. Branch protection points"
                     " here, so the matrix can grow or shrink without touching"
@@ -265,6 +275,7 @@ DECLARED: tuple[Point, ...] = (
         "nightly",
         "nightly.yml",
         ("schedule", "workflow_dispatch"),
+        cron="17 4 * * *",
         note=(
             "The nightly point: the clock and a dispatch entry, one call per"
             " Python. What runs is the workshop's builtin schedule plus"
@@ -383,6 +394,15 @@ def verify_points(points: tuple[Point, ...]) -> None:
             fail(
                 f"the {point.name} point inherits {point.inherits!r}, which is"
                 " not a declared point"
+            )
+        if ("schedule" in point.events) != bool(point.cron):
+            fail(
+                f"the {point.name} point "
+                + (
+                    "runs on the clock and names no cron"
+                    if "schedule" in point.events
+                    else "names a cron and does not run on the clock"
+                )
             )
         for other in points:
             if other.name >= point.name or other.workflow != point.workflow:

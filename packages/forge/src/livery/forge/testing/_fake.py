@@ -23,7 +23,14 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from livery.forge._errors import ForgeError, Unsupported
-from livery.forge._protocol import Checks, Issues, PullRequests, Releases, Repository
+from livery.forge._protocol import (
+    Checks,
+    Issues,
+    PullRequests,
+    Releases,
+    Repository,
+    Schedules,
+)
 from livery.forge._types import (
     Capability,
     Codeowners,
@@ -42,6 +49,7 @@ from livery.forge._types import (
     Review,
     ReviewState,
     Run,
+    Schedule,
     ScheduleEvent,
     StateFilter,
     Step,
@@ -56,6 +64,7 @@ _ALL_CAPABILITIES: tuple[Capability, ...] = (
     "schedule_events",
     "min_approvals",
     "pages_config",
+    "pipeline_schedules",
 )
 
 
@@ -186,6 +195,7 @@ class _RepoState:
     issues: dict[int, _IssueState] = field(default_factory=dict)
     releases: dict[str, Release] = field(default_factory=dict)
     runs: dict[int, _RunState] = field(default_factory=dict)
+    schedules: dict[str, Schedule] = field(default_factory=dict)
     protections: dict[str, Protection] = field(default_factory=dict)
     next_pr: int = 1
     next_issue: int = 1
@@ -578,6 +588,7 @@ class _FakeRepository:
         self.checks: Checks = _FakeChecks(fake, owner, name)
         self.issue: Issues = _FakeIssues(fake, owner, name)
         self.release: Releases = _FakeReleases(fake, owner, name)
+        self.schedule: Schedules = _FakeSchedules(fake, owner, name)
         self._fake = fake
 
     @property
@@ -1043,6 +1054,61 @@ class _FakeChecks:
         self._fake._start_run(
             state, sha, workflow=workflow, event="workflow_dispatch", outcome=outcome
         )
+
+
+class _FakeSchedules:
+    """The pipeline schedules of one FakeForge repository, in memory."""
+
+    def __init__(self, fake: FakeForge, owner: str, name: str) -> None:
+        self._fake = fake
+        self._owner = owner
+        self._name = name
+
+    def _require(self) -> dict[str, Schedule]:
+        if not self._fake.supports("pipeline_schedules"):
+            raise Unsupported(
+                "this fake keeps its clock in the workflow file"
+                " (capability: pipeline_schedules)"
+            )
+        return self._fake._require_repo(self._owner, self._name).schedules
+
+    def list(self) -> tuple[Schedule, ...]:
+        """Every schedule, in creation order."""
+        return tuple(self._require().values())
+
+    def ensure(
+        self,
+        description: str,
+        *,
+        ref: str,
+        cron: str,
+        variables: Mapping[str, str] | None = None,
+    ) -> Schedule:
+        """Create or update the schedule described *description*."""
+        schedules = self._require()
+        state = self._fake._require_repo(self._owner, self._name)
+        if ref not in state.branches:
+            raise ForgeError(
+                f"ref {ref} does not exist in {self._owner}/{self._name}", status=400
+            )
+        held = schedules.get(description)
+        merged = dict(held.variables) if held else {}
+        merged.update(variables or {})
+        fresh = max((item.id for item in schedules.values()), default=0) + 1
+        schedule = Schedule(
+            id=held.id if held else fresh,
+            description=description,
+            ref=ref,
+            cron=cron,
+            active=True,
+            variables=tuple(merged.items()),
+        )
+        schedules[description] = schedule
+        return schedule
+
+    def delete(self, description: str) -> bool:
+        """Delete the schedule described *description*; False when there is none."""
+        return self._require().pop(description, None) is not None
 
 
 class _FakeIssues:

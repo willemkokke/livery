@@ -25,7 +25,15 @@ from urllib.parse import quote
 
 from livery.forge._errors import ForgeError, Unsupported
 from livery.forge._http import JsonClient, Opener
-from livery.forge._protocol import Checks, Issues, PullRequests, Releases, Repository
+from livery.forge._protocol import (
+    Checks,
+    Issues,
+    PullRequests,
+    Releases,
+    Repository,
+    Schedules,
+)
+from livery.forge._schedules import DeclinedSchedules
 from livery.forge._types import (
     Capability,
     CheckState,
@@ -387,6 +395,7 @@ class _GiteaRepository:
         self.checks: Checks = _GiteaChecks(forge, client, self._base)
         self.issue: Issues = _GiteaIssues(forge, client, self._base)
         self.release: Releases = _GiteaReleases(client, self._base)
+        self.schedule: Schedules = DeclinedSchedules("gitea")
 
     @property
     def owner(self) -> str:

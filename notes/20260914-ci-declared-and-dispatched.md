@@ -1,7 +1,8 @@
 # CI declared, contributed, and dispatched on command
 
 Status: ruled 2026-09-14. Phase 1 landed 2026-09-15 (livery#584), phase 2
-landed 2026-09-15 (livery#587); phases 3 to 5 not started. Runs
+landed 2026-09-15 (livery#587), phase 3 landed 2026-09-15 (livery#589) with
+one acceptance item open; phases 4 and 5 not started. Runs
 before [the tool record and its index][record-plan], whose phase 8 declares
 a point through the mechanism phase 5 here delivers; that plan carries no
 other CI work.
@@ -42,15 +43,17 @@ date where phase 1 moved it.
   `fm ci.run --point=<p> --job=<j>`, the one command every rendered gate,
   merge and nightly job calls. A job's identity is its point and its
   name. The task addresses live in the entries, never in the YAML.
-- `_ci_generate.py` is 1089 lines, one emitter per forge-and-point pair:
-  `_github_gate`, `_github_nightly`, `_github_release`, `_gitea_gate`,
-  `_gitea_nightly`, `_gitea_release`, and `_gitlab_pipeline` plus
-  `_gitlab_governance`. The step helpers are already factored:
-  `_rung_step`, `_setup_uv_step`, `_docs_requirements_step`,
-  `_pin_driver_step`, `_enter_step`. `generate(root)` returns every
-  generated file by path; `fm template.apply` writes them and
-  `fm template.check` reports drift. There is no `fm ci.generate`. No
-  workflow file exists in the workshop outside these emitters.
+- `_ci_generate.py` renders the gate, the merge point and the nightly
+  from the declarations: `_actions_workflow` walks the points that share
+  a file for GitHub and Gitea, `_gitlab_document` walks every point into
+  the one GitLab document, and each job goes through the step helpers
+  (`_rung_step`, `_setup_uv_step`, `_docs_requirements_step`,
+  `_pin_driver_step`, `_enter_step`). The release keeps its emitters,
+  `_github_release` and `_gitea_release`, and GitLab's `pages` and
+  `release-publish` jobs keep their shapes, until phase 4.
+  `generate(root)` returns every generated file by path;
+  `fm template.apply` writes them and `fm template.check` reports drift.
+  There is no `fm ci.generate`.
 - **The release point is not on the points shape either.** `jobs_of` gives
   it no jobs. Its shells call `fm release.wheels`,
   `fm workflow.release.publish` and `fm release.templates` directly, and
@@ -59,14 +62,20 @@ date where phase 1 moved it.
   `contains(needs.publish.outputs.members, '<publisher>')`, an output
   `workflow_release_publish` writes to `GITHUB_OUTPUT`. The dispatch
   inputs `ref` and `workshop` reach the steps as `${{ inputs.ref }}`.
-- **GitLab's document is not on the points shape.** `_gitlab_pipeline`
-  calls `fm check` and `fm docs.build` bare, has no `ci.run`, no nightly,
-  and no merge-point dispatch job; `release-publish` rules on a commit
-  title regex. Its `workflow: rules` admit `$FORGE_WORKFLOW`, so an
-  API-created pipeline already runs the `gate` and `docs` jobs. The
-  document sets `workflow: name` to `$FORGE_WORKFLOW`, and the GitLab
-  backend fills `Run.workflow` from the pipeline listing's `name`, so
-  `point_runs` tells a dispatched gate pipeline from a dispatched wave.
+- **GitLab's document is on the points shape for the gate, the merge
+  point and the nightly.** One job per declared job, calling
+  `fm ci.run --point=<p> --job=<j>` through `setup.sh`, with rules on the
+  point's events and on `$FORGE_WORKFLOW`; the deploy renders as GitLab
+  Pages' own `pages` job, and `release-publish` rules on a commit title
+  regex until phase 4. The document sets `workflow: name` to
+  `$FORGE_WORKFLOW`, and the GitLab backend fills `Run.workflow` from
+  the pipeline listing's `name`, so `point_runs` tells a dispatched gate
+  pipeline from a dispatched wave. The clock is a pipeline schedule:
+  the forge protocol's `pipeline_schedules` capability
+  (`Repository.schedule`), which GitLab implements and GitHub and Gitea
+  decline by name, and `fm workflow.configure` reconciles one schedule
+  per point that runs on the clock, named `workshop: <point>`. None of
+  this is proven live: the GitLab lane of the loop does not exist.
 - **The e2e loop has one lane.** `fm ci.e2e` refuses `--forge=gitlab` by
   name. GitLab is proven by rendered output in unit tests only. The loop
   proves the Gitea release wave through `_release_act`; the GitHub wave
@@ -270,6 +279,34 @@ Acceptance:
   `.github/workflows/`.
 
 ### Phase 3: one renderer per forge, for the gate, the merge and the nightly
+
+Landed 2026-09-15 as livery#589. Evidence:
+
+- `uv run python -m pytest packages/workshop/tests/test_workshop_render.py`:
+  8 passed against the renderers, with two pins moved deliberately: the
+  Gitea deploy fetches tags like GitHub's, and GitLab's jobs are the
+  declared ones.
+- The grep for `_(github|gitea)_(gate|nightly)\(` in `_ci_generate.py`
+  prints 0.
+- `uv run fm template.apply` re-rendered this repository's `ci.yml` and
+  `nightly.yml`, and `uv run fm template.check` exits 0.
+- `uv run fm check --fix`: exit 0.
+- The `schedules` conformance scenario recorded against the local GitLab
+  and replaying green; `schedules-declined` replaying green on Gitea,
+  GitHub and the fake.
+- `uv run fm ci.e2e --fresh`: exit 0 on the re-rendered Gitea shells,
+  every proof line printed: the setup gate, the verified skip, the
+  scoped, prose and tests legs, the release and its receipt, the nightly
+  by hand (run 1616) and the gate by hand (run 1617), ending
+  `the loop is whole: gate, merge, release, receipt, nightly, and the
+  gate on command`. Main's runs ran the merge point's deploy, govern,
+  dispatch and janitor through the rendered jobs.
+- Open: one API-created pipeline against the local GitLab running the
+  `gate` and `docs` jobs through `ci.run`. Not run: the local GitLab has
+  no runner that can enter a workspace (the loop's dev wheels index and
+  the entry script are Gitea's lane), so the GitLab rendering is proven
+  by its pins and the recorded schedules scenario alone. The evidence
+  lands with the GitLab lane of the loop.
 
 Deliverables:
 
@@ -487,6 +524,30 @@ Acceptance:
   xdist start-up (livery#585), so the cassettes were recorded by the
   same pytest invocation the verb makes, run directly with
   `FORGE_RECORD=1` and the shared env sourced.
+- 2026-09-15, the agent, at phase 3: the renderers differ from the
+  emitters in three ways a run can see, each judged equivalent or
+  better. A single-runner job runs on the contract's first runner on
+  GitHub as it did on Gitea, where the emitter spelled ubuntu-latest.
+  The environment rung renders on every job where the committed
+  `.repo.env` declares keys, where the Gitea emitter put it on the
+  check, verdict and nightly jobs alone; a job without secrets to mount
+  renders no step. The Gitea deploy fetches tags, which the pin found
+  missing. On GitLab a `legs` matrix is one leg, labelled by the first
+  runner and the first gate Python so its rows key the leg the union
+  expects, and the `pages` job stays the deploy until phase 4.
+- 2026-09-15, the agent, at phase 3, operations: the loop failed five
+  times before its green pass, none on the render. The host carried six
+  orphaned Claude Code snapshot shells spinning at 100% since
+  2026-09-08 (killed), the GitLab containers idled at several cores
+  (stopped; `fm forge.dev.up --profile=gitlab` restores them), the
+  Gitea container answered one-row updates in seconds after eleven days
+  up (restarted), and the act_runner's restart failed on the daemon's
+  side and left it stopped. Each dead pass left its runs on the scratch
+  repository for the runner to grind, with nothing left to read them;
+  livery#590 asks for a per-forge down and a runner restart, livery#591
+  for cancelling the runs a newer push supersedes. The loop's three
+  watchers now retry a timed-out read within the `ci` verbs' budget
+  rather than failing the pass on the first one.
 - 2026-09-15, the agent, at phase 2: the release's jobs are declared
   with the vocabulary the wave needs (an artifact published and
   collected, an environment, a deploy key, the driver pin, a job that
