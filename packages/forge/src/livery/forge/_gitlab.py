@@ -105,6 +105,9 @@ _EVENTS = {
     "api": "workflow_dispatch",
     "trigger": "workflow_dispatch",
     "web": "workflow_dispatch",
+    # A merge request pipeline is a pull request run: one vocabulary
+    # for every reader, the runner's own context included.
+    "merge_request_event": "pull_request",
 }
 
 

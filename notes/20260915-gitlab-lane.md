@@ -1,7 +1,8 @@
 # GitLab, a first-class citizen again: the loop's GitLab lane
 
-Status: ruled 2026-09-15. Phase 1 landed 2026-09-15 (livery#598); phases
-2 to 5 not started.
+Status: ruled 2026-09-15. Phase 1 landed 2026-09-15 (livery#598); phase 2
+in progress (livery#600), its live pass waiting on the `gitlab` hosts
+entry; phases 3 to 5 not started.
 Closes the two open lines of [CI declared, contributed, and dispatched on
 command][ci-plan]: the live GitLab pipeline through `ci.run`, and the
 schedules reconcile creating a real pipeline schedule.
@@ -142,7 +143,17 @@ Deliverables:
   `GITLAB_PUSH_TOKEN`, and sets `FORGE_TOKEN`, `FORGE_ADMIN_TOKEN`,
   `GITLAB_PUSH_TOKEN` and `UV_PUBLISH_TOKEN` as masked variables through
   `RepoConfig.secrets`. The contract the birth seeds declares the
-  project's PyPI registry, index and publish, by project id.
+  project's PyPI registry, index and publish, by the project's
+  URL-encoded path. The dev wheels publish there too, since the setup
+  gate installs them; the seeded group is public so the runner reads
+  the index without a credential, as it reads Gitea's.
+- livery#590: `fm forge.dev.down --profile=<forge>` stops one forge and
+  its runner, and `fm forge.dev.restart --profile=<forge>` restarts one
+  forge's runner, discarding its jobs.
+- livery#591 and livery#495: `fm submit`'s push and the loop's setup
+  push cancel the runs still moving for the head they supersede, and a
+  re-run of a red run waits until every job of it has completed,
+  naming the job it waits on.
 - The loop's run selection reads runs by event and commit through
   `point_runs` and `Run.workflow`, the same on both forges.
 - `_merge_setup` merges through the protocol's `merge_now`, which on
@@ -237,6 +248,16 @@ Acceptance:
   nobody asked for.
 - 2026-09-15, Willem: the plan is ruled as written, with the open
   issues folded in as the sequencing section lists them.
+- 2026-09-15, the agent, at phase 2: the dev wheels belong to this
+  phase, not phase 4: the setup gate installs them from the lane's
+  registry, so the registry's read and upload are proven here and
+  phase 4 keeps the wave and the receipts. Measured on the local GitLab
+  18.9: the project's simple index answers anonymously on a public
+  project, `__token__` with the token authenticates as basic auth, and
+  the URL-encoded project path addresses the registry as the numeric
+  id does. The provisioning ran live twice: the project created then
+  reused, four masked variables, the push token minted and the previous
+  one revoked by name.
 - 2026-09-15, the agent: the loop's run selection by workflow file name
   is kept, and GitLab meets it by naming every pipeline, rather than the
   loop growing a per-forge selection. The same choice serves

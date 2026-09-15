@@ -505,8 +505,15 @@ def _merge_title(repo: Repository, plan: Plan) -> str:
     return (pr.title.strip() if pr else "") or plan.title
 
 
-def _push(git: GitOps, branch: str, *, force: bool) -> None:
+def _push(
+    git: GitOps, branch: str, *, force: bool, repo: Repository | None = None
+) -> None:
     """Push *branch*, or force it with a lease and full disclosure.
+
+    With *repo*, the runs still moving for the head the push
+    supersedes are cancelled afterwards (livery.workshop._ci_tasks.
+    cancel_superseded_runs): a stale head's runs would delay the new
+    head's on a shared runner and prove nothing.
 
     A force is refused on ``workflow/`` branches: recovery reads the
     ref, the branch's commits are the durable record of what was
@@ -516,6 +523,12 @@ def _push(git: GitOps, branch: str, *, force: bool) -> None:
     (the flow fetched already, so the listing is current up to the
     push itself, which the lease guards).
     """
+    previous = ""
+    if repo is not None:
+        try:
+            previous = git.remote_head(branch)
+        except GitError:
+            previous = ""
     if not force:
         try:
             git.push(branch)
@@ -553,6 +566,11 @@ def _push(git: GitOps, branch: str, *, force: bool) -> None:
             f" this clone last saw.\n{error}\n  Fetch to see what arrived"
             " (`git fetch origin`), then decide again and re-run."
         )
+    if repo is not None and previous and previous != git.head_sha():
+        from livery.workshop._ci_tasks import cancel_superseded_runs
+
+        for line in cancel_superseded_runs(repo, previous):
+            print(line)
 
 
 def _required_context_at(git: GitOps, ref: str) -> str:
@@ -684,11 +702,11 @@ def push_and_pr(
     # fail non-fast-forward.
     pr = repo.pr.find_by_head(plan.branch)
     if pr is None:
-        _push(git, plan.branch, force=force)
+        _push(git, plan.branch, force=force, repo=repo)
         pr = repo.pr.open(plan.branch, plan.base, plan.title, body)
         print(f"  opened PR #{pr.number}: {pr.title}")
     else:
-        _push(git, plan.branch, force=force)
+        _push(git, plan.branch, force=force, repo=repo)
         print(f"  reusing PR #{pr.number}")
         if plan.title_given and pr.title != plan.title:
             repo.pr.update_title(pr.number, plan.title)

@@ -16,6 +16,8 @@ from __future__ import annotations
 import os
 import re
 import shutil
+from collections.abc import Callable, Collection
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -45,6 +47,72 @@ _TEMPLATES = Path(__file__).parent / "templates"
 DEV_MEMBERS = ("workshop", "forge", "toolroom", "footman")
 
 
+@dataclass(frozen=True)
+class Lane:
+    """One local forge the loop runs against, as the host and the runner reach it.
+
+    Attributes:
+        kind: The forge kind, ``gitea`` or ``gitlab``.
+        alias: The forge as CI sees it, the compose service name and
+            port, true on the host too through its hosts entry.
+        url_var: The shared env key the seed writes the host-side URL
+            to.
+        token_var: The shared env key the seed writes the lane token to.
+        version_path: The API path the hosts-entry probe reads.
+    """
+
+    kind: str
+    alias: str
+    url_var: str
+    token_var: str
+    version_path: str
+
+    @property
+    def host(self) -> str:
+        """The compose hostname alone, for the hosts entry."""
+        return self.alias.removeprefix("http://").rsplit(":", 1)[0]
+
+    def publish(self, base: str = "") -> str:
+        """The PyPI upload base for the loop's packages at *base*, the alias by default.
+
+        Gitea keeps an owner's registry; GitLab a project's, addressed
+        by its URL-encoded path.
+        """
+        base = base or self.alias
+        if self.kind == "gitlab":
+            from urllib.parse import quote
+
+            project = quote(f"{E2E_OWNER}/{E2E_REPO}", safe="")
+            return f"{base}/api/v4/projects/{project}/packages/pypi"
+        return f"{base}/api/packages/{E2E_OWNER}/pypi"
+
+    def index(self, base: str = "") -> str:
+        """The simple index the loop's packages are read from."""
+        return f"{self.publish(base)}/simple"
+
+
+#: The lanes, by forge kind.
+LANES: dict[str, Lane] = {
+    "gitea": Lane(
+        "gitea", "http://gitea:3000", "GITEA_URL", "GITEA_TOKEN", "/api/v1/version"
+    ),
+    "gitlab": Lane(
+        "gitlab", "http://gitlab:8929", "GITLAB_URL", "GITLAB_TOKEN", "/api/v4/version"
+    ),
+}
+
+
+def _lane(kind: str) -> Lane:
+    """The lane for *kind*; refuses a kind with no local containers."""
+    lane = LANES.get(kind)
+    if lane is None:
+        fail(
+            f"--forge={kind} is not a local lane: the loop runs against"
+            f" {', '.join(LANES)}"
+        )
+    return lane
+
+
 def _dev_forge(kind: str) -> tuple[Forge, str]:
     """The seeded local forge and its token; refusal teaches.
 
@@ -52,24 +120,20 @@ def _dev_forge(kind: str) -> tuple[Forge, str]:
     shared env file the cascade reads, so a warm machine needs
     nothing beyond the containers being up.
     """
-    if kind != "gitea":
-        fail(
-            f"--forge={kind} is not built: gitea is the one local lane"
-            " today, and gitlab follows once gitea is in a good state"
-        )
-    url = os.environ.get("GITEA_URL", "")
-    token = os.environ.get("GITEA_TOKEN", "")
+    lane = _lane(kind)
+    url = os.environ.get(lane.url_var, "")
+    token = os.environ.get(lane.token_var, "")
     if not url or not token:
         fail(
-            "the local Gitea's credentials are not in the environment."
-            f" Run `{footman.prog()} forge.dev.up --profile=gitea`: it"
+            f"the local {kind}'s credentials are not in the environment."
+            f" Run `{footman.prog()} forge.dev.up --profile={kind}`: it"
             " starts and seeds"
-            " the containers and writes GITEA_URL and GITEA_TOKEN into"
-            " the shared env file the cascade reads"
+            f" the containers and writes {lane.url_var} and {lane.token_var}"
+            " into the shared env file the cascade reads"
         )
-    from livery.forge import GiteaForge
+    from livery.workshop._forge_lane import _connect
 
-    return GiteaForge.connect(url=url, token=token), token
+    return _connect(kind, url, token), token
 
 
 def provision(kind: str = "gitea") -> None:
@@ -105,33 +169,101 @@ def provision(kind: str = "gitea") -> None:
     # Three secrets, all the lane token: the registry credential the
     # publish reads, the forge lane's everyday token, and the admin
     # ladder's, because the emitted governance job asks for it and
-    # the seeded admin account holds every grant anyway.
-    repo.configure(
-        RepoConfig(
-            secrets={
-                "UV_PUBLISH_TOKEN": token,
-                "FORGE_TOKEN": token,
-                "FORGE_ADMIN_TOKEN": token,
-            }
+    # the seeded admin account holds every grant anyway. GitLab's jobs
+    # push through a fourth, a project access token, since the job
+    # token cannot push.
+    secrets = {
+        "UV_PUBLISH_TOKEN": token,
+        "FORGE_TOKEN": token,
+        "FORGE_ADMIN_TOKEN": token,
+    }
+    if kind == "gitlab":
+        secrets["GITLAB_PUSH_TOKEN"] = _mint_push_token(
+            os.environ.get(_lane(kind).url_var, ""), token
         )
+    repo.configure(RepoConfig(secrets=secrets))
+    print(f"  secrets set: {', '.join(secrets)}")
+
+
+#: One GitLab API call for the loop's provisioning: (method, path,
+#: token, body) to (status, parsed body or text).
+GitlabCall = Callable[[str, str, str, "dict[str, object] | None"], "tuple[int, object]"]
+
+
+def _gitlab_call(
+    method: str, url: str, token: str, body: dict[str, object] | None = None
+) -> tuple[int, object]:
+    """One GitLab API call for the loop's provisioning; (status, parsed body)."""
+    import json
+    import urllib.error
+    import urllib.request
+
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(body).encode() if body is not None else None,
+        method=method,
+        headers={"PRIVATE-TOKEN": token, "Content-Type": "application/json"},
     )
-    print("  secrets set: UV_PUBLISH_TOKEN, FORGE_TOKEN, FORGE_ADMIN_TOKEN")
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            text = response.read().decode()
+            return int(response.status), (json.loads(text) if text else None)
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read().decode(errors="replace")
 
 
-#: One forge URL true on both sides: the compose hostname, which
-#: the runner resolves natively and the host through its taught
-#: /etc/hosts alias. The contract carries it, so in-container verbs
-#: reach the forge the same way host-side ones do.
+def _mint_push_token(url: str, token: str, api: GitlabCall | None = None) -> str:
+    """A project access token that may push to the loop's project; its value.
+
+    GitLab's job token cannot push, so the state store, the receipt
+    tags and the template artifact ride a project access token with
+    ``write_repository``. A token's value is readable at minting
+    alone, so every provisioning mints one and revokes the ones it
+    minted before, by name. *api* is the call, the live one by
+    default.
+    """
+    from datetime import UTC, datetime, timedelta
+    from urllib.parse import quote
+
+    api = api or _gitlab_call
+    base = f"{url}/api/v4/projects/{quote(f'{E2E_OWNER}/{E2E_REPO}', safe='')}"
+    name = "livery-loop-push"
+
+    def call(
+        path: str, *, method: str = "GET", body: dict[str, object] | None = None
+    ) -> tuple[int, object]:
+        return api(method, base + path, token, body)
+
+    status, listed = call("/access_tokens")
+    if status == 200 and isinstance(listed, list):
+        for item in listed:
+            if (
+                isinstance(item, dict)
+                and item.get("name") == name
+                and item.get("active")
+            ):
+                call(f"/access_tokens/{item['id']}", method="DELETE")
+    expires = (datetime.now(UTC) + timedelta(days=30)).date().isoformat()
+    status, made = call(
+        "/access_tokens",
+        method="POST",
+        body={
+            "name": name,
+            "scopes": ["api", "write_repository"],
+            "access_level": 40,
+            "expires_at": expires,
+        },
+    )
+    if status != 201 or not isinstance(made, dict) or not made.get("token"):
+        fail(f"the loop's push token was not minted: HTTP {status}: {made}")
+    return str(made["token"])
+
+
+#: Gitea's forge URL as both sides see it: the compose hostname,
+#: which the runner resolves natively and the host through its
+#: taught /etc/hosts alias. Every lane has one; `Lane.alias` is the
+#: general form, and this name serves the Gitea-only callers.
 ALIAS_URL = "http://gitea:3000"
-
-#: The registry as CI sees it: the compose network's service name,
-#: which the runner resolves and the host does not. The host-side
-#: half of the same registry is GITEA_URL.
-LOOP_INDEX = "http://gitea:3000/api/packages/livery/pypi/simple"
-
-#: The upload base the loop's releases publish to; the read index
-#: above is this plus /simple.
-LOOP_PUBLISH = "http://gitea:3000/api/packages/livery/pypi"
 
 #: The member's distribution name: new.package prefixes the
 #: project's namespace (ci_e2e_loop), so the dist is never
@@ -157,29 +289,30 @@ def _member_dist(name: str) -> str:
     return f"ci-e2e-loop-{name}"
 
 
-def _require_host_alias() -> None:
-    """Refuse until the host resolves the compose hostname.
+def _require_host_alias(kind: str = "gitea") -> None:
+    """Refuse until the host resolves the lane's compose hostname.
 
     One registry URL must be true on both sides of the loop: the
-    runner resolves the compose service name ``gitea``, the host
-    does not, and a split URL forces an unlocked workspace and a
-    hostname fork through every file. The one-line alias makes the
-    compose name true on the host too, and the lock then carries a
-    URL both sides can read.
+    runner resolves the compose service name, the host does not, and
+    a split URL forces an unlocked workspace and a hostname fork
+    through every file. The one-line alias makes the compose name
+    true on the host too, and the lock then carries a URL both sides
+    can read.
     """
     import urllib.error
     import urllib.request
 
+    lane = _lane(kind)
     try:
-        with urllib.request.urlopen("http://gitea:3000/api/v1/version", timeout=2):
+        with urllib.request.urlopen(lane.alias + lane.version_path, timeout=2):
             return
     except (urllib.error.URLError, TimeoutError, OSError):
         fail(
-            "the host cannot reach http://gitea:3000, the compose"
+            f"the host cannot reach {lane.alias}, the compose"
             " hostname CI uses for the registry (a network resolving"
-            " 'gitea' elsewhere fails the same way; /etc/hosts wins"
+            f" '{lane.host}' elsewhere fails the same way; /etc/hosts wins"
             " over DNS). Add the alias once:"
-            " sudo sh -c 'echo \"127.0.0.1 gitea\" >> /etc/hosts'"
+            f" sudo sh -c 'echo \"127.0.0.1 {lane.host}\" >> /etc/hosts'"
         )
 
 
@@ -236,7 +369,6 @@ def _publish_dev_wheels(kind: str) -> dict[str, str]:
     distribution name, for the loop's lock to pin exactly.
     """
     from livery.footman import run
-    from livery.forge._registry import purge_packages
     from livery.workshop._dev_release import unchanged_since_release
     from livery.workshop._git_ops import GitOps
     from livery.workshop._layers import workspace_root
@@ -266,8 +398,8 @@ def _publish_dev_wheels(kind: str) -> dict[str, str]:
         else:
             changed.append(member)
     if released:
-        purged = purge_packages(
-            os.environ.get("GITEA_URL", ""), E2E_OWNER, token=token, names=released
+        purged = _purge(
+            kind, os.environ.get(_lane(kind).url_var, ""), token, names=released
         )
         print(
             f"  registry: {len(purged)} stale rehearsal release(s) of the pinned"
@@ -281,10 +413,7 @@ def _publish_dev_wheels(kind: str) -> dict[str, str]:
             # pair would strip PATH from under the child fm.
             env={
                 **os.environ,
-                "PYTHON_PUBLISH_INDEX": ALIAS_URL
-                + "/api/packages/"
-                + E2E_OWNER
-                + "/pypi",
+                "PYTHON_PUBLISH_INDEX": _lane(kind).publish(),
                 "UV_PUBLISH_TOKEN": token,
             },
         )
@@ -293,8 +422,33 @@ def _publish_dev_wheels(kind: str) -> dict[str, str]:
     return pins
 
 
+def _purge(
+    kind: str, url: str, token: str, *, names: Collection[str] | None = None
+) -> list[str]:
+    """Drop the loop's packages from the registry at *url*: every one, or *names*.
+
+    Gitea keeps them under the owner, GitLab under the project.
+    """
+    from livery.forge._registry import purge_gitlab_packages, purge_packages
+
+    project = f"{E2E_OWNER}/{E2E_REPO}"
+    if names is None:
+        if kind == "gitlab":
+            return purge_gitlab_packages(url, project, token=token)
+        return purge_packages(url, E2E_OWNER, token=token)
+    if kind == "gitlab":
+        return purge_gitlab_packages(url, project, token=token, names=names)
+    return purge_packages(url, E2E_OWNER, token=token, names=names)
+
+
 def start_over(
-    lane: Forge, token: str, root: Path, *, url: str, wait: float = 120.0
+    lane: Forge,
+    token: str,
+    root: Path,
+    *,
+    url: str,
+    wait: float = 120.0,
+    kind: str = "gitea",
 ) -> list[str]:
     """Delete the loop's repository, its registry releases, and *root*; the lines.
 
@@ -306,8 +460,6 @@ def start_over(
     the server anyway, so the reset waits up to *wait* seconds for
     the repository to be gone before it refuses.
     """
-    from livery.forge._registry import purge_packages
-
     if (root / ".git").is_dir():
         unpushed = _unpushed_commits(root)
         if unpushed:
@@ -331,7 +483,7 @@ def start_over(
         )
     else:
         lines.append(f"  deleted {E2E_OWNER}/{E2E_REPO} on the dev forge")
-    purged = purge_packages(url, E2E_OWNER, token=token)
+    purged = _purge(kind, url, token)
     lines.append(
         f"  purged {len(purged)} release(s) from the registry"
         + (f": {', '.join(purged)}" if purged else "")
@@ -399,14 +551,14 @@ def _birth(kind: str, url: str) -> Path:
             E2E_REPO,
             forge=kind,
             owner=E2E_OWNER,
-            url=ALIAS_URL,
+            url=_lane(kind).alias,
             templates=str(_TEMPLATES),
             description="The workshop's local CI loop. Scratch; recreated freely.",
         )
     return home / E2E_REPO
 
 
-def _authenticate_remote(root: Path, token: str) -> None:
+def _authenticate_remote(root: Path, token: str, kind: str = "gitea") -> None:
     """Embed the lane token in the scratch workspace's remote.
 
     Birth writes a credential-free remote by design and a human's
@@ -418,7 +570,7 @@ def _authenticate_remote(root: Path, token: str) -> None:
     """
     from livery.toolroom import tools as toolroom
 
-    bare = ALIAS_URL.removeprefix("http://")
+    bare = _lane(kind).alias.removeprefix("http://")
     url = f"http://oauth2:{token}@{bare}/{E2E_OWNER}/{E2E_REPO}.git"
     result = toolroom.git.opts(cwd=root, nofail=True, recorded=False)(
         "remote", "set-url", "origin", url
@@ -475,7 +627,7 @@ def _lock_pins(root: Path, pins: dict[str, str]) -> None:
         )
 
 
-def _eat_dev_wheels(root: Path, pins: dict[str, str]) -> str:
+def _eat_dev_wheels(root: Path, pins: dict[str, str], kind: str = "gitea") -> str:
     """Point the workspace at this pass's dev wheels; the pushed head sha.
 
     The registry joins the contract, the lock pins the wheels the
@@ -499,12 +651,15 @@ def _eat_dev_wheels(root: Path, pins: dict[str, str]) -> str:
     # mergeable false, the merge API answering 'try again later'
     # forever).
     _fresh_branch(root, _SETUP_BRANCH)
+    lane = _lane(kind)
+    host_url = os.environ.get(lane.url_var, "")
     for name in ("workshop.toml", ".copier-answers.yml"):
         f = root / name
         if f.is_file():
             body = f.read_text("utf-8")
-            if "http://localhost:3000" in body:
-                f.write_text(body.replace("http://localhost:3000", ALIAS_URL), "utf-8")
+            if host_url and host_url in body:
+                f.write_text(body.replace(host_url, lane.alias), "utf-8")
+    loop_index, loop_publish = lane.index(), lane.publish()
     # The registry lives in the contract, and the template renders it
     # into pyproject from there: every re-render preserves the wiring
     # (a roster change re-renders pyproject too, and an unwired
@@ -529,13 +684,13 @@ def _eat_dev_wheels(root: Path, pins: dict[str, str]) -> str:
             + "# is where the release wave uploads; without it the wave\n"
             + "# refuses rather than default an upload endpoint.\n"
             + "[registries.python]\n"
-            + f'url = "{LOOP_INDEX}"\n'
-            + f'publish = "{LOOP_PUBLISH}"\n'
+            + f'url = "{loop_index}"\n'
+            + f'publish = "{loop_publish}"\n'
         )
-    elif f'publish = "{LOOP_PUBLISH}"' not in contract_text:
+    elif f'publish = "{loop_publish}"' not in contract_text:
         contract_text = contract_text.replace(
-            f'url = "{LOOP_INDEX}"\n',
-            f'url = "{LOOP_INDEX}"\npublish = "{LOOP_PUBLISH}"\n',
+            f'url = "{loop_index}"\n',
+            f'url = "{loop_index}"\npublish = "{loop_publish}"\n',
             1,
         )
     contract_text = re.sub(r'prerelease = "[^"]*"\n', "", contract_text)
@@ -599,7 +754,7 @@ def _eat_dev_wheels(root: Path, pins: dict[str, str]) -> str:
         next_table = "\n[tool.uv.workspace]"
         wired = text.replace(
             next_table,
-            f'\n{marker}\nname = "loop"\nurl = "{LOOP_INDEX}"\n' + next_table,
+            f'\n{marker}\nname = "loop"\nurl = "{loop_index}"\n' + next_table,
             1,
         )
         if wired == text:
@@ -632,7 +787,22 @@ def _eat_dev_wheels(root: Path, pins: dict[str, str]) -> str:
         )
         # Force: the branch is rebuilt from main each pass, so the
         # remote's copy is always superseded, like everything scratch.
+        # The head this push supersedes keeps its runs moving with
+        # nothing left to read them: they are cancelled after the push.
+        previous = ""
+        try:
+            previous = git.remote_head(_SETUP_BRANCH)
+        except Exception:  # no such branch on origin yet
+            previous = ""
         git.push_force(_SETUP_BRANCH)
+        if previous and previous != git.head_sha():
+            from livery.workshop._ci_tasks import cancel_superseded_runs
+
+            forge_lane, _ = _dev_forge(kind)
+            for line in cancel_superseded_runs(
+                forge_lane.repository(E2E_OWNER, E2E_REPO), previous
+            ):
+                print(line)
         print("  dev wheels: wired and pushed")
     return git.head_sha()
 
@@ -750,10 +920,31 @@ def _retry_red_once(repo: Repository, runs: tuple[Run, ...]) -> list[str]:
     attempt before it is judged. Returns the workflows re-run, empty
     when nothing was red.
     """
+    import time
+
     retried: list[str] = []
     for run in runs:
         if run.conclusion != "failure":
             continue
+        # A job of the old attempt still running would collect the new
+        # attempt's halves: the re-run waits until every job has
+        # completed, naming the one it waits on.
+        deadline = time.monotonic() + 600
+        while True:
+            moving = [
+                job.name
+                for job in repo.checks.jobs(run.id)
+                if job.status != "completed"
+            ]
+            if not moving:
+                break
+            if time.monotonic() >= deadline:
+                fail(
+                    f"run {run.id} ended failure but {', '.join(moving)} still"
+                    " moved 600s later; the re-run would race it"
+                )
+            print(f"  waiting for {moving[0]} of run {run.id} before its re-run")
+            time.sleep(5)
         repo.checks.rerun(run.id, failed_only=True)
         print(f"  re-running {run.workflow} (run {run.id}) once: it ended failure")
         retried.append(run.workflow)
@@ -1746,7 +1937,7 @@ def _release_act(root: Path, kind: str) -> None:
         # The wave runs on the squash asynchronously; its red must
         # surface verbatim, because a registry poll alone cannot say
         # whether the wave failed or is merely slow.
-        _watch(kind, ALIAS_URL, squash, require=("release.yml",))
+        _watch(kind, _lane(kind).alias, squash, require=("release.yml",))
     else:
         # The recovery arm dispatched the wave at the stamping commit,
         # which is not main's tip, so the newest release run is the
@@ -1755,9 +1946,7 @@ def _release_act(root: Path, kind: str) -> None:
         print("  main unmoved: the recovery arm dispatched; following its wave")
         _watch_latest(kind, "release.yml")
     _, token = _dev_forge(kind)
-    registry = SimpleRegistry(
-        f"{ALIAS_URL}/api/packages/{E2E_OWNER}/pypi/simple", token=token
-    )
+    registry = SimpleRegistry(_lane(kind).index(), token=token)
     deadline = time.monotonic() + 300
     for name in names:
         while "0.1.0" not in registry.versions(_member_dist(name)):
@@ -1862,7 +2051,7 @@ def _merge_setup(kind: str, sha: str) -> None:
         print("  setup PR: head moved on; leaving it to the next run")
         return
     _follow_merge_state(
-        repo, "gitea", pr.number, repo.pr.merge_now, pr.number, title=pr.title
+        repo, kind, pr.number, repo.pr.merge_now, pr.number, title=pr.title
     )
     print(f"  setup PR #{pr.number}: merged; the gate is proven")
 
@@ -1889,12 +2078,12 @@ if _WORKSHOP_TESTS.is_dir():
         """
         import os
 
-        url = os.environ.get("GITEA_URL", "")
-        _require_host_alias()
+        url = os.environ.get(_lane(forge).url_var, "")
+        _require_host_alias(forge)
         lane, lane_token = _dev_forge(forge)
         root = _loop_home() / E2E_REPO
         if fresh:
-            for line in start_over(lane, lane_token, root, url=url):
+            for line in start_over(lane, lane_token, root, url=url, kind=forge):
                 print(line)
         pins = _publish_dev_wheels(forge)
         if (root / ".git").is_dir():
@@ -1905,7 +2094,7 @@ if _WORKSHOP_TESTS.is_dir():
             # without the reconcile, birth's foreign-repo guard reads
             # our own squash as a stranger's history and refuses.
 
-            _authenticate_remote(root, lane_token)
+            _authenticate_remote(root, lane_token, forge)
             _align_main(root)
             # Birth's resume renders from the contract's template
             # source before the wiring re-points it, and the source a
@@ -1916,9 +2105,9 @@ if _WORKSHOP_TESTS.is_dir():
                 _point_templates(contract.read_text("utf-8"), _TEMPLATES), "utf-8"
             )
         root = _birth(forge, url)
-        _authenticate_remote(root, lane_token)
+        _authenticate_remote(root, lane_token, forge)
         provision(forge)
-        sha = _eat_dev_wheels(root, pins)
+        sha = _eat_dev_wheels(root, pins, forge)
         print(f"  watching {sha[:12]} on the runner")
         from livery.workshop._new_project import _SETUP_BRANCH
 

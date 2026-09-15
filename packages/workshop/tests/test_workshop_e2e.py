@@ -15,13 +15,115 @@ from livery.workshop import _e2e
 _FAILURES = (BaseException,)
 
 
-def test_an_unbuilt_forge_lane_refuses_naming_the_one_built(
+def test_a_kind_with_no_local_containers_refuses_naming_the_lanes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("GITEA_URL", "http://gitea.example")
     monkeypatch.setenv("GITEA_TOKEN", "t")
-    with pytest.raises(_FAILURES, match="gitea is the one local lane"):
-        _e2e.provision("gitlab")
+    with pytest.raises(
+        _FAILURES, match="not a local lane: the loop runs against gitea, gitlab"
+    ):
+        _e2e.provision("svn")
+
+
+def test_each_lane_addresses_its_own_registry() -> None:
+    gitea, gitlab = _e2e.LANES["gitea"], _e2e.LANES["gitlab"]
+    assert gitea.host == "gitea" and gitlab.host == "gitlab"
+    # Gitea keeps an owner's registry; GitLab a project's, by its
+    # URL-encoded path, so one URL is true on both sides of the loop.
+    assert gitea.publish() == "http://gitea:3000/api/packages/livery/pypi"
+    assert gitea.index() == "http://gitea:3000/api/packages/livery/pypi/simple"
+    assert gitlab.publish() == (
+        "http://gitlab:8929/api/v4/projects/livery%2Fci-e2e-loop/packages/pypi"
+    )
+    assert gitlab.index("http://localhost:8929") == (
+        "http://localhost:8929/api/v4/projects/livery%2Fci-e2e-loop/packages/pypi"
+        "/simple"
+    )
+
+
+def test_gitlab_provisioning_mints_the_push_token_and_sets_it_masked(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("GITLAB_URL", "http://gitlab.example")
+    monkeypatch.setenv("GITLAB_TOKEN", "the-lane-token")
+    fake = FakeForge()
+    monkeypatch.setattr(
+        "livery.forge.GitlabForge.connect",
+        staticmethod(lambda url, token: fake),
+    )
+    calls: list[tuple[str, str, object]] = []
+
+    def api(
+        method: str, url: str, token: str, body: object = None
+    ) -> tuple[int, object]:
+        calls.append((method, url, body))
+        if method == "GET":
+            return 200, [{"id": 4, "name": "livery-loop-push", "active": True}]
+        if method == "DELETE":
+            return 204, None
+        return 201, {"id": 5, "token": "glpat-minted"}
+
+    mint = _e2e._mint_push_token
+    monkeypatch.setattr(
+        _e2e, "_mint_push_token", lambda url, token: mint(url, token, api)
+    )
+    _e2e.provision("gitlab")
+    out = capsys.readouterr().out
+    assert (
+        "secrets set: UV_PUBLISH_TOKEN, FORGE_TOKEN, FORGE_ADMIN_TOKEN,"
+        " GITLAB_PUSH_TOKEN" in out
+    )
+    state = fake._repos[(_e2e.E2E_OWNER, _e2e.E2E_REPO)]
+    assert state.secrets["GITLAB_PUSH_TOKEN"] == "glpat-minted"
+    assert state.secrets["FORGE_TOKEN"] == "the-lane-token"
+    # The token minted before, by name, is revoked before a new one is
+    # minted with the push scope, since a value is readable at minting alone.
+    methods = [(method, url.rsplit("/", 1)[-1]) for method, url, _ in calls]
+    assert methods == [
+        ("GET", "access_tokens"),
+        ("DELETE", "4"),
+        ("POST", "access_tokens"),
+    ]
+    assert calls[-1][2] == {
+        "name": "livery-loop-push",
+        "scopes": ["api", "write_repository"],
+        "access_level": 40,
+        "expires_at": calls[-1][2]["expires_at"],  # type: ignore[index]
+    }
+    assert "livery%2Fci-e2e-loop" in calls[0][1]
+
+
+def test_a_refused_mint_names_the_status(monkeypatch: pytest.MonkeyPatch) -> None:
+    def api(
+        method: str, url: str, token: str, body: object = None
+    ) -> tuple[int, object]:
+        return (200, []) if method == "GET" else (403, "insufficient scope")
+
+    with pytest.raises(_FAILURES, match="push token was not minted: HTTP 403"):
+        _e2e._mint_push_token("http://gitlab.example", "t", api)
+
+
+def test_the_purge_addresses_the_lane(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[tuple[str, ...]] = []
+
+    def gitea(base: str, owner: str, **kw: object) -> list[str]:
+        seen.append(("gitea", base, owner))
+        return ["a==1"]
+
+    def gitlab(base: str, project: str, **kw: object) -> list[str]:
+        seen.append(("gitlab", base, project))
+        return ["b==2"]
+
+    monkeypatch.setattr("livery.forge._registry.purge_packages", gitea)
+    monkeypatch.setattr("livery.forge._registry.purge_gitlab_packages", gitlab)
+    assert _e2e._purge("gitea", "http://h", "t") == ["a==1"]
+    assert _e2e._purge("gitlab", "http://h", "t", names=["b"]) == ["b==2"]
+    assert seen == [
+        ("gitea", "http://h", "livery"),
+        ("gitlab", "http://h", "livery/ci-e2e-loop"),
+    ]
 
 
 def test_missing_credentials_teach_the_dev_up_verb(
