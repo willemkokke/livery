@@ -176,6 +176,43 @@ def test_check_affected_scopes_or_says_nothing(
     assert set(ran) == {"format", "lint", "types", "complete", "test"}
 
 
+def test_a_dispatched_run_sets_the_verified_record_aside(
+    rig: tuple[FakeForge, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # A person dispatched the gate for this tree: the run proves it
+    # now, whatever an earlier run stamped, so the record is never
+    # read and every verb runs.
+    _, root = rig
+    ran: list[str] = []
+    monkeypatch.setattr(_python, "run_format", lambda **kwargs: ran.append("format"))
+    monkeypatch.setattr(_python, "run_lint", lambda **kwargs: ran.append("lint"))
+    monkeypatch.setattr(_python, "run_typecheck", lambda **kwargs: ran.append("types"))
+    monkeypatch.setattr(
+        _python, "run_typecomplete", lambda subset: ran.append("complete")
+    )
+    monkeypatch.setattr(_python, "run_test", lambda **kwargs: ran.append("test"))
+    from livery.workshop import _gate_record
+    from livery.workshop._git_ops import GitOps
+    from livery.workshop._verified import tree_id
+
+    git = GitOps(root)
+    _gate_record.remember(root, git, tree=tree_id(git), packages=None)
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
+    monkeypatch.setenv("GITHUB_RUN_ID", "7")
+
+    def never(root: Path) -> None:
+        raise AssertionError(f"the verified record was read for {root}")
+
+    monkeypatch.setattr(_quality, "verified_already", never)
+    _quality.check()
+    out = capsys.readouterr().out
+    assert "dispatched: the whole gate, the verified record set aside" in out
+    assert set(ran) == {"format", "lint", "types", "complete", "test"}
+
+
 def test_check_fix_rewrites_serially_then_judges_the_rest(
     rig: tuple[FakeForge, Path],
     monkeypatch: pytest.MonkeyPatch,
@@ -347,6 +384,43 @@ def test_ci_run_spawns_the_jobs_entries(
     assert "gate/docs: docs.build (builtin)" in capsys.readouterr().out
     with pytest.raises(_FAILURES, match="has no job 'nope'"):
         _ci_tasks.ci_run(point="gate", job="nope")
+
+
+def test_ci_dispatch_refuses_the_merge_and_release_points_and_starts_the_gate(
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop._git_ops import GitOps
+    from livery.workshop._verdict import EXIT_PENDING
+
+    fake, root = rig
+    repo = fake.repository(OWNER, NAME)
+    # The refusals first: a point without an entry names what starts
+    # it, and the release names the verb that dispatches the wave.
+    with pytest.raises(_FAILURES, match="the merge point has no dispatch entry"):
+        _ci_tasks.dispatch_flow(repo, point="merge", ref="main")
+    with pytest.raises(_FAILURES, match="starts gate, nightly"):
+        _ci_tasks.dispatch_flow(repo, point="merge", ref="main")
+    with pytest.raises(_FAILURES, match=r"workflow\.release\.dispatch"):
+        _ci_tasks.dispatch_flow(repo, point="release", ref="main")
+    with pytest.raises(_FAILURES, match="'weekly' is not a point"):
+        _ci_tasks.dispatch_flow(repo, point="weekly", ref="main")
+    assert repo.checks.runs(event="workflow_dispatch") == ()
+    # The gate dispatches on main; without --follow the run is named
+    # and the exit says it moves.
+    sha = fake.push(OWNER, NAME, "main")
+    code = _ci_tasks.dispatch_flow(
+        repo, point="gate", ref="main", follow=False, interval=0.05, register_timeout=5
+    )
+    assert code == EXIT_PENDING
+    out = capsys.readouterr().out
+    assert "dispatched the gate point on main (ci.yml)" in out
+    (run,) = repo.checks.runs(event="workflow_dispatch")
+    assert f"gate: run {run.id}" in out
+    # Settled, the point's own reader answers green for the dispatched
+    # run, whatever commit it checked.
+    fake.settle(OWNER, NAME, sha)
+    assert _ci_tasks.runs_status_flow(repo, GitOps(root), point="gate") == 0
+    assert "green: 1 run(s) for the gate point" in capsys.readouterr().out
 
 
 def test_ci_verdict_outside_ci_and_inside(

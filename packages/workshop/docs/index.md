@@ -182,6 +182,12 @@ unless `--ref` names another, and follows the run to its verdict;
 `fm ci.status --point=nightly` and `fm ci.logs --point=nightly` read
 the newest nightly run by workflow rather than by commit, so a
 failure only the nightly meets reaches a person through `fm`.
+`fm ci.dispatch --point=gate` starts the gate the same way. A
+dispatched gate is the full gate: the check verb reads the event and
+narrows on a pull request alone, and it sets the verified record
+aside as the nightly does, so a dispatch proves the tree it checks
+out whatever the record already says. The shell spells one call on
+every event; nothing passes `--full`.
 
 ## Coverage floors
 

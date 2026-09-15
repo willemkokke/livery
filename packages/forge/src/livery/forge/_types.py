@@ -260,8 +260,11 @@ class Run:
             Backends that also number runs per repository translate;
             the protocol speaks one handle.
         workflow: The workflow that ran, as the forge names it. A
-            workflow file name on GitHub and Gitea; empty on GitLab,
-            which has one pipeline definition per repository.
+            workflow file name on GitHub and Gitea; on GitLab, which
+            has one pipeline definition per repository, the pipeline's
+            name, which a document sets from ``$FORGE_WORKFLOW`` so a
+            dispatched pipeline carries the workflow asked for, and
+            empty for a pipeline the document does not name.
         head_sha: The commit the run checked.
         event: What triggered the run, in the forge's own vocabulary.
         status: Where the run is in its life.

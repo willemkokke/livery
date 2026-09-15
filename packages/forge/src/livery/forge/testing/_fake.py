@@ -1272,7 +1272,7 @@ class FakeDriver:
 
     def await_run(
         self, repo_owner: str, repo_name: str, *, head_sha: str = "", event: str = ""
-    ) -> int:
+    ) -> Run:
         """The one run matching the filters; the fake never waits.
 
         Raises AssertionError unless exactly one run matches, which is
@@ -1282,7 +1282,7 @@ class FakeDriver:
             head_sha=head_sha, event=event
         )
         assert len(runs) == 1, f"expected one matching run, found {len(runs)}"
-        return runs[0].id
+        return runs[0]
 
     def comment_bodies(
         self,

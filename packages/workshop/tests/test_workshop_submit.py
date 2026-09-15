@@ -513,11 +513,13 @@ def test_ci_dispatch_refuses_points_without_a_dispatch_entry(
 
     fake, _git = rig
     repo = _repo(fake)
-    for point in ("gate", "merge"):
-        with pytest.raises(_FAILURES) as caught:
-            dispatch_flow(repo, point=point, ref="main")
-        assert "no dispatch entry" in str(caught.value)
-        assert "on its own event" in str(caught.value)
+    # The merge point runs on a push alone; the gate and the nightly
+    # carry the entries.
+    with pytest.raises(_FAILURES) as caught:
+        dispatch_flow(repo, point="merge", ref="main")
+    assert "the merge point has no dispatch entry" in str(caught.value)
+    assert "on a push to main" in str(caught.value)
+    assert "starts gate, nightly" in str(caught.value)
     with pytest.raises(_FAILURES) as caught:
         dispatch_flow(repo, point="release", ref="main")
     assert "workflow.release.dispatch" in str(caught.value)

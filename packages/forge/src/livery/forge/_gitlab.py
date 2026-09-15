@@ -1061,7 +1061,10 @@ class _GitlabChecks:
         The pipeline ``source`` maps into the protocol's event
         vocabulary: an API-, trigger-, or web-created pipeline reads
         as ``workflow_dispatch``, a push as ``push``, anything else
-        verbatim.
+        verbatim. The pipeline's ``name`` is the run's workflow: a
+        document whose ``workflow: name`` is ``$FORGE_WORKFLOW`` names
+        a dispatched pipeline after the workflow the dispatch asked
+        for, and every other pipeline stays unnamed.
         """
         query = f"&sha={quote(head_sha, safe='')}" if head_sha else ""
         runs = []
@@ -1074,7 +1077,7 @@ class _GitlabChecks:
             runs.append(
                 Run(
                     id=int(entry["id"]),
-                    workflow="",
+                    workflow=str(entry.get("name") or ""),
                     head_sha=str(entry.get("sha", "")),
                     event=mapped,
                     status=status,

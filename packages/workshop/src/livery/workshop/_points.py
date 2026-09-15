@@ -51,17 +51,21 @@ WORKFLOWS = {
 }
 
 #: The events that trigger each point's runs, in the forges' words.
+#: The gate runs on a pull request and by hand: a dispatched gate
+#: pays the full gate, since the check verb narrows on a pull request
+#: alone, and the shell spells one call whatever the event.
 EVENTS = {
-    "gate": ("pull_request",),
+    "gate": ("pull_request", "workflow_dispatch"),
     "merge": ("push",),
     "nightly": ("schedule", "workflow_dispatch"),
     "release": ("workflow_dispatch",),
 }
 
 #: The points a person starts by hand through ``ci.dispatch``: their
-#: shells carry a dispatch entry. The release wave is dispatched by
-#: the merge point through ``workflow.release.dispatch``.
-DISPATCHABLE = ("nightly",)
+#: shells carry a dispatch entry. The merge point runs on a push
+#: alone, and the release wave is dispatched by the merge point
+#: through ``workflow.release.dispatch``.
+DISPATCHABLE = ("gate", "nightly")
 
 #: The trace the profiled gate writes, read by the leg's row.
 TRACE = "fm-profile.json"

@@ -313,13 +313,20 @@ def check(
     run = run_context()
     # The nightly point pays the whole gate: the record it would skip on
     # was stamped by a run that selected the gate's tests, not its own,
-    # and a narrowed nightly would be no nightly.
+    # and a narrowed nightly would be no nightly. A dispatched run sets
+    # the record aside too: a person asked for this tree to be proved
+    # now, and a skip would answer with what an earlier run said. Its
+    # narrowing is the affected-legs decision's, which pays the full
+    # gate on every event but a pull request and says so.
     nightly = _current_point() == "nightly"
+    dispatched = run is not None and run.event == "workflow_dispatch"
     if nightly:
         print(
             "  nightly: the whole gate, the verified record and the narrowing set aside"
         )
-    if not nightly and root_for_ci is not None and run is not None:
+    elif dispatched:
+        print("  dispatched: the whole gate, the verified record set aside")
+    if not (nightly or dispatched) and root_for_ci is not None and run is not None:
         from livery.workshop._state import remote_snapshot
 
         # The verified record and the records a skip reads: one listing.

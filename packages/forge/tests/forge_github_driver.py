@@ -30,7 +30,7 @@ import time
 from collections.abc import Callable
 from typing import Literal
 
-from livery.forge import Forge, ForgeError, GithubForge, Repository
+from livery.forge import Forge, ForgeError, GithubForge, Repository, Run
 from livery.forge._http import JsonClient, Opener
 from livery.forge.testing import Outcome
 
@@ -262,10 +262,10 @@ class GithubConformanceDriver:
 
     def await_run(
         self, repo_owner: str, repo_name: str, *, head_sha: str = "", event: str = ""
-    ) -> int:
-        """Poll until exactly one matching run is listed; its id."""
+    ) -> Run:
+        """Poll until exactly one matching run is listed; that run."""
         checks = self._github.repository(repo_owner, repo_name).checks
-        found: list[int] = []
+        found: list[Run] = []
 
         def probe() -> bool:
             matching = checks.runs(head_sha=head_sha, event=event)
@@ -273,7 +273,7 @@ class GithubConformanceDriver:
                 raise AssertionError(
                     f"expected one matching run, found {len(matching)}"
                 )
-            found[:] = [run.id for run in matching]
+            found[:] = list(matching)
             return bool(found)
 
         self._poll(probe, subject="a matching run to appear")
