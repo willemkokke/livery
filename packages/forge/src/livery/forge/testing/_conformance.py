@@ -30,7 +30,7 @@ from typing import Literal, Protocol, TypeAlias
 
 from livery.forge._errors import ForgeError, Unsupported
 from livery.forge._protocol import Forge, Repository
-from livery.forge._types import Capability, Label, RepoConfig
+from livery.forge._types import Capability, Label, RepoConfig, Run
 
 Outcome: TypeAlias = Literal["success", "failure", "hang", "skipped"]
 """What CI will do with a pushed commit.
@@ -102,11 +102,12 @@ class ForgeDriver(Protocol):
 
     def await_run(
         self, repo_owner: str, repo_name: str, *, head_sha: str = "", event: str = ""
-    ) -> int:
-        """The id of the one run matching the filters, once it exists.
+    ) -> Run:
+        """The one run matching the filters, once it exists.
 
         Runs appear asynchronously on a real forge; this blocks until
-        the matching run is listed. Exactly one run must match.
+        the matching run is listed. Exactly one run must match, and
+        the run comes back as the listing named it.
         """
         ...
 
@@ -500,7 +501,7 @@ def _arm_disarm(driver: ForgeDriver) -> None:
     assert repo.pr.disarm(pr.number)
     assert not repo.pr.is_armed(pr.number)
     assert not repo.pr.disarm(pr.number)  # idempotent, and says so
-    run = driver.await_run(repo.owner, repo.name, head_sha=sha)
+    run = driver.await_run(repo.owner, repo.name, head_sha=sha).id
     repo.checks.cancel_run(run)  # leave nothing hanging
 
 
@@ -538,7 +539,7 @@ def _status_progression(driver: ForgeDriver) -> None:
     red_sha = driver.push(repo.owner, repo.name, "red", outcome="failure")
     driver.settle(repo.owner, repo.name, red_sha)
     assert repo.checks.status(red_sha).state == "failure"
-    live_run = driver.await_run(repo.owner, repo.name, head_sha=live_sha)
+    live_run = driver.await_run(repo.owner, repo.name, head_sha=live_sha).id
     repo.checks.cancel_run(live_run)  # leave nothing hanging
     driver.settle(repo.owner, repo.name, live_sha)
 
@@ -574,7 +575,7 @@ def _rerun(driver: ForgeDriver) -> None:
     """Rerun re-runs a completed run; a live run is refused."""
     repo = driver.fresh_repo()
     live_sha = driver.push(repo.owner, repo.name, "live", outcome="hang")
-    live_run = driver.await_run(repo.owner, repo.name, head_sha=live_sha)
+    live_run = driver.await_run(repo.owner, repo.name, head_sha=live_sha).id
     try:
         repo.checks.rerun(live_run)
     except ForgeError:
@@ -585,7 +586,7 @@ def _rerun(driver: ForgeDriver) -> None:
     driver.settle(repo.owner, repo.name, live_sha)
     flaky_sha = driver.push(repo.owner, repo.name, "flaky", outcome="failure")
     driver.settle(repo.owner, repo.name, flaky_sha)
-    flaky_run = driver.await_run(repo.owner, repo.name, head_sha=flaky_sha)
+    flaky_run = driver.await_run(repo.owner, repo.name, head_sha=flaky_sha).id
     repo.checks.rerun(flaky_run)
     driver.settle(repo.owner, repo.name, flaky_sha)
     settled = repo.checks.runs(head_sha=flaky_sha)[0]
@@ -596,7 +597,7 @@ def _cancel_run(driver: ForgeDriver) -> None:
     """cancel_run cancels a live run; a terminal run is refused."""
     repo = driver.fresh_repo()
     sha = driver.push(repo.owner, repo.name, "feature", outcome="hang")
-    run = driver.await_run(repo.owner, repo.name, head_sha=sha)
+    run = driver.await_run(repo.owner, repo.name, head_sha=sha).id
     repo.checks.cancel_run(run)
     driver.settle(repo.owner, repo.name, sha)  # cancellation lands async
     cancelled = repo.checks.runs(head_sha=sha)[0]
@@ -614,7 +615,7 @@ def _cancel_run_forced(driver: ForgeDriver) -> None:
     """Force-cancel works where the capability is declared."""
     repo = driver.fresh_repo()
     sha = driver.push(repo.owner, repo.name, "feature", outcome="hang")
-    run = driver.await_run(repo.owner, repo.name, head_sha=sha)
+    run = driver.await_run(repo.owner, repo.name, head_sha=sha).id
     repo.checks.cancel_run(run, force=True)
     driver.settle(repo.owner, repo.name, sha)
     cancelled = repo.checks.runs(head_sha=sha)[0]
@@ -625,7 +626,7 @@ def _cancel_run_force_declined(driver: ForgeDriver) -> None:
     """Force is declined by name where unsupported; plain cancel still works."""
     repo = driver.fresh_repo()
     sha = driver.push(repo.owner, repo.name, "feature", outcome="hang")
-    run = driver.await_run(repo.owner, repo.name, head_sha=sha)
+    run = driver.await_run(repo.owner, repo.name, head_sha=sha).id
     try:
         repo.checks.cancel_run(run, force=True)
     except Unsupported as exc:
@@ -638,10 +639,14 @@ def _cancel_run_force_declined(driver: ForgeDriver) -> None:
 
 
 def _dispatch(driver: ForgeDriver) -> None:
-    """Dispatch queues a run on the named ref; a missing ref is refused."""
+    """Dispatch queues a run named after the workflow; a missing ref is refused."""
     repo = driver.fresh_repo()
     repo.checks.dispatch("conf.yml", ref=_default_branch(driver, repo))
-    driver.await_run(repo.owner, repo.name, event="workflow_dispatch")
+    run = driver.await_run(repo.owner, repo.name, event="workflow_dispatch")
+    # The run names the workflow the dispatch asked for, so a caller
+    # tells one dispatched workflow's runs from another's: a path on
+    # GitHub, a file on Gitea, the pipeline's name on GitLab.
+    assert run.workflow.rsplit("/", 1)[-1] == "conf.yml", run.workflow
     try:
         repo.checks.dispatch("conf.yml", ref="no-such-ref")
     except ForgeError:

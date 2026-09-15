@@ -58,8 +58,10 @@ def test_each_point_names_its_workflow_and_events() -> None:
     assert workflow_of("nightly") == "nightly.yml"
     assert workflow_of("release") == RELEASE_WORKFLOW
     assert set(EVENTS) == set(POINTS)
+    assert EVENTS["gate"] == ("pull_request", "workflow_dispatch")
+    assert EVENTS["merge"] == ("push",)
     assert EVENTS["nightly"] == ("schedule", "workflow_dispatch")
-    assert DISPATCHABLE == ("nightly",)
+    assert DISPATCHABLE == ("gate", "nightly")
 
 
 def test_an_unknown_job_names_the_points_jobs(tmp_path: Path) -> None:
@@ -154,6 +156,42 @@ def test_the_nightly_carries_the_forge_token_where_the_repository_has_one() -> N
     files = generate(Path(__file__).resolve().parents[3])
     nightly = files[".github/workflows/nightly.yml"]
     assert "FORGE_TOKEN: ${{ secrets.FORGE_TOKEN || secrets.GITHUB_TOKEN }}" in nightly
+
+
+def _rendered(tmp_path: Path, kind: str) -> dict[str, str]:
+    from livery.workshop._ci_generate import generate
+
+    root = tmp_path / kind
+    root.mkdir()
+    (root / "workshop.toml").write_text(
+        '[workspace]\nlayers = ["livery.workshop"]\n\n[forge]\n'
+        f'kind = "{kind}"\nowner = "owner"\n\n[ci]\nrunners = ["ubuntu-latest"]\n'
+        "affected-legs = true\n"
+    )
+    (root / "pyproject.toml").write_text(
+        '[project]\nname = "scratch"\nrequires-python = ">=3.11"\n'
+    )
+    return generate(root)
+
+
+def test_the_gate_carries_a_dispatch_entry_and_spells_one_call_on_every_event(
+    tmp_path: Path,
+) -> None:
+    # A dispatched run pays the full gate because the check verb reads
+    # the event, so the shell never spells --full: one rendered call
+    # serves a pull request, a push and a dispatch alike.
+    for kind in ("github", "gitea"):
+        gate = _rendered(tmp_path, kind)[f".{kind}/workflows/ci.yml"]
+        triggers = gate.split("jobs:", 1)[0]
+        assert "  pull_request:\n" in triggers
+        assert "  workflow_dispatch:\n" in triggers
+        assert "--full" not in gate
+        assert gate.count("ci.run --point=gate --job=check") == 1
+    # GitLab names a dispatched pipeline after the workflow asked for,
+    # so a dispatched gate is told from a dispatched wave.
+    pipeline = _rendered(tmp_path, "gitlab")[".gitlab-ci.yml"]
+    assert "workflow:\n  name: $FORGE_WORKFLOW\n" in pipeline
+    assert "--full" not in pipeline
 
 
 def test_a_red_entry_fails_the_job_and_stops(tmp_path: Path) -> None:

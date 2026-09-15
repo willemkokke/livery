@@ -11,7 +11,8 @@ state's code, so a script can wait on main after a merge, and
 logs reach an agent through fm; both read the newest run of a point
 instead under ``--point``, which is how the nightly's verdict reaches
 a person. ``ci.dispatch`` starts a point that has a dispatch entry
-(the nightly) and follows it to its verdict. ``ci.run`` runs one job of a point
+(the gate, the nightly) and follows it to its verdict. ``ci.run``
+runs one job of a point
 (livery.workshop._points), the one verb the emitted shells call;
 ``ci.verdict`` is the gate job's judgement of the jobs it needs.
 ``ci.timings`` prints the timing rows the gate writes on
@@ -347,9 +348,9 @@ def dispatch_flow(
                 " workflow.release.dispatch` does by hand"
             )
         fail(
-            f"the {point} point has no dispatch entry: it runs on its own event"
-            f" (a pull request, a push to main); `{footman_prog()} ci.dispatch`"
-            f" starts {', '.join(DISPATCHABLE)}"
+            f"the {point} point has no dispatch entry: it runs on a push to"
+            f" main; `{footman_prog()} ci.dispatch` starts"
+            f" {', '.join(DISPATCHABLE)}"
         )
     workflow = workflow_of(point)
     seen = {run.id for run in point_runs(repo, point)}
@@ -389,9 +390,7 @@ def footman_prog() -> str:
 
 @ci.task(name="dispatch")
 def ci_dispatch(
-    point: Annotated[
-        str, doc("the point to start; nightly is the one with an entry")
-    ] = "nightly",
+    point: Annotated[str, doc("the point to start: gate or nightly")] = "nightly",
     ref: Annotated[str, doc("the branch or tag the run checks out")] = "main",
     follow: Annotated[bool, doc("wait for the run's verdict")] = True,
     interval: Annotated[int, doc("poll seconds")] = 15,
@@ -399,14 +398,16 @@ def ci_dispatch(
 ) -> None:
     """Start a point on the forge by hand and follow it to its verdict.
 
-    The nightly is the point with a dispatch entry: the clock's run
-    waits for nobody, and this verb starts the same run now, on
-    *ref*, so a failure only the nightly meets (a floor Python, a
-    replay) is reproduced on demand. Exits green 0, red 13 with the
-    red jobs named, a run that never registered or a wait that runs
-    out 14, a forge unreachable for five polls in a row 15, and,
-    with ``--no-follow``, 18 while the run moves. The gate and the
-    merge point run on their own events, and the release wave is the
+    The gate and the nightly carry a dispatch entry. A dispatched
+    gate pays the full gate on *ref*, since the check verb narrows on
+    a pull request alone, and its stamp writes a full row for the
+    tree it proved; the nightly's run waits for nobody, and this verb
+    starts the same run now, so a failure only the nightly meets (a
+    floor Python, a replay) is reproduced on demand. Exits green 0,
+    red 13 with the red jobs named, a run that never registered or a
+    wait that runs out 14, a forge unreachable for five polls in a
+    row 15, and, with ``--no-follow``, 18 while the run moves. The
+    merge point runs on a push alone, and the release wave is the
     merge point's to dispatch.
     """
     repo, _git = _resolved()

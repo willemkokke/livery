@@ -3,10 +3,15 @@
 # `fm template.apply`; an edit here is drift.
 name: ci
 
+# A pull request, a push to main, and a dispatch by hand. A
+# dispatched run pays the full gate: the check verb reads the event
+# and narrows on a pull request alone, so every event spells the
+# same call.
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   check:

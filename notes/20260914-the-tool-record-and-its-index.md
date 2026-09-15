@@ -87,7 +87,7 @@ conformance harness leaves the eager import, independent of this plan).
 ## Sequencing
 
 Phases 1 to 7 depend on nothing in the [CI plan][ci-plan] and can start as
-soon as this one is ruled. Only phase 8 waits, on that plan's phase 4.
+soon as this one is ruled. Only phase 8 waits, on that plan's phase 5.
 
 ## Ground-truth contracts (do not violate)
 
@@ -499,7 +499,7 @@ Acceptance:
 
 ### Phase 8: the six-host verification point
 
-Depends on the CI plan's phase 4, which is what lets a package declare a
+Depends on the CI plan's phase 5, which is what lets a package declare a
 point at all.
 
 Deliverables:
@@ -511,8 +511,8 @@ Deliverables:
 
 Acceptance:
 
-- `uv run fm ci.generate` emits the point's workflow with the six runners,
-  and `uv run fm template.check` exits 0.
+- `uv run fm template.apply` writes the point's workflow with the six
+  runners, and `uv run fm template.check` exits 0 after it.
 - One dispatched run is green on all six legs.
 - `uv run fm check` exits 0 and its runner list is unchanged, proven by
   `grep runners workshop.toml`.

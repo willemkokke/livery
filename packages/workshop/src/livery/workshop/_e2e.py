@@ -1484,6 +1484,52 @@ def _prove_nightly(root: Path, kind: str) -> None:
     )
 
 
+def _prove_dispatched_gate(root: Path, kind: str) -> None:
+    """Prove the gate on command: dispatched on main, full, followed to green.
+
+    A dispatched gate pays the full gate whatever the contract's
+    affected-legs key says: the check verb reads the event and
+    narrows on a pull request alone, and sets the verified record
+    aside the way the nightly does, so a tree main already proved is
+    proved again rather than skipped. The check leg says so, and the
+    run is read back green through the point's own reader.
+    """
+    code = _loop_fm(root, "ci.dispatch", "--point=gate", "--interval=5", nofail=True)
+    if code:
+        fail(f"the loop's `{footman.prog()} ci.dispatch --point=gate` exited {code}")
+    if _loop_fm(root, "ci.status", "--point=gate", nofail=True):
+        fail(
+            f"the loop's `{footman.prog()} ci.status --point=gate` did not"
+            " read the dispatched run green"
+        )
+    from livery.workshop._ci_tasks import point_runs
+
+    forge, _ = _dev_forge(kind)
+    repo = forge.repository(E2E_OWNER, E2E_REPO)
+    run = point_runs(repo, "gate")[0]
+    if run.event != "workflow_dispatch":
+        fail(
+            f"the newest gate run {run.id} is a {run.event} run, not the"
+            f" dispatched one: {run.url}"
+        )
+    jobs = repo.checks.jobs(run.id)
+    _require_lines(
+        repo,
+        run,
+        jobs,
+        "check",
+        (
+            "dispatched: the whole gate, the verified record set aside",
+            "affected-legs: a workflow_dispatch run pays the full gate",
+        ),
+        forbidden=("affected-legs: the scoped gate against", "skipping the gate"),
+    )
+    print(
+        f"  gate: proven by hand (run {run.id}: dispatched, followed to green,"
+        " the full gate ran, and the point read back green)"
+    )
+
+
 def _release_act(root: Path, kind: str) -> None:
     """Release the member through the loop; verify wheel and receipt.
 
@@ -1785,4 +1831,8 @@ if _WORKSHOP_TESTS.is_dir():
         _prove_tests_leg(root, forge)
         _release_act(root, forge)
         _prove_nightly(root, forge)
-        print("  the loop is whole: gate, merge, release, receipt, nightly")
+        _prove_dispatched_gate(root, forge)
+        print(
+            "  the loop is whole: gate, merge, release, receipt, nightly, and the"
+            " gate on command"
+        )

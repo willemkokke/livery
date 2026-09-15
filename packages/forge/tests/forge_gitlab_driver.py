@@ -24,7 +24,7 @@ from collections.abc import Callable
 from typing import Literal
 from urllib.parse import quote
 
-from livery.forge import Forge, ForgeError, GitlabForge, Repository
+from livery.forge import Forge, ForgeError, GitlabForge, Repository, Run
 from livery.forge._http import JsonClient, Opener
 from livery.forge.testing import Outcome
 
@@ -34,6 +34,9 @@ CI_YAML = """\
 # tag would re-run the held gate and could fail the combined status,
 # so tag pipelines are suppressed entirely.
 workflow:
+  # A dispatched pipeline is named after the workflow the dispatch
+  # asked for; every other pipeline stays unnamed.
+  name: $FORGE_WORKFLOW
   rules:
     - if: $CI_COMMIT_TAG
       when: never
@@ -251,10 +254,10 @@ class GitlabConformanceDriver:
 
     def await_run(
         self, repo_owner: str, repo_name: str, *, head_sha: str = "", event: str = ""
-    ) -> int:
-        """Poll until exactly one matching run is listed; its id."""
+    ) -> Run:
+        """Poll until exactly one matching run is listed; that run."""
         checks = self._gitlab.repository(repo_owner, repo_name).checks
-        found: list[int] = []
+        found: list[Run] = []
 
         def probe() -> bool:
             matching = checks.runs(head_sha=head_sha, event=event)
@@ -262,7 +265,7 @@ class GitlabConformanceDriver:
                 raise AssertionError(
                     f"expected one matching run, found {len(matching)}"
                 )
-            found[:] = [run.id for run in matching]
+            found[:] = list(matching)
             return bool(found)
 
         self._poll(probe, subject="a matching run to appear")
