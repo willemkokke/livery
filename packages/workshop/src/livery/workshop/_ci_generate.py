@@ -26,7 +26,7 @@ from typing import Any
 
 import livery.footman as footman
 from livery.workshop._contract import load_contract
-from livery.workshop._points import DECLARED, EVENT_NAMES, POINT_BY_NAME, Job, Point
+from livery.workshop._points import EVENT_NAMES, Job, Point, points
 from livery.workshop._pythons import gate_pythons, python_matrix
 
 #: Pinned action shas, one place; version comments ride each use.
@@ -255,21 +255,25 @@ def _renders(job: Job, answers: dict[str, Any]) -> bool:
     return True
 
 
-def _points_of(workflow: str) -> tuple[Point, ...]:
-    """The declared points whose shell *workflow* is, in declaration order."""
-    return tuple(point for point in DECLARED if point.workflow == workflow)
+def _points_of(workflow: str, everything: tuple[Point, ...]) -> tuple[Point, ...]:
+    """The points among *everything* whose shell *workflow* is, in order."""
+    return tuple(point for point in everything if point.workflow == workflow)
 
 
-def _inherited_jobs(point: Point) -> tuple[Job, ...]:
+def _inherited_jobs(point: Point, everything: tuple[Point, ...]) -> tuple[Job, ...]:
     """The jobs *point* runs before its own, from the point it inherits."""
-    return POINT_BY_NAME[point.inherits].jobs if point.inherits else ()
+    if not point.inherits:
+        return ()
+    return next(other for other in everything if other.name == point.inherits).jobs
 
 
-def _needs(point: Point, job: Job, answers: dict[str, Any]) -> list[str]:
+def _needs(
+    point: Point, job: Job, answers: dict[str, Any], everything: tuple[Point, ...]
+) -> list[str]:
     """The jobs *job* waits for that render for this workspace."""
     rendered = {
         other.name
-        for other in (*_inherited_jobs(point), *point.jobs)
+        for other in (*_inherited_jobs(point, everything), *point.jobs)
         if _renders(other, answers)
     }
     return [need for need in job.needs if need in rendered]
@@ -283,7 +287,7 @@ def _event_filter(point: Point) -> str:
 def _call_step(prog: str, point: Point, job: Job) -> str:
     """The one call: ``ci.run`` for the point and job, the matrix facts passed."""
     call = f"{prog} ci.run --point={point.name} --job={job.name}"
-    if job.matrix == "legs":
+    if job.matrix in ("legs", "declared"):
         return (
             "        run: >-\n"
             f"          {call}\n"
@@ -461,7 +465,13 @@ def _grants(job: Job, *, pages: bool) -> str:
 
 
 def _actions_job(
-    answers: dict[str, Any], prog: str, point: Point, job: Job, *, forge: str
+    answers: dict[str, Any],
+    prog: str,
+    point: Point,
+    job: Job,
+    *,
+    forge: str,
+    everything: tuple[Point, ...],
 ) -> str:
     """One job of *point* for GitHub or Gitea, from its declaration.
 
@@ -476,12 +486,16 @@ def _actions_job(
     conditions = []
     if job.always:
         conditions.append("always()")
-    shared = [other for other in _points_of(point.workflow) if other.name != point.name]
+    shared = [
+        other
+        for other in _points_of(point.workflow, everything)
+        if other.name != point.name
+    ]
     if shared and not any(other.inherits == point.name for other in shared):
         conditions.append(_event_filter(point))
     if conditions:
         lines.append(f"    if: {' && '.join(conditions)}\n")
-    needs = _needs(point, job, answers)
+    needs = _needs(point, job, answers, everything)
     if needs:
         lines.append(f"    needs: [{', '.join(needs)}]\n")
     if forge == "github":
@@ -510,6 +524,14 @@ def _actions_job(
             "    runs-on: ${{ matrix.os }}\n"
         )
         cache = ""
+    elif job.matrix == "declared":
+        lines.append(
+            "    strategy:\n      fail-fast: false\n      matrix:\n"
+            f"        os: [{_csv(list(job.runners))}]\n"
+            f"        python: [{_csv(list(job.pythons), quoted=True)}]\n"
+            "    runs-on: ${{ matrix.os }}\n"
+        )
+        cache = "${{ matrix.os }}-${{ matrix.python }}"
     else:
         lines.append(f"    runs-on: {first}\n")
         cache = "docs" if job.docs_tools else ""
@@ -521,7 +543,9 @@ def _actions_job(
     lines.append(_rung_step(answers))
     if job.docs_tools:
         lines.append(_docs_requirements_step(answers))
-    lines.append(_enter_step(matrix_python=job.matrix in ("legs", "pythons")))
+    lines.append(
+        _enter_step(matrix_python=job.matrix in ("legs", "pythons", "declared"))
+    )
     lines.append(_driver_step(prog, point, job, forge=forge))
     if forge == "github":
         lines.append(_deploy_key_step(job))
@@ -537,16 +561,26 @@ def _actions_job(
 
 
 def _actions_workflow(
-    answers: dict[str, Any], prog: str, workflow: str, *, forge: str
+    answers: dict[str, Any],
+    prog: str,
+    workflow: str,
+    *,
+    forge: str,
+    everything: tuple[Point, ...] | None = None,
 ) -> str:
-    """The workflow file *workflow* for GitHub or Gitea, from the points that share it."""
-    points = _points_of(workflow)
+    """The workflow file *workflow* for GitHub or Gitea, from the points that share it.
+
+    *everything* is the workspace's points, the builtin four when
+    absent.
+    """
+    everything = everything if everything is not None else points(None)
+    owners_all = _points_of(workflow, everything)
     lines = [f"name: {workflow.removesuffix('.yml')}\n\n"]
-    for point in points:
+    for point in owners_all:
         lines.append(_comment(point.note))
     lines.append("on:\n")
     for event in EVENT_NAMES:
-        owners = [point for point in points if event in point.events]
+        owners = [point for point in owners_all if event in point.events]
         if not owners:
             continue
         if event == "pull_request":
@@ -570,17 +604,21 @@ def _actions_workflow(
                 if not item.required:
                     lines.append(f'        default: "{item.default}"\n')
     lines.append("\njobs:\n")
-    for point in points:
+    for point in owners_all:
         for job in point.jobs:
             if _renders(job, answers):
-                lines.append(_actions_job(answers, prog, point, job, forge=forge))
+                lines.append(
+                    _actions_job(
+                        answers, prog, point, job, forge=forge, everything=everything
+                    )
+                )
     return "".join(lines)
 
 
-def _gitlab_rules(point: Point) -> str:
+def _gitlab_rules(point: Point, everything: tuple[Point, ...]) -> str:
     """The rules admitting *point*'s runs, and those of the points inheriting it."""
     events: list[str] = list(point.events)
-    for other in DECLARED:
+    for other in everything:
         if other.inherits == point.name:
             events.extend(event for event in other.events if event not in events)
     lines = ["  rules:\n", "    - if: $CI_COMMIT_TAG\n      when: never\n"]
@@ -601,7 +639,13 @@ def _gitlab_rules(point: Point) -> str:
 
 
 def _gitlab_job(
-    answers: dict[str, Any], prog: str, point: Point, job: Job, *, image: str
+    answers: dict[str, Any],
+    prog: str,
+    point: Point,
+    job: Job,
+    *,
+    image: str,
+    everything: tuple[Point, ...],
 ) -> str:
     """One job of *point* in the GitLab document, from its declaration.
 
@@ -614,7 +658,7 @@ def _gitlab_job(
     """
     tools = " ".join(str(t) for t in answers.get("docs_requirements", []))
     first = str(next(iter(answers.get("runners", ["ubuntu-latest"]))))
-    stage = "check" if point.name in ("gate", "nightly") else "release"
+    stage = "release" if point.name in ("merge", "release") else "check"
     name = "pages" if job.deploy else job.name
     lines = [
         _comment(job.note),
@@ -622,7 +666,7 @@ def _gitlab_job(
         f"  stage: {stage}\n",
         f"  image: {image}\n",
     ]
-    needs = _needs(point, job, answers)
+    needs = _needs(point, job, answers, everything)
     if needs:
         lines.append(f"  needs: [{', '.join(needs)}]\n")
     variables: list[str] = []
@@ -634,7 +678,7 @@ def _gitlab_job(
         variables.append("    FORGE_ADMIN_TOKEN: $FORGE_ADMIN_TOKEN")
     if variables:
         lines.append("  variables:\n" + "".join(v + "\n" for v in variables))
-    rules = _gitlab_rules(point)
+    rules = _gitlab_rules(point, everything)
     if job.always:
         rules = rules.replace("    - if: '", "    - when: always\n      if: '")
     lines.append(rules)
@@ -659,6 +703,8 @@ def _gitlab_job(
     if job.matrix == "legs":
         python = str(next(iter(answers.get("gate_pythons", ["3.11"]))))
         call += f' --os="{first}" --python="{python}"'
+    elif job.matrix == "declared":
+        call += f' --os="{job.runners[0]}" --python="{job.pythons[0]}"'
     elif job.matrix == "pythons":
         python = str(next(iter(answers.get("python_versions", ["3.11"]))))
         call += f' --python="{python}"'
@@ -670,8 +716,10 @@ def _gitlab_job(
     return "".join(lines) + "\n"
 
 
-def _gitlab_document(answers: dict[str, Any], prog: str) -> str:
-    """The one GitLab document: every declared point's jobs.
+def _gitlab_document(
+    answers: dict[str, Any], prog: str, *, everything: tuple[Point, ...] | None = None
+) -> str:
+    """The one GitLab document: every point's jobs, the builtin four by default.
 
     The merge point's dispatch job starts the wave through the API at
     the base branch with the squash in the ``ref`` variable, which the
@@ -705,10 +753,15 @@ stages: [check, release]
 
 """
     ]
-    for point in DECLARED:
+    everything = everything if everything is not None else points(None)
+    for point in everything:
         for job in point.jobs:
             if _renders(job, answers):
-                lines.append(_gitlab_job(answers, prog, point, job, image=image))
+                lines.append(
+                    _gitlab_job(
+                        answers, prog, point, job, image=image, everything=everything
+                    )
+                )
     return "".join(lines)
 
 
@@ -732,18 +785,20 @@ def generate(root: Path) -> dict[str, str]:
     kind = str(facts["forge_kind"])
     header = generated_header("#")
     site = {"zensical.toml": zensical_config(root)}
+    everything = points(root)
     if kind in ("github", "gitea"):
-        # One file per declared workflow: the gate and the merge point
-        # share ci.yml, the nightly and the release have their own.
-        workflows = sorted({point.workflow for point in DECLARED})
+        # One file per workflow: the gate and the merge point share
+        # ci.yml, the nightly, the release and every contributed point
+        # have their own.
+        workflows = sorted({point.workflow for point in everything})
         files = {
             f".{kind}/workflows/{workflow}": _actions_workflow(
-                facts, prog, workflow, forge=kind
+                facts, prog, workflow, forge=kind, everything=everything
             )
             for workflow in workflows
         }
     else:
-        files = {".gitlab-ci.yml": _gitlab_document(facts, prog)}
+        files = {".gitlab-ci.yml": _gitlab_document(facts, prog, everything=everything)}
     files["setup.sh"] = entry_script(root)
     files.update(site)
     rendered = {path: header + content for path, content in files.items()}
@@ -763,9 +818,8 @@ def generated_files(root: Path) -> dict[Path, str]:
     return {root / relative: content for relative, content in generate(root).items()}
 
 
-#: Generated files an earlier emission wrote and this one folds away:
-#: the apply deletes them where present, so a workspace never keeps a
-#: workflow the emitter no longer owns.
+#: Generated files an earlier emission wrote under other names and
+#: this one folds away: the apply deletes them where present.
 RETIRED = (
     ".gitea/workflows/governance.yml",
     ".gitea/workflows/docs.yml",
@@ -775,6 +829,34 @@ RETIRED = (
 )
 
 
+#: What every generated file opens with, whatever runner wrote it.
+GENERATED_MARK = "# Generated by the workshop from workshop.toml"
+
+
 def retired_files(root: Path) -> tuple[Path, ...]:
-    """The retired generated files present under *root*, to delete."""
-    return tuple(root / relative for relative in RETIRED if (root / relative).is_file())
+    """The generated workflow files under *root* this emission does not own, to delete.
+
+    `RETIRED` names the ones earlier emissions wrote under other names.
+    Beyond those, every file in the forge's workflow directory that
+    opens with `GENERATED_MARK` and is not in this emission is retired
+    too: the workflow of a point a package contributed and that went
+    with the package. A file without the mark is a person's and is
+    never touched.
+    """
+    found = [root / relative for relative in RETIRED if (root / relative).is_file()]
+    owned = set(generate(root))
+    for directory in (".github/workflows", ".gitea/workflows"):
+        folder = root / directory
+        if not folder.is_dir():
+            continue
+        for path in sorted(folder.glob("*.yml")):
+            relative = path.relative_to(root).as_posix()
+            if relative in owned or relative in RETIRED:
+                continue
+            try:
+                head = path.read_text("utf-8", errors="replace")[: len(GENERATED_MARK)]
+            except OSError:
+                continue
+            if head == GENERATED_MARK:
+                found.append(path)
+    return tuple(found)

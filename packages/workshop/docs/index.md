@@ -182,6 +182,17 @@ unless `--ref` names another, and follows the run to its verdict;
 `fm ci.status --point=nightly` and `fm ci.logs --point=nightly` read
 the newest nightly run by workflow rather than by commit, so a
 failure only the nightly meets reaches a person through `fm`.
+A package contributes a point of its own with `[[ci.point]]` in its
+`workshop.toml`: `name` (a workflow file name and a job name at once),
+`task`, and optionally `args`, `every`, `runners` (the root contract's
+when absent) and `pythons` (the newest gate Python when absent). The
+point runs on the clock and by hand, one job on those runners and
+Pythons calling the task through `fm ci.run`, with the job token and
+nothing more: a permission, a secret or an environment in the table
+refuses, as does a builtin name, a name two packages claim, a cadence
+that is not one, or a task no layer mounts. Removing the package
+removes its workflow: `fm template.check` reports the file as retired
+and `fm template.apply` deletes it.
 On GitLab the clock is a pipeline schedule, a project setting rather
 than a line in the pipeline document: `fm workflow.configure` creates
 one per point that runs on the clock, named `workshop: <point>`, and

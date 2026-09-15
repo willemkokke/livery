@@ -23,18 +23,25 @@ same checks, plus the jobs only a merge has (the docs deploy, the
 governance reconcile). A shell spells ``--point=gate`` on the shared
 jobs and the verb promotes the point on a push, so the YAML carries
 no decision.
+
+A package contributes a point of its own through ``[[ci.point]]`` in
+its ``workshop.toml``: a scheduled point with a dispatch entry, one
+job on the runners and Pythons it names, running the task it names
+with the job token and nothing more. `points` is every point a
+workspace has, the builtin four first; every reader takes that set.
 """
 
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 
 import livery.footman as footman
-from livery.footman import fail
+from livery.footman import Tasks, fail
 from livery.workshop._contract import load_contract
 from livery.workshop._pytest_points import POINT_VARIABLE
 from livery.workshop._state import LEG_VARIABLE, run_context
@@ -72,7 +79,11 @@ class Job:
         matrix: The legs the job fans out to: ``legs`` for one per
             runner and gate Python, ``pythons`` for one per Python of
             the whole matrix on the first runner, ``wheels`` for one per
-            declared wheel platform, ``""`` for one job on one runner.
+            declared wheel platform, ``declared`` for one per runner
+            and Python the job itself names, ``""`` for one job on one
+            runner.
+        runners: The runners a ``declared`` matrix fans out to.
+        pythons: The Pythons a ``declared`` matrix fans out to.
         needs: The jobs of the point this one waits for.
         always: Whether the job runs when a job it needs was red, the
             verdict job's shape.
@@ -114,6 +125,8 @@ class Job:
 
     name: str
     matrix: str = ""
+    runners: tuple[str, ...] = ()
+    pythons: tuple[str, ...] = ()
     needs: tuple[str, ...] = ()
     always: bool = False
     fetch: str = ""
@@ -172,6 +185,11 @@ class Point:
     cron: str = ""
     note: str = ""
 
+
+#: When the clock starts a scheduled point, UTC: the nightly's hour,
+#: and every contributed point's, whose cadence is judged on the
+#: runner by `due` rather than by a cron of its own.
+CLOCK = "17 4 * * *"
 
 #: The four builtin points, in the order a change meets them.
 DECLARED: tuple[Point, ...] = (
@@ -282,7 +300,7 @@ DECLARED: tuple[Point, ...] = (
         "nightly",
         "nightly.yml",
         ("schedule", "workflow_dispatch"),
-        cron="17 4 * * *",
+        cron=CLOCK,
         note=(
             "The nightly point: the clock and a dispatch entry, one call per"
             " Python. What runs is the workshop's builtin schedule plus"
@@ -452,11 +470,213 @@ def verify_points(points: tuple[Point, ...]) -> None:
 
 verify_points(DECLARED)
 
-#: The declared points by name.
+#: The builtin points by name.
 POINT_BY_NAME: dict[str, Point] = {point.name: point for point in DECLARED}
 
-#: The points, in the order a change meets them.
+#: The builtin points, in the order a change meets them. A workspace
+#: may have more: `points` adds the ones its packages contribute.
 POINTS = tuple(point.name for point in DECLARED)
+
+#: What a contributed point's name may look like: a workflow file
+#: name and a job name at once.
+POINT_NAME = re.compile(r"^[a-z][a-z0-9-]*$")
+
+#: The keys a contributed point may not carry: a scheduled workflow
+#: with a grant, a secret or an environment on a public repository is
+#: a foothold, and that stays a root decision.
+FORBIDDEN_POINT_KEYS = ("permissions", "secrets", "secret", "environment")
+
+
+#: The runner's merged task tree, kept by the workshop's ``pre_tasks``
+#: hook for the span of one invocation: discovery merges every layer's
+#: tree into the invocation and resets the module-level root, so a
+#: check against what this runner mounts reads it here.
+MOUNTED: Tasks | None = None
+
+
+def _mounted(task: str) -> bool:
+    """Whether the runner mounts the task at the dotted address *task*.
+
+    The invocation's merged tree when a run kept one, else whatever
+    the module-level root holds, which is a test's own registrations.
+    """
+    from livery.footman import registry
+
+    view = MOUNTED if MOUNTED is not None else Tasks(registry.root)
+    return view.get(task) is not None
+
+
+@dataclass(frozen=True)
+class Contribution:
+    """A point a package contributes, and the entry that runs it.
+
+    Attributes:
+        point: The point, a scheduled one with a dispatch entry and
+            one job named after it.
+        entry: The task the job runs, with its cadence.
+    """
+
+    point: Point
+    entry: Entry
+
+
+def contributed(
+    root: Path, *, mounted: Callable[[str], bool] | None = None
+) -> tuple[Contribution, ...]:
+    """The ``[[ci.point]]`` declarations of *root*'s packages, refusing bad ones.
+
+    Each table names a ``name`` (the point's, a workflow file name and
+    a job name at once), a ``task``, and optionally ``args``,
+    ``every`` (a cadence from `CADENCES`), ``runners`` (the root
+    contract's when absent) and ``pythons`` (the newest gate Python
+    when absent). A name that is a builtin point or that two packages
+    claim, a name `POINT_NAME` refuses, a cadence that is not one, a
+    task *mounted* does not know (the runner's own registry when
+    absent), and a permission, secret or environment key each refuse
+    at load, naming the package and the point.
+    """
+    from livery.workshop._packages import discover_packages
+    from livery.workshop._pythons import gate_pythons
+
+    mounted = mounted or _mounted
+    contract = load_contract(root / "workshop.toml")
+    ci_table = contract.get("ci") or {}
+    default_runners = tuple(
+        str(r) for r in (ci_table.get("runners") or ["ubuntu-latest"])
+    )
+    default_pythons: tuple[str, ...] | None = None
+    found: dict[str, str] = {}
+    contributions: list[Contribution] = []
+    for package in discover_packages(root):
+        package_contract = load_contract(package.directory / "workshop.toml")
+        raw = (package_contract.get("ci") or {}).get("point") or []
+        if not isinstance(raw, list):
+            fail(f"{package.path}: [ci] point must be a list of [[ci.point]] tables")
+        for index, item in enumerate(raw, start=1):
+            where = f"{package.path} [[ci.point]] entry {index}"
+            if not isinstance(item, dict):
+                fail(f"{where} is not a table")
+            name = str(item.get("name", ""))
+            task = str(item.get("task", ""))
+            if not name:
+                fail(f"{where}: names no point")
+            if name in POINT_BY_NAME:
+                fail(
+                    f"{where}: {name!r} is a builtin point; a package contributes"
+                    " a point of its own and adds no job to the gate"
+                )
+            if not POINT_NAME.match(name):
+                fail(
+                    f"{where}: {name!r} is not a point name; a name is a workflow"
+                    " file's, lower-case letters, digits and dashes, starting"
+                    " with a letter"
+                )
+            if name in found:
+                fail(
+                    f"{where}: {name!r} is already the point {found[name]}"
+                    " declares; two packages cannot share one"
+                )
+            for key in FORBIDDEN_POINT_KEYS:
+                if key in item:
+                    fail(
+                        f"{where} ({name}): declares {key!r}; a contributed point"
+                        " runs with the job token and nothing more, and a grant,"
+                        " a secret or an environment is a root decision"
+                    )
+            if not task:
+                fail(f"{where} ({name}): names no task")
+            if not mounted(task):
+                fail(
+                    f"{where} ({name}): the runner mounts no task {task!r}; a"
+                    " point runs a task some layer mounts"
+                )
+            args = item.get("args", [])
+            if not isinstance(args, list) or not all(isinstance(a, str) for a in args):
+                fail(f"{where} ({name}, {task}): args must be strings")
+            every = str(item.get("every", ""))
+            if every and every not in CADENCES:
+                fail(
+                    f"{where} ({name}, {task}): every {every!r} is not a cadence;"
+                    f" the cadences are {', '.join(CADENCES)}"
+                )
+            runners = item.get("runners", list(default_runners))
+            pythons = item.get("pythons")
+            if pythons is None:
+                if default_pythons is None:
+                    default_pythons = (gate_pythons(root)[-1],)
+                pythons = list(default_pythons)
+            for label, values in (("runners", runners), ("pythons", pythons)):
+                if (
+                    not isinstance(values, list)
+                    or not values
+                    or not all(isinstance(v, str) and v for v in values)
+                ):
+                    fail(
+                        f"{where} ({name}): {label} must be a non-empty list of strings"
+                    )
+            found[name] = package.path
+            point = Point(
+                name,
+                f"{name}.yml",
+                ("schedule", "workflow_dispatch"),
+                cron=CLOCK,
+                note=(
+                    f"The {name} point, contributed by {package.path}: the clock"
+                    " and a dispatch entry, one call per runner and Python it"
+                    " names, with the job token and nothing more."
+                ),
+                jobs=(
+                    Job(
+                        name,
+                        matrix="declared",
+                        runners=tuple(str(r) for r in runners),
+                        pythons=tuple(str(v) for v in pythons),
+                        token="job",
+                    ),
+                ),
+            )
+            entry = Entry(
+                name, name, task, tuple(args), source=package.path, every=every
+            )
+            contributions.append(Contribution(point, entry))
+    return tuple(contributions)
+
+
+def points(root: Path | None) -> tuple[Point, ...]:
+    """Every point *root* has: the builtin four, then the ones its packages contribute.
+
+    ``None`` is a process outside any workspace, which has the builtin
+    four alone. The whole set is verified as one: a contributed point
+    cannot share a file or a name with another.
+    """
+    if root is None:
+        return DECLARED
+    everything = DECLARED + tuple(item.point for item in contributed(root))
+    verify_points(everything)
+    return everything
+
+
+def point_by_name(root: Path | None) -> dict[str, Point]:
+    """`points`, by name."""
+    return {point.name: point for point in points(root)}
+
+
+def events_of(root: Path | None, point: str) -> tuple[str, ...]:
+    """The events that start *point*'s runs; refuses a name that is not a point."""
+    by_name = point_by_name(root)
+    if point not in by_name:
+        fail(f"{point!r} is not a point; the points are {', '.join(by_name)}")
+    return by_name[point].events
+
+
+def dispatchable(root: Path | None) -> tuple[str, ...]:
+    """The points a person starts by hand: a dispatch entry and no inputs."""
+    return tuple(
+        point.name
+        for point in points(root)
+        if "workflow_dispatch" in point.events and not point.inputs
+    )
+
 
 #: The workflow file each point's shell is: the gate and the merge
 #: point share one, the nightly and the release have their own.
@@ -606,7 +826,7 @@ BUILTIN: tuple[Entry, ...] = (
 def declared(root: Path) -> tuple[Entry, ...]:
     """The ``[[ci.schedule]]`` entries of *root*'s contract, refusing bad ones.
 
-    Each entry names a ``point`` (one of `POINTS`), a ``task``, and
+    Each entry names a ``point`` (one of `points`), a ``task``, and
     optionally a ``job`` (the point's own name when absent), ``args``
     and ``every``, a cadence from `CADENCES`. An unknown point, a
     missing task, arguments that are not strings, or a cadence that
@@ -617,15 +837,16 @@ def declared(root: Path) -> tuple[Entry, ...]:
     if not isinstance(raw, list):
         fail("[ci] schedule must be a list of [[ci.schedule]] tables")
     entries: list[Entry] = []
+    names = tuple(point.name for point in points(root))
     for index, item in enumerate(raw, start=1):
         if not isinstance(item, dict):
             fail(f"[[ci.schedule]] entry {index} is not a table")
         point = str(item.get("point", ""))
         task = str(item.get("task", ""))
-        if point not in POINTS:
+        if point not in names:
             fail(
                 f"[[ci.schedule]] entry {index}: point {point!r} is not a"
-                f" point; the points are {', '.join(POINTS)}"
+                f" point; the points are {', '.join(names)}"
             )
         if not task:
             fail(f"[[ci.schedule]] entry {index} ({point}): names no task")
@@ -654,15 +875,16 @@ def declared(root: Path) -> tuple[Entry, ...]:
 
 
 def schedule(root: Path) -> tuple[Entry, ...]:
-    """Every entry, the builtin ones first, then the contract's."""
-    return BUILTIN + declared(root)
+    """Every entry: the builtin ones, the packages' contributed ones, the contract's."""
+    return BUILTIN + tuple(item.entry for item in contributed(root)) + declared(root)
 
 
-def workflow_of(point: str) -> str:
+def workflow_of(point: str, root: Path | None = None) -> str:
     """The workflow file *point*'s shell is; refuses a name that is not a point."""
-    if point not in WORKFLOWS:
-        fail(f"{point!r} is not a point; the points are {', '.join(POINTS)}")
-    return WORKFLOWS[point]
+    by_name = point_by_name(root)
+    if point not in by_name:
+        fail(f"{point!r} is not a point; the points are {', '.join(by_name)}")
+    return by_name[point].workflow
 
 
 def jobs_of(root: Path, point: str) -> tuple[str, ...]:
@@ -671,12 +893,11 @@ def jobs_of(root: Path, point: str) -> tuple[str, ...]:
     A ``[[ci.schedule]]`` entry may name a job no declaration has; it
     is listed after the declared jobs, in schedule order.
     """
-    if point not in POINT_BY_NAME:
-        fail(f"{point!r} is not a point; the points are {', '.join(POINTS)}")
-    declared_point = POINT_BY_NAME[point]
-    inherited = (
-        POINT_BY_NAME[declared_point.inherits].jobs if declared_point.inherits else ()
-    )
+    by_name = point_by_name(root)
+    if point not in by_name:
+        fail(f"{point!r} is not a point; the points are {', '.join(by_name)}")
+    declared_point = by_name[point]
+    inherited = by_name[declared_point.inherits].jobs if declared_point.inherits else ()
     names: list[str] = [job.name for job in (*inherited, *declared_point.jobs)]
     for entry in schedule(root):
         if entry.point in (INHERITS.get(point), point) and entry.job not in names:
@@ -783,7 +1004,9 @@ def run_point(
     from livery.workshop._state import dispatch_inputs
 
     facts.update(
-        dispatch_inputs(tuple(item.name for item in POINT_BY_NAME[resolved].inputs))
+        dispatch_inputs(
+            tuple(item.name for item in point_by_name(root)[resolved].inputs)
+        )
     )
     prog = footman.prog()
     # One listing of the state store's namespace for the whole job:

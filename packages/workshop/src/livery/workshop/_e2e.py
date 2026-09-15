@@ -147,6 +147,10 @@ LOOP_MEMBERS: tuple[tuple[str, str], ...] = (
     ("loop-native", "package-python-nanobind"),
 )
 
+#: The member that contributes a point, and the point's name.
+CONTRIBUTING_MEMBER = "loop-echo"
+CONTRIBUTED_POINT = "echo-audit"
+
 
 def _member_dist(name: str) -> str:
     """The distribution name ``new.package`` gives the loop member *name*."""
@@ -950,6 +954,18 @@ def _ensure_members(root: Path) -> None:
                 + "\n\n[release]\n# The first release lands at the baseline.\n"
                 + 'baseline = "0.1.0"\n'
             )
+        if name == CONTRIBUTING_MEMBER and "[[ci.point]]" not in body:
+            # The member contributes a point: the loop dispatches it
+            # by hand, so the point is proven against the real runner
+            # rather than against the renderer's own output.
+            body = (
+                body.rstrip("\n")
+                + "\n\n# A point of this member's own, run by hand in the loop.\n"
+                + "[[ci.point]]\n"
+                + f'name = "{CONTRIBUTED_POINT}"\n'
+                + 'task = "layers"\n'
+                + 'runners = ["ubuntu-latest"]\n'
+            )
         member.write_text(body, "utf-8")
         # The baseline is a render input: cliff.toml was rendered before
         # the append, so it must settle again or the gate names it as
@@ -1573,6 +1589,49 @@ def _prove_dispatched_gate(root: Path, kind: str) -> None:
     )
 
 
+def _prove_contributed_point(root: Path, kind: str) -> None:
+    """Prove the member's point: dispatched, followed to green, its task run.
+
+    The member's contract declares the point; the rendered shell is
+    the loop's own output, so the proof is the real runner running
+    the declared task through ``ci.run`` and the point reading back
+    green through the point's own reader.
+    """
+    code = _loop_fm(
+        root, "ci.dispatch", f"--point={CONTRIBUTED_POINT}", "--interval=5", nofail=True
+    )
+    if code:
+        fail(
+            f"the loop's `{footman.prog()} ci.dispatch --point={CONTRIBUTED_POINT}`"
+            f" exited {code}"
+        )
+    if _loop_fm(root, "ci.status", f"--point={CONTRIBUTED_POINT}", nofail=True):
+        fail(
+            f"the loop's `{footman.prog()} ci.status --point={CONTRIBUTED_POINT}`"
+            " did not read the dispatched run green"
+        )
+    from livery.workshop._ci_tasks import point_runs
+
+    forge, _ = _dev_forge(kind)
+    repo = forge.repository(E2E_OWNER, E2E_REPO)
+    run = point_runs(repo, CONTRIBUTED_POINT, root)[0]
+    jobs = repo.checks.jobs(run.id)
+    _require_lines(
+        repo,
+        run,
+        jobs,
+        CONTRIBUTED_POINT,
+        (
+            f"{CONTRIBUTED_POINT}/{CONTRIBUTED_POINT}: layers"
+            f" (packages/{CONTRIBUTING_MEMBER})",
+        ),
+    )
+    print(
+        f"  {CONTRIBUTED_POINT}: proven by hand (run {run.id}: the contributed"
+        " point dispatched, its task run, and the point read back green)"
+    )
+
+
 def _release_act(root: Path, kind: str) -> None:
     """Release the member through the loop; verify wheel and receipt.
 
@@ -1875,7 +1934,8 @@ if _WORKSHOP_TESTS.is_dir():
         _release_act(root, forge)
         _prove_nightly(root, forge)
         _prove_dispatched_gate(root, forge)
+        _prove_contributed_point(root, forge)
         print(
-            "  the loop is whole: gate, merge, release, receipt, nightly, and the"
-            " gate on command"
+            "  the loop is whole: gate, merge, release, receipt, nightly, the"
+            " gate on command, and a contributed point"
         )

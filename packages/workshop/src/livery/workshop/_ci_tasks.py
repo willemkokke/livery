@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Annotated
 
 import livery.footman as footman
-from livery.footman import doc, fail, group, task
+from livery.footman import doc, fail, group, pre_tasks, task
 from livery.forge import (
     Capability,
     Forge,
@@ -52,6 +52,20 @@ from livery.workshop._verdict import (
 )
 
 ci = group("ci", help="The head commit's CI runs")
+
+
+@pre_tasks
+def remember_mounted_tasks(inv: footman.Invocation) -> None:
+    """Keep this run's merged task tree for the declared points' task check.
+
+    A ``[[ci.point]]`` names a task some layer mounts; the check reads
+    the tree discovery merged for this invocation, which the
+    module-level registry no longer holds by the time a task runs.
+    """
+    from livery.workshop import _points
+
+    _points.MOUNTED = inv.tasks
+
 
 _CAPABILITIES: tuple[Capability, ...] = (
     "auto_merge",
@@ -238,7 +252,9 @@ def ci_cancel(
 _GREEN = ("success", "skipped", "neutral")
 
 
-def point_runs(repo: Repository, point: str) -> tuple[Run, ...]:
+def point_runs(
+    repo: Repository, point: str, root: Path | None = None
+) -> tuple[Run, ...]:
     """The runs of *point*'s workflow, newest first, whatever commit they checked.
 
     Read by the point's events so the listing stays short on a forge
@@ -247,11 +263,12 @@ def point_runs(repo: Repository, point: str) -> tuple[Run, ...]:
     comparison). A forge that names no workflow on a run (GitLab)
     answers by event alone.
     """
-    from livery.workshop._points import EVENTS, workflow_of
+    from livery.workshop._points import events_of, workflow_of
 
-    workflow = workflow_of(point)
+    root = root if root is not None else workspace_root()
+    workflow = workflow_of(point, root)
     found: dict[int, Run] = {}
-    for event in EVENTS[point]:
+    for event in events_of(root, point):
         for run in repo.checks.runs(event=event):
             if not run.workflow or run.workflow.rsplit("/", 1)[-1] == workflow:
                 found[run.id] = run
@@ -336,11 +353,14 @@ def dispatch_flow(
     """
     import time
 
-    from livery.workshop._points import DISPATCHABLE, POINTS, workflow_of
+    from livery.workshop._points import dispatchable, point_by_name, workflow_of
 
-    if point not in POINTS:
-        fail(f"{point!r} is not a point; the points are {', '.join(POINTS)}")
-    if point not in DISPATCHABLE:
+    root = workspace_root()
+    names = point_by_name(root)
+    if point not in names:
+        fail(f"{point!r} is not a point; the points are {', '.join(names)}")
+    starts = dispatchable(root)
+    if point not in starts:
         if point == "release":
             fail(
                 "the release point has no dispatch entry of its own: the merge"
@@ -350,9 +370,9 @@ def dispatch_flow(
         fail(
             f"the {point} point has no dispatch entry: it runs on a push to"
             f" main; `{footman_prog()} ci.dispatch` starts"
-            f" {', '.join(DISPATCHABLE)}"
+            f" {', '.join(starts)}"
         )
-    workflow = workflow_of(point)
+    workflow = workflow_of(point, root)
     seen = {run.id for run in point_runs(repo, point)}
     try:
         repo.checks.dispatch(workflow, ref=ref)
@@ -390,7 +410,9 @@ def footman_prog() -> str:
 
 @ci.task(name="dispatch")
 def ci_dispatch(
-    point: Annotated[str, doc("the point to start: gate or nightly")] = "nightly",
+    point: Annotated[
+        str, doc("the point to start: gate, nightly, or one a package contributes")
+    ] = "nightly",
     ref: Annotated[str, doc("the branch or tag the run checks out")] = "main",
     follow: Annotated[bool, doc("wait for the run's verdict")] = True,
     interval: Annotated[int, doc("poll seconds")] = 15,
