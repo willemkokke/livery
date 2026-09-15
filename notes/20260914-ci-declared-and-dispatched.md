@@ -443,7 +443,12 @@ Landed 2026-09-15 as livery#595. Evidence:
   `environment:` and no secret beyond the job token in the contributed
   job, then the removal.
 - `uv run fm check --fix`: exit 0.
-- `uv run fm ci.e2e`: LOOP5_EVIDENCE
+- `uv run fm ci.e2e --fresh`: exit 0, the member's point dispatched by
+  hand: `echo-audit: proven by hand (run 1682: the contributed point
+  dispatched, its task run, and the point read back green)`, after the
+  wave, the nightly (run 1680) and the gate on command (run 1681), ending
+  `the loop is whole: gate, merge, release, receipt, nightly, the gate on
+  command, and a contributed point`.
 
 Deliverables:
 
@@ -577,6 +582,15 @@ Acceptance:
   missing. On GitLab a `legs` matrix is one leg, labelled by the first
   runner and the first gate Python so its rows key the leg the union
   expects, and the `pages` job stays the deploy until phase 4.
+- 2026-09-15, the agent, at phase 5, operations: one pass died on the
+  loop's docs job, where zensical reported a build finished in 0.03 s
+  with eight pages present and left no index page; the same runner had
+  built the site green on the setup and member pull requests minutes
+  before, and the fresh pass that followed built it green on every
+  leg. Not reproduced, not understood; a second sighting gets an
+  issue. A pass is not resumable past the verified-skip proof, which
+  reads main's newest push run as the setup squash's: fresh is the
+  recovery.
 - 2026-09-15, the agent, at phase 5: a contributed point's job carries
   the job token as `FORGE_TOKEN`, since a task that reads the forge (a
   scheduled audit filing its own issue) needs one and the job token is
