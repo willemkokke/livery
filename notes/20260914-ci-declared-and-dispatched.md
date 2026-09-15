@@ -3,7 +3,8 @@
 Status: ruled 2026-09-14. Phase 1 landed 2026-09-15 (livery#584), phase 2
 landed 2026-09-15 (livery#587), phase 3 landed 2026-09-15 (livery#589) with
 one acceptance item open, phase 4 landed 2026-09-15 (livery#593) with one
-acceptance item open; phase 5 not started. Runs
+acceptance item open, phase 5 landed 2026-09-15 (livery#595). The plan is
+complete but for the two open lines. Runs
 before [the tool record and its index][record-plan], whose phase 8 declares
 a point through the mechanism phase 5 here delivers; that plan carries no
 other CI work.
@@ -33,13 +34,17 @@ needs and filters, and call the same verbs.
 Verified against the tree at `69f18cc` on 2026-09-14, and brought up to
 date where phase 1 moved it.
 
-- `_points.py` declares the four points in `DECLARED`, a tuple of `Point`
-  (`gate`, `merge`, `nightly`, `release`): each its workflow file, its
-  events, its dispatch inputs and its jobs, a `Job` stating in the
-  workshop's words what it needs. `verify_points` refuses a set no shell
-  renders from at import. `POINTS`, `WORKFLOWS`, `EVENTS`, `DISPATCHABLE`
-  (`("gate", "nightly")`) and `INHERITS` derive from it. What a job
-  runs is `BUILTIN`, a tuple of `Entry`, plus the root contract's
+- `_points.py` declares the four builtin points in `DECLARED`, a tuple
+  of `Point` (`gate`, `merge`, `nightly`, `release`): each its workflow
+  file, its events, its dispatch inputs and its jobs, a `Job` stating in
+  the workshop's words what it needs. `contributed(root)` reads the
+  `[[ci.point]]` tables of the workspace's packages, refusing bad ones
+  at load, and `points(root)` is the whole set, verified as one; every
+  reader (`jobs_of`, `entries_for`, `run_point`, `point_runs`,
+  `dispatch_flow`, the renderers) takes it. `POINTS`, `WORKFLOWS`,
+  `EVENTS`, `DISPATCHABLE` and `INHERITS` stay the builtin four's. What a
+  job runs is `BUILTIN`, a tuple of `Entry`, the contributed entries, plus
+  the root contract's
   `[[ci.schedule]]` entries; `run_point` spawns each entry as a child of
   `fm ci.run --point=<p> --job=<j>`, the one command every rendered gate,
   merge and nightly job calls. A job's identity is its point and its
@@ -98,9 +103,11 @@ date where phase 1 moved it.
   filtered by `if: github.event_name == 'push'`. `ci.verified.stamp` at
   the end of the gate job writes the row for the tree the run proved, a
   full row since no leg narrowed.
-- `RETIRED` in `_ci_generate.py` is a static tuple of paths an earlier
-  emission wrote; `retired_files` deletes those present. It cannot name a
-  file whose name a removed package chose.
+- `retired_files` in `_ci_generate.py` names `RETIRED`, the paths earlier
+  emissions wrote under other names, and every file in the forge's
+  workflow directory that opens with `GENERATED_MARK` and is not in this
+  emission: the workflow of a point whose package is gone.
+  `fm template.check` reports them and `fm template.apply` deletes them.
 - Tests carry their package's name: `test_workshop_points.py`,
   `test_workshop_dispatch.py`, `test_workshop_entry.py` (the render pins
   for all three forge kinds), `test_workshop_shells.py`,
@@ -426,6 +433,18 @@ Acceptance:
 
 ### Phase 5: a package contributes a point
 
+Landed 2026-09-15 as livery#595. Evidence:
+
+- `uv run python -m pytest
+  packages/workshop/tests/test_workshop_points_contributed.py`: 13 passed,
+  every refusal forced before the accepting case, then one declaration
+  rendered for `github`, `gitea` and `gitlab`, each output carrying
+  `ci.run --point=host-audit --job=host-audit` and no `permissions:` or
+  `environment:` and no secret beyond the job token in the contributed
+  job, then the removal.
+- `uv run fm check --fix`: exit 0.
+- `uv run fm ci.e2e`: LOOP5_EVIDENCE
+
 Deliverables:
 
 - `[[ci.point]]` in a package's `workshop.toml`: `name`, `task`, `args`,
@@ -558,6 +577,14 @@ Acceptance:
   missing. On GitLab a `legs` matrix is one leg, labelled by the first
   runner and the first gate Python so its rows key the leg the union
   expects, and the `pages` job stays the deploy until phase 4.
+- 2026-09-15, the agent, at phase 5: a contributed point's job carries
+  the job token as `FORGE_TOKEN`, since a task that reads the forge (a
+  scheduled audit filing its own issue) needs one and the job token is
+  the repository's default grant; the pin admits that one secret and no
+  other. A contributed point runs on the nightly's clock, its cadence
+  judged on the runner, so no per-forge cron dialect is rendered. A task
+  is proven mounted against the runner's own registry at load, so a
+  unit test supplies the seam; under `fm` the layers are mounted.
 - 2026-09-15, the agent, at phase 4: the wave trusts a collected
   `dist/` inside CI alone, since a runner's checkout starts with none
   and a person's may hold a stale build. The templates verb reads the
