@@ -112,7 +112,7 @@ def test_the_matrix_is_the_union_in_declaration_order(tmp_path: Path) -> None:
 
 
 def test_the_emitted_wheels_jobs_run_the_declared_labels(tmp_path: Path) -> None:
-    from livery.workshop._ci_generate import _facts, _gitea_release, _github_release
+    from livery.workshop._ci_generate import _actions_workflow, _facts
 
     (tmp_path / "workshop.toml").write_text(
         '[workspace]\nlayers = ["livery.workshop"]\n\n[forge]\nkind = "github"\n'
@@ -130,12 +130,12 @@ def test_the_emitted_wheels_jobs_run_the_declared_labels(tmp_path: Path) -> None
     assert facts["packages"] == [
         {"dir": "ext", "name": "ext", "kind": "python-nanobind"}
     ]
-    github = _github_release(facts, "fm")
-    assert "os: [ubuntu-latest]" in github and "--prebuilt" in github
-    gitea = _gitea_release(facts, "fm")
+    github = _actions_workflow(facts, "fm", "release.yml", forge="github")
+    assert "os: [ubuntu-latest]" in github and "--prebuilt" not in github
+    gitea = _actions_workflow(facts, "fm", "release.yml", forge="gitea")
     # The wheels matrix follows the declaration, not the check runners.
     assert (
-        "runner: [ubuntu-latest]" in gitea
+        "os: [ubuntu-latest]" in gitea
         and "macos-latest" not in gitea.split("publish:")[0]
     )
     # A pure workspace emits no wheels job at all.
@@ -144,8 +144,8 @@ def test_the_emitted_wheels_jobs_run_the_declared_labels(tmp_path: Path) -> None
     )
     pure = _facts(tmp_path)
     assert pure["wheel_runners"] == []
-    assert "wheels:" not in _github_release(pure, "fm")
-    assert "wheels:" not in _gitea_release(pure, "fm")
+    assert "wheels:" not in _actions_workflow(pure, "fm", "release.yml", forge="github")
+    assert "wheels:" not in _actions_workflow(pure, "fm", "release.yml", forge="gitea")
 
 
 def test_the_one_wheel_skip_follows_the_hosts_libc(

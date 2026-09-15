@@ -691,15 +691,14 @@ def test_no_rung_step_without_declared_keys(tmp_path: Path) -> None:
 def test_ambient_tokens_mount_as_forge_token(tmp_path: Path) -> None:
     from livery.workshop._ci_generate import generate
 
-    github = generate(_contract_root(tmp_path, "github"))
-    assert (
-        "FORGE_TOKEN: ${{ github.token }}" in (github[".github/workflows/release.yml"])
-    )
-    gitea = generate(_contract_root(tmp_path, "gitea"))
-    assert (
-        "FORGE_TOKEN: ${{ secrets.GITHUB_TOKEN }}"
-        in (gitea[".gitea/workflows/release.yml"])
-    )
+    # The wave's forge reads ride the repository's token where there
+    # is one and the ambient job token otherwise, on both forges.
+    for kind in ("github", "gitea"):
+        release = generate(_contract_root(tmp_path, kind))[
+            f".{kind}/workflows/release.yml"
+        ]
+        credential = "FORGE_TOKEN: ${{ secrets.FORGE_TOKEN || secrets.GITHUB_TOKEN }}"
+        assert credential in release
 
 
 def test_a_lagging_pr_head_stays_in_flight(

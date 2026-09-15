@@ -306,7 +306,11 @@ def test_the_builtin_jobs_of_each_point(tmp_path: Path) -> None:
     # job of it too, green and empty until the contract attaches a
     # task.
     assert _points.jobs_of(root, "release") == ("wheels", "publish", "templates")
-    assert _points.entries_for(root, "release", "publish") == ()
+    # The wave's verbs are the release's entries, at the dispatched ref.
+    assert [e.task for e in _points.entries_for(root, "release", "publish")] == [
+        "workflow.release.publish"
+    ]
+    assert _points.entries_for(root, "release", "publish")[0].args == ("--ref={ref}",)
     assert _points.entries_for(root, "release", "release") == ()
 
 
@@ -455,6 +459,39 @@ def test_a_push_promotes_the_gate_to_the_merge_point(
     assert _points.effective_point("gate") == "gate"
     with pytest.raises(_FAILURES, match="the gate point has no job 'govern'"):
         _points.run_point(root, "gate", "govern", spawn=green)
+
+
+def test_a_dispatched_points_inputs_reach_its_entries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+
+    import livery.footman as footman
+
+    monkeypatch.setattr(footman, "prog", lambda: "hse")
+    root = _root(tmp_path)
+    seen: list[list[str]] = []
+
+    def green(argv: list[str], env: dict[str, str]) -> int:
+        seen.append(argv)
+        return 0
+
+    # Outside a dispatch the input is empty: the verb takes HEAD.
+    _points.run_point(root, "release", "publish", spawn=green)
+    assert seen == [["hse", "workflow.release.publish", "--ref="]]
+    seen.clear()
+    # GitHub and Gitea carry the inputs in the event payload.
+    event = tmp_path / "event.json"
+    event.write_text(json.dumps({"inputs": {"ref": "abc123", "workshop": ""}}))
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(event))
+    _points.run_point(root, "release", "wheels", spawn=green)
+    assert seen == [["hse", "release.wheels", "--ref=abc123"]]
+    seen.clear()
+    # GitLab carries them as pipeline variables, environment by name.
+    monkeypatch.delenv("GITHUB_EVENT_PATH")
+    monkeypatch.setenv("ref", "def456")
+    _points.run_point(root, "release", "templates", spawn=green)
+    assert seen == [["hse", "release.templates", "--ref=def456"]]
 
 
 def test_the_nightly_point_runs_the_whole_check(

@@ -188,23 +188,6 @@ DRIVER_DIST = "livery-workshop"
 """The distribution a re-dispatched wave may pin as its driver."""
 
 
-def _pin_driver_step() -> str:
-    """The wave's driver pin: a released workshop installed over the squash's.
-
-    Empty on a normal wave, so the squash's own workshop drives it and
-    a re-run does what the first run did. Set by a re-dispatch whose
-    first run died on the driver itself: the named release replaces
-    the workshop the checkout synced, in this workspace the editable
-    member and elsewhere the version the lock pins, and the checkout,
-    the ref and the wheel stay the squash's.
-    """
-    return (
-        "      - name: Pin the driver\n"
-        "        if: inputs.workshop != ''\n"
-        f'        run: uv pip install "{DRIVER_DIST}==${{{{ inputs.workshop }}}}"\n'
-    )
-
-
 def _enter_step(*, matrix_python: bool = False) -> str:
     """The entry step: ``setup.sh github`` persists the emission.
 
@@ -237,255 +220,6 @@ def _wheel_runners(answers: dict[str, Any]) -> list[str]:
     workflow says so by shape.
     """
     return [str(label) for label in answers.get("wheel_runners", []) or []]
-
-
-def _github_release(answers: dict[str, Any], prog: str) -> str:
-    rung = _rung_step(answers)
-    setup_uv = _setup_uv_step(answers)
-    enter = _enter_step()
-    pin = _pin_driver_step()
-    publisher = str(answers.get("templates_publisher", ""))
-    wheel_labels = _wheel_runners(answers)
-    wheels = bool(wheel_labels)
-    wheels_job = (
-        f"""  # Every platform's wheels, built before the wave: the matrix
-  # feeds the publish job through artifacts, so one release ships
-  # the complete set. linux arm waits on a docker-capable arm
-  # runner, the container seam's known constraint.
-  wheels:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [{_csv(wheel_labels)}]
-    runs-on: ${{{{ matrix.os }}}}
-    steps:
-      - uses: {CHECKOUT}
-        with:
-          ref: ${{{{ inputs.ref }}}}
-          fetch-depth: 0
-{setup_uv}{enter}{pin}      - name: Build this platform's wheels
-        run: >-
-          {prog} release.wheels
-          --ref="${{{{ inputs.ref }}}}"
-      - uses: {UPLOAD}
-        with:
-          name: wheels-${{{{ matrix.os }}}}
-          path: packages/*/dist/*
-          if-no-files-found: ignore
-"""
-        if wheels
-        else ""
-    )
-    needs_wheels = "    needs: [wheels]\n" if wheels else ""
-    collect_step = (
-        f"""      - uses: {DOWNLOAD}
-        with:
-          pattern: wheels-*
-          path: packages
-          merge-multiple: true
-"""
-        if wheels
-        else ""
-    )
-    prebuilt_flag = " --prebuilt" if wheels else ""
-    workflow = f"""name: release
-
-# The train: a workflow.release PR merges, this publishes its squash,
-# and the receipt tags are cut only after the index confirms each
-# member. A tag is a receipt, never a trigger: the merge point's
-# dispatch job starts the wave at the release squash, and a hand
-# dispatch with --ref is the recovery entry when a publish died
-# mid-wave; --workshop names a released driver for a wave whose own
-# workshop was the fault.
-on:
-  workflow_dispatch:
-    inputs:
-      ref:
-        description: the release squash to publish
-        required: true
-      workshop:
-        description: a released {DRIVER_DIST} version to drive the wave; empty runs the squash's own
-        required: false
-        default: ""
-
-jobs:
-{wheels_job}  publish:
-{needs_wheels}    runs-on: ubuntu-latest
-    environment: pypi
-    permissions:
-      id-token: write
-      contents: write
-    outputs:
-      members: ${{{{ steps.wave.outputs.members }}}}
-    steps:
-      # The receipt push carries FORGE_TOKEN where the repository has
-      # one: the ambient job token may not push a ref whose commit
-      # carries a workflow file that differs from the tip's, and a
-      # squash a later change moved past is exactly that. A tag is
-      # never a trigger, so the suppressed-workflow-events limit
-      # cannot bite either way.
-      - uses: {CHECKOUT}
-        with:
-          ref: ${{{{ inputs.ref }}}}
-          fetch-depth: 0
-          token: ${{{{ secrets.FORGE_TOKEN || github.token }}}}
-{setup_uv}{collect_step}{rung}{enter}{pin}      - name: Publish the wave
-        id: wave
-        # A PYPI_TOKEN secret publishes with a token, which a first
-        # release of a new name needs, since trusted publishing waits
-        # on a pending publisher registered by hand. An absent secret
-        # arrives as an empty string, which the publish verb drops
-        # before it spawns uv, so uv stays on trusted publishing.
-        env:
-          FORGE_TOKEN: ${{{{ github.token }}}}
-          UV_PUBLISH_TOKEN: ${{{{ secrets.PYPI_TOKEN }}}}
-        run: >-
-          {prog} workflow.release.publish{prebuilt_flag}
-          --ref="${{{{ inputs.ref }}}}"
-"""
-    if not answers.get("templates_artifact") or not publisher:
-        return workflow
-    # Only a home publishes: the contract declares the artifact
-    # repository and a member layer ships the tree.
-    return (
-        workflow
-        + f"""
-  # The home's release aftermath: the (composed) template artifact,
-  # tagged in lockstep with the publishing layer's receipt.
-  templates:
-    needs: [publish]
-    if: contains(needs.publish.outputs.members, '{publisher}')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: {CHECKOUT}
-        with:
-          ref: ${{{{ inputs.ref }}}}
-{setup_uv}{enter}{pin}      - name: Deploy key
-        run: |
-          mkdir -p ~/.ssh
-          printf '%s\\n' "${{{{ secrets.WORKSHOP_TEMPLATES_DEPLOY_KEY }}}}" > ~/.ssh/templates_deploy
-          chmod 600 ~/.ssh/templates_deploy
-      - name: Publish the template artifact
-        env:
-          GIT_SSH_COMMAND: ssh -i ~/.ssh/templates_deploy -o StrictHostKeyChecking=accept-new
-          FORGE_TOKEN: ${{{{ secrets.FORGE_TOKEN }}}}
-        run: {prog} release.templates
-"""
-    )
-
-
-def _gitea_release(answers: dict[str, Any], prog: str) -> str:
-    first = next(iter(answers.get("runners", ["ubuntu-latest"])))
-    rung = _rung_step(answers)
-    enter = _enter_step()
-    wheel_labels = _wheel_runners(answers)
-    wheels = bool(wheel_labels)
-    runners = _csv(wheel_labels)
-    wheels_job = (
-        f"""  # Every declared wheel platform's wheels, built before the wave
-  # and collected as artifacts. linux arm waits on a docker-capable
-  # runner, the container seam's known constraint.
-  wheels:
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [{runners}]
-    runs-on: ${{{{ matrix.runner }}}}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{{{ inputs.ref }}}}
-          fetch-depth: 0
-          # The receipt push rides this checkout's credential. Receipt
-          # tags are protected, and the lane is the one identity on the
-          # whitelist; the ambient token is bound like everyone else.
-          token: ${{{{ secrets.FORGE_TOKEN }}}}
-{enter}      - name: Build this platform's wheels
-        run: >-
-          {prog} release.wheels
-          --ref="${{{{ inputs.ref }}}}"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: wheels-${{{{ matrix.runner }}}}
-          path: packages/*/dist/*
-          if-no-files-found: ignore
-"""
-        if wheels
-        else ""
-    )
-    needs_wheels = "    needs: [wheels]\n" if wheels else ""
-    collect_step = (
-        """      - uses: actions/download-artifact@v4
-        with:
-          pattern: wheels-*
-          path: packages
-          merge-multiple: true
-"""
-        if wheels
-        else ""
-    )
-    prebuilt_flag = " --prebuilt" if wheels else ""
-    workflow = f"""name: release
-
-# The wave, dispatched by the merge point at the commit that stamped
-# the release manifest, and by hand as the recovery gesture. Token
-# publishing (Gitea has no trusted publishing): the wave publishes
-# the ref and cuts receipt tags after the index confirms each member.
-on:
-  workflow_dispatch:
-    inputs:
-      ref:
-        description: the release squash to publish
-        required: true
-
-jobs:
-{wheels_job}  publish:
-{needs_wheels}    runs-on: {first}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{{{ inputs.ref }}}}
-          fetch-depth: 0
-          # The receipt push rides this checkout's credential. Receipt
-          # tags are protected, and the lane is the one identity on the
-          # whitelist; the ambient token is bound like everyone else.
-          token: ${{{{ secrets.FORGE_TOKEN }}}}
-{collect_step}{rung}{enter}      # PYTHON_PUBLISH_INDEX and PYTHON_REGISTRY_URL come from the
-      # committed .repo.env through the env cascade; only the secrets
-      # are mounted here. Gitea's automatic token serves the wave's
-      # forge reads and receipt-tag pushes.
-      - name: Publish the wave
-        env:
-          UV_PUBLISH_TOKEN: ${{{{ secrets.UV_PUBLISH_TOKEN }}}}
-          FORGE_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
-        run: >-
-          {prog} workflow.release.publish{prebuilt_flag}
-          --ref="${{{{ inputs.ref }}}}"
-"""
-    publisher = str(answers.get("templates_publisher", ""))
-    if not answers.get("templates_artifact") or not publisher:
-        return workflow
-    # A cross-repository push needs a real token: the ambient one is
-    # scoped to this repository alone.
-    return (
-        workflow
-        + f"""
-  # The home's release aftermath: the (composed) template artifact,
-  # tagged in lockstep with the publishing layer's receipt.
-  templates:
-    needs: [publish]
-    runs-on: {first}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{{{ inputs.ref }}}}
-          token: ${{{{ secrets.FORGE_TOKEN }}}}
-{enter}      - name: Publish the template artifact
-        env:
-          FORGE_TOKEN: ${{{{ secrets.FORGE_TOKEN }}}}
-        run: {prog} release.templates
-"""
-    )
 
 
 def _gitlab_image(answers: dict[str, Any], python: str) -> str:
@@ -526,6 +260,21 @@ def _points_of(workflow: str) -> tuple[Point, ...]:
     return tuple(point for point in DECLARED if point.workflow == workflow)
 
 
+def _inherited_jobs(point: Point) -> tuple[Job, ...]:
+    """The jobs *point* runs before its own, from the point it inherits."""
+    return POINT_BY_NAME[point.inherits].jobs if point.inherits else ()
+
+
+def _needs(point: Point, job: Job, answers: dict[str, Any]) -> list[str]:
+    """The jobs *job* waits for that render for this workspace."""
+    rendered = {
+        other.name
+        for other in (*_inherited_jobs(point), *point.jobs)
+        if _renders(other, answers)
+    }
+    return [need for need in job.needs if need in rendered]
+
+
 def _event_filter(point: Point) -> str:
     """The Actions condition admitting *point*'s events alone."""
     return " || ".join(f"github.event_name == '{event}'" for event in point.events)
@@ -541,27 +290,42 @@ def _call_step(prog: str, point: Point, job: Job) -> str:
             '          --os="${{ matrix.os }}" --python="${{ matrix.python }}"\n'
         )
     if job.matrix == "pythons":
-        return f'        run: >-\n          {call}\n          --python="${{{{ matrix.python }}}}"\n'
+        return (
+            f"        run: >-\n          {call}\n"
+            '          --python="${{ matrix.python }}"\n'
+        )
     return f"        run: {call}\n"
 
 
-def _token_env(job: Job) -> str:
-    """The credential the call sees, in the Actions secrets' words."""
+def _call_env(job: Job, *, forge: str) -> str:
+    """What the call sees: the credential, the index token, the deploy key's ssh."""
+    lines: list[str] = []
     if job.token == "job":
-        value = "FORGE_TOKEN: ${{ secrets.GITHUB_TOKEN }}"
+        lines.append("FORGE_TOKEN: ${{ secrets.GITHUB_TOKEN }}")
     elif job.token == "repository":
-        value = "FORGE_TOKEN: ${{ secrets.FORGE_TOKEN || secrets.GITHUB_TOKEN }}"
+        lines.append("FORGE_TOKEN: ${{ secrets.FORGE_TOKEN || secrets.GITHUB_TOKEN }}")
     elif job.token == "secret":
-        value = "FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}"
+        lines.append("FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}")
     elif job.token == "admin":
-        value = "FORGE_ADMIN_TOKEN: ${{ secrets.FORGE_ADMIN_TOKEN }}"
-    else:
+        lines.append("FORGE_ADMIN_TOKEN: ${{ secrets.FORGE_ADMIN_TOKEN }}")
+    if job.publishes_index:
+        # A token publishes where the repository has one; on GitHub an
+        # absent secret arrives empty, which the publish verb drops
+        # before it spawns uv, so uv stays on trusted publishing.
+        secret = "PYPI_TOKEN" if forge == "github" else "UV_PUBLISH_TOKEN"
+        lines.append(f"UV_PUBLISH_TOKEN: ${{{{ secrets.{secret} }}}}")
+    if job.deploy_key and forge == "github":
+        lines.append(
+            "GIT_SSH_COMMAND: ssh -i ~/.ssh/templates_deploy"
+            " -o StrictHostKeyChecking=accept-new"
+        )
+    if not lines:
         return ""
-    return f"        env:\n          {value}\n"
+    return "        env:\n" + "".join(f"          {line}\n" for line in lines)
 
 
 def _checkout_step(point: Point, job: Job, *, forge: str) -> str:
-    """The checkout, as deep as the job's verbs need."""
+    """The checkout: as deep as the verbs need, at the dispatched ref, able to push."""
     action = CHECKOUT if forge == "github" else "actions/checkout@v4"
     with_lines: list[str] = []
     if point.ref_input:
@@ -572,11 +336,74 @@ def _checkout_step(point: Point, job: Job, *, forge: str) -> str:
         with_lines.append("          fetch-tags: true")
     elif job.fetch:
         with_lines.append(f"          fetch-depth: {job.fetch}")
+    if job.pushes:
+        # The push rides this checkout's credential: the job token may
+        # not push a ref whose commit carries a workflow file that
+        # differs from the tip's, and receipt tags are protected.
+        token = (
+            "${{ secrets.FORGE_TOKEN || github.token }}"
+            if forge == "github"
+            else "${{ secrets.FORGE_TOKEN }}"
+        )
+        with_lines.append(f"          token: {token}")
     lines = [f"      - uses: {action}\n"]
     if with_lines:
         lines.append("        with:\n")
         lines.extend(line + "\n" for line in with_lines)
     return "".join(lines)
+
+
+def _collect_step(job: Job, *, forge: str) -> str:
+    """The artifacts *job* collects, merged into the packages tree."""
+    if not job.collects:
+        return ""
+    action = DOWNLOAD if forge == "github" else "actions/download-artifact@v4"
+    return (
+        f"      - uses: {action}\n"
+        "        with:\n"
+        f"          pattern: {job.collects}-*\n"
+        "          path: packages\n"
+        "          merge-multiple: true\n"
+    )
+
+
+def _publish_step(job: Job, *, forge: str) -> str:
+    """The artifact *job* publishes: this leg's built wheels."""
+    if not job.publishes:
+        return ""
+    action = UPLOAD if forge == "github" else "actions/upload-artifact@v4"
+    return (
+        f"      - uses: {action}\n"
+        "        with:\n"
+        f"          name: {job.publishes}-${{{{ matrix.os }}}}\n"
+        "          path: packages/*/dist/*\n"
+        "          if-no-files-found: ignore\n"
+    )
+
+
+def _driver_step(prog: str, point: Point, job: Job, *, forge: str) -> str:
+    """The driver pin, through its verb: the released workshop the input names."""
+    if not job.driver_pin or not any(item.name == "workshop" for item in point.inputs):
+        return ""
+    value = "${{ inputs.workshop }}" if forge != "gitlab" else "$workshop"
+    return (
+        "      - name: Pin the driver\n"
+        f'        run: {prog} release.driver --workshop="{value}"\n'
+    )
+
+
+def _deploy_key_step(job: Job) -> str:
+    """The deploy key written to disk for a cross-repository push over ssh (GitHub)."""
+    if not job.deploy_key:
+        return ""
+    return (
+        "      - name: Deploy key\n"
+        "        run: |\n"
+        "          mkdir -p ~/.ssh\n"
+        f"          printf '%s\\n' \"${{{{ secrets.{job.deploy_key} }}}}\""
+        " > ~/.ssh/templates_deploy\n"
+        "          chmod 600 ~/.ssh/templates_deploy\n"
+    )
 
 
 def _profile_step(forge: str) -> str:
@@ -617,6 +444,22 @@ _PAGES_STEPS = """      - uses: actions/upload-pages-artifact@7b1f4a764d45c48632
 """
 
 
+def _grants(job: Job, *, pages: bool) -> str:
+    """GitHub's grants for *job*: organisation defaults are read-only."""
+    if pages:
+        return _PAGES_GRANT
+    lines: list[str] = []
+    if job.environment:
+        # Trusted publishing: the id token is minted for the named
+        # environment.
+        lines.append("      id-token: write")
+    if job.writes:
+        lines.append("      contents: write")
+    if not lines:
+        return ""
+    return "    permissions:\n" + "".join(line + "\n" for line in lines)
+
+
 def _actions_job(
     answers: dict[str, Any], prog: str, point: Point, job: Job, *, forge: str
 ) -> str:
@@ -638,19 +481,11 @@ def _actions_job(
         conditions.append(_event_filter(point))
     if conditions:
         lines.append(f"    if: {' && '.join(conditions)}\n")
-    needs = [
-        need
-        for need in job.needs
-        if any(_renders(other, answers) for other in point.jobs if other.name == need)
-        or any(other.name == need for other in _inherited_jobs(point))
-    ]
+    needs = _needs(point, job, answers)
     if needs:
         lines.append(f"    needs: [{', '.join(needs)}]\n")
     if forge == "github":
-        if pages:
-            lines.append(_PAGES_GRANT)
-        elif job.writes:
-            lines.append("    permissions:\n      contents: write\n")
+        lines.append(_grants(job, pages=pages))
         if job.environment:
             lines.append(f"    environment: {job.environment}\n")
     if job.matrix == "legs":
@@ -680,27 +515,25 @@ def _actions_job(
         cache = "docs" if job.docs_tools else ""
     lines.append("    steps:\n")
     lines.append(_checkout_step(point, job, forge=forge))
-    lines.append(_rung_step(answers))
     if forge == "github":
         lines.append(_setup_uv_step(answers, cache_suffix=cache))
+    lines.append(_collect_step(job, forge=forge))
+    lines.append(_rung_step(answers))
     if job.docs_tools:
         lines.append(_docs_requirements_step(answers))
     lines.append(_enter_step(matrix_python=job.matrix in ("legs", "pythons")))
-    if job.driver_pin:
-        lines.append(_pin_driver_step())
+    lines.append(_driver_step(prog, point, job, forge=forge))
+    if forge == "github":
+        lines.append(_deploy_key_step(job))
     lines.append(f"      - name: {job.step or job.name.capitalize()}\n")
-    lines.append(_token_env(job))
+    lines.append(_call_env(job, forge=forge))
     lines.append(_call_step(prog, point, job))
+    lines.append(_publish_step(job, forge=forge))
     if job.profile:
         lines.append(_profile_step(forge))
     if pages:
         lines.append(_PAGES_STEPS)
     return "".join(lines)
-
-
-def _inherited_jobs(point: Point) -> tuple[Job, ...]:
-    """The jobs *point* runs before its own, from the point it inherits."""
-    return POINT_BY_NAME[point.inherits].jobs if point.inherits else ()
 
 
 def _actions_workflow(
@@ -774,22 +607,22 @@ def _gitlab_job(
 
     One executor, one image: a ``legs`` matrix is one leg on the first
     runner's label and the first gate Python, so its rows key the same
-    leg the union expects; a ``pythons`` matrix is the first Python.
+    leg the union expects; a ``pythons`` or ``wheels`` matrix is one
+    job. The deploy is GitLab Pages' own: a job named ``pages``
+    publishing ``public/`` is the seam. A job that pushes rewrites
+    origin with the push token first, since the job token cannot push.
     """
     tools = " ".join(str(t) for t in answers.get("docs_requirements", []))
     first = str(next(iter(answers.get("runners", ["ubuntu-latest"]))))
     stage = "check" if point.name in ("gate", "nightly") else "release"
+    name = "pages" if job.deploy else job.name
     lines = [
         _comment(job.note),
-        f"{job.name}:\n",
+        f"{name}:\n",
         f"  stage: {stage}\n",
         f"  image: {image}\n",
     ]
-    needs = [
-        need
-        for need in job.needs
-        if any(o.name == need for o in (*_inherited_jobs(point), *point.jobs))
-    ]
+    needs = _needs(point, job, answers)
     if needs:
         lines.append(f"  needs: [{', '.join(needs)}]\n")
     variables: list[str] = []
@@ -806,9 +639,22 @@ def _gitlab_job(
         rules = rules.replace("    - if: '", "    - when: always\n      if: '")
     lines.append(rules)
     lines.append("  script:\n")
+    if point.ref_input:
+        # The pipeline runs on the base branch; the dispatch names the
+        # commit to publish in a variable, and the wave reads it there.
+        lines.append(f'    - git checkout --quiet "${point.ref_input}"\n')
+    if job.pushes:
+        lines.append("    - git fetch --tags\n")
+        lines.append(
+            '    - git remote set-url origin "https://oauth2:${GITLAB_PUSH_TOKEN}'
+            '@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"\n'
+        )
     if job.docs_tools and tools:
         lines.append(f"    - apt-get update -q && apt-get install -y -q {tools}\n")
     lines.append("    - source setup.sh\n")
+    driver = _driver_step(prog, point, job, forge="gitlab")
+    if driver:
+        lines.append(f"    - {driver.split('run: ', 1)[1]}")
     call = f"{prog} ci.run --point={point.name} --job={job.name}"
     if job.matrix == "legs":
         python = str(next(iter(answers.get("gate_pythons", ["3.11"]))))
@@ -817,23 +663,22 @@ def _gitlab_job(
         python = str(next(iter(answers.get("python_versions", ["3.11"]))))
         call += f' --python="{python}"'
     lines.append(f"    - {call}\n")
+    if job.deploy:
+        lines.append("    - mv site public\n  artifacts:\n    paths: [public]\n")
+    elif job.publishes:
+        lines.append('  artifacts:\n    paths: ["packages/*/dist/*"]\n')
     return "".join(lines) + "\n"
 
 
 def _gitlab_document(answers: dict[str, Any], prog: str) -> str:
-    """The one GitLab document: every declared job, the pages seam, the wave.
+    """The one GitLab document: every declared point's jobs.
 
-    The deploy job is GitLab Pages' own: a job named ``pages``
-    publishing ``public/`` is the seam, so the merge point's deploy
-    renders as that job. The wave keeps its shape until the release
-    point's jobs are entries.
+    The merge point's dispatch job starts the wave through the API at
+    the base branch with the squash in the ``ref`` variable, which the
+    document routes on ``FORGE_WORKFLOW`` like a hand dispatch.
     """
     python = str(next(iter(answers.get("python_versions", ["3.11"]))))
     image = _gitlab_image(answers, python)
-    tools = " ".join(str(t) for t in answers.get("docs_requirements", []))
-    install = (
-        f"    - apt-get update -q && apt-get install -y -q {tools}\n" if tools else ""
-    )
     lines = [
         """# The gate, the merge point, the nightly and the train, GitLab-shaped,
 # generated by the workshop. One pipeline definition: workflow rules
@@ -842,7 +687,12 @@ def _gitlab_document(answers: dict[str, Any], prog: str) -> str:
 # told from a dispatched wave. Every job sources the entry script in
 # its own shell, then calls the runner bare. The clock itself is a
 # pipeline schedule, a project setting the governance reconcile
-# creates, never a line here.
+# creates, never a line here. GitLab CI variables arrive as process
+# environment, the cascade's highest rung already: declare
+# PYTHON_PUBLISH_INDEX, PYTHON_REGISTRY_URL, FORGE_TOKEN,
+# UV_PUBLISH_TOKEN and GITLAB_PUSH_TOKEN (a project access token with
+# write_repository, for the receipt tags) as CI variables, masked
+# where their values allow it.
 workflow:
   name: $FORGE_WORKFLOW
   rules:
@@ -856,52 +706,9 @@ stages: [check, release]
 """
     ]
     for point in DECLARED:
-        if point.name == "release":
-            continue
         for job in point.jobs:
-            if job.deploy:
-                lines.append(
-                    f"""# The pages seam: GitLab Pages serves the artifact of a job named
-# ``pages`` publishing ``public/``; main only, after the checks.
-pages:
-  stage: release
-  image: {image}
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
-  script:
-{install}    - source setup.sh
-    - {prog} docs.build
-    - mv site public
-  artifacts:
-    paths: [public]
-
-"""
-                )
-                continue
-            lines.append(_gitlab_job(answers, prog, point, job, image=image))
-    lines.append(
-        f"""# The merge-triggered train: the squash of a workflow.release PR
-# lands on main, its changed changelogs stating the release, and the
-# wave publishes it, cutting receipt tags after the index confirms
-# each member. Token publishing; pushing tags needs GITLAB_PUSH_TOKEN
-# (a project access token with write_repository).
-release-publish:
-  stage: release
-  image: {image}
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main" && $CI_COMMIT_TITLE =~ /^chore\\(release\\): released /'
-  script:
-    - git fetch --tags
-    - git remote set-url origin "https://oauth2:${{GITLAB_PUSH_TOKEN}}@${{CI_SERVER_HOST}}/${{CI_PROJECT_PATH}}.git"
-    - source setup.sh
-    - {prog} workflow.release.publish --ref="$CI_COMMIT_SHA"
-  # GitLab CI variables arrive as process environment, the cascade's
-  # highest rung already: declare PYTHON_PUBLISH_INDEX,
-  # PYTHON_REGISTRY_URL, and FORGE_TOKEN as CI variables; no rung
-  # step is emitted here. Masking is GitLab's flag-and-constraint
-  # model: mark each variable masked where its value allows it.
-"""
-    )
+            if _renders(job, answers):
+                lines.append(_gitlab_job(answers, prog, point, job, image=image))
     return "".join(lines)
 
 
@@ -927,17 +734,13 @@ def generate(root: Path) -> dict[str, str]:
     site = {"zensical.toml": zensical_config(root)}
     if kind in ("github", "gitea"):
         # One file per declared workflow: the gate and the merge point
-        # share ci.yml, the nightly has its own, and the release keeps
-        # its emitter until its jobs are entries.
-        release = _github_release if kind == "github" else _gitea_release
+        # share ci.yml, the nightly and the release have their own.
+        workflows = sorted({point.workflow for point in DECLARED})
         files = {
-            f".{kind}/workflows/ci.yml": _actions_workflow(
-                facts, prog, "ci.yml", forge=kind
-            ),
-            f".{kind}/workflows/release.yml": release(facts, prog),
-            f".{kind}/workflows/nightly.yml": _actions_workflow(
-                facts, prog, "nightly.yml", forge=kind
-            ),
+            f".{kind}/workflows/{workflow}": _actions_workflow(
+                facts, prog, workflow, forge=kind
+            )
+            for workflow in workflows
         }
     else:
         files = {".gitlab-ci.yml": _gitlab_document(facts, prog)}

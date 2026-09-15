@@ -250,9 +250,12 @@ def test_the_rendered_release_workflow_carries_the_driver_pin() -> None:
     ]
     assert "      workshop:\n" in release
     assert 'default: ""' in release
+    # The pin is a verb that decides for itself on an empty input: no
+    # condition in the shell.
     assert release.count("- name: Pin the driver") == 2  # publish, templates
-    assert "if: inputs.workshop != ''" in release
-    assert 'uv pip install "livery-workshop==${{ inputs.workshop }}"' in release
+    assert release.count('fm release.driver --workshop="${{ inputs.workshop }}"') == 2
+    assert "if: inputs.workshop" not in release
+    assert "uv pip install" not in release
     # The receipt push needs a credential with the workflows scope at
     # a squash the tip has moved past; the job token cannot push it.
     assert "token: ${{ secrets.FORGE_TOKEN || github.token }}" in release

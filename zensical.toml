@@ -350,6 +350,7 @@ nav = [
             ] },
             { "release" = [
                 { "Overview" = "_generated/packages/workshop/_generated/tasks/release/index.md" },
+                { "driver" = "_generated/packages/workshop/_generated/tasks/release/driver.md" },
                 { "prepare" = "_generated/packages/workshop/_generated/tasks/release/prepare.md" },
                 { "replay" = "_generated/packages/workshop/_generated/tasks/release/replay.md" },
                 { "templates" = "_generated/packages/workshop/_generated/tasks/release/templates.md" },

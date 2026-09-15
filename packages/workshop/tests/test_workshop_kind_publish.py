@@ -300,30 +300,39 @@ def _release_answers(*, with_native: bool) -> dict[str, object]:
 
 
 def test_the_github_release_gains_the_matrix_only_with_a_native_member() -> None:
-    from livery.workshop._ci_generate import _github_release
+    from livery.workshop._ci_generate import _actions_workflow
 
-    pure = _github_release(_release_answers(with_native=False), "fm")
+    pure = _actions_workflow(
+        _release_answers(with_native=False), "fm", "release.yml", forge="github"
+    )
     assert "wheels:" not in pure
-    assert "--prebuilt" not in pure
-    native = _github_release(_release_answers(with_native=True), "fm")
+    native = _actions_workflow(
+        _release_answers(with_native=True), "fm", "release.yml", forge="github"
+    )
     assert "wheels:" in native
     # The matrix is the declared wheel platforms, never a fixed OS list.
     assert "matrix:" in native and "os: [ubuntu-latest, windows]" in native
-    assert "release.wheels" in native
+    assert "ci.run --point=release --job=wheels" in native
     assert "needs: [wheels]" in native
-    assert "--prebuilt" in native
     assert "pattern: wheels-*" in native
+    # The wave decides prebuilt from the collected dist; the shell
+    # spells nothing.
+    assert "--prebuilt" not in native
 
 
 def test_the_gitea_release_matrix_rides_the_declared_wheel_platforms() -> None:
-    from livery.workshop._ci_generate import _gitea_release
+    from livery.workshop._ci_generate import _actions_workflow
 
-    pure = _gitea_release(_release_answers(with_native=False), "fm")
+    pure = _actions_workflow(
+        _release_answers(with_native=False), "fm", "release.yml", forge="gitea"
+    )
     assert "wheels:" not in pure
-    native = _gitea_release(_release_answers(with_native=True), "fm")
+    native = _actions_workflow(
+        _release_answers(with_native=True), "fm", "release.yml", forge="gitea"
+    )
     assert "wheels:" in native
-    assert "runner: [ubuntu-latest, windows]" in native
-    assert "--prebuilt" in native
+    assert "os: [ubuntu-latest, windows]" in native
+    assert "--prebuilt" not in native
 
 
 def test_validate_member_skips_a_wheelless_kind(

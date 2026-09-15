@@ -3,13 +3,12 @@
 # `fm template.apply`; an edit here is drift.
 name: release
 
-# The train: a workflow.release PR merges, this publishes its squash,
-# and the receipt tags are cut only after the index confirms each
-# member. A tag is a receipt, never a trigger: the merge point's
-# dispatch job starts the wave at the release squash, and a hand
-# dispatch with --ref is the recovery entry when a publish died
-# mid-wave; --workshop names a released driver for a wave whose own
-# workshop was the fault.
+# The train: a workflow.release PR merges, this publishes its squash, and
+# the receipt tags are cut only after the index confirms each member. A
+# tag is a receipt, never a trigger: the merge point's dispatch job starts
+# the wave at the release squash, and a hand dispatch with --ref is the
+# recovery entry when a publish died mid-wave; --workshop names a released
+# driver for a wave whose own workshop was the fault.
 on:
   workflow_dispatch:
     inputs:
@@ -22,21 +21,17 @@ on:
         default: ""
 
 jobs:
+  # The wave: publish the ref, cut the receipt tags after the index
+  # confirms each member. The receipt push carries the repository's token
+  # where there is one: the job token may not push a ref whose commit
+  # carries a workflow file that differs from the tip's.
   publish:
-    runs-on: ubuntu-latest
-    environment: pypi
     permissions:
       id-token: write
       contents: write
-    outputs:
-      members: ${{ steps.wave.outputs.members }}
+    environment: pypi
+    runs-on: ubuntu-latest
     steps:
-      # The receipt push carries FORGE_TOKEN where the repository has
-      # one: the ambient job token may not push a ref whose commit
-      # carries a workflow file that differs from the tip's, and a
-      # squash a later change moved past is exactly that. A tag is
-      # never a trigger, so the suppressed-workflow-events limit
-      # cannot bite either way.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref }}
@@ -45,43 +40,37 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.12.7"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: wheels-*
+          path: packages
+          merge-multiple: true
       - name: Enter the workspace
         run: bash setup.sh github
       - name: Pin the driver
-        if: inputs.workshop != ''
-        run: uv pip install "livery-workshop==${{ inputs.workshop }}"
+        run: fm release.driver --workshop="${{ inputs.workshop }}"
       - name: Publish the wave
-        id: wave
-        # A PYPI_TOKEN secret publishes with a token, which a first
-        # release of a new name needs, since trusted publishing waits
-        # on a pending publisher registered by hand. An absent secret
-        # arrives as an empty string, which the publish verb drops
-        # before it spawns uv, so uv stays on trusted publishing.
         env:
-          FORGE_TOKEN: ${{ github.token }}
+          FORGE_TOKEN: ${{ secrets.FORGE_TOKEN || secrets.GITHUB_TOKEN }}
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
-        run: >-
-          fm workflow.release.publish
-          --ref="${{ inputs.ref }}"
-
-  # The home's release aftermath: the (composed) template artifact,
-  # tagged in lockstep with the publishing layer's receipt.
+        run: fm ci.run --point=release --job=publish
+  # The home's release aftermath: the (composed) template artifact, tagged
+  # in lockstep with the publishing layer's receipt.
   templates:
     needs: [publish]
-    if: contains(needs.publish.outputs.members, 'livery-workshop')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref }}
+          token: ${{ secrets.FORGE_TOKEN || github.token }}
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.12.7"
       - name: Enter the workspace
         run: bash setup.sh github
       - name: Pin the driver
-        if: inputs.workshop != ''
-        run: uv pip install "livery-workshop==${{ inputs.workshop }}"
+        run: fm release.driver --workshop="${{ inputs.workshop }}"
       - name: Deploy key
         run: |
           mkdir -p ~/.ssh
@@ -89,6 +78,6 @@ jobs:
           chmod 600 ~/.ssh/templates_deploy
       - name: Publish the template artifact
         env:
-          GIT_SSH_COMMAND: ssh -i ~/.ssh/templates_deploy -o StrictHostKeyChecking=accept-new
           FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}
-        run: fm release.templates
+          GIT_SSH_COMMAND: ssh -i ~/.ssh/templates_deploy -o StrictHostKeyChecking=accept-new
+        run: fm ci.run --point=release --job=templates

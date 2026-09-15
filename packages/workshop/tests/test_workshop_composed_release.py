@@ -149,7 +149,7 @@ def test_the_emitters_gate_the_artifact_job_on_the_home_shape(
     )
     release = generate(root)[".gitea/workflows/release.yml"]
     assert "Publish the template artifact" in release
-    assert "release.templates" in release
+    assert "ci.run --point=release --job=templates" in release
     assert "FORGE_TOKEN: ${{ secrets.FORGE_TOKEN }}" in release
 
     # Without the declaration, no job: an instance publishes nothing.

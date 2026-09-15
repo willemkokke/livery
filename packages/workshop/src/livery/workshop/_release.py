@@ -452,6 +452,59 @@ def release_wheels(
         print(f"  {package.name}: {wheels}")
 
 
+@release.task(name="driver", hidden=True)
+def release_driver(
+    workshop: Annotated[
+        str,
+        doc(
+            "a released livery-workshop version to drive the wave; empty keeps"
+            " the checkout's"
+        ),
+    ] = "",
+) -> None:
+    """Install the released workshop *workshop* names over the checkout's own.
+
+    The wave's recovery for a run whose own workshop was the fault: a
+    re-dispatch names a released driver, and this step installs it
+    before the wave's verbs run, so they run under it. Empty, the
+    checkout's workshop drives the wave and nothing is installed; a
+    re-run then does what the first run did.
+    """
+    from livery.toolroom import tools
+
+    if not workshop:
+        print("  driver: the checkout's own workshop drives the wave")
+        return
+    from livery.workshop._ci_generate import DRIVER_DIST
+
+    tools.uv("pip", "install", f"{DRIVER_DIST}=={workshop}")
+    print(f"  driver: {DRIVER_DIST} {workshop} installed over the checkout's")
+
+
+def publisher_in_wave(root: Path, ref: str) -> tuple[str, bool]:
+    """The home's template publisher, and whether the wave at *ref* released it.
+
+    The wave at *ref* is the manifest the release squash stamped; the
+    publisher is the last layer in the stack that ships a template
+    tree. A home whose stack ships none answers ``("", False)``.
+    """
+    from livery.workshop._compose import layer_template_tree
+    from livery.workshop._layers import layer_entries
+    from livery.workshop._publish import discover_release
+
+    publisher = ""
+    for layer, dist in layer_entries(root):
+        if layer_template_tree(root, layer) is not None:
+            publisher = dist
+    if not publisher:
+        return "", False
+    git = GitOps(root)
+    released = {
+        package.name for package, _version in discover_release(root, git, ref or "HEAD")
+    }
+    return publisher, publisher in released
+
+
 @release.task(name="templates", hidden=True)
 def release_templates(
     version: Annotated[
@@ -460,17 +513,23 @@ def release_templates(
     remote: Annotated[
         str, doc("artifact repository url (default: the contract's)")
     ] = "",
+    ref: Annotated[
+        str, doc("the release squash whose wave this follows; empty means every wave")
+    ] = "",
 ) -> None:
     """Publish this home's template artifact for one release.
 
-    Runs from the released checkout in the release workflow. A layer
-    home publishes its composed tree (base at the pinned installed
-    version plus its overlay), with the composition recorded in the
-    artifact; the base home publishes its own tree unchanged, the
-    degenerate case. The tag is ``v<version>``, the publishing
-    layer's version, in lockstep with that layer's release tag.
-    Same version, different content refuses: a released tag is
-    immutable.
+    Runs from the released checkout in the release workflow, after the
+    wave. With ``--ref`` it decides for itself: the manifest at the
+    squash names the wave's members, and a wave that did not release
+    the publishing layer has no artifact to publish, so the verb says
+    so and exits green. A layer home publishes its composed tree (base
+    at the pinned installed version plus its overlay), with the
+    composition recorded in the artifact; the base home publishes its
+    own tree unchanged, the degenerate case. The tag is
+    ``v<version>``, the publishing layer's version, in lockstep with
+    that layer's release tag. Same version, different content
+    refuses: a released tag is immutable.
     """
     import tempfile as _tempfile
     from importlib.metadata import version as installed
@@ -480,6 +539,14 @@ def release_templates(
     from livery.workshop._templates import render_source, templates_artifact
 
     root = _root()
+    if ref:
+        publisher, released = publisher_in_wave(root, ref)
+        if publisher and not released:
+            print(
+                f"  templates: {publisher} was not in the wave at {ref[:12]};"
+                " nothing to publish"
+            )
+            return
     remote = remote or templates_artifact(root)
     if not remote:
         fail(
@@ -499,8 +566,8 @@ def release_templates(
             " publish; `uv sync` installs the base layer's"
         )
     version = version or installed(publisher)
-    source, ref, owners = render_source(root)
-    if ref is not None:
+    source, remote_ref, owners = render_source(root)
+    if remote_ref is not None:
         fail(
             "the template source resolves to a remote artifact: only a"
             " home (a workspace whose stack ships its trees locally)"
