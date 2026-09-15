@@ -7,7 +7,9 @@ stops at the native member, phase 3's first act; phase 3 landed
 2026-09-15 (livery#602): the runners share one toolchain image, the
 docker socket is opt-in, and the members and the three legs prove
 themselves on merge request pipelines, the pass stopping at the release
-act; phases 4 and 5 not started.
+act; phases 4 and 5 landed 2026-09-15 (livery#605): the GitLab loop
+is whole, exit 0, and the clock's schedule ran on demand. The plan is
+complete.
 Closes the two open lines of [CI declared, contributed, and dispatched on
 command][ci-plan]: the live GitLab pipeline through `ci.run`, and the
 schedules reconcile creating a real pipeline schedule.
@@ -225,7 +227,10 @@ Deliverables:
 Acceptance:
 
 - `uv run fm ci.e2e --forge=gitlab` prints `release: ... served,
-  receipts ... cut`.
+  receipts ... cut`. Met 2026-09-15: `release: ci-e2e-loop-loop-echo
+  0.1.0, ci-e2e-loop-loop-native 0.1.0 served, receipts
+  packages/loop-echo/v0.1.0, packages/loop-native/v0.1.0 cut`, both
+  receipts' deletion refused over git.
 
 ### Phase 5: the points by hand, and the clock
 
@@ -243,7 +248,12 @@ Acceptance:
 
 - `uv run fm ci.e2e --forge=gitlab` exits 0 and ends `the loop is
   whole: gate, merge, release, receipt, nightly, the gate on command,
-  and a contributed point`.
+  and a contributed point`. Met 2026-09-15: exit 0, the nightly by hand
+  on run 1338, the gate on 1339, the contributed point on 1340. The
+  protocol listed the birth's schedule (`workshop: nightly`, `17 4 * *
+  *` on main, `FORGE_WORKFLOW=nightly.yml`), and running it on demand
+  through the API produced pipeline 1341, source `schedule`, named
+  `nightly.yml`, whose nightly job went green.
 - `uv run fm ci.e2e --forge=gitea` exits 0 on the same tree, run after
   it.
 
@@ -315,6 +325,16 @@ Acceptance:
   runner's event payload, which GitLab never writes; `event_payload`
   builds the pull request shape from `CI_MERGE_REQUEST_*` on a merge
   request pipeline, so every payload reader works on GitLab unchanged.
+- 2026-09-15, the agent, at phase 4: git-cliff completes a Gitea
+  root with `/api/v1` itself and a GitLab address with nothing (the
+  release run asked `http://gitlab:8929/projects/...` and got 404), so
+  the rendered `cliff.toml` spells `/api/v4` on GitLab alone. The
+  loop's receipt proof read Gitea's tag protections after a delete
+  that landed; on GitLab a protected tag's deletion over git is
+  refused to everyone, so a delete that lands there is the failure.
+  A merge request reads `locked` for the beat its merge runs, which
+  the backend read as closed unmerged and the submit stopped on; it
+  reads as open now.
 - 2026-09-15, the agent: the loop's run selection by workflow file name
   is kept, and GitLab meets it by naming every pipeline, rather than the
   loop growing a per-forge selection. The same choice serves

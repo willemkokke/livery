@@ -257,6 +257,39 @@ def test_the_runner_probe_refuses_a_missing_runner_and_a_missing_socket(
     _e2e._require_runner_docker("gitea")
 
 
+def test_a_deletable_receipt_on_gitlab_is_the_contracts_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The refusal first: GitLab refuses a protected tag's deletion to
+    # everyone over git, so a delete that lands means no protection,
+    # and the receipt is pushed back before the failure names it. A
+    # refused delete holds on every forge.
+    from types import SimpleNamespace
+
+    from livery.toolroom import tools
+
+    pushes: list[tuple[str, ...]] = []
+    deny = {"code": 0}
+
+    def _opts(**kwargs: object) -> object:
+        def _run(*args: str) -> object:
+            if args[0] == "push":
+                pushes.append(args)
+                if args[2].startswith(":refs/tags/"):
+                    return SimpleNamespace(code=deny["code"], stdout="", stderr="")
+            return SimpleNamespace(code=0, stdout="", stderr="")
+
+        return _run
+
+    monkeypatch.setattr(tools, "git", SimpleNamespace(opts=_opts))
+    with pytest.raises(_FAILURES, match="deletable on gitlab"):
+        _e2e._require_receipt_protected(tmp_path, "packages/loop-echo/v0.1.0", "gitlab")
+    assert pushes[-1] == ("push", "origin", "refs/tags/packages/loop-echo/v0.1.0")
+    deny["code"] = 1
+    _e2e._require_receipt_protected(tmp_path, "packages/loop-echo/v0.1.0", "gitlab")
+    assert "delete refused; protection holds" in capsys.readouterr().out
+
+
 # --- the dev-wheel pins: refusals first, then the read -----------------------
 
 HEAD = "05482de" + "0" * 33

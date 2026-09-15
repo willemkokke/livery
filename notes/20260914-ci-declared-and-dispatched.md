@@ -4,7 +4,8 @@ Status: ruled 2026-09-14. Phase 1 landed 2026-09-15 (livery#584), phase 2
 landed 2026-09-15 (livery#587), phase 3 landed 2026-09-15 (livery#589) with
 one acceptance item open, phase 4 landed 2026-09-15 (livery#593) with one
 acceptance item open, phase 5 landed 2026-09-15 (livery#595). The plan is
-complete but for the two open lines. Runs
+complete but for one open line, the GitHub wave; the live GitLab line
+closed 2026-09-15 with the GitLab lane of the loop. Runs
 before [the tool record and its index][record-plan], whose phase 8 declares
 a point through the mechanism phase 5 here delivers; that plan carries no
 other CI work.
@@ -309,12 +310,14 @@ Landed 2026-09-15 as livery#589. Evidence:
   `the loop is whole: gate, merge, release, receipt, nightly, and the
   gate on command`. Main's runs ran the merge point's deploy, govern,
   dispatch and janitor through the rendered jobs.
-- Open: one API-created pipeline against the local GitLab running the
-  `gate` and `docs` jobs through `ci.run`. Not run: the local GitLab has
-  no runner that can enter a workspace (the loop's dev wheels index and
-  the entry script are Gitea's lane), so the GitLab rendering is proven
-  by its pins and the recorded schedules scenario alone. The evidence
-  lands with the GitLab lane of the loop.
+- Closed 2026-09-15 by the GitLab lane of the loop
+  (`fm ci.e2e --forge=gitlab`, exit 0): every pipeline on the local
+  GitLab runs its jobs through `ci.run`, the job logs carrying
+  `gate/check: check (builtin)` and `gate/docs: docs.build (builtin)`;
+  the dispatched gate, nightly and contributed point ran as API-created
+  pipelines named by `FORGE_WORKFLOW`, and the birth's schedule, run on
+  demand, produced a pipeline from source `schedule` whose nightly job
+  went green.
 
 Deliverables:
 

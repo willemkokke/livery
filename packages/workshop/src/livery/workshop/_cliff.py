@@ -150,7 +150,7 @@ def _run(root: Path, package: Package, *args: str) -> str:
             detail += (
                 "\n  the forge refused the author lookup: check FORGE_TOKEN"
                 f" can read this repository, and that {CONFIG_NAME}'s api_url"
-                " names the server root"
+                " names the server root (with /api/v4 on GitLab)"
             )
         fail(f"git-cliff exited {result.code}:\n{detail}")
     return result.stdout

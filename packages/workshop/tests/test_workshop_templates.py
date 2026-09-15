@@ -151,6 +151,40 @@ def test_a_receipt_without_package_dir_renders_the_right_paths(
     assert package_drift(root) == []
 
 
+@pytest.mark.parametrize(
+    ("kind", "url", "api_url"),
+    [
+        ("gitlab", "http://gitlab:8929", "http://gitlab:8929/api/v4"),
+        ("gitea", "http://gitea:3000", "http://gitea:3000"),
+    ],
+)
+def test_the_cliff_remote_carries_the_api_prefix_gitlab_alone_needs(
+    tmp_path: Path, kind: str, url: str, api_url: str
+) -> None:
+    # git-cliff completes a Gitea root with /api/v1 itself and a
+    # GitLab address with nothing, so the render spells the prefix
+    # for GitLab alone; a doubled prefix on Gitea answers 404.
+    root = _template_instance(tmp_path)
+    contract = root / "workshop.toml"
+    contract.write_text(
+        contract.read_text().replace(
+            '[forge]\nkind = "github"\n', f'[forge]\nkind = "{kind}"\nurl = "{url}"\n'
+        )
+    )
+    apply_project(root)
+    package = root / "packages" / "thing"
+    package.mkdir(parents=True)
+    answers = read_answers(ROOT / "packages" / "workshop" / ".copier-answers.yml")
+    answers["package_name"] = "livery-thing"
+    (package / ".copier-answers.yml").write_text(
+        "\n".join(f"{key}: {value!r}" for key, value in answers.items()) + "\n"
+    )
+    assert "packages/thing/cliff.toml" in apply_packages(root)
+    body = (package / "cliff.toml").read_text()
+    assert f"[remote.{kind}]" in body
+    assert f'api_url = "{api_url}"' in body
+
+
 def test_a_render_is_made_once_per_input_and_again_after_an_edit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
