@@ -465,10 +465,27 @@ def event_payload(environ: Mapping[str, str] | None = None) -> dict[str, Any] | 
     GitHub and Gitea write the event that started the run to the file
     ``GITHUB_EVENT_PATH`` names; a payload that is missing or does not
     parse reads as none, so a caller falls back rather than fails.
+    GitLab writes no file and carries the same facts as variables, so a
+    merge request pipeline answers with the payload's ``pull_request``
+    shape built from ``CI_MERGE_REQUEST_*``: the iid as the number, the
+    title, the source branch and head sha, and the target branch. Any
+    other GitLab pipeline has no payload.
     """
     env = os.environ if environ is None else environ
     path = env.get("GITHUB_EVENT_PATH", "")
     if not path:
+        if env.get("GITLAB_CI") == "true" and env.get("CI_MERGE_REQUEST_IID"):
+            return {
+                "pull_request": {
+                    "number": int(env["CI_MERGE_REQUEST_IID"]),
+                    "title": env.get("CI_MERGE_REQUEST_TITLE", ""),
+                    "head": {
+                        "ref": env.get("CI_MERGE_REQUEST_SOURCE_BRANCH_NAME", ""),
+                        "sha": env.get("CI_COMMIT_SHA", ""),
+                    },
+                    "base": {"ref": env.get("CI_MERGE_REQUEST_TARGET_BRANCH_NAME", "")},
+                }
+            }
         return None
     try:
         payload = json.loads(Path(path).read_text("utf-8"))

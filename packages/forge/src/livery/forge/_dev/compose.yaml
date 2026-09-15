@@ -58,8 +58,9 @@ services:
       GITEA_RUNNER_REGISTRATION_TOKEN: ${GITEA_RUNNER_TOKEN:-}
       GITEA_RUNNER_NAME: livery-dev
       # Host mode: jobs run inside the runner container itself; the
-      # host's docker socket below serves cibuildwheel's build
-      # containers, the way a hosted linux runner's daemon does.
+      # host's docker socket, when compose.docker.yaml rides along,
+      # serves cibuildwheel's build containers, the way a hosted
+      # linux runner's daemon does.
       GITEA_RUNNER_LABELS: ubuntu-latest:host,linux:host
       CONFIG_FILE: /runner-config.yaml
     configs:
@@ -67,11 +68,6 @@ services:
         target: /runner-config.yaml
     volumes:
       - runner-data:/data
-      # cibuildwheel runs its manylinux and musllinux containers
-      # through this socket; it copies the project in over the
-      # daemon rather than bind-mounting it, so a socket-only daemon
-      # is enough.
-      - /var/run/docker.sock:/var/run/docker.sock
 
   gitlab:
     # The image is architecture-dependent: GitLab ships no official
@@ -111,7 +107,17 @@ services:
       start_period: 10m
 
   gitlab-runner:
-    image: gitlab/gitlab-runner:latest
+    # The same image as act_runner, so a job finds the same toolchain
+    # on either lane; the shell executor runs the jobs as root inside
+    # this container, under /builds. The registration lives in the
+    # config volume and survives an image rebuild.
+    build:
+      context: .
+      dockerfile: runner.Dockerfile
+    image: livery-forge-dev-act-runner:pinned
+    pull_policy: never
+    entrypoint: ["gitlab-runner"]
+    command: ["run", "--working-directory", "/builds"]
     profiles: [gitlab-runner]
     depends_on:
       gitlab:

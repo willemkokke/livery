@@ -59,6 +59,7 @@ class Lane:
             to.
         token_var: The shared env key the seed writes the lane token to.
         version_path: The API path the hosts-entry probe reads.
+        runner: The compose service of the lane's runner.
     """
 
     kind: str
@@ -66,6 +67,7 @@ class Lane:
     url_var: str
     token_var: str
     version_path: str
+    runner: str
 
     @property
     def host(self) -> str:
@@ -94,12 +96,64 @@ class Lane:
 #: The lanes, by forge kind.
 LANES: dict[str, Lane] = {
     "gitea": Lane(
-        "gitea", "http://gitea:3000", "GITEA_URL", "GITEA_TOKEN", "/api/v1/version"
+        "gitea",
+        "http://gitea:3000",
+        "GITEA_URL",
+        "GITEA_TOKEN",
+        "/api/v1/version",
+        "act_runner",
     ),
     "gitlab": Lane(
-        "gitlab", "http://gitlab:8929", "GITLAB_URL", "GITLAB_TOKEN", "/api/v4/version"
+        "gitlab",
+        "http://gitlab:8929",
+        "GITLAB_URL",
+        "GITLAB_TOKEN",
+        "/api/v4/version",
+        "gitlab-runner",
     ),
 }
+
+#: The compose project the dev containers belong to; a container is
+#: named ``<project>-<service>-1``.
+_DEV_PROJECT = "livery-forge-dev"
+
+
+def _require_runner_docker(kind: str) -> None:
+    """Refuse until the lane's runner has the host's docker socket.
+
+    The loop's native member builds its wheel through cibuildwheel on
+    the runner, which needs a daemon, and the runners get the socket
+    only from ``fm forge.dev.up --with-docker``. A runner that is not
+    up at all is named the same way, so the refusal comes before the
+    minutes a pass spends reaching the release act.
+    """
+    import json
+
+    from livery.toolroom import tools
+
+    lane = _lane(kind)
+    container = f"{_DEV_PROJECT}-{lane.runner}-1"
+    result = tools.docker.opts(nofail=True, recorded=False)(
+        "inspect", "--format", "{{json .Mounts}}", container
+    )
+    if result.code != 0:
+        fail(
+            f"the {kind} runner ({container}) is not up:"
+            f" `{footman.prog()} forge.dev.up --profile={kind} --with-docker`"
+        )
+    try:
+        mounts = json.loads(result.stdout or "[]")
+    except ValueError:
+        mounts = []
+    destinations = {
+        str(mount.get("Destination", "")) for mount in mounts if isinstance(mount, dict)
+    }
+    if "/var/run/docker.sock" not in destinations:
+        fail(
+            f"the {kind} runner has no docker socket, and the loop's native"
+            " member builds its wheel through cibuildwheel on it:"
+            f" `{footman.prog()} forge.dev.up --profile={kind} --with-docker`"
+        )
 
 
 def _lane(kind: str) -> Lane:
@@ -2124,6 +2178,7 @@ if _WORKSHOP_TESTS.is_dir():
 
         url = os.environ.get(_lane(forge).url_var, "")
         _require_host_alias(forge)
+        _require_runner_docker(forge)
         lane, lane_token = _dev_forge(forge)
         root = _loop_home(forge) / E2E_REPO
         if fresh:

@@ -339,6 +339,34 @@ def test_the_run_context_head_branch_is_the_pull_requests_and_empty_otherwise(
     assert gitlab is not None and gitlab.head_ref == "feat/z"
 
 
+def test_a_gitlab_merge_request_pipeline_answers_the_pull_request_payload() -> None:
+    # The fallbacks first: a GitLab pipeline that no merge request
+    # started has no payload, and a merge request pipeline builds the
+    # pull request shape GitHub and Gitea write, from the variables.
+    assert (
+        _state.event_payload({"GITLAB_CI": "true", "CI_PIPELINE_SOURCE": "push"})
+        is None
+    )
+    payload = _state.event_payload(
+        {
+            "GITLAB_CI": "true",
+            "CI_MERGE_REQUEST_IID": "7",
+            "CI_MERGE_REQUEST_TITLE": "chore: a member-only change",
+            "CI_MERGE_REQUEST_SOURCE_BRANCH_NAME": "chore/scoped-leg",
+            "CI_MERGE_REQUEST_TARGET_BRANCH_NAME": "main",
+            "CI_COMMIT_SHA": "d" * 40,
+        }
+    )
+    assert payload == {
+        "pull_request": {
+            "number": 7,
+            "title": "chore: a member-only change",
+            "head": {"ref": "chore/scoped-leg", "sha": "d" * 40},
+            "base": {"ref": "main"},
+        }
+    }
+
+
 def test_the_event_payload_is_none_when_missing_junk_or_not_an_object(
     tmp_path: Path,
 ) -> None:

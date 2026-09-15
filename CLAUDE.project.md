@@ -21,7 +21,8 @@ note.
   only through footman's own `plugin()`. Never create
   `livery/__init__.py`.
 - The local forge containers: `fm forge.dev.up` (Gitea and GitLab,
-  seeded), shipped by livery-forge and mounted through the layers
+  seeded; `--with-docker` mounts the host's docker socket into the
+  runners, which the CI loop needs), shipped by livery-forge and mounted through the layers
   list in `workshop.toml`; their credentials are written to
   `.repo.shared.env` in the runner's config directory, which the
   env cascade reads everywhere. The e2e accounts and their runbook

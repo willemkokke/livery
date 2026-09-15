@@ -3,8 +3,11 @@
 Status: ruled 2026-09-15. Phase 1 landed 2026-09-15 (livery#598); phase 2
 landed 2026-09-15 (livery#600): `fm ci.e2e --forge=gitlab` merges the
 setup pull request on the real runner and proves the verified skip, then
-stops at the native member, phase 3's first act; phases 3 to 5 not
-started.
+stops at the native member, phase 3's first act; phase 3 landed
+2026-09-15 (livery#602): the runners share one toolchain image, the
+docker socket is opt-in, and the members and the three legs prove
+themselves on merge request pipelines, the pass stopping at the release
+act; phases 4 and 5 not started.
 Closes the two open lines of [CI declared, contributed, and dispatched on
 command][ci-plan]: the live GitLab pipeline through `ci.run`, and the
 schedules reconcile creating a real pipeline schedule.
@@ -202,7 +205,10 @@ Acceptance:
 
 - `uv run fm ci.e2e --forge=gitlab` prints the three `proven on a ...`
   lines and their `composed skip` lines, then fails by name at the
-  release act.
+  release act. Met 2026-09-15: a fresh pass printed all six (main's
+  runs 1311, 1313 and 1315), and stopped at `fm workflow.release`,
+  where git-cliff asked `http://gitlab:8929/projects/...` for the
+  project's metadata, without the `/api/v4` prefix, and got 404.
 
 ### Phase 4: the release act on GitLab
 
@@ -292,6 +298,23 @@ Acceptance:
   stamp without a scope; and a project delete is asynchronous, the old
   path answering an upload for a moment, so the dev wheels publish
   after the birth on every lane.
+- 2026-09-15, the agent, at phase 3: open question 2 settled by the
+  first shape. The act_runner image is Alpine 3.24, whose package
+  index carries `gitlab-runner` 19.1.1, so both runner services build
+  the one `runner.Dockerfile` and the GitLab service runs
+  `gitlab-runner run --working-directory /builds` on it as root; the
+  registration in the config volume survived the image switch, and
+  the native member compiled and landed through the loop's own gate
+  on the first pass. The docker socket is opt-in on both lanes
+  (`fm forge.dev.up --with-docker`, a compose overlay), as livery#299
+  asks, and the loop refuses at its start when the lane's runner has
+  none, since its native member's wheel needs the daemon. The speed
+  judge read the leg from the job's display name, which on GitLab is
+  the bare `check` and never the reference runner; it reads the leg's
+  own label from the row now. The release title check reads the
+  runner's event payload, which GitLab never writes; `event_payload`
+  builds the pull request shape from `CI_MERGE_REQUEST_*` on a merge
+  request pipeline, so every payload reader works on GitLab unchanged.
 - 2026-09-15, the agent: the loop's run selection by workflow file name
   is kept, and GitLab meets it by naming every pipeline, rather than the
   loop growing a per-forge selection. The same choice serves
@@ -303,22 +326,11 @@ Acceptance:
    2026-09-15 by the dev act in phase 2: `uv publish` with
    `UV_PUBLISH_TOKEN` alone, uv's fixed `__token__` username, uploads to
    the project registry on the local GitLab 18.9.
-2. **Which shape the GitLab runner takes.** The Gitea runner's jobs run
-   in host mode inside its container, whose image carries node, git,
-   bash, curl, the docker CLI, a C++ toolchain and cmake on Alpine, with
-   the host's docker socket mounted: the gate leg compiles the native
-   member's editable install there, and the wheels job builds through
-   the socket. The GitLab runner is the stock Ubuntu image with the shell
-   executor, no toolchain and no socket, so both jobs fail on it as it
-   stands. The first shape to try is one image for both runners, the
-   toolchain image with the `gitlab-runner` binary added and the socket
-   mounted; the two base images differ, so either the Alpine image takes
-   GitLab's Alpine binary or the image is rebuilt on Ubuntu with the
-   same toolchain list. If one image does not work out, the runner is
-   registered with the docker executor and every job runs in the
-   toolchain image; the runner container then needs only the binary and
-   the socket. Settled by trying the first. Owner: the agent, at
-   phase 3.
+2. **Which shape the GitLab runner takes.** Settled 2026-09-15 by the
+   first shape: one image for both runners, the act_runner toolchain
+   image with Alpine's `gitlab-runner` package, the GitLab service
+   running the shell executor on it as root under `/builds`; the socket
+   rides a compose overlay behind `fm forge.dev.up --with-docker`.
 3. **The docs build the loop once saw finish in 0.03 s with nothing
    built.** Recorded in the CI plan; not reproduced. If the GitLab lane
    sees it, it gets an issue with both sightings. Owner: the agent.
