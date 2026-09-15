@@ -414,3 +414,32 @@ def test_merge_hold_names_a_missing_pull_request_and_reads_the_published_state()
     )
     with pytest.raises(ForgeError, match="no pull request 5"):
         gitea.repository("acme", "ws").pr.merge_hold(5)
+
+
+def test_a_locked_merge_request_is_still_open() -> None:
+    # GitLab locks a merge request for the beat its merge runs; a
+    # follower reading that beat as closed would stop before the
+    # merge lands. Locked reads open and not merged; merged and
+    # closed read as they are.
+    mr = f"{_GL}/projects/acme%2Fws/merge_requests/5"
+    body = '{"iid": 5, "title": "t", "state": "%s", "sha": "a", "source_branch": "f"}'
+    forge = GitlabForge(
+        _GL,
+        token="t",
+        opener=ReplayOpener(
+            Cassette(
+                [
+                    _exchange("GET", mr, 200, body % "locked"),
+                    _exchange("GET", mr, 200, body % "merged"),
+                    _exchange("GET", mr, 200, body % "closed"),
+                ]
+            )
+        ),
+    )
+    pulls = forge.repository("acme", "ws").pr
+    locked = pulls.get(5)
+    assert locked is not None and locked.state == "open" and not locked.merged
+    merged = pulls.get(5)
+    assert merged is not None and merged.state == "closed" and merged.merged
+    closed = pulls.get(5)
+    assert closed is not None and closed.state == "closed" and not closed.merged

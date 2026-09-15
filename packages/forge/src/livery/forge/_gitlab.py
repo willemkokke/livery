@@ -780,9 +780,15 @@ class _GitlabRepository:
 
 
 def _as_pull_request(data: Mapping[str, Any]) -> PullRequest:
-    """GitLab's merge request JSON, normalised; the number is the iid."""
+    """GitLab's merge request JSON, normalised; the number is the iid.
+
+    A merge request reads ``locked`` while GitLab merges it, for a
+    beat between the merge starting and ``merged``; it is still open
+    here, since a caller following the merge must keep following,
+    and a ``closed`` read would call it closed unmerged.
+    """
     raw_state = str(data.get("state", ""))
-    state: ItemState = "open" if raw_state == "opened" else "closed"
+    state: ItemState = "open" if raw_state in ("opened", "locked") else "closed"
     return PullRequest(
         number=int(data["iid"]),
         title=str(data.get("title", "")),

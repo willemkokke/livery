@@ -1947,7 +1947,7 @@ def _release_act(root: Path, kind: str) -> None:
         if listed.code == 0 and tag in listed.stdout
     }
     for name in sorted(cut):
-        _require_receipt_protected(root, all_tags[name])
+        _require_receipt_protected(root, all_tags[name], kind)
         print(f"  release: receipt {all_tags[name]} already on the loop")
     names = tuple(name for name, _kind in LOOP_MEMBERS if name not in cut)
     if not names:
@@ -2067,20 +2067,21 @@ def _release_act(root: Path, kind: str) -> None:
             if time.monotonic() >= deadline:
                 fail(f"served, but the receipt tag {tag} is not on the loop")
             time.sleep(5)
-        _require_receipt_protected(root, tag)
+        _require_receipt_protected(root, tag, kind)
     served = ", ".join(f"{_member_dist(name)} 0.1.0" for name in names)
     print(f"  release: {served} served, receipts {', '.join(tags.values())} cut")
 
 
-def _require_receipt_protected(root: Path, tag: str) -> None:
+def _require_receipt_protected(root: Path, tag: str, kind: str = "gitea") -> None:
     """Prove the receipt's protection by attempting the crime.
 
-    A refused delete is the strongest proof and ends it. Gitea ties
-    creation, deletion, and movement to one whitelist, so the loop's
-    own lane (the whitelisted admin) can delete; there the tag is
-    pushed straight back and the proof is the protection's presence
-    with the lane on its whitelist, read from the API, which is what
-    binds everyone else.
+    A refused delete is the strongest proof and ends it; GitLab
+    refuses a protected tag's deletion over git to everyone, so there
+    it is the only proof. Gitea ties creation, deletion, and movement
+    to one whitelist, so the loop's own lane (the whitelisted admin)
+    can delete; there the tag is pushed straight back and the proof is
+    the protection's presence with the lane on its whitelist, read
+    from the API, which is what binds everyone else.
     """
     import fnmatch
     import json
@@ -2098,6 +2099,12 @@ def _require_receipt_protected(root: Path, tag: str) -> None:
         print(f"  receipt {tag}: delete refused; protection holds")
         return
     toolroom.git.opts(cwd=root, nofail=True)("push", "origin", f"refs/tags/{tag}")
+    if kind != "gitea":
+        fail(
+            f"the receipt tag {tag} was deletable on {kind}, whose protection"
+            " refuses every deletion over git: the contract's assertion did"
+            " not hold (the receipt was pushed back)"
+        )
     url = os.environ.get("GITEA_URL", "")
     token = os.environ.get("GITEA_TOKEN", "")
     request = urllib.request.Request(
