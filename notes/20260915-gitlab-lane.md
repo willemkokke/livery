@@ -161,7 +161,10 @@ Deliverables:
 - `_merge_setup` merges through the protocol's `merge_now`, which on
   GitLab is the merge request.
 - The loop's workspace lives per lane, `workshop-e2e/<forge>/`, so a
-  pass never adopts the other lane's checkout and re-points it.
+  pass never adopts the other lane's checkout and re-points it. A
+  machine whose Gitea workspace predates the move runs its next Gitea
+  pass with `--fresh`: the new path is empty while the repository on
+  the forge keeps its history, which birth refuses to adopt.
 - The publish step walks past GitLab's duplicate refusal ("File name
   has already been taken") as it walks past Gitea's "already exists".
 - `create_repo` on GitLab waits for, then removes, the protection GitLab puts on a new
