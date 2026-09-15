@@ -1119,3 +1119,40 @@ def test_the_run_context_base_is_the_pull_requests_and_empty_otherwise(
         }
     )
     assert gitlab is not None and gitlab.base_ref == "main"
+
+
+def test_a_gitlab_pipeline_source_reads_in_the_one_event_vocabulary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A source the map does not name stays its own word, and a
+    # GitHub run is untouched: the map is GitLab's alone.
+    from livery.workshop._state import run_context
+
+    def event(env: dict[str, str]) -> str:
+        run = run_context(env)
+        assert run is not None
+        return run.event
+
+    base = {"GITLAB_CI": "true", "CI_PIPELINE_ID": "7", "CI_COMMIT_SHA": "abc"}
+    assert event({**base, "CI_PIPELINE_SOURCE": "push"}) == "push"
+    assert event({**base, "CI_PIPELINE_SOURCE": "schedule"}) == "schedule"
+    assert event({**base, "CI_PIPELINE_SOURCE": "pipeline"}) == "pipeline"
+    assert (
+        event({"GITHUB_ACTIONS": "true", "GITHUB_EVENT_NAME": "merge_request_event"})
+        == "merge_request_event"
+    )
+    # A merge request pipeline is a pull request run, with its head and
+    # base as the runner names them; a created pipeline is a dispatch.
+    merge = run_context(
+        {
+            **base,
+            "CI_PIPELINE_SOURCE": "merge_request_event",
+            "CI_MERGE_REQUEST_SOURCE_BRANCH_NAME": "feat/1-work",
+            "CI_MERGE_REQUEST_TARGET_BRANCH_NAME": "main",
+        }
+    )
+    assert merge is not None
+    assert merge.event == "pull_request"
+    assert merge.head_ref == "feat/1-work" and merge.base_ref == "main"
+    for source in ("api", "web", "trigger"):
+        assert event({**base, "CI_PIPELINE_SOURCE": source}) == "workflow_dispatch"
