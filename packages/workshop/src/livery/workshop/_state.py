@@ -477,6 +477,29 @@ def event_payload(environ: Mapping[str, str] | None = None) -> dict[str, Any] | 
     return payload if isinstance(payload, dict) else None
 
 
+def dispatch_inputs(
+    names: tuple[str, ...], environ: Mapping[str, str] | None = None
+) -> dict[str, str]:
+    """The dispatch inputs *names*, as the run received them; ``""`` for one it did not.
+
+    GitHub and Gitea carry a dispatch's inputs in the event payload
+    under ``inputs``; GitLab carries them as pipeline variables, which
+    arrive as environment variables named by the input. A run that no
+    dispatch started, or a process outside CI, has none, and every
+    name reads empty.
+    """
+    env = os.environ if environ is None else environ
+    payload = event_payload(env)
+    carried = (payload or {}).get("inputs") or {}
+    found: dict[str, str] = {}
+    for name in names:
+        if isinstance(carried, dict) and carried.get(name) not in (None, ""):
+            found[name] = str(carried[name])
+        else:
+            found[name] = env.get(name, "")
+    return found
+
+
 def _event_head_sha(env: Mapping[str, str]) -> str:
     """The pull request's head from the event payload, or the pushed commit.
 

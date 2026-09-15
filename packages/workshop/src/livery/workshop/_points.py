@@ -86,6 +86,10 @@ class Job:
             secret as ``FORGE_ADMIN_TOKEN``, ``""`` for none.
         writes: Whether the job pushes to the repository (the state
             store, a receipt tag), which needs the write grant.
+        pushes: Whether the job pushes through git itself, so the
+            checkout carries the credential the push needs.
+        publishes_index: Whether the job uploads to a package index,
+            so the index token reaches it as ``UV_PUBLISH_TOKEN``.
         profile: Whether the job's trace is kept as an artifact.
         docs_tools: Whether the docs generators' system requirements
             are installed before the call.
@@ -98,7 +102,8 @@ class Job:
         deploy_key: The secret written as the job's SSH deploy key,
             ``""`` for none.
         driver_pin: Whether the job installs the released workshop the
-            point's ``workshop`` input names, over the checkout's own.
+            point's ``workshop`` input names, over the checkout's own,
+            before its one call.
         only: When the job exists at all: ``wheels`` where a member
             declares wheel platforms, ``home`` where the workspace
             publishes a template artifact, ``""`` always.
@@ -114,6 +119,8 @@ class Job:
     fetch: str = ""
     token: str = ""
     writes: bool = False
+    pushes: bool = False
+    publishes_index: bool = False
     profile: bool = False
     docs_tools: bool = False
     deploy: bool = False
@@ -339,9 +346,12 @@ DECLARED: tuple[Point, ...] = (
                 fetch="full",
                 token="repository",
                 writes=True,
+                pushes=True,
+                publishes_index=True,
                 collects="wheels",
                 environment="pypi",
                 driver_pin=True,
+                step="Publish the wave",
                 note=(
                     "The wave: publish the ref, cut the receipt tags after"
                     " the index confirms each member. The receipt push"
@@ -355,8 +365,10 @@ DECLARED: tuple[Point, ...] = (
                 needs=("publish",),
                 only="home",
                 token="secret",
+                pushes=True,
                 deploy_key="WORKSHOP_TEMPLATES_DEPLOY_KEY",
                 driver_pin=True,
+                step="Publish the template artifact",
                 note=(
                     "The home's release aftermath: the (composed) template"
                     " artifact, tagged in lockstep with the publishing"
@@ -481,7 +493,10 @@ class Entry:
         task: The task's dotted address, as the workspace mounts it.
         args: The arguments, each formatted with the run's facts:
             ``{display}`` the job's display name, ``{label}`` the
-            leg's label, ``{os}`` and ``{python}`` the matrix values.
+            leg's label, ``{os}`` and ``{python}`` the matrix values,
+            and each of the point's dispatch inputs by name
+            (``{ref}`` on the release), empty when the run was not
+            dispatched with it.
         profiled: Whether the task runs under ``--profile``, its
             trace left at `TRACE` for the leg's timing row.
         source: Where the entry was declared.
@@ -578,6 +593,13 @@ BUILTIN: tuple[Entry, ...] = (
     # The clock's point: the whole check, with the tests that declare
     # the nightly point selected in, on every python of the matrix.
     Entry("nightly", "nightly", "check", profiled=True),
+    # The wave, at the squash the dispatch names: each platform's
+    # wheels, then the publish that cuts the receipts, then the home's
+    # template artifact. Each verb decides for itself what the ref
+    # holds: no wheels to build, no publisher in the wave.
+    Entry("release", "wheels", "release.wheels", ("--ref={ref}",)),
+    Entry("release", "publish", "workflow.release.publish", ("--ref={ref}",)),
+    Entry("release", "templates", "release.templates", ("--ref={ref}",)),
 )
 
 
@@ -756,6 +778,13 @@ def run_point(
     display = f"{job} ({os_label}, {python})" if os_label or python else job
     label = f"{job}-{os_label}-{python}" if os_label or python else job
     facts = {"display": display, "label": label, "os": os_label, "python": python}
+    # A dispatched point's inputs, as the run received them, by name:
+    # the release's ``{ref}`` names the squash the wave publishes.
+    from livery.workshop._state import dispatch_inputs
+
+    facts.update(
+        dispatch_inputs(tuple(item.name for item in POINT_BY_NAME[resolved].inputs))
+    )
     prog = footman.prog()
     # One listing of the state store's namespace for the whole job:
     # every entry reads through it and records what it writes for the

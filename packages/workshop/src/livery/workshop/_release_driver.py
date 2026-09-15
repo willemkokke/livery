@@ -1112,6 +1112,9 @@ def workflow_release_publish(
     ``--prebuilt`` is the wheels matrix handing over: a
     platform-wheel member's dist/ was collected by the per-OS jobs,
     and the wave publishes it instead of rebuilding one platform's.
+    Inside CI the wave decides that for itself: a platform-wheel
+    member whose dist/ already holds wheels was fed by the matrix,
+    since a runner's checkout starts with none.
     """
     import os
 
@@ -1141,6 +1144,8 @@ def workflow_release_publish(
     # wheel the index is already serving.
     registry = SimpleRegistry(target.url, token=target.token)
     registries: dict[str, Registry] = {"python": registry}
+    if not prebuilt:
+        prebuilt = collected_wheels(root, git, ref)
 
     def registry_for(package: Package) -> Registry:
         artifact = kind_for(package.type).artifact
@@ -1172,8 +1177,28 @@ def workflow_release_publish(
         token=os.environ.get("UV_PUBLISH_TOKEN", "") or target.token,
         prebuilt=prebuilt,
     )
-    output = os.environ.get("GITHUB_OUTPUT", "")
-    if output:
-        names = " ".join(receipt.package.name for receipt in receipts)
-        with Path(output).open("a", encoding="utf-8") as handle:
-            handle.write(f"members={names}\n")
+    print(f"  wave: {len(receipts)} member(s) published")
+
+
+def collected_wheels(root: Path, git: GitOps, ref: str) -> bool:
+    """Whether the wheels matrix fed this wave, judged inside CI alone.
+
+    A runner's checkout starts with an empty dist/, so wheels there
+    were collected from the matrix's artifacts; outside CI a dist/
+    may hold a stale local build, and the wave builds as asked.
+    """
+    from livery.workshop._kinds import kind_for
+    from livery.workshop._publish import discover_release
+    from livery.workshop._state import run_context
+
+    if run_context() is None:
+        return False
+    fed = [
+        package.name
+        for package, _version in discover_release(root, git, ref or git.head_sha())
+        if kind_for(package.type).wheel_identity == "platform"
+        and any((package.directory / "dist").glob("*.whl"))
+    ]
+    if fed:
+        print(f"  prebuilt: the wheels matrix collected wheels for {', '.join(fed)}")
+    return bool(fed)

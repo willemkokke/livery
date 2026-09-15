@@ -2,7 +2,8 @@
 
 Status: ruled 2026-09-14. Phase 1 landed 2026-09-15 (livery#584), phase 2
 landed 2026-09-15 (livery#587), phase 3 landed 2026-09-15 (livery#589) with
-one acceptance item open; phases 4 and 5 not started. Runs
+one acceptance item open, phase 4 landed 2026-09-15 (livery#593) with one
+acceptance item open; phase 5 not started. Runs
 before [the tool record and its index][record-plan], whose phase 8 declares
 a point through the mechanism phase 5 here delivers; that plan carries no
 other CI work.
@@ -43,31 +44,31 @@ date where phase 1 moved it.
   `fm ci.run --point=<p> --job=<j>`, the one command every rendered gate,
   merge and nightly job calls. A job's identity is its point and its
   name. The task addresses live in the entries, never in the YAML.
-- `_ci_generate.py` renders the gate, the merge point and the nightly
-  from the declarations: `_actions_workflow` walks the points that share
-  a file for GitHub and Gitea, `_gitlab_document` walks every point into
-  the one GitLab document, and each job goes through the step helpers
-  (`_rung_step`, `_setup_uv_step`, `_docs_requirements_step`,
-  `_pin_driver_step`, `_enter_step`). The release keeps its emitters,
-  `_github_release` and `_gitea_release`, and GitLab's `pages` and
-  `release-publish` jobs keep their shapes, until phase 4.
-  `generate(root)` returns every generated file by path;
-  `fm template.apply` writes them and `fm template.check` reports drift.
-  There is no `fm ci.generate`.
-- **The release point is not on the points shape either.** `jobs_of` gives
-  it no jobs. Its shells call `fm release.wheels`,
-  `fm workflow.release.publish` and `fm release.templates` directly, and
-  carry two decisions in YAML: `--prebuilt` is spelled when the wheels
-  matrix is non-empty, and the `templates` job runs on
-  `contains(needs.publish.outputs.members, '<publisher>')`, an output
-  `workflow_release_publish` writes to `GITHUB_OUTPUT`. The dispatch
-  inputs `ref` and `workshop` reach the steps as `${{ inputs.ref }}`.
-- **GitLab's document is on the points shape for the gate, the merge
-  point and the nightly.** One job per declared job, calling
-  `fm ci.run --point=<p> --job=<j>` through `setup.sh`, with rules on the
-  point's events and on `$FORGE_WORKFLOW`; the deploy renders as GitLab
-  Pages' own `pages` job, and `release-publish` rules on a commit title
-  regex until phase 4. The document sets `workflow: name` to
+- `_ci_generate.py` renders every point from the declarations:
+  `_actions_workflow` walks the points that share a file for GitHub and
+  Gitea, `_gitlab_document` walks every point into the one GitLab
+  document, and each job goes through the step helpers (`_rung_step`,
+  `_setup_uv_step`, `_docs_requirements_step`, `_enter_step`). No function
+  is named for a point. `generate(root)` returns every generated file by
+  path; `fm template.apply` writes them and `fm template.check` reports
+  drift. There is no `fm ci.generate`.
+- **The release point is on the points shape.** Its jobs `wheels`,
+  `publish` and `templates` are `ci.run` jobs whose entries are
+  `release.wheels`, `workflow.release.publish` and `release.templates`, each
+  at `--ref={ref}`, the dispatch input `run_point` reads through
+  `dispatch_inputs` (the event payload on GitHub and Gitea, the pipeline
+  variables on GitLab). The wave decides prebuilt for itself inside CI
+  from a platform member's collected `dist/` (`collected_wheels`), the
+  templates verb reads the wave at the ref and skips one that did not
+  release the publisher (`publisher_in_wave`), and the driver pin is
+  `fm release.driver`, green on an empty input. The `members` output and
+  the commit-title regex are gone.
+- **GitLab's document is on the points shape for every point.** One
+  job per declared job, calling `fm ci.run --point=<p> --job=<j>` through
+  `setup.sh`, with rules on the point's events and on `$FORGE_WORKFLOW`;
+  the deploy renders as GitLab Pages' own `pages` job, and the wave's
+  `publish` job checks out the `ref` variable and rewrites origin with
+  the push token before its call. The document sets `workflow: name` to
   `$FORGE_WORKFLOW`, and the GitLab backend fills `Run.workflow` from
   the pipeline listing's `name`, so `point_runs` tells a dispatched gate
   pipeline from a dispatched wave. The clock is a pipeline schedule:
@@ -354,6 +355,28 @@ Acceptance:
 The release is the point whose shell is least like one `fm` call, so it
 lands alone, after the model is proven on the three that fit it.
 
+Landed 2026-09-15 as livery#593. Evidence:
+
+- `uv run python -m pytest packages/workshop/tests/test_workshop_render.py
+  packages/workshop/tests/test_workshop_composed_release.py
+  packages/workshop/tests/test_workshop_dispatch.py
+  packages/workshop/tests/test_workshop_release_driver.py
+  packages/workshop/tests/test_workshop_release_point.py`: passes, the
+  skip of a wave without the publisher and the untrusted local `dist/`
+  before the acting cases.
+- The grep for every point-named emitter in `_ci_generate.py` prints 0.
+- `uv run fm template.apply` re-rendered this repository's
+  `release.yml`, and `uv run fm template.check` exits 0.
+- `uv run fm check --fix`: exit 0.
+- `uv run fm ci.e2e --fresh`: exit 0, the wave on the re-rendered Gitea
+  release shell through `ci.run`: `release: ci-e2e-loop-loop-echo 0.1.0,
+  ci-e2e-loop-loop-native 0.1.0 served, receipts packages/loop-echo/v0.1.0,
+  packages/loop-native/v0.1.0 cut`, then the nightly (run 1638) and the
+  gate (run 1639) by hand, ending `the loop is whole`.
+- Open: the GitHub wave rendered from the declaration is proven by the
+  first release after this lands, read through
+  `uv run fm ci.status --point=release`.
+
 Deliverables:
 
 - The release's two YAML decisions move into verbs, per livery#286.
@@ -535,6 +558,15 @@ Acceptance:
   missing. On GitLab a `legs` matrix is one leg, labelled by the first
   runner and the first gate Python so its rows key the leg the union
   expects, and the `pages` job stays the deploy until phase 4.
+- 2026-09-15, the agent, at phase 4: the wave trusts a collected
+  `dist/` inside CI alone, since a runner's checkout starts with none
+  and a person's may hold a stale build. The templates verb reads the
+  wave at `--ref` and decides; without `--ref` it publishes as before,
+  which is the hand-run recovery. Gitea's release gains the `workshop`
+  input and the driver pin its emitter never had. On GitLab the wave
+  checks out the `ref` variable first, since the pipeline runs on the
+  base branch, where the emitter published `$CI_COMMIT_SHA`, the base's
+  tip rather than the squash.
 - 2026-09-15, the agent, at phase 3, operations: the loop failed five
   times before its green pass, none on the render. The host carried six
   orphaned Claude Code snapshot shells spinning at 100% since

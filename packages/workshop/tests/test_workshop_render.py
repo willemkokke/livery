@@ -230,14 +230,23 @@ def test_the_release_shell_is_dispatched_with_a_ref_and_publishes_it(
     triggers = _triggers(doc)
     assert set(triggers) == {"workflow_dispatch"}
     inputs = triggers["workflow_dispatch"]["inputs"]
+    assert set(inputs) == {"ref", "workshop"}
     assert inputs["ref"]["required"] is True
+    assert inputs["workshop"]["required"] is False
+    assert inputs["workshop"]["default"] == ""
     # A pure workspace that is not a home: the publish job alone, no
     # wheels matrix, no templates job.
     jobs = doc["jobs"]
     assert list(jobs) == ["publish"]
     publish = jobs["publish"]
-    assert "needs" not in publish
-    assert _calls(publish)[-1] == 'workflow.release.publish --ref="${{ inputs.ref }}"'
+    assert "needs" not in publish and "if" not in publish
+    # One call, through ci.run, at the ref the dispatch named; the
+    # driver pin before it decides for itself.
+    assert _calls(publish) == [
+        'release.driver --workshop="${{ inputs.workshop }}"',
+        "ci.run --point=release --job=publish",
+    ]
+    assert not [step for step in publish["steps"] if "if" in step]
     checkout = next(
         step["with"]
         for step in publish["steps"]
@@ -245,20 +254,53 @@ def test_the_release_shell_is_dispatched_with_a_ref_and_publishes_it(
     )
     assert checkout["ref"] == "${{ inputs.ref }}"
     assert checkout["fetch-depth"] == 0
+    # The receipt push rides the checkout's credential.
     if kind == "github":
-        assert set(inputs) == {"ref", "workshop"}
-        assert inputs["workshop"]["default"] == ""
+        assert checkout["token"] == "${{ secrets.FORGE_TOKEN || github.token }}"
         assert publish["environment"] == "pypi"
         assert publish["permissions"] == {"id-token": "write", "contents": "write"}
-        assert _secrets(publish) == {"FORGE_TOKEN", "PYPI_TOKEN"}
-        assert (
-            _calls(publish)[:-1]
-            == ['pip install "livery-workshop==${{ inputs.workshop }}"']
-            or _calls(publish)[:-1] == []
-        )
+        assert _secrets(publish) == {"FORGE_TOKEN", "GITHUB_TOKEN", "PYPI_TOKEN"}
     else:
-        assert set(inputs) == {"ref"}
+        assert checkout["token"] == "${{ secrets.FORGE_TOKEN }}"
+        assert "permissions" not in publish and "environment" not in publish
         assert _secrets(publish) == {"FORGE_TOKEN", "UV_PUBLISH_TOKEN", "GITHUB_TOKEN"}
+    # The wheels are collected before the wave, whether or not a leg
+    # built any: the wave decides prebuilt from what it finds.
+    uses = [str(step.get("uses", "")) for step in publish["steps"]]
+    assert any("download-artifact" in u for u in uses)
+    assert not any("upload-artifact" in u for u in uses)
+
+
+def test_wheel_platforms_render_the_wheels_matrix_before_the_wave(
+    tmp_path: Path,
+) -> None:
+    root = _root(tmp_path, "github")
+    member = root / "packages" / "native"
+    (member / "src").mkdir(parents=True)
+    (member / "workshop.toml").write_text(
+        'type = "python-nanobind"\nname = "acme-native"\n\n[ci]\n'
+        'wheel-platforms = ["ubuntu-latest", "macos-latest"]\n'
+    )
+    (member / "pyproject.toml").write_text('[project]\nname = "acme-native"\n')
+    text = generate(root)[".github/workflows/release.yml"]
+    jobs = _doc(text)["jobs"]
+    assert list(jobs) == ["wheels", "publish"]
+    wheels = jobs["wheels"]
+    assert wheels["strategy"]["matrix"] == {"os": ["ubuntu-latest", "macos-latest"]}
+    assert _calls(wheels) == [
+        'release.driver --workshop="${{ inputs.workshop }}"',
+        "ci.run --point=release --job=wheels",
+    ]
+    upload = next(
+        step["with"]
+        for step in wheels["steps"]
+        if "upload-artifact" in str(step.get("uses", ""))
+    )
+    assert upload["name"] == "wheels-${{ matrix.os }}"
+    assert upload["path"] == "packages/*/dist/*"
+    assert jobs["publish"]["needs"] == ["wheels"]
+    # The wave spells no --prebuilt: it decides from the collected dist.
+    assert "--prebuilt" not in text
 
 
 # --- GitLab, one document -----------------------------------------------------
@@ -268,7 +310,8 @@ def test_the_gitlab_document_names_its_pipelines_and_runs_every_declared_job(
     tmp_path: Path,
 ) -> None:
     prog = footman.prog()
-    doc = _doc(generate(_root(tmp_path, "gitlab"))[".gitlab-ci.yml"])
+    text = generate(_root(tmp_path, "gitlab"))[".gitlab-ci.yml"]
+    doc = _doc(text)
     assert doc["workflow"]["name"] == "$FORGE_WORKFLOW"
     rules = [rule["if"] for rule in doc["workflow"]["rules"]]
     assert rules == [
@@ -288,7 +331,7 @@ def test_the_gitlab_document_names_its_pipelines_and_runs_every_declared_job(
         "govern",
         "dispatch",
         "nightly",
-        "release-publish",
+        "publish",
     ]
     scripts = {
         name: [line for line in job["script"] if line.startswith(prog)]
@@ -301,11 +344,14 @@ def test_the_gitlab_document_names_its_pipelines_and_runs_every_declared_job(
         ],
         "docs": [f"{prog} ci.run --point=gate --job=docs"],
         "gate": [f"{prog} ci.run --point=gate --job=gate"],
-        "pages": [f"{prog} docs.build"],
+        "pages": [f"{prog} ci.run --point=merge --job=deploy"],
         "govern": [f"{prog} ci.run --point=merge --job=govern"],
         "dispatch": [f"{prog} ci.run --point=merge --job=dispatch"],
         "nightly": [f'{prog} ci.run --point=nightly --job=nightly --python="3.13"'],
-        "release-publish": [f'{prog} workflow.release.publish --ref="$CI_COMMIT_SHA"'],
+        "publish": [
+            f'{prog} release.driver --workshop="$workshop"',
+            f"{prog} ci.run --point=release --job=publish",
+        ],
     }
     assert {name: job["stage"] for name, job in jobs.items()} == {
         "check": "check",
@@ -315,7 +361,7 @@ def test_the_gitlab_document_names_its_pipelines_and_runs_every_declared_job(
         "govern": "release",
         "dispatch": "release",
         "nightly": "check",
-        "release-publish": "release",
+        "publish": "release",
     }
     assert jobs["gate"]["needs"] == ["check", "docs"]
     assert jobs["dispatch"]["needs"] == ["gate"]
@@ -346,8 +392,26 @@ def test_the_gitlab_document_names_its_pipelines_and_runs_every_declared_job(
         '$CI_PIPELINE_SOURCE == "schedule" && $FORGE_WORKFLOW == "nightly.yml"',
         '$FORGE_WORKFLOW == "nightly.yml"',
     ]
-    assert jobs["pages"]["rules"] == [{"if": '$CI_COMMIT_BRANCH == "main"'}]
-    assert "CI_COMMIT_TITLE" in jobs["release-publish"]["rules"][0]["if"]
+    assert conditions("pages") == [
+        tag_never,
+        '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"',
+    ]
+    # The pages seam and the wave's push, GitLab's own plumbing: the
+    # site moved to public/ as the artifact, and origin rewritten with
+    # the push token after the dispatched ref is checked out. The
+    # commit-title regex that once started the wave is gone: the merge
+    # point's dispatch job starts it through the API.
+    assert jobs["pages"]["script"][-1] == "mv site public"
+    assert jobs["pages"]["artifacts"] == {"paths": ["public"]}
+    publish_script = jobs["publish"]["script"]
+    assert publish_script[0] == 'git checkout --quiet "$ref"'
+    assert publish_script[1] == "git fetch --tags"
+    assert "GITLAB_PUSH_TOKEN" in publish_script[2]
+    assert jobs["publish"]["rules"] == [
+        {"if": "$CI_COMMIT_TAG", "when": "never"},
+        {"if": '$FORGE_WORKFLOW == "release.yml"'},
+    ]
+    assert "CI_COMMIT_TITLE" not in text
     # The admin token reaches govern alone; the checkouts are as deep
     # as the verbs need.
     assert jobs["govern"]["variables"] == {

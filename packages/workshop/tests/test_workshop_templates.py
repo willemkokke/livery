@@ -267,7 +267,7 @@ def test_each_forge_kind_generates_a_ci_definition_that_lints(
 
     files = generate(_contract_root(tmp_path, "gitlab"))
     pipeline = yaml.safe_load(files[".gitlab-ci.yml"])
-    assert "gate" in pipeline and "release-publish" in pipeline
+    assert "gate" in pipeline and "publish" in pipeline
     assert pipeline["workflow"]["rules"]
 
     gitea = _render_kind(tmp_path, "gitea", forge_url="https://forge.example.com")
