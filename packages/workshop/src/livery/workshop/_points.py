@@ -1,14 +1,17 @@
-"""CI as points: what each point runs, and the verb that runs it.
+"""CI as points: what each point is, what it runs, and the verb that runs it.
 
 A consumer never thinks about CI. They reason about a named point in
 the process and attach a task to it. The four points are ``gate``
-(a pull request), ``merge`` (main after a merge), ``nightly`` (the
-clock), and ``release`` (dispatched by the merge point). The emitted
-workflow is a static shell, one ``fm ci.run --point=<p> --job=<j>``
-per job, and what a job does is data: the builtin schedule below,
-plus the ``[[ci.schedule]]`` entries a workspace declares in
-``workshop.toml``. The matrix shape belongs to a point's job, never
-to a task.
+(a pull request, or a dispatch by hand), ``merge`` (main after a
+merge), ``nightly`` (the clock), and ``release`` (dispatched by the
+merge point). A point is a declaration, [livery.workshop._points.Point][]:
+its workflow file, its events, and its jobs, each job stating what it
+needs in the workshop's words ([livery.workshop._points.Job][]); each
+forge's renderer says those in its own. The emitted workflow is a
+static shell, one ``fm ci.run --point=<p> --job=<j>`` per job, and
+what a job does is data: the builtin schedule below, plus the
+``[[ci.schedule]]`` entries a workspace declares in ``workshop.toml``.
+The matrix shape belongs to a point's job, never to a task.
 
 Reach for [livery.workshop._points.run_point][] to run a job's
 entries, and `schedule` to see them. Every entry runs as a child of
@@ -36,36 +39,413 @@ from livery.workshop._contract import load_contract
 from livery.workshop._pytest_points import POINT_VARIABLE
 from livery.workshop._state import LEG_VARIABLE, run_context
 
-#: The points, in the order a change meets them.
-POINTS = ("gate", "merge", "nightly", "release")
+#: The events a point may run on, in the forges' words.
+EVENT_NAMES = ("pull_request", "push", "schedule", "workflow_dispatch")
 
-#: The workflow file each point's shell is, as GitHub and Gitea
-#: address a dispatch and name a run: the gate and the merge point
-#: share one, the nightly and the release have their own. GitLab has
-#: one pipeline definition and names no workflow on a run.
-WORKFLOWS = {
-    "gate": "ci.yml",
-    "merge": "ci.yml",
-    "nightly": "nightly.yml",
-    "release": "release.yml",
-}
+
+@dataclass(frozen=True)
+class Input:
+    """One input a dispatched point takes, as the forge prompts for it.
+
+    Attributes:
+        name: The input's name, as the dispatch passes it.
+        description: What the input is, for the person dispatching.
+        required: Whether a dispatch without it is refused.
+        default: The value an absent optional input takes.
+    """
+
+    name: str
+    description: str
+    required: bool = False
+    default: str = ""
+
+
+@dataclass(frozen=True)
+class Job:
+    """One job of a point's shell, in the workshop's words.
+
+    Each forge's renderer says these in that forge's words: a grant, a
+    step, an action, an image. Nothing here is forge-shaped.
+
+    Attributes:
+        name: The job's name, and the ``--job`` its one call passes.
+        matrix: The legs the job fans out to: ``legs`` for one per
+            runner and gate Python, ``pythons`` for one per Python of
+            the whole matrix on the first runner, ``wheels`` for one per
+            declared wheel platform, ``""`` for one job on one runner.
+        needs: The jobs of the point this one waits for.
+        always: Whether the job runs when a job it needs was red, the
+            verdict job's shape.
+        fetch: How deep the checkout is: ``full`` for every commit,
+            ``tags`` for the tags as well, ``2`` for the commit and its
+            parent, ``""`` for the commit alone.
+        token: The credential the verb sees as ``FORGE_TOKEN``: ``job``
+            for the run's own token, ``repository`` for the repository's
+            secret when present and the job's otherwise, ``secret`` for
+            the repository's secret alone, ``admin`` for the admin
+            secret as ``FORGE_ADMIN_TOKEN``, ``""`` for none.
+        writes: Whether the job pushes to the repository (the state
+            store, a receipt tag), which needs the write grant.
+        profile: Whether the job's trace is kept as an artifact.
+        docs_tools: Whether the docs generators' system requirements
+            are installed before the call.
+        deploy: Whether the job publishes the site through the
+            contract's publish seam after the call.
+        publishes: The artifact the job uploads, ``""`` for none.
+        collects: The artifact the job downloads first, ``""`` for none.
+        environment: The named deployment environment the job runs in,
+            ``""`` for none.
+        deploy_key: The secret written as the job's SSH deploy key,
+            ``""`` for none.
+        driver_pin: Whether the job installs the released workshop the
+            point's ``workshop`` input names, over the checkout's own.
+        only: When the job exists at all: ``wheels`` where a member
+            declares wheel platforms, ``home`` where the workspace
+            publishes a template artifact, ``""`` always.
+        note: The comment the rendered shell prints above the job.
+    """
+
+    name: str
+    matrix: str = ""
+    needs: tuple[str, ...] = ()
+    always: bool = False
+    fetch: str = ""
+    token: str = ""
+    writes: bool = False
+    profile: bool = False
+    docs_tools: bool = False
+    deploy: bool = False
+    publishes: str = ""
+    collects: str = ""
+    environment: str = ""
+    deploy_key: str = ""
+    driver_pin: bool = False
+    only: str = ""
+    note: str = ""
+
+
+@dataclass(frozen=True)
+class Point:
+    """One point: its workflow file, its events, and its jobs.
+
+    Attributes:
+        name: The point's name, and the ``--point`` its jobs pass.
+        workflow: The workflow file the point's shell is, as GitHub and
+            Gitea address a dispatch and name a run. Two points may
+            share one, the gate and the merge point do, when their
+            events do not overlap. GitLab has one pipeline document and
+            names a dispatched pipeline after this.
+        events: The events that start the point's runs, from
+            `EVENT_NAMES`.
+        jobs: The point's own jobs, in order.
+        inherits: A point whose jobs this one runs first, the gate's
+            for the merge point; ``""`` for none.
+        inputs: The inputs a dispatch takes; a point with any is
+            dispatched by a verb that supplies them, never by hand.
+        ref_input: The input naming the commit the jobs check out,
+            ``""`` for the run's own commit.
+        note: The comment the rendered shell prints under its name.
+    """
+
+    name: str
+    workflow: str
+    events: tuple[str, ...]
+    jobs: tuple[Job, ...] = ()
+    inherits: str = ""
+    inputs: tuple[Input, ...] = ()
+    ref_input: str = ""
+    note: str = ""
+
+
+#: The four builtin points, in the order a change meets them.
+DECLARED: tuple[Point, ...] = (
+    Point(
+        "gate",
+        "ci.yml",
+        ("pull_request", "workflow_dispatch"),
+        note=(
+            "A pull request, a push to main, and a dispatch by hand. A"
+            " dispatched run pays the full gate: the check verb reads the"
+            " event and narrows on a pull request alone, so every event"
+            " spells the same call."
+        ),
+        jobs=(
+            Job(
+                "check",
+                matrix="legs",
+                fetch="full",
+                writes=True,
+                profile=True,
+                note=(
+                    "The check legs: the tests run metered, and only they."
+                    " The leg's measured suites ride its per-run ref on the"
+                    " state store, and the gate job unions them with main's"
+                    " record and judges once. The scoped gate diffs against"
+                    " the merge base with the pull request's base branch,"
+                    " which a shallow clone lacks."
+                ),
+            ),
+            Job(
+                "docs",
+                docs_tools=True,
+                note=(
+                    "The strict site build: broken links and orphan pages go"
+                    " red here, required through the gate context, never"
+                    " inside the local check."
+                ),
+            ),
+            Job(
+                "gate",
+                needs=("check", "docs"),
+                always=True,
+                fetch="full",
+                token="job",
+                writes=True,
+                note=(
+                    "The one required context. Branch protection points"
+                    " here, so the matrix can grow or shrink without touching"
+                    " repository settings. Its entries union the legs'"
+                    " measured suites with main's coverage record and judge"
+                    " the floors, collect the run's timing rows, ask the"
+                    " forge for the jobs it needs, and stamp the tree a green"
+                    " run proved; a red run is judged too. The stamp composes"
+                    " a narrowed run with its base tree's record through the"
+                    " merge base, which a shallow clone lacks."
+                ),
+            ),
+        ),
+    ),
+    Point(
+        "merge",
+        "ci.yml",
+        ("push",),
+        inherits="gate",
+        jobs=(
+            Job(
+                "deploy",
+                needs=("gate",),
+                fetch="tags",
+                token="job",
+                docs_tools=True,
+                deploy=True,
+                note=(
+                    "The site's deploy through the contract's seam, on the"
+                    " push alone. The release view reads the receipt tags; a"
+                    " shallow tagless clone renders its no-tags fallback page"
+                    " instead."
+                ),
+            ),
+            Job(
+                "govern",
+                fetch="2",
+                token="admin",
+                note=(
+                    "The repository settings reconciled when the merge"
+                    " changed a contract or the owners file. The commit's own"
+                    " file list decides whether anything is governed; a depth"
+                    " of one would read a squash as a root."
+                ),
+            ),
+            Job(
+                "dispatch",
+                needs=("gate",),
+                fetch="full",
+                token="job",
+                note=(
+                    "The release wave is dispatched from here, after main's"
+                    " own verdict: the verb reads the manifest at HEAD and the"
+                    " receipts on the remote, and is green unless a merged"
+                    " release is unpublished. The commit that stamped the"
+                    " manifest can be far back."
+                ),
+            ),
+        ),
+    ),
+    Point(
+        "nightly",
+        "nightly.yml",
+        ("schedule", "workflow_dispatch"),
+        note=(
+            "The nightly point: the clock and a dispatch entry, one call per"
+            " Python. What runs is the workshop's builtin schedule plus"
+            " [[ci.schedule]] in workshop.toml, and the tests that declare"
+            " the nightly point are selected in."
+        ),
+        jobs=(
+            Job(
+                "nightly",
+                matrix="pythons",
+                fetch="full",
+                token="repository",
+                note=(
+                    "A replay checks the tree out at a release tag. A pull"
+                    " request a scheduled task opens with the job token starts"
+                    " no workflow, so the repository's token carries the"
+                    " nightly where there is one."
+                ),
+            ),
+        ),
+    ),
+    Point(
+        "release",
+        "release.yml",
+        ("workflow_dispatch",),
+        inputs=(
+            Input("ref", "the release squash to publish", required=True),
+            Input(
+                "workshop",
+                "a released livery-workshop version to drive the wave; empty"
+                " runs the squash's own",
+            ),
+        ),
+        ref_input="ref",
+        note=(
+            "The train: a workflow.release PR merges, this publishes its"
+            " squash, and the receipt tags are cut only after the index"
+            " confirms each member. A tag is a receipt, never a trigger: the"
+            " merge point's dispatch job starts the wave at the release"
+            " squash, and a hand dispatch with --ref is the recovery entry"
+            " when a publish died mid-wave; --workshop names a released"
+            " driver for a wave whose own workshop was the fault."
+        ),
+        jobs=(
+            Job(
+                "wheels",
+                matrix="wheels",
+                only="wheels",
+                fetch="full",
+                driver_pin=True,
+                publishes="wheels",
+                note=(
+                    "Every platform's wheels, built before the wave: the"
+                    " matrix feeds the publish job through artifacts, so one"
+                    " release ships the complete set."
+                ),
+            ),
+            Job(
+                "publish",
+                needs=("wheels",),
+                fetch="full",
+                token="repository",
+                writes=True,
+                collects="wheels",
+                environment="pypi",
+                driver_pin=True,
+                note=(
+                    "The wave: publish the ref, cut the receipt tags after"
+                    " the index confirms each member. The receipt push"
+                    " carries the repository's token where there is one: the"
+                    " job token may not push a ref whose commit carries a"
+                    " workflow file that differs from the tip's."
+                ),
+            ),
+            Job(
+                "templates",
+                needs=("publish",),
+                only="home",
+                token="secret",
+                deploy_key="WORKSHOP_TEMPLATES_DEPLOY_KEY",
+                driver_pin=True,
+                note=(
+                    "The home's release aftermath: the (composed) template"
+                    " artifact, tagged in lockstep with the publishing"
+                    " layer's receipt."
+                ),
+            ),
+        ),
+    ),
+)
+
+
+def verify_points(points: tuple[Point, ...]) -> None:
+    """Refuse a set of declarations a shell cannot be rendered from.
+
+    A point name declared twice, an event outside `EVENT_NAMES`, a
+    point inheriting one that is not declared, two points sharing a
+    workflow file whose events overlap (a run would belong to both),
+    a job name declared twice in one point, a job needing a job the
+    point does not have, and a job collecting an artifact no job of
+    the point publishes each refuse naming the point and the fault.
+    """
+    by_name: dict[str, Point] = {}
+    for point in points:
+        if point.name in by_name:
+            fail(f"the {point.name} point is declared twice")
+        by_name[point.name] = point
+    for point in points:
+        for event in point.events:
+            if event not in EVENT_NAMES:
+                fail(
+                    f"the {point.name} point runs on {event!r}, which is not an"
+                    f" event; the events are {', '.join(EVENT_NAMES)}"
+                )
+        if point.inherits and point.inherits not in by_name:
+            fail(
+                f"the {point.name} point inherits {point.inherits!r}, which is"
+                " not a declared point"
+            )
+        for other in points:
+            if other.name >= point.name or other.workflow != point.workflow:
+                continue
+            shared = sorted(set(point.events) & set(other.events))
+            if shared:
+                fail(
+                    f"the {other.name} and {point.name} points share"
+                    f" {point.workflow} and both run on {', '.join(shared)}:"
+                    " a run would belong to both"
+                )
+        inherited = by_name[point.inherits].jobs if point.inherits else ()
+        names: list[str] = [job.name for job in inherited]
+        for job in point.jobs:
+            if job.name in names:
+                fail(f"the {point.name} point declares the job {job.name!r} twice")
+            names.append(job.name)
+        published = {
+            job.publishes for job in (*inherited, *point.jobs) if job.publishes
+        }
+        for job in point.jobs:
+            for need in job.needs:
+                if need not in names:
+                    fail(
+                        f"the {point.name} point's {job.name} job needs"
+                        f" {need!r}, which the point does not have; its jobs"
+                        f" are {', '.join(names)}"
+                    )
+            if job.collects and job.collects not in published:
+                fail(
+                    f"the {point.name} point's {job.name} job collects"
+                    f" {job.collects!r}, which no job of the point publishes"
+                )
+
+
+verify_points(DECLARED)
+
+#: The declared points by name.
+POINT_BY_NAME: dict[str, Point] = {point.name: point for point in DECLARED}
+
+#: The points, in the order a change meets them.
+POINTS = tuple(point.name for point in DECLARED)
+
+#: The workflow file each point's shell is: the gate and the merge
+#: point share one, the nightly and the release have their own.
+WORKFLOWS = {point.name: point.workflow for point in DECLARED}
 
 #: The events that trigger each point's runs, in the forges' words.
-#: The gate runs on a pull request and by hand: a dispatched gate
-#: pays the full gate, since the check verb narrows on a pull request
-#: alone, and the shell spells one call whatever the event.
-EVENTS = {
-    "gate": ("pull_request", "workflow_dispatch"),
-    "merge": ("push",),
-    "nightly": ("schedule", "workflow_dispatch"),
-    "release": ("workflow_dispatch",),
-}
+EVENTS = {point.name: point.events for point in DECLARED}
 
-#: The points a person starts by hand through ``ci.dispatch``: their
-#: shells carry a dispatch entry. The merge point runs on a push
-#: alone, and the release wave is dispatched by the merge point
-#: through ``workflow.release.dispatch``.
-DISPATCHABLE = ("gate", "nightly")
+#: The points a person starts by hand through ``ci.dispatch``: a
+#: dispatch entry and no inputs to supply. The merge point runs on a
+#: push alone, and the release wave takes inputs, so the merge point
+#: dispatches it through ``workflow.release.dispatch``.
+DISPATCHABLE = tuple(
+    point.name
+    for point in DECLARED
+    if "workflow_dispatch" in point.events and not point.inputs
+)
+
+#: A point whose jobs include another point's: the merge point runs
+#: the gate's jobs and its own.
+INHERITS = {point.name: point.inherits for point in DECLARED if point.inherits}
 
 #: The trace the profiled gate writes, read by the leg's row.
 TRACE = "fm-profile.json"
@@ -180,10 +560,6 @@ BUILTIN: tuple[Entry, ...] = (
     Entry("nightly", "nightly", "check", profiled=True),
 )
 
-#: A point whose jobs include another point's: the merge point runs
-#: the gate's jobs and its own.
-INHERITS = {"merge": "gate"}
-
 
 def declared(root: Path) -> tuple[Entry, ...]:
     """The ``[[ci.schedule]]`` entries of *root*'s contract, refusing bad ones.
@@ -248,10 +624,18 @@ def workflow_of(point: str) -> str:
 
 
 def jobs_of(root: Path, point: str) -> tuple[str, ...]:
-    """The jobs *point* has, inherited ones first, in schedule order."""
-    if point not in POINTS:
+    """The jobs *point* has: declared ones, inherited first, then any an entry names.
+
+    A ``[[ci.schedule]]`` entry may name a job no declaration has; it
+    is listed after the declared jobs, in schedule order.
+    """
+    if point not in POINT_BY_NAME:
         fail(f"{point!r} is not a point; the points are {', '.join(POINTS)}")
-    names: list[str] = []
+    declared_point = POINT_BY_NAME[point]
+    inherited = (
+        POINT_BY_NAME[declared_point.inherits].jobs if declared_point.inherits else ()
+    )
+    names: list[str] = [job.name for job in (*inherited, *declared_point.jobs)]
     for entry in schedule(root):
         if entry.point in (INHERITS.get(point), point) and entry.job not in names:
             names.append(entry.job)

@@ -1,7 +1,7 @@
 # CI declared, contributed, and dispatched on command
 
-Status: ruled 2026-09-14. Phase 1 landed 2026-09-15 (livery#584); phases
-2 to 5 not started. Runs
+Status: ruled 2026-09-14. Phase 1 landed 2026-09-15 (livery#584), phase 2
+landed 2026-09-15 (livery#587); phases 3 to 5 not started. Runs
 before [the tool record and its index][record-plan], whose phase 8 declares
 a point through the mechanism phase 5 here delivers; that plan carries no
 other CI work.
@@ -31,9 +31,12 @@ needs and filters, and call the same verbs.
 Verified against the tree at `69f18cc` on 2026-09-14, and brought up to
 date where phase 1 moved it.
 
-- `_points.py` names four points in `POINTS` (`gate`, `merge`, `nightly`,
-  `release`), maps them to three files through `WORKFLOWS` and to their
-  events through `EVENTS`. `DISPATCHABLE` is `("gate", "nightly")`. What a job
+- `_points.py` declares the four points in `DECLARED`, a tuple of `Point`
+  (`gate`, `merge`, `nightly`, `release`): each its workflow file, its
+  events, its dispatch inputs and its jobs, a `Job` stating in the
+  workshop's words what it needs. `verify_points` refuses a set no shell
+  renders from at import. `POINTS`, `WORKFLOWS`, `EVENTS`, `DISPATCHABLE`
+  (`("gate", "nightly")`) and `INHERITS` derive from it. What a job
   runs is `BUILTIN`, a tuple of `Entry`, plus the root contract's
   `[[ci.schedule]]` entries; `run_point` spawns each entry as a child of
   `fm ci.run --point=<p> --job=<j>`, the one command every rendered gate,
@@ -210,6 +213,20 @@ Acceptance:
   `uv run fm test packages/forge`.
 
 ### Phase 2: a point is a declaration, and the emitters are pinned
+
+Landed 2026-09-15 as livery#587. Evidence:
+
+- `uv run python -m pytest packages/workshop/tests/test_workshop_points.py`:
+  the load refusals first, 22 passed in the file.
+- `uv run python -m pytest packages/workshop/tests/test_workshop_render.py`:
+  8 passed against the emitters as they are.
+- `uv run fm template.check`: exit 0, no workflow file changed.
+- `uv run fm check --fix`: exit 0.
+
+What the pins found: the Gitea deploy job checks out without the tags
+the GitHub one fetches, so its release view renders the no-tags
+fallback. The pin names the difference per forge; phase 3 renders both
+from the one declaration and the loop proves the Gitea deploy then.
 
 Deliverables:
 
@@ -470,6 +487,14 @@ Acceptance:
   xdist start-up (livery#585), so the cassettes were recorded by the
   same pytest invocation the verb makes, run directly with
   `FORGE_RECORD=1` and the shared env sourced.
+- 2026-09-15, the agent, at phase 2: the release's jobs are declared
+  with the vocabulary the wave needs (an artifact published and
+  collected, an environment, a deploy key, the driver pin, a job that
+  exists only where wheels or a template artifact do), and the
+  emitters still render them; `jobs_of` lists them, with no entries
+  until phase 4. A job's step names and comments are not pinned, by
+  the functional-equivalence ruling; its checkout depth, its artifact
+  upload and GitHub's grants are, since a verb depends on them.
 
 ## Open
 
