@@ -1318,14 +1318,21 @@ def run_test(
                 # tests. The workshop's pytest plugin names each
                 # test's context in that run, the leg splits the one
                 # run's data per suite, and the floors are judged
-                # once, on the union, in the gate job. Streamed, never
-                # captured: the job's log is the run's evidence, and a
-                # red test's own words belong there, since nothing
-                # else in a runner shows them.
+                # once, on the union, in the gate job. Captured, and
+                # printed on a red exit: the job's log is the run's
+                # evidence and nothing else in a runner shows a red
+                # test's words. Captured rather than streamed because a
+                # captured child gets its own hidden console on Windows,
+                # where a streamed one shares the runner's and a control
+                # event a worker raises would interrupt the runner too.
                 armed = {**env, ARMED: str(root / "pyproject.toml")}
-                pytest.opts(in_process=False, env=armed, capture=False)(
+                result = pytest.opts(in_process=False, env=armed, nofail=True)(
                     *dirs, *pytest_args
                 )
+                if result.code != 0:
+                    print(result.stdout, end="")
+                    print(result.stderr, end="")
+                    fail(f"pytest exited {result.code}")
             else:
                 # Bare --cov: the measured source is [tool.coverage.run]
                 # source, the namespace the render derived, never a
