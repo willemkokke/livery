@@ -47,6 +47,69 @@ def test_an_unknown_point_names_the_four(tmp_path: Path) -> None:
         _points.jobs_of(_root(tmp_path), "stage")
 
 
+def test_a_declaration_a_shell_cannot_render_from_refuses_at_load() -> None:
+    from livery.workshop._points import Job, Point, verify_points
+
+    gate = Point("gate", "ci.yml", ("pull_request",), jobs=(Job("check"),))
+
+    def refusal(*points: Point) -> str:
+        with pytest.raises(_FAILURES) as caught:
+            verify_points(points)
+        return str(caught.value)
+
+    assert "the gate point is declared twice" in refusal(gate, gate)
+    assert "runs on 'weekly', which is not an event" in refusal(
+        Point("clock", "clock.yml", ("weekly",))
+    )
+    assert "inherits 'gate', which is not a declared point" in refusal(
+        Point("merge", "ci.yml", ("push",), inherits="gate")
+    )
+    # Two points on one file whose events overlap: a run would belong
+    # to both, and neither reader could tell.
+    assert "share ci.yml and both run on pull_request" in refusal(
+        gate, Point("twin", "ci.yml", ("pull_request", "push"))
+    )
+    assert "declares the job 'check' twice" in refusal(
+        Point("gate", "ci.yml", ("pull_request",), jobs=(Job("check"), Job("check")))
+    )
+    # An inherited job counts as declared twice too.
+    assert "declares the job 'check' twice" in refusal(
+        gate, Point("merge", "ci.yml", ("push",), inherits="gate", jobs=(Job("check"),))
+    )
+    assert "needs 'lint', which the point does not have; its jobs are check" in refusal(
+        Point(
+            "gate", "ci.yml", ("pull_request",), jobs=(Job("check", needs=("lint",)),)
+        )
+    )
+    assert "collects 'wheels', which no job of the point publishes" in refusal(
+        Point(
+            "release",
+            "release.yml",
+            ("workflow_dispatch",),
+            jobs=(Job("publish", collects="wheels"),),
+        )
+    )
+    # A need on an inherited job, and an artifact an inherited job
+    # publishes, are both satisfied.
+    verify_points(
+        (
+            Point(
+                "gate",
+                "ci.yml",
+                ("pull_request",),
+                jobs=(Job("check", publishes="trace"),),
+            ),
+            Point(
+                "merge",
+                "ci.yml",
+                ("push",),
+                inherits="gate",
+                jobs=(Job("deploy", needs=("check",), collects="trace"),),
+            ),
+        )
+    )
+
+
 def test_each_point_names_its_workflow_and_events() -> None:
     from livery.workshop._points import DISPATCHABLE, EVENTS, POINTS, workflow_of
     from livery.workshop._release_driver import RELEASE_WORKFLOW
@@ -61,7 +124,15 @@ def test_each_point_names_its_workflow_and_events() -> None:
     assert EVENTS["gate"] == ("pull_request", "workflow_dispatch")
     assert EVENTS["merge"] == ("push",)
     assert EVENTS["nightly"] == ("schedule", "workflow_dispatch")
+    # A dispatch entry and no inputs: the release takes inputs, so
+    # the merge point dispatches it through its own verb.
     assert DISPATCHABLE == ("gate", "nightly")
+    from livery.workshop._points import INHERITS, POINT_BY_NAME
+
+    assert INHERITS == {"merge": "gate"}
+    assert [job.name for job in POINT_BY_NAME["gate"].jobs] == ["check", "docs", "gate"]
+    assert POINT_BY_NAME["release"].ref_input == "ref"
+    assert [i.name for i in POINT_BY_NAME["release"].inputs] == ["ref", "workshop"]
 
 
 def test_an_unknown_job_names_the_points_jobs(tmp_path: Path) -> None:
@@ -230,9 +301,12 @@ def test_the_builtin_jobs_of_each_point(tmp_path: Path) -> None:
     assert _points.entries_for(root, "nightly", "nightly") == (
         _points.Entry("nightly", "nightly", "check", profiled=True),
     )
-    # A point's own job exists before its first entry: the shell runs
-    # green and empty until the contract attaches a task.
-    assert _points.jobs_of(root, "release") == ()
+    # The release's jobs are declared, with nothing scheduled on them
+    # until the wave's verbs become entries; a point's own name is a
+    # job of it too, green and empty until the contract attaches a
+    # task.
+    assert _points.jobs_of(root, "release") == ("wheels", "publish", "templates")
+    assert _points.entries_for(root, "release", "publish") == ()
     assert _points.entries_for(root, "release", "release") == ()
 
 
@@ -244,6 +318,9 @@ def test_a_declared_entry_joins_its_point(tmp_path: Path) -> None:
         '\n[[ci.schedule]]\npoint = "gate"\njob = "docs"\ntask = "docs.links"\n',
     )
     assert _points.jobs_of(root, "nightly") == ("nightly",)
+    # A job an entry names that no declaration has lists after the
+    # declared ones.
+    assert _points.jobs_of(root, "gate") == ("check", "docs", "gate")
     entries = _points.entries_for(root, "nightly", "nightly")
     assert [e.task for e in entries] == ["check", "release.replay"]
     assert entries[-1] == _points.Entry(
