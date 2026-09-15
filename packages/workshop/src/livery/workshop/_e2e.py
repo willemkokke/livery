@@ -23,6 +23,7 @@ import livery.footman as footman
 from livery.footman import fail
 from livery.forge import ForgeError
 from livery.workshop._ci_tasks import ci
+from livery.workshop._verdict import Transient
 
 if TYPE_CHECKING:
     from livery.forge import Forge, Job, Repository, Run
@@ -632,6 +633,29 @@ def _eat_dev_wheels(root: Path, pins: dict[str, str]) -> str:
     return git.head_sha()
 
 
+def _runs_patiently(
+    repo: Repository,
+    transient: Transient,
+    *,
+    head_sha: str = "",
+    subject: str,
+) -> tuple[Run, ...] | None:
+    """One poll of the runs; ``None`` for a transport error within the budget.
+
+    A loaded local forge answers a runs listing in minutes, and the
+    client's timeout is shorter: the poll is retried like the ``ci``
+    verbs retry theirs, and only a spent budget is the verdict.
+    """
+    try:
+        runs = repo.checks.runs(head_sha=head_sha)
+    except ForgeError as error:
+        if transient.note(error):
+            fail(transient.giving_up(subject))
+        return None
+    transient.reset()
+    return runs
+
+
 def _watch_latest(kind: str, workflow: str, *, timeout: float = 900.0) -> None:
     """Follow the newest run of *workflow* to its verdict; red fails verbatim."""
     import time
@@ -639,8 +663,13 @@ def _watch_latest(kind: str, workflow: str, *, timeout: float = 900.0) -> None:
     forge, _ = _dev_forge(kind)
     repo = forge.repository(E2E_OWNER, E2E_REPO)
     deadline = time.monotonic() + timeout
+    transient = Transient(interval=5)
     while True:
-        runs = [run for run in repo.checks.runs() if run.workflow.endswith(workflow)]
+        listed = _runs_patiently(repo, transient, subject=f"{workflow}'s runs")
+        if listed is None:
+            time.sleep(5)
+            continue
+        runs = [run for run in listed if run.workflow.endswith(workflow)]
         latest = max(runs, key=lambda run: run.id, default=None)
         if latest is not None and latest.status == "completed":
             if latest.conclusion != "success":
@@ -752,8 +781,15 @@ def _watch(
     repo = forge.repository(E2E_OWNER, E2E_REPO)
     deadline = time.monotonic() + timeout
     retried = False
+    transient = Transient(interval=interval)
     while True:
-        runs = repo.checks.runs(head_sha=sha)
+        listed = _runs_patiently(
+            repo, transient, head_sha=sha, subject=f"{sha[:10]}'s runs"
+        )
+        if listed is None:
+            time.sleep(interval)
+            continue
+        runs = listed
         present = {run.workflow for run in runs}
         if (
             runs
@@ -954,10 +990,17 @@ def _completed_run(
 
     deadline = time.monotonic() + timeout
     retried = False
+    transient = Transient(interval=interval)
     while True:
+        listed = _runs_patiently(
+            repo, transient, head_sha=sha, subject=f"{sha[:10]}'s {event} run"
+        )
+        if listed is None:
+            time.sleep(interval)
+            continue
         runs = [
             run
-            for run in repo.checks.runs(head_sha=sha)
+            for run in listed
             if run.workflow.endswith("ci.yml") and run.event == event
         ]
         run = max(runs, key=lambda run: run.id, default=None)

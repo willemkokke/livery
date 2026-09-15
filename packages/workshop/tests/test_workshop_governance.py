@@ -389,6 +389,49 @@ def _configure_rig(
     return root, fake, repo
 
 
+def test_the_clock_is_reconciled_only_where_the_forge_keeps_it(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.workshop._workflow_tasks import reconcile_schedules, workflow_configure
+
+    _root, fake, repo = _configure_rig(tmp_path, monkeypatch)
+    # The decline first: a forge whose clock is in the workflow file
+    # has nothing to reconcile, and the configure says so and goes on.
+    real = fake.supports
+    monkeypatch.setattr(
+        fake, "supports", lambda c: False if c == "pipeline_schedules" else real(c)
+    )
+    assert reconcile_schedules(repo, fake) == [
+        "  schedules: the clock is in the workflow file; nothing to reconcile"
+    ]
+    workflow_configure()
+    out = capsys.readouterr().out
+    assert "nothing to reconcile" in out and "asserted from the contract" in out
+    # With the capability: one schedule per point on the clock, named
+    # by the reconcile, at the point's cron, routed by the variable;
+    # a second run changes nothing; a schedule the reconcile named for
+    # a point no longer declared goes, and a person's stays.
+    monkeypatch.setattr(fake, "supports", real)
+    fake.push("acme", "ws", "main")
+    repo.schedule.ensure("workshop: weekly", ref="main", cron="0 0 * * 1")
+    repo.schedule.ensure("alice's audit", ref="main", cron="0 1 * * *")
+    lines = reconcile_schedules(repo, fake)
+    assert lines == [
+        "  schedule 'workshop: nightly': 17 4 * * * on main,"
+        " FORGE_WORKFLOW=nightly.yml",
+        "  schedule 'workshop: weekly': deleted, no such point",
+    ]
+    listed = {schedule.description: schedule for schedule in repo.schedule.list()}
+    assert set(listed) == {"workshop: nightly", "alice's audit"}
+    assert listed["workshop: nightly"].variables == (("FORGE_WORKFLOW", "nightly.yml"),)
+    nightly = listed["workshop: nightly"]
+    assert reconcile_schedules(repo, fake) == [lines[0]]
+    again = {schedule.description: schedule for schedule in repo.schedule.list()}
+    assert again["workshop: nightly"] == nightly
+
+
 def test_configure_refuses_unknown_owners_before_applying(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -567,13 +610,16 @@ def test_governance_jobs_are_runnable_where_they_land(tmp_path: Path) -> None:
     assert "setup-uv" not in gov
 
     gitlab = generate(_contract_root(tmp_path, "gitlab", floor="3.12"))
-    section = gitlab[".gitlab-ci.yml"].split("governance-apply:")[1]
-    # Without an image the job lands on the runner default, where uv
-    # does not exist.
+    # GitLab's govern job is the merge point's, like the other two
+    # forges: the verb classifies its own commit. Without an image the
+    # job lands on the runner default, where uv does not exist.
+    section = gitlab[".gitlab-ci.yml"].split("\ngovern:")[1].split("\ndispatch:")[0]
     assert "image: ghcr.io/astral-sh/uv:python3.12-bookworm" in section
     assert "source setup.sh" in section
-    assert "fm workflow.configure" in section
+    assert "fm ci.run --point=merge --job=govern" in section
+    assert "FORGE_ADMIN_TOKEN: $FORGE_ADMIN_TOKEN" in section
     assert "uv run" not in section
+    assert "governance-apply" not in gitlab[".gitlab-ci.yml"]
 
 
 def test_doctor_prints_the_ladder_and_the_owner_verdicts(

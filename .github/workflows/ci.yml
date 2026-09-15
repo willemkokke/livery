@@ -3,10 +3,9 @@
 # `fm template.apply`; an edit here is drift.
 name: ci
 
-# A pull request, a push to main, and a dispatch by hand. A
-# dispatched run pays the full gate: the check verb reads the event
-# and narrows on a pull request alone, so every event spells the
-# same call.
+# A pull request, a push to main, and a dispatch by hand. A dispatched run
+# pays the full gate: the check verb reads the event and narrows on a pull
+# request alone, so every event spells the same call.
 on:
   pull_request:
   push:
@@ -14,10 +13,12 @@ on:
   workflow_dispatch:
 
 jobs:
+  # The check legs: the tests run metered, and only they. The leg's
+  # measured suites ride its per-run ref on the state store, and the gate
+  # job unions them with main's record and judges once. The scoped gate
+  # diffs against the merge base with the pull request's base branch,
+  # which a shallow clone lacks.
   check:
-    # The leg pushes its timing row to the state store's namespace;
-    # the ambient token needs the grant declared, since organisation
-    # defaults are read-only.
     permissions:
       contents: write
     strategy:
@@ -29,8 +30,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # The scoped gate diffs against the merge base with the
-          # pull request's base branch, which a shallow clone lacks.
           fetch-depth: 0
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
@@ -44,19 +43,12 @@ jobs:
           UV_PYTHON: ${{ matrix.python }}
         run: bash setup.sh github
       - name: Check
-        # The tests run metered, and only they: the test runner arms
-        # coverage's process-start variable in pytest's environment,
-        # so the tests and every process they start record, and the
-        # gate's own driver does not. The leg's measured suites ride
-        # its per-run ref on the state store, and the gate job below
-        # unions them with main's record and judges once.
         run: >-
           fm ci.run --point=gate --job=check
           --os="${{ matrix.os }}" --python="${{ matrix.python }}"
-      # The run as a Chrome trace, one artifact per leg: every task,
-      # step, lane wait, and pytest test as slices. Observational, so
-      # it runs on a red gate too (the run worth reading) and its own
-      # exit never decides the leg.
+      # The run as a Chrome trace, one artifact per leg. Observational,
+      # so it runs on a red gate too and its own exit never decides
+      # the leg.
       - name: Upload the run profile
         if: always()
         continue-on-error: true
@@ -65,10 +57,8 @@ jobs:
           name: profile-${{ matrix.os }}-${{ matrix.python }}
           path: fm-profile.json
           if-no-files-found: ignore
-
-  # The strict site build: broken links and orphan pages go red
-  # here, required through the gate context below, never inside the
-  # local check.
+  # The strict site build: broken links and orphan pages go red here,
+  # required through the gate context, never inside the local check.
   docs:
     runs-on: ubuntu-latest
     steps:
@@ -84,14 +74,13 @@ jobs:
         run: bash setup.sh github
       - name: Docs
         run: fm ci.run --point=gate --job=docs
-
-  # The one required context. Branch protection points here, so the
-  # matrix can grow or shrink without touching repository settings.
-  # Its entries union the legs' measured suites with main's coverage
-  # record and judge the floors, collect the run's timing rows, ask
-  # the forge for the jobs it needs, and stamp the tree a green run
-  # proved; always(), so a red run is judged too. The state store's
-  # pushes need the grant, since organisation defaults are read-only.
+  # The one required context. Branch protection points here, so the matrix
+  # can grow or shrink without touching repository settings. Its entries
+  # union the legs' measured suites with main's coverage record and judge
+  # the floors, collect the run's timing rows, ask the forge for the jobs
+  # it needs, and stamp the tree a green run proved; a red run is judged
+  # too. The stamp composes a narrowed run with its base tree's record
+  # through the merge base, which a shallow clone lacks.
   gate:
     if: always()
     needs: [check, docs]
@@ -101,8 +90,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # The stamp composes a narrowed run with its base tree's
-          # record through the merge base, which a shallow clone lacks.
           fetch-depth: 0
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
@@ -113,15 +100,12 @@ jobs:
         env:
           FORGE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: fm ci.run --point=gate --job=gate
-
-  # The merge point's own jobs, on the push alone: the site's deploy
-  # through the contract's seam, the repository settings reconciled
-  # when the merge changed a contract or the owners file, and the
-  # release wave dispatched when a merged release is unpublished.
+  # The site's deploy through the contract's seam, on the push alone. The
+  # release view reads the receipt tags; a shallow tagless clone renders
+  # its no-tags fallback page instead.
   deploy:
     if: github.event_name == 'push'
     needs: [gate]
-    runs-on: ubuntu-latest
     permissions:
       contents: read
       pages: write
@@ -132,11 +116,10 @@ jobs:
     concurrency:
       group: pages
       cancel-in-progress: false
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # The release view reads the receipt tags; a shallow
-          # tagless clone renders its no-tags fallback page instead.
           fetch-tags: true
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
@@ -156,14 +139,15 @@ jobs:
           path: site
       - id: deployment
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
+  # The repository settings reconciled when the merge changed a contract
+  # or the owners file. The commit's own file list decides whether
+  # anything is governed; a depth of one would read a squash as a root.
   govern:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # The commit's own file list decides whether anything is
-          # governed; a depth of one would read a squash as a root.
           fetch-depth: 2
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
@@ -174,9 +158,10 @@ jobs:
         env:
           FORGE_ADMIN_TOKEN: ${{ secrets.FORGE_ADMIN_TOKEN }}
         run: fm ci.run --point=merge --job=govern
-  # The release wave is dispatched from here, after main's own
-  # verdict: the verb reads the manifest at HEAD and the receipts on
-  # the remote, and is green unless a merged release is unpublished.
+  # The release wave is dispatched from here, after main's own verdict:
+  # the verb reads the manifest at HEAD and the receipts on the remote,
+  # and is green unless a merged release is unpublished. The commit that
+  # stamped the manifest can be far back.
   dispatch:
     if: github.event_name == 'push'
     needs: [gate]
@@ -184,7 +169,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # The commit that stamped the manifest can be far back.
           fetch-depth: 0
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:

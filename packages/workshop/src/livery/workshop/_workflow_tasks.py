@@ -15,7 +15,7 @@ from typing import Annotated
 
 import livery.footman as footman
 from livery.footman import doc, fail, group, suggest
-from livery.forge import RepoConfig, Repository
+from livery.forge import Forge, RepoConfig, Repository
 from livery.workshop._contract import load_contract
 from livery.workshop._git_ops import GitOps
 from livery.workshop._layers import workspace_root
@@ -356,7 +356,57 @@ def assert_configuration(root: Path) -> None:
     if publish_seam(root) == "pages" and forge.supports("pages_config"):
         repo.ensure_pages(build_type="workflow")
         print("  pages hosting asserted (workflow build type)")
+    for line in reconcile_schedules(repo, forge):
+        print(line)
     print("  repository configuration asserted from the contract")
+
+
+#: How the reconcile names the schedules it owns; any other schedule
+#: on the repository is a person's and is never touched.
+SCHEDULE_PREFIX = "workshop: "
+
+
+def reconcile_schedules(repo: Repository, forge: Forge) -> list[str]:
+    """Make the forge's clock match the points that run on it; what was done.
+
+    A forge whose clock is in the workflow file (GitHub, Gitea) has
+    nothing to reconcile and says so. On a forge with pipeline
+    schedules (GitLab) every declared point whose events include
+    ``schedule`` gets one schedule on ``main``, named
+    ``workshop: <point>``, at the point's cron, starting its pipeline
+    with ``FORGE_WORKFLOW`` set to the point's workflow file so the
+    document routes it; a schedule the reconcile named for a point
+    no longer declared is deleted.
+    """
+    from livery.workshop._points import DECLARED
+
+    if not forge.supports("pipeline_schedules"):
+        return ["  schedules: the clock is in the workflow file; nothing to reconcile"]
+    wanted = {
+        f"{SCHEDULE_PREFIX}{point.name}": point
+        for point in DECLARED
+        if "schedule" in point.events
+    }
+    lines: list[str] = []
+    for description, point in wanted.items():
+        schedule = repo.schedule.ensure(
+            description,
+            ref="main",
+            cron=point.cron,
+            variables={"FORGE_WORKFLOW": point.workflow},
+        )
+        lines.append(
+            f"  schedule {description!r}: {schedule.cron} on {schedule.ref},"
+            f" FORGE_WORKFLOW={point.workflow}"
+        )
+    for schedule in repo.schedule.list():
+        if (
+            schedule.description.startswith(SCHEDULE_PREFIX)
+            and schedule.description not in wanted
+        ):
+            repo.schedule.delete(schedule.description)
+            lines.append(f"  schedule {schedule.description!r}: deleted, no such point")
+    return lines
 
 
 def _spawn_configure() -> footman.Result:

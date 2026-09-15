@@ -22,6 +22,7 @@ Capability: TypeAlias = Literal[
     "schedule_events",
     "min_approvals",
     "pages_config",
+    "pipeline_schedules",
 ]
 """What livery.forge.Forge.supports answers for, by name.
 
@@ -49,6 +50,11 @@ Capability: TypeAlias = Literal[
   through the API (livery.forge.Repository.ensure_pages). Only
   GitHub has one to configure: Gitea ships no Pages, and GitLab
   Pages exists implicitly through pipeline artifacts.
+- ``pipeline_schedules``: the forge keeps the clock outside the
+  workflow file, as a project setting the API creates
+  (livery.forge.Repository.schedule). GitLab's pipeline schedules
+  are that; GitHub and Gitea decline, since their clock is the
+  ``schedule`` trigger in the file.
 """
 
 RegistryKind: TypeAlias = Literal["python", "conan", "container"]
@@ -479,6 +485,29 @@ ScheduleEventKind: TypeAlias = Literal[
     "scheduled", "unscheduled", "merged", "closed", "reopened", "pushed"
 ]
 """What happened to a pull request's merge schedule, normalised."""
+
+
+@dataclass(frozen=True)
+class Schedule:
+    """One pipeline schedule: the forge's clock for a workflow the file cannot time.
+
+    Attributes:
+        id: The forge's identifier of the schedule.
+        description: The name a caller addresses it by; unique per
+            repository as livery.forge.Schedules keeps it.
+        ref: The branch the scheduled pipeline runs on.
+        cron: When it runs, in cron's five fields, UTC.
+        active: Whether the clock is on.
+        variables: The variables each scheduled pipeline starts with,
+            as (key, value) pairs in the forge's order.
+    """
+
+    id: int
+    description: str
+    ref: str
+    cron: str
+    active: bool = True
+    variables: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)

@@ -32,7 +32,14 @@ from urllib.parse import quote
 
 from livery.forge._errors import ForgeError, Unsupported
 from livery.forge._http import JsonClient, Opener
-from livery.forge._protocol import Checks, Issues, PullRequests, Releases, Repository
+from livery.forge._protocol import (
+    Checks,
+    Issues,
+    PullRequests,
+    Releases,
+    Repository,
+    Schedules,
+)
 from livery.forge._types import (
     Capability,
     Codeowners,
@@ -52,6 +59,7 @@ from livery.forge._types import (
     Review,
     Run,
     RunStatus,
+    Schedule,
     ScheduleEvent,
     ScheduleEventKind,
     StateFilter,
@@ -208,7 +216,12 @@ class GitlabForge:
         """
         if capability == "min_approvals":
             return self._probe_min_approvals()
-        return capability in ("auto_merge", "ci_secrets", "schedule_events")
+        return capability in (
+            "auto_merge",
+            "ci_secrets",
+            "schedule_events",
+            "pipeline_schedules",
+        )
 
     def _probe_min_approvals(self) -> bool:
         """Whether this instance's licence grants approval rules.
@@ -412,6 +425,7 @@ class _GitlabRepository:
         self.checks: Checks = _GitlabChecks(client, self._base)
         self.issue: Issues = _GitlabIssues(forge, client, self._base)
         self.release: Releases = _GitlabReleases(client, self._base)
+        self.schedule: Schedules = _GitlabSchedules(client, self._base)
 
     @property
     def owner(self) -> str:
@@ -1183,6 +1197,131 @@ class _GitlabChecks:
             method="POST",
             data={"ref": ref, "variables": variables},
         )
+
+
+class _GitlabSchedules:
+    """The pipeline schedules of one GitLab project, by description.
+
+    A schedule's listing carries no variables; the single read does,
+    so every schedule returned is read once more for them. Creating
+    and changing a schedule needs the maintainer role.
+    """
+
+    def __init__(self, client: JsonClient, base: str) -> None:
+        self._client = client
+        self._base = base
+
+    def _read(self, schedule_id: int) -> Schedule:
+        data = self._client.request(f"{self._base}/pipeline_schedules/{schedule_id}")
+        assert data is not None
+        return _as_schedule(data)
+
+    def _find(self, description: str) -> dict[str, Any] | None:
+        rows = self._client.paginate(
+            lambda page: (
+                self._client.request(
+                    f"{self._base}/pipeline_schedules?page={page}&per_page=50"
+                )
+                or []
+            ),
+            subject=f"{self._base}/pipeline_schedules",
+        )
+        for row in rows:
+            if str(row.get("description", "")) == description:
+                found: dict[str, Any] = row
+                return found
+        return None
+
+    def list(self) -> tuple[Schedule, ...]:
+        """Every schedule, each read once more for its variables."""
+        rows = self._client.paginate(
+            lambda page: (
+                self._client.request(
+                    f"{self._base}/pipeline_schedules?page={page}&per_page=50"
+                )
+                or []
+            ),
+            subject=f"{self._base}/pipeline_schedules",
+        )
+        return tuple(self._read(int(row["id"])) for row in rows)
+
+    def ensure(
+        self,
+        description: str,
+        *,
+        ref: str,
+        cron: str,
+        variables: Mapping[str, str] | None = None,
+    ) -> Schedule:
+        """Create or update the schedule described *description*; the schedule."""
+        found = self._find(description)
+        if found is None:
+            created = self._client.request(
+                f"{self._base}/pipeline_schedules",
+                method="POST",
+                data={
+                    "description": description,
+                    "ref": ref,
+                    "cron": cron,
+                    "active": True,
+                },
+            )
+            assert created is not None
+            schedule_id = int(created["id"])
+        else:
+            schedule_id = int(found["id"])
+            if (
+                str(found.get("ref", "")).removeprefix("refs/heads/") != ref
+                or str(found.get("cron", "")) != cron
+                or not bool(found.get("active", False))
+            ):
+                self._client.request(
+                    f"{self._base}/pipeline_schedules/{schedule_id}",
+                    method="PUT",
+                    data={"ref": ref, "cron": cron, "active": True},
+                )
+        current = dict(self._read(schedule_id).variables)
+        for key, value in (variables or {}).items():
+            if key not in current:
+                self._client.request(
+                    f"{self._base}/pipeline_schedules/{schedule_id}/variables",
+                    method="POST",
+                    data={"key": key, "value": value},
+                )
+            elif current[key] != value:
+                self._client.request(
+                    f"{self._base}/pipeline_schedules/{schedule_id}/variables/{quote(key)}",
+                    method="PUT",
+                    data={"value": value},
+                )
+        return self._read(schedule_id)
+
+    def delete(self, description: str) -> bool:
+        """Delete the schedule described *description*; False when there is none."""
+        found = self._find(description)
+        if found is None:
+            return False
+        self._client.request(
+            f"{self._base}/pipeline_schedules/{int(found['id'])}", method="DELETE"
+        )
+        return True
+
+
+def _as_schedule(data: dict[str, Any]) -> Schedule:
+    """One schedule from its GitLab record."""
+    variables = tuple(
+        (str(item.get("key", "")), str(item.get("value", "")))
+        for item in data.get("variables") or []
+        if isinstance(item, dict)
+    )
+    return Schedule(
+        id=int(data["id"]),
+        description=str(data.get("description", "")),
+        ref=str(data.get("ref", "")).removeprefix("refs/heads/"),
+        cron=str(data.get("cron", "")),
+        active=bool(data.get("active", False)),
+        variables=variables,
+    )
 
 
 class _GitlabReleases:

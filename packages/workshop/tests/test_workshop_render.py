@@ -145,11 +145,9 @@ def test_the_gate_shell_runs_the_declared_jobs_on_the_declared_events(
     assert depth["dispatch"].get("fetch-depth") == 0
     assert depth["govern"].get("fetch-depth") == 2
     assert depth["docs"] == {}
-    # The deploy reads the receipt tags for the release view. The
-    # GitHub emitter fetches them; the Gitea emitter does not, and its
-    # view renders the no-tags fallback. One declaration renders both
-    # once the renderer replaces the emitters, and this pin moves then.
-    assert depth["deploy"].get("fetch-tags") is (True if kind == "github" else None)
+    # The deploy reads the receipt tags for the release view, on
+    # every forge: one declaration renders both.
+    assert depth["deploy"].get("fetch-tags") is True
     # The profile trace is kept on the check legs alone, whatever the
     # verdict.
     uploads = {
@@ -266,7 +264,7 @@ def test_the_release_shell_is_dispatched_with_a_ref_and_publishes_it(
 # --- GitLab, one document -----------------------------------------------------
 
 
-def test_the_gitlab_document_names_its_pipelines_and_runs_the_jobs_it_has(
+def test_the_gitlab_document_names_its_pipelines_and_runs_every_declared_job(
     tmp_path: Path,
 ) -> None:
     prog = footman.prog()
@@ -276,38 +274,85 @@ def test_the_gitlab_document_names_its_pipelines_and_runs_the_jobs_it_has(
     assert rules == [
         '$CI_PIPELINE_SOURCE == "merge_request_event"',
         '$CI_COMMIT_BRANCH == "main"',
+        '$CI_PIPELINE_SOURCE == "schedule"',
         "$FORGE_WORKFLOW",
     ]
     jobs = {k: v for k, v in doc.items() if k not in ("workflow", "stages")}
+    # The declared jobs in order, the deploy as GitLab Pages' own job,
+    # and the wave as it is until its jobs are entries.
     assert list(jobs) == [
+        "check",
+        "docs",
         "gate",
         "pages",
-        "docs",
+        "govern",
+        "dispatch",
+        "nightly",
         "release-publish",
-        "governance-apply",
     ]
     scripts = {
         name: [line for line in job["script"] if line.startswith(prog)]
         for name, job in jobs.items()
     }
     assert scripts == {
-        "gate": [f"{prog} check"],
+        "check": [
+            f'{prog} ci.run --point=gate --job=check --os="ubuntu-latest"'
+            ' --python="3.13"'
+        ],
+        "docs": [f"{prog} ci.run --point=gate --job=docs"],
+        "gate": [f"{prog} ci.run --point=gate --job=gate"],
         "pages": [f"{prog} docs.build"],
-        "docs": [f"{prog} docs.build"],
+        "govern": [f"{prog} ci.run --point=merge --job=govern"],
+        "dispatch": [f"{prog} ci.run --point=merge --job=dispatch"],
+        "nightly": [f'{prog} ci.run --point=nightly --job=nightly --python="3.13"'],
         "release-publish": [f'{prog} workflow.release.publish --ref="$CI_COMMIT_SHA"'],
-        "governance-apply": [f"{prog} workflow.configure"],
     }
     assert {name: job["stage"] for name, job in jobs.items()} == {
+        "check": "check",
+        "docs": "check",
         "gate": "check",
         "pages": "release",
-        "docs": "check",
+        "govern": "release",
+        "dispatch": "release",
+        "nightly": "check",
         "release-publish": "release",
-        "governance-apply": "release",
     }
-    for name in ("gate", "docs"):
-        assert jobs[name]["rules"][0] == {"if": "$CI_COMMIT_TAG", "when": "never"}
+    assert jobs["gate"]["needs"] == ["check", "docs"]
+    assert jobs["dispatch"]["needs"] == ["gate"]
+
+    # The rules: a tag never; the gate's jobs on a merge request, a
+    # dispatch and main's push (the merge point inherits them); the
+    # merge point's own on the push alone; the nightly on the clock
+    # and a dispatch, both routed by the pipeline's variable.
+    def conditions(name: str) -> list[str]:
+        return [rule["if"] for rule in jobs[name]["rules"]]
+
+    tag_never = "$CI_COMMIT_TAG"
+    gate_rules = [
+        tag_never,
+        '$CI_PIPELINE_SOURCE == "merge_request_event"',
+        '$FORGE_WORKFLOW == "ci.yml"',
+        '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"',
+    ]
+    assert conditions("check") == gate_rules
+    assert conditions("gate") == gate_rules
+    assert jobs["gate"]["rules"][1]["when"] == "always"
+    assert conditions("govern") == [
+        tag_never,
+        '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"',
+    ]
+    assert conditions("nightly") == [
+        tag_never,
+        '$CI_PIPELINE_SOURCE == "schedule" && $FORGE_WORKFLOW == "nightly.yml"',
+        '$FORGE_WORKFLOW == "nightly.yml"',
+    ]
     assert jobs["pages"]["rules"] == [{"if": '$CI_COMMIT_BRANCH == "main"'}]
     assert "CI_COMMIT_TITLE" in jobs["release-publish"]["rules"][0]["if"]
-    assert jobs["governance-apply"]["variables"] == {
-        "FORGE_ADMIN_TOKEN": "$FORGE_ADMIN_TOKEN"
+    # The admin token reaches govern alone; the checkouts are as deep
+    # as the verbs need.
+    assert jobs["govern"]["variables"] == {
+        "GIT_DEPTH": "2",
+        "FORGE_ADMIN_TOKEN": "$FORGE_ADMIN_TOKEN",
     }
+    assert jobs["check"]["variables"] == {"GIT_DEPTH": "0"}
+    assert "variables" not in jobs["docs"]

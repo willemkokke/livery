@@ -53,6 +53,7 @@ from livery.forge._types import (
     RepoInfo,
     Review,
     Run,
+    Schedule,
     ScheduleEvent,
     StateFilter,
 )
@@ -285,6 +286,42 @@ class Checks(Protocol):
         ...
 
 
+class Schedules(Protocol):
+    """One repository's pipeline schedules, addressed by description.
+
+    The clock for a forge that keeps it outside the workflow file
+    (capability ``pipeline_schedules``). A forge whose clock is in
+    the file raises livery.forge.Unsupported naming the capability
+    from every method.
+    """
+
+    def list(self) -> tuple[Schedule, ...]:
+        """Every schedule of the repository, with its variables."""
+        ...
+
+    def ensure(
+        self,
+        description: str,
+        *,
+        ref: str,
+        cron: str,
+        variables: Mapping[str, str] | None = None,
+    ) -> Schedule:
+        """Make the schedule described *description* say *ref*, *cron* and *variables*.
+
+        Idempotent: a schedule with that description is updated in
+        place, none is created, and the schedule as the forge now
+        holds it comes back. Variables named are set; variables the
+        schedule has that *variables* does not name are left as
+        they are.
+        """
+        ...
+
+    def delete(self, description: str) -> bool:
+        """Delete the schedule described *description*; False when there is none."""
+        ...
+
+
 class Releases(Protocol):
     """One repository's releases, addressed by tag."""
 
@@ -450,6 +487,11 @@ class Repository(Protocol):
     @property
     def release(self) -> Releases:
         """The release operations."""
+        ...
+
+    @property
+    def schedule(self) -> Schedules:
+        """The pipeline schedule operations (capability ``pipeline_schedules``)."""
         ...
 
     def ensure_pages(self, *, build_type: str = "workflow") -> None:

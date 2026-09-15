@@ -655,6 +655,65 @@ def _dispatch(driver: ForgeDriver) -> None:
         raise AssertionError("dispatching on a missing ref must raise")
 
 
+def _schedules(driver: ForgeDriver) -> None:
+    """Ensure creates once and then updates; list carries the variables; delete answers.
+
+    A second ensure with the same description changes the clock and
+    the variables in place, never creates a second schedule, and
+    delete says whether there was one to delete.
+    """
+    repo = driver.fresh_repo()
+    branch = _default_branch(driver, repo)
+    made = repo.schedule.ensure(
+        "workshop: nightly",
+        ref=branch,
+        cron="17 4 * * *",
+        variables={"FORGE_WORKFLOW": "nightly.yml"},
+    )
+    assert made.description == "workshop: nightly"
+    assert made.ref == branch and made.cron == "17 4 * * *" and made.active
+    assert ("FORGE_WORKFLOW", "nightly.yml") in made.variables
+    again = repo.schedule.ensure(
+        "workshop: nightly",
+        ref=branch,
+        cron="17 4 * * *",
+        variables={"FORGE_WORKFLOW": "nightly.yml"},
+    )
+    assert again.id == made.id, "a second ensure updates, never creates"
+    listed = [s for s in repo.schedule.list() if s.description == "workshop: nightly"]
+    assert [s.id for s in listed] == [made.id]
+    assert ("FORGE_WORKFLOW", "nightly.yml") in listed[0].variables
+    moved = repo.schedule.ensure(
+        "workshop: nightly",
+        ref=branch,
+        cron="7 5 * * *",
+        variables={"FORGE_WORKFLOW": "weekly.yml"},
+    )
+    assert moved.id == made.id and moved.cron == "7 5 * * *"
+    assert ("FORGE_WORKFLOW", "weekly.yml") in moved.variables
+    assert repo.schedule.delete("workshop: nightly") is True
+    assert repo.schedule.delete("workshop: nightly") is False
+    assert not [s for s in repo.schedule.list() if s.description == "workshop: nightly"]
+
+
+def _schedules_declined(driver: ForgeDriver) -> None:
+    """A forge whose clock is in the file declines every schedule call by name."""
+    repo = driver.forge.repository("nobody", "nothing")
+    for call in (
+        lambda: repo.schedule.list(),
+        lambda: repo.schedule.ensure(
+            "workshop: nightly", ref="main", cron="17 4 * * *"
+        ),
+        lambda: repo.schedule.delete("workshop: nightly"),
+    ):
+        try:
+            call()
+        except Unsupported as exc:
+            assert "pipeline_schedules" in str(exc)
+        else:
+            raise AssertionError("schedules must refuse by name without the capability")
+
+
 def _release_by_tag(driver: ForgeDriver) -> None:
     """Get probes by tag; create refuses a tag that already has a release."""
     repo = driver.fresh_repo()
@@ -904,6 +963,10 @@ SCENARIOS: tuple[Scenario, ...] = (
         forbids=("force_cancel",),
     ),
     Scenario("dispatch", _dispatch),
+    Scenario("schedules", _schedules, requires=("pipeline_schedules",)),
+    Scenario(
+        "schedules-declined", _schedules_declined, forbids=("pipeline_schedules",)
+    ),
     Scenario("release-by-tag", _release_by_tag),
     Scenario("issue-text-both-ways", _issue_text_both_ways),
     Scenario("issue-update", _issue_update),
