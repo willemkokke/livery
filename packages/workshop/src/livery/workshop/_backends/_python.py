@@ -1318,9 +1318,14 @@ def run_test(
                 # tests. The workshop's pytest plugin names each
                 # test's context in that run, the leg splits the one
                 # run's data per suite, and the floors are judged
-                # once, on the union, in the gate job.
+                # once, on the union, in the gate job. Streamed, never
+                # captured: the job's log is the run's evidence, and a
+                # red test's own words belong there, since nothing
+                # else in a runner shows them.
                 armed = {**env, ARMED: str(root / "pyproject.toml")}
-                pytest.opts(in_process=False, env=armed)(*dirs, *pytest_args)
+                pytest.opts(in_process=False, env=armed, capture=False)(
+                    *dirs, *pytest_args
+                )
             else:
                 # Bare --cov: the measured source is [tool.coverage.run]
                 # source, the namespace the render derived, never a
