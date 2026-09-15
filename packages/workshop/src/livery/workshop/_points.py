@@ -996,7 +996,14 @@ def run_point(
     entries = entries_for(root, resolved, job)
     if resolved != point:
         print(f"  point: {point} on a push is the {resolved} point")
-    display = f"{job} ({os_label}, {python})" if os_label or python else job
+    # The display name is the job's name as the forge lists it, since
+    # the collect step joins the leg's row with the forge's job by it:
+    # GitHub and Gitea show a matrix job as ``check (ubuntu-latest,
+    # 3.14)``; GitLab names the job by its key alone, the matrix
+    # riding its variables and never its name.
+    run = run_context()
+    matrix = bool(os_label or python) and (run is None or run.forge != "gitlab")
+    display = f"{job} ({os_label}, {python})" if matrix else job
     label = f"{job}-{os_label}-{python}" if os_label or python else job
     facts = {"display": display, "label": label, "os": os_label, "python": python}
     # A dispatched point's inputs, as the run received them, by name:

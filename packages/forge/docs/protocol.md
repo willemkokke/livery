@@ -57,7 +57,7 @@ and discovery joins the protocol only when a workflow demands it.
 | `server_version()` | the server's version; backends with a floor raise `Unsupported` naming it |
 | `supports(capability)` | the honesty valve |
 | `repository(owner, name)` | the `Repository` view; cheap, no network |
-| `create_repo(owner, name, *, private, description)` | create, initialised with a default branch; raises when it exists |
+| `create_repo(owner, name, *, private, description)` | create, initialised with an unprotected default branch the creator may push over; raises when it exists |
 | `get_repo(owner, name)` | settings or None; the probe that makes creation re-runnable |
 | `delete_repo(owner, name)` | idempotent |
 | `user_url(login)` | the profile address; string building, nothing on the wire |
@@ -109,6 +109,7 @@ reached on (see `quirks.md`).
 | `arm(number, *, title, message)` | merge when green, server-side; disarm before any push |
 | `disarm(number)` | cancels the schedule; True when one existed |
 | `is_armed(number)` | the schedule's state; a non-open pull request reads unarmed |
+| `merge_hold(number)` | the forge's published mergeability state, verbatim (GitLab `detailed_merge_status`, GitHub `mergeable_state`); empty where none is published |
 | `reviews(number)` | the submitted review verdicts; drafts never arrive |
 | `schedule_events(number)` | the merge-scheduling history, oldest first; capability-gated (`schedule_events`) |
 | `comment(number, body)` | the evidence channel |

@@ -252,3 +252,165 @@ def test_the_fake_names_every_missing_subject() -> None:
         here.pr.update_body(1, "b")
     with pytest.raises(ForgeError, match="no issue"):
         here.issue.comment(1, "b")
+
+
+# --- a created project's default branch, and the published merge hold ---------
+
+_GL = "http://gl.invalid/api/v4"
+
+
+def _gl_exchange(method: str, url: str, status: int, body: str) -> Exchange:
+    from livery.forge.testing._cassette import VOLATILE
+
+    exchange = _exchange(method, url, status, body)
+    if method in ("POST", "PUT"):
+        return Exchange(**{**exchange.__dict__, "request_body": VOLATILE})
+    return exchange
+
+
+def test_gitlab_create_under_the_users_namespace_waits_for_the_rule(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The fallback first: a personal namespace follows the instance
+    # default, which the token cannot read (403), so the create waits
+    # for the rule; it arrives on the second look and goes.
+    import time
+
+    import livery.forge._gitlab as gitlab
+
+    naps: list[float] = []
+    monkeypatch.setattr(time, "sleep", naps.append)
+    rules = f"{_GL}/projects/me%2Frepo/protected_branches"
+    cassette = Cassette(
+        [
+            _gl_exchange("GET", f"{_GL}/user", 200, '{"username": "me"}'),
+            _gl_exchange("POST", f"{_GL}/projects", 201, '{"default_branch": "main"}'),
+            _gl_exchange(
+                "GET", f"{_GL}/application/settings", 403, '{"message": "403"}'
+            ),
+            _gl_exchange("GET", rules, 200, "[]"),
+            _gl_exchange("GET", rules, 200, '[{"name": "main"}]'),
+            _gl_exchange("DELETE", f"{rules}/main", 204, ""),
+        ]
+    )
+    opener = ReplayOpener(cassette)
+    forge = GitlabForge(_GL, token="t", opener=opener)
+    forge.create_repo("me", "repo")
+    opener.verify_exhausted()
+    assert naps == [gitlab._NEW_PROTECTION_POLL]
+
+
+def test_gitlab_create_in_a_group_reads_its_default_before_waiting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A group whose default is no protection (0) never gets a rule, so
+    # nothing is polled; a group the token cannot read is taken as
+    # protected; and a budget that runs out leaves the branch as it is.
+    import time
+
+    import livery.forge._gitlab as gitlab
+
+    monkeypatch.setattr(time, "sleep", lambda seconds: None)
+    rules = f"{_GL}/projects/acme%2Frepo/protected_branches"
+
+    def head(default: tuple[int, str]) -> list[Exchange]:
+        return [
+            _gl_exchange("GET", f"{_GL}/user", 200, '{"username": "me"}'),
+            _gl_exchange(
+                "GET",
+                f"{_GL}/namespaces?search=acme",
+                200,
+                '[{"full_path": "acme", "id": 3}]',
+            ),
+            _gl_exchange("POST", f"{_GL}/projects", 201, '{"default_branch": "main"}'),
+            _gl_exchange("GET", f"{_GL}/groups/acme", *default),
+        ]
+
+    open_default = ReplayOpener(
+        Cassette(head((200, '{"default_branch_protection": 0}')))
+    )
+    GitlabForge(_GL, token="t", opener=open_default).create_repo("acme", "repo")
+    open_default.verify_exhausted()
+
+    unreadable = ReplayOpener(
+        Cassette(
+            [
+                *head((404, '{"message": "404"}')),
+                _gl_exchange("GET", rules, 200, '[{"name": "main"}]'),
+                _gl_exchange("DELETE", f"{rules}/main", 204, ""),
+            ]
+        )
+    )
+    GitlabForge(_GL, token="t", opener=unreadable).create_repo("acme", "repo")
+    unreadable.verify_exhausted()
+
+    monkeypatch.setattr(gitlab, "_NEW_PROTECTION_WAIT", 0.0)
+    budget = ReplayOpener(
+        Cassette(
+            [
+                *head((200, '{"default_branch_protection": 2}')),
+                _gl_exchange("GET", rules, 200, "[]"),
+            ]
+        )
+    )
+    GitlabForge(_GL, token="t", opener=budget).create_repo("acme", "repo")
+    budget.verify_exhausted()
+
+
+def test_merge_hold_names_a_missing_pull_request_and_reads_the_published_state() -> (
+    None
+):
+    # The refusal first on every backend: a pull request that does not
+    # exist raises with 404; then the published field, verbatim.
+    gitlab_mr = f"{_GL}/projects/acme%2Fws/merge_requests/5"
+    gitlab = GitlabForge(
+        _GL,
+        token="t",
+        opener=ReplayOpener(
+            Cassette(
+                [
+                    _exchange("GET", gitlab_mr, 404, '{"message": "404"}'),
+                    _exchange(
+                        "GET", gitlab_mr, 200, '{"detailed_merge_status": "checking"}'
+                    ),
+                ]
+            )
+        ),
+    )
+    with pytest.raises(ForgeError, match="no merge request 5") as caught:
+        gitlab.repository("acme", "ws").pr.merge_hold(5)
+    assert caught.value.status == 404
+    assert gitlab.repository("acme", "ws").pr.merge_hold(5) == "checking"
+
+    github_pr = "https://api.github.com/repos/acme/ws/pulls/5"
+    github = GithubForge(
+        "https://api.github.com",
+        token="t",
+        opener=ReplayOpener(
+            Cassette(
+                [
+                    _exchange("GET", github_pr, 404, '{"message": "Not Found"}'),
+                    _exchange("GET", github_pr, 200, '{"mergeable_state": "blocked"}'),
+                ]
+            )
+        ),
+    )
+    with pytest.raises(ForgeError, match="no pull request 5"):
+        github.repository("acme", "ws").pr.merge_hold(5)
+    assert github.repository("acme", "ws").pr.merge_hold(5) == "blocked"
+
+    gitea = GiteaForge(
+        "http://g.invalid/api/v1",
+        token="t",
+        opener=ReplayOpener(
+            Cassette(
+                [
+                    _exchange(
+                        "GET", "http://g.invalid/api/v1/repos/acme/ws/pulls/5", 404, ""
+                    )
+                ]
+            )
+        ),
+    )
+    with pytest.raises(ForgeError, match="no pull request 5"):
+        gitea.repository("acme", "ws").pr.merge_hold(5)

@@ -193,8 +193,10 @@ def _follow_merge_state(
 ) -> None:
     """Drive *act* to a decided state; merge means as soon as possible.
 
-    A 405 classifies through [livery.forge.classify_merge_refusal][]
-    with the pull request and its combined status fetched fresh.
+    A 405, or the 422 GitLab answers while its mergeability recompute
+    runs, classifies through [livery.forge.classify_merge_refusal][]
+    with the pull request, its combined status and the forge's
+    published hold fetched fresh.
     In-progress states follow through to completion, the task's own
     timeout the only backstop; recoverable and terminal states fail
     with the user-facing message and the forge's words verbatim;
@@ -212,7 +214,7 @@ def _follow_merge_state(
             act(*args, **kwargs)
             return
         except ForgeError as exc:
-            if exc.status != 405:
+            if exc.status not in (405, 422):
                 raise
             pr = repo.pr.get(number)
             if pr is None:
@@ -223,6 +225,7 @@ def _follow_merge_state(
                 combined=repo.checks.status(pr.head_sha),
                 item_state=pr.state,
                 merged=pr.merged,
+                hold=repo.pr.merge_hold(number),
             )
             if hold.category == "success":
                 print(f"  PR #{number}: {hold.message}; walking past")
@@ -505,8 +508,15 @@ def _merge_title(repo: Repository, plan: Plan) -> str:
     return (pr.title.strip() if pr else "") or plan.title
 
 
-def _push(git: GitOps, branch: str, *, force: bool) -> None:
+def _push(
+    git: GitOps, branch: str, *, force: bool, repo: Repository | None = None
+) -> None:
     """Push *branch*, or force it with a lease and full disclosure.
+
+    With *repo*, the runs still moving for the head the push
+    supersedes are cancelled afterwards (livery.workshop._ci_tasks.
+    cancel_superseded_runs): a stale head's runs would delay the new
+    head's on a shared runner and prove nothing.
 
     A force is refused on ``workflow/`` branches: recovery reads the
     ref, the branch's commits are the durable record of what was
@@ -516,6 +526,12 @@ def _push(git: GitOps, branch: str, *, force: bool) -> None:
     (the flow fetched already, so the listing is current up to the
     push itself, which the lease guards).
     """
+    previous = ""
+    if repo is not None:
+        try:
+            previous = git.remote_head(branch)
+        except GitError:
+            previous = ""
     if not force:
         try:
             git.push(branch)
@@ -553,6 +569,11 @@ def _push(git: GitOps, branch: str, *, force: bool) -> None:
             f" this clone last saw.\n{error}\n  Fetch to see what arrived"
             " (`git fetch origin`), then decide again and re-run."
         )
+    if repo is not None and previous and previous != git.head_sha():
+        from livery.workshop._ci_tasks import cancel_superseded_runs
+
+        for line in cancel_superseded_runs(repo, previous):
+            print(line)
 
 
 def _required_context_at(git: GitOps, ref: str) -> str:
@@ -684,11 +705,11 @@ def push_and_pr(
     # fail non-fast-forward.
     pr = repo.pr.find_by_head(plan.branch)
     if pr is None:
-        _push(git, plan.branch, force=force)
+        _push(git, plan.branch, force=force, repo=repo)
         pr = repo.pr.open(plan.branch, plan.base, plan.title, body)
         print(f"  opened PR #{pr.number}: {pr.title}")
     else:
-        _push(git, plan.branch, force=force)
+        _push(git, plan.branch, force=force, repo=repo)
         print(f"  reusing PR #{pr.number}")
         if plan.title_given and pr.title != plan.title:
             repo.pr.update_title(pr.number, plan.title)

@@ -148,6 +148,81 @@ class SimpleRegistry:
         return tuple(str(v) for v in payload.get("versions") or [])
 
 
+def _normalise_name(name: str) -> str:
+    """A distribution name as the index compares it: lower-case, dashes."""
+    return name.lower().replace("_", "-").replace(".", "-")
+
+
+def purge_gitlab_packages(
+    base: str,
+    project: str,
+    *,
+    token: str,
+    names: Collection[str] | None = None,
+    api: Callable[[str, str, str], tuple[int, object]] | None = None,
+) -> list[str]:
+    """Delete every PyPI package version the GitLab project at *base*/*project* holds.
+
+    The GitLab half of `purge_packages`: a project's packages are
+    listed and deleted by id through ``/projects/:id/packages``, the
+    project addressed by its URL-encoded path. With *names*, only
+    those packages go. Returns ``name==version`` per deleted package.
+    """
+    from urllib.parse import quote
+
+    call = api or _gitlab_call
+    encoded = quote(project, safe="")
+    wanted = {_normalise_name(n) for n in names} if names is not None else None
+    deleted: list[str] = []
+    page = 1
+    listed: list[dict[str, object]] = []
+    while True:
+        status, body = call(
+            "GET",
+            f"{base}/api/v4/projects/{encoded}/packages?package_type=pypi"
+            f"&per_page=100&page={page}",
+            token,
+        )
+        if status != 200 or not isinstance(body, list) or not body:
+            break
+        listed.extend(item for item in body if isinstance(item, dict))
+        if len(body) < 100:
+            break
+        page += 1
+    for item in listed:
+        name = str(item.get("name", ""))
+        if wanted is not None and _normalise_name(name) not in wanted:
+            continue
+        status, _ = call(
+            "DELETE",
+            f"{base}/api/v4/projects/{encoded}/packages/{item.get('id')}",
+            token,
+        )
+        if status in (200, 202, 204):
+            deleted.append(f"{name}=={item.get('version', '')}")
+    return deleted
+
+
+def _gitlab_call(method: str, url: str, token: str) -> tuple[int, object]:
+    """One GitLab API call for the purge; (status, parsed body or text)."""
+    import json
+    import urllib.error
+    import urllib.request
+
+    request = urllib.request.Request(
+        url, method=method, headers={"PRIVATE-TOKEN": token}
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            text = response.read().decode()
+            try:
+                return int(response.status), json.loads(text) if text else None
+            except ValueError:
+                return int(response.status), text
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read().decode(errors="replace")
+
+
 def purge_packages(
     base: str,
     owner: str,

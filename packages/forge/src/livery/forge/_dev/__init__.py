@@ -452,15 +452,26 @@ def _seed_gitlab() -> None:
         minted = _docker_exec("gitlab", "gitlab-rails", "runner", script)
         if minted.code != 0:
             fail(f"gitlab PAT mint failed:\n{minted.stdout}{minted.stderr}")
-    if _gitlab_api("/groups/livery", token)[0] != 200:
+    # The group is public: the loop's project publishes packages the
+    # runner installs without a credential, as the Gitea org's are
+    # served, and a private project inside a public group stays
+    # private.
+    status, body = _gitlab_api("/groups/livery", token)
+    if status != 200:
         status, body = _gitlab_api(
             "/groups",
             token,
             method="POST",
-            body={"name": "livery", "path": "livery", "visibility": "private"},
+            body={"name": "livery", "path": "livery", "visibility": "public"},
         )
         if status not in (201, 409):
             fail(f"gitlab group creation answered HTTP {status}: {body}")
+    elif '"visibility":"public"' not in body.replace(" ", ""):
+        status, body = _gitlab_api(
+            "/groups/livery", token, method="PUT", body={"visibility": "public"}
+        )
+        if status != 200:
+            fail(f"gitlab group visibility answered HTTP {status}: {body}")
     _update_dev_env({"GITLAB_URL": _GITLAB_URL, "GITLAB_TOKEN": token})
     print(f"  seed: gitlab credentials written to {_dev_env_path().name}")
 
@@ -527,23 +538,78 @@ def _register_gitlab_runner() -> None:
     print("  seed: gitlab runner registered (concurrency 8)")
 
 
+#: The compose profiles each forge's containers and runner carry, and
+#: the runner service a restart discards the jobs of.
+_FORGE_PROFILES = {
+    "gitea": (("gitea", "gitea-runner"), "act_runner"),
+    "gitlab": (("gitlab", "gitlab-runner"), "gitlab-runner"),
+}
+
+
+def _forges(profile: str) -> tuple[str, ...]:
+    """The forges *profile* names; refuses a word that is not one."""
+    if profile == "all":
+        return tuple(_FORGE_PROFILES)
+    if profile not in _FORGE_PROFILES:
+        fail(f"unknown profile {profile}: use gitea, gitlab, or all")
+    return (profile,)
+
+
 @dev.task(name="down")
 def dev_down(
+    profile: Annotated[str, doc("which forges: gitea, gitlab, or all")] = "all",
     wipe: Annotated[bool, doc("also delete the data volumes")] = False,
 ) -> None:
-    """Stop the local forge containers; `--wipe` deletes their data too."""
-    args = [
-        "--profile",
-        "gitea",
-        "--profile",
-        "gitea-runner",
-        "--profile",
-        "gitlab",
-        "--profile",
-        "gitlab-runner",
-        "down",
-    ]
-    if wipe:
-        args.append("--volumes")
+    """Stop the local forge containers; `--wipe` deletes their data too.
+
+    ``--profile`` stops one forge and its runner and leaves the other
+    up, matching ``up``. A wipe of one forge deletes its volumes
+    alone; the shared env file goes only when every forge is wiped,
+    since it carries the other forge's credentials too.
+    """
+    forges = _forges(profile)
+    if wipe and profile == "all":
         _dev_env_path().unlink(missing_ok=True)
-    _compose(*args)
+    if profile == "all":
+        args = []
+        for names, _runner in _FORGE_PROFILES.values():
+            for name in names:
+                args += ["--profile", name]
+        args.append("down")
+        if wipe:
+            args.append("--volumes")
+        _compose(*args)
+        return
+    for forge_kind in forges:
+        names, runner = _FORGE_PROFILES[forge_kind]
+        args = []
+        for name in names:
+            args += ["--profile", name]
+        # One forge's services alone: `down` would take the whole
+        # project, so its containers stop and are removed by name.
+        services = [forge_kind, runner]
+        _compose(*args, "stop", *services)
+        _compose(*args, "rm", "-f", *(["-v"] if wipe else []), *services)
+        print(f"  {forge_kind}: stopped" + (", volumes deleted" if wipe else ""))
+
+
+@dev.task(name="restart")
+def dev_restart(
+    profile: Annotated[
+        str, doc("which forges' runners: gitea, gitlab, or all")
+    ] = "all",
+) -> None:
+    """Restart one forge's runner, discarding the jobs it was running.
+
+    The recovery for a runner grinding the runs a dead pass left
+    behind: the runner container restarts, its jobs die with it, and
+    it registers again with the same configuration. The forge itself
+    stays up.
+    """
+    for forge_kind in _forges(profile):
+        names, runner = _FORGE_PROFILES[forge_kind]
+        args = []
+        for name in names:
+            args += ["--profile", name]
+        _compose(*args, "restart", runner)
+        print(f"  {forge_kind}: runner {runner} restarted")

@@ -1,0 +1,133 @@
+"""The dev rig's per-forge down and restart: the refusal, then each shape."""
+
+from __future__ import annotations
+
+import importlib
+import sys
+from collections.abc import Iterator
+from pathlib import Path
+from types import ModuleType
+
+import pytest
+
+_FAILURES = (BaseException,)
+
+
+@pytest.fixture
+def dev(monkeypatch: pytest.MonkeyPatch) -> Iterator[ModuleType]:
+    """The dev plugin, imported into a captured registry and left unloaded.
+
+    The plugin registers its groups at import, and a workspace mounts
+    it by importing it fresh through footman's ``plugin()``: a copy
+    left in ``sys.modules`` would make a later mount in the same
+    process read the layer as content only. The entry is popped
+    directly at teardown: a monkeypatched delete would be undone, and
+    the module put back. The setup's monkeypatched delete restores
+    whatever ``sys.modules`` held before.
+    """
+    from livery.footman import registry
+
+    monkeypatch.delitem(sys.modules, "livery.forge._dev", raising=False)
+    with registry.capture():
+        module = importlib.import_module("livery.forge._dev")
+    yield module
+    sys.modules.pop("livery.forge._dev", None)
+
+
+def _compose_recorder(
+    monkeypatch: pytest.MonkeyPatch, dev: ModuleType
+) -> list[tuple[str, ...]]:
+    calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(dev, "_compose", lambda *args, **kwargs: calls.append(args))
+    return calls
+
+
+def test_a_profile_outside_the_forges_is_refused_by_name(dev: ModuleType) -> None:
+    # The refusal first: a word that names no forge dies naming the
+    # three accepted ones, and touches no container.
+    with pytest.raises(_FAILURES, match="unknown profile github"):
+        dev._forges("github")
+    assert dev._forges("all") == ("gitea", "gitlab")
+    assert dev._forges("gitlab") == ("gitlab",)
+
+
+def test_down_stops_one_forge_alone_and_wipes_only_its_volumes(
+    dev: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # One forge: its services stop and are removed by name, since a
+    # compose down would take the whole project; the shared env file
+    # stays, because it carries the other forge's credentials too.
+    calls = _compose_recorder(monkeypatch, dev)
+    env = tmp_path / ".repo.shared.env"
+    env.write_text("GITEA_TOKEN=x\n")
+    monkeypatch.setattr(dev, "_dev_env_path", lambda: env)
+    dev.dev_down(profile="gitlab", wipe=True)
+    profiles = ("--profile", "gitlab", "--profile", "gitlab-runner")
+    assert calls == [
+        (*profiles, "stop", "gitlab", "gitlab-runner"),
+        (*profiles, "rm", "-f", "-v", "gitlab", "gitlab-runner"),
+    ]
+    assert env.exists()
+    assert "gitlab: stopped, volumes deleted" in capsys.readouterr().out
+    calls.clear()
+    dev.dev_down(profile="gitea")
+    assert calls[1] == (
+        "--profile",
+        "gitea",
+        "--profile",
+        "gitea-runner",
+        "rm",
+        "-f",
+        "gitea",
+        "act_runner",
+    )
+
+
+def test_down_of_every_forge_is_one_compose_down_and_a_wipe_drops_the_env(
+    dev: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls = _compose_recorder(monkeypatch, dev)
+    env = tmp_path / ".repo.shared.env"
+    env.write_text("GITEA_TOKEN=x\n")
+    monkeypatch.setattr(dev, "_dev_env_path", lambda: env)
+    dev.dev_down()
+    every = (
+        "--profile",
+        "gitea",
+        "--profile",
+        "gitea-runner",
+        "--profile",
+        "gitlab",
+        "--profile",
+        "gitlab-runner",
+    )
+    assert calls == [(*every, "down")]
+    assert env.exists()
+    calls.clear()
+    dev.dev_down(wipe=True)
+    assert calls == [(*every, "down", "--volumes")]
+    assert not env.exists()
+
+
+def test_restart_restarts_each_forges_runner_and_names_it(
+    dev: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    calls = _compose_recorder(monkeypatch, dev)
+    dev.dev_restart()
+    assert calls == [
+        ("--profile", "gitea", "--profile", "gitea-runner", "restart", "act_runner"),
+        (
+            "--profile",
+            "gitlab",
+            "--profile",
+            "gitlab-runner",
+            "restart",
+            "gitlab-runner",
+        ),
+    ]
+    out = capsys.readouterr().out
+    assert "gitea: runner act_runner restarted" in out
+    assert "gitlab: runner gitlab-runner restarted" in out

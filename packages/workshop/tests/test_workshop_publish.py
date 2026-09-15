@@ -225,6 +225,50 @@ def test_an_empty_publish_token_variable_never_reaches_uv(
     assert args[args.index("--token") + 1] == "given"
 
 
+def test_every_index_wording_of_a_duplicate_upload_is_walked_past(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The fallback first: a re-run must walk past what an earlier
+    # attempt landed, and each index refuses the duplicate in its own
+    # words. Gitea says the version already exists, GitLab's registry
+    # says the file name has already been taken; any other refusal
+    # surfaces verbatim.
+    from types import SimpleNamespace
+
+    from livery.toolroom import tools
+    from livery.workshop._publish import publish_wheels
+
+    package = Package(
+        directory=tmp_path,
+        path="packages/thing",
+        name="thing",
+        type="python",
+        depends=(),
+    )
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "dist" / "thing-0.1.0-py3-none-any.whl").write_bytes(b"")
+    refusal = {"text": ""}
+
+    def _opts(**kwargs: object) -> object:
+        def _run(*args: str) -> object:
+            return SimpleNamespace(code=2, stdout="", stderr=refusal["text"])
+
+        return _run
+
+    monkeypatch.setattr(tools, "uv", SimpleNamespace(opts=_opts))
+    refusal["text"] = (
+        'Server returned status code 400 Bad Request. Server says: {"message":'
+        '"400 Bad request - Validation failed: File name has already been taken"}'
+    )
+    assert publish_wheels(package, index_url="https://index.test/upload") is False
+    refusal["text"] = "409 Conflict: package version already exists"
+    assert publish_wheels(package, index_url="https://index.test/upload") is False
+    refusal["text"] = "403 Forbidden: bad credentials"
+    with pytest.raises(_FAILURES) as caught:
+        publish_wheels(package, index_url="https://index.test/upload")
+    assert "bad credentials" in str(caught.value)
+
+
 def test_a_garbled_manifest_falls_back_to_the_diff() -> None:
     # The fallback first: unreadable content answers None and the
     # caller keeps the diff-derived discovery for legacy squashes.

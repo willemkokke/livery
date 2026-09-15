@@ -909,6 +909,11 @@ class _FakePullRequests:
         pr = self._fake._require_pr(state, number)
         return number in state.armed and pr.state == "open"
 
+    def merge_hold(self, number: int) -> str:
+        """Empty: the fake speaks Gitea's words, which carry the hold in prose."""
+        self._fake._require_pr(self._state(), number)
+        return ""
+
     def reviews(self, number: int) -> tuple[Review, ...]:
         """The submitted reviews on pull request *number*."""
         return tuple(self._fake._require_pr(self._state(), number).reviews)

@@ -252,6 +252,34 @@ def ci_cancel(
 _GREEN = ("success", "skipped", "neutral")
 
 
+def cancel_superseded_runs(repo: Repository, sha: str) -> list[str]:
+    """Cancel the runs still moving for *sha*, a commit a newer push has superseded.
+
+    A push that moves a branch's head leaves the old head's runs
+    running with nothing left to read them, and on a shared runner
+    they delay the new head's. The cancel is best effort: a run the
+    forge refuses to cancel (already terminal, cancelling) is named
+    and left. Returns one line per run touched.
+    """
+    lines: list[str] = []
+    try:
+        runs = repo.checks.runs(head_sha=sha)
+    except ForgeError as error:
+        return [f"  superseded runs for {sha[:12]}: not read ({error})"]
+    for run in runs:
+        if run.status == "completed":
+            continue
+        try:
+            repo.checks.cancel_run(run.id)
+        except ForgeError as error:
+            lines.append(
+                f"  superseded run {run.id} for {sha[:12]}: not cancelled ({error})"
+            )
+            continue
+        lines.append(f"  superseded run {run.id} for {sha[:12]}: cancelled")
+    return lines
+
+
 def point_runs(
     repo: Repository, point: str, root: Path | None = None
 ) -> tuple[Run, ...]:

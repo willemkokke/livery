@@ -781,6 +781,12 @@ class _GiteaPullRequests:
         )
         return result is not None
 
+    def merge_hold(self, number: int) -> str:
+        """Empty: Gitea publishes no mergeability state, the refusal's prose does."""
+        if self.get(number) is None:
+            raise ForgeError(f"no pull request {number} at {self._base}", status=404)
+        return ""
+
     def is_armed(self, number: int) -> bool:
         """Whether a merge is scheduled, read from the issue timeline.
 

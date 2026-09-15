@@ -17,6 +17,7 @@ nav = [
         { "forge" = [
             { "Overview" = "_generated/tasks/forge/index.md" },
             { "dev.down" = "_generated/tasks/forge/dev/down.md" },
+            { "dev.restart" = "_generated/tasks/forge/dev/restart.md" },
             { "dev.seed" = "_generated/tasks/forge/dev/seed.md" },
             { "dev.up" = "_generated/tasks/forge/dev/up.md" },
             { "fixtures.record" = "_generated/tasks/forge/fixtures/record.md" },

@@ -180,6 +180,18 @@ class PullRequests(Protocol):
         """
         ...
 
+    def merge_hold(self, number: int) -> str:
+        """The forge's published mergeability state of *number*, verbatim.
+
+        GitLab's ``detailed_merge_status`` and GitHub's
+        ``mergeable_state``; empty on a forge that publishes none
+        (Gitea says why in the merge refusal's prose instead).
+        [livery.forge.classify_merge_refusal][] reads it to classify a
+        refusal on those forges. Raises livery.forge.ForgeError with
+        status 404 when the pull request does not exist.
+        """
+        ...
+
     def reviews(self, number: int) -> tuple[Review, ...]:
         """The submitted reviews on pull request *number*.
 
@@ -695,10 +707,13 @@ class Forge(Protocol):
     ) -> Repository:
         """Create the repository and return its view.
 
-        The repository is initialised with a default branch. Raises
-        livery.forge.ForgeError when it already exists; ensure-exists
-        callers probe with livery.forge.Forge.get_repo first. On
-        GitLab, *owner* may be a group path.
+        The repository is initialised with a default branch that
+        carries no protection: the creator may push its own history
+        over the initial commit, and protection starts when the caller
+        configures it. Raises livery.forge.ForgeError when it already
+        exists; ensure-exists callers probe with
+        livery.forge.Forge.get_repo first. On GitLab, *owner* may be a
+        group path.
         """
         ...
 

@@ -284,16 +284,20 @@ def classify_merge_refusal(
     combined: CombinedStatus,
     item_state: ItemState,
     merged: bool,
+    hold: str = "",
 ) -> MergeState:
     """Classify a merge-endpoint refusal by the forge *kind*.
 
     The identity states resolve first on every forge: a merged pull
     request is success whatever the words, a closed one terminal.
     Gitea's prose classifier handles ``gitea`` and the empty kind
-    (the fake speaks Gitea's words). GitHub and GitLab classify from
-    their published state fields on the read path instead, wired
-    when their lanes are; a merge-endpoint refusal from them raises
-    as unmapped rather than being guessed at.
+    (the fake speaks Gitea's words). GitLab and GitHub classify
+    *hold*, their published state field read after the refusal
+    through [livery.forge.PullRequests.merge_hold][]; a refusal
+    while that field already reads as the go (``mergeable``,
+    ``clean``) is the recompute the refusal raced, and follows
+    through as ``computing``. An empty *hold* on those forges is
+    unmapped: nothing waits on a state the forge did not publish.
     """
     if merged:
         return merge_state("merged", native)
@@ -302,5 +306,23 @@ def classify_merge_refusal(
     if kind in ("gitea", ""):
         return classify_gitea_merge_refusal(
             native, combined=combined, item_state=item_state, merged=merged
+        )
+    if kind == "gitlab" and hold:
+        if hold == "mergeable":
+            return merge_state("computing", native)
+        classified = classify_gitlab_detailed_status(
+            hold, item_state=item_state, merged=merged
+        )
+        return MergeState(
+            classified.state, classified.category, classified.message, native
+        )
+    if kind == "github" and hold:
+        if hold == "clean":
+            return merge_state("computing", native)
+        classified = classify_github_mergeable_state(
+            hold, item_state=item_state, merged=merged
+        )
+        return MergeState(
+            classified.state, classified.category, classified.message, native
         )
     raise _unmapped(kind, native)

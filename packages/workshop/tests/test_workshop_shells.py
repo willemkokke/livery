@@ -423,6 +423,39 @@ def test_ci_dispatch_refuses_the_merge_and_release_points_and_starts_the_gate(
     assert "green: 1 run(s) for the gate point" in capsys.readouterr().out
 
 
+def test_superseded_runs_are_cancelled_and_a_refusal_is_named(
+    rig: tuple[FakeForge, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.forge import ForgeError
+
+    fake, _root = rig
+    repo = fake.repository(OWNER, NAME)
+    # Nothing to read for a commit the forge never ran: one line, no raise.
+    assert _ci_tasks.cancel_superseded_runs(repo, "0" * 40) == []
+    old = fake.push(OWNER, NAME, "feat/1-thing")
+    new = fake.push(OWNER, NAME, "feat/1-thing")
+    fake.settle(OWNER, NAME, new)
+    lines = _ci_tasks.cancel_superseded_runs(repo, old)
+    (run,) = repo.checks.runs(head_sha=old)
+    assert lines == [f"  superseded run {run.id} for {old[:12]}: cancelled"]
+    assert (
+        run.status == "completed"
+        or repo.checks.runs(head_sha=old)[0].conclusion == "cancelled"
+    )
+    # A completed run is left alone; a refusal is named, never raised.
+    assert _ci_tasks.cancel_superseded_runs(repo, new) == []
+    third = fake.push(OWNER, NAME, "feat/1-thing")
+
+    def refuse(run_id: int, *, force: bool = False) -> None:
+        raise ForgeError("nope", status=409)
+
+    monkeypatch.setattr(repo.checks, "cancel_run", refuse)
+    (moving,) = repo.checks.runs(head_sha=third)
+    assert _ci_tasks.cancel_superseded_runs(repo, third) == [
+        f"  superseded run {moving.id} for {third[:12]}: not cancelled (nope)"
+    ]
+
+
 def test_ci_verdict_outside_ci_and_inside(
     rig: tuple[FakeForge, Path],
     monkeypatch: pytest.MonkeyPatch,

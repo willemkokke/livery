@@ -161,3 +161,44 @@ def test_a_named_user_rides_in_the_basic_credential(
     ).versions("livery-forge")
     credential = base64.b64encode(b"livery-admin:t").decode()
     assert requests[0].get_header("Authorization") == f"Basic {credential}"
+
+
+def test_the_gitlab_purge_lists_by_project_and_deletes_by_id() -> None:
+    from livery.forge._registry import purge_gitlab_packages
+
+    calls: list[tuple[str, str]] = []
+
+    def api(method: str, url: str, token: str) -> tuple[int, object]:
+        calls.append((method, url))
+        if method == "GET":
+            return 200, [
+                {"id": 1, "name": "acme-echo", "version": "0.1.0"},
+                {"id": 2, "name": "acme_native", "version": "0.1.0"},
+            ]
+        return 204, None
+
+    # Names narrow the purge, compared as the index compares them.
+    deleted = purge_gitlab_packages(
+        "http://gitlab", "livery/ci-e2e-loop", token="t", names=["acme-native"], api=api
+    )
+    assert deleted == ["acme_native==0.1.0"]
+    assert calls[0][0] == "GET"
+    assert "/projects/livery%2Fci-e2e-loop/packages?package_type=pypi" in calls[0][1]
+    assert calls[1] == (
+        "DELETE",
+        "http://gitlab/api/v4/projects/livery%2Fci-e2e-loop/packages/2",
+    )
+    # Every package without names; a listing the forge refuses deletes nothing.
+    calls.clear()
+    assert purge_gitlab_packages(
+        "http://gitlab", "livery/ci-e2e-loop", token="t", api=api
+    ) == [
+        "acme-echo==0.1.0",
+        "acme_native==0.1.0",
+    ]
+    assert (
+        purge_gitlab_packages(
+            "http://gitlab", "p", token="t", api=lambda m, u, t: (403, "no")
+        )
+        == []
+    )
