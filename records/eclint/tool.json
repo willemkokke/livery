@@ -11,8 +11,18 @@
     "windows-x64"
   ],
   "layout": {
+    "entry_points": [
+      "eclint"
+    ],
     "paths": [
       "."
     ]
+  },
+  "host_layouts": {
+    "windows-x64": {
+      "entry_points": [
+        "eclint.exe"
+      ]
+    }
   }
 }

@@ -20,6 +20,12 @@
         "exe": {
           "type": "string"
         },
+        "entry_points": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "paths": {
           "type": "array",
           "items": {

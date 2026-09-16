@@ -11,6 +11,9 @@
     "windows-x64"
   ],
   "layout": {
+    "entry_points": [
+      "prek"
+    ],
     "paths": [
       "."
     ]
@@ -27,6 +30,11 @@
     },
     "linux-arm": {
       "root": "prek-aarch64-unknown-linux-gnu"
+    },
+    "windows-x64": {
+      "entry_points": [
+        "prek.exe"
+      ]
     }
   }
 }

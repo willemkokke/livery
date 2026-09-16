@@ -64,7 +64,7 @@ DELTAS_DIR = "deltas"
 _SHA256 = re.compile(r"^[a-f0-9]{64}$")
 _DELTA_NAME = re.compile(r"^(?P<sequence>\d{4})-(?P<version>.+)\.json$")
 
-LAYOUT_KEYS = ("root", "exe", "paths", "env", "shims", "exclude")
+LAYOUT_KEYS = ("root", "exe", "entry_points", "paths", "env", "shims", "exclude")
 """The layout fields an override may set, in the record's key order."""
 
 _TOOL_KEYS = (
@@ -121,16 +121,22 @@ class Layout:
         root: The directory inside the archive to hoist to the install
             root; empty keeps the archive's own top.
         exe: The executable's name for a `binary` download.
+        entry_points: Install-relative paths of the executables the
+            deployment puts on PATH, annotated here and never
+            discovered: they are what a bin directory links and what
+            the collected tree marks executable on every platform.
         paths: Install-relative directories to put on PATH.
         env: Environment variables to set; a value may carry
             `PACKAGE_VAR`, the install root.
         shims: Link name to an executable the install carries, such as
             `node` to `bun`.
-        exclude: Patterns of archive members left out before import.
+        exclude: Patterns of archive members left out before import,
+            install-relative and forward-slashed, `fnmatch` style.
     """
 
     root: str | None = None
     exe: str | None = None
+    entry_points: tuple[str, ...] | None = None
     paths: tuple[str, ...] | None = None
     env: Mapping[str, str] | None = None
     shims: Mapping[str, str] | None = None
@@ -161,6 +167,9 @@ class Layout:
         return cls(
             _text(data["root"], where=f"{where} root") if "root" in data else None,
             _text(data["exe"], where=f"{where} exe") if "exe" in data else None,
+            _texts(data["entry_points"], where=f"{where} entry_points")
+            if "entry_points" in data
+            else None,
             _texts(data["paths"], where=f"{where} paths") if "paths" in data else None,
             _mapping(data["env"], where=f"{where} env") if "env" in data else None,
             _mapping(data["shims"], where=f"{where} shims")
@@ -233,6 +242,8 @@ class Deployment:
         sha256: The artifact's sha256.
         root: See [livery.toolroom.store.Layout][].
         exe: See [livery.toolroom.store.Layout][].
+        entry_points: See [livery.toolroom.store.Layout][]; never empty
+            for a kind the store downloads.
         paths: See [livery.toolroom.store.Layout][]; never empty.
         env: See [livery.toolroom.store.Layout][].
         shims: See [livery.toolroom.store.Layout][].
@@ -243,6 +254,7 @@ class Deployment:
     sha256: str
     root: str
     exe: str
+    entry_points: tuple[str, ...]
     paths: tuple[str, ...]
     env: dict[str, str]
     shims: dict[str, str]
@@ -253,6 +265,7 @@ class Deployment:
 _BUILTIN: dict[str, Any] = {
     "root": "",
     "exe": "",
+    "entry_points": (),
     "paths": (),
     "env": {},
     "shims": {},
@@ -570,6 +583,7 @@ def resolve(record: Record, version: str, host: str) -> Deployment:
         artifact.sha256,
         str(values["root"]),
         str(values["exe"]),
+        tuple(values["entry_points"]),
         tuple(values["paths"]),
         dict(values["env"]),
         dict(values["shims"]),
@@ -656,6 +670,10 @@ def _incomplete(record: Record, values: Mapping[str, Any]) -> str:
         return "paths is empty"
     if record.kind == "binary" and not values["exe"]:
         return "a binary names no exe"
+    if record.kind in DOWNLOAD_KINDS and not values["entry_points"]:
+        return "no entry point is declared"
+    if record.kind == "binary" and values["exe"] not in values["entry_points"]:
+        return f"the binary's exe {values['exe']!r} is not among its entry points"
     return ""
 
 
@@ -693,6 +711,7 @@ def schema() -> dict[str, Any]:
         "properties": {
             "root": {"type": "string"},
             "exe": {"type": "string"},
+            "entry_points": {"type": "array", "items": {"type": "string"}},
             "paths": {"type": "array", "items": {"type": "string"}},
             "env": {"type": "object", "additionalProperties": {"type": "string"}},
             "shims": {"type": "object", "additionalProperties": {"type": "string"}},
