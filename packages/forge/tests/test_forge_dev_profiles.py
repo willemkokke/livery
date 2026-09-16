@@ -152,3 +152,78 @@ def test_the_docker_overlay_rides_only_with_the_flag(dev: ModuleType) -> None:
     assert armed[4].endswith("compose.docker.yaml")
     assert armed[5:] == ["ps"]
     assert dev._docker_overlay().is_file()
+
+
+def test_conformance_replays_by_default_and_probes_the_forges_when_live(
+    dev: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The refusals first: an unknown backend, then a live run whose
+    # local forge is not up, refused by name before any suite starts.
+    # Then the shapes: replay carries no switch, live carries
+    # FORGE_LIVE and leaves the cassettes alone, and the recorder's
+    # switch is FORGE_RECORD; GitHub's suite names the e2e owner.
+    from types import SimpleNamespace
+    from typing import cast
+
+    from livery.toolroom import tools
+
+    runs: list[tuple[tuple[str, ...], dict[str, str]]] = []
+
+    def _opts(**kwargs: object) -> object:
+        def _run(*args: str) -> None:
+            runs.append((args, dict(cast("dict[str, str]", kwargs["env"]))))
+
+        return _run
+
+    monkeypatch.setattr(tools, "pytest", SimpleNamespace(opts=_opts))
+    with pytest.raises(_FAILURES, match="unknown backend 'bitbucket'"):
+        dev._run_suites("", "bitbucket", {}, live=False)
+    up: set[str] = set()
+
+    def _probe(kind: str) -> None:
+        if kind not in up:
+            dev.fail(f"the local {kind} is not up")
+
+    monkeypatch.setattr(dev, "_require_forge_up", _probe)
+    with pytest.raises(_FAILURES, match="the local gitea is not up"):
+        dev._run_suites("", "", {"FORGE_LIVE": "1"}, live=True)
+    assert runs == []
+    dev._run_suites("branches", "gitea", {}, live=False)
+    assert Path(runs[-1][0][0]).name == "test_gitea_conformance.py"
+    assert runs[-1][0][1:] == ("-k", "branches")
+    assert "FORGE_LIVE" not in runs[-1][1] and "FORGE_RECORD" not in runs[-1][1]
+    up.update({"gitea", "gitlab"})
+    runs.clear()
+    dev._run_suites("", "", {"FORGE_LIVE": "1"}, live=True)
+    assert [Path(args[0]).name for args, _ in runs] == [
+        "test_gitea_conformance.py",
+        "test_gitlab_conformance.py",
+        "test_github_conformance.py",
+    ]
+    assert all(env["FORGE_LIVE"] == "1" for _, env in runs)
+    assert runs[1][0][1:3] == ("-n", "4")
+    assert runs[2][1]["FORGE_E2E_OWNER"] == "livery-forge-e2e"
+    runs.clear()
+    dev._run_suites("", "gitea", {"FORGE_RECORD": "1"}, live=True)
+    assert runs[-1][1]["FORGE_RECORD"] == "1"
+
+
+def test_the_forge_probe_reads_a_refusal_as_up_and_a_dead_port_as_down(
+    dev: ModuleType, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import urllib.error
+    import urllib.request
+    from email.message import Message
+
+    def refuse(*args: object, **kwargs: object) -> object:
+        raise urllib.error.HTTPError("http://x", 401, "Unauthorized", Message(), None)
+
+    monkeypatch.setattr(urllib.request, "urlopen", refuse)
+    dev._require_forge_up("gitlab")
+
+    def dead(*args: object, **kwargs: object) -> object:
+        raise urllib.error.URLError("connection refused")
+
+    monkeypatch.setattr(urllib.request, "urlopen", dead)
+    with pytest.raises(_FAILURES, match=r"forge\.dev\.up --profile=gitea"):
+        dev._require_forge_up("gitea")
