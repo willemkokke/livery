@@ -4,8 +4,10 @@ Status: ruled 2026-09-14. Phase 1 landed 2026-09-15 (livery#584), phase 2
 landed 2026-09-15 (livery#587), phase 3 landed 2026-09-15 (livery#589) with
 one acceptance item open, phase 4 landed 2026-09-15 (livery#593) with one
 acceptance item open, phase 5 landed 2026-09-15 (livery#595). The plan is
-complete but for one open line, the GitHub wave; the live GitLab line
-closed 2026-09-15 with the GitLab lane of the loop. Runs
+complete: the live GitLab line closed 2026-09-15 with the GitLab lane of
+the loop, and the GitHub wave line closed 2026-09-16 with the first
+release, which also found the dispatch job's missing grant
+(livery#616). Runs
 before [the tool record and its index][record-plan], whose phase 8 declares
 a point through the mechanism phase 5 here delivers; that plan carries no
 other CI work.
@@ -383,9 +385,14 @@ Landed 2026-09-15 as livery#593. Evidence:
   ci-e2e-loop-loop-native 0.1.0 served, receipts packages/loop-echo/v0.1.0,
   packages/loop-native/v0.1.0 cut`, then the nightly (run 1638) and the
   gate (run 1639) by hand, ending `the loop is whole`.
-- Open: the GitHub wave rendered from the declaration is proven by the
-  first release after this lands, read through
-  `uv run fm ci.status --point=release`.
+- Closed 2026-09-16 by the first release after the plan landed, forge
+  v0.4.0 and workshop v0.3.0 (pull request #614): the rendered wave, run
+  35054898123 at the squash, read green through
+  `uv run fm ci.status --point=release`, PyPI serves both versions and
+  both receipts are annotated tags on origin. The wave was dispatched by
+  hand: main's dispatch job had no `actions: write` grant, the forge
+  answered 403, and the verb printed the refusal as a green line
+  (livery#616 gives the job the grant and makes the refusal red).
 
 Deliverables:
 

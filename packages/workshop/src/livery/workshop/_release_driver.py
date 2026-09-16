@@ -729,9 +729,15 @@ def dispatch_flow(
     try:
         repo.checks.dispatch(RELEASE_WORKFLOW, ref=base, inputs=inputs)
     except ForgeError as error:
-        return [
-            f"  the forge refused the dispatch: {error}; uncut: {', '.join(missing)}"
-        ]
+        # Red, never a printed line: the merge point's verdict is the
+        # exit code, and a wave that did not start leaves the release
+        # uncut until someone reads the log.
+        fail(
+            f"the forge refused the dispatch: {error}; uncut:"
+            f" {', '.join(missing)}. Nothing started; on GitHub the job"
+            " needs the actions: write grant, and the recovery by hand"
+            f" is `{footman.prog()} workflow.release.dispatch`"
+        )
     import time
 
     deadline = time.monotonic() + timeout

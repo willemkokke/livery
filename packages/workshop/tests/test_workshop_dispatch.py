@@ -16,6 +16,8 @@ from livery.workshop._publish import MANIFEST
 from livery.workshop._release_driver import await_wave, dispatch_flow
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
 
+_FAILURES = (SystemExit, Failed)
+
 OWNER, NAME = "owner", "repo"
 
 
@@ -110,11 +112,13 @@ def test_a_refused_dispatch_names_the_reason(
         raise ForgeError("dispatch needs actions: write", status=403)
 
     monkeypatch.setattr(repo.checks, "dispatch", refuse)
-    (line,) = dispatch_flow(root, repo, git)
-    assert line.startswith(
-        "  the forge refused the dispatch: dispatch needs actions: write"
-    )
-    assert "uncut: packages/thing/v1.2.0" in line
+    # Red, never a printed line: the run's verdict is the exit code.
+    with pytest.raises(_FAILURES) as caught:
+        list(dispatch_flow(root, repo, git))
+    message = str(caught.value)
+    assert "the forge refused the dispatch: dispatch needs actions: write" in message
+    assert "uncut: packages/thing/v1.2.0" in message
+    assert "workflow.release.dispatch" in message
 
 
 def test_an_accepted_dispatch_without_a_run_times_out_naming_the_rerun(
