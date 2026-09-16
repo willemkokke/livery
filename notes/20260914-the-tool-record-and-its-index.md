@@ -1,7 +1,7 @@
 # The tool record and its index
 
-Status: ruled 2026-09-16 as drafted. Phases 1 and 2 landed 2026-09-16
-(livery#620, livery#622); phase 3 in progress (livery#625).
+Status: ruled 2026-09-16 as drafted. Phases 1 to 3 landed 2026-09-16
+(livery#620, livery#622, livery#625); phase 4 in progress (livery#627).
 Runs after [CI declared, contributed, and dispatched on command][ci-plan],
 which delivers the mechanism this plan's last phase uses.
 Subsumes phase 2 onward of [the tool store over strongroom][store-plan],
@@ -662,6 +662,39 @@ Acceptance:
   exited 1 on main, since the formatter's raw spawn was a note the
   runner refuses; the spawn now hands over its directory and
   environment on purpose.
+- 2026-09-16, the agent, at phase 4, the index's shape: one strongroom
+  store at the index root, its layout served as it is, and
+  `pointer.json` beside it naming per tool the current tree and the
+  digest of the record it was built from, so a build can tell a moved
+  record from one that stood. Per tool one tree: `tool` for the axis,
+  and per version `observation` (help, platforms, extractor, absences,
+  date), `hosts/<host>` with the resolved deployment, and
+  `surface/<verb>` one blob per verb with the tool's own options under
+  `_`, a name a verb may not take. A version read but never installed
+  has no hosts; one installed but never read has no observation and no
+  surface. The stubs, the renderer's version in the pointer and the
+  derived tree are phase 5's.
+- 2026-09-16, the agent, at phase 4, the snapshot: the last published
+  state a build reads is the pointer at the directory it builds into,
+  and a tool is reused when the pointer's record digest matches and the
+  store still names its tree; `--from-genesis` ignores the pointer. The
+  Pages job is the site's own deploy: the bench declares
+  `tools.index.build` as a docs generator, the site's build writes the
+  index under `docs/_generated/index`, gitignored and rebuilt like every
+  generated tree, and the deploy serves it under the site's URL. A
+  fresh checkout holds no pointer, so a CI build is a build from
+  genesis; the reuse pays off where a directory persists, and the
+  acceptance proves both forms land the same objects. Refs in the
+  published store carry the build's own clock in their records and are
+  not part of the equality the acceptance names; the objects and the
+  pointer are.
+- 2026-09-16, the agent, at phase 4, the acceptance as met: two builds
+  from genesis on the 31 records landed 1803 objects each, equal as
+  sets, with byte-equal pointers, 16 MB on disk; a third build into the
+  first directory reused all 31; one new delta on a fixture record wrote
+  exactly the objects its new tree reaches beyond the old one, proven in
+  the bench's tests; `fm docs.build` ran the generator and the site
+  carries `_generated/index/pointer.json`; `fm check` exits 0.
 - 2026-09-16, the agent, at phase 1: the records live at this
   repository's root, `records/<tool>/`, the authoring site the design
   names; the schema beside them is one document with `Tool` and `Delta`

@@ -36,7 +36,7 @@ from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 
-from livery.toolroom.bench import _drivers, _stubgen, _surfaces, _toolspec
+from livery.toolroom.bench import _drivers, _index, _stubgen, _surfaces, _toolspec
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -2356,6 +2356,48 @@ def _discard(bindir: Path) -> None:
     import shutil
 
     shutil.rmtree(bindir.parent, ignore_errors=True)
+
+
+index_tasks = tasks.group("index", help="The published index of the tool records")
+
+
+@index_tasks.task(name="build")
+def index_build(
+    into: Annotated[
+        str, doc("the index root; omitted = docs/_generated/index in the workspace")
+    ] = "",
+    from_genesis: Annotated[
+        bool, doc("ignore the build already there and materialise every tool")
+    ] = False,
+) -> _index.Built:
+    """Materialise every record into the index: a strongroom store and its pointer.
+
+    The index is a strongroom store served as static files, one tree per
+    tool holding the tool axis, each version's deployment per host and
+    its surface one blob per verb, and beside it `pointer.json` naming
+    each tool's current tree. A build into a directory that already
+    holds one reads its pointer and reuses every tool whose record did
+    not move; `--from-genesis` ignores the pointer and rebuilds every
+    tool, and two builds from genesis land the same objects and the same
+    pointer.
+
+    Declared as a docs generator, so the site's build writes the index
+    under `docs/_generated/index` and the site's deploy serves it.
+    """
+    target = (
+        Path(into).expanduser().resolve()
+        if into
+        else _records_dir().parent / "docs" / "_generated" / "index"
+    )
+    built = _index.build(_records_dir(), target, from_genesis=from_genesis)
+    for name in built.rebuilt:
+        print(f"built {name} {built.tools[name]}")
+    if built.reused:
+        print(f"reused {len(built.reused)}: {', '.join(built.reused)}")
+    if built.dropped:
+        print(f"dropped: {', '.join(built.dropped)}")
+    print(f"pointer: {target / _index.POINTER} ({len(built.tools)} tools)")
+    return built
 
 
 @tasks.task

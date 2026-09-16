@@ -22,6 +22,11 @@ path = "packages/toolroom-store"
 kind = "runtime"
 floor = "0.1.0"
 
+[docs]
+# The index of the tool records, built into docs/_generated/index and
+# served by the site's deploy as static files.
+generators = ["tools.index.build"]
+
 [qa]
 # The coverage high-water mark the gate enforces; raise it as the
 # suite grows, lower it only deliberately.
