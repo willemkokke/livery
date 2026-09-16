@@ -277,7 +277,6 @@ nav = [
             { "livery.toolroom.store._engine" = "_generated/api/toolroom-store/_engine.md" },
             { "livery.toolroom.store._home" = "_generated/api/toolroom-store/_home.md" },
             { "livery.toolroom.store._record" = "_generated/api/toolroom-store/_record.md" },
-            { "livery.toolroom.store._spec" = "_generated/api/toolroom-store/_spec.md" },
         ] },
     ] },
     { "workshop" = [
