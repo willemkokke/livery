@@ -78,7 +78,7 @@ def test_a_declared_entry_point_the_tree_lacks_is_refused_naming_it_whole(
     tmp_path: Path, origin: dict[str, bytes]
 ) -> None:
     data = _archive("tool")
-    record = _record("tool", data, entry_points=("bin/tool", "bin/missing"))
+    record = _record("tool", data, entry_points=(f"bin/tool{EXE}", "bin/missing"))
     origin["https://origin.test/tool.zip"] = data
     store = Store(Home(tmp_path / "home"), host=HOST)
     with pytest.raises(StoreError) as caught:

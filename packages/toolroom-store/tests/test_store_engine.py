@@ -338,7 +338,7 @@ def test_a_tar_archive_and_a_binary_install_too(
     spec = Record(
         "tarred",
         hosts=(HOST,),
-        layout=Layout(entry_points=(f"tool{EXE}",), paths=(".",)),
+        layout=Layout(entry_points=("tool",), paths=(".",)),
         deltas=(RecordDelta(1, "1.0.0", "", {HOST: Artifact(url, sha(tar))}),),
     )
     origin[url] = tar
