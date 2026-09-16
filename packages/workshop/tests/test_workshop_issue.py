@@ -17,6 +17,7 @@ from livery.workshop._issue_tasks import (
     issue_close,
     issue_create,
     issue_reopen,
+    issue_show,
     issue_stop,
     parse_ref,
     start,
@@ -70,6 +71,37 @@ def rig(
     monkeypatch.setattr("livery.footman.data_dir", lambda: tmp_path / "home")
     monkeypatch.chdir(root)
     return root, fake, git
+
+
+def test_show_refuses_a_title_and_a_missing_number_then_prints_the_issue_whole(
+    rig: tuple[Path, FakeForge, GitOps], capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The refusals first: a title is not a number, and a number the
+    # forge has no issue for dies naming it. Then the whole issue: the
+    # header, the branch's open pull request, the body and the thread.
+    root, fake, git = rig
+    with pytest.raises(_FAILURES, match="not one"):
+        issue_show("a title")
+    with pytest.raises(_FAILURES, match="no issue #41"):
+        issue_show("41")
+    repo = fake.repository("willemkokke", "livery")
+    made = repo.issue.create("the work", body="the order\n\nin two paragraphs")
+    repo.issue.assign(made.number, "fake-user")
+    repo.issue.comment(made.number, "the first reply")
+    branch = branch_name("feat", made.number, "the work")
+    git.create_branch(branch)
+    (root / "w.txt").write_text("w\n")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "feat: w")
+    _git(root, "push", "-u", "origin", branch)
+    fake.push("willemkokke", "livery", branch)
+    repo.pr.open(branch, "main", "feat: the work", "")
+    issue_show(f"#{made.number}")
+    out = capsys.readouterr().out
+    assert f"#{made.number}  the work  (fake-user)" in out
+    assert "open PR #1 on " + branch in out
+    assert "the order\n\nin two paragraphs" in out
+    assert "--- " in out and "the first reply" in out
 
 
 def test_ref_parsing_and_branch_grammar() -> None:

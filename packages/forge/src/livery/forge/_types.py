@@ -417,6 +417,23 @@ class Review:
 
 
 @dataclass(frozen=True)
+class Comment:
+    """One comment on an issue's thread.
+
+    Attributes:
+        author: The login of who wrote it, the same namespace as
+            livery.forge.Forge.whoami.
+        created_at: When it was posted, as the forge reports it;
+            empty when the forge does not say.
+        body: The comment text, in full.
+    """
+
+    author: str
+    created_at: str
+    body: str
+
+
+@dataclass(frozen=True)
 class CodeownersEntry:
     """One neutral ownership declaration a codeowners file expresses.
 

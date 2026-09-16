@@ -150,6 +150,7 @@ the waiting caller.
 | `unassign(number)` | removes only the authenticated user; not being assigned is a no-op |
 | `assigned_to_me()` | the open issues assigned to the token's user |
 | `comment(number, body)` | evidence the body cannot carry |
+| `comments(number)` | the thread back, oldest first: each comment's author, time and body; a forge's own system notes are left out |
 | `close(number)` | closes; closing a closed issue is a no-op, so re-running is the recovery |
 
 ### `Registry`: one method, apart from the forge

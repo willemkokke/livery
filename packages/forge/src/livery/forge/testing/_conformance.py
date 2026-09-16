@@ -911,12 +911,23 @@ def _issue_comment(driver: ForgeDriver) -> None:
     repo.issue.comment(issue.number, "evidence the body cannot carry")
     bodies = driver.comment_bodies(repo.owner, repo.name, issue.number, kind="issue")
     assert "evidence the body cannot carry" in bodies
+    # The thread reads back through the protocol: the comment whole,
+    # by the lane's own user, and nothing the forge wrote itself.
+    thread = repo.issue.comments(issue.number)
+    assert [comment.body for comment in thread] == ["evidence the body cannot carry"]
+    assert thread[0].author == driver.forge.whoami()
     try:
         repo.issue.comment(issue.number + 999, "lost")
     except ForgeError:
         pass
     else:
         raise AssertionError("commenting on a missing issue must raise")
+    try:
+        repo.issue.comments(issue.number + 999)
+    except ForgeError:
+        pass
+    else:
+        raise AssertionError("reading a missing issue's thread must raise")
 
 
 def _default_branch(driver: ForgeDriver, repo: Repository) -> str:

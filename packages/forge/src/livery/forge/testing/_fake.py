@@ -36,6 +36,7 @@ from livery.forge._types import (
     Codeowners,
     CodeownersEntry,
     CombinedStatus,
+    Comment,
     Conclusion,
     Issue,
     Job,
@@ -1228,6 +1229,14 @@ class _FakeIssues:
     def comment(self, number: int, body: str) -> None:
         """Post *body* on issue *number*."""
         self._fake._require_issue(self._state(), number).comments.append(body)
+
+    def comments(self, number: int) -> tuple[Comment, ...]:
+        """The issue's comments, oldest first, each by the fake's own user."""
+        bodies = self._fake._require_issue(self._state(), number).comments
+        author = self._fake.whoami()
+        return tuple(
+            Comment(author=author, created_at="", body=body) for body in bodies
+        )
 
     def close(self, number: int) -> None:
         """Close issue *number*; a closed issue stays closed."""

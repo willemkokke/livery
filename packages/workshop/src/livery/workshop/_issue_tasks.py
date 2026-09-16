@@ -166,6 +166,42 @@ def issue_list() -> None:
         print(f"  #{row.number}  {row.title}{holders}")
 
 
+@issue.task(name="show")
+def issue_show(
+    ref: Annotated[Arg[str], ask(), suggest(_open_numbers, strict=False)] = "",
+) -> None:
+    """One issue in full: title, state, who is on it, the body, and its thread.
+
+    The body is the work order and the thread its continuation, so
+    both print verbatim. The pull request on the issue's branch is
+    named when one is open, since that is where the work stands.
+    """
+    root = _workspace()
+    number, _ = parse_ref(ref)
+    if not number:
+        fail(f"issue.show takes an issue number; {ref!r} is not one")
+    repo = _repo(root)
+    found = repo.issue.get(number)
+    if found is None:
+        fail(f"no issue #{number} on the forge")
+    holders = f"  ({', '.join(found.assignees)})" if found.assignees else ""
+    labels = f"  [{', '.join(found.labels)}]" if found.labels else ""
+    print(f"  #{found.number}  {found.title}{holders}{labels}")
+    print(f"  {found.state}  {found.url}".rstrip())
+    branch = _find_branch(GitOps(root), number)
+    pull = repo.pr.find_by_head(branch) if branch else None
+    if pull is not None and pull.state == "open":
+        print(f"  open PR #{pull.number} on {branch}: {pull.title}")
+    if found.body.strip():
+        print()
+        print(found.body.rstrip("\n"))
+    for comment in repo.issue.comments(number):
+        when = f" {comment.created_at}" if comment.created_at else ""
+        print()
+        print(f"  --- {comment.author}{when}")
+        print(comment.body.rstrip("\n"))
+
+
 @issue.task(name="search")
 def issue_search(text: Arg[str] = "") -> None:
     """The open issues whose title or body contains *text*."""

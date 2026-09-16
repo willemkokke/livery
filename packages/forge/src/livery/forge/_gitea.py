@@ -40,6 +40,7 @@ from livery.forge._types import (
     Codeowners,
     CodeownersEntry,
     CombinedStatus,
+    Comment,
     Conclusion,
     Issue,
     ItemState,
@@ -1062,6 +1063,15 @@ def _as_issue(data: Mapping[str, Any]) -> Issue:
     )
 
 
+def _as_comment(row: Mapping[str, Any]) -> Comment:
+    """One comment row, normalised."""
+    return Comment(
+        author=str((row.get("user") or {}).get("login") or ""),
+        created_at=str(row.get("created_at") or ""),
+        body=str(row.get("body") or ""),
+    )
+
+
 class _GiteaIssues:
     """The issue operations of one Gitea repository.
 
@@ -1210,6 +1220,21 @@ class _GiteaIssues:
             method="POST",
             data={"body": body},
         )
+
+    def comments(self, number: int) -> tuple[Comment, ...]:
+        """The issue's comments, oldest first, through Gitea's issue comments API."""
+        if self.get(number) is None:
+            raise ForgeError(f"no issue {number} at {self._base}", status=404)
+        rows = self._client.paginate(
+            lambda page: (
+                self._client.request(
+                    f"{self._base}/issues/{number}/comments?page={page}&limit=50"
+                )
+                or []
+            ),
+            subject=f"{self._base}/issues/{number}/comments",
+        )
+        return tuple(_as_comment(row) for row in rows)
 
     def close(self, number: int) -> None:
         """Close issue *number*; a closed issue stays closed."""

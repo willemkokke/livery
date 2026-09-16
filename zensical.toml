@@ -341,6 +341,7 @@ nav = [
                 { "list" = "_generated/packages/workshop/_generated/tasks/issue/list.md" },
                 { "reopen" = "_generated/packages/workshop/_generated/tasks/issue/reopen.md" },
                 { "search" = "_generated/packages/workshop/_generated/tasks/issue/search.md" },
+                { "show" = "_generated/packages/workshop/_generated/tasks/issue/show.md" },
                 { "stop" = "_generated/packages/workshop/_generated/tasks/issue/stop.md" },
                 { "update" = "_generated/packages/workshop/_generated/tasks/issue/update.md" },
             ] },
