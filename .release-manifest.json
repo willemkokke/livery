@@ -2,19 +2,14 @@
  "schema": 1,
  "members": [
   {
-   "dir": "toolroom",
-   "name": "livery-toolroom",
-   "version": "0.7.0"
+   "dir": "forge",
+   "name": "livery-forge",
+   "version": "0.4.0"
   },
   {
-   "dir": "footman",
-   "name": "livery-footman",
-   "version": "0.53.0"
-  },
-  {
-   "dir": "toolroom-bench",
-   "name": "livery-toolroom-bench",
-   "version": "0.0.0"
+   "dir": "workshop",
+   "name": "livery-workshop",
+   "version": "0.3.0"
   }
  ]
 }

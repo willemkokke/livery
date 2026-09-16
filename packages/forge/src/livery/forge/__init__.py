@@ -74,7 +74,7 @@ from livery.forge._types import (
     Step,
 )
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "Capability",
