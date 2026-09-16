@@ -1,0 +1,14 @@
+{
+  "sequence": 7,
+  "version": "9.7.0",
+  "date": "2026-02-23",
+  "artifacts": {},
+  "surface": {
+    "platforms": [
+      "Linux",
+      "Windows",
+      "macOS"
+    ],
+    "extractor": 3
+  }
+}

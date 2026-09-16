@@ -1,0 +1,24 @@
+{
+  "sequence": 11,
+  "version": "7.15.3",
+  "date": "2026-08-02",
+  "artifacts": {},
+  "surface": {
+    "platforms": [
+      "Linux",
+      "Windows",
+      "macOS"
+    ],
+    "extractor": 3,
+    "help": "Coverage.py, version 7.15.3 with C extension",
+    "verbs": {
+      "": {
+        "help": "Coverage.py, version 7.15.3 with C extension",
+        "wraps": false,
+        "positional": "any",
+        "lead": "",
+        "options": {}
+      }
+    }
+  }
+}

@@ -1,0 +1,363 @@
+{
+  "sequence": 26,
+  "version": "5.4p1",
+  "date": "2010-03-07",
+  "artifacts": {},
+  "surface": {
+    "platforms": [
+      "Linux",
+      "macOS"
+    ],
+    "extractor": 3,
+    "verbs": {
+      "": {
+        "help": "authentication key generation, management and conversion",
+        "wraps": false,
+        "positional": "any",
+        "lead": "",
+        "options": {
+          "B": {
+            "flags": [
+              "-B"
+            ],
+            "negation": "",
+            "help": "Show the bubblebabble digest of specified private or public key file",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "C": {
+            "flags": [
+              "-C"
+            ],
+            "negation": "",
+            "help": "Provides a new comment",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "D": {
+            "flags": [
+              "-D"
+            ],
+            "negation": "",
+            "help": "Download the RSA public keys provided by the PKCS#11 shared library pkcs11",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "F": {
+            "flags": [
+              "-F"
+            ],
+            "negation": "",
+            "help": "Search for the specified hostname in a known_hosts file, listing any occurrences found",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "G": {
+            "flags": [
+              "-G"
+            ],
+            "negation": "",
+            "help": "Generate candidate primes for DH-GEX",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "H": {
+            "flags": [
+              "-H"
+            ],
+            "negation": "",
+            "help": "Hash a known_hosts file",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "I": {
+            "flags": [
+              "-I"
+            ],
+            "negation": "",
+            "help": "Specify the key identity when signing a public key",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "L": {
+            "flags": [
+              "-L"
+            ],
+            "negation": "",
+            "help": "Prints the contents of a certificate",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "M": {
+            "flags": [
+              "-M"
+            ],
+            "negation": "",
+            "help": "Specify the amount of memory to use (in megabytes) when generating candidate moduli for DH-GEX",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "N": {
+            "flags": [
+              "-N"
+            ],
+            "negation": "",
+            "help": "Provides the new passphrase",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "O": {
+            "flags": [
+              "-O"
+            ],
+            "negation": "",
+            "help": "Specify a certificate constraint when signing a key",
+            "type": "list[str]",
+            "default": null,
+            "choices": []
+          },
+          "P": {
+            "flags": [
+              "-P"
+            ],
+            "negation": "",
+            "help": "Provides the (old) passphrase",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "R": {
+            "flags": [
+              "-R"
+            ],
+            "negation": "",
+            "help": "Removes all keys belonging to hostname from a known_hosts file",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "S": {
+            "flags": [
+              "-S"
+            ],
+            "negation": "",
+            "help": "Specify start point (in hex) when generating candidate moduli for DH-GEX",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "T": {
+            "flags": [
+              "-T"
+            ],
+            "negation": "",
+            "help": "Test DH group exchange candidate primes (generated using the -G option) for safety",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "V": {
+            "flags": [
+              "-V"
+            ],
+            "negation": "",
+            "help": "Specify a validity interval when signing a certificate",
+            "type": "list[str]",
+            "default": null,
+            "choices": []
+          },
+          "W": {
+            "flags": [
+              "-W"
+            ],
+            "negation": "",
+            "help": "Specify desired generator when testing candidate moduli for DH- GEX",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "a": {
+            "flags": [
+              "-a"
+            ],
+            "negation": "",
+            "help": "Specifies the number of primality tests to perform when screening DH-GEX candidates using the -T command",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "b": {
+            "flags": [
+              "-b"
+            ],
+            "negation": "",
+            "help": "Specifies the number of bits in the key to create",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "c": {
+            "flags": [
+              "-c"
+            ],
+            "negation": "",
+            "help": "Requests changing the comment in the private and public key files",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "e": {
+            "flags": [
+              "-e"
+            ],
+            "negation": "",
+            "help": "This option will read a private or public OpenSSH key file and print the key in RFC 4716 SSH Public Key File Format to stdout",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "f": {
+            "flags": [
+              "-f"
+            ],
+            "negation": "",
+            "help": "Specifies the filename of the key file",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "g": {
+            "flags": [
+              "-g"
+            ],
+            "negation": "",
+            "help": "Use generic DNS format when printing fingerprint resource records using the -r command",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "h": {
+            "flags": [
+              "-h"
+            ],
+            "negation": "",
+            "help": "When signing a key, create a host certificate instead of a user certificate",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "i": {
+            "flags": [
+              "-i"
+            ],
+            "negation": "",
+            "help": "This option will read an unencrypted private (or public) key file in SSH2-compatible format and print an OpenSSH compatible private (or public) key to stdout",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "l": {
+            "flags": [
+              "-l"
+            ],
+            "negation": "",
+            "help": "Show fingerprint of specified public key file",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "n": {
+            "flags": [
+              "-n"
+            ],
+            "negation": "",
+            "help": "Specify one or more principals (user or host names) to be included in a certificate when signing a key",
+            "type": "list[str]",
+            "default": null,
+            "choices": []
+          },
+          "p": {
+            "flags": [
+              "-p"
+            ],
+            "negation": "",
+            "help": "Requests changing the passphrase of a private key file instead of creating a new private key",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "q": {
+            "flags": [
+              "-q"
+            ],
+            "negation": "",
+            "help": "Silence ssh-keygen",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "r": {
+            "flags": [
+              "-r"
+            ],
+            "negation": "",
+            "help": "Print the SSHFP fingerprint resource record named hostname for the specified public key file",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "s": {
+            "flags": [
+              "-s"
+            ],
+            "negation": "",
+            "help": "Certify (sign) a public key using the specified CA key",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "t": {
+            "flags": [
+              "-t"
+            ],
+            "negation": "",
+            "help": "Specifies the type of key to create",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "v": {
+            "flags": [
+              "-v"
+            ],
+            "negation": "",
+            "help": "Verbose mode",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "y": {
+            "flags": [
+              "-y"
+            ],
+            "negation": "",
+            "help": "This option will read a private OpenSSH format file and print an OpenSSH public key to stdout",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          }
+        }
+      }
+    }
+  }
+}

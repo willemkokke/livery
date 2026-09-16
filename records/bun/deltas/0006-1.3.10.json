@@ -1,0 +1,226 @@
+{
+  "sequence": 6,
+  "version": "1.3.10",
+  "date": "2026-02-26",
+  "artifacts": {},
+  "surface": {
+    "platforms": [
+      "Linux",
+      "Windows",
+      "macOS"
+    ],
+    "extractor": 3,
+    "verbs": {
+      "test": {
+        "help": "",
+        "wraps": false,
+        "positional": "any",
+        "lead": "",
+        "options": {
+          "bail": {
+            "flags": [
+              "--bail"
+            ],
+            "negation": "",
+            "help": "Exit the test suite after <NUMBER> failures",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "concurrent": {
+            "flags": [
+              "--concurrent"
+            ],
+            "negation": "",
+            "help": "Treat all tests as `test.concurrent()` tests",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "coverage": {
+            "flags": [
+              "--coverage"
+            ],
+            "negation": "",
+            "help": "Generate a coverage profile",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "coverage_dir": {
+            "flags": [
+              "--coverage-dir"
+            ],
+            "negation": "",
+            "help": "Directory for coverage files",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "coverage_reporter": {
+            "flags": [
+              "--coverage-reporter"
+            ],
+            "negation": "",
+            "help": "Report coverage in 'text' and/or 'lcov'",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "dots": {
+            "flags": [
+              "--dots"
+            ],
+            "negation": "",
+            "help": "Enable dots reporter",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "max_concurrency": {
+            "flags": [
+              "--max-concurrency"
+            ],
+            "negation": "",
+            "help": "Maximum number of concurrent tests to execute at once",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "only": {
+            "flags": [
+              "--only"
+            ],
+            "negation": "",
+            "help": "Run only tests that are marked with \"test.only()\" or \"describe.only()\"",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "only_failures": {
+            "flags": [
+              "--only-failures"
+            ],
+            "negation": "",
+            "help": "Only display test failures, hiding passing tests",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "pass_with_no_tests": {
+            "flags": [
+              "--pass-with-no-tests"
+            ],
+            "negation": "",
+            "help": "Exit with code 0 when no tests are found",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "randomize": {
+            "flags": [
+              "--randomize"
+            ],
+            "negation": "",
+            "help": "Run tests in random order",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "reporter": {
+            "flags": [
+              "--reporter"
+            ],
+            "negation": "",
+            "help": "Test output reporter format",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "reporter_outfile": {
+            "flags": [
+              "--reporter-outfile"
+            ],
+            "negation": "",
+            "help": "Output file path for the reporter format (required with --reporter)",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "rerun_each": {
+            "flags": [
+              "--rerun-each"
+            ],
+            "negation": "",
+            "help": "Re-run each test file <NUMBER> times, helps catch certain bugs",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "retry": {
+            "flags": [
+              "--retry"
+            ],
+            "negation": "",
+            "help": "Default retry count for all tests, overridden by per-test { retry: N }",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "seed": {
+            "flags": [
+              "--seed"
+            ],
+            "negation": "",
+            "help": "Set the random seed for test randomization",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "test_name_pattern": {
+            "flags": [
+              "--test-name-pattern",
+              "-t"
+            ],
+            "negation": "",
+            "help": "Run only tests with a name that matches the given regex",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "timeout": {
+            "flags": [
+              "--timeout"
+            ],
+            "negation": "",
+            "help": "Set the per-test timeout in milliseconds, default is 5000",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "todo": {
+            "flags": [
+              "--todo"
+            ],
+            "negation": "",
+            "help": "Include tests that are marked with \"test.todo()\"",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "update_snapshots": {
+            "flags": [
+              "--update-snapshots",
+              "-u"
+            ],
+            "negation": "",
+            "help": "Update snapshot files",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          }
+        }
+      }
+    }
+  }
+}

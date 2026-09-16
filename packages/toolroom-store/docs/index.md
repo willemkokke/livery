@@ -1,10 +1,11 @@
 # toolroom store
 
 The pinned tool store over strongroom. A record, one directory per
-tool, names the tool, every version tracked, and per version and host
-the artifact's URL and its sha256 with the deployment resolved through
-the record's layers; the store lands the artifact by that digest,
-extracts it, collects it as a tree, and names the tree under
+tool, names the tool, every version tracked, per version and host the
+artifact's URL and its sha256 with the deployment resolved through the
+record's layers, and per version the surface its command line
+accepts; the store lands the artifact by that digest, extracts it,
+collects it as a tree, and names the tree under
 `tools/<name>@<version>` in one strongroom store per machine, shared
 by every checkout on it.
 
@@ -49,15 +50,45 @@ install root; `shims`, a link name to an executable the install
 carries; and `exclude`, the archive members left out before import,
 `fnmatch` patterns over the install-relative path.
 
-Loading a record resolves every host of every version and refuses one
-that does not resolve whole: an artifact without a sha256, a layer
-naming a host or a version the record does not carry, a layer restating
-the value it inherits, a version whose host resolves with no `paths`, a
-downloaded kind with no entry point, a binary with no `exe` or whose
-`exe` is not among its entry points, and a delta out of sequence. The
-schema of both
-documents is `records/record.schema.json`, exported by
-`export_schema`.
+## The surface
+
+A delta may carry a `surface`: what the version's command line
+accepts, as it was read, and who read it. The reading is one verb at
+a time. `verbs` names the verbs this version changed, each whole, with
+`help`, `wraps`, `positional`, `lead` and its `options`, and an option
+carries `flags`, `negation`, `help`, `type`, `default` and `choices`;
+a verb set to `null` is withdrawn, and a verb not named is inherited
+from the nearest earlier version that has a surface. The tool's own
+options hang off the verb named `""`. `help`, the tool's description,
+is set when it changed and inherited otherwise; the record's first
+surface sets it. `platforms` names who read the version, from `Linux`,
+`macOS` and `Windows`, and `extractor` the generation of the reader;
+neither is inherited. `absent` records, per verb and option, the
+platforms that read the version and did not find that option, the
+option named `""` standing for the verb itself; it names only
+platforms among `platforms`. A version whose delta carries no surface
+was never read, and `surface_at` answers `None` for it rather than
+inheriting a reading. A version with a surface and no artifact is
+tracked for its surface alone: it has no host and nothing installs it.
+
+`surface_at` resolves one version whole, every verb in name order with
+its options in name order, and `observations` resolves every version
+that has a surface, in sequence.
+
+## What a load refuses
+
+Loading a record resolves every host of every version and every
+version's surface, and refuses a record that does not resolve whole:
+an artifact without a sha256, a layer naming a host or a version the
+record does not carry, a layer restating the value it inherits, a
+version whose host resolves with no `paths`, a downloaded kind with no
+entry point, a binary with no `exe` or whose `exe` is not among its
+entry points, a version with neither an artifact nor a surface, a
+surface read on no platform, a surface restating the help or a verb it
+inherits, a withdrawn verb no earlier version has, an absence naming a
+verb or option the version lacks or a platform that did not read it,
+and a delta out of sequence. The schema of both documents is
+`records/record.schema.json`, exported by `export_schema`.
 
 ## The store
 

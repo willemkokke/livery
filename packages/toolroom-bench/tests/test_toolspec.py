@@ -939,7 +939,7 @@ def stubs(tmp_path, monkeypatch):
     from livery.toolroom.bench import _tasks as tools_tasks
 
     monkeypatch.setattr(tools_tasks, "_STUBS", tmp_path)
-    monkeypatch.setattr(tools_tasks, "_HISTORY", tmp_path / "history")
+    monkeypatch.setattr(tools_tasks, "_RECORDS", tmp_path / "records")
     monkeypatch.setattr(tools_tasks, "_CHANGELOG", tmp_path / "CHANGELOG.md")
     return tmp_path
 

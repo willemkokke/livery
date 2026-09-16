@@ -1,0 +1,785 @@
+{
+  "sequence": 2,
+  "version": "2.50.0",
+  "date": "2025-06-16",
+  "artifacts": {},
+  "surface": {
+    "platforms": [
+      "Linux",
+      "macOS"
+    ],
+    "extractor": 3,
+    "verbs": {
+      "branch": {
+        "help": "List, create, or delete branches",
+        "wraps": false,
+        "positional": "any",
+        "lead": "",
+        "options": {
+          "C": {
+            "flags": [
+              "-C"
+            ],
+            "negation": "",
+            "help": "Shortcut for --copy --force",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "D": {
+            "flags": [
+              "-D"
+            ],
+            "negation": "",
+            "help": "Shortcut for --delete --force",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "M": {
+            "flags": [
+              "-M"
+            ],
+            "negation": "",
+            "help": "Shortcut for --move --force",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "abbrev": {
+            "flags": [
+              "--abbrev"
+            ],
+            "negation": "",
+            "help": "In the verbose listing that show the commit object name, show the shortest prefix that is at least <n> hexdigits long that uniquely refers the object",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "all": {
+            "flags": [
+              "--all",
+              "-a"
+            ],
+            "negation": "",
+            "help": "List both remote-tracking branches and local branches",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "color": {
+            "flags": [
+              "--color"
+            ],
+            "negation": "",
+            "help": "Color branches to highlight current, local, and remote-tracking branches",
+            "type": "optvalue",
+            "default": null,
+            "choices": []
+          },
+          "column": {
+            "flags": [
+              "--no-column",
+              "--column"
+            ],
+            "negation": "",
+            "help": "Display branch listing in columns",
+            "type": "optvalue",
+            "default": null,
+            "choices": []
+          },
+          "contains": {
+            "flags": [
+              "--contains"
+            ],
+            "negation": "",
+            "help": "Only list branches which contain <commit> (HEAD if not specified)",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "copy": {
+            "flags": [
+              "--copy",
+              "-c"
+            ],
+            "negation": "",
+            "help": "Copy a branch, together with its config and reflog",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "create_reflog": {
+            "flags": [
+              "--create-reflog"
+            ],
+            "negation": "",
+            "help": "Create the branch's reflog",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "delete": {
+            "flags": [
+              "--delete",
+              "-d"
+            ],
+            "negation": "",
+            "help": "Delete a branch",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "edit_description": {
+            "flags": [
+              "--edit-description"
+            ],
+            "negation": "",
+            "help": "Open an editor and edit the text to explain what the branch is for, to be used by various other commands (e.g",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "force": {
+            "flags": [
+              "--force",
+              "-f"
+            ],
+            "negation": "",
+            "help": "Reset <branch-name> to <start-point>, even if <branch-name> exists already",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "format": {
+            "flags": [
+              "--format"
+            ],
+            "negation": "",
+            "help": "A string that interpolates %(fieldname) from a branch ref being shown and the object it points at",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "ignore_case": {
+            "flags": [
+              "--ignore-case",
+              "-i"
+            ],
+            "negation": "",
+            "help": "Sorting and filtering branches are case insensitive",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "list": {
+            "flags": [
+              "--list",
+              "-l"
+            ],
+            "negation": "",
+            "help": "List branches",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "merged": {
+            "flags": [
+              "--merged"
+            ],
+            "negation": "",
+            "help": "Only list branches whose tips are reachable from <commit> (HEAD if not specified)",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "move": {
+            "flags": [
+              "--move",
+              "-m"
+            ],
+            "negation": "",
+            "help": "Move/rename a branch, together with its config and reflog",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "no_abbrev": {
+            "flags": [
+              "--no-abbrev"
+            ],
+            "negation": "",
+            "help": "Display the full sha1s in the output listing rather than abbreviating them",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "no_color": {
+            "flags": [
+              "--no-color"
+            ],
+            "negation": "",
+            "help": "Turn off branch colors, even when the configuration file gives the default to color output",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "no_contains": {
+            "flags": [
+              "--no-contains"
+            ],
+            "negation": "",
+            "help": "Only list branches which don't contain <commit> (HEAD if not specified)",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "no_merged": {
+            "flags": [
+              "--no-merged"
+            ],
+            "negation": "",
+            "help": "Only list branches whose tips are not reachable from <commit> (HEAD if not specified)",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "no_track": {
+            "flags": [
+              "--no-track"
+            ],
+            "negation": "",
+            "help": "Do not set up \"upstream\" configuration, even if the branch.autoSetupMerge configuration variable is set",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "omit_empty": {
+            "flags": [
+              "--omit-empty"
+            ],
+            "negation": "",
+            "help": "Do not print a newline after formatted refs where the format expands to the empty string",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "points_at": {
+            "flags": [
+              "--points-at"
+            ],
+            "negation": "",
+            "help": "Only list branches of <object>",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "quiet": {
+            "flags": [
+              "--quiet",
+              "-q"
+            ],
+            "negation": "",
+            "help": "Be more quiet when creating or deleting a branch, suppressing non-error messages",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "recurse_submodules": {
+            "flags": [
+              "--recurse-submodules"
+            ],
+            "negation": "",
+            "help": "THIS OPTION IS EXPERIMENTAL! Cause the current command to recurse into submodules if submodule.propagateBranches is enabled",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "remotes": {
+            "flags": [
+              "--remotes",
+              "-r"
+            ],
+            "negation": "",
+            "help": "List or delete (if used with -d) the remote-tracking branches",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "set_upstream": {
+            "flags": [
+              "--set-upstream"
+            ],
+            "negation": "",
+            "help": "As this option had confusing syntax, it is no longer supported",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "set_upstream_to": {
+            "flags": [
+              "--set-upstream-to",
+              "-u"
+            ],
+            "negation": "",
+            "help": "Set up <branch-name>'s tracking information so <upstream> is considered <branch-name>'s upstream branch",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "show_current": {
+            "flags": [
+              "--show-current"
+            ],
+            "negation": "",
+            "help": "Print the name of the current branch",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "sort": {
+            "flags": [
+              "--sort"
+            ],
+            "negation": "",
+            "help": "Sort based on <key>",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "track": {
+            "flags": [
+              "--track",
+              "-t"
+            ],
+            "negation": "",
+            "help": "When creating a new branch, set up branch.<name>.remote and branch.<name>.merge configuration entries to set \"upstream\" tracking configuration for the new branch",
+            "type": "optvalue",
+            "default": null,
+            "choices": []
+          },
+          "unset_upstream": {
+            "flags": [
+              "--unset-upstream"
+            ],
+            "negation": "",
+            "help": "Remove the upstream information for <branch-name>",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "verbose": {
+            "flags": [
+              "--verbose",
+              "-vv",
+              "-v"
+            ],
+            "negation": "",
+            "help": "When in list mode, show sha1 and commit subject line for each head, along with relationship to upstream branch (if any)",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          }
+        }
+      },
+      "checkout": {
+        "help": "Switch branches or restore working tree files",
+        "wraps": false,
+        "positional": "any",
+        "lead": "",
+        "options": {
+          "B": {
+            "flags": [
+              "-B"
+            ],
+            "negation": "",
+            "help": "Creates the branch <new-branch>, start it at <start-point>; if it already exists, then reset it to <start-point>",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "b": {
+            "flags": [
+              "-b"
+            ],
+            "negation": "",
+            "help": "Create a new branch named <new-branch>, start it at <start-point>, and check the resulting branch out; see git-branch(1) for details",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "conflict": {
+            "flags": [
+              "--conflict"
+            ],
+            "negation": "",
+            "help": "The same as --merge option above, but changes the way the conflicting hunks are presented, overriding the merge.conflictStyle configuration variable",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "detach": {
+            "flags": [
+              "--detach",
+              "-d"
+            ],
+            "negation": "",
+            "help": "Rather than checking out a branch to work on it, check out a commit for inspection and discardable experiments",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "force": {
+            "flags": [
+              "--force",
+              "-f"
+            ],
+            "negation": "",
+            "help": "When switching branches, proceed even if the index or the working tree differs from HEAD, and even if there are untracked files in the way",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "guess": {
+            "flags": [
+              "--no-guess",
+              "--guess"
+            ],
+            "negation": "--no-guess",
+            "help": "If <branch> is not found but there does exist a tracking branch in exactly one remote (call it <remote>) with a matching name, treat as equivalent to $ git checkout -b <branch> --track <remote>/<branch> If the branch exists in multiple remotes and one of them is named by the checkout.defaultRemote configuration variable, we'll use that one for the purposes of disambiguation, even if the <branch> isn't unique across all remotes",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "ignore_other_worktrees": {
+            "flags": [
+              "--ignore-other-worktrees"
+            ],
+            "negation": "",
+            "help": "git checkout refuses when the wanted branch is already checked out or otherwise in use by another worktree",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "ignore_skip_worktree_bits": {
+            "flags": [
+              "--ignore-skip-worktree-bits"
+            ],
+            "negation": "",
+            "help": "In sparse checkout mode, git checkout -- <path>..",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "l": {
+            "flags": [
+              "-l"
+            ],
+            "negation": "",
+            "help": "Create the new branch's reflog; see git-branch(1) for details",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "merge": {
+            "flags": [
+              "--merge",
+              "-m"
+            ],
+            "negation": "",
+            "help": "When switching branches, if you have local modifications to one or more files that are different between the current branch and the branch to which you are switching, the command refuses to switch branches in order to preserve your modifications in context",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "no_track": {
+            "flags": [
+              "--no-track"
+            ],
+            "negation": "",
+            "help": "Do not set up \"upstream\" configuration, even if the branch.autoSetupMerge configuration variable is true",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "orphan": {
+            "flags": [
+              "--orphan"
+            ],
+            "negation": "",
+            "help": "Create a new unborn branch, named <new-branch>, started from <start-point> and switch to it",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "ours": {
+            "flags": [
+              "--theirs",
+              "--ours"
+            ],
+            "negation": "",
+            "help": "When checking out paths from the index, check out stage #2 (ours) or #3 (theirs) for unmerged paths",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "overlay": {
+            "flags": [
+              "--no-overlay",
+              "--overlay"
+            ],
+            "negation": "",
+            "help": "In the default overlay mode, git checkout never removes files from the index or the working tree",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "overwrite_ignore": {
+            "flags": [
+              "--no-overwrite-ignore",
+              "--overwrite-ignore"
+            ],
+            "negation": "",
+            "help": "Silently overwrite ignored files when switching branches",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "patch": {
+            "flags": [
+              "--patch",
+              "-p"
+            ],
+            "negation": "",
+            "help": "Interactively select hunks in the difference between the <tree-ish> (or the index, if unspecified) and the working tree",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "pathspec_file_nul": {
+            "flags": [
+              "--pathspec-file-nul"
+            ],
+            "negation": "",
+            "help": "Only meaningful with --pathspec-from-file",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "pathspec_from_file": {
+            "flags": [
+              "--pathspec-from-file"
+            ],
+            "negation": "",
+            "help": "Pathspec is passed in <file> instead of commandline args",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "progress": {
+            "flags": [
+              "--no-progress",
+              "--progress"
+            ],
+            "negation": "",
+            "help": "Progress status is reported on the standard error stream by default when it is attached to a terminal, unless --quiet is specified",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "quiet": {
+            "flags": [
+              "--quiet",
+              "-q"
+            ],
+            "negation": "",
+            "help": "Quiet, suppress feedback messages",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "recurse_submodules": {
+            "flags": [
+              "--no-recurse-submodules",
+              "--recurse-submodules"
+            ],
+            "negation": "",
+            "help": "Using --recurse-submodules will update the content of all active submodules according to the commit recorded in the superproject",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "track": {
+            "flags": [
+              "--track",
+              "-t"
+            ],
+            "negation": "",
+            "help": "When creating a new branch, set up \"upstream\" configuration",
+            "type": "optvalue",
+            "default": null,
+            "choices": []
+          }
+        }
+      },
+      "switch": {
+        "help": "Switch branches",
+        "wraps": false,
+        "positional": "any",
+        "lead": "",
+        "options": {
+          "conflict": {
+            "flags": [
+              "--conflict"
+            ],
+            "negation": "",
+            "help": "The same as --merge option above, but changes the way the conflicting hunks are presented, overriding the merge.conflictStyle configuration variable",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "create": {
+            "flags": [
+              "--create",
+              "-c"
+            ],
+            "negation": "",
+            "help": "Create a new branch named <new-branch> starting at <start-point> before switching to the branch",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "detach": {
+            "flags": [
+              "--detach",
+              "-d"
+            ],
+            "negation": "",
+            "help": "Switch to a commit for inspection and discardable experiments",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "discard_changes": {
+            "flags": [
+              "--discard-changes"
+            ],
+            "negation": "",
+            "help": "Proceed even if the index or the working tree differs from HEAD",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "force": {
+            "flags": [
+              "--force",
+              "-f"
+            ],
+            "negation": "",
+            "help": "An alias for --discard-changes",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "force_create": {
+            "flags": [
+              "--force-create",
+              "-C"
+            ],
+            "negation": "",
+            "help": "Similar to --create except that if <new-branch> already exists, it will be reset to <start-point>",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "guess": {
+            "flags": [
+              "--no-guess",
+              "--guess"
+            ],
+            "negation": "--no-guess",
+            "help": "If <branch> is not found but there does exist a tracking branch in exactly one remote (call it <remote>) with a matching name, treat as equivalent to $ git switch -c <branch> --track <remote>/<branch> If the branch exists in multiple remotes and one of them is named by the checkout.defaultRemote configuration variable, we'll use that one for the purposes of disambiguation, even if the <branch> isn't unique across all remotes",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "ignore_other_worktrees": {
+            "flags": [
+              "--ignore-other-worktrees"
+            ],
+            "negation": "",
+            "help": "git switch refuses when the wanted ref is already checked out by another worktree",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "merge": {
+            "flags": [
+              "--merge",
+              "-m"
+            ],
+            "negation": "",
+            "help": "If you have local modifications to one or more files that are different between the current branch and the branch to which you are switching, the command refuses to switch branches in order to preserve your modifications in context",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "orphan": {
+            "flags": [
+              "--orphan"
+            ],
+            "negation": "",
+            "help": "Create a new unborn branch, named <new-branch>",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "progress": {
+            "flags": [
+              "--no-progress",
+              "--progress"
+            ],
+            "negation": "",
+            "help": "Progress status is reported on the standard error stream by default when it is attached to a terminal, unless --quiet is specified",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "quiet": {
+            "flags": [
+              "--quiet",
+              "-q"
+            ],
+            "negation": "",
+            "help": "Quiet, suppress feedback messages",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "recurse_submodules": {
+            "flags": [
+              "--no-recurse-submodules",
+              "--recurse-submodules"
+            ],
+            "negation": "",
+            "help": "Using --recurse-submodules will update the content of all active submodules according to the commit recorded in the superproject",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "track": {
+            "flags": [
+              "--track",
+              "-t"
+            ],
+            "negation": "--no-track",
+            "help": "When creating a new branch, set up \"upstream\" configuration",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          }
+        }
+      }
+    }
+  }
+}

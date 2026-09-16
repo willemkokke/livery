@@ -70,6 +70,134 @@
         }
       }
     },
+    "Option": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "flags",
+        "negation",
+        "help",
+        "type",
+        "default",
+        "choices"
+      ],
+      "properties": {
+        "flags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "negation": {
+          "type": "string"
+        },
+        "help": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "default": {},
+        "choices": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "Verb": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "help",
+        "wraps",
+        "positional",
+        "lead",
+        "options"
+      ],
+      "properties": {
+        "help": {
+          "type": "string"
+        },
+        "wraps": {
+          "type": "boolean"
+        },
+        "positional": {
+          "type": "string"
+        },
+        "lead": {
+          "type": "string"
+        },
+        "options": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Option"
+          }
+        }
+      }
+    },
+    "Surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "platforms",
+        "extractor"
+      ],
+      "properties": {
+        "platforms": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "Linux",
+              "macOS",
+              "Windows"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "extractor": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "help": {
+          "type": "string"
+        },
+        "verbs": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Verb"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "absent": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "Linux",
+                  "macOS",
+                  "Windows"
+                ]
+              },
+              "minItems": 1
+            }
+          }
+        }
+      }
+    },
     "Tool": {
       "type": "object",
       "additionalProperties": false,
@@ -193,6 +321,9 @@
           "additionalProperties": {
             "$ref": "#/$defs/Layout"
           }
+        },
+        "surface": {
+          "$ref": "#/$defs/Surface"
         }
       }
     }

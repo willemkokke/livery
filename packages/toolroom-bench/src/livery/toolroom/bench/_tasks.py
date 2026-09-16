@@ -36,16 +36,17 @@ from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 
-from livery.toolroom.bench import _drivers, _stubgen, _toolhistory, _toolspec
+from livery.toolroom.bench import _drivers, _stubgen, _surfaces, _toolspec
 
 if TYPE_CHECKING:
     from types import ModuleType
 
     from livery.toolroom.bench import _provision, _toolfetch
+    from livery.toolroom.store import Record
 
 import livery.toolroom.tools as _tools
 from livery.footman._describe import bold, cyan, wants_color
-from livery.footman.context import current, data_dir
+from livery.footman.context import current, data_dir, project_root
 from livery.footman.params import doc
 from livery.footman.registry import Group
 from livery.toolroom.tools import version_tuple as _version_tuple
@@ -53,14 +54,22 @@ from livery.toolroom.tools import version_tuple as _version_tuple
 tasks: Group = Group("tools", help="Keep the tools.* stubs honest")
 
 _STUBS = Path(_tools.__file__).resolve().parent / "_stubs"
-# Repo-only, deliberately outside `src/`: generation reads the history and
-# generation is a maintainer task run from a checkout, while users read the
-# stubs — which already carry everything the log is for. Shipping it would
-# make every install pay for history nobody reads.
-# The curated readings ship inside the package: the stubs regenerate
-# from them, and the release legs run the suite against the installed
-# copy, where a checkout-relative anchor points at nothing.
-_HISTORY = Path(__file__).resolve().parent / "_history"
+
+# The records live at the repository root, `records/<tool>/`, the
+# authoring site the store reads. The bench writes them from a checkout
+# and never from an installed copy, so the directory is resolved per
+# call from the run's project root; a test points it elsewhere by
+# setting `_RECORDS`.
+_RECORDS: Path | None = None
+
+
+def _records_dir() -> Path:
+    if _RECORDS is not None:
+        return _RECORDS
+    root = project_root()
+    return (
+        root if root is not None else Path(__file__).resolve().parents[6]
+    ) / "records"
 
 
 class _Ambiguous(Exception):
@@ -79,8 +88,8 @@ def _stub_path(key: str) -> Path:
     return _STUBS / f"{key}.pyi"
 
 
-def _history_path(key: str) -> Path:
-    return _HISTORY / f"{key}.json"
+def _record_path(key: str) -> Path:
+    return _records_dir() / key
 
 
 def default_prefix() -> Path:
@@ -364,105 +373,94 @@ def _generate(driver: _drivers.Driver) -> str:
     record that can disagree with it.
     """
     spec = _extract(driver)
-    doc = _observe(driver, spec)
-    return _stub_from(driver, doc, in_process=spec.in_process)
+    record = _observe(driver, spec)
+    return _stub_from(driver, record, in_process=spec.in_process)
 
 
 def _stub_from(
-    driver: _drivers.Driver, doc: dict[str, Any], *, in_process: bool = False
+    driver: _drivers.Driver, record: Record, *, in_process: bool = False
 ) -> str:
-    """The stub text for a tool's history.
+    """The stub text for a tool's record.
 
     Rendered from the *union*, not the newest release: a flag the tool has
     since dropped stays completable, because the reader may be running a
     version that still has it, and its docstring says when it went. With a
-    history of one release the union is that release, so nothing is claimed
+    record of one release the union is that release, so nothing is claimed
     that has not been observed.
 
-    The header reports the base observation's own platform rather than this
-    machine's — the file says what was read, and a prime run elsewhere must
-    not rewrite that claim.
+    The header reports the newest observation's own platforms rather than
+    this machine's: the file says what was read, and a prime run elsewhere
+    must not rewrite that claim.
     """
-    base = doc["base"]
-    spec = _toolhistory.union(doc, name=driver.name, in_process=in_process)
+    newest = _surfaces.versions(record)[0]
+    spec = _surfaces.union(record, name=driver.name, in_process=in_process)
     return _formatted(
         _stubgen.render(
             spec,
             # Every platform that read it, not the first alphabetically: a
-            # base observed on two says so, or the header credits one and
-            # quietly disowns the other's evidence.
-            platform=_and(base.get("platforms") or [_platform()]),
+            # version observed on two says so, or the header credits one
+            # and quietly disowns the other's evidence.
+            platform=_and(_surfaces.platforms_of(record, newest) or [_platform()]),
             class_name=_class_name(driver.key),
             in_process=_mode(driver, spec),
         )
     )
 
 
-def _observe(driver: _drivers.Driver, spec: _toolspec.ToolSpec) -> dict[str, Any]:
-    """Record this reading in the tool's history, and return the history.
+def _observe(driver: _drivers.Driver, spec: _toolspec.ToolSpec) -> Record:
+    """Record this reading in the tool's record, and return the record.
 
-    Three cases, and the third is the one the format exists for: a first
-    reading opens the file; re-reading the release the base already holds
-    updates it in place; a *newer* release becomes the base and demotes the
-    old one to a delta — one entry rewritten, the rest untouched.
+    Three cases: a first reading opens the record; a reading of a version
+    the record already holds is merged into it; any other version is
+    placed at its own position, above the newest or below it. A reading
+    the comparator cannot place against the newest is declined.
     """
-    path = _history_path(driver.key)
-    surface = _toolhistory.surface_of(spec)
+    path = _record_path(driver.key)
+    surface = _surfaces.surface_of(spec)
     version = spec.version or "unknown"
-    doc = _toolhistory.load(path)
-    if doc is None:
-        doc = _toolhistory.new(
+    record = _surfaces.load(path)
+    if record is None:
+        record = _surfaces.new(
             driver.key,
+            kind=driver.provision.record_kind,
             version=version,
             date=_today(),
             surface=surface,
             platforms=[_platform()],
         )
-    elif doc["base"]["version"] == version:
-        # A reading of the release the base already holds — a re-sync on this
-        # machine, or another platform's first look. Merged, never written
-        # over: overwriting replaced a multi-platform base with one
-        # platform's reading, erasing every recorded absence while
-        # `platforms` went on claiming those platforms had looked. It also
-        # left the first delta describing a step from a surface that no
-        # longer existed, so everything below replayed wrong — silently, and
-        # already possible today whenever an extractor improvement changed
-        # the words.
-        doc["base"]["extractor"] = _toolhistory.EXTRACTOR
-        _toolhistory.merge(
-            doc, version=version, surface=surface, platforms=[_platform()]
-        )
-    elif _version_tuple(version) == _version_tuple(doc["base"]["version"]):
-        # Two builds of one base — eclint's `0.6.0-wk.3` against its
-        # `-wk.5`. The comparator cannot separate them and the dates cannot
-        # help, because an incoming reading is stamped today whatever build
-        # it holds. Ordering a chain breaks such a tie on publication date;
-        # here there is no such date, so the base does not move. Declining is
-        # the only answer that cannot be wrong, and it is what "a snapshot
-        # only ever moves forward" means when forward is unknowable.
-        raise _Ambiguous(driver.key, version, doc["base"]["version"])
-    elif _version_tuple(version) < _version_tuple(doc["base"]["version"]):
-        # An *older* reading is an older observation, not a new head. Demoting
-        # on any change let a machine with a stale tool rewrite the base and
-        # push the newer release down the chain as though it came first — the
-        # base only ever moves forward, exactly as a snapshot does.
-        _toolhistory.extend(
-            doc,
-            version=version,
-            date=_today(),
-            surface=surface,
-            platforms=[_platform()],
+    elif version in record.versions:
+        # A reading of a version the record already holds: a re-sync on
+        # this machine, or another platform's first look. Merged, never
+        # written over: overwriting would replace a multi-platform reading
+        # with one platform's, erasing every recorded absence while the
+        # platforms went on claiming they had looked.
+        record, _moved = _surfaces.merge(
+            record, version=version, surface=surface, platforms=[_platform()]
         )
     else:
-        _toolhistory.promote(
-            doc,
+        chain = _surfaces.versions(record)
+        newest = chain[0] if chain else ""
+        if newest and _version_tuple(version) == _version_tuple(newest):
+            # Two builds of one base, eclint's `0.6.0-wk.3` against its
+            # `-wk.5`. The comparator cannot separate them and the dates
+            # cannot help, because an incoming reading is stamped today
+            # whatever build it holds. Declining is the only answer that
+            # cannot be wrong, and it is what "a snapshot only ever moves
+            # forward" means when forward is unknowable.
+            raise _Ambiguous(driver.key, version, newest)
+        # An older reading is an older observation, not a new head: the
+        # record places it below, and the newest version stays what it is.
+        placed = _surfaces.place(
+            record,
             version=version,
             date=_today(),
             surface=surface,
             platforms=[_platform()],
         )
-    _toolhistory.save(doc, path)
-    return doc
+        if placed is not None:
+            record = placed
+    _surfaces.save(record, path)
+    return record
 
 
 def _today() -> str:
@@ -511,6 +509,7 @@ def _formatted(text: str) -> str:
     """
     import subprocess
 
+    cwd, env = _spawn_context()
     for argv in (
         [
             "ruff",
@@ -532,6 +531,8 @@ def _formatted(text: str) -> str:
                 encoding="utf-8",
                 errors="replace",
                 timeout=60,
+                cwd=cwd,
+                env=env,
             )
         except (OSError, subprocess.SubprocessError):
             return text
@@ -741,7 +742,7 @@ def _sync(only: str, root: Path | None = None) -> None:
 def restub(
     only: Annotated[str, doc("re-render just this tool")] = "",
 ) -> dict[str, object]:
-    """Re-render every stub from the checked-in history — no tools, no network.
+    """Re-render every stub from the checked-in records: no tools, no network.
 
     A stub is a *rendering* of a stored surface, and the two move for
     different reasons. `sync` re-reads the tools and can change what is
@@ -753,29 +754,29 @@ def restub(
     That separation is what keeps a delta readable. Regenerating through
     `sync` would fold this machine's tool versions into the answer, so a
     template change would arrive mixed with version drift and neither could
-    be reviewed. Here the store is opened read-only: whatever comes out
+    be reviewed. Here the records are opened read-only: whatever comes out
     differs from what is checked in *only* because the renderer does.
 
     The six shells (`bash`, `zsh`, `fish`, `nu`, `pwsh`, `cmd`) have
-    hand-written stubs and no history to render from, so they are listed as
+    hand-written stubs and no record to render from, so they are listed as
     left alone and edited by hand.
     """
-    wrote, unchanged, no_history = [], [], []
+    wrote, unchanged, no_record = [], [], []
     for driver in _drivers.DRIVERS:
         if only and driver.key != only:
             continue
         if driver.source == "manual":
-            no_history.append(driver.key)
+            no_record.append(driver.key)
             continue
-        doc_ = _toolhistory.load(_history_path(driver.key))
-        if doc_ is None:
-            no_history.append(driver.key)
+        record = _surfaces.load(_record_path(driver.key))
+        if record is None:
+            no_record.append(driver.key)
             continue
         path = _stub_path(driver.key)
         # Exactly `assemble`'s call, so a re-render is byte-identical to what
-        # the refresh workflow would have written from the same history.
+        # the refresh workflow would have written from the same record.
         try:
-            text = _stub_from(driver, doc_)
+            text = _stub_from(driver, record)
         except _stubgen.NameCollision as clash:
             print(f"refused {driver.key}: {clash}")
             continue
@@ -787,9 +788,9 @@ def restub(
     print(f"re-rendered {len(wrote)}: {', '.join(wrote) or 'none changed'}")
     if unchanged:
         print(f"unchanged: {len(unchanged)}")
-    if no_history:
-        print(f"no history (hand-written): {', '.join(no_history)}")
-    return {"rendered": wrote, "unchanged": unchanged, "no_history": no_history}
+    if no_record:
+        print(f"no record (hand-written): {', '.join(no_record)}")
+    return {"rendered": wrote, "unchanged": unchanged, "no_record": no_record}
 
 
 @tasks.task
@@ -1093,21 +1094,21 @@ def prime(
             skipped += [f"{key} ({why})" for key, why in sorted(unreachable.items())]
 
             plans: dict[str, list[_toolfetch.Release]] = {}
-            docs: dict[str, dict[str, Any]] = {}
+            records: dict[str, Record] = {}
             for driver in drivers:
                 if driver.key not in listings:
                     continue
-                doc_ = _toolhistory.load(_history_path(driver.key))
-                if doc_ is None:
-                    skipped.append(f"{driver.key} (no history — run `sync` first)")
+                record = _surfaces.load(_record_path(driver.key))
+                if record is None or not _surfaces.versions(record):
+                    skipped.append(f"{driver.key} (no record — run `sync` first)")
                     continue
-                planned, refused = _plan_prime(doc_, listings[driver.key], count)
+                planned, refused = _plan_prime(record, listings[driver.key], count)
                 if refused:
                     lines.append(
-                        f"{driver.key} +0 (from {doc_['observed_from']}) — {refused}"
+                        f"{driver.key} +0 (from {_surfaces.floor(record)}) — {refused}"
                     )
                     continue
-                docs[driver.key] = doc_
+                records[driver.key] = record
                 plans[driver.key] = planned
 
             work = [(d, r) for d in drivers if d.key in plans for r in plans[d.key]]
@@ -1115,13 +1116,12 @@ def prime(
             for driver in drivers:
                 if driver.key not in plans:
                     continue
-                fresh, holes = _assemble(
-                    driver, docs[driver.key], plans[driver.key], surfaces
+                record, fresh, holes = _assemble(
+                    driver, records[driver.key], plans[driver.key], surfaces
                 )
                 note = f" — holes: {', '.join(holes)}" if holes else ""
                 lines.append(
-                    f"{driver.key} +{len(fresh)}"
-                    f" (from {docs[driver.key]['observed_from']}){note}"
+                    f"{driver.key} +{len(fresh)} (from {_surfaces.floor(record)}){note}"
                 )
     finally:
         if not keep:
@@ -1250,11 +1250,11 @@ def _work_to_do(
     for driver in drivers:
         if driver.key not in listings:
             continue
-        doc = _toolhistory.load(_history_path(driver.key))
-        if doc is None:
-            skipped.append(f"{driver.key} (no history — run `sync` first)")
+        record = _surfaces.load(_record_path(driver.key))
+        if record is None or not _surfaces.versions(record):
+            skipped.append(f"{driver.key} (no record — run `sync` first)")
             continue
-        work += [(driver, r) for r in _plan_gather(doc, listings[driver.key], count)]
+        work += [(driver, r) for r in _plan_gather(record, listings[driver.key], count)]
     return work, skipped, unreachable
 
 
@@ -1268,7 +1268,7 @@ class Owed:
     """Indexes that would not answer. Not the same as nothing to do — a
     walk that cannot see an index cannot say the index has nothing new."""
     skipped: list[str]
-    """Tools with no index to read, or no history to add to."""
+    """Tools with no index to read, or no record to add to."""
 
     @property
     def total(self) -> int:
@@ -1357,7 +1357,7 @@ def _report_gather(found: Gathered) -> None:
 
 
 def _plan_gather(
-    doc: dict[str, Any], listing: list[_toolfetch.Release], count: int
+    record: Record, listing: list[_toolfetch.Release], count: int
 ) -> list[_toolfetch.Release]:
     """Everything this platform still owes an answer on, newest first.
 
@@ -1376,8 +1376,8 @@ def _plan_gather(
     acted on rather than merely noted.
     """
     here = _platform()
-    known = set(_toolhistory.observed(doc))
-    floor = doc["observed_from"]
+    known = set(_surfaces.versions(record))
+    floor = _surfaces.floor(record)
     wanted = [
         release
         for release in listing
@@ -1385,16 +1385,13 @@ def _plan_gather(
         and _version_tuple(release.version) >= _version_tuple(floor)
     ]
     for release in listing:
-        entry = _toolhistory.entry_of(doc, release.version)
-        if entry is None:
+        found = _surfaces.observation(record, release.version)
+        if found is None:
             continue
-        if (
-            here not in entry.get("platforms", [])
-            or entry.get("extractor", 0) < _toolhistory.EXTRACTOR
-        ):
+        if here not in found.platforms or found.extractor < _surfaces.EXTRACTOR:
             wanted.append(release)
     if count:
-        wanted += _plan_prime(doc, listing, count)[0]
+        wanted += _plan_prime(record, listing, count)[0]
     seen, unique = set(), []
     for release in wanted:
         if release.version not in seen:
@@ -1437,9 +1434,11 @@ def _additions_only(events: dict[str, list[str]]) -> bool:
     if not any(events.values()):
         return False
     for key, versions in events.items():
-        doc = _toolhistory.load(_history_path(key)) or {}
-        span = _toolhistory.changes(
-            doc, since=_predecessor(doc, versions[0]), until=versions[-1]
+        record = _surfaces.load(_record_path(key))
+        if record is None:
+            continue
+        span = _surfaces.changes(
+            record, since=_predecessor(record, versions[0]), until=versions[-1]
         )
         if span.get("add"):
             return False
@@ -1457,8 +1456,10 @@ def _finish(found: Refreshed, changelog: bool) -> Refreshed:
         found = replace(found, additions_only=_additions_only(found.events))
     if changelog and found.events:
         entries = [
-            _entry_for(key, _toolhistory.load(_history_path(key)) or {}, versions)
+            _entry_for(key, record, versions)
             for key, versions in sorted(found.events.items())
+            for record in (_surfaces.load(_record_path(key)),)
+            if record is not None
         ]
         found = replace(found, wrote_changelog=_write_changelog(entries))
     _report_refresh(found)
@@ -1533,14 +1534,14 @@ def _assemble_documents(documents: list[dict[str, Any]]) -> Refreshed:
     events: dict[str, list[str]] = {}
     for tool, versions in sorted(by_release.items()):
         driver = _drivers.find(tool)
-        doc_ = _toolhistory.load(_history_path(tool))
-        if driver is None or doc_ is None:
-            skipped.append(f"{tool} (no history — run `sync` first)")
+        record = _surfaces.load(_record_path(tool))
+        if driver is None or record is None:
+            skipped.append(f"{tool} (no record — run `sync` first)")
             continue
-        # What the chain already reached, before this fold. A release above
-        # it is news; one below it is history being filled in.
-        highest = (_toolhistory.observed(doc_) or [""])[0]
-        fresh, touched = _fold_into(doc_, tool, versions, meta[tool])
+        # What the record already reached, before this fold. A release
+        # above it is news; one below it is history being filled in.
+        highest = (_surfaces.versions(record) or [""])[0]
+        record, fresh, touched = _fold_into(record, versions, meta[tool])
         if fresh:
             read[tool] = fresh
         if touched:
@@ -1548,9 +1549,9 @@ def _assemble_documents(documents: list[dict[str, Any]]) -> Refreshed:
             # week where three platforms merely agreed about what they see
             # is exactly the week whose findings would otherwise be
             # recomputed from scratch every Monday.
-            _toolhistory.save(doc_, _history_path(tool))
-            _stub_path(tool).write_text(_stub_from(driver, doc_), encoding="utf-8")
-        if moved := _events_of(doc_, fresh, above=highest):
+            _surfaces.save(record, _record_path(tool))
+            _stub_path(tool).write_text(_stub_from(driver, record), encoding="utf-8")
+        if moved := _events_of(record, fresh, above=highest):
             events[tool] = moved
     return Refreshed(
         read=read,
@@ -1562,61 +1563,50 @@ def _assemble_documents(documents: list[dict[str, Any]]) -> Refreshed:
 
 
 def _fold_into(
-    doc: dict[str, Any],
-    tool: str,
+    record: Record,
     versions: dict[str, dict[str, dict[str, Any]]],
     meta: dict[str, dict[str, Any]],
-) -> tuple[list[str], bool]:
-    """Fold every platform's reading of each release into one chain.
+) -> tuple[Record, list[str], bool]:
+    """Fold every platform's reading of each release into one record.
 
     Oldest first, so a release's delta is computed against the release that
-    actually precedes it. Returns what the chain *gained* and whether
-    anything moved at all: widened coverage is not news — it must never read
-    as a new release — but it is still a finding, and a finding that is not
-    written down is one every Monday pays for again.
+    actually precedes it. Returns the record, what it *gained* and whether
+    anything moved at all: widened coverage is not news, and must never
+    read as a new release, but it is still a finding, and a finding that
+    is not written down is one every Monday pays for again. A merge
+    stamps the release as read by today's extractor, whatever the reading
+    found; unstamped, `_plan_gather` would offer it again every run.
     """
     order = sorted(versions, key=lambda v: (_version_tuple(v), v))
     fresh: list[str] = []
     touched = False
     for version in order:
-        surface, absent = _toolhistory.fold(versions[version])
+        surface, absent = _surfaces.fold(versions[version])
         platforms = sorted(versions[version])
-        if (entry := _toolhistory.entry_of(doc, version)) is not None:
-            was = json.dumps(entry, sort_keys=True)
-            moved = _toolhistory.merge(
-                doc,
+        if _surfaces.observation(record, version) is not None:
+            before = record
+            record, moved = _surfaces.merge(
+                record,
                 version=version,
                 surface=surface,
                 platforms=platforms,
                 absent=absent,
             )
-            # Read back rather than reused: a surface change *replaces* a
-            # delta's entry, and only the base is rewritten in place. The
-            # reference taken above therefore goes stale exactly when the
-            # fold did the most work, and comparing it answered "nothing
-            # moved" for every delta a better extractor had just corrected —
-            # so the correction was computed, believed, and dropped unsaved.
-            entry = _toolhistory.entry_of(doc, version) or {}
-            # This release has now been read by today's extractor, whatever
-            # that reading found. Unstamped, `_plan_gather` offers it again
-            # every run: the walk that heals the store never records that it
-            # healed it, and every gather pays for all of it again.
-            entry["extractor"] = _toolhistory.EXTRACTOR
-            touched = touched or moved or json.dumps(entry, sort_keys=True) != was
+            touched = touched or moved or record != before
             continue
-        if _toolhistory.insert(
-            doc,
+        placed = _surfaces.place(
+            record,
             version=version,
             date=meta[version]["date"],
             surface=surface,
             platforms=platforms,
-        ):
-            placed = _toolhistory.entry_of(doc, version) or {}
-            if absent:
-                placed["absent"] = absent
+            absent=absent,
+        )
+        if placed is not None:
+            record = placed
             fresh.append(version)
             touched = True
-    return fresh, touched
+    return record, fresh, touched
 
 
 @dataclass(frozen=True)
@@ -1638,13 +1628,13 @@ class Refreshed:
     """Indexes that would not answer, and why. Not the same as a tool with
     nothing new — see `_toolfetch.Unreachable`."""
     skipped: list[str]
-    """Tools with no index to read, or no history to add to."""
+    """Tools with no index to read, or no record to add to."""
     holes: dict[str, list[str]] = field(default_factory=dict)
     """Releases that were listed but could not be observed — an install that
     failed, a binary that would not describe itself. A hole is not an error:
-    the chain stays contiguous by construction, a later run fills it via
-    `insert`, and until then a change the missing release carried reads as
-    arriving at the next release actually read."""
+    the record stays whole by construction, a later run fills it, and until
+    then a change the missing release carried reads as arriving at the next
+    release actually read."""
     wrote_changelog: bool = False
     """Whether the events reached `CHANGELOG.md`. False with nothing to say,
     and false when the file has no `[Unreleased]` section to write into —
@@ -1761,7 +1751,26 @@ def _prog() -> str:
 def _run_submit(argv: list[str]) -> int:
     import subprocess
 
-    return subprocess.run(argv, check=False).returncode
+    cwd, env = _spawn_context()
+    return subprocess.run(argv, check=False, cwd=cwd, env=env).returncode
+
+
+def _spawn_context() -> tuple[Path, dict[str, str]]:
+    """The directory and environment a raw spawn runs in, handed over on purpose.
+
+    Inside a run they are the task's own, the overlay included, so a
+    provisioned prefix's ruff is the one that formats; outside a run they
+    are the process's. Passed explicitly, because a spawn the runner has
+    to fill in is a note it refuses.
+    """
+    import os
+
+    from livery.footman import _globals
+
+    ctx = current()
+    if _globals.active():
+        return Path(ctx.cwd or Path.cwd()), dict(ctx.env)
+    return Path.cwd(), dict(os.environ)
 
 
 # The changelog stays a checkout fact: the release-note writer edits
@@ -1769,7 +1778,7 @@ def _run_submit(argv: list[str]) -> int:
 _CHANGELOG = Path(_tools.__file__).resolve().parents[4] / "CHANGELOG.md"
 
 
-def _entry_for(key: str, doc: dict[str, Any], versions: list[str]) -> str:
+def _entry_for(key: str, record: Record, versions: list[str]) -> str:
     """One CHANGELOG bullet for one tool's refresh.
 
     Per tool rather than per release: a reader cares that prek gained
@@ -1785,21 +1794,21 @@ def _entry_for(key: str, doc: dict[str, Any], versions: list[str]) -> str:
     release can reword half a dozen descriptions without changing what the
     tool accepts, and spelling those out would make the entry a diff dump.
     """
-    since = _predecessor(doc, versions[0])
-    span = _toolhistory.changes(doc, since=since, until=versions[-1])
+    since = _predecessor(record, versions[0])
+    span = _surfaces.changes(record, since=since, until=versions[-1])
     newest = versions[-1]
     # Two keys can share a spelling — a flag on the bare command and on one
     # of its verbs — and a reader wants to be told about `--glob` once.
     added = sorted(
-        set(_toolhistory.spellings(doc, newest, span.get("drop", ())).values())
+        set(_surfaces.spellings(record, newest, span.get("drop", ())).values())
     )
     dropped = sorted(
-        set(_toolhistory.spellings(doc, since, span.get("add", {})).values())
+        set(_surfaces.spellings(record, since, span.get("add", {})).values())
     )
     # `None` means the newer release added the verb. Anything else is a verb
     # the step back restores or amends, and which of those it is says so in
     # the newer surface rather than in the shape of the payload.
-    now = (_toolhistory.at(doc, newest) or {}).get("verbs", {})
+    now = (_surfaces.at(record, newest) or {}).get("verbs", {})
     gained, lost, amended = [], [], 0
     for name, moved in span.get("verbs", {}).items():
         if moved is None:
@@ -1835,9 +1844,9 @@ def _entry_for(key: str, doc: dict[str, Any], versions: list[str]) -> str:
     return f"- **{key} {newest}** {said[0]}{over}.{rest}"
 
 
-def _predecessor(doc: dict[str, Any], version: str) -> str:
+def _predecessor(record: Record, version: str) -> str:
     """The observed release just older than *version*, or the oldest there is."""
-    chain = _toolhistory.observed(doc)  # newest first
+    chain = _surfaces.versions(record)  # newest first
     if version in chain and chain.index(version) + 1 < len(chain):
         return chain[chain.index(version) + 1]
     return chain[-1]
@@ -1864,8 +1873,8 @@ def _and(clauses: list[str]) -> str:
 def _write_changelog(entries: list[str], path: Path | None = None) -> bool:
     """Put *entries* under `[Unreleased]` → `### Changed`, in place.
 
-    Written rather than printed because the refresh already edits
-    `tool-history/` and the stubs and has to land through a PR either way —
+    Written rather than printed because the refresh already edits the
+    records and the stubs and has to land through a PR either way —
     a scheduled job that emitted release notes to stdout would be producing
     them for nobody. `### Changed` because a tool gaining a flag changes
     footman's *stub*; footman itself added nothing.
@@ -2031,7 +2040,7 @@ def _list_phase(
 
 
 def _plan_refresh(
-    doc: dict[str, Any], listing: list[_toolfetch.Release]
+    record: Record, listing: list[_toolfetch.Release]
 ) -> list[_toolfetch.Release]:
     """Every listed release the chain does not hold, down to its floor.
 
@@ -2040,8 +2049,8 @@ def _plan_refresh(
     the floor stays `prime`'s business, because depth is a budget and a
     refresh must not silently spend it.
     """
-    known = set(_toolhistory.observed(doc))
-    floor = doc["observed_from"]
+    known = set(_surfaces.versions(record))
+    floor = _surfaces.floor(record)
     return [
         release
         for release in listing
@@ -2051,7 +2060,7 @@ def _plan_refresh(
 
 
 def _plan_prime(
-    doc: dict[str, Any], listing: list[_toolfetch.Release], count: int
+    record: Record, listing: list[_toolfetch.Release], count: int
 ) -> tuple[list[_toolfetch.Release], str]:
     """Up to *count* releases below the floor — the backward walk's work.
 
@@ -2060,8 +2069,8 @@ def _plan_prime(
     every release ever published. A floor the listing cannot place refuses
     the tool with directions rather than guessing where it belongs.
     """
-    known = set(_toolhistory.observed(doc))
-    floor = doc["observed_from"]
+    known = set(_surfaces.versions(record))
+    floor = _surfaces.floor(record)
     below = [index for index, release in enumerate(listing) if release.version == floor]
     if listing and not below:
         return [], f"{floor} is not among the listed releases (sync it forward first)"
@@ -2085,8 +2094,8 @@ def observe(
 
     The unit of the gather, pure in (tool, version): requests for the same
     release dedupe on the futures work key, and arrival order is nobody's
-    business — `_toolhistory.insert` assembles the chain from whatever order
-    these finish in.
+    business: the record places each version at its own position whatever
+    order these finish in.
 
     A real task deliberately, not a helper. The task boundary is what buys
     each observation its own environment: a body call copies the caller's
@@ -2135,7 +2144,7 @@ def observe(
         # reading that names a different version is a hole, not an
         # observation.
         return None
-    return _toolhistory.surface_of(spec)
+    return _surfaces.surface_of(spec)
 
 
 def _same_release(reported: str, requested: str) -> bool:
@@ -2264,16 +2273,16 @@ def _gather(
 
 def _assemble(
     driver: _drivers.Driver,
-    doc: dict[str, Any],
+    record: Record,
     planned: list[_toolfetch.Release],
     surfaces: dict[str, dict[str, dict[str, Any] | None]],
-) -> tuple[list[str], list[str]]:
-    """Insert whatever the gather brought home; say what is missing.
+) -> tuple[Record, list[str], list[str]]:
+    """Place whatever the gather brought home; say what is missing.
 
     Single-threaded on purpose: the arithmetic is microseconds against the
-    installs, the doc is mutated in place, and one writer per file means the
-    atomic save needs no coordination. Returns the fresh releases oldest
-    first — the order a reader tells the story in — and the holes.
+    installs, and one writer per record means the save needs no
+    coordination. Returns the record, the fresh releases oldest first,
+    the order a reader tells the story in, and the holes.
     """
     observed_here = surfaces.get(driver.key, {})
     fresh: list[str] = []
@@ -2283,34 +2292,36 @@ def _assemble(
         if surface is None:
             holes.append(release.version)
             continue
-        if _toolhistory.insert(
-            doc,
+        placed = _surfaces.place(
+            record,
             version=release.version,
             date=release.date,
             surface=surface,
             platforms=[_platform()],
-        ):
+        )
+        if placed is not None:
+            record = placed
             fresh.append(release.version)
     if fresh:
-        chain = _toolhistory.observed(doc)  # newest first
+        chain = _surfaces.versions(record)  # newest first
         fresh.sort(key=chain.index, reverse=True)  # oldest first
-        _toolhistory.save(doc, _history_path(driver.key))
+        _surfaces.save(record, _record_path(driver.key))
         # The stub is a rendering of the record, so it follows the record
         # rather than waiting for someone to remember a `sync`.
-        _stub_path(driver.key).write_text(_stub_from(driver, doc), encoding="utf-8")
-    return fresh, holes
+        _stub_path(driver.key).write_text(_stub_from(driver, record), encoding="utf-8")
+    return record, fresh, holes
 
 
-def _events_of(doc: dict[str, Any], fresh: list[str], *, above: str = "") -> list[str]:
+def _events_of(record: Record, fresh: list[str], *, above: str = "") -> list[str]:
     """Which of *fresh* changed the tool's surface — the release decision.
 
-    Answered from the assembled chain rather than remembered from arrival
-    order: a release's own changes live in the delta keyed by its
-    predecessor, the step back *from* it. A hole just below a release makes
-    that delta span the gap, so the change is attributed to the release
-    actually read — the chain's standing imprecision, reported as the hole.
+    Answered from the record rather than remembered from arrival order:
+    a release's own changes are its delta against the release read
+    before it. A hole just below a release makes that delta span the gap,
+    so the change is attributed to the release actually read — the
+    record's standing imprecision, reported as the hole.
 
-    Only releases newer than *above* — the newest the chain held before
+    Only releases newer than *above* — the newest the record held before
     this fold — are considered. A walk that reaches backwards changes the
     surface at every step it takes, and every one of those steps is a
     change the tool made years ago: filling git's history announced that
@@ -2318,19 +2329,14 @@ def _events_of(doc: dict[str, Any], fresh: list[str], *, above: str = "") -> lis
     a changelog reports is a release nobody had seen before, not a release
     footman had not got around to reading.
     """
-    chain = _toolhistory.observed(doc)  # newest first
     ceiling = _version_tuple(above) if above else ()
-    changed: list[str] = []
-    for version in fresh:
-        if ceiling and _version_tuple(version) <= ceiling:
-            continue  # history being filled in, not news
-        spot = chain.index(version)
-        if spot + 1 >= len(chain):
-            continue  # the floor: nothing below to have changed from
-        step = doc["deltas"][chain[spot + 1]]
-        if any(key not in ("date", "platforms", "extractor") for key in step):
-            changed.append(version)
-    return changed
+    return [
+        version
+        for version in fresh
+        # Below the ceiling is history being filled in, not news.
+        if not (ceiling and _version_tuple(version) <= ceiling)
+        and _surfaces.changed(record, version)
+    ]
 
 
 def _discard(bindir: Path) -> None:
@@ -2350,125 +2356,6 @@ def _discard(bindir: Path) -> None:
     import shutil
 
     shutil.rmtree(bindir.parent, ignore_errors=True)
-
-
-@dataclass(frozen=True)
-class Prepared:
-    """A release rolled, as data — what the tag step needs to know."""
-
-    version: str
-    """The version the tree now claims, `X.Y.Z`."""
-    previous: str
-    """What it claimed before, for the compare link and for a sanity check."""
-    entries: int
-    """How many bullets moved out of `[Unreleased]`."""
-
-
-@tasks.task(name="prepare-release")
-def prepare_release(
-    bump: Annotated[Literal["patch", "minor"], doc("which part to raise")] = "patch",
-) -> Prepared:
-    """Roll the version and the changelog, the way the runbook does by hand.
-
-    A stub-only release is a patch bump — the tools moved, toolroom did
-    not — which is why `patch` is the default and the automatic path never
-    chooses anything else.
-
-    Two files must agree or the release workflow refuses the tag
-    (`pyproject.toml` and `__init__.__version__`). The README's beta note
-    rolls with them: its minor-pin example (`toolroom~=X.Y.0`) follows the
-    released minor, so a minor bump rewrites it and a patch bump leaves it
-    — the pin already admits the patch (`tests/test_docs_drift.py` fails
-    the gate if it goes stale).
-
-    `[Unreleased]` becomes `[X.Y.Z]` dated today, with the compare links
-    repointed. Refuses rather than guesses when there is nothing to release.
-    """
-    from livery.footman import fail
-
-    root = _HISTORY.parent
-    current = _re.search(
-        r'^version = "([^"]+)"', (root / "pyproject.toml").read_text("utf-8"), _re.M
-    )
-    if current is None:  # pragma: no cover - pyproject always carries one
-        fail("pyproject.toml has no version to raise", code=64)
-    previous = current[1]
-    major, minor, patch = (int(part) for part in previous.split(".")[:3])
-    version = (
-        f"{major}.{minor}.{patch + 1}" if bump == "patch" else f"{major}.{minor + 1}.0"
-    )
-
-    moved = _roll_changelog(root / "CHANGELOG.md", version, previous)
-    if not moved:
-        fail(
-            "nothing under [Unreleased] to release — the tree is already "
-            "where the last tag left it",
-            code=64,
-        )
-    for path, pattern, replacement in (
-        (
-            root / "pyproject.toml",
-            rf'^version = "{previous}"',
-            f'version = "{version}"',
-        ),
-        (
-            root / "src" / "toolroom" / "__init__.py",
-            rf'^__version__ = "{previous}"',
-            f'__version__ = "{version}"',
-        ),
-        (
-            root / "README.md",
-            r"toolroom~=\d+\.\d+\.0",
-            "toolroom~={}.{}.0".format(*version.split(".")[:2]),
-        ),
-    ):
-        text = path.read_text(encoding="utf-8")
-        path.write_text(
-            _re.sub(pattern, replacement, text, count=1, flags=_re.M), "utf-8"
-        )
-    print(f"prepared {previous} -> {version} ({moved} entries)")
-    return Prepared(version=version, previous=previous, entries=moved)
-
-
-def _roll_changelog(path: Path, version: str, previous: str) -> int:
-    """`[Unreleased]` becomes the new release, and the links follow.
-
-    Returns how many bullets moved, so a caller can refuse to cut a release
-    out of an empty section rather than tagging a no-op.
-    """
-    import datetime
-
-    text = path.read_text(encoding="utf-8")
-    lines = text.split("\n")
-    start = next(
-        i for i, line in enumerate(lines) if line.startswith("## [Unreleased]")
-    )
-    end = next(
-        (
-            i
-            for i, line in enumerate(lines[start + 1 :], start + 1)
-            if line.startswith("## [")
-        ),
-        len(lines),
-    )
-    entries = sum(1 for line in lines[start:end] if line.startswith("- "))
-    if not entries:
-        return 0
-    today = datetime.datetime.now(tz=datetime.UTC).date().isoformat()
-    lines[start : start + 1] = [
-        "## [Unreleased]",
-        "",
-        f"## [{version}] — {today}",
-    ]
-    rolled = "\n".join(lines)
-    repo = "https://github.com/willemkokke/toolroom"
-    rolled = rolled.replace(
-        f"[Unreleased]: {repo}/compare/v{previous}...HEAD",
-        f"[Unreleased]: {repo}/compare/v{version}...HEAD\n"
-        f"[{version}]: {repo}/compare/v{previous}...v{version}",
-    )
-    path.write_text(rolled, encoding="utf-8")
-    return entries
 
 
 @tasks.task

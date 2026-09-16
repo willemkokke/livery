@@ -1,0 +1,798 @@
+{
+  "sequence": 9,
+  "version": "0.11.33",
+  "date": "2026-07-28",
+  "artifacts": {},
+  "surface": {
+    "platforms": [
+      "Linux",
+      "Windows",
+      "macOS"
+    ],
+    "extractor": 3,
+    "verbs": {
+      "pip.list": {
+        "help": "List, in tabular format, packages installed in an environment",
+        "wraps": false,
+        "positional": "none",
+        "lead": "",
+        "options": {
+          "allow_insecure_host": {
+            "flags": [
+              "--allow-insecure-host"
+            ],
+            "negation": "",
+            "help": "Allow insecure connections to a host",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "cache_dir": {
+            "flags": [
+              "--cache-dir"
+            ],
+            "negation": "",
+            "help": "Path to the cache directory",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "color": {
+            "flags": [
+              "--color"
+            ],
+            "negation": "",
+            "help": "Control the use of color in output",
+            "type": "choice",
+            "default": null,
+            "choices": [
+              "auto",
+              "always",
+              "never"
+            ]
+          },
+          "config_file": {
+            "flags": [
+              "--config-file"
+            ],
+            "negation": "",
+            "help": "The path to a `uv.toml` file to use for configuration",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "default_index": {
+            "flags": [
+              "--default-index"
+            ],
+            "negation": "",
+            "help": "The URL of the default package index (by default: <https://pypi.org/simple>)",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "directory": {
+            "flags": [
+              "--directory"
+            ],
+            "negation": "",
+            "help": "Change to the given directory prior to running the command",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "editable": {
+            "flags": [
+              "--editable",
+              "-e"
+            ],
+            "negation": "",
+            "help": "Only include editable projects",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "exclude": {
+            "flags": [
+              "--exclude"
+            ],
+            "negation": "",
+            "help": "Exclude the specified package(s) from the output",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "exclude_editable": {
+            "flags": [
+              "--exclude-editable"
+            ],
+            "negation": "",
+            "help": "Exclude any editable packages from output",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "exclude_newer": {
+            "flags": [
+              "--exclude-newer"
+            ],
+            "negation": "",
+            "help": "Limit candidate packages to those that were uploaded prior to the given date",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "exclude_newer_package": {
+            "flags": [
+              "--exclude-newer-package"
+            ],
+            "negation": "",
+            "help": "Limit candidate packages for specific packages to those that were uploaded prior to the given date",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "extra_index_url": {
+            "flags": [
+              "--extra-index-url"
+            ],
+            "negation": "",
+            "help": "(Deprecated: use `--index` instead) Extra URLs of package indexes to use, in addition to `--index-url`",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "find_links": {
+            "flags": [
+              "--find-links",
+              "-f"
+            ],
+            "negation": "",
+            "help": "Locations to search for candidate distributions, in addition to those found in the registry indexes",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "format": {
+            "flags": [
+              "--format"
+            ],
+            "negation": "",
+            "help": "Select the output format",
+            "type": "choice",
+            "default": "columns",
+            "choices": [
+              "columns",
+              "freeze",
+              "json"
+            ]
+          },
+          "index": {
+            "flags": [
+              "--index"
+            ],
+            "negation": "",
+            "help": "The URLs to use when resolving dependencies, in addition to the default index",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "index_strategy": {
+            "flags": [
+              "--index-strategy"
+            ],
+            "negation": "",
+            "help": "The strategy to use when resolving against multiple index URLs",
+            "type": "choice",
+            "default": null,
+            "choices": [
+              "first-index",
+              "unsafe-first-match",
+              "unsafe-best-match"
+            ]
+          },
+          "index_url": {
+            "flags": [
+              "--index-url",
+              "-i"
+            ],
+            "negation": "",
+            "help": "(Deprecated: use `--default-index` instead) The URL of the Python package index (by default: <https://pypi.org/simple>)",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "keyring_provider": {
+            "flags": [
+              "--keyring-provider"
+            ],
+            "negation": "",
+            "help": "Attempt to use `keyring` for authentication for index URLs",
+            "type": "choice",
+            "default": null,
+            "choices": [
+              "disabled",
+              "subprocess"
+            ]
+          },
+          "managed_python": {
+            "flags": [
+              "--managed-python"
+            ],
+            "negation": "--no-managed-python",
+            "help": "Require use of uv-managed Python versions",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "no_cache": {
+            "flags": [
+              "--no-cache",
+              "-n"
+            ],
+            "negation": "",
+            "help": "Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "no_config": {
+            "flags": [
+              "--no-config"
+            ],
+            "negation": "",
+            "help": "Avoid discovering configuration files (`pyproject.toml`, `uv.toml`)",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "no_index": {
+            "flags": [
+              "--no-index"
+            ],
+            "negation": "",
+            "help": "Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via `--find-links`",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "no_progress": {
+            "flags": [
+              "--no-progress"
+            ],
+            "negation": "",
+            "help": "Hide all progress outputs",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "no_python_downloads": {
+            "flags": [
+              "--no-python-downloads"
+            ],
+            "negation": "",
+            "help": "Disable automatic downloads of Python",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "offline": {
+            "flags": [
+              "--offline"
+            ],
+            "negation": "",
+            "help": "Disable network access",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "outdated": {
+            "flags": [
+              "--outdated"
+            ],
+            "negation": "",
+            "help": "List outdated packages",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "prefix": {
+            "flags": [
+              "--prefix"
+            ],
+            "negation": "",
+            "help": "List packages from the specified `--prefix` directory",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "project": {
+            "flags": [
+              "--project"
+            ],
+            "negation": "",
+            "help": "Discover a project in the given directory",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "python": {
+            "flags": [
+              "--python",
+              "-p"
+            ],
+            "negation": "",
+            "help": "The Python interpreter for which packages should be listed",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "quiet": {
+            "flags": [
+              "--quiet",
+              "-q"
+            ],
+            "negation": "",
+            "help": "Use quiet output",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "strict": {
+            "flags": [
+              "--strict"
+            ],
+            "negation": "",
+            "help": "Validate the Python environment, to detect packages with missing dependencies and other issues",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "system": {
+            "flags": [
+              "--system"
+            ],
+            "negation": "",
+            "help": "List packages in the system Python environment",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "system_certs": {
+            "flags": [
+              "--system-certs"
+            ],
+            "negation": "",
+            "help": "Whether to load TLS certificates from the platform's native certificate store",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "target": {
+            "flags": [
+              "--target",
+              "-t"
+            ],
+            "negation": "",
+            "help": "List packages from the specified `--target` directory",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "verbose": {
+            "flags": [
+              "--verbose",
+              "-v"
+            ],
+            "negation": "",
+            "help": "Use verbose output",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          }
+        }
+      },
+      "venv": {
+        "help": "Create a virtual environment",
+        "wraps": false,
+        "positional": "any",
+        "lead": "",
+        "options": {
+          "allow_existing": {
+            "flags": [
+              "--allow-existing"
+            ],
+            "negation": "",
+            "help": "Preserve any existing files or directories at the target path",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "allow_insecure_host": {
+            "flags": [
+              "--allow-insecure-host"
+            ],
+            "negation": "",
+            "help": "Allow insecure connections to a host",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "cache_dir": {
+            "flags": [
+              "--cache-dir"
+            ],
+            "negation": "",
+            "help": "Path to the cache directory",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "clear": {
+            "flags": [
+              "--clear",
+              "-c"
+            ],
+            "negation": "",
+            "help": "Remove any existing files or directories at the target path",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "color": {
+            "flags": [
+              "--color"
+            ],
+            "negation": "",
+            "help": "Control the use of color in output",
+            "type": "choice",
+            "default": null,
+            "choices": [
+              "auto",
+              "always",
+              "never"
+            ]
+          },
+          "config_file": {
+            "flags": [
+              "--config-file"
+            ],
+            "negation": "",
+            "help": "The path to a `uv.toml` file to use for configuration",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "default_index": {
+            "flags": [
+              "--default-index"
+            ],
+            "negation": "",
+            "help": "The URL of the default package index (by default: <https://pypi.org/simple>)",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "directory": {
+            "flags": [
+              "--directory"
+            ],
+            "negation": "",
+            "help": "Change to the given directory prior to running the command",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "exclude_newer": {
+            "flags": [
+              "--exclude-newer"
+            ],
+            "negation": "",
+            "help": "Limit candidate packages to those that were uploaded prior to the given date",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "exclude_newer_package": {
+            "flags": [
+              "--exclude-newer-package"
+            ],
+            "negation": "",
+            "help": "Limit candidate packages for specific packages to those that were uploaded prior to the given date",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "extra_index_url": {
+            "flags": [
+              "--extra-index-url"
+            ],
+            "negation": "",
+            "help": "(Deprecated: use `--index` instead) Extra URLs of package indexes to use, in addition to `--index-url`",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "find_links": {
+            "flags": [
+              "--find-links",
+              "-f"
+            ],
+            "negation": "",
+            "help": "Locations to search for candidate distributions, in addition to those found in the registry indexes",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "force": {
+            "flags": [
+              "--force"
+            ],
+            "negation": "",
+            "help": "Allow `--clear` to remove a non-virtual environment directory",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "index": {
+            "flags": [
+              "--index"
+            ],
+            "negation": "",
+            "help": "The URLs to use when resolving dependencies, in addition to the default index",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "index_strategy": {
+            "flags": [
+              "--index-strategy"
+            ],
+            "negation": "",
+            "help": "The strategy to use when resolving against multiple index URLs",
+            "type": "choice",
+            "default": null,
+            "choices": [
+              "first-index",
+              "unsafe-first-match",
+              "unsafe-best-match"
+            ]
+          },
+          "index_url": {
+            "flags": [
+              "--index-url",
+              "-i"
+            ],
+            "negation": "",
+            "help": "(Deprecated: use `--default-index` instead) The URL of the Python package index (by default: <https://pypi.org/simple>)",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "keyring_provider": {
+            "flags": [
+              "--keyring-provider"
+            ],
+            "negation": "",
+            "help": "Attempt to use `keyring` for authentication for index URLs",
+            "type": "choice",
+            "default": null,
+            "choices": [
+              "disabled",
+              "subprocess"
+            ]
+          },
+          "link_mode": {
+            "flags": [
+              "--link-mode"
+            ],
+            "negation": "",
+            "help": "The method to use when installing packages from the global cache",
+            "type": "choice",
+            "default": null,
+            "choices": [
+              "clone",
+              "copy",
+              "hardlink",
+              "symlink"
+            ]
+          },
+          "managed_python": {
+            "flags": [
+              "--managed-python"
+            ],
+            "negation": "--no-managed-python",
+            "help": "Require use of uv-managed Python versions",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "no_cache": {
+            "flags": [
+              "--no-cache",
+              "-n"
+            ],
+            "negation": "",
+            "help": "Avoid reading from or writing to the cache, instead using a temporary directory for the duration of the operation",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "no_config": {
+            "flags": [
+              "--no-config"
+            ],
+            "negation": "",
+            "help": "Avoid discovering configuration files (`pyproject.toml`, `uv.toml`)",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "no_index": {
+            "flags": [
+              "--no-index"
+            ],
+            "negation": "",
+            "help": "Ignore the registry index (e.g., PyPI), instead relying on direct URL dependencies and those provided via `--find-links`",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "no_progress": {
+            "flags": [
+              "--no-progress"
+            ],
+            "negation": "",
+            "help": "Hide all progress outputs",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "no_project": {
+            "flags": [
+              "--no-project"
+            ],
+            "negation": "",
+            "help": "Avoid discovering a project or workspace",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "no_python_downloads": {
+            "flags": [
+              "--no-python-downloads"
+            ],
+            "negation": "",
+            "help": "Disable automatic downloads of Python",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "offline": {
+            "flags": [
+              "--offline"
+            ],
+            "negation": "",
+            "help": "Disable network access",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "project": {
+            "flags": [
+              "--project"
+            ],
+            "negation": "",
+            "help": "Discover a project in the given directory",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "prompt": {
+            "flags": [
+              "--prompt"
+            ],
+            "negation": "",
+            "help": "Provide an alternative prompt prefix for the virtual environment",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "python": {
+            "flags": [
+              "--python",
+              "-p"
+            ],
+            "negation": "",
+            "help": "The Python interpreter to use for the virtual environment",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "quiet": {
+            "flags": [
+              "--quiet",
+              "-q"
+            ],
+            "negation": "",
+            "help": "Use quiet output",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "refresh": {
+            "flags": [
+              "--refresh"
+            ],
+            "negation": "",
+            "help": "Refresh all cached data",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "refresh_package": {
+            "flags": [
+              "--refresh-package"
+            ],
+            "negation": "",
+            "help": "Refresh cached data for a specific package",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "relocatable": {
+            "flags": [
+              "--relocatable"
+            ],
+            "negation": "",
+            "help": "Make the virtual environment relocatable",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "seed": {
+            "flags": [
+              "--seed"
+            ],
+            "negation": "",
+            "help": "Install seed packages (one or more of: `pip`, `setuptools`, and `wheel`) into the virtual environment",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "system_certs": {
+            "flags": [
+              "--system-certs"
+            ],
+            "negation": "",
+            "help": "Whether to load TLS certificates from the platform's native certificate store",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "system_site_packages": {
+            "flags": [
+              "--system-site-packages"
+            ],
+            "negation": "",
+            "help": "Give the virtual environment access to the system site packages directory",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "verbose": {
+            "flags": [
+              "--verbose",
+              "-v"
+            ],
+            "negation": "",
+            "help": "Use verbose output",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          }
+        }
+      }
+    }
+  }
+}

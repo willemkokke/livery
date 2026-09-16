@@ -1,0 +1,135 @@
+{
+  "sequence": 4,
+  "version": "1.11.1",
+  "date": "2022-11-05",
+  "artifacts": {},
+  "surface": {
+    "platforms": [
+      "Linux",
+      "Windows",
+      "macOS"
+    ],
+    "extractor": 3,
+    "verbs": {
+      "": {
+        "help": "if targets are unspecified, builds the 'default' target (see manual).",
+        "wraps": false,
+        "positional": "any",
+        "lead": "",
+        "options": {
+          "C": {
+            "flags": [
+              "-C"
+            ],
+            "negation": "",
+            "help": "change to DIR before doing anything else",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "d": {
+            "flags": [
+              "-d"
+            ],
+            "negation": "",
+            "help": "enable debugging (use '-d list' to list modes)",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "f": {
+            "flags": [
+              "-f"
+            ],
+            "negation": "",
+            "help": "specify input build file [default=build.ninja]",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "j": {
+            "flags": [
+              "-j"
+            ],
+            "negation": "",
+            "help": "run N jobs in parallel (0 means infinity) [default=6 on this system]",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "k": {
+            "flags": [
+              "-k"
+            ],
+            "negation": "",
+            "help": "keep going until N jobs fail (0 means infinity) [default=1]",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "l": {
+            "flags": [
+              "-l"
+            ],
+            "negation": "",
+            "help": "do not start new jobs if the load average is greater than N",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "n": {
+            "flags": [
+              "-n"
+            ],
+            "negation": "",
+            "help": "dry run (don't run commands but act like they succeeded)",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "quiet": {
+            "flags": [
+              "--quiet"
+            ],
+            "negation": "",
+            "help": "don't show progress status, just command output",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "t": {
+            "flags": [
+              "-t"
+            ],
+            "negation": "",
+            "help": "run a subtool (use '-t list' to list subtools) terminates toplevel options; further flags are passed to the tool",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "verbose": {
+            "flags": [
+              "--verbose",
+              "-v"
+            ],
+            "negation": "",
+            "help": "show all command lines while building",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "w": {
+            "flags": [
+              "-w"
+            ],
+            "negation": "",
+            "help": "adjust warnings (use '-w list' to list warnings)",
+            "type": "str",
+            "default": null,
+            "choices": []
+          }
+        }
+      }
+    }
+  }
+}

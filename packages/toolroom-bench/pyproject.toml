@@ -21,12 +21,14 @@ classifiers = [
     "Typing :: Typed",
 ]
 
-# The bench runs under footman and writes the stubs of
-# livery.toolroom.tools: both are runtime dependencies, and a consumer
-# of the handles never installs the bench.
+# The bench runs under footman, writes the stubs of
+# livery.toolroom.tools, and reads and writes the tool records through
+# the store: all three are runtime dependencies, and a consumer of the
+# handles never installs the bench.
 dependencies = [
     "livery-footman>=0.53.0",
     "livery-toolroom>=0.7.0",
+    "livery-toolroom-store>=0.1.0",
 ]
 
 [project.optional-dependencies]

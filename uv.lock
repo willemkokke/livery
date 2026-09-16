@@ -966,6 +966,7 @@ source = { editable = "packages/toolroom-bench" }
 dependencies = [
     { name = "livery-footman" },
     { name = "livery-toolroom" },
+    { name = "livery-toolroom-store" },
 ]
 
 [package.optional-dependencies]
@@ -977,6 +978,7 @@ test = [
 requires-dist = [
     { name = "livery-footman", editable = "packages/footman" },
     { name = "livery-toolroom", editable = "packages/toolroom" },
+    { name = "livery-toolroom-store", editable = "packages/toolroom-store" },
     { name = "mkdocs", marker = "extra == 'test'", specifier = ">=1.6" },
 ]
 provides-extras = ["test"]
