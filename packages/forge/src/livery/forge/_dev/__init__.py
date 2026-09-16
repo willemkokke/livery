@@ -46,6 +46,69 @@ dev = forge.group("dev", help="Local forge containers (Gitea and GitLab)")
 #: holding tests/ is four parents up.
 _FORGE_TESTS = Path(__file__).resolve().parents[4] / "tests"
 
+#: The conformance suite of each backend, and the concurrency its
+#: server absorbs: one single-node GitLab takes about four concurrent
+#: writers before its own internals time out (Gitaly deadlines), and
+#: GitHub's scratch organisation the same.
+_SUITES: dict[str, tuple[str, tuple[str, ...]]] = {
+    "gitea": ("test_gitea_conformance.py", ()),
+    "gitlab": ("test_gitlab_conformance.py", ("-n", "4")),
+    "github": ("test_github_conformance.py", ("-n", "4")),
+}
+
+
+def _run_suites(
+    scenario: str, backend: str, switch: dict[str, str], *, live: bool
+) -> None:
+    """Run the conformance suites, *switch* in their environment.
+
+    *live* probes each local backend's container first and refuses
+    naming the up verb, so a missing container fails before the suite
+    spends its start-up on it. GitHub scratch goes to the e2e
+    organisation, never the signed-in user's profile.
+    """
+    backends = (backend,) if backend else tuple(_SUITES)
+    for name in backends:
+        if name not in _SUITES:
+            fail(f"unknown backend {name!r}: gitea, gitlab, or github")
+    if live:
+        for name in backends:
+            if name in _FORGE_PROFILES:
+                _require_forge_up(name)
+    only = ("-k", scenario) if scenario else ()
+    for name in backends:
+        suite, workers = _SUITES[name]
+        env = {**os.environ, **switch}
+        if name == "github":
+            env["FORGE_E2E_OWNER"] = "livery-forge-e2e"
+        # A child, never in this process: pytest-xdist hands its
+        # workers the session's option dict, which in the runner's
+        # own process carries footman's argv proxy and cannot be
+        # serialised.
+        tools.pytest.opts(env=env, capture=False, in_process=False)(
+            str(_FORGE_TESTS / suite), *workers, *only
+        )
+
+
+def _require_forge_up(kind: str) -> None:
+    """Refuse until *kind*'s local container answers its version endpoint."""
+    url, path = (
+        (_GITEA_URL, "/api/v1/version")
+        if kind == "gitea"
+        else (_GITLAB_URL, "/api/v4/version")
+    )
+    try:
+        with urllib.request.urlopen(f"{url}{path}", timeout=5) as answer:
+            answer.read()
+    except urllib.error.HTTPError:
+        return  # answered: GitLab's version endpoint refuses an anonymous read
+    except (urllib.error.URLError, OSError):
+        fail(
+            f"the local {kind} is not up at {url}:"
+            f" `{footman.prog()} forge.dev.up --profile={kind}`"
+        )
+
+
 if _FORGE_TESTS.is_dir():
     fixtures = forge.group("fixtures", help="Recorded HTTP fixtures (cassettes)")
 
@@ -69,47 +132,27 @@ if _FORGE_TESTS.is_dir():
         """
         # The recording switch travels as explicit child env, never an
         # ambient write.
-        base_env = {**os.environ, "FORGE_RECORD": "1"}
+        _run_suites(scenario, backend, {"FORGE_RECORD": "1"}, live=True)
 
-        def run_tests(*args: str, env: dict[str, str]) -> None:
-            # A child, never in this process: pytest-xdist hands its
-            # workers the session's option dict, which in the runner's
-            # own process carries footman's argv proxy and cannot be
-            # serialised.
-            tools.pytest.opts(env=env, capture=False, in_process=False)(*args)
+    @forge.task(name="conformance")
+    def conformance(
+        scenario: Annotated[str, doc("run only this scenario, by its name")] = "",
+        backend: Annotated[str, doc("run only gitea, gitlab, or github")] = "",
+        live: Annotated[
+            bool, doc("against the seeded containers, the cassettes untouched")
+        ] = False,
+    ) -> None:
+        """Run the conformance suites: the cassettes' replay, or live.
 
-        only = ("-k", scenario) if scenario else ()
-        backends = (backend,) if backend else ("gitea", "gitlab", "github")
-        for name in backends:
-            if name not in ("gitea", "gitlab", "github"):
-                fail(f"unknown backend {name!r}: gitea, gitlab, or github")
-        if "gitea" in backends:
-            run_tests(
-                str(_FORGE_TESTS / "test_gitea_conformance.py"), *only, env=base_env
-            )
-        if "gitlab" in backends:
-            # One single-node GitLab absorbs about four concurrent
-            # writers; beyond that its own internals time out (Gitaly
-            # deadlines), so the recording run is capped rather than
-            # flaky.
-            run_tests(
-                str(_FORGE_TESTS / "test_gitlab_conformance.py"),
-                "-n",
-                "4",
-                *only,
-                env=base_env,
-            )
-        if "github" in backends:
-            # GitHub scratch goes to the e2e organisation, never the
-            # signed-in user's profile: scratch stays out of personal
-            # namespaces, recording included.
-            run_tests(
-                str(_FORGE_TESTS / "test_github_conformance.py"),
-                "-n",
-                "4",
-                *only,
-                env={**base_env, "FORGE_E2E_OWNER": "livery-forge-e2e"},
-            )
+        Replay is the gate's own run, with no network and no
+        credential. ``--live`` runs against the seeded containers
+        (`fm forge.dev.up` first) and rewrites nothing; a local
+        backend that is not up is refused by name before its suite
+        starts, and GitHub's live arm reads the e2e organisation's
+        credential the way the recorder does.
+        """
+        switch = {"FORGE_LIVE": "1"} if live else {}
+        _run_suites(scenario, backend, switch, live=live)
 
 
 _GITEA_URL = "http://localhost:3000"
