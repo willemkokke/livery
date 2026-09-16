@@ -67,6 +67,7 @@ nav = [
             { "list" = "_generated/tasks/issue/list.md" },
             { "reopen" = "_generated/tasks/issue/reopen.md" },
             { "search" = "_generated/tasks/issue/search.md" },
+            { "show" = "_generated/tasks/issue/show.md" },
             { "stop" = "_generated/tasks/issue/stop.md" },
             { "update" = "_generated/tasks/issue/update.md" },
         ] },

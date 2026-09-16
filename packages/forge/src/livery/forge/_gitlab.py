@@ -46,6 +46,7 @@ from livery.forge._types import (
     Codeowners,
     CodeownersEntry,
     CombinedStatus,
+    Comment,
     Conclusion,
     Issue,
     ItemState,
@@ -1477,6 +1478,15 @@ def _as_issue(data: Mapping[str, Any]) -> Issue:
     )
 
 
+def _as_comment(row: Mapping[str, Any]) -> Comment:
+    """One comment row, normalised."""
+    return Comment(
+        author=str((row.get("author") or {}).get("username") or ""),
+        created_at=str(row.get("created_at") or ""),
+        body=str(row.get("body") or ""),
+    )
+
+
 class _GitlabIssues:
     """The issue operations of one GitLab project."""
 
@@ -1668,3 +1678,19 @@ class _GitlabIssues:
             method="POST",
             data={"body": body},
         )
+
+    def comments(self, number: int) -> tuple[Comment, ...]:
+        """The issue's notes people wrote, oldest first; system notes are left out."""
+        if self.get(number) is None:
+            raise ForgeError(f"no issue {number} at {self._base}", status=404)
+        rows = self._client.paginate(
+            lambda page: (
+                self._client.request(
+                    f"{self._base}/issues/{number}/notes?sort=asc&order_by=created_at"
+                    f"&page={page}&per_page=100"
+                )
+                or []
+            ),
+            subject=f"{self._base}/issues/{number}/notes",
+        )
+        return tuple(_as_comment(row) for row in rows if not row.get("system"))

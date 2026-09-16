@@ -43,6 +43,7 @@ from livery.forge._types import (
     Codeowners,
     CodeownersEntry,
     CombinedStatus,
+    Comment,
     Issue,
     Job,
     Protection,
@@ -442,6 +443,17 @@ class Issues(Protocol):
 
     def comment(self, number: int, body: str) -> None:
         """Post *body* as a comment on issue *number*."""
+        ...
+
+    def comments(self, number: int) -> tuple[Comment, ...]:
+        """The comments on issue *number*, oldest first, each in full.
+
+        The thread continues the work order the body opened, so it is
+        read whole, the way the body is. Only what people wrote is a
+        comment: a forge's own system notes are left out. Raises
+        livery.forge.ForgeError with status 404 when the issue does
+        not exist.
+        """
         ...
 
     def close(self, number: int) -> None:

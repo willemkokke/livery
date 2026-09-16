@@ -16,6 +16,7 @@ def test_the_surface_is_declared() -> None:
         "Codeowners",
         "CodeownersEntry",
         "CombinedStatus",
+        "Comment",
         "Conclusion",
         "Forge",
         "ForgeError",

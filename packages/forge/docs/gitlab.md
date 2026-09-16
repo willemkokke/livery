@@ -145,3 +145,4 @@ not commit statuses.
 | `close` | `PUT /projects/:path/issues/:iid` | `state_event=close`, gated on the current state: GitLab refuses the event on a closed issue |
 | `assigned_to_me` | `GET /projects/:path/issues?scope=assigned_to_me&state=opened` | |
 | `comment` | `POST /projects/:path/issues/:iid/notes` | `body` |
+| `comments` | `GET /projects/:path/issues/:iid/notes?sort=asc&order_by=created_at` | the notes people wrote, in order; `system` notes are left out |
