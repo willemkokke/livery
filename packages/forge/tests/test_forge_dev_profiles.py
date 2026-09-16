@@ -10,6 +10,12 @@ from types import ModuleType
 
 import pytest
 
+# The dev plugin imports footman and toolroom, which forge never
+# depends on: the release's isolated leg runs this suite against the
+# wheel with forge's own dependencies alone, and these tests skip there.
+pytest.importorskip("livery.footman")
+pytest.importorskip("livery.toolroom")
+
 _FAILURES = (BaseException,)
 
 
