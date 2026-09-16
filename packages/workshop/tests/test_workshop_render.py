@@ -182,7 +182,10 @@ def test_the_github_gate_grants_the_store_writes_and_the_pages_deploy(
     uses = [str(step.get("uses", "")) for step in jobs["deploy"]["steps"]]
     assert any(u.startswith("actions/upload-pages-artifact") for u in uses)
     assert any(u.startswith("actions/deploy-pages") for u in uses)
-    for name in ("docs", "govern", "dispatch"):
+    # Starting the wave through the API needs the actions grant; the
+    # workflow token answers 403 without it, and the wave never starts.
+    assert jobs["dispatch"]["permissions"] == {"actions": "write"}
+    for name in ("docs", "govern"):
         assert "permissions" not in jobs[name], name
 
 

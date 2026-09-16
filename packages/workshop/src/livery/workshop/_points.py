@@ -112,6 +112,9 @@ class Job:
             ``""`` for none.
         deploy_key: The secret written as the job's SSH deploy key,
             ``""`` for none.
+        dispatches: Whether the job starts another workflow through the
+            forge's API, which GitHub's workflow token may do only with
+            the ``actions: write`` grant.
         driver_pin: Whether the job installs the released workshop the
             point's ``workshop`` input names, over the checkout's own,
             before its one call.
@@ -141,6 +144,7 @@ class Job:
     collects: str = ""
     environment: str = ""
     deploy_key: str = ""
+    dispatches: bool = False
     driver_pin: bool = False
     only: str = ""
     step: str = ""
@@ -286,6 +290,7 @@ DECLARED: tuple[Point, ...] = (
                 needs=("gate",),
                 fetch="full",
                 token="job",
+                dispatches=True,
                 note=(
                     "The release wave is dispatched from here, after main's"
                     " own verdict: the verb reads the manifest at HEAD and the"

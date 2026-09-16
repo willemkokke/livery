@@ -459,6 +459,11 @@ def _grants(job: Job, *, pages: bool) -> str:
         lines.append("      id-token: write")
     if job.writes:
         lines.append("      contents: write")
+    if job.dispatches:
+        # Starting a workflow through the API: the workflow token
+        # answers 403 ("Resource not accessible by integration")
+        # without it, and the wave never starts.
+        lines.append("      actions: write")
     if not lines:
         return ""
     return "    permissions:\n" + "".join(line + "\n" for line in lines)
