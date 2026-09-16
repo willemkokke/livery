@@ -5,6 +5,17 @@ All notable changes to footman are documented here. The format is based on
 [Semantic Versioning](https://semver.org/). While footman is pre-1.0, minor
 versions may include breaking changes.
 
+## [0.54.0] - 2026-09-16
+
+### Added
+
+- The release act, the points by hand and the clock on GitLab: the loop is whole on both lanes by @willemkokke
+
+### Fixed
+
+- One attended check, and the janitor sweeps wherever it runs by @willemkokke
+- The test HTTP servers stop on a short poll by @willemkokke
+
 ## [0.53.0] - 2026-09-13
 
 ### Added
