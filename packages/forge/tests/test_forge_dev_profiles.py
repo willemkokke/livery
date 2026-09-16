@@ -183,13 +183,13 @@ def test_conformance_replays_by_default_and_probes_the_forges_when_live(
         dev._run_suites("", "", {"FORGE_LIVE": "1"}, live=True)
     assert runs == []
     dev._run_suites("branches", "gitea", {}, live=False)
-    assert runs[-1][0][0].endswith("test_gitea_conformance.py")
+    assert Path(runs[-1][0][0]).name == "test_gitea_conformance.py"
     assert runs[-1][0][1:] == ("-k", "branches")
     assert "FORGE_LIVE" not in runs[-1][1] and "FORGE_RECORD" not in runs[-1][1]
     up.update({"gitea", "gitlab"})
     runs.clear()
     dev._run_suites("", "", {"FORGE_LIVE": "1"}, live=True)
-    assert [args[0].rsplit("/", 1)[-1] for args, _ in runs] == [
+    assert [Path(args[0]).name for args, _ in runs] == [
         "test_gitea_conformance.py",
         "test_gitlab_conformance.py",
         "test_github_conformance.py",
