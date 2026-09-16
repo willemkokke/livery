@@ -27,22 +27,25 @@ def test_outside_a_workspace_there_are_no_layers(tmp_path: Path) -> None:
     assert mount_layers(tmp_path) == ()
 
 
-def test_the_workshop_never_mounts_itself() -> None:
+def test_the_workshop_never_mounts_itself(tmp_path: Path) -> None:
     from livery.footman import registry
 
+    # A scratch contract naming a layer the workshop itself depends
+    # on, never this repository's, whose further layers belong to its
+    # dev group and are absent where the suite runs against the wheel
+    # with the package's own dependencies alone.
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nlayers = ["livery.workshop", "livery.forge"]\n'
+    )
     # The mount lands in a captured tree, never the process global.
     with registry.capture():
-        _the_workshop_never_mounts_itself()
+        _the_workshop_never_mounts_itself(tmp_path)
 
 
-def _the_workshop_never_mounts_itself() -> None:
+def _the_workshop_never_mounts_itself(root: Path) -> None:
     # The walk skips this package (importing it IS the base layer
     # arriving) and grafts only the further layers the contract names.
-    assert mount_layers(ROOT) == (
-        "livery.forge",
-        "livery.toolroom.bench",
-        "livery.footman",
-    )
+    assert mount_layers(root) == ("livery.forge",)
 
 
 def test_a_contract_without_layers_names_none(tmp_path: Path) -> None:
