@@ -1,0 +1,1 @@
+{"branch": "docs/tool-store-plan", "forge": "github", "legs": ["check (macos-latest, 3.14)", "check (ubuntu-latest, 3.14)", "check (windows-latest, 3.14)"], "run": "34673309217", "schema": 1, "scope": "full", "sha": "5ab63295d2b545eff1934fd985395cb4df7188a4", "tree": "20c24e2d595aa5b0a9bfdb9e55ea8ba1697e5ac5", "when": "2026-09-12T04:43:14.687572+00:00"}

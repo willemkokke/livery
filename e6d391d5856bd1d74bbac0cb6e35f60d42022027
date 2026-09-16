@@ -1,0 +1,1 @@
+{"branch": "feat/423-branch-coverage-the-record-holds-arcs-an", "forge": "github", "legs": ["check (macos-latest, 3.14)", "check (ubuntu-latest, 3.14)"], "run": "34564938143", "schema": 1, "scope": "full", "sha": "05c1e75b06dc5e1e3ce310935dfd86a65a58885a", "tree": "e6d391d5856bd1d74bbac0cb6e35f60d42022027", "when": "2026-09-11T05:18:40.282961+00:00"}

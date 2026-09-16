@@ -1,0 +1,1 @@
+{"branch": "chore/473-the-workshop-s-floor-on-copier-names-9-1", "forge": "github", "legs": ["check (macos-latest, 3.14)", "check (ubuntu-latest, 3.14)"], "run": "34648039921", "schema": 1, "scope": "full", "sha": "c887993189edfb97ca670d85f7c2558d3a3055bd", "tree": "a7e885ebcd5a1881d0219634a6e7cb9d27f37931", "when": "2026-09-11T21:17:43.011497+00:00"}

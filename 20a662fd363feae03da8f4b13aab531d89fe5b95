@@ -1,0 +1,1 @@
+{"branch": "fix/458-a-release-squash-whose-own-tree-cannot-p", "forge": "github", "legs": ["check (macos-latest, 3.14)", "check (ubuntu-latest, 3.14)"], "run": "34639013759", "schema": 1, "scope": "full", "sha": "4ec2073ac6bfd5237a2064057f280bec91a0e082", "tree": "20a662fd363feae03da8f4b13aab531d89fe5b95", "when": "2026-09-11T19:35:38.928952+00:00"}
