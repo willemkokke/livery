@@ -1,6 +1,6 @@
 """The engine: a pinned tool installed from verified tiers, linked, emitted, fetched.
 
-`ensure` lands a spec's artifact by its pin through the store's
+`ensure` lands a version's artifact by the record's digest through the store's
 sources, and through the origin URL unless the store is offline;
 extracts it, hoists the root, places a binary as its exe, applies the
 shims, collects the directory as a tree, moves `tools/<name>@<version>`
@@ -41,13 +41,14 @@ from livery.strongroom import (
 )
 from livery.strongroom import Store as ObjectStore
 from livery.toolroom.store._home import TOOLS, Home
-from livery.toolroom.store._spec import (
+from livery.toolroom.store._record import (
     DOWNLOAD_KINDS,
     HOSTS,
     PACKAGE_VAR,
-    Definition,
-    Spec,
+    Deployment,
+    Record,
     host_key,
+    resolve,
 )
 
 
@@ -109,7 +110,7 @@ class Ensured:
         installed: True when this call installed it, False when it was
             present already.
         tool_dir: The view a shell runs from.
-        definition: The host's definition the install followed.
+        deployment: The host's deployment the install followed.
         tree: The tree `tools/<name>@<version>` names.
     """
 
@@ -117,25 +118,25 @@ class Ensured:
     version: str
     installed: bool
     tool_dir: Path
-    definition: Definition
+    deployment: Deployment
     tree: Digest
 
     @property
     def paths(self) -> tuple[Path, ...]:
-        """The directories the definition puts on PATH, under the tool directory."""
+        """The directories the deployment puts on PATH, under the tool directory."""
         return tuple(
             self.tool_dir if entry == "." else self.tool_dir / entry
-            for entry in self.definition.paths
+            for entry in self.deployment.paths
         )
 
     @property
     def env(self) -> dict[str, str]:
-        """The definition's env with `PACKAGE_VAR` replaced by the tool directory."""
+        """The deployment's env with `PACKAGE_VAR` replaced by the tool directory."""
         return {
             key: str(Path(value.replace(PACKAGE_VAR, str(self.tool_dir))))
             if PACKAGE_VAR in value
             else value
-            for key, value in self.definition.env.items()
+            for key, value in self.deployment.env.items()
         }
 
 
@@ -234,67 +235,68 @@ class Store:
 
     # --- ensure ------------------------------------------------------------
 
-    def probe(self, spec: Spec, version: str = "") -> Ensured | None:
+    def probe(self, record: Record, version: str) -> Ensured | None:
         """The tool version when it is present here, else None; no source is consulted.
 
         Present means the ref names a tree and the view directory holds
         every path the view recorded.
-        """
-        definition = spec.definition_for(self.host, version)
-        wanted = version or spec.pinned
-        tool_dir = self.home.tool_dir(spec.name, wanted)
-        tree = self._objects.ref(TOOLS, f"{spec.name}@{wanted}")
-        if tree is None or not self._whole(tool_dir):
-            return None
-        return Ensured(spec.name, wanted, False, tool_dir, definition, tree)
-
-    def ensure(self, spec: Spec, version: str = "") -> Ensured:
-        """Supply the tool at *version*, the pinned version by default.
 
         Raises:
-            SpecError: for a host or version the spec lacks.
+            RecordError: for a version the record does not track, or a
+                version without this host.
+        """
+        deployment = resolve(record, version, self.host)
+        tool_dir = self.home.tool_dir(record.name, version)
+        tree = self._objects.ref(TOOLS, f"{record.name}@{version}")
+        if tree is None or not self._whole(tool_dir):
+            return None
+        return Ensured(record.name, version, False, tool_dir, deployment, tree)
+
+    def ensure(self, record: Record, version: str) -> Ensured:
+        """Supply the tool at *version*.
+
+        Raises:
+            RecordError: for a version the record does not track, or a
+                version without this host.
             StoreError: for a delegated kind, a miss while offline, a
                 mismatch at a tier, an archive that will not extract,
                 or a ref already naming another tree.
         """
-        if spec.kind not in DOWNLOAD_KINDS:
+        if record.kind not in DOWNLOAD_KINDS:
             raise StoreError(
-                f"{spec.name}: kind {spec.kind!r} is delegated to its tool and"
+                f"{record.name}: kind {record.kind!r} is delegated to its tool and"
                 " not installed through the store yet"
             )
-        wanted = version or spec.pinned
-        self._progress(Event(spec.name, wanted, "probe"))
-        present = self.probe(spec, version)
+        self._progress(Event(record.name, version, "probe"))
+        present = self.probe(record, version)
         if present is not None:
             return present
-        definition = spec.definition_for(self.host, version)
-        if definition.sha256 is None:  # pragma: no cover - the model refuses this
-            raise StoreError(f"{spec.name} {wanted}: no sha256 to land by")
-        digest = Digest("sha256", definition.sha256)
-        artifact = self._land(spec.name, wanted, definition.url, digest)
-        self._progress(Event(spec.name, wanted, "install", str(digest)))
-        scratch = self._scratch(spec.name, wanted)
+        deployment = resolve(record, version, self.host)
+        digest = Digest("sha256", deployment.sha256)
+        artifact = self._land(record.name, version, deployment.url, digest)
+        self._progress(Event(record.name, version, "install", str(digest)))
+        scratch = self._scratch(record.name, version)
         try:
-            self._unpack(spec, definition, artifact, scratch)
-            _apply_shims(definition, scratch)
+            self._unpack(record, deployment, artifact, scratch)
+            _apply_shims(deployment, scratch)
             tree = self._objects.collect(
                 scratch,
                 sorted(entry.name for entry in scratch.iterdir()),
-                executable=(definition.exe,) if definition.exe else (),
+                executable=(deployment.exe,) if deployment.exe else (),
             )
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
-        key = f"{spec.name}@{wanted}"
+        key = f"{record.name}@{version}"
         current = self._objects.ref(TOOLS, key)
         if current is None:
             self._objects.set_ref(TOOLS, key, tree.digest(), previous=None, by=BY)
         elif current != tree.digest():
             raise StoreError(
-                f"{spec.name} {wanted}: tools/{key} already names another tree"
+                f"{record.name} {version}: tools/{key} already names another tree"
                 f" ({current}); the artifact changed under a pinned version, which"
                 " a store never accepts"
             )
-        tool_dir = self.home.tool_dir(spec.name, wanted)
+        tool_dir = self.home.tool_dir(record.name, version)
         stale = self._view_of(tool_dir)
         if stale is not None:
             # A view the store made and something has since damaged:
@@ -303,12 +305,12 @@ class Store:
             self._objects.drop_view(stale.id)
         if tool_dir.exists() and any(tool_dir.iterdir()):
             raise StoreError(
-                f"{spec.name} {wanted}: {tool_dir} exists and is not the store's"
+                f"{record.name} {version}: {tool_dir} exists and is not the store's"
                 " view; the store never removes what it did not create"
             )
         tool_dir.parent.mkdir(parents=True, exist_ok=True)
         self._objects.view(tree.digest(), tool_dir)
-        return Ensured(spec.name, wanted, True, tool_dir, definition, tree.digest())
+        return Ensured(record.name, version, True, tool_dir, deployment, tree.digest())
 
     def _land(self, name: str, version: str, url: str, digest: Digest) -> Path:
         """The artifact's path here: the tiers first, then the origin unless offline."""
@@ -338,32 +340,28 @@ class Store:
         return scratch
 
     def _unpack(
-        self, spec: Spec, definition: Definition, artifact: Path, into: Path
+        self, record: Record, deployment: Deployment, artifact: Path, into: Path
     ) -> None:
-        if spec.kind == "binary":
-            if not definition.exe:
-                raise StoreError(
-                    f"{spec.name}: the binary definition {definition.key} names no exe"
-                )
-            placed = into / definition.exe
+        if record.kind == "binary":
+            placed = into / deployment.exe
             shutil.copyfile(artifact, placed)
             placed.chmod(
                 placed.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
             )
             return
         try:
-            _extract(artifact, _archive_name(definition.url), into)
+            _extract(artifact, _archive_name(deployment.url), into)
         except (tarfile.TarError, zipfile.BadZipFile, OSError) as error:
             raise StoreError(
-                f"{spec.name}: the archive at {definition.url} will not extract:"
+                f"{record.name}: the archive at {deployment.url} will not extract:"
                 f" {error}"
             ) from None
-        if definition.root:
-            root = into / definition.root
+        if deployment.root:
+            root = into / deployment.root
             if not root.is_dir():
                 found = ", ".join(sorted(p.name for p in into.iterdir())) or "nothing"
                 raise StoreError(
-                    f"{spec.name}: the archive has no root {definition.root!r};"
+                    f"{record.name}: the archive has no root {deployment.root!r};"
                     f" it holds {found}"
                 )
             for member in list(root.iterdir()):
@@ -450,9 +448,9 @@ class Store:
     # --- the mirror ----------------------------------------------------------
 
     def fetch(
-        self, specs: Iterable[Spec], *, hosts: Iterable[str] = HOSTS, into: Path
+        self, records: Iterable[Record], *, hosts: Iterable[str] = HOSTS, into: Path
     ) -> tuple[Fetched, ...]:
-        """Land every definition's artifact for *hosts* into a store at *into*.
+        """Land every version's artifact for *hosts* into a store at *into*.
 
         The folder is a mirror by construction: a source of this
         engine's layout. Bytes come from this store's sources and, unless
@@ -464,26 +462,24 @@ class Store:
         wanted = tuple(hosts)
         mirror = Home(into).open_store()
         landed: list[Fetched] = []
-        for spec in specs:
-            if spec.kind not in DOWNLOAD_KINDS:
+        for record in records:
+            if record.kind not in DOWNLOAD_KINDS:
                 continue
-            for version in spec.versions.values():
-                for host, definition in version.definitions.items():
-                    if host not in wanted or definition.sha256 is None:
+            for delta in record.deltas:
+                for host, artifact in delta.artifacts.items():
+                    if host not in wanted:
                         continue
-                    digest = Digest("sha256", definition.sha256)
+                    digest = Digest("sha256", artifact.sha256)
                     if mirror.state(digest) == "present":
                         landed.append(
-                            Fetched(spec.name, version.version, host, digest, False)
+                            Fetched(record.name, delta.version, host, digest, False)
                         )
                         continue
-                    path = self._land(
-                        spec.name, version.version, definition.url, digest
-                    )
+                    path = self._land(record.name, delta.version, artifact.url, digest)
                     with path.open("rb") as handle:
                         mirror.land(handle, expected=digest)
                     landed.append(
-                        Fetched(spec.name, version.version, host, digest, True)
+                        Fetched(record.name, delta.version, host, digest, True)
                     )
         return tuple(landed)
 
@@ -515,9 +511,9 @@ def _extract(artifact: Path, name: str, into: Path) -> None:
         archive.extractall(into, filter="data")
 
 
-def _apply_shims(definition: Definition, into: Path) -> None:
-    """Make the definition's shims inside the install: a link name to an executable."""
-    for link_name, target_name in definition.shims.items():
+def _apply_shims(deployment: Deployment, into: Path) -> None:
+    """Make the deployment's shims inside the install: a link name to an executable."""
+    for link_name, target_name in deployment.shims.items():
         if sys.platform == "win32":
             source = into / f"{target_name}.exe"
             link = into / f"{link_name}.exe"

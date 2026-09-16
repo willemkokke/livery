@@ -1,0 +1,24 @@
+{
+  "name": "tea",
+  "description": "Gitea CLI",
+  "kind": "binary",
+  "min_version": "",
+  "hosts": [
+    "macos-arm",
+    "macos-x64",
+    "linux-x64",
+    "linux-arm",
+    "windows-x64"
+  ],
+  "layout": {
+    "exe": "tea",
+    "paths": [
+      "."
+    ]
+  },
+  "host_layouts": {
+    "windows-x64": {
+      "exe": "tea.exe"
+    }
+  }
+}

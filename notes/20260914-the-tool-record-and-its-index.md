@@ -1,6 +1,6 @@
 # The tool record and its index
 
-Status: drafted 2026-09-14, awaiting Willem's ruling. No phase started.
+Status: ruled 2026-09-16 as drafted. Phase 1 in progress (livery#620).
 Runs after [CI declared, contributed, and dispatched on command][ci-plan],
 which delivers the mechanism this plan's last phase uses.
 Subsumes phase 2 onward of [the tool store over strongroom][store-plan],
@@ -604,6 +604,24 @@ Acceptance:
   operates a published store. The axis is client against operator, so no
   read-only tier is planned; splitting `Store` would revise the published
   protocol `StoreLike` and no consumer needs it.
+
+- 2026-09-16, Willem: the plan starts as drafted. The agent read that as
+  the ruling on the two open questions phase 1 needs, and took the plan's
+  own proposals: the reader lives in `livery.toolroom.store` with the
+  bench to depend on it (open question 1), and an override that shadows
+  nothing is both an override naming a host or version the record lacks
+  and one restating the value it inherits (open question 6).
+- 2026-09-16, the agent, at phase 1: the records live at this
+  repository's root, `records/<tool>/`, the authoring site the design
+  names; the schema beside them is one document with `Tool` and `Delta`
+  under `$defs`. The conversion placed each field at the widest layer a
+  majority of the cells share, so a root that differs per host sits on
+  the host layer with nothing at the tool level; the seven specs
+  converted whole, tea with two versions. A converted delta's date is
+  empty, since the specs carried none and a guessed date is a wrong
+  fact. `Store.ensure` takes the version it installs: a record pins
+  nothing, the lock does (phase 6). The spec model went in the same
+  change, its module and files with the proof test that converted them.
 
 ## Open
 

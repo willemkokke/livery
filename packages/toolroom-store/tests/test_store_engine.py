@@ -16,15 +16,17 @@ import pytest
 
 from livery.strongroom import Digest, FolderSource
 from livery.toolroom.store import (
-    Definition,
+    Artifact,
     Event,
     Home,
-    Spec,
-    SpecError,
+    Layout,
+    Record,
+    RecordDelta,
+    RecordError,
     Store,
     StoreError,
-    Version,
     _engine,
+    resolve,
 )
 
 HOST = "linux-x64"
@@ -61,7 +63,7 @@ def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _spec(
+def _record(
     name: str,
     artifacts: dict[str, bytes],
     *,
@@ -72,27 +74,25 @@ def _spec(
     env: dict[str, str] | None = None,
     shims: dict[str, str] | None = None,
     version: str = "1.0.0",
-) -> Spec:
-    """A spec pinning *version* with one definition per host in *artifacts*."""
-    definitions = {}
-    for host, data in artifacts.items():
-        platform, arch = host.split("-")
-        definitions[host] = Definition(
-            platform,
-            arch,
-            url=f"https://origin.test/{name}/{version}/{host}.zip",
-            sha256=_sha(data),
-            root=root,
-            exe=exe,
-            paths=paths,
-            env=env or {},
-            shims=shims or {},
-        )
-    return Spec(
+) -> Record:
+    """A record tracking one *version* with one artifact per host in *artifacts*."""
+    found = {
+        host: Artifact(f"https://origin.test/{name}/{version}/{host}.zip", _sha(data))
+        for host, data in artifacts.items()
+    }
+    layout = Layout(
+        root=root or None,
+        exe=exe or None,
+        paths=paths or None,
+        env=env or None,
+        shims=shims or None,
+    )
+    return Record(
         name,
         kind=kind,
-        pinned=version,
-        versions={version: Version(version, definitions)},
+        hosts=tuple(artifacts),
+        layout=layout,
+        deltas=(RecordDelta(1, version, "", found),),
     )
 
 
@@ -110,9 +110,9 @@ def origin(monkeypatch: pytest.MonkeyPatch) -> dict[str, bytes]:
     return served
 
 
-def _serve(origin: dict[str, bytes], spec: Spec, artifacts: dict[str, bytes]) -> None:
+def _serve(origin: dict[str, bytes], spec: Record, artifacts: dict[str, bytes]) -> None:
     for host, data in artifacts.items():
-        origin[spec.versions[spec.pinned].definitions[host].url] = data
+        origin[spec.deltas[-1].artifacts[host].url] = data
 
 
 @pytest.fixture
@@ -139,23 +139,23 @@ def test_a_host_no_spec_names_and_a_delegated_kind_are_refused(home: Home) -> No
         Store(home, host="plan9-mips")
     store = Store(home, host=HOST)
     artifacts, _ = _tool()
-    delegated = _spec("uvx", artifacts, kind="uv-tool")
+    delegated = _record("uvx", artifacts, kind="uv-tool")
     with pytest.raises(StoreError, match="kind 'uv-tool' is delegated to its tool"):
-        store.ensure(delegated)
-    with pytest.raises(SpecError, match="no definition for windows-arm"):
-        Store(home, host="windows-arm").ensure(_spec("tool", artifacts))
+        store.ensure(delegated, delegated.versions[-1])
+    with pytest.raises(RecordError, match="no host windows-arm"):
+        Store(home, host="windows-arm").ensure(_record("tool", artifacts), "1.0.0")
 
 
 def test_an_origin_serving_the_wrong_bytes_is_refused_naming_it(
     home: Home, origin: dict[str, bytes]
 ) -> None:
     artifacts, data = _tool()
-    spec = _spec("tool", artifacts)
+    spec = _record("tool", artifacts)
     _serve(origin, spec, {HOST: data + b"tampered"})
     store = Store(home, host=HOST)
     with pytest.raises(StoreError, match="served bytes that are not sha256:"):
-        store.ensure(spec)
-    assert store.probe(spec) is None
+        store.ensure(spec, spec.versions[-1])
+    assert store.probe(spec, spec.versions[-1]) is None
     assert store.objects.state(Digest("sha256", _sha(data))) == "absent"
 
 
@@ -163,21 +163,21 @@ def test_an_offline_miss_fails_closed_naming_the_origin(
     home: Home, origin: dict[str, bytes]
 ) -> None:
     artifacts, _data = _tool()
-    spec = _spec("tool", artifacts)
+    spec = _record("tool", artifacts)
     _serve(origin, spec, artifacts)
     store = Store(home, host=HOST, offline=True)
     with pytest.raises(
         StoreError,
         match=r"tool@1\.0\.0: sha256:.* is in no source and the store is offline; https://origin.test/tool/1.0.0/linux-x64.zip would have satisfied it",
     ):
-        store.ensure(spec)
+        store.ensure(spec, spec.versions[-1])
 
 
 def test_a_corrupt_mirror_entry_is_passed_over_for_the_next_tier(
     home: Home, origin: dict[str, bytes], tmp_path: Path
 ) -> None:
     artifacts, data = _tool()
-    spec = _spec("tool", artifacts)
+    spec = _record("tool", artifacts)
     _serve(origin, spec, artifacts)
     mirror = Home(tmp_path / "mirror").open_store()
     digest = Digest("sha256", _sha(data))
@@ -189,22 +189,22 @@ def test_a_corrupt_mirror_entry_is_passed_over_for_the_next_tier(
     store = Store(
         home, host=HOST, sources=[FolderSource(mirror.root)], progress=events.append
     )
-    ensured = store.ensure(spec)
+    ensured = store.ensure(spec, spec.versions[-1])
     assert ensured.installed
     assert [e.action for e in events] == ["probe", "fetch", "install", "link"][:3]
-    assert events[1].detail == spec.definition_for(HOST).url
+    assert events[1].detail == resolve(spec, spec.versions[-1], HOST).url
 
 
 def test_an_archive_without_the_declared_root_is_refused(
     home: Home, origin: dict[str, bytes]
 ) -> None:
     artifacts, _data = _tool()
-    spec = _spec("tool", artifacts, root="elsewhere")
+    spec = _record("tool", artifacts, root="elsewhere")
     _serve(origin, spec, artifacts)
     with pytest.raises(
         StoreError, match=r"has no root 'elsewhere'; it holds tool-1\.0\.0"
     ):
-        Store(home, host=HOST).ensure(spec)
+        Store(home, host=HOST).ensure(spec, spec.versions[-1])
     # Nothing half-made stays: no ref, no scratch, no tool directory.
     assert Store(home, host=HOST).objects.refs("tools") == []
     assert not any(home.tools.glob(".build-*"))
@@ -214,41 +214,34 @@ def test_a_binary_without_an_exe_and_a_non_archive_are_refused(
     home: Home, origin: dict[str, bytes]
 ) -> None:
     payload = b"#!/bin/sh\necho bin\n"
-    spec = _spec("bin", {HOST: payload}, kind="binary", paths=(".",))
-    _serve(origin, spec, {HOST: payload})
-    with pytest.raises(
-        StoreError, match="the binary definition linux-x64 names no exe"
-    ):
-        Store(home, host=HOST).ensure(spec)
-    not_an_archive = Spec(
+    # A binary that names no exe is refused by the record itself, at load.
+    with pytest.raises(RecordError, match="a binary names no exe"):
+        _record("bin", {HOST: payload}, kind="binary", paths=(".",))
+    not_an_archive = Record(
         "raw",
-        pinned="1",
-        versions={
-            "1": Version(
+        hosts=(HOST,),
+        layout=Layout(paths=(".",)),
+        deltas=(
+            RecordDelta(
+                1,
                 "1",
-                {
-                    HOST: Definition(
-                        "linux",
-                        "x64",
-                        url="https://origin.test/raw.bin",
-                        sha256=_sha(payload),
-                    )
-                },
-            )
-        },
+                "",
+                {HOST: Artifact("https://origin.test/raw.bin", _sha(payload))},
+            ),
+        ),
     )
     origin["https://origin.test/raw.bin"] = payload
     with pytest.raises(
         StoreError, match=r"raw\.bin is not an archive the store extracts"
     ):
-        Store(home, host=HOST).ensure(not_an_archive)
+        Store(home, host=HOST).ensure(not_an_archive, not_an_archive.versions[-1])
 
 
 def test_a_directory_the_store_did_not_make_is_never_removed(
     home: Home, origin: dict[str, bytes]
 ) -> None:
     artifacts, _data = _tool()
-    spec = _spec("tool", artifacts)
+    spec = _record("tool", artifacts)
     _serve(origin, spec, artifacts)
     mine = home.tool_dir("tool", "1.0.0")
     mine.mkdir(parents=True)
@@ -256,7 +249,7 @@ def test_a_directory_the_store_did_not_make_is_never_removed(
     with pytest.raises(
         StoreError, match="exists and is not the store's view; the store never removes"
     ):
-        Store(home, host=HOST).ensure(spec)
+        Store(home, host=HOST).ensure(spec, spec.versions[-1])
     assert (mine / "precious").read_text() == "mine"
 
 
@@ -264,7 +257,7 @@ def test_a_ref_that_already_names_another_tree_is_refused(
     home: Home, origin: dict[str, bytes]
 ) -> None:
     artifacts, _data = _tool()
-    spec = _spec("tool", artifacts)
+    spec = _record("tool", artifacts)
     _serve(origin, spec, artifacts)
     store = Store(home, host=HOST)
     other = store.objects.put(b"{}")
@@ -273,7 +266,7 @@ def test_a_ref_that_already_names_another_tree_is_refused(
         StoreError,
         match=r"already names another tree \(sha256:.*\); the artifact changed",
     ):
-        store.ensure(spec)
+        store.ensure(spec, spec.versions[-1])
 
 
 def test_a_launcher_stands_in_where_a_link_is_refused(
@@ -283,10 +276,10 @@ def test_a_launcher_stands_in_where_a_link_is_refused(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     artifacts, _data = _tool()
-    spec = _spec("tool", artifacts, root="tool-1.0.0")
+    spec = _record("tool", artifacts, root="tool-1.0.0")
     _serve(origin, spec, artifacts)
     store = Store(home, host=HOST)
-    ensured = store.ensure(spec)
+    ensured = store.ensure(spec, spec.versions[-1])
 
     def refuse(target: Path, link: Path) -> None:
         raise OSError("symlinks refused here")
@@ -308,7 +301,7 @@ def test_an_install_lands_extracts_hoists_collects_and_views(
     home: Home, origin: dict[str, bytes]
 ) -> None:
     artifacts, _data = _tool()
-    spec = _spec(
+    spec = _record(
         "tool",
         artifacts,
         root="tool-1.0.0",
@@ -318,7 +311,7 @@ def test_an_install_lands_extracts_hoists_collects_and_views(
     _serve(origin, spec, artifacts)
     events: list[Event] = []
     store = Store(home, host=HOST, progress=events.append)
-    ensured = store.ensure(spec)
+    ensured = store.ensure(spec, spec.versions[-1])
     assert ensured.installed and ensured.version == "1.0.0"
     tool = ensured.tool_dir / "bin" / f"tool{EXE}"
     assert tool.read_bytes() == b"#!/bin/sh\necho hi\n"
@@ -337,15 +330,15 @@ def test_an_install_lands_extracts_hoists_collects_and_views(
     assert [e.action for e in events] == ["probe", "fetch", "install"]
     # The second call is a probe: nothing fetched, nothing installed.
     events.clear()
-    again = store.ensure(spec)
+    again = store.ensure(spec, spec.versions[-1])
     assert not again.installed and again.tree == ensured.tree
     assert [e.action for e in events] == ["probe"]
     # A damaged view is made whole again through its own record. The
     # view's file is read-only, and Windows refuses to unlink one.
     tool.chmod(tool.stat().st_mode | stat.S_IWUSR)
     tool.unlink()
-    assert store.probe(spec) is None
-    repaired = store.ensure(spec)
+    assert store.probe(spec, spec.versions[-1]) is None
+    repaired = store.ensure(spec, spec.versions[-1])
     assert repaired.installed and tool.exists()
 
 
@@ -353,30 +346,21 @@ def test_a_tar_archive_and_a_binary_install_too(
     home: Home, origin: dict[str, bytes]
 ) -> None:
     tar = _tar({"tool": b"#!/bin/sh\necho tar\n"}, executable=("tool",))
-    spec = _spec("tarred", {HOST: tar}, paths=(".",))
-    url = spec.definition_for(HOST).url.replace(".zip", ".tar.gz")
-    spec = Spec(
+    url = "https://origin.test/tarred/1.0.0/linux-x64.tar.gz"
+    spec = Record(
         "tarred",
-        pinned="1.0.0",
-        versions={
-            "1.0.0": Version(
-                "1.0.0",
-                {
-                    HOST: Definition(
-                        "linux", "x64", url=url, sha256=_sha(tar), paths=(".",)
-                    )
-                },
-            )
-        },
+        hosts=(HOST,),
+        layout=Layout(paths=(".",)),
+        deltas=(RecordDelta(1, "1.0.0", "", {HOST: Artifact(url, _sha(tar))}),),
     )
     origin[url] = tar
     store = Store(home, host=HOST)
-    ensured = store.ensure(spec)
+    ensured = store.ensure(spec, spec.versions[-1])
     assert (ensured.tool_dir / "tool").read_bytes().endswith(b"echo tar\n")
     payload = b"#!/bin/sh\necho bin\n"
-    binary = _spec("bin", {HOST: payload}, kind="binary", exe="bin", paths=(".",))
+    binary = _record("bin", {HOST: payload}, kind="binary", exe="bin", paths=(".",))
     _serve(origin, binary, {HOST: payload})
-    placed = store.ensure(binary)
+    placed = store.ensure(binary, binary.versions[-1])
     assert (placed.tool_dir / "bin").read_bytes() == payload
     if sys.platform != "win32":
         assert (placed.tool_dir / "bin").stat().st_mode & stat.S_IXUSR
@@ -386,13 +370,16 @@ def test_link_fills_the_bin_directory_and_removes_only_what_it_made(
     home: Home, origin: dict[str, bytes], tmp_path: Path
 ) -> None:
     artifacts, _data = _tool()
-    spec = _spec("tool", artifacts, root="tool-1.0.0")
+    spec = _record("tool", artifacts, root="tool-1.0.0")
     _serve(origin, spec, artifacts)
     other_artifacts, _other_data = _tool("other")
-    other = _spec("other", other_artifacts, root="other-1.0.0")
+    other = _record("other", other_artifacts, root="other-1.0.0")
     _serve(origin, other, other_artifacts)
     store = Store(home, host=HOST)
-    installs = [store.ensure(spec), store.ensure(other)]
+    installs = [
+        store.ensure(spec, spec.versions[-1]),
+        store.ensure(other, other.versions[-1]),
+    ]
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     (bin_dir / "mine").write_text("a person's file")
@@ -418,7 +405,7 @@ def test_fetch_builds_a_mirror_an_offline_store_installs_from(
     home: Home, origin: dict[str, bytes], tmp_path: Path
 ) -> None:
     artifacts, data = _tool()
-    spec = _spec("tool", artifacts, root="tool-1.0.0")
+    spec = _record("tool", artifacts, root="tool-1.0.0")
     _serve(origin, spec, artifacts)
     store = Store(Home(tmp_path / "fetcher"), host=HOST)
     mirror = tmp_path / "mirror"
@@ -433,7 +420,7 @@ def test_fetch_builds_a_mirror_an_offline_store_installs_from(
     offline = Store(
         home, host=HOST, offline=True, sources=[FolderSource(Home(mirror).store)]
     )
-    ensured = offline.ensure(spec)
+    ensured = offline.ensure(spec, spec.versions[-1])
     assert ensured.installed
     # One blob gone from the mirror: the next offline install fails closed, naming it.
     gone = Home(mirror).open_store()
@@ -445,7 +432,7 @@ def test_fetch_builds_a_mirror_an_offline_store_installs_from(
             host=OTHER,
             offline=True,
             sources=[FolderSource(Home(mirror).store)],
-        ).ensure(spec)
+        ).ensure(spec, spec.versions[-1])
 
 
 # --- the seams and the edges ------------------------------------------------------
@@ -486,10 +473,10 @@ def test_an_archive_that_will_not_extract_is_refused(
     home: Home, origin: dict[str, bytes]
 ) -> None:
     broken = b"PK\x03\x04 not really a zip"
-    spec = _spec("broken", {HOST: broken})
+    spec = _record("broken", {HOST: broken})
     _serve(origin, spec, {HOST: broken})
     with pytest.raises(StoreError, match=r"the archive at .* will not extract"):
-        Store(home, host=HOST).ensure(spec)
+        Store(home, host=HOST).ensure(spec, spec.versions[-1])
 
 
 def test_a_zip_with_directories_and_modeless_members_installs(
@@ -512,9 +499,9 @@ def test_a_zip_with_directories_and_modeless_members_installs(
         escape.external_attr = 0o755 << 16
         archive.writestr(escape, b"#!/bin/sh\n")
     data = buffer.getvalue()
-    spec = _spec("zipped", {HOST: data}, root="t")
+    spec = _record("zipped", {HOST: data}, root="t")
     _serve(origin, spec, {HOST: data})
-    ensured = Store(home, host=HOST).ensure(spec)
+    ensured = Store(home, host=HOST).ensure(spec, spec.versions[-1])
     assert (ensured.tool_dir / "bin" / "plain").read_bytes() == b"x"
 
 
@@ -530,12 +517,15 @@ def test_link_skips_what_is_not_an_executable_file_or_a_name_taken(
         },
         executable=(f"t/bin/tool{EXE}", f"t/bin/sub/inner{EXE}"),
     )
-    spec = _spec("first", {HOST: data}, root="t", paths=("bin", "missing"))
+    spec = _record("first", {HOST: data}, root="t", paths=("bin", "missing"))
     _serve(origin, spec, {HOST: data})
-    twin = _spec("second", {HOST: data + b"\n"}, root="t", paths=("bin",))
+    twin = _record("second", {HOST: data + b"\n"}, root="t", paths=("bin",))
     _serve(origin, twin, {HOST: data + b"\n"})
     store = Store(home, host=HOST)
-    installs = [store.ensure(spec), store.ensure(twin)]
+    installs = [
+        store.ensure(spec, spec.versions[-1]),
+        store.ensure(twin, twin.versions[-1]),
+    ]
     bin_dir = tmp_path / "bin"
     made = store.link(installs, bin_dir)
     # One link: README is not executable, sub is a directory, the twin's
@@ -555,11 +545,11 @@ def test_fetch_skips_a_delegated_kind_and_a_shim_never_overwrites(
         {f"t/bin/bun{EXE}": b"#!/bin/sh\n", f"t/node{EXE}": b"already here"},
         executable=(f"t/bin/bun{EXE}",),
     )
-    spec = _spec("bun", {HOST: data}, root="t", shims={"node": "bin/bun"})
+    spec = _record("bun", {HOST: data}, root="t", shims={"node": "bin/bun"})
     _serve(origin, spec, {HOST: data})
-    delegated = _spec("uvx", {HOST: b"unused"}, kind="uv-tool")
+    delegated = _record("uvx", {HOST: b"unused"}, kind="uv-tool")
     store = Store(home, host=HOST)
-    ensured = store.ensure(spec)
+    ensured = store.ensure(spec, spec.versions[-1])
     # The archive carried a `node` of its own: the shim leaves it alone.
     assert (ensured.tool_dir / f"node{EXE}").read_bytes() == b"already here"
     fetched = store.fetch([delegated, spec], into=tmp_path / "mirror")
