@@ -1,5 +1,64 @@
 # Changelog
 
+## [0.3.0] - 2026-09-16
+
+### Added
+
+- A Windows leg's temporary directory lives on the runner's working drive by default on GitHub by @willemkokke
+- The state store reads and writes a series in a fixed handful of git processes by @willemkokke
+- The speed marks are off unless the contract declares them by @willemkokke
+- A given body updates a reused pull request by @willemkokke
+- A verb reads the state store through one snapshot of the remote namespace by @willemkokke
+- The gate job drops the stale speed marks while the marks are off by @willemkokke
+- The store's remaining round trips: no readback, one listing for heads, one write per leg, one snapshot per job by @willemkokke
+- The wave publishes with a PyPI token when the repository has one by @willemkokke
+- Livery.toolroom is a namespace, the handles live in livery.toolroom.tools by @willemkokke
+- The merged head decides what a merge left behind, and the release act cleans up after itself by @willemkokke
+- A schedule entry runs every week or every two weeks, and the refresh submits what moved by @willemkokke
+- The loop's verbs at the top level: start, commit, abandon a branch, submit --no-close, and issue.reopen by @willemkokke
+- The stub machinery is livery.toolroom.bench, its own distribution by @willemkokke
+- Tests are namespaced by their path, and a helper carries its package's name by @willemkokke
+- The gate record is a chain, and fm check runs what changed since the nearest proved tree by @willemkokke
+- The kind seam classifies a change, and a test-only delta runs its files by @willemkokke
+- The environment follows the branch by @willemkokke
+- The gate runs on command, and a GitLab pipeline names its workflow by @willemkokke
+- A point is a declaration, and the emitters' properties are pinned by @willemkokke
+- One renderer per forge for the gate, the merge and the nightly, and the clock on GitLab by @willemkokke
+- The release point is data: its two YAML decisions move into verbs and its jobs become ci.run jobs by @willemkokke
+- A package contributes a point: [[ci.point]] in its contract, rendered for every forge, removed with the package by @willemkokke
+- Every GitLab pipeline names its workflow, a merge request pipeline is a pull request run, and the recorder's pytest is a child by @willemkokke
+- The GitLab lane is born: fm ci.e2e --forge=gitlab merges the setup PR on the real runner and proves the verified skip by @willemkokke
+- The GitLab runner carries the toolchain, the docker socket is opt-in on both lanes, and the members and the three legs prove themselves on merge request pipelines by @willemkokke
+- The release act, the points by hand and the clock on GitLab: the loop is whole on both lanes by @willemkokke
+- Issue.show prints one issue whole, and the protocol reads an issue's thread by @willemkokke
+
+### Fixed
+
+- The publish job pushes receipts with a credential that has the workflows scope by @willemkokke
+- The wave walks past a version the index already serves before uploading by @willemkokke
+- The release legs' toolchain install leaves what the leg resolved by @willemkokke
+- A re-run of only the verdict job runs the whole run instead by @willemkokke
+- The release legs refresh the co-released members' cached wheels by @willemkokke
+- A submit re-run on the merged head reports the merge by @willemkokke
+- The changelog credits authors with the token the forge lane connects with by @willemkokke
+- The train's recovery finds the requested set's own uncut squash by @willemkokke
+- The site build names its sources and refuses a checkout without them by @willemkokke
+- Dropping a view and evicting an object clear the read-only mark Windows refuses on by @willemkokke
+- The verbs that remove a worktree are serial, so the teardown may move the process by @willemkokke
+- An empty publish token variable never reaches uv publish by @willemkokke
+- One attended check, and the janitor sweeps wherever it runs by @willemkokke
+- A dev release tells a decline from an unanswered question by @willemkokke
+- The terminal is asked in one place, and the lint keeps it there by @willemkokke
+- The workshop's toolroom floor is 0.7.0, the namespace's first release by @willemkokke
+
+### Changed
+
+- Remove the footman and toolroom compat shim packages by @willemkokke
+- The isolated legs resolve from local wheels, never an index by @willemkokke
+- The suites build their repositories once by @willemkokke
+- Closure ids are read in one git process by @willemkokke
+- The layer walk's test mounts a scratch contract, not this repository's by @willemkokke
+
 ## [0.2.0] - 2026-09-11
 
 ### Added
