@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.4.0] - 2026-09-16
+
+### Added
+
+- The state store reads and writes a series in a fixed handful of git processes by @willemkokke
+- A given body updates a reused pull request by @willemkokke
+- Livery.toolroom is a namespace, the handles live in livery.toolroom.tools by @willemkokke
+- The merged head decides what a merge left behind, and the release act cleans up after itself by @willemkokke
+- The loop's verbs at the top level: start, commit, abandon a branch, submit --no-close, and issue.reopen by @willemkokke
+- Tests are namespaced by their path, and a helper carries its package's name by @willemkokke
+- The gate runs on command, and a GitLab pipeline names its workflow by @willemkokke
+- One renderer per forge for the gate, the merge and the nightly, and the clock on GitLab by @willemkokke
+- Every GitLab pipeline names its workflow, a merge request pipeline is a pull request run, and the recorder's pytest is a child by @willemkokke
+- The GitLab lane is born: fm ci.e2e --forge=gitlab merges the setup PR on the real runner and proves the verified skip by @willemkokke
+- The GitLab runner carries the toolchain, the docker socket is opt-in on both lanes, and the members and the three legs prove themselves on merge request pipelines by @willemkokke
+- The release act, the points by hand and the clock on GitLab: the loop is whole on both lanes by @willemkokke
+- Issue.show prints one issue whole, and the protocol reads an issue's thread by @willemkokke
+- Forge.conformance runs the suites in replay or live against the local forges, the cassettes untouched by @willemkokke
+
+### Fixed
+
+- The test HTTP servers stop on a short poll by @willemkokke
+- The dev plugin's tests skip where footman is absent by @willemkokke
+
 ## [0.3.0] - 2026-09-11
 
 ### Added
