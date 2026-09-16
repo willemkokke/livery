@@ -1,0 +1,18 @@
+{
+  "name": "git",
+  "description": "System git at the floor version; Windows vendors the pinned PortableGit when no suitable Git for Windows is present",
+  "kind": "system-check",
+  "min_version": "2.43.0",
+  "hosts": [
+    "windows-x64"
+  ],
+  "layout": {
+    "paths": [
+      "cmd",
+      "bin"
+    ],
+    "env": {
+      "CLAUDE_CODE_GIT_BASH_PATH": "$package/bin/bash.exe"
+    }
+  }
+}

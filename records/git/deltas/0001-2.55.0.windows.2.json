@@ -1,0 +1,11 @@
+{
+  "sequence": 1,
+  "version": "2.55.0.windows.2",
+  "date": "",
+  "artifacts": {
+    "windows-x64": {
+      "url": "https://github.com/git-for-windows/git/releases/download/v2.55.0.windows.2/PortableGit-2.55.0.2-64-bit.7z.exe",
+      "sha256": "b20d42da3afa228e9fa6174480de820282667e799440d655e308f700dfa0d0df"
+    }
+  }
+}
