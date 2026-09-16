@@ -26,7 +26,10 @@ dependencies = [
     # silent un-starving). 0.52.2 is the first livery-footman: the
     # workshop imports livery.footman directly, never the shim.
     "livery-footman>=0.52.2",
-    "livery-toolroom>=0.6.2",
+    # 0.7.0 is the first livery-toolroom with the livery.toolroom
+    # namespace, whose tools module the workshop imports; the release
+    # act's lowest-direct leg installs the floor and proves it.
+    "livery-toolroom>=0.7.0",
     # The template engine behind `fm template.check` and `fm
     # new.package`; pyyaml reads the adopted answers files. The
     # pyyaml floor is the oldest release whose wheels cover every
