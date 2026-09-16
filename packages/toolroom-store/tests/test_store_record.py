@@ -52,7 +52,7 @@ def _record(**overrides: object) -> Record:
         "name": "tool",
         "kind": "archive",
         "hosts": ("macos-arm", "linux-x64"),
-        "layout": Layout(paths=("bin",)),
+        "layout": Layout(entry_points=("bin/tool",), paths=("bin",)),
         "deltas": (_delta(),),
     }
     fields.update(overrides)
@@ -128,9 +128,19 @@ def test_an_override_restating_what_it_inherits_is_refused() -> None:
 
 def test_a_version_whose_host_resolves_incomplete_is_refused() -> None:
     with pytest.raises(RecordError, match=r"resolves incomplete, paths is empty"):
-        _record(layout=Layout())
+        _record(layout=Layout(entry_points=("tool",)))
     with pytest.raises(RecordError, match=r"a binary names no exe"):
         _record(kind="binary")
+    # What goes on PATH is declared, never discovered: a downloaded
+    # kind with no entry point, and a binary whose exe is not among
+    # them, are incomplete.
+    with pytest.raises(RecordError, match=r"no entry point is declared"):
+        _record(layout=Layout(paths=("bin",)))
+    with pytest.raises(RecordError, match=r"exe 'tool' is not among its entry points"):
+        _record(
+            kind="binary",
+            layout=Layout(exe="tool", entry_points=("other",), paths=(".",)),
+        )
     with pytest.raises(RecordError, match=r"a archive version needs an artifact"):
         _record(deltas=(_delta(hosts=()),))
     with pytest.raises(RecordError, match=r"a layout for a version with no host"):
@@ -287,8 +297,10 @@ def test_a_host_no_record_can_name_is_refused() -> None:
 def test_the_four_layers_resolve_most_specific_winning() -> None:
     record = _record(
         hosts=("macos-arm", "linux-x64", "windows-x64"),
-        layout=Layout(paths=("bin",), env={"A": "tool"}),
-        host_layouts={"windows-x64": Layout(paths=("cmd",))},
+        layout=Layout(entry_points=("bin/tool",), paths=("bin",), env={"A": "tool"}),
+        host_layouts={
+            "windows-x64": Layout(entry_points=("cmd/tool.exe",), paths=("cmd",))
+        },
         deltas=(
             _delta(1, "1", hosts=("macos-arm", "linux-x64", "windows-x64")),
             _delta(
@@ -301,9 +313,18 @@ def test_the_four_layers_resolve_most_specific_winning() -> None:
         ),
     )
     assert resolve(record, "1", "macos-arm") == Deployment(
-        "https://x/1/macos-arm.zip", SHA, "", "", ("bin",), {"A": "tool"}, {}, ()
+        "https://x/1/macos-arm.zip",
+        SHA,
+        "",
+        "",
+        ("bin/tool",),
+        ("bin",),
+        {"A": "tool"},
+        {},
+        (),
     )
     assert resolve(record, "1", "windows-x64").paths == ("cmd",)
+    assert resolve(record, "1", "windows-x64").entry_points == ("cmd/tool.exe",)
     two_mac = resolve(record, "2", "macos-arm")
     assert (two_mac.root, two_mac.paths, two_mac.env) == ("v2", ("bin",), {"A": "tool"})
     two_win = resolve(record, "2", "windows-x64")
@@ -316,12 +337,13 @@ def test_the_four_layers_resolve_most_specific_winning() -> None:
 
 def test_a_record_round_trips_through_save_and_load(tmp_path: Path) -> None:
     record = _record(
+        host_layouts={"linux-x64": Layout(root="l")},
         deltas=(
             _delta(1, "1"),
             _delta(
                 2, "2", host_layouts={"macos-arm": Layout(root="m", exclude=("*.txt",))}
             ),
-        )
+        ),
     )
     record.save(tmp_path / "tool")
     assert sorted(p.name for p in (tmp_path / "tool" / "deltas").iterdir()) == [
@@ -338,7 +360,9 @@ def test_a_record_round_trips_through_save_and_load(tmp_path: Path) -> None:
         "min_version",
         "hosts",
         "layout",
+        "host_layouts",
     ]
+    assert written["host_layouts"] == {"linux-x64": {"root": "l"}}
     delta = json.loads(
         (tmp_path / "tool" / "deltas" / "0002-2.json").read_text("utf-8")
     )
@@ -363,6 +387,7 @@ def test_the_schema_names_both_documents_and_exports(tmp_path: Path) -> None:
     assert set(shape["$defs"]["Layout"]["properties"]) == {
         "root",
         "exe",
+        "entry_points",
         "paths",
         "env",
         "shims",
@@ -388,4 +413,10 @@ def test_every_host_of_every_version_of_every_record_resolves_whole() -> None:
                 assert deployment.url and deployment.sha256, (name, version, host)
                 assert deployment.paths, (name, version, host)
                 if record.kind == "binary":
-                    assert deployment.exe, (name, version, host)
+                    assert deployment.exe in deployment.entry_points, (
+                        name,
+                        version,
+                        host,
+                    )
+                if record.kind in ("archive", "binary"):
+                    assert deployment.entry_points, (name, version, host)

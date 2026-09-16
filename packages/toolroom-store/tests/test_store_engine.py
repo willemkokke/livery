@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import hashlib
 import io
 import os
 import stat
 import sys
-import tarfile
 import zipfile
 from collections.abc import Iterator
 from pathlib import Path
@@ -28,39 +26,13 @@ from livery.toolroom.store import (
     _engine,
     resolve,
 )
+from toolroom_store_archives import make_tar, make_zip, sha
 
 HOST = "linux-x64"
 OTHER = "macos-arm"
 # The fixtures are Linux-shaped; on Windows the engine judges an
 # executable by its suffix, so the fixtures carry one there.
 EXE = ".exe" if sys.platform == "win32" else ""
-
-
-def _zip(files: dict[str, bytes], *, executable: tuple[str, ...] = ()) -> bytes:
-    """A zip whose members carry Unix modes, an executable bit where named."""
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w") as archive:
-        for name, data in files.items():
-            info = zipfile.ZipInfo(name)
-            mode = 0o755 if name in executable else 0o644
-            info.external_attr = mode << 16
-            archive.writestr(info, data)
-    return buffer.getvalue()
-
-
-def _tar(files: dict[str, bytes], *, executable: tuple[str, ...] = ()) -> bytes:
-    buffer = io.BytesIO()
-    with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
-        for name, data in files.items():
-            info = tarfile.TarInfo(name)
-            info.size = len(data)
-            info.mode = 0o755 if name in executable else 0o644
-            archive.addfile(info, io.BytesIO(data))
-    return buffer.getvalue()
-
-
-def _sha(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
 
 
 def _record(
@@ -74,15 +46,31 @@ def _record(
     env: dict[str, str] | None = None,
     shims: dict[str, str] | None = None,
     version: str = "1.0.0",
+    entry_points: tuple[str, ...] | None = None,
 ) -> Record:
-    """A record tracking one *version* with one artifact per host in *artifacts*."""
+    """A record tracking one *version* with one artifact per host in *artifacts*.
+
+    The entry points default to the one executable the test archives
+    carry: `bin/<name>` when `bin` is on PATH, else `<name>` at the top,
+    the binary's `exe` for a binary.
+    """
+    if entry_points is None:
+        if exe:
+            entry_points = (exe,)
+        elif "bin" in paths and root:
+            entry_points = (f"bin/{name}{EXE}",)
+        elif "bin" in paths:
+            entry_points = (f"{name}-{version}/bin/{name}{EXE}",)
+        else:
+            entry_points = (f"{name}{EXE}",)
     found = {
-        host: Artifact(f"https://origin.test/{name}/{version}/{host}.zip", _sha(data))
+        host: Artifact(f"https://origin.test/{name}/{version}/{host}.zip", sha(data))
         for host, data in artifacts.items()
     }
     layout = Layout(
         root=root or None,
         exe=exe or None,
+        entry_points=entry_points,
         paths=paths or None,
         env=env or None,
         shims=shims or None,
@@ -121,7 +109,7 @@ def home(tmp_path: Path) -> Home:
 
 
 def _tool(name: str = "tool") -> tuple[dict[str, bytes], bytes]:
-    data = _zip(
+    data = make_zip(
         {
             f"{name}-1.0.0/bin/{name}{EXE}": b"#!/bin/sh\necho hi\n",
             f"{name}-1.0.0/README": b"r",
@@ -156,7 +144,7 @@ def test_an_origin_serving_the_wrong_bytes_is_refused_naming_it(
     with pytest.raises(StoreError, match="served bytes that are not sha256:"):
         store.ensure(spec, spec.versions[-1])
     assert store.probe(spec, spec.versions[-1]) is None
-    assert store.objects.state(Digest("sha256", _sha(data))) == "absent"
+    assert store.objects.state(Digest("sha256", sha(data))) == "absent"
 
 
 def test_an_offline_miss_fails_closed_naming_the_origin(
@@ -180,7 +168,7 @@ def test_a_corrupt_mirror_entry_is_passed_over_for_the_next_tier(
     spec = _record("tool", artifacts)
     _serve(origin, spec, artifacts)
     mirror = Home(tmp_path / "mirror").open_store()
-    digest = Digest("sha256", _sha(data))
+    digest = Digest("sha256", sha(data))
     # The mirror holds wrong bytes under the right name.
     wrong = mirror.object_path(digest)
     wrong.parent.mkdir(parents=True, exist_ok=True)
@@ -220,13 +208,13 @@ def test_a_binary_without_an_exe_and_a_non_archive_are_refused(
     not_an_archive = Record(
         "raw",
         hosts=(HOST,),
-        layout=Layout(paths=(".",)),
+        layout=Layout(entry_points=("raw",), paths=(".",)),
         deltas=(
             RecordDelta(
                 1,
                 "1",
                 "",
-                {HOST: Artifact("https://origin.test/raw.bin", _sha(payload))},
+                {HOST: Artifact("https://origin.test/raw.bin", sha(payload))},
             ),
         ),
     )
@@ -345,13 +333,13 @@ def test_an_install_lands_extracts_hoists_collects_and_views(
 def test_a_tar_archive_and_a_binary_install_too(
     home: Home, origin: dict[str, bytes]
 ) -> None:
-    tar = _tar({"tool": b"#!/bin/sh\necho tar\n"}, executable=("tool",))
+    tar = make_tar({"tool": b"#!/bin/sh\necho tar\n"}, executable=("tool",))
     url = "https://origin.test/tarred/1.0.0/linux-x64.tar.gz"
     spec = Record(
         "tarred",
         hosts=(HOST,),
-        layout=Layout(paths=(".",)),
-        deltas=(RecordDelta(1, "1.0.0", "", {HOST: Artifact(url, _sha(tar))}),),
+        layout=Layout(entry_points=(f"tool{EXE}",), paths=(".",)),
+        deltas=(RecordDelta(1, "1.0.0", "", {HOST: Artifact(url, sha(tar))}),),
     )
     origin[url] = tar
     store = Store(home, host=HOST)
@@ -424,7 +412,7 @@ def test_fetch_builds_a_mirror_an_offline_store_installs_from(
     assert ensured.installed
     # One blob gone from the mirror: the next offline install fails closed, naming it.
     gone = Home(mirror).open_store()
-    gone.evict(Digest("sha256", _sha(data + b"\n")))
+    gone.evict(Digest("sha256", sha(data + b"\n")))
     other_home = Home(tmp_path / "other-home")
     with pytest.raises(StoreError, match="is in no source and the store is offline"):
         Store(
@@ -499,16 +487,16 @@ def test_a_zip_with_directories_and_modeless_members_installs(
         escape.external_attr = 0o755 << 16
         archive.writestr(escape, b"#!/bin/sh\n")
     data = buffer.getvalue()
-    spec = _record("zipped", {HOST: data}, root="t")
+    spec = _record("zipped", {HOST: data}, root="t", entry_points=("bin/exe",))
     _serve(origin, spec, {HOST: data})
     ensured = Store(home, host=HOST).ensure(spec, spec.versions[-1])
     assert (ensured.tool_dir / "bin" / "plain").read_bytes() == b"x"
 
 
-def test_link_skips_what_is_not_an_executable_file_or_a_name_taken(
+def test_link_links_the_declared_entry_points_and_skips_a_name_taken(
     home: Home, origin: dict[str, bytes], tmp_path: Path
 ) -> None:
-    data = _zip(
+    data = make_zip(
         {
             f"t/bin/tool{EXE}": b"#!/bin/sh\n",
             "t/bin/README": b"prose",
@@ -517,9 +505,14 @@ def test_link_skips_what_is_not_an_executable_file_or_a_name_taken(
         },
         executable=(f"t/bin/tool{EXE}", f"t/bin/sub/inner{EXE}"),
     )
-    spec = _record("first", {HOST: data}, root="t", paths=("bin", "missing"))
+    entry = (f"bin/tool{EXE}",)
+    spec = _record(
+        "first", {HOST: data}, root="t", paths=("bin", "missing"), entry_points=entry
+    )
     _serve(origin, spec, {HOST: data})
-    twin = _record("second", {HOST: data + b"\n"}, root="t", paths=("bin",))
+    twin = _record(
+        "second", {HOST: data + b"\n"}, root="t", paths=("bin",), entry_points=entry
+    )
     _serve(origin, twin, {HOST: data + b"\n"})
     store = Store(home, host=HOST)
     installs = [
@@ -528,8 +521,9 @@ def test_link_skips_what_is_not_an_executable_file_or_a_name_taken(
     ]
     bin_dir = tmp_path / "bin"
     made = store.link(installs, bin_dir)
-    # One link: README is not executable, sub is a directory, the twin's
-    # tool is a name already taken, and "missing" is no directory.
+    # One link: the annotation names tool alone, so the executable
+    # under sub never reaches the bin directory, README is prose, and
+    # the twin's tool is a name already taken.
     assert [p.name for p in made] == [f"tool{EXE}"]
     # A link the manifest names but that is already gone is no error.
     (bin_dir / f"tool{EXE}").unlink()
@@ -541,7 +535,7 @@ def test_link_skips_what_is_not_an_executable_file_or_a_name_taken(
 def test_fetch_skips_a_delegated_kind_and_a_shim_never_overwrites(
     home: Home, origin: dict[str, bytes], tmp_path: Path
 ) -> None:
-    data = _zip(
+    data = make_zip(
         {f"t/bin/bun{EXE}": b"#!/bin/sh\n", f"t/node{EXE}": b"already here"},
         executable=(f"t/bin/bun{EXE}",),
     )

@@ -11,6 +11,9 @@
     "windows-x64"
   ],
   "layout": {
+    "entry_points": [
+      "bun"
+    ],
     "paths": [
       "."
     ],
@@ -32,7 +35,10 @@
       "root": "bun-linux-aarch64"
     },
     "windows-x64": {
-      "root": "bun-windows-x64"
+      "root": "bun-windows-x64",
+      "entry_points": [
+        "bun.exe"
+      ]
     }
   }
 }

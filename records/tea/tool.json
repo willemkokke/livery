@@ -12,13 +12,19 @@
   ],
   "layout": {
     "exe": "tea",
+    "entry_points": [
+      "tea"
+    ],
     "paths": [
       "."
     ]
   },
   "host_layouts": {
     "windows-x64": {
-      "exe": "tea.exe"
+      "exe": "tea.exe",
+      "entry_points": [
+        "tea.exe"
+      ]
     }
   }
 }

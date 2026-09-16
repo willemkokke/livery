@@ -41,16 +41,21 @@ A deployment resolves through four layers, most specific winning: the
 tool's layout, the tool's override for the host, the version's layout,
 the version's override for the host. The layout fields are `root`, the
 directory inside the archive hoisted to the install root; `exe`, a
-binary's executable name; `paths`, the install-relative directories put
-on PATH; `env`, with `$package` standing for the install root; `shims`,
-a link name to an executable the install carries; and `exclude`, the
-archive members left out before import.
+binary's executable name; `entry_points`, the install-relative paths of
+the executables the deployment puts on PATH, annotated here and never
+discovered by scanning a directory; `paths`, the install-relative
+directories put on PATH; `env`, with `$package` standing for the
+install root; `shims`, a link name to an executable the install
+carries; and `exclude`, the archive members left out before import,
+`fnmatch` patterns over the install-relative path.
 
 Loading a record resolves every host of every version and refuses one
 that does not resolve whole: an artifact without a sha256, a layer
 naming a host or a version the record does not carry, a layer restating
-the value it inherits, a version whose host resolves with no `paths` or
-a binary with no `exe`, and a delta out of sequence. The schema of both
+the value it inherits, a version whose host resolves with no `paths`, a
+downloaded kind with no entry point, a binary with no `exe` or whose
+`exe` is not among its entry points, and a delta out of sequence. The
+schema of both
 documents is `records/record.schema.json`, exported by
 `export_schema`.
 
@@ -60,15 +65,20 @@ documents is `records/record.schema.json`, exported by
 through the origin URL unless the store is offline; a mismatch at any
 tier is refused naming the tier, and an offline miss names
 `<name>@<version>` and the origin. The archive is extracted, its root
-hoisted, a binary placed as its `exe`, the shims made, the directory
-collected as a tree, `tools/<name>@<version>` moved to it write-once,
-and the tree viewed at the home's tool directory. A second `ensure`
-is a probe that answers offline. A directory the store did not make
-is never removed.
+hoisted, the excluded members removed, a binary placed as its `exe`,
+the shims made, every declared entry point checked for in the tree,
+which refuses naming the tool, the version, the host and the path when
+one is absent, the directory collected as a tree with the entry points
+as its executables and nothing else, `tools/<name>@<version>` moved to
+it write-once, and the tree viewed at the home's tool directory. One
+archive lands one tree digest on every platform by construction: the
+annotation decides the executable bit, not the modes the extractor
+happened to produce. A second `ensure` is a probe that answers
+offline. A directory the store did not make is never removed.
 
-`link` fills a bin directory with one link per executable the
-deployments' `paths` name, a launcher where the platform refuses a
-link, and removes only links it made; `delta` is the one PATH prepend
+`link` fills a bin directory with one link per declared entry point,
+a launcher where the platform refuses a link, and removes only links
+it made; `delta` is the one PATH prepend
 and the env with `$package` replaced by the tool directory. `fetch`
 lands every version's artifact for the hosts asked into a store at
 another root, a mirror by construction, for an offline install

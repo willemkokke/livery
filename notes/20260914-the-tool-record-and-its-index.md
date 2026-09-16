@@ -1,6 +1,7 @@
 # The tool record and its index
 
-Status: ruled 2026-09-16 as drafted. Phase 1 in progress (livery#620).
+Status: ruled 2026-09-16 as drafted. Phase 1 landed 2026-09-16
+(livery#620); phase 2 in progress (livery#622).
 Runs after [CI declared, contributed, and dispatched on command][ci-plan],
 which delivers the mechanism this plan's last phase uses.
 Subsumes phase 2 onward of [the tool store over strongroom][store-plan],
@@ -622,6 +623,18 @@ Acceptance:
   fact. `Store.ensure` takes the version it installs: a record pins
   nothing, the lock does (phase 6). The spec model went in the same
   change, its module and files with the proof test that converted them.
+- 2026-09-16, the agent, at phase 2: the entry points were authored
+  from the artifacts themselves, the Windows and Linux archives listed
+  member by member; the macOS artifacts could not be landed through the
+  store because strongroom's `fetch_url` refuses the 302 every GitHub
+  and GitLab release asset answers (livery#623, filed there per contract
+  12), so their names follow the Linux members of the same releases, and
+  phase 8's six-host verification proves them. One tree digest
+  everywhere is made by the engine rather than a strongroom change: after
+  extraction every file but a declared entry point loses the executable
+  bit, and `collect` marks the entry points, so the mode ladder reads the
+  same on every platform. git, a `system-check` kind the store never
+  installs, carries no entry points.
 
 ## Open
 

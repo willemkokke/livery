@@ -11,6 +11,9 @@
     "windows-x64"
   ],
   "layout": {
+    "entry_points": [
+      "ty"
+    ],
     "paths": [
       "."
     ]
@@ -27,6 +30,11 @@
     },
     "linux-arm": {
       "root": "ty-aarch64-unknown-linux-gnu"
+    },
+    "windows-x64": {
+      "entry_points": [
+        "ty.exe"
+      ]
     }
   }
 }

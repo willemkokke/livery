@@ -17,6 +17,7 @@ progress callback. Reach for [livery.toolroom.store.Store][].
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import shutil
@@ -278,11 +279,14 @@ class Store:
         scratch = self._scratch(record.name, version)
         try:
             self._unpack(record, deployment, artifact, scratch)
+            _exclude(deployment, scratch)
             _apply_shims(deployment, scratch)
+            _require_entry_points(record, version, self.host, deployment, scratch)
+            _annotate_modes(deployment, scratch)
             tree = self._objects.collect(
                 scratch,
                 sorted(entry.name for entry in scratch.iterdir()),
-                executable=(deployment.exe,) if deployment.exe else (),
+                executable=deployment.entry_points,
             )
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
@@ -411,19 +415,18 @@ class Store:
         made: list[Path] = []
         names: set[str] = set()
         for item in ensured:
-            for directory in item.paths:
-                if not directory.is_dir():
+            # The entry points are the annotation, never a directory
+            # scan: a bundle's own interpreter stays off the bin
+            # directory unless the deployment names it.
+            for entry in item.deployment.entry_points:
+                candidate = item.tool_dir / entry
+                if not candidate.is_file() or candidate.name in names:
                     continue
-                for candidate in sorted(directory.iterdir()):
-                    if not candidate.is_file() or candidate.name in names:
-                        continue
-                    if not _is_executable(candidate):
-                        continue
-                    link = into / candidate.name
-                    _make_link(candidate, link)
-                    names.add(candidate.name)
-                    made.append(link)
-                    self._progress(Event(item.name, item.version, "link", str(link)))
+                link = into / candidate.name
+                _make_link(candidate, link)
+                names.add(candidate.name)
+                made.append(link)
+                self._progress(Event(item.name, item.version, "link", str(link)))
         manifest.write_text(json.dumps([p.name for p in made]) + "\n", encoding="utf-8")
         return tuple(made)
 
@@ -511,6 +514,56 @@ def _extract(artifact: Path, name: str, into: Path) -> None:
         archive.extractall(into, filter="data")
 
 
+def _exclude(deployment: Deployment, into: Path) -> None:
+    """Remove the extracted members the deployment's exclusion patterns match.
+
+    A pattern is `fnmatch` style over the install-relative, forward-
+    slashed path; a matched directory goes with everything under it.
+    Separable from the annotation, and justified by size alone.
+    """
+    if not deployment.exclude:
+        return
+    for path in sorted(into.rglob("*"), key=lambda p: len(p.parts), reverse=True):
+        relative = path.relative_to(into).as_posix()
+        if any(fnmatch.fnmatch(relative, pattern) for pattern in deployment.exclude):
+            if path.is_dir() and not path.is_symlink():
+                shutil.rmtree(path, ignore_errors=True)
+            elif path.exists() or path.is_symlink():
+                path.unlink()
+
+
+def _require_entry_points(
+    record: Record, version: str, host: str, deployment: Deployment, into: Path
+) -> None:
+    """Refuse an entry point the extracted tree does not carry, naming it whole."""
+    for entry in deployment.entry_points:
+        if not (into / entry).is_file():
+            raise StoreError(
+                f"{record.name} {version} on {host}: the declared entry point"
+                f" {entry!r} is not in the extracted tree; the record's"
+                " annotation and the artifact disagree"
+            )
+
+
+def _annotate_modes(deployment: Deployment, into: Path) -> None:
+    """Leave the executable bit to the annotation alone.
+
+    `collect` marks every declared entry point executable on every
+    platform; every other file loses the bit the extractor happened
+    to give it, so one archive lands one tree digest wherever it is
+    extracted. On Windows the bit does not exist and nothing moves.
+    """
+    if sys.platform == "win32":
+        return
+    declared = {into / entry for entry in deployment.entry_points}
+    for path in into.rglob("*"):
+        if path.is_symlink() or not path.is_file() or path in declared:
+            continue
+        mode = path.stat().st_mode
+        if mode & 0o111:
+            path.chmod(mode & ~0o111)
+
+
 def _apply_shims(deployment: Deployment, into: Path) -> None:
     """Make the deployment's shims inside the install: a link name to an executable."""
     for link_name, target_name in deployment.shims.items():
@@ -524,12 +577,6 @@ def _apply_shims(deployment: Deployment, into: Path) -> None:
         if link.is_symlink() or link.exists():
             continue
         symlink(Path(target_name), link)
-
-
-def _is_executable(path: Path) -> bool:
-    if sys.platform == "win32":
-        return path.suffix.lower() in (".exe", ".cmd", ".bat")
-    return bool(path.stat().st_mode & stat.S_IXUSR)
 
 
 def _make_link(target: Path, link: Path) -> None:
