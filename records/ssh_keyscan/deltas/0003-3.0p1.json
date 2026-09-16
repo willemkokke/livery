@@ -1,0 +1,73 @@
+{
+  "sequence": 3,
+  "version": "3.0p1",
+  "date": "2002-09-17",
+  "artifacts": {},
+  "surface": {
+    "platforms": [
+      "Linux",
+      "macOS"
+    ],
+    "extractor": 3,
+    "verbs": {
+      "": {
+        "help": "gather ssh public keys",
+        "wraps": false,
+        "positional": "any",
+        "lead": "",
+        "options": {
+          "T": {
+            "flags": [
+              "-T"
+            ],
+            "negation": "",
+            "help": "Set the timeout for connection attempts",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "f": {
+            "flags": [
+              "-f"
+            ],
+            "negation": "",
+            "help": "Read hosts or addrlist namelist pairs from this file, one per line",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "p": {
+            "flags": [
+              "-p"
+            ],
+            "negation": "",
+            "help": "Port to connect to on the remote host",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "t": {
+            "flags": [
+              "-t"
+            ],
+            "negation": "",
+            "help": "Specifies the type of the key to fetch from the scanned hosts",
+            "type": "list[str]",
+            "default": null,
+            "choices": []
+          },
+          "v": {
+            "flags": [
+              "-v"
+            ],
+            "negation": "",
+            "help": "Verbose mode",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          }
+        }
+      }
+    }
+  }
+}

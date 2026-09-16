@@ -1,0 +1,86 @@
+{
+  "sequence": 12,
+  "version": "2.1.238",
+  "date": "2026-08-20",
+  "artifacts": {},
+  "surface": {
+    "platforms": [
+      "Linux",
+      "Windows",
+      "macOS"
+    ],
+    "extractor": 3,
+    "verbs": {
+      "plugin.install": {
+        "help": "Install a plugin from available marketplaces (use plugin@marketplace for",
+        "wraps": false,
+        "positional": "required",
+        "lead": "plugin",
+        "options": {
+          "config": {
+            "flags": [
+              "--config"
+            ],
+            "negation": "",
+            "help": "Set a userConfig option declared in the plugin's manifest (repeatable)",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "scope": {
+            "flags": [
+              "--scope",
+              "-s"
+            ],
+            "negation": "",
+            "help": "Installation scope: user, project, or local",
+            "type": "str",
+            "default": "user",
+            "choices": []
+          },
+          "yes": {
+            "flags": [
+              "--yes",
+              "-y"
+            ],
+            "negation": "",
+            "help": "Accept the displayed marketplace-declared command without the confirmation prompt - a plugin installed by running a command, or one whose archive is fetched through a headersHelper command (required when stdin or stdout is not a TTY)",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          }
+        }
+      },
+      "plugin.update": {
+        "help": "Update a plugin to the latest version (restart required to apply)",
+        "wraps": false,
+        "positional": "required",
+        "lead": "plugin",
+        "options": {
+          "scope": {
+            "flags": [
+              "--scope",
+              "-s"
+            ],
+            "negation": "",
+            "help": "Installation scope: user, project, local, managed",
+            "type": "str",
+            "default": "user",
+            "choices": []
+          },
+          "yes": {
+            "flags": [
+              "--yes",
+              "-y"
+            ],
+            "negation": "",
+            "help": "Accept the displayed marketplace-declared command without the confirmation prompt - a changed install command, or the headersHelper command that fetches its archive (required when stdin or stdout is not a TTY)",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          }
+        }
+      }
+    }
+  }
+}

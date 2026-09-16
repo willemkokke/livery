@@ -106,6 +106,32 @@ class Provision:
         """What to fetch: the explicit `package`/`repo`, else the tool *name*."""
         return self.package or self.repo or name
 
+    @property
+    def record_kind(self) -> str:
+        """The installer kind a new record of this tool names, from the tier.
+
+        A record that exists keeps its own kind; this answers only for a
+        tool read for the first time. A forge release and docker's static
+        build land as archives, the manual tiers verify a system tool, and
+        the package tiers delegate to their installer.
+        """
+        return RECORD_KINDS[self.kind]
+
+
+RECORD_KINDS = {
+    "uv": "uv-tool",
+    "python": "uv-python",
+    "node": "bun-install",
+    "man": "system-check",
+    "docker": "archive",
+    "bun": "archive",
+    "github": "archive",
+    "gitlab": "archive",
+    "gitea": "archive",
+    "deferred": "archive",
+}
+"""Each provision tier's installer kind, one of [livery.toolroom.store.KINDS][]."""
+
 
 @dataclass(frozen=True)
 class Plugin:

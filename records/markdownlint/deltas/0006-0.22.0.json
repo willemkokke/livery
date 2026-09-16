@@ -1,0 +1,75 @@
+{
+  "sequence": 6,
+  "version": "0.22.0",
+  "date": "2026-03-22",
+  "artifacts": {},
+  "surface": {
+    "platforms": [
+      "Linux",
+      "Windows",
+      "macOS"
+    ],
+    "extractor": 3,
+    "verbs": {
+      "": {
+        "help": "",
+        "wraps": false,
+        "positional": "any",
+        "lead": "",
+        "options": {
+          "config": {
+            "flags": [
+              "--config"
+            ],
+            "negation": "",
+            "help": "specifies the path to a configuration file to define the base configuration",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "configPointer": {
+            "flags": [
+              "--configPointer",
+              "--config"
+            ],
+            "negation": "",
+            "help": "specifies a JSON Pointer to a configuration object within the --config file",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "fix": {
+            "flags": [
+              "--fix"
+            ],
+            "negation": "",
+            "help": "updates files to resolve fixable issues (can be overridden in configuration)",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "format": {
+            "flags": [
+              "--format"
+            ],
+            "negation": "",
+            "help": "reads standard input (stdin), applies fixes, writes standard output (stdout)",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "no_globs": {
+            "flags": [
+              "--no-globs"
+            ],
+            "negation": "",
+            "help": "ignores the \"globs\" property if present in the top-level options object",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          }
+        }
+      }
+    }
+  }
+}

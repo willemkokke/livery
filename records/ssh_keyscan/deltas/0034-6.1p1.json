@@ -1,0 +1,13 @@
+{
+  "sequence": 34,
+  "version": "6.1p1",
+  "date": "2012-08-28",
+  "artifacts": {},
+  "surface": {
+    "platforms": [
+      "Linux",
+      "macOS"
+    ],
+    "extractor": 3
+  }
+}

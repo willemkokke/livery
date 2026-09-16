@@ -10,12 +10,12 @@ from livery.toolroom.bench import _tasks
 
 
 def _classify(monkeypatch, spans: dict[str, dict[str, Any]]) -> bool:
-    monkeypatch.setattr(_tasks._toolhistory, "load", lambda path: {"chain": []})
-    monkeypatch.setattr(_tasks, "_predecessor", lambda doc, version: "0.0.0")
+    monkeypatch.setattr(_tasks._surfaces, "load", lambda path: object())
+    monkeypatch.setattr(_tasks, "_predecessor", lambda record, version: "0.0.0")
     monkeypatch.setattr(
-        _tasks._toolhistory,
+        _tasks._surfaces,
         "changes",
-        lambda doc, *, since, until: spans[until],
+        lambda record, *, since, until: spans[until],
     )
     return _tasks._additions_only({k: [k] for k in spans})
 

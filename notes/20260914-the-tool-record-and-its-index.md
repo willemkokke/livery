@@ -1,7 +1,7 @@
 # The tool record and its index
 
-Status: ruled 2026-09-16 as drafted. Phase 1 landed 2026-09-16
-(livery#620); phase 2 in progress (livery#622).
+Status: ruled 2026-09-16 as drafted. Phases 1 and 2 landed 2026-09-16
+(livery#620, livery#622); phase 3 in progress (livery#625).
 Runs after [CI declared, contributed, and dispatched on command][ci-plan],
 which delivers the mechanism this plan's last phase uses.
 Subsumes phase 2 onward of [the tool store over strongroom][store-plan],
@@ -612,6 +612,56 @@ Acceptance:
   bench to depend on it (open question 1), and an override that shadows
   nothing is both an override naming a host or version the record lacks
   and one restating the value it inherits (open question 6).
+- 2026-09-16, the agent, at phase 3, the surface's form in git: a delta
+  carries a `surface` naming the verbs the version changed, each whole,
+  and the tool's description when it changed; every other verb is
+  inherited from the version read before it, a verb set to `null` is
+  withdrawn, and a verb or description restating what it inherits is
+  refused at load, the layout's rule applied to the surface. So a new
+  release is one delta and the whole of the review diff, and the index
+  of phase 4 materialises each version by resolving the inheritance,
+  which is the replay contract 8 allows the publisher and contract 9
+  denies the client. Beside the surface the delta carries the facts of
+  the observation as the history did, `platforms`, `extractor` and the
+  `absent` sidecar, never inherited. A delta carries an artifact, a
+  surface, or both: a version with a surface and no artifact is tracked
+  for its stub and installs nowhere, which is what the 24 tools that had
+  no spec and the older versions of the 7 that had one are.
+- 2026-09-16, the agent, at phase 3, writing the record: every write
+  resolves each version whole, changes one version's reading, and
+  derives every delta's sparse surface again in sequence. So placing a
+  version between two, or a platform widening an older version, rewrites
+  that version's delta and re-anchors the one after it on the value it
+  had, and nothing any other version resolves to moves. The history's
+  three write paths (`extend`, `promote`, `insert`) become one, `place`,
+  and its deltas are renumbered when an older version arrives, the
+  rewrite the design accepted for priming.
+- 2026-09-16, the agent, at phase 3, the proof: a one-time converter
+  wrote the 31 histories into records, merging the 7 that had artifacts,
+  and a proof script compared each tool through both forms: every
+  version's surface, platforms, absences, dates and extractor, the
+  union, the changelog span between neighbours and the release decision.
+  31 of 31 agreed, `fm tools.restub` re-rendered 31 stubs and changed
+  none, and the converter, the proof and `_toolhistory.py` went in the
+  same change. A record is named by the curated key (`ruff_format`,
+  `ssh_keygen`), the name its stub and its driver carry; its kind comes
+  from the driver's provision tier for a tool read for the first time,
+  and a record that exists keeps its own. The bench now depends on the
+  store, the graph the plan names, and the standalone repository's
+  release roll (`fm tools.prepare-release`) went with the history it
+  anchored on, since the release train owns versions here.
+- 2026-09-16, the agent, at phase 3, the acceptance as met: `fm check`
+  exits 0 on the full tree; the conversion's proof ran as a script over
+  the 31 histories rather than as the checked-in
+  `test_record_conversion.py` the acceptance named, since the phase's
+  own text has the converter go with the change and a test of a deleted
+  module cannot stay; what stays in the gate is the render check over
+  every curated tool, which compares each checked-in stub against a
+  render from its record, and `fm tools.restub`, which re-rendered 31
+  and changed none. Found live and fixed in place: `fm tools.restub`
+  exited 1 on main, since the formatter's raw spawn was a note the
+  runner refuses; the spawn now hands over its directory and
+  environment on purpose.
 - 2026-09-16, the agent, at phase 1: the records live at this
   repository's root, `records/<tool>/`, the authoring site the design
   names; the schema beside them is one document with `Tool` and `Delta`

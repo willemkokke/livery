@@ -1,0 +1,13 @@
+{
+  "sequence": 59,
+  "version": "8.3p1",
+  "date": "2020-05-26",
+  "artifacts": {},
+  "surface": {
+    "platforms": [
+      "Linux",
+      "macOS"
+    ],
+    "extractor": 3
+  }
+}

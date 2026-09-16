@@ -1,0 +1,7 @@
+{
+  "name": "mkdocs",
+  "description": "",
+  "kind": "uv-tool",
+  "min_version": "",
+  "hosts": []
+}

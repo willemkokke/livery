@@ -1,4 +1,4 @@
-"""The tool record: one tool, every version tracked, and each host's deployment.
+"""The tool record: one tool, every version tracked, each host's deployment and surface.
 
 A record is inert data, authored in git as one directory per tool:
 ``tool.json`` carries the tool axis, what does not move with a
@@ -6,16 +6,24 @@ version, and ``deltas/<nnnn>-<version>.json`` carries one version's
 arrival each, forward and append-only. A deployment resolves through
 four layers, most specific winning: the tool's layout, the host's
 override of it, the version's override, and the version's override for
-one host. Resolution is total and checked: loading a record resolves
-every host of every version and refuses one that resolves incomplete,
-an override that names a host or version the record does not carry,
-an override that restates the value it inherits, and a delta out of
-sequence. A record names a kind, per host an artifact with a mandatory
-digest, and the layout; it never runs a command.
+one host. A version's surface, what its command line accepts, is
+carried one verb at a time: a delta names the verbs the version
+changed and the tool's description when it changed, and every other
+verb is inherited from the nearest earlier version that has a surface.
+Resolution is total and checked: loading a record resolves every host
+of every version and every version's surface, and refuses a host that
+resolves incomplete, an override that names a host or version the
+record does not carry, an override or a verb that restates the value
+it inherits, a withdrawn verb no earlier version has, and a delta out
+of sequence. A record names a kind, per host an artifact with a
+mandatory digest, and the layout; it never runs a command. A version
+with no artifact is tracked for its surface alone: it has no host and
+nothing installs it.
 
-Reach for [livery.toolroom.store.Record.load][] to read a record and
+Reach for [livery.toolroom.store.Record.load][] to read a record,
 [livery.toolroom.store.resolve][] for one host's deployment at one
-version; the rest is what a load validates.
+version, and [livery.toolroom.store.surface_at][] for one version's
+whole surface; the rest is what a load validates.
 """
 
 from __future__ import annotations
@@ -67,6 +75,15 @@ _DELTA_NAME = re.compile(r"^(?P<sequence>\d{4})-(?P<version>.+)\.json$")
 LAYOUT_KEYS = ("root", "exe", "entry_points", "paths", "env", "shims", "exclude")
 """The layout fields an override may set, in the record's key order."""
 
+SURFACE_PLATFORMS = ("Linux", "macOS", "Windows")
+"""The platforms a reading of a tool's command line may name."""
+
+VERB_KEYS = ("help", "wraps", "positional", "lead", "options")
+"""A verb's fields in a surface, in the record's key order; every one is present."""
+
+OPTION_KEYS = ("flags", "negation", "help", "type", "default", "choices")
+"""An option's fields in a surface, in the record's key order; every one is present."""
+
 _TOOL_KEYS = (
     "name",
     "description",
@@ -76,8 +93,17 @@ _TOOL_KEYS = (
     "layout",
     "host_layouts",
 )
-_DELTA_KEYS = ("sequence", "version", "date", "artifacts", "layout", "host_layouts")
+_DELTA_KEYS = (
+    "sequence",
+    "version",
+    "date",
+    "artifacts",
+    "layout",
+    "host_layouts",
+    "surface",
+)
 _ARTIFACT_KEYS = ("url", "sha256")
+_SURFACE_KEYS = ("platforms", "extractor", "help", "verbs", "absent")
 
 
 class RecordError(ValueError):
@@ -274,8 +300,183 @@ _BUILTIN: dict[str, Any] = {
 
 
 @dataclass(frozen=True)
+class Surface:
+    """One version's reading of the tool's command line, as its delta carries it.
+
+    Sparse: the tool's description and each verb are inherited from the
+    nearest earlier version with a surface unless this version sets
+    them, a verb set to `None` is withdrawn, and a description or verb
+    set to the value it inherits is refused at load as dead data. The
+    facts about the observation ride beside it and are never inherited.
+
+    Attributes:
+        platforms: The platforms that read this version, from
+            `SURFACE_PLATFORMS`; at least one.
+        extractor: The generation of the reader that took the reading,
+            a positive integer.
+        help: The tool's own description, or `None` to inherit it; the
+            first surface of a record sets it.
+        verbs: Verb name to the verb whole, an object with `VERB_KEYS`
+            whose options are objects with `OPTION_KEYS`, or `None` for
+            a verb this version withdraws; a verb not named is
+            inherited. The tool's own options hang off the verb named
+            `""`.
+        absent: Verb name to option name to the platforms that read the
+            version and did not find that option; the option name `""`
+            stands for the verb itself. Every platform named is among
+            `platforms`, every verb among the resolved verbs and every
+            option among that verb's options.
+    """
+
+    platforms: tuple[str, ...]
+    extractor: int
+    help: str | None = None
+    verbs: Mapping[str, Mapping[str, Any] | None] = field(default_factory=dict)
+    absent: Mapping[str, Mapping[str, tuple[str, ...]]] = field(default_factory=dict)
+
+    def to_json(self) -> dict[str, Any]:
+        """The surface as a JSON object, verbs and options in name order."""
+        out: dict[str, Any] = {
+            "platforms": list(self.platforms),
+            "extractor": self.extractor,
+        }
+        if self.help is not None:
+            out["help"] = self.help
+        if self.verbs:
+            out["verbs"] = {
+                name: None if verb is None else _canonical_verb(verb)
+                for name, verb in sorted(self.verbs.items())
+            }
+        if self.absent:
+            out["absent"] = {
+                verb: {option: list(who) for option, who in sorted(options.items())}
+                for verb, options in sorted(self.absent.items())
+            }
+        return out
+
+    @classmethod
+    def from_json(cls, value: Any, *, where: str) -> Surface:
+        """A surface from its JSON object; the verbs' shape is checked at load.
+
+        Raises:
+            RecordError: when the object is not a surface, naming *where*.
+        """
+        data = _object(value, _SURFACE_KEYS, where=where)
+        for required in ("platforms", "extractor"):
+            if required not in data:
+                raise RecordError(f"{where}: no {required}")
+        extractor = data["extractor"]
+        if (
+            not isinstance(extractor, int)
+            or isinstance(extractor, bool)
+            or extractor < 1
+        ):
+            raise RecordError(f"{where}: extractor is not a positive integer")
+        raw_verbs = data.get("verbs", {})
+        if not isinstance(raw_verbs, dict):
+            raise RecordError(f"{where}: verbs is not an object")
+        raw_absent = data.get("absent", {})
+        if not isinstance(raw_absent, dict):
+            raise RecordError(f"{where}: absent is not an object")
+        absent: dict[str, dict[str, tuple[str, ...]]] = {}
+        for verb, options in raw_absent.items():
+            if not isinstance(options, dict):
+                raise RecordError(f"{where}: absent[{verb}] is not an object")
+            absent[str(verb)] = {
+                str(option): _texts(who, where=f"{where} absent[{verb}][{option}]")
+                for option, who in options.items()
+            }
+        return cls(
+            _texts(data["platforms"], where=f"{where} platforms"),
+            extractor,
+            _text(data["help"], where=f"{where} help") if "help" in data else None,
+            {
+                str(name): None if verb is None else _object_any(verb, where, name)
+                for name, verb in raw_verbs.items()
+            },
+            absent,
+        )
+
+
+def _object_any(value: Any, where: str, name: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise RecordError(f"{where}: verb {name!r} is neither an object nor null")
+    return value
+
+
+def _verb_fault(verb: Mapping[str, Any]) -> str:
+    """What is wrong with a verb's shape, or empty when it has `VERB_KEYS` whole."""
+    if set(verb) != set(VERB_KEYS):
+        return f"a verb carries exactly {', '.join(VERB_KEYS)}"
+    for key in ("help", "positional", "lead"):
+        if not isinstance(verb[key], str):
+            return f"{key} is not a string"
+    if not isinstance(verb["wraps"], bool):
+        return "wraps is not a boolean"
+    if not isinstance(verb["options"], Mapping):
+        return "options is not an object"
+    for name, option in verb["options"].items():
+        if not isinstance(option, Mapping) or set(option) != set(OPTION_KEYS):
+            return f"option {name!r} carries exactly {', '.join(OPTION_KEYS)}"
+        for key in ("negation", "help", "type"):
+            if not isinstance(option[key], str):
+                return f"option {name!r}: {key} is not a string"
+        for key in ("flags", "choices"):
+            if not isinstance(option[key], list | tuple) or not all(
+                isinstance(item, str) for item in option[key]
+            ):
+                return f"option {name!r}: {key} is not a list of strings"
+    return ""
+
+
+def _canonical_verb(verb: Mapping[str, Any]) -> dict[str, Any]:
+    """A verb as plain data in the record's key order, options in name order."""
+    return {
+        "help": verb["help"],
+        "wraps": verb["wraps"],
+        "positional": verb["positional"],
+        "lead": verb["lead"],
+        "options": {
+            name: {
+                "flags": list(option["flags"]),
+                "negation": option["negation"],
+                "help": option["help"],
+                "type": option["type"],
+                "default": option["default"],
+                "choices": list(option["choices"]),
+            }
+            for name, option in sorted(verb["options"].items())
+        },
+    }
+
+
+@dataclass(frozen=True)
+class Observation:
+    """What one version accepted, whole, and who looked: its surface resolved.
+
+    Attributes:
+        version: The version observed.
+        date: The version's date, as its delta carries it.
+        platforms: The platforms that read the version.
+        extractor: The generation of the reader that took the reading.
+        help: The tool's own description at this version.
+        verbs: Every verb whole, in name order, each in `VERB_KEYS` shape
+            with its options in name order; treat it as read-only.
+        absent: See [livery.toolroom.store.Surface][].
+    """
+
+    version: str
+    date: str
+    platforms: tuple[str, ...]
+    extractor: int
+    help: str
+    verbs: dict[str, dict[str, Any]]
+    absent: dict[str, dict[str, tuple[str, ...]]]
+
+
+@dataclass(frozen=True)
 class Delta:
-    """One version's arrival: its artifacts and what it overrides.
+    """One version's arrival: its artifacts, what it overrides, and its surface.
 
     Attributes:
         sequence: The delta's place in the record, from 1, consecutive.
@@ -286,6 +487,9 @@ class Delta:
             this version has.
         layout: The version's override of the tool's layout.
         host_layouts: The version's override for one host each.
+        surface: The version's reading of the command line, or `None`
+            when no reading was taken; a delta carries an artifact, a
+            surface, or both.
     """
 
     sequence: int
@@ -294,6 +498,7 @@ class Delta:
     artifacts: dict[str, Artifact] = field(default_factory=dict)
     layout: Layout = field(default_factory=Layout)
     host_layouts: dict[str, Layout] = field(default_factory=dict)
+    surface: Surface | None = None
 
     @property
     def hosts(self) -> tuple[str, ...]:
@@ -317,6 +522,8 @@ class Delta:
             out["layout"] = self.layout.to_json()
         if self.host_layouts:
             out["host_layouts"] = {k: v.to_json() for k, v in self.host_layouts.items()}
+        if self.surface is not None:
+            out["surface"] = self.surface.to_json()
         return out
 
     @classmethod
@@ -352,6 +559,9 @@ class Delta:
                 str(k): Layout.from_json(v, where=f"{where} host_layouts[{k}]")
                 for k, v in raw_hosts.items()
             },
+            Surface.from_json(data["surface"], where=f"{where} surface")
+            if "surface" in data
+            else None,
         )
 
 
@@ -508,11 +718,20 @@ class Record:
         return record
 
     def save(self, directory: Path) -> None:
-        """Write the record under *directory*: the tool axis and every delta."""
+        """Write the record under *directory*: the tool axis and every delta.
+
+        A delta file the record no longer names is removed, so a record
+        whose deltas were renumbered leaves no stale file behind for
+        the next load to refuse.
+        """
         directory.mkdir(parents=True, exist_ok=True)
         (directory / TOOL_FILE).write_text(_dumps(self.to_json()), encoding="utf-8")
         deltas_dir = directory / DELTAS_DIR
         deltas_dir.mkdir(exist_ok=True)
+        names = {delta.file_name for delta in self.deltas}
+        for stale in deltas_dir.glob("*.json"):
+            if stale.name not in names:
+                stale.unlink()
         for delta in self.deltas:
             (deltas_dir / delta.file_name).write_text(
                 _dumps(delta.to_json()), encoding="utf-8"
@@ -591,6 +810,57 @@ def resolve(record: Record, version: str, host: str) -> Deployment:
     )
 
 
+def observations(record: Record) -> tuple[Observation, ...]:
+    """Every version's whole surface, in sequence, resolved through inheritance.
+
+    A version whose delta carries no surface is left out: nothing was
+    read for it, and inheriting a reading would claim one.
+    """
+    out: list[Observation] = []
+    help_ = ""
+    verbs: dict[str, dict[str, Any]] = {}
+    for delta in record.deltas:
+        surface = delta.surface
+        if surface is None:
+            continue
+        if surface.help is not None:
+            help_ = surface.help
+        for name, verb in surface.verbs.items():
+            if verb is None:
+                verbs.pop(name, None)
+            else:
+                verbs[name] = _canonical_verb(verb)
+        out.append(
+            Observation(
+                delta.version,
+                delta.date,
+                surface.platforms,
+                surface.extractor,
+                help_,
+                {name: verbs[name] for name in sorted(verbs)},
+                {
+                    verb: {option: tuple(who) for option, who in options.items()}
+                    for verb, options in surface.absent.items()
+                },
+            )
+        )
+    return tuple(out)
+
+
+def surface_at(record: Record, version: str) -> Observation | None:
+    """The whole surface of *version*, or `None` when no reading was taken for it.
+
+    Raises:
+        RecordError: when the record does not track *version*, naming
+            the versions it does.
+    """
+    record.delta_for(version)
+    for observation in observations(record):
+        if observation.version == version:
+            return observation
+    return None
+
+
 def validate(record: Record) -> None:
     """Refuse a record that breaks a rule; every host of every version resolves.
 
@@ -618,6 +888,8 @@ def validate(record: Record) -> None:
                 f" lacks; it has {', '.join(record.hosts) or 'none'}"
             )
     seen: set[str] = set()
+    help_: str | None = None
+    verbs: dict[str, dict[str, Any]] = {}
     for index, delta in enumerate(record.deltas, start=1):
         at = f"{where} {DELTAS_DIR}/{delta.file_name}"
         if delta.sequence != index:
@@ -640,10 +912,10 @@ def validate(record: Record) -> None:
                     f"{at}: a {host} layout for a host the version lacks; it has"
                     f" {', '.join(delta.hosts) or 'none'}"
                 )
-        if record.kind in DOWNLOAD_KINDS and not delta.artifacts:
-            raise RecordError(f"{at}: a {record.kind} version needs an artifact")
         if delta.layout.set_fields() and not delta.artifacts:
             raise RecordError(f"{at}: a layout for a version with no host")
+        if not delta.artifacts and delta.surface is None:
+            raise RecordError(f"{at}: a version with neither an artifact nor a surface")
         for host in delta.hosts:
             values, restated = _resolve_fields(record, delta, host)
             if restated:
@@ -654,6 +926,8 @@ def validate(record: Record) -> None:
                     f"{at} {host}: resolves incomplete, {missing}; every host of"
                     " every version must resolve to a whole deployment"
                 )
+        if delta.surface is not None:
+            help_ = _validate_surface(delta.surface, help_, verbs, at=f"{at} surface")
     # A tool-level layout that no version and host ever reads is not a
     # restatement, so a tool with no version is validated on its own.
     if not record.deltas:
@@ -662,6 +936,70 @@ def validate(record: Record) -> None:
         )
         if restated:
             raise RecordError(f"{where}: {restated[0]}")
+
+
+def _validate_surface(
+    surface: Surface, help_: str | None, verbs: dict[str, dict[str, Any]], *, at: str
+) -> str:
+    """Refuse a surface that breaks a rule, and fold it into the inherited state.
+
+    *help_* is the description inherited so far, `None` before any
+    surface, and *verbs* the verbs inherited so far, rewritten in place.
+    Returns the description after this surface.
+    """
+    if not surface.platforms:
+        raise RecordError(f"{at}: no platform read it")
+    for platform in surface.platforms:
+        if platform not in SURFACE_PLATFORMS:
+            raise RecordError(
+                f"{at}: platform {platform!r} is not one of"
+                f" {', '.join(SURFACE_PLATFORMS)}"
+            )
+    if len(set(surface.platforms)) != len(surface.platforms):
+        raise RecordError(f"{at}: a platform is listed twice")
+    if surface.extractor < 1:
+        raise RecordError(f"{at}: extractor is not a positive integer")
+    if surface.help is None and help_ is None:
+        raise RecordError(f"{at}: the record's first surface names no help")
+    if surface.help is not None and surface.help == help_:
+        raise RecordError(f"{at}: restates help as it inherits it")
+    for name, verb in surface.verbs.items():
+        if verb is None:
+            if name not in verbs:
+                raise RecordError(
+                    f"{at}: withdraws verb {name!r}, which no earlier version has"
+                )
+            del verbs[name]
+            continue
+        fault = _verb_fault(verb)
+        if fault:
+            raise RecordError(f"{at} verb {name!r}: {fault}")
+        canonical = _canonical_verb(verb)
+        if verbs.get(name) == canonical:
+            raise RecordError(f"{at}: restates verb {name!r} as it inherits it")
+        verbs[name] = canonical
+    for verb_name, options in surface.absent.items():
+        if verb_name not in verbs:
+            raise RecordError(
+                f"{at}: absent names verb {verb_name!r}, which the version lacks"
+            )
+        for option, who in options.items():
+            if option and option not in verbs[verb_name]["options"]:
+                raise RecordError(
+                    f"{at}: absent names option {option!r} of verb {verb_name!r},"
+                    " which the version lacks"
+                )
+            if not who:
+                raise RecordError(
+                    f"{at}: absent names no platform for {verb_name!r} {option!r}"
+                )
+            for platform in who:
+                if platform not in surface.platforms:
+                    raise RecordError(
+                        f"{at}: absent names {platform}, which did not read the"
+                        f" version; it was read on {', '.join(surface.platforms)}"
+                    )
+    return surface.help if surface.help is not None else str(help_)
 
 
 def _incomplete(record: Record, values: Mapping[str, Any]) -> str:
@@ -750,6 +1088,66 @@ def schema() -> dict[str, Any]:
             "host_layouts": host_layouts,
         },
     }
+    option = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": list(OPTION_KEYS),
+        "properties": {
+            "flags": {"type": "array", "items": {"type": "string"}},
+            "negation": {"type": "string"},
+            "help": {"type": "string"},
+            "type": {"type": "string"},
+            "default": {},
+            "choices": {"type": "array", "items": {"type": "string"}},
+        },
+    }
+    verb = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": list(VERB_KEYS),
+        "properties": {
+            "help": {"type": "string"},
+            "wraps": {"type": "boolean"},
+            "positional": {"type": "string"},
+            "lead": {"type": "string"},
+            "options": {
+                "type": "object",
+                "additionalProperties": {"$ref": "#/$defs/Option"},
+            },
+        },
+    }
+    surface = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["platforms", "extractor"],
+        "properties": {
+            "platforms": {
+                "type": "array",
+                "items": {"type": "string", "enum": list(SURFACE_PLATFORMS)},
+                "minItems": 1,
+                "uniqueItems": True,
+            },
+            "extractor": {"type": "integer", "minimum": 1},
+            "help": {"type": "string"},
+            "verbs": {
+                "type": "object",
+                "additionalProperties": {
+                    "oneOf": [{"$ref": "#/$defs/Verb"}, {"type": "null"}]
+                },
+            },
+            "absent": {
+                "type": "object",
+                "additionalProperties": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "array",
+                        "items": {"type": "string", "enum": list(SURFACE_PLATFORMS)},
+                        "minItems": 1,
+                    },
+                },
+            },
+        },
+    }
     delta = {
         "type": "object",
         "additionalProperties": False,
@@ -765,13 +1163,22 @@ def schema() -> dict[str, Any]:
             },
             "layout": {"$ref": "#/$defs/Layout"},
             "host_layouts": host_layouts,
+            "surface": {"$ref": "#/$defs/Surface"},
         },
     }
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "title": "Record",
         "oneOf": [{"$ref": "#/$defs/Tool"}, {"$ref": "#/$defs/Delta"}],
-        "$defs": {"Layout": layout, "Artifact": artifact, "Tool": tool, "Delta": delta},
+        "$defs": {
+            "Layout": layout,
+            "Artifact": artifact,
+            "Option": option,
+            "Verb": verb,
+            "Surface": surface,
+            "Tool": tool,
+            "Delta": delta,
+        },
     }
 
 

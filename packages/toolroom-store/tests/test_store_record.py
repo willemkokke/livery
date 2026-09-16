@@ -9,6 +9,8 @@ import pytest
 
 from livery.toolroom.store import (
     HOSTS,
+    OPTION_KEYS,
+    VERB_KEYS,
     Artifact,
     Deployment,
     Layout,
@@ -141,7 +143,9 @@ def test_a_version_whose_host_resolves_incomplete_is_refused() -> None:
             kind="binary",
             layout=Layout(exe="tool", entry_points=("other",), paths=(".",)),
         )
-    with pytest.raises(RecordError, match=r"a archive version needs an artifact"):
+    with pytest.raises(
+        RecordError, match=r"a version with neither an artifact nor a surface"
+    ):
         _record(deltas=(_delta(hosts=()),))
     with pytest.raises(RecordError, match=r"a layout for a version with no host"):
         _record(
@@ -384,6 +388,9 @@ def test_the_schema_names_both_documents_and_exports(tmp_path: Path) -> None:
     assert [ref["$ref"] for ref in shape["oneOf"]] == ["#/$defs/Tool", "#/$defs/Delta"]
     assert shape["$defs"]["Tool"]["required"] == ["name", "hosts"]
     assert shape["$defs"]["Delta"]["required"] == ["sequence", "version", "artifacts"]
+    assert shape["$defs"]["Surface"]["required"] == ["platforms", "extractor"]
+    assert set(shape["$defs"]["Verb"]["required"]) == set(VERB_KEYS)
+    assert set(shape["$defs"]["Option"]["required"]) == set(OPTION_KEYS)
     assert set(shape["$defs"]["Layout"]["properties"]) == {
         "root",
         "exe",
@@ -402,8 +409,10 @@ def test_the_schema_names_both_documents_and_exports(tmp_path: Path) -> None:
 
 
 def test_every_host_of_every_version_of_every_record_resolves_whole() -> None:
+    if not RECORDS.is_dir():
+        pytest.skip("the checked-in records are a checkout fact")
     names = sorted(p.name for p in RECORDS.iterdir() if p.is_dir())
-    assert names == ["bun", "eclint", "git", "prek", "tea", "ty", "uv"]
+    assert {"bun", "eclint", "git", "prek", "tea", "ty", "uv"} <= set(names)
     for name in names:
         record = Record.load(RECORDS / name)
         assert record.versions, name

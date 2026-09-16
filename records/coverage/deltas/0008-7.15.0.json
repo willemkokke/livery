@@ -1,0 +1,705 @@
+{
+  "sequence": 8,
+  "version": "7.15.0",
+  "date": "2026-07-02",
+  "artifacts": {},
+  "surface": {
+    "platforms": [
+      "Linux",
+      "Windows",
+      "macOS"
+    ],
+    "extractor": 3,
+    "help": "Coverage.py, version 7.15.0 with C extension",
+    "verbs": {
+      "": {
+        "help": "Coverage.py, version 7.15.0 with C extension",
+        "wraps": false,
+        "positional": "any",
+        "lead": "",
+        "options": {}
+      },
+      "annotate": {
+        "help": "Make annotated copies of the given files, marking statements that are executed with > and statements that are missed with !.",
+        "wraps": false,
+        "positional": "any",
+        "lead": "",
+        "options": {
+          "data_file": {
+            "flags": [
+              "--data-file"
+            ],
+            "negation": "",
+            "help": "Read coverage data for report generation from this file",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "debug": {
+            "flags": [
+              "--debug"
+            ],
+            "negation": "",
+            "help": "Debug options, separated by commas",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "directory": {
+            "flags": [
+              "--directory",
+              "-d"
+            ],
+            "negation": "",
+            "help": "Write the output files to DIR",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "ignore_errors": {
+            "flags": [
+              "--ignore-errors",
+              "-i"
+            ],
+            "negation": "",
+            "help": "Ignore errors while reading source files",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "include": {
+            "flags": [
+              "--include"
+            ],
+            "negation": "",
+            "help": "Include only files whose paths match one of these patterns",
+            "type": "list[str]",
+            "default": null,
+            "choices": []
+          },
+          "keep_combined": {
+            "flags": [
+              "--keep-combined"
+            ],
+            "negation": "",
+            "help": "Keep original coverage files, otherwise they are deleted after combining",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "omit": {
+            "flags": [
+              "--omit"
+            ],
+            "negation": "",
+            "help": "Omit files whose paths match one of these patterns",
+            "type": "list[str]",
+            "default": null,
+            "choices": []
+          },
+          "rcfile": {
+            "flags": [
+              "--rcfile"
+            ],
+            "negation": "",
+            "help": "Specify configuration file",
+            "type": "str",
+            "default": null,
+            "choices": []
+          }
+        }
+      },
+      "html": {
+        "help": "Create an HTML report of coverage results. Each file gets its own page, with the source decorated to show executed, excluded, and missed lines.",
+        "wraps": false,
+        "positional": "any",
+        "lead": "",
+        "options": {
+          "contexts": {
+            "flags": [
+              "--contexts"
+            ],
+            "negation": "",
+            "help": "Only display data from lines covered in the given contexts",
+            "type": "list[str]",
+            "default": null,
+            "choices": []
+          },
+          "data_file": {
+            "flags": [
+              "--data-file"
+            ],
+            "negation": "",
+            "help": "Read coverage data for report generation from this file",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "debug": {
+            "flags": [
+              "--debug"
+            ],
+            "negation": "",
+            "help": "Debug options, separated by commas",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "directory": {
+            "flags": [
+              "--directory",
+              "-d"
+            ],
+            "negation": "",
+            "help": "Write the output files to DIR",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "fail_under": {
+            "flags": [
+              "--fail-under"
+            ],
+            "negation": "",
+            "help": "Exit with a status of 2 if the total coverage is less than MIN",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "ignore_errors": {
+            "flags": [
+              "--ignore-errors",
+              "-i"
+            ],
+            "negation": "",
+            "help": "Ignore errors while reading source files",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "include": {
+            "flags": [
+              "--include"
+            ],
+            "negation": "",
+            "help": "Include only files whose paths match one of these patterns",
+            "type": "list[str]",
+            "default": null,
+            "choices": []
+          },
+          "keep_combined": {
+            "flags": [
+              "--keep-combined"
+            ],
+            "negation": "",
+            "help": "Keep original coverage files, otherwise they are deleted after combining",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "omit": {
+            "flags": [
+              "--omit"
+            ],
+            "negation": "",
+            "help": "Omit files whose paths match one of these patterns",
+            "type": "list[str]",
+            "default": null,
+            "choices": []
+          },
+          "precision": {
+            "flags": [
+              "--precision"
+            ],
+            "negation": "",
+            "help": "Number of digits after the decimal point to display for reported coverage percentages",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "quiet": {
+            "flags": [
+              "--quiet",
+              "-q"
+            ],
+            "negation": "",
+            "help": "Don't print messages about what is happening",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "rcfile": {
+            "flags": [
+              "--rcfile"
+            ],
+            "negation": "",
+            "help": "Specify configuration file",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "show_contexts": {
+            "flags": [
+              "--show-contexts"
+            ],
+            "negation": "",
+            "help": "Show contexts for covered lines",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "skip_covered": {
+            "flags": [
+              "--skip-covered"
+            ],
+            "negation": "--no-skip-covered",
+            "help": "Skip files with 100% coverage",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "skip_empty": {
+            "flags": [
+              "--skip-empty"
+            ],
+            "negation": "",
+            "help": "Skip files with no code",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "title": {
+            "flags": [
+              "--title"
+            ],
+            "negation": "",
+            "help": "A text string to use as the title on the HTML",
+            "type": "str",
+            "default": null,
+            "choices": []
+          }
+        }
+      },
+      "json": {
+        "help": "Generate a JSON report of coverage results.",
+        "wraps": false,
+        "positional": "any",
+        "lead": "",
+        "options": {
+          "contexts": {
+            "flags": [
+              "--contexts"
+            ],
+            "negation": "",
+            "help": "Only display data from lines covered in the given contexts",
+            "type": "list[str]",
+            "default": null,
+            "choices": []
+          },
+          "data_file": {
+            "flags": [
+              "--data-file"
+            ],
+            "negation": "",
+            "help": "Read coverage data for report generation from this file",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "debug": {
+            "flags": [
+              "--debug"
+            ],
+            "negation": "",
+            "help": "Debug options, separated by commas",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "fail_under": {
+            "flags": [
+              "--fail-under"
+            ],
+            "negation": "",
+            "help": "Exit with a status of 2 if the total coverage is less than MIN",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "ignore_errors": {
+            "flags": [
+              "--ignore-errors",
+              "-i"
+            ],
+            "negation": "",
+            "help": "Ignore errors while reading source files",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "include": {
+            "flags": [
+              "--include"
+            ],
+            "negation": "",
+            "help": "Include only files whose paths match one of these patterns",
+            "type": "list[str]",
+            "default": null,
+            "choices": []
+          },
+          "keep_combined": {
+            "flags": [
+              "--keep-combined"
+            ],
+            "negation": "",
+            "help": "Keep original coverage files, otherwise they are deleted after combining",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "o": {
+            "flags": [
+              "-o"
+            ],
+            "negation": "",
+            "help": "Write the JSON report to this file",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "omit": {
+            "flags": [
+              "--omit"
+            ],
+            "negation": "",
+            "help": "Omit files whose paths match one of these patterns",
+            "type": "list[str]",
+            "default": null,
+            "choices": []
+          },
+          "pretty_print": {
+            "flags": [
+              "--pretty-print"
+            ],
+            "negation": "",
+            "help": "Format the JSON for human readers",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "quiet": {
+            "flags": [
+              "--quiet",
+              "-q"
+            ],
+            "negation": "",
+            "help": "Don't print messages about what is happening",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "rcfile": {
+            "flags": [
+              "--rcfile"
+            ],
+            "negation": "",
+            "help": "Specify configuration file",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "show_contexts": {
+            "flags": [
+              "--show-contexts"
+            ],
+            "negation": "",
+            "help": "Show contexts for covered lines",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          }
+        }
+      },
+      "report": {
+        "help": "Report coverage statistics on modules.",
+        "wraps": false,
+        "positional": "any",
+        "lead": "",
+        "options": {
+          "contexts": {
+            "flags": [
+              "--contexts"
+            ],
+            "negation": "",
+            "help": "Only display data from lines covered in the given contexts",
+            "type": "list[str]",
+            "default": null,
+            "choices": []
+          },
+          "data_file": {
+            "flags": [
+              "--data-file"
+            ],
+            "negation": "",
+            "help": "Read coverage data for report generation from this file",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "debug": {
+            "flags": [
+              "--debug"
+            ],
+            "negation": "",
+            "help": "Debug options, separated by commas",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "fail_under": {
+            "flags": [
+              "--fail-under"
+            ],
+            "negation": "",
+            "help": "Exit with a status of 2 if the total coverage is less than MIN",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "format": {
+            "flags": [
+              "--format"
+            ],
+            "negation": "",
+            "help": "Output format, either text (default), markdown, or total",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "ignore_errors": {
+            "flags": [
+              "--ignore-errors",
+              "-i"
+            ],
+            "negation": "",
+            "help": "Ignore errors while reading source files",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "include": {
+            "flags": [
+              "--include"
+            ],
+            "negation": "",
+            "help": "Include only files whose paths match one of these patterns",
+            "type": "list[str]",
+            "default": null,
+            "choices": []
+          },
+          "keep_combined": {
+            "flags": [
+              "--keep-combined"
+            ],
+            "negation": "",
+            "help": "Keep original coverage files, otherwise they are deleted after combining",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "omit": {
+            "flags": [
+              "--omit"
+            ],
+            "negation": "",
+            "help": "Omit files whose paths match one of these patterns",
+            "type": "list[str]",
+            "default": null,
+            "choices": []
+          },
+          "precision": {
+            "flags": [
+              "--precision"
+            ],
+            "negation": "",
+            "help": "Number of digits after the decimal point to display for reported coverage percentages",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "rcfile": {
+            "flags": [
+              "--rcfile"
+            ],
+            "negation": "",
+            "help": "Specify configuration file",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "show_missing": {
+            "flags": [
+              "--show-missing",
+              "-m"
+            ],
+            "negation": "",
+            "help": "Show line numbers of statements in each module that weren't executed",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "skip_covered": {
+            "flags": [
+              "--skip-covered"
+            ],
+            "negation": "--no-skip-covered",
+            "help": "Skip files with 100% coverage",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "skip_empty": {
+            "flags": [
+              "--skip-empty"
+            ],
+            "negation": "",
+            "help": "Skip files with no code",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "sort": {
+            "flags": [
+              "--sort"
+            ],
+            "negation": "",
+            "help": "Sort the report by the named column: name, stmts, miss, branch, brpart, or cover",
+            "type": "str",
+            "default": null,
+            "choices": []
+          }
+        }
+      },
+      "xml": {
+        "help": "Generate an XML report of coverage results.",
+        "wraps": false,
+        "positional": "any",
+        "lead": "",
+        "options": {
+          "data_file": {
+            "flags": [
+              "--data-file"
+            ],
+            "negation": "",
+            "help": "Read coverage data for report generation from this file",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "debug": {
+            "flags": [
+              "--debug"
+            ],
+            "negation": "",
+            "help": "Debug options, separated by commas",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "fail_under": {
+            "flags": [
+              "--fail-under"
+            ],
+            "negation": "",
+            "help": "Exit with a status of 2 if the total coverage is less than MIN",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "ignore_errors": {
+            "flags": [
+              "--ignore-errors",
+              "-i"
+            ],
+            "negation": "",
+            "help": "Ignore errors while reading source files",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "include": {
+            "flags": [
+              "--include"
+            ],
+            "negation": "",
+            "help": "Include only files whose paths match one of these patterns",
+            "type": "list[str]",
+            "default": null,
+            "choices": []
+          },
+          "keep_combined": {
+            "flags": [
+              "--keep-combined"
+            ],
+            "negation": "",
+            "help": "Keep original coverage files, otherwise they are deleted after combining",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "o": {
+            "flags": [
+              "-o"
+            ],
+            "negation": "",
+            "help": "Write the XML report to this file",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "omit": {
+            "flags": [
+              "--omit"
+            ],
+            "negation": "",
+            "help": "Omit files whose paths match one of these patterns",
+            "type": "list[str]",
+            "default": null,
+            "choices": []
+          },
+          "quiet": {
+            "flags": [
+              "--quiet",
+              "-q"
+            ],
+            "negation": "",
+            "help": "Don't print messages about what is happening",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "rcfile": {
+            "flags": [
+              "--rcfile"
+            ],
+            "negation": "",
+            "help": "Specify configuration file",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "skip_empty": {
+            "flags": [
+              "--skip-empty"
+            ],
+            "negation": "",
+            "help": "Skip files with no code",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          }
+        }
+      }
+    }
+  }
+}

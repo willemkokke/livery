@@ -1,0 +1,124 @@
+{
+  "sequence": 1,
+  "version": "0.0.41",
+  "date": "2026-05-09",
+  "artifacts": {},
+  "surface": {
+    "platforms": [
+      "Linux",
+      "Windows",
+      "macOS"
+    ],
+    "extractor": 3,
+    "help": "Zensical - A modern static site generator.",
+    "verbs": {
+      "": {
+        "help": "Zensical - A modern static site generator.",
+        "wraps": false,
+        "positional": "any",
+        "lead": "",
+        "options": {}
+      },
+      "build": {
+        "help": "Build a project.",
+        "wraps": false,
+        "positional": "none",
+        "lead": "",
+        "options": {
+          "clean": {
+            "flags": [
+              "--clean",
+              "-c"
+            ],
+            "negation": "",
+            "help": "Clean cache",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "config_file": {
+            "flags": [
+              "--config-file",
+              "-f"
+            ],
+            "negation": "",
+            "help": "Path to config file",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "strict": {
+            "flags": [
+              "--strict",
+              "-s"
+            ],
+            "negation": "",
+            "help": "Enable strict mode - abort the build on warnings",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          }
+        }
+      },
+      "new": {
+        "help": "Create a new template project in the current or given directory.",
+        "wraps": false,
+        "positional": "any",
+        "lead": "",
+        "options": {}
+      },
+      "serve": {
+        "help": "Build and serve a project.",
+        "wraps": false,
+        "positional": "none",
+        "lead": "",
+        "options": {
+          "config_file": {
+            "flags": [
+              "--config-file",
+              "-f"
+            ],
+            "negation": "",
+            "help": "Path to config file",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "dev_addr": {
+            "flags": [
+              "--dev-addr",
+              "-a"
+            ],
+            "negation": "",
+            "help": "IP address and port",
+            "type": "str",
+            "default": "localhost:8000",
+            "choices": []
+          },
+          "open": {
+            "flags": [
+              "--open",
+              "-o"
+            ],
+            "negation": "",
+            "help": "Open preview in default browser",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "strict": {
+            "flags": [
+              "--strict",
+              "-s"
+            ],
+            "negation": "",
+            "help": "Strict mode (currently unsupported)",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          }
+        }
+      }
+    }
+  }
+}

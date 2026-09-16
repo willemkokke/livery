@@ -1,0 +1,464 @@
+{
+  "sequence": 9,
+  "version": "1.6.0",
+  "date": "2024-04-20",
+  "artifacts": {},
+  "surface": {
+    "platforms": [
+      "Linux",
+      "Windows",
+      "macOS"
+    ],
+    "extractor": 3,
+    "verbs": {
+      "build": {
+        "help": "Build the MkDocs documentation.",
+        "wraps": false,
+        "positional": "none",
+        "lead": "",
+        "options": {
+          "clean": {
+            "flags": [
+              "--clean",
+              "--dirty",
+              "-c"
+            ],
+            "negation": "",
+            "help": "Remove old files from the site_dir before building (the default)",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "config_file": {
+            "flags": [
+              "--config-file",
+              "-f"
+            ],
+            "negation": "",
+            "help": "Provide a specific MkDocs config",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "quiet": {
+            "flags": [
+              "--quiet",
+              "-q"
+            ],
+            "negation": "",
+            "help": "Silence warnings",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "site_dir": {
+            "flags": [
+              "--site-dir",
+              "-d"
+            ],
+            "negation": "",
+            "help": "The directory to output the result of the documentation build",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "strict": {
+            "flags": [
+              "--no-strict",
+              "--strict",
+              "-s"
+            ],
+            "negation": "",
+            "help": "Enable strict mode",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "theme": {
+            "flags": [
+              "--theme",
+              "-t"
+            ],
+            "negation": "",
+            "help": "The theme to use when building your documentation",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "use_directory_urls": {
+            "flags": [
+              "--use-directory-urls",
+              "--no-directory-urls"
+            ],
+            "negation": "",
+            "help": "Use directory URLs when building pages (the default)",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "verbose": {
+            "flags": [
+              "--verbose",
+              "-v"
+            ],
+            "negation": "",
+            "help": "Enable verbose output",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          }
+        }
+      },
+      "gh_deploy": {
+        "help": "Deploy your documentation to GitHub Pages.",
+        "wraps": false,
+        "positional": "none",
+        "lead": "",
+        "options": {
+          "clean": {
+            "flags": [
+              "--clean",
+              "--dirty",
+              "-c"
+            ],
+            "negation": "",
+            "help": "Remove old files from the site_dir before building (the default)",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "config_file": {
+            "flags": [
+              "--config-file",
+              "-f"
+            ],
+            "negation": "",
+            "help": "Provide a specific MkDocs config",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "force": {
+            "flags": [
+              "--force"
+            ],
+            "negation": "",
+            "help": "Force the push to the repository",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "ignore_version": {
+            "flags": [
+              "--ignore-version"
+            ],
+            "negation": "",
+            "help": "Ignore check that build is not being deployed with an older version of MkDocs",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "message": {
+            "flags": [
+              "--message",
+              "-m"
+            ],
+            "negation": "",
+            "help": "A commit message to use when committing to the GitHub Pages remote branch",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "no_history": {
+            "flags": [
+              "--no-history"
+            ],
+            "negation": "",
+            "help": "Replace the whole Git history with one new commit",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "quiet": {
+            "flags": [
+              "--quiet",
+              "-q"
+            ],
+            "negation": "",
+            "help": "Silence warnings",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "remote_branch": {
+            "flags": [
+              "--remote-branch",
+              "-b"
+            ],
+            "negation": "",
+            "help": "The remote branch to commit to for GitHub Pages",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "remote_name": {
+            "flags": [
+              "--remote-name",
+              "-r"
+            ],
+            "negation": "",
+            "help": "The remote name to commit to for GitHub Pages",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "shell": {
+            "flags": [
+              "--shell"
+            ],
+            "negation": "",
+            "help": "Use the shell when invoking Git",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "site_dir": {
+            "flags": [
+              "--site-dir",
+              "-d"
+            ],
+            "negation": "",
+            "help": "The directory to output the result of the documentation build",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "strict": {
+            "flags": [
+              "--no-strict",
+              "--strict",
+              "-s"
+            ],
+            "negation": "",
+            "help": "Enable strict mode",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "theme": {
+            "flags": [
+              "--theme",
+              "-t"
+            ],
+            "negation": "",
+            "help": "The theme to use when building your documentation",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "use_directory_urls": {
+            "flags": [
+              "--use-directory-urls",
+              "--no-directory-urls"
+            ],
+            "negation": "",
+            "help": "Use directory URLs when building pages (the default)",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "verbose": {
+            "flags": [
+              "--verbose",
+              "-v"
+            ],
+            "negation": "",
+            "help": "Enable verbose output",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          }
+        }
+      },
+      "new": {
+        "help": "Create a new MkDocs project.",
+        "wraps": false,
+        "positional": "required",
+        "lead": "project_directory",
+        "options": {
+          "quiet": {
+            "flags": [
+              "--quiet",
+              "-q"
+            ],
+            "negation": "",
+            "help": "Silence warnings",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "verbose": {
+            "flags": [
+              "--verbose",
+              "-v"
+            ],
+            "negation": "",
+            "help": "Enable verbose output",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          }
+        }
+      },
+      "serve": {
+        "help": "Run the builtin development server.",
+        "wraps": false,
+        "positional": "none",
+        "lead": "",
+        "options": {
+          "clean": {
+            "flags": [
+              "--clean",
+              "-c"
+            ],
+            "negation": "",
+            "help": "Build the site without any effects of `mkdocs serve` - pure `mkdocs build`, then serve",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "config_file": {
+            "flags": [
+              "--config-file",
+              "-f"
+            ],
+            "negation": "",
+            "help": "Provide a specific MkDocs config",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "dev_addr": {
+            "flags": [
+              "--dev-addr",
+              "-a"
+            ],
+            "negation": "",
+            "help": "IP address and port to serve documentation locally",
+            "type": "str",
+            "default": "localhost:8000",
+            "choices": []
+          },
+          "dirty": {
+            "flags": [
+              "--dirty"
+            ],
+            "negation": "",
+            "help": "Only re-build files that have changed",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "no_livereload": {
+            "flags": [
+              "--no-livereload"
+            ],
+            "negation": "",
+            "help": "Disable the live reloading in the development server",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "open": {
+            "flags": [
+              "--open",
+              "-o"
+            ],
+            "negation": "",
+            "help": "Open the website in a Web browser after the initial build finishes",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "quiet": {
+            "flags": [
+              "--quiet",
+              "-q"
+            ],
+            "negation": "",
+            "help": "Silence warnings",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "strict": {
+            "flags": [
+              "--no-strict",
+              "--strict",
+              "-s"
+            ],
+            "negation": "",
+            "help": "Enable strict mode",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "theme": {
+            "flags": [
+              "--theme",
+              "-t"
+            ],
+            "negation": "",
+            "help": "The theme to use when building your documentation",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "use_directory_urls": {
+            "flags": [
+              "--use-directory-urls",
+              "--no-directory-urls"
+            ],
+            "negation": "",
+            "help": "Use directory URLs when building pages (the default)",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "verbose": {
+            "flags": [
+              "--verbose",
+              "-v"
+            ],
+            "negation": "",
+            "help": "Enable verbose output",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "watch": {
+            "flags": [
+              "--watch",
+              "-w"
+            ],
+            "negation": "",
+            "help": "A directory or file to watch for live reloading",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "watch_theme": {
+            "flags": [
+              "--watch-theme"
+            ],
+            "negation": "",
+            "help": "Include the theme in list of files to watch for live reloading",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          }
+        }
+      }
+    }
+  }
+}

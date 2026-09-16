@@ -1,0 +1,87 @@
+{
+  "sequence": 12,
+  "version": "2.98.0",
+  "date": "2026-08-20",
+  "artifacts": {},
+  "surface": {
+    "platforms": [
+      "Linux",
+      "Windows",
+      "macOS"
+    ],
+    "extractor": 3,
+    "verbs": {
+      "pr.checkout": {
+        "help": "Check out a pull request in git",
+        "wraps": false,
+        "positional": "any",
+        "lead": "",
+        "options": {
+          "branch": {
+            "flags": [
+              "--branch",
+              "-b"
+            ],
+            "negation": "",
+            "help": "Local branch name to use",
+            "type": "str",
+            "default": "[the name of the head branch]",
+            "choices": []
+          },
+          "detach": {
+            "flags": [
+              "--detach"
+            ],
+            "negation": "",
+            "help": "Checkout PR with a detached HEAD",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "force": {
+            "flags": [
+              "--force",
+              "-f"
+            ],
+            "negation": "",
+            "help": "Reset the existing local branch to the latest state of the pull request",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "recurse_submodules": {
+            "flags": [
+              "--recurse-submodules"
+            ],
+            "negation": "",
+            "help": "Update all submodules after checkout",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "repo": {
+            "flags": [
+              "--repo",
+              "-R"
+            ],
+            "negation": "",
+            "help": "Select another repository using the [HOST/]OWNER/REPO format",
+            "type": "str",
+            "default": null,
+            "choices": []
+          },
+          "worktree": {
+            "flags": [
+              "--worktree"
+            ],
+            "negation": "",
+            "help": "Check out the pull request into a worktree at the given path",
+            "type": "str",
+            "default": null,
+            "choices": []
+          }
+        }
+      }
+    }
+  }
+}
