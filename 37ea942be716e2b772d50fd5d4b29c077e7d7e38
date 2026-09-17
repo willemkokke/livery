@@ -1,0 +1,1 @@
+{"branch": "chore/388-the-plan-note-s-tail-is-every-slice-s-me", "forge": "github", "legs": ["check (macos-latest, 3.14)", "check (ubuntu-latest, 3.14)"], "run": "34604446004", "schema": 1, "scope": "full", "sha": "64624ccf705da94520250cb803548d1a9d66b713", "tree": "37ea942be716e2b772d50fd5d4b29c077e7d7e38", "when": "2026-09-11T13:32:28.334583+00:00"}

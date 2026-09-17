@@ -1,0 +1,1 @@
+{"branch": "docs/windows-is-in-the-gate", "forge": "github", "legs": ["check (macos-latest, 3.14)", "check (ubuntu-latest, 3.14)", "check (windows-latest, 3.14)"], "run": "34672972558", "schema": 1, "scope": "full", "sha": "df4f2eca548832895493b13b2d248b30757347a9", "tree": "e7d0d80a3f9a538bd55adc0c753eaa24702e3928", "when": "2026-09-12T04:34:22.276457+00:00"}

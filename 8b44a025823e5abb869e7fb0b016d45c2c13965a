@@ -1,0 +1,1 @@
+{"branch": "feat/434-strongroom-is-born-and-the-formats-have", "forge": "github", "legs": ["check (macos-latest, 3.14)", "check (ubuntu-latest, 3.14)"], "run": "34598158196", "schema": 1, "scope": "full", "sha": "d53b426e45b9b83c956693bbcb7ddca4860f5410", "tree": "8b44a025823e5abb869e7fb0b016d45c2c13965a", "when": "2026-09-11T12:21:13.847684+00:00"}

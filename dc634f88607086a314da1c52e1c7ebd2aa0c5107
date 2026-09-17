@@ -1,0 +1,1 @@
+{"branch": "workflow/release/footman", "forge": "github", "legs": ["check (macos-latest, 3.14)", "check (ubuntu-latest, 3.14)", "check (windows-latest, 3.14)"], "run": "35056883057", "schema": 1, "scope": "full", "sha": "76af7a9b432efe2d9bc6dc7e6e512ebe6475f072", "tree": "dc634f88607086a314da1c52e1c7ebd2aa0c5107", "when": "2026-09-16T04:56:29.044181+00:00"}
