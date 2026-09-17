@@ -81,7 +81,7 @@ def render(
     class_name: str = "",
     in_process: str = "",
 ) -> str:
-    """The full text of `_stubs/<tool>.pyi` for *spec*."""
+    """The full text of `stubs/<tool>.pyi` for *spec*."""
     root = class_name or _class_name(spec.name)
     tree = _tree(spec.verbs)
     taken = _generated_names(tree, root)
@@ -607,7 +607,7 @@ def _arg_lines(option: Option) -> list[str]:
     Unwrapped on purpose: hovers treat a docstring's line breaks as hard
     breaks, so a wrap chosen for the .pyi's column limit used to land
     mid-sentence in every tooltip. One line per entry lets each renderer
-    reflow to its own width; E501 is waived for `_stubs/` in exchange.
+    reflow to its own width; each stub waives E501 in exchange.
     """
     text = _esc(option.help).rstrip(".")
     if option.type_name.startswith("list[") or option.type_name.endswith("[]"):

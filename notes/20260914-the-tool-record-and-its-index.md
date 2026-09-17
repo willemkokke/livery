@@ -786,6 +786,16 @@ Acceptance:
   provision prefix was the store's home, `data_dir()/toolroom`, so a
   materialised store read as a provisioned prefix; the bench's prefix
   is `data_dir()/toolroom-bench` now.
+- 2026-09-18, the agent, on the typings layout: a tree inside the tools
+  package's own directory, `typings/livery/toolroom/tools/`, shadows the
+  package for a checker run on explicit paths, which the affected gate
+  is: basedpyright then reads the package as a namespace portion and
+  its `__file__` as `str | None`, two errors in the bench on lines
+  nobody touched. So the stubs are `livery.toolroom.stubs` and the
+  handles `livery.toolroom.handles`, both under the namespace package
+  beside the tools package, which every resolver merges across roots;
+  the writer removes a tree it finds inside the package's directory.
+  The names lose their underscores with the move (livery#644).
 - 2026-09-17, Willem, on the stubs' home: a tool the workspace does not
   deploy gets no stub, since a stub nobody uses only spends resources;
   the stubs are rendered to pass the linter. So `fm tools.restub` writes

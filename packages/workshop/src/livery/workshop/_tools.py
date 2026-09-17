@@ -27,11 +27,13 @@ one.
 The stubs the type checkers read are materialised too, into `typings/`
 at the root, pyright's default stub path and a search path the rendered
 configuration hands the other three checkers: one rendering per tool
-the lock holds, at the locked version, as `_stubs` modules with a
-`_handles` module beside them declaring each handle, which the
-installed tools package's index imports, so the typings directory
-never shadows the package. A tool the workspace does not deploy gets
-no stub. `fm tools.restub`
+the lock holds, at the locked version, as `livery.toolroom.stubs`
+modules with `livery.toolroom.handles` beside them declaring each
+handle, which the installed tools package's index imports. Both live
+under the `livery.toolroom` namespace package, beside the tools package
+and never inside its directory: a tree inside it would shadow the
+package for a checker run on explicit paths. A tool the workspace does
+not deploy gets no stub. `fm tools.restub`
 writes them, and so do `fm sync` and every lock verb. A source that is a
 directory of records holds no rendering; `[tools] index-build` names the
 verb that builds the index there before the catalogue is read.
@@ -40,6 +42,7 @@ verb that builds the index there before the catalogue is read.
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -79,8 +82,8 @@ DEFAULT_HOSTS = ("linux-x64", "macos-arm", "windows-x64")
 TYPINGS = "typings"
 """The directory under the root the stubs are written into, pyright's default."""
 
-STUBS_PACKAGE = ("livery", "toolroom", "tools")
-"""The package the stubs belong to, as directories under the typings directory."""
+TYPINGS_PACKAGE = ("livery", "toolroom")
+"""The namespace package the stubs and handles live under, beside the tools package."""
 
 
 def tools_table(path: Path) -> dict[str, object]:
@@ -591,8 +594,8 @@ def typings_dir(root: Path) -> Path:
 
 
 def stubs_dir(root: Path) -> Path:
-    """The `_stubs` directory under the typings directory's tools package."""
-    return typings_dir(root).joinpath(*STUBS_PACKAGE) / "_stubs"
+    """The `stubs` package under the typings directory's `livery.toolroom`."""
+    return typings_dir(root).joinpath(*TYPINGS_PACKAGE) / "stubs"
 
 
 def stubs_present(root: Path) -> int:
@@ -623,15 +626,16 @@ def write_stubs(root: Path, *, offline: bool = False) -> Stubbed:
 
     One stub per tool `tools.lock` holds, at the locked version: a tool
     the workspace does not deploy gets no stub, and its handle types as
-    a bare `Tool`. The `_handles` module beside the stubs declares the
+    a bare `Tool`. The `handles` module beside the stubs declares the
     handles, one import and one `name: Class[Result]` per stub written,
-    and the installed tools package's index imports every name from it,
-    so the typings directory never shadows the package. The handles
-    cannot live in the stubs package's own index: a package's index
-    binds its submodules, and `ruff` would name `ruff.pyi` rather than
-    the handle. A stub already on disk as the catalogue holds it is
-    kept, so a checker's cache stands. Without a lock nothing is
-    written.
+    and the installed tools package's index imports every name from it.
+    The handles cannot live in the stubs package's own index: a
+    package's index binds its submodules, and `ruff` would name
+    `ruff.pyi` rather than the handle. Nothing is written inside the
+    tools package's own directory, and a tree left there is removed:
+    it shadows the package for a checker run on explicit paths. A stub
+    already on disk as the catalogue holds it is kept, so a checker's
+    cache stands. Without a lock nothing is written.
 
     Refuses when `[tools] index` names a directory of records and no
     `[tools] index-build` verb: records hold no rendering.
@@ -646,6 +650,9 @@ def write_stubs(root: Path, *, offline: bool = False) -> Stubbed:
     lock = current_lock(root)
     locked = dict(lock.tools) if lock is not None else {}
     listing = catalogue(root, offline=offline) if locked else None
+    shutil.rmtree(
+        typings_dir(root).joinpath(*TYPINGS_PACKAGE, "tools"), ignore_errors=True
+    )
     directory = stubs_dir(root)
     directory.mkdir(parents=True, exist_ok=True)
     written: list[str] = []
@@ -678,16 +685,16 @@ def write_stubs(root: Path, *, offline: bool = False) -> Stubbed:
 
 
 def handles_path(root: Path) -> Path:
-    """The `_handles.pyi` module beside the stubs, declaring the typed handles."""
-    return typings_dir(root).joinpath(*STUBS_PACKAGE) / "_handles.pyi"
+    """The `handles.pyi` module beside the stubs, declaring the typed handles."""
+    return typings_dir(root).joinpath(*TYPINGS_PACKAGE) / "handles.pyi"
 
 
 def handles_index(names: list[str]) -> str:
-    """The `_handles` module declaring the handles of *names*, in order.
+    """The `handles` module declaring the handles of *names*, in order.
 
     The installed tools package's own index imports every name from
     this module, so the handle `ruff` types as `Ruff[Result]` exactly
-    when `_stubs/ruff.pyi` is beside it.
+    when `stubs/ruff.pyi` is beside it.
     """
     lines = [
         f"# Rendered by `{prog()} tools.restub`: the handles this workspace",
@@ -695,7 +702,7 @@ def handles_index(names: list[str]) -> str:
         "from livery.toolroom.tools import Result",
     ]
     lines += [
-        f"from livery.toolroom.tools._stubs.{name} import"
+        f"from livery.toolroom.stubs.{name} import"
         f" {class_name(name)} as {class_name(name)}"
         for name in names
     ]

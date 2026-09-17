@@ -156,6 +156,11 @@ def test_the_stubs_are_written_for_the_locked_tools_at_their_locked_version(
     stubs = _tools.stubs_dir(root)
     stubs.mkdir(parents=True)
     (stubs / "gone.pyi").write_text("class Gone: ...\n")
+    # A tree inside the tools package's directory shadows the package for
+    # a checker run on explicit paths; the writer removes one it finds.
+    inside = _tools.typings_dir(root) / "livery" / "toolroom" / "tools"
+    inside.mkdir(parents=True)
+    (inside / "stale.pyi").write_text("")
     # A lock entry below the newest listed: the lock verbs keep an entry
     # that still satisfies its floor, so ruff stays at 1.0.0.
     Lock(THREE, {"ruff": Locked("1.0.0", {})}).save(_tools.lock_path(root))
@@ -171,16 +176,17 @@ def test_the_stubs_are_written_for_the_locked_tools_at_their_locked_version(
         "# Rendered by `fm tools.restub`: the handles this workspace\n"
         "# locks. Do not edit by hand.\n"
         "from livery.toolroom.tools import Result\n"
-        "from livery.toolroom.tools._stubs.ruff import Ruff as Ruff\n"
+        "from livery.toolroom.stubs.ruff import Ruff as Ruff\n"
         "\n"
         "ruff: Ruff[Result]\n"
     )
     # The package's own index is never shadowed: nothing else is written.
     assert sorted(p.name for p in _tools.typings_dir(root).rglob("*.pyi")) == [
         "__init__.pyi",
-        "_handles.pyi",
+        "handles.pyi",
         "ruff.pyi",
     ]
+    assert not _tools.typings_dir(root).joinpath("livery", "toolroom", "tools").exists()
     assert _tools.stubs_present(root) == 1
     # A second write changes nothing on disk.
     again = _tools.write_stubs(root)

@@ -134,9 +134,10 @@ def tools_restub(
 ) -> None:
     """Write the stubs the catalogue offers into `typings/`.
 
-    One stub per tool the lock holds, at the locked version, and the
-    `_handles` module beside them declaring the handles for the tools
-    package's index to import. The four checkers read `typings/` first,
+    One stub per tool the lock holds, at the locked version, as
+    `livery.toolroom.stubs` modules, and `livery.toolroom.handles`
+    beside them declaring the handles for the tools package's index to
+    import. The four checkers read `typings/` first,
     so a locked tool's handle completes with its own verbs and flags;
     a tool the workspace does not deploy gets no stub and types as a
     bare `Tool`. `sync` and the lock verbs write them too; this writes

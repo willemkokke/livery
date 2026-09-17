@@ -261,11 +261,15 @@ def _fm_install_stubs(index_url, target=None):
     # rehearsal names another target, so it never touches its own package.
     import hashlib
 
+    # The target is the livery.toolroom namespace directory: the stubs go
+    # under its stubs/, the handles beside them, never inside the tools
+    # package's own directory.
     if target is None:
         import livery.toolroom.tools as tools
 
-        target = Path(tools.__file__).resolve().parent / "_stubs"
+        target = Path(tools.__file__).resolve().parents[1]
     target = Path(target)
+    stubs_dir = target / "stubs"
     base = index_url.rstrip("/") + "/"
 
     def read(digest):
@@ -280,7 +284,7 @@ def _fm_install_stubs(index_url, target=None):
         return {e["name"]: e["digest"] for e in json.loads(read(digest))["entries"]}
 
     pointer = json.loads(_fm_fetch(base + "pointer.json"))
-    target.mkdir(parents=True, exist_ok=True)
+    stubs_dir.mkdir(parents=True, exist_ok=True)
     written = []
     for name, entry in pointer["tools"].items():
         if not entry.get("stubs"):
@@ -289,12 +293,12 @@ def _fm_install_stubs(index_url, target=None):
         stubs = entries(entry["stubs"])
         for version in reversed(versions):
             if version in stubs:
-                (target / (name + ".pyi")).write_text(
+                (stubs_dir / (name + ".pyi")).write_text(
                     read(stubs[version]), encoding="utf-8"
                 )
                 written.append(name)
                 break
-    (target / "__init__.pyi").write_text("", encoding="utf-8")
+    (stubs_dir / "__init__.pyi").write_text("", encoding="utf-8")
     # The package's own index imports the handles from the module beside
     # the stubs: one import and one typed handle per stub, the class named
     # as the records name it.
@@ -303,13 +307,11 @@ def _fm_install_stubs(index_url, target=None):
 
     index = ["from livery.toolroom.tools import Result"]
     index += [
-        "from livery.toolroom.tools._stubs." + n + " import " + cls(n) + " as " + cls(n)
+        "from livery.toolroom.stubs." + n + " import " + cls(n) + " as " + cls(n)
         for n in written
     ]
     index += [""] + [n + ": " + cls(n) + "[Result]" for n in written]
-    (target.parent / "_handles.pyi").write_text(
-        chr(10).join(index) + chr(10), encoding="utf-8"
-    )
+    (target / "handles.pyi").write_text(chr(10).join(index) + chr(10), encoding="utf-8")
     return len(written)
 
 
