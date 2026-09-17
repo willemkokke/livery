@@ -39,6 +39,7 @@ from livery.strongroom import (
     MissingObject,
     Source,
     Subject,
+    Unreachable,
     ViewRecord,
     fetch_url,
 )
@@ -521,7 +522,13 @@ class Store:
                     f" offline; {url} would have satisfied it ({miss})"
                 ) from None
         self._progress(Event(name, version, "fetch", url))
-        data = download(url)
+        try:
+            data = download(url)
+        except (Unreachable, OSError) as error:
+            raise StoreError(
+                f"{name}@{version}: the origin {url} did not answer ({error}); the"
+                " artifact is in no source either"
+            ) from None
         try:
             self._objects.land(BytesIO(data), expected=digest)
         except IntegrityError as error:

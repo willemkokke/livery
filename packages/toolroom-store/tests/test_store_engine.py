@@ -694,3 +694,31 @@ def test_a_delegated_install_runs_its_installer_with_the_environment_handed_over
         [sys.executable, str(script), str(out)], {"UV_TOOL_DIR": "here"}
     )
     assert code == 0 and out.read_text() == "here"
+
+
+def test_an_origin_that_does_not_answer_is_a_store_refusal_naming_the_url(
+    home: Home, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A source's refusal is the store's to name.
+
+    The workspace reports it and goes on, which a raw exception would
+    not let it do.
+    """
+    from livery.strongroom import Unreachable
+
+    artifacts, _data = _tool()
+    record = _record("tool", artifacts)
+
+    def unreachable(url: str) -> bytes:
+        raise Unreachable(f"{url}: HTTP 302")
+
+    monkeypatch.setattr(_engine, "download", unreachable)
+    with pytest.raises(StoreError, match=r"tool@1\.0\.0: the origin .* did not answer"):
+        Store(home, host=HOST).ensure(record, "1.0.0")
+
+    def refused(url: str) -> bytes:
+        raise OSError("connection reset")
+
+    monkeypatch.setattr(_engine, "download", refused)
+    with pytest.raises(StoreError, match=r"connection reset"):
+        Store(home, host=HOST).ensure(record, "1.0.0")
