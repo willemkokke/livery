@@ -138,9 +138,24 @@ lands every version's artifact for the hosts asked into a store at
 another root, a mirror by construction, for an offline install
 elsewhere.
 
+`supply` is the primitive `ensure` stands on: a tool by name, kind,
+version and deployment, which is what a consumer holds after reading
+the catalogue. The delegated kinds go through their installer rather
+than the objects: a `uv-tool` is installed by uv at the locked version
+into a directory of its own under the home, the record's `package`
+naming what uv installs when it differs from the tool's name, and its
+launchers under `bin` are its entry points; a `system-check` tool is
+the machine's own, found on PATH and held to the record's
+`min_version` or the locked version, and the store installs nothing
+for it. `bun-install` and `uv-python` refuse naming the kind until
+they are supplied the same way. A delegated tool has no tree.
+
+A record's `mode` says how a materialised tool reaches PATH: `link`
+puts its entry points in the checkout's bin directory, `path` its own
+directories on PATH, `none` neither, for a tool reached only through a
+typed handle; a binary links and a system tool takes `none` unless the
+record says otherwise, and every other kind takes `path`.
+
 A version or host the record does not carry refuses by name, naming
 what it does carry. The six host keys are `macos-arm`, `macos-x64`,
-`linux-x64`, `linux-arm`, `windows-x64` and `windows-arm`. The
-delegated kinds, `uv-tool`, `uv-python`, `bun-install` and
-`system-check`, and the `fm tools.*` verbs follow in the plan's next
-phases.
+`linux-x64`, `linux-arm`, `windows-x64` and `windows-arm`.

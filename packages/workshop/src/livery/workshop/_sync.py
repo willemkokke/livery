@@ -348,6 +348,30 @@ def sync() -> None:
     from livery.workshop._reconcile import record_receipt
 
     record_receipt(root)
+    for line in materialise_tools(root):
+        print(line)
+
+
+def materialise_tools(root: Path) -> list[str]:
+    """Supply every locked tool through the store and write the receipts; the lines.
+
+    The bundle the sites require, materialised as `fm sync` enters the
+    environment: a checkout with no `tools.lock` yet has nothing to
+    materialise and says so.
+    """
+    from livery.workshop._tools import current_lock, materialise
+
+    if current_lock(root) is None:
+        return [f"  tools: no tools.lock; `{footman.prog()} tools.lock` writes one"]
+    done = materialise(root, strict=False)
+    supplied = [m for m in done if m.receipt is not None]
+    installed = [m.receipt.tool for m in supplied if m.installed and m.receipt]
+    lines = [
+        f"  tools: {len(supplied)} receipt(s)"
+        + (f", installed {', '.join(installed)}" if installed else ", all present")
+    ]
+    lines += [f"  tools: could not materialise: {m.failure}" for m in done if m.failure]
+    return lines
 
 
 @task

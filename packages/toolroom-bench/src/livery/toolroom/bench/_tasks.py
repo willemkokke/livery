@@ -95,12 +95,15 @@ def _record_path(key: str) -> Path:
 def default_prefix() -> Path:
     """Where provisioned tools live when no `--prefix` names another place.
 
-    A `toolroom` room in footman's data directory — durable, never touched
-    by the cache collector, and moved wholesale by `FOOTMAN_DATA_DIR` (or
-    `XDG_DATA_HOME`). One machine-level home, instead of a `.tools-latest`
-    in whichever directory the command happened to run from.
+    A `toolroom-bench` room in footman's data directory: durable, never
+    touched by the cache collector, and moved wholesale by
+    `FOOTMAN_DATA_DIR` (or `XDG_DATA_HOME`). One machine-level home,
+    instead of a `.tools-latest` in whichever directory the command
+    happened to run from, and beside the store's own `toolroom` home,
+    never inside it: the store's bin directory is not a provisioned
+    prefix.
     """
-    return data_dir() / "toolroom"
+    return data_dir() / "toolroom-bench"
 
 
 def _resolve_prefix(prefix: str | Path) -> Path | None:
@@ -2470,7 +2473,7 @@ def provision(
     tool under one isolated prefix — `uv tool install` for the PyPI wheels
     (the Rust and C++ tools included), bun's own release then `bun add` for the
     node CLIs, a release asset for the Go ones — touching nothing outside it.
-    Omitted, the prefix is the `toolroom` room in footman's data directory,
+    Omitted, the prefix is the `toolroom-bench` room in footman's data directory,
     which every empty-prefix reading looks in first, so provisioning once
     serves every later `sync`/`audit` on this machine. `--sync` rewrites the
     stubs against the prefix; `--clean` deletes it, which is the whole undo.

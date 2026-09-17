@@ -155,6 +155,28 @@ def test_a_version_whose_host_resolves_incomplete_is_refused() -> None:
         )
 
 
+def test_a_mode_outside_the_three_is_refused_and_the_kinds_default_by_shape(
+    tmp_path: Path,
+) -> None:
+    from livery.toolroom.store import MODES, default_mode
+
+    with pytest.raises(RecordError, match=r"tool: mode 'float' is not one of link"):
+        _record(mode="float")
+    assert MODES == ("link", "path", "none")
+    assert default_mode("binary") == "link"
+    assert default_mode("system-check") == "none"
+    assert {default_mode(k) for k in ("archive", "uv-tool", "bun-install")} == {"path"}
+    # The package and the mode ride the tool axis, written only when set.
+    bare = _record()
+    assert "package" not in bare.to_json() and "mode" not in bare.to_json()
+    told = _record(kind="uv-tool", package="the-dist", mode="link")
+    told.save(tmp_path / "tool")
+    loaded = Record.load(tmp_path / "tool")
+    assert (loaded.package, loaded.mode) == ("the-dist", "link")
+    written = json.loads((tmp_path / "tool" / "tool.json").read_text("utf-8"))
+    assert list(written)[:5] == ["name", "description", "kind", "package", "mode"]
+
+
 def test_a_delta_out_of_sequence_or_repeating_a_version_is_refused() -> None:
     with pytest.raises(
         RecordError, match=r"0002-1\.json: out of sequence; expected 0001"

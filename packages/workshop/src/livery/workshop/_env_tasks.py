@@ -223,7 +223,16 @@ def workspace_delta(root: Path, cwd: Path) -> EnvDelta:
     for key, value in _APPLIED.items():
         values.setdefault(key, os.environ.get(key, value))
     values["VIRTUAL_ENV"] = str(root / ".venv")
-    return EnvDelta(values=values, paths=(str(venv_bin(root)),))
+    paths, env = _receipts_emission(root)
+    values.update(env)
+    return EnvDelta(values=values, paths=(str(venv_bin(root)), *paths))
+
+
+def _receipts_emission(root: Path) -> tuple[tuple[str, ...], dict[str, str]]:
+    """What the checkout's receipts add: the tools materialised on this machine."""
+    from livery.workshop._tools import emission
+
+    return emission(root)
 
 
 def _posix_quote(value: str) -> str:
@@ -363,7 +372,9 @@ def agent_delta(root: Path, cwd: Path, environ: dict[str, str]) -> EnvDelta:
         if key not in NEVER_AGENT and (environ.get(key) or _APPLIED.get(key))
     }
     values["VIRTUAL_ENV"] = str(root / ".venv")
-    return EnvDelta(values=values, paths=(str(venv_bin(root)),))
+    paths, env = _receipts_emission(root)
+    values.update(env)
+    return EnvDelta(values=values, paths=(str(venv_bin(root)), *paths))
 
 
 def github_persist(delta: EnvDelta, environ: dict[str, str]) -> list[str]:
@@ -673,19 +684,34 @@ def _set_ci_secret(root: Path, key: str, value: str) -> None:
 
 @env.task(name="check")
 def env_check() -> int:
-    """Verify this shell against the derived tool profile.
+    """Verify this shell against the tools the sites require.
 
     Run it bare from the session being checked: a freshly entered
-    shell would report itself, not yours. Every tool of the profile
-    must resolve; a miss prints the PATH breakdown and the remedy.
+    shell would report itself, not yours. Every required tool must
+    resolve, and each one's receipt is named with its version; a
+    receipt the lock has moved under is drift, a tool with no receipt
+    that still resolves from PATH is named and not a problem, and a
+    miss prints the PATH breakdown and the remedy.
     """
+    from livery.workshop._tools import drift as receipt_drift
+
     root, _cwd = _workspace()
     problems: list[str] = []
     bin_dir = venv_bin(root)
+    said = receipt_drift(root)
     for tool in tool_profile(root):
-        if not (shutil.which(tool) or (bin_dir / tool).is_file()):
-            problems.append(f"{tool}: MISSING")
+        resolves = bool(shutil.which(tool) or (bin_dir / tool).is_file())
+        verdict = said.get(tool, "")
+        if not resolves:
+            problems.append(f"{tool}: MISSING" + (f" ({verdict})" if verdict else ""))
             continue
+        if verdict.startswith("DRIFT"):
+            problems.append(f"{tool}: {verdict}")
+            continue
+        if verdict:
+            print(f"  {tool}: on PATH; {verdict}")
+        else:
+            print(f"  {tool}: receipt ok")
         if tool == "uv":
             drift = _uv_drift(root)
             if drift:
@@ -697,7 +723,7 @@ def env_check() -> int:
             " build-essential on Debian)"
         )
     if not problems:
-        print("  environment ok: every profile tool resolves")
+        print("  environment ok: every required tool resolves")
         return 0
     for problem in problems:
         print(f"  {problem}")
@@ -706,8 +732,8 @@ def env_check() -> int:
         marker = "" if Path(entry).is_dir() else "  (missing)"
         print(f"    {index:>2}  {entry}{marker}")
     print(
-        "  The profile derives from the present package types. Run"
-        f" `{footman.prog()} sync` to provision, or enter the environment with"
-        f" `{footman.prog()} shell`."
+        "  The tools are what the kinds, the packages and the project require."
+        f" Run `{footman.prog()} sync` to materialise them, or enter the"
+        f" environment with `{footman.prog()} shell`."
     )
     return 1

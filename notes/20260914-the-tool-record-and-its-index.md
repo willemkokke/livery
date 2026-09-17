@@ -4,8 +4,9 @@ Status: ruled 2026-09-16 as drafted. Phases 1 to 4 landed 2026-09-16
 (livery#620, livery#622, livery#625, livery#627); phase 5's index half
 landed 2026-09-17 (livery#629), its wheel half deferred to phase 6 by
 the ruling of 2026-09-17. Phase 6 lands in parts: the three sites,
-resolution and the lock (livery#631) in progress; receipts,
-materialisation and the modes, then the stubs' home, follow.
+resolution and the lock landed 2026-09-17 (livery#631); receipts,
+materialisation and the modes in progress (livery#634); the stubs'
+home follows.
 Runs after [CI declared, contributed, and dispatched on command][ci-plan],
 which delivers the mechanism this plan's last phase uses.
 Subsumes phase 2 onward of [the tool store over strongroom][store-plan],
@@ -450,6 +451,10 @@ Open, by the ruling of 2026-09-17: the first and third items are phase
 6's, with the lock that names the tools a workspace uses; they stay open
 here until that evidence lands. The second item is met.
 
+Open, from phase 6's second part: `bun-install` and `uv-python` are not
+supplied through the store yet and refuse naming the kind; they follow
+the shape `uv-tool` set once a site requires one.
+
 ### Phase 6: receipts, per-package requirements, the lock
 
 Deliverables:
@@ -760,6 +765,38 @@ Acceptance:
   it does. This repository's contract names `index = "records"`, and
   its lock holds the six at the versions the records resolve on the
   gated three: ty and uv at the one version each has artifacts for.
+- 2026-09-17, the agent, at phase 6, the second part: `Store.supply`
+  is the primitive `ensure` stands on, a tool by name, kind, version and
+  deployment, since a consumer holds the catalogue's deployment and no
+  record. The delegated kinds go through their installer behind a seam
+  the tests replace: a `uv-tool` is installed by uv at the locked
+  version into `<home>/uv/tools/<name>@<version>` with its launchers
+  under `bin` as its entry points, the record's new `package` naming
+  what uv installs when it differs from the name; a `system-check` tool
+  is found on PATH and held to `min_version` or the locked version;
+  `bun-install` and `uv-python` refuse naming the kind, an open line
+  below. A record's new `mode` and the root contract's `[tools] modes`
+  say how a tool reaches PATH, `link`, `path` or `none`, a binary
+  linking and a system tool taking none by default. Receipts live under
+  `.workshop/receipts/`, one JSON file per tool with the version, the
+  host, the deployment digest and what reached PATH; `fm sync` and
+  `fm tools.add` write them, the emission carries their paths, and
+  `fm env.check` reports drift against the lock. `[tools] sources` names
+  the store's tiers. Found live and fixed in place: the bench's default
+  provision prefix was the store's home, `data_dir()/toolroom`, so a
+  materialised store read as a provisioned prefix; the bench's prefix
+  is `data_dir()/toolroom-bench` now.
+- 2026-09-17, the agent, at phase 6's second part, the acceptance as
+  met so far: `fm tools.add` writes a receipt and a lock entry with no
+  network, proven with the sources set to a folder and the download
+  seam refusing (test_tools_materialise); `fm env.check` names each
+  required tool's receipt and the drift when the lock's deployment has
+  moved under it, and on this repository names the six at their locked
+  versions with no receipt yet; `fm check` exits 0 on the full tree. A
+  real `fm sync` on this repository waits on livery#623, since the two
+  archives, uv and ty, download from GitHub releases through a redirect
+  strongroom's `fetch_url` refuses; until then sync names them as not
+  materialised and supplies the four uv tools.
 - 2026-09-16, the agent, at phase 1: the records live at this
   repository's root, `records/<tool>/`, the authoring site the design
   names; the schema beside them is one document with `Tool` and `Delta`

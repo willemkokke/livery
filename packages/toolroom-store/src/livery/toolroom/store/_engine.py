@@ -20,8 +20,10 @@ from __future__ import annotations
 import fnmatch
 import json
 import os
+import re
 import shutil
 import stat
+import subprocess
 import sys
 import tarfile
 import uuid
@@ -51,6 +53,7 @@ from livery.toolroom.store._record import (
     host_key,
     resolve,
 )
+from livery.toolroom.tools import version_tuple
 
 
 def _by() -> Subject:
@@ -110,9 +113,13 @@ class Ensured:
         version: The version.
         installed: True when this call installed it, False when it was
             present already.
-        tool_dir: The view a shell runs from.
-        deployment: The host's deployment the install followed.
-        tree: The tree `tools/<name>@<version>` names.
+        tool_dir: The view a shell runs from; a delegated kind's own
+            directory under the home, or a system tool's directory.
+        deployment: The host's deployment the install followed; for a
+            delegated kind, the entry points its installer wrote under
+            `bin`, and nothing else.
+        tree: The tree `tools/<name>@<version>` names; `None` for a
+            delegated kind, whose bytes never went through the store.
     """
 
     name: str
@@ -120,7 +127,7 @@ class Ensured:
     installed: bool
     tool_dir: Path
     deployment: Deployment
-    tree: Digest
+    tree: Digest | None
 
     @property
     def paths(self) -> tuple[Path, ...]:
@@ -190,6 +197,62 @@ download: Callable[[str], bytes] = _download
 without a network."""
 
 
+def _run_installer(argv: list[str], env: dict[str, str]) -> int:
+    """Run a delegated kind's installer with *env* over the process's; its exit code."""
+    completed = subprocess.run(
+        argv, env={**os.environ, **env}, cwd=Path.cwd(), check=False
+    )
+    return completed.returncode
+
+
+run_installer: Callable[[list[str], dict[str, str]], int] = _run_installer
+"""Runs a delegated kind's installer. A variable, so a test supplies the
+install without uv or bun."""
+
+
+def _read_version(argv: list[str]) -> str:
+    """What a tool prints for *argv*, stdout then stderr; empty when it will not run."""
+    try:
+        completed = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=Path.cwd(),
+            env=dict(os.environ),
+        )
+    except OSError:
+        return ""
+    return completed.stdout + completed.stderr
+
+
+read_version: Callable[[list[str]], str] = _read_version
+"""Reads what a system tool prints for its version flag. A variable, so a
+test answers for the machine."""
+
+
+def _version_in(text: str) -> str:
+    """The first version-shaped run in *text*, or empty."""
+    match = re.search(r"\d+(?:\.\d+)+", text)
+    return match[0] if match else ""
+
+
+def _launchers(bin_dir: Path) -> tuple[str, ...]:
+    """The entry points an installer wrote under *bin_dir*, install-relative."""
+    if not bin_dir.is_dir():
+        return ()
+    return tuple(
+        f"bin/{path.name}" for path in sorted(bin_dir.iterdir()) if path.is_file()
+    )
+
+
+def _delegated(entry_points: tuple[str, ...]) -> Deployment:
+    """The deployment a delegated kind reports: its launchers under `bin`."""
+    return Deployment(
+        "", "", "", "", entry_points, ("bin",) if entry_points else (), {}, {}, ()
+    )
+
+
 def _symlink(target: Path, link: Path) -> None:
     os.symlink(target, link)
 
@@ -240,48 +303,108 @@ class Store:
         """The tool version when it is present here, else None; no source is consulted.
 
         Present means the ref names a tree and the view directory holds
-        every path the view recorded.
+        every path the view recorded; for a delegated kind, that its
+        installer's directory holds what it installed.
 
         Raises:
             RecordError: for a version the record does not track, or a
                 version without this host.
-        """
-        deployment = resolve(record, version, self.host)
-        tool_dir = self.home.tool_dir(record.name, version)
-        tree = self._objects.ref(TOOLS, f"{record.name}@{version}")
-        if tree is None or not self._whole(tool_dir):
-            return None
-        return Ensured(record.name, version, False, tool_dir, deployment, tree)
-
-    def ensure(self, record: Record, version: str) -> Ensured:
-        """Supply the tool at *version*.
-
-        Raises:
-            RecordError: for a version the record does not track, or a
-                version without this host.
-            StoreError: for a delegated kind, a miss while offline, a
-                mismatch at a tier, an archive that will not extract,
-                or a ref already naming another tree.
         """
         if record.kind not in DOWNLOAD_KINDS:
-            raise StoreError(
-                f"{record.name}: kind {record.kind!r} is delegated to its tool and"
-                " not installed through the store yet"
-            )
-        self._progress(Event(record.name, version, "probe"))
-        present = self.probe(record, version)
+            return self._probe_delegated(record.name, record.kind, version)
+        deployment = resolve(record, version, self.host)
+        return self._probe_download(record.name, version, deployment)
+
+    def ensure(self, record: Record, version: str) -> Ensured:
+        """Supply the tool at *version* as its record resolves it on this host.
+
+        Raises:
+            RecordError: for a version the record does not track, or a
+                version without this host.
+            StoreError: as `supply` raises.
+        """
+        deployment = (
+            resolve(record, version, self.host)
+            if record.kind in DOWNLOAD_KINDS
+            else None
+        )
+        return self.supply(
+            record.name,
+            record.kind,
+            version,
+            deployment,
+            package=record.package,
+            min_version=record.min_version,
+        )
+
+    def supply(
+        self,
+        name: str,
+        kind: str,
+        version: str,
+        deployment: Deployment | None = None,
+        *,
+        package: str = "",
+        min_version: str = "",
+    ) -> Ensured:
+        """Supply *name* at *version* from *deployment* or through its installer.
+
+        An `archive` or `binary` lands its artifact by the deployment's
+        digest, extracts it, collects it as a tree and views it. A
+        `uv-tool` is installed by uv into its own directory under the
+        home, *package* naming what uv installs when it differs from the
+        tool's name, and its launchers are the entry points. A
+        `system-check` is the machine's own tool, found on PATH and
+        held to *min_version*. `bun-install` and `uv-python` are not
+        supplied through the store yet and refuse naming the kind.
+
+        Raises:
+            StoreError: for a kind the store cannot supply, a downloaded
+                kind with no deployment, a miss while offline, a
+                mismatch at a tier, an archive that will not extract, an
+                installer that failed, a system tool missing or below
+                its floor, or a ref already naming another tree.
+        """
+        if kind in DOWNLOAD_KINDS:
+            if deployment is None:
+                raise StoreError(
+                    f"{name}: a {kind} needs its deployment to be supplied"
+                )
+            return self._supply_download(name, kind, version, deployment)
+        if kind == "uv-tool":
+            return self._supply_uv_tool(name, version, package or name)
+        if kind == "system-check":
+            return self._supply_system(name, version, min_version)
+        raise StoreError(
+            f"{name}: kind {kind!r} is delegated to its tool and not supplied"
+            " through the store yet"
+        )
+
+    def _probe_download(
+        self, name: str, version: str, deployment: Deployment
+    ) -> Ensured | None:
+        tool_dir = self.home.tool_dir(name, version)
+        tree = self._objects.ref(TOOLS, f"{name}@{version}")
+        if tree is None or not self._whole(tool_dir):
+            return None
+        return Ensured(name, version, False, tool_dir, deployment, tree)
+
+    def _supply_download(
+        self, name: str, kind: str, version: str, deployment: Deployment
+    ) -> Ensured:
+        self._progress(Event(name, version, "probe"))
+        present = self._probe_download(name, version, deployment)
         if present is not None:
             return present
-        deployment = resolve(record, version, self.host)
         digest = Digest("sha256", deployment.sha256)
-        artifact = self._land(record.name, version, deployment.url, digest)
-        self._progress(Event(record.name, version, "install", str(digest)))
-        scratch = self._scratch(record.name, version)
+        artifact = self._land(name, version, deployment.url, digest)
+        self._progress(Event(name, version, "install", str(digest)))
+        scratch = self._scratch(name, version)
         try:
-            self._unpack(record, deployment, artifact, scratch)
+            self._unpack(name, kind, deployment, artifact, scratch)
             _exclude(deployment, scratch)
             _apply_shims(deployment, scratch)
-            _require_entry_points(record, version, self.host, deployment, scratch)
+            _require_entry_points(name, version, self.host, deployment, scratch)
             _annotate_modes(deployment, scratch)
             tree = self._objects.collect(
                 scratch,
@@ -290,17 +413,17 @@ class Store:
             )
         finally:
             shutil.rmtree(scratch, ignore_errors=True)
-        key = f"{record.name}@{version}"
+        key = f"{name}@{version}"
         current = self._objects.ref(TOOLS, key)
         if current is None:
             self._objects.set_ref(TOOLS, key, tree.digest(), previous=None, by=BY)
         elif current != tree.digest():
             raise StoreError(
-                f"{record.name} {version}: tools/{key} already names another tree"
+                f"{name} {version}: tools/{key} already names another tree"
                 f" ({current}); the artifact changed under a pinned version, which"
                 " a store never accepts"
             )
-        tool_dir = self.home.tool_dir(record.name, version)
+        tool_dir = self.home.tool_dir(name, version)
         stale = self._view_of(tool_dir)
         if stale is not None:
             # A view the store made and something has since damaged:
@@ -309,12 +432,83 @@ class Store:
             self._objects.drop_view(stale.id)
         if tool_dir.exists() and any(tool_dir.iterdir()):
             raise StoreError(
-                f"{record.name} {version}: {tool_dir} exists and is not the store's"
+                f"{name} {version}: {tool_dir} exists and is not the store's"
                 " view; the store never removes what it did not create"
             )
         tool_dir.parent.mkdir(parents=True, exist_ok=True)
         self._objects.view(tree.digest(), tool_dir)
-        return Ensured(record.name, version, True, tool_dir, deployment, tree.digest())
+        return Ensured(name, version, True, tool_dir, deployment, tree.digest())
+
+    # --- the delegated kinds --------------------------------------------------
+
+    def _probe_delegated(self, name: str, kind: str, version: str) -> Ensured | None:
+        if kind == "uv-tool":
+            tool_dir = self.home.uv / "tools" / f"{name}@{version}"
+            launchers = _launchers(tool_dir / "bin")
+            if not launchers:
+                return None
+            return Ensured(name, version, False, tool_dir, _delegated(launchers), None)
+        if kind == "system-check":
+            found = shutil.which(name)
+            if found is None:
+                return None
+            return Ensured(
+                name, version, False, Path(found).parent, _delegated(()), None
+            )
+        return None
+
+    def _supply_uv_tool(self, name: str, version: str, package: str) -> Ensured:
+        """Install *package* at *version* through uv, into the tool's own directory.
+
+        uv keeps one install per tool name in its tool directory, so
+        each version gets a tool directory of its own, with its
+        launchers in `bin` beside it; the launchers are the entry
+        points, which uv writes from the package's own console scripts.
+        """
+        self._progress(Event(name, version, "probe"))
+        present = self._probe_delegated(name, "uv-tool", version)
+        if present is not None:
+            return present
+        tool_dir = self.home.uv / "tools" / f"{name}@{version}"
+        bin_dir = tool_dir / "bin"
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        argv = ["uv", "tool", "install", f"{package}=={version}"]
+        if self.offline:
+            argv.append("--offline")
+        self._progress(Event(name, version, "install", " ".join(argv)))
+        code = run_installer(
+            argv,
+            {
+                "UV_TOOL_DIR": str(tool_dir / "tools"),
+                "UV_TOOL_BIN_DIR": str(bin_dir),
+            },
+        )
+        launchers = _launchers(bin_dir)
+        if code != 0 or not launchers:
+            shutil.rmtree(tool_dir, ignore_errors=True)
+            raise StoreError(
+                f"{name} {version}: `{' '.join(argv)}` exited {code} and left"
+                f" {'no launcher' if code == 0 else 'nothing'} in {bin_dir}"
+            )
+        return Ensured(name, version, True, tool_dir, _delegated(launchers), None)
+
+    def _supply_system(self, name: str, version: str, min_version: str) -> Ensured:
+        """The machine's own *name*, found on PATH and at or above *min_version*."""
+        self._progress(Event(name, version, "probe"))
+        found = shutil.which(name)
+        if found is None:
+            raise StoreError(
+                f"{name}: not on PATH; a system-check tool is the machine's own and"
+                " the store installs nothing for it"
+            )
+        floor = min_version or version
+        reported = _version_in(read_version([found, "--version"]))
+        if floor and version_tuple(reported) < version_tuple(floor):
+            raise StoreError(
+                f"{name}: {found} reports {reported or 'no version'}, below the"
+                f" floor {floor}"
+            )
+        return Ensured(name, version, False, Path(found).parent, _delegated(()), None)
 
     def _land(self, name: str, version: str, url: str, digest: Digest) -> Path:
         """The artifact's path here: the tiers first, then the origin unless offline."""
@@ -344,9 +538,9 @@ class Store:
         return scratch
 
     def _unpack(
-        self, record: Record, deployment: Deployment, artifact: Path, into: Path
+        self, name: str, kind: str, deployment: Deployment, artifact: Path, into: Path
     ) -> None:
-        if record.kind == "binary":
+        if kind == "binary":
             placed = into / deployment.exe
             shutil.copyfile(artifact, placed)
             placed.chmod(
@@ -357,15 +551,14 @@ class Store:
             _extract(artifact, _archive_name(deployment.url), into)
         except (tarfile.TarError, zipfile.BadZipFile, OSError) as error:
             raise StoreError(
-                f"{record.name}: the archive at {deployment.url} will not extract:"
-                f" {error}"
+                f"{name}: the archive at {deployment.url} will not extract: {error}"
             ) from None
         if deployment.root:
             root = into / deployment.root
             if not root.is_dir():
                 found = ", ".join(sorted(p.name for p in into.iterdir())) or "nothing"
                 raise StoreError(
-                    f"{record.name}: the archive has no root {deployment.root!r};"
+                    f"{name}: the archive has no root {deployment.root!r};"
                     f" it holds {found}"
                 )
             for member in list(root.iterdir()):
@@ -533,13 +726,13 @@ def _exclude(deployment: Deployment, into: Path) -> None:
 
 
 def _require_entry_points(
-    record: Record, version: str, host: str, deployment: Deployment, into: Path
+    name: str, version: str, host: str, deployment: Deployment, into: Path
 ) -> None:
     """Refuse an entry point the extracted tree does not carry, naming it whole."""
     for entry in deployment.entry_points:
         if not (into / entry).is_file():
             raise StoreError(
-                f"{record.name} {version} on {host}: the declared entry point"
+                f"{name} {version} on {host}: the declared entry point"
                 f" {entry!r} is not in the extracted tree; the record's"
                 " annotation and the artifact disagree"
             )

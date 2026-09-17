@@ -493,13 +493,15 @@ def _assemble(record: Record, readings: list[_Reading]) -> Record:
         )
     return Record(
         record.name,
-        record.description,
-        record.kind,
-        record.min_version,
-        record.hosts,
-        record.layout,
-        record.host_layouts,
-        tuple(deltas),
+        description=record.description,
+        kind=record.kind,
+        package=record.package,
+        mode=record.mode,
+        min_version=record.min_version,
+        hosts=record.hosts,
+        layout=record.layout,
+        host_layouts=record.host_layouts,
+        deltas=tuple(deltas),
     )
 
 
