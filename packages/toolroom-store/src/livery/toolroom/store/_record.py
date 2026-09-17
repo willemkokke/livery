@@ -63,6 +63,27 @@ and may carry an artifact for a host that has no system tool."""
 DOWNLOAD_KINDS = frozenset({"archive", "binary"})
 """The kinds whose every host needs an artifact."""
 
+MODES = ("link", "path", "none")
+"""How a materialised tool reaches PATH: its entry points linked into the
+checkout's bin directory, its own directories on PATH, or not at all,
+for a tool reached only through a typed handle."""
+
+
+def default_mode(kind: str) -> str:
+    """The materialisation mode a kind takes unless the record or the project says.
+
+    A binary links, since it resolves nothing beside itself; a bundle
+    puts its directories on PATH, since an archive's or an installer's
+    tool finds its own data by its real path; a system tool is on PATH
+    already.
+    """
+    if kind == "binary":
+        return "link"
+    if kind == "system-check":
+        return "none"
+    return "path"
+
+
 PACKAGE_VAR = "$package"
 """The one substitution a deployment's env values may carry: the install root."""
 
@@ -91,6 +112,8 @@ _TOOL_KEYS = (
     "name",
     "description",
     "kind",
+    "package",
+    "mode",
     "min_version",
     "hosts",
     "layout",
@@ -638,6 +661,10 @@ class Record:
             store's `tools/<name>@<version>` stem.
         description: One line on what the tool is.
         kind: One of `KINDS`.
+        package: What a delegated kind's installer installs, when it
+            differs from the tool's name: the PyPI or npm package.
+        mode: How the tool reaches PATH once materialised, one of
+            `MODES`; empty takes the kind's default.
         min_version: The floor a `system-check` tool must reach.
         hosts: The host keys the tool has, from `HOSTS`.
         layout: The tool's layout, the layer every host and version
@@ -649,6 +676,8 @@ class Record:
     name: str
     description: str = ""
     kind: str = "archive"
+    package: str = ""
+    mode: str = ""
     min_version: str = ""
     hosts: tuple[str, ...] = ()
     layout: Layout = field(default_factory=Layout)
@@ -688,9 +717,13 @@ class Record:
             "name": self.name,
             "description": self.description,
             "kind": self.kind,
-            "min_version": self.min_version,
-            "hosts": list(self.hosts),
         }
+        if self.package:
+            out["package"] = self.package
+        if self.mode:
+            out["mode"] = self.mode
+        out["min_version"] = self.min_version
+        out["hosts"] = list(self.hosts)
         if self.layout.set_fields():
             out["layout"] = self.layout.to_json()
         if self.host_layouts:
@@ -717,6 +750,8 @@ class Record:
             _text(data["name"], where=f"{where} name"),
             _text(data.get("description", ""), where=f"{where} description"),
             _text(data.get("kind", "archive"), where=f"{where} kind"),
+            _text(data.get("package", ""), where=f"{where} package"),
+            _text(data.get("mode", ""), where=f"{where} mode"),
             _text(data.get("min_version", ""), where=f"{where} min_version"),
             _texts(data.get("hosts", []), where=f"{where} hosts"),
             Layout.from_json(data.get("layout", {}), where=f"{where} layout"),
@@ -934,6 +969,10 @@ def validate(record: Record) -> None:
     if record.kind not in KINDS:
         raise RecordError(
             f"{where}: kind {record.kind!r} is not one of {', '.join(KINDS)}"
+        )
+    if record.mode and record.mode not in MODES:
+        raise RecordError(
+            f"{where}: mode {record.mode!r} is not one of {', '.join(MODES)}"
         )
     for host in record.hosts:
         if host not in HOSTS:
@@ -1153,6 +1192,8 @@ def schema() -> dict[str, Any]:
             "name": {"type": "string", "minLength": 1},
             "description": {"type": "string", "default": ""},
             "kind": {"type": "string", "enum": list(KINDS), "default": "archive"},
+            "package": {"type": "string", "default": ""},
+            "mode": {"type": "string", "enum": list(MODES)},
             "min_version": {"type": "string", "default": ""},
             "hosts": {
                 "type": "array",

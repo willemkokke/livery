@@ -47,10 +47,29 @@ otherwise.
 catalogue and writes `tools.lock` at the root: one version per tool for
 the whole repository, the newest that satisfies every floor and
 resolves on every locked host, refusing by name otherwise. `fm
-tools.add <requirement>` declares a tool at the project site and locks
-it; `fm tools.upgrade <tool>` moves one entry to the newest eligible
-version, and every package with it, since no package runs a version of
-its own. `fm env.check` verifies the tools the sites require.
+tools.add <requirement>` declares a tool at the project site, locks it
+and materialises it; `fm tools.upgrade <tool>` moves one entry to the
+newest eligible version, and every package with it, since no package
+runs a version of its own.
+
+Entering the environment materialises the bundle the sites require:
+`fm sync` supplies every locked tool through the machine's store, the
+downloaded kinds from the catalogue's deployment for this host through
+`[tools] sources` (folders or URLs in the store's layout, consulted
+before the origin) and the delegated kinds through their installer, in
+one of three modes per tool: `link` puts its entry points in the
+checkout's `.workshop/bin`, `path` its own directories on PATH, `none`
+neither, for a tool reached only through a typed handle. A binary
+links and a system tool takes `none` unless the record or the root
+contract's `[tools] modes` says otherwise; every other kind takes
+`path`. Each tool leaves a receipt under `.workshop/receipts/`, this
+checkout's statement of what it installed: the exact version, the
+host, the deployment's digest and what reached PATH, as the release
+train's receipt is a release's statement. `fm env.emit` carries the
+receipts' paths and variables, and `fm env.check` names each required
+tool's receipt and the drift when the lock's deployment has moved
+under it, a tool with no receipt that still resolves from PATH being
+named and not a problem.
 
 ## The task surface
 

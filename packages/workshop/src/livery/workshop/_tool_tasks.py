@@ -56,21 +56,30 @@ def tools_lock() -> None:
 def tools_add(
     requirement: Annotated[str, doc("the tool, `name` or `name>=floor`")],
 ) -> None:
-    """Declare a tool at the project site and lock it.
+    """Declare a tool at the project site, lock it, and materialise it.
 
     The requirement joins `[tools] requires` in the root `workshop.toml`
-    unless it is already there, and the lock is resolved with it. A
-    spelling that is not a requirement refuses before anything is
-    written.
+    unless it is already there, the lock is resolved with it, and the
+    tool is supplied through the store on this machine with its receipt
+    written. A spelling that is not a requirement refuses before
+    anything is written.
     """
-    from livery.workshop._tools import declare, write_lock
+    from livery.toolroom.store import Requirement
+    from livery.workshop._tools import declare, materialise, write_lock
 
     root = _root()
     if declare(root, requirement):
         print(f"  workshop.toml: [tools] requires {requirement}")
     else:
         print(f"  workshop.toml: {requirement} was declared already")
-    _report(write_lock(root))
+    lock = write_lock(root)
+    _report(lock)
+    name = Requirement.parse(requirement).name
+    (made,) = materialise(root, (name,))
+    assert made.receipt is not None  # strict: a refusal never reaches here
+    where = made.receipt.tool_dir
+    state = "installed" if made.installed else "present"
+    print(f"  {name} {made.receipt.version}: {state} at {where}, receipt written")
 
 
 @tools.task(name="upgrade")

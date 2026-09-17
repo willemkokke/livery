@@ -263,10 +263,22 @@ def test_add_declares_at_the_project_site_and_locks_with_no_network(
         raise AssertionError("the network was reached")
 
     monkeypatch.setattr(socket, "create_connection", no_network)
+    from livery.toolroom.store import _engine
+
+    def installing(argv: list[str], env: dict[str, str]) -> int:
+        bin_dir = Path(env["UV_TOOL_BIN_DIR"])
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        (bin_dir / "git-cliff").write_text("launcher")
+        return 0
+
+    monkeypatch.setattr(_engine, "run_installer", installing)
+    monkeypatch.setattr("livery.footman.context.data_dir", lambda: tmp_path / "data")
     _tool_tasks.tools_add("git-cliff>=2.0")
     out = capsys.readouterr().out
     assert "workshop.toml: [tools] requires git-cliff>=2.0" in out
     assert "git-cliff 2.1.0" in out and "tools.lock: 7 tool(s)" in out
+    assert "git-cliff 2.1.0: installed at" in out and "receipt written" in out
+    assert (root / ".workshop" / "receipts" / "git-cliff.json").is_file()
     contract = (root / "workshop.toml").read_text(encoding="utf-8")
     assert 'requires = ["git-cliff>=2.0"]' in contract
     lock = json.loads((root / "tools.lock").read_text(encoding="utf-8"))
@@ -276,12 +288,12 @@ def test_add_declares_at_the_project_site_and_locks_with_no_network(
     _tool_tasks.tools_add("git-cliff>=2.0")
     assert "was declared already" in capsys.readouterr().out
     # A second requirement joins the list on the same line.
-    _records(root, Record("cspell", kind="bun-install", deltas=_read("1.0.0")))
-    _tool_tasks.tools_add("cspell")
+    _records(root, Record("black", kind="uv-tool", deltas=_read("1.0.0")))
+    _tool_tasks.tools_add("black")
     contract = (root / "workshop.toml").read_text(encoding="utf-8")
-    assert 'requires = ["git-cliff>=2.0", "cspell"]' in contract
+    assert 'requires = ["git-cliff>=2.0", "black"]' in contract
     with pytest.raises(Failed, match=r"is not a requirement"):
-        _tool_tasks.tools_add("cspell==1")
+        _tool_tasks.tools_add("black==1")
 
 
 def test_declare_edits_every_shape_of_the_requires_list(tmp_path: Path) -> None:

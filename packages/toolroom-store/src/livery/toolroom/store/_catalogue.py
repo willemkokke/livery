@@ -50,6 +50,9 @@ class Listed:
         name: The tool's name.
         kind: The installer kind, one of the record's kinds.
         description: One line on what the tool is.
+        package: What a delegated kind's installer installs, when it
+            differs from the name.
+        mode: The record's materialisation mode; empty for the kind's default.
         versions: Every version tracked, oldest first, as the record
             orders them.
         hosts: Per version, the host keys the version has an artifact
@@ -64,6 +67,9 @@ class Listed:
     versions: tuple[str, ...]
     hosts: dict[str, dict[str, Digest]]
     stubs: dict[str, Digest] = field(default_factory=dict)
+    package: str = ""
+    mode: str = ""
+    min_version: str = ""
 
 
 @dataclass(frozen=True)
@@ -147,7 +153,14 @@ class Catalogue:
                     deployments[(record.name, delta.version, host)] = deployment
                     hosts[delta.version][host] = deployment.digest()
             tools[record.name] = Listed(
-                record.name, record.kind, record.description, record.versions, hosts
+                record.name,
+                record.kind,
+                record.description,
+                record.versions,
+                hosts,
+                package=record.package,
+                mode=record.mode,
+                min_version=record.min_version,
             )
         return cls(tools, deployments)
 
@@ -257,4 +270,14 @@ def _listed(
         for stub in _tree(store, Digest.parse(named), where=f"{where} stubs").entries:
             if isinstance(stub, Entry):
                 stubs[stub.name] = stub.digest
-    return Listed(name, record.kind, record.description, tuple(versions), hosts, stubs)
+    return Listed(
+        name,
+        record.kind,
+        record.description,
+        tuple(versions),
+        hosts,
+        stubs,
+        package=record.package,
+        mode=record.mode,
+        min_version=record.min_version,
+    )

@@ -641,7 +641,7 @@ def test_default_prefix_rides_footman_data_dir(tmp_path, monkeypatch):
     from livery.toolroom.bench import _tasks
 
     monkeypatch.setenv("FOOTMAN_DATA_DIR", str(tmp_path / "data"))
-    assert _tasks.default_prefix() == tmp_path / "data" / "toolroom"
+    assert _tasks.default_prefix() == tmp_path / "data" / "toolroom-bench"
 
 
 def test_empty_prefix_resolves_to_the_default_room_once_provisioned(
@@ -651,14 +651,14 @@ def test_empty_prefix_resolves_to_the_default_room_once_provisioned(
 
     monkeypatch.setenv("FOOTMAN_DATA_DIR", str(tmp_path / "data"))
     assert _tasks._resolve_prefix("") is None  # nothing provisioned: host PATH
-    (tmp_path / "data" / "toolroom").mkdir(parents=True)
-    assert _tasks._resolve_prefix("") == tmp_path / "data" / "toolroom"
+    (tmp_path / "data" / "toolroom-bench").mkdir(parents=True)
+    assert _tasks._resolve_prefix("") == tmp_path / "data" / "toolroom-bench"
 
 
 def test_an_explicit_prefix_wins_over_the_default_room(tmp_path, monkeypatch):
     from livery.toolroom.bench import _tasks
 
     monkeypatch.setenv("FOOTMAN_DATA_DIR", str(tmp_path / "data"))
-    (tmp_path / "data" / "toolroom").mkdir(parents=True)
+    (tmp_path / "data" / "toolroom-bench").mkdir(parents=True)
     mine = tmp_path / "mine"
     assert _tasks._resolve_prefix(str(mine)) == mine.resolve()

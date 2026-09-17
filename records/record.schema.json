@@ -226,6 +226,18 @@
           ],
           "default": "archive"
         },
+        "package": {
+          "type": "string",
+          "default": ""
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "link",
+            "path",
+            "none"
+          ]
+        },
         "min_version": {
           "type": "string",
           "default": ""

@@ -127,9 +127,12 @@ def test_a_host_no_spec_names_and_a_delegated_kind_are_refused(home: Home) -> No
         Store(home, host="plan9-mips")
     store = Store(home, host=HOST)
     artifacts, _ = _tool()
-    delegated = _record("uvx", artifacts, kind="uv-tool")
-    with pytest.raises(StoreError, match="kind 'uv-tool' is delegated to its tool"):
+    delegated = _record("bunx", artifacts, kind="bun-install")
+    with pytest.raises(StoreError, match="kind 'bun-install' is delegated to its tool"):
         store.ensure(delegated, delegated.versions[-1])
+    assert store.probe(delegated, delegated.versions[-1]) is None
+    with pytest.raises(StoreError, match=r"tool: a archive needs its deployment"):
+        store.supply("tool", "archive", "1.0.0")
     with pytest.raises(RecordError, match="no host windows-arm"):
         Store(home, host="windows-arm").ensure(_record("tool", artifacts), "1.0.0")
 
@@ -548,3 +551,146 @@ def test_fetch_skips_a_delegated_kind_and_a_shim_never_overwrites(
     assert (ensured.tool_dir / f"node{EXE}").read_bytes() == b"already here"
     fetched = store.fetch([delegated, spec], into=tmp_path / "mirror")
     assert [f.name for f in fetched] == ["bun"]
+
+
+# --- the delegated kinds ---------------------------------------------------------
+
+
+def _uv_tool(name: str = "ruff", *versions: str) -> Record:
+    from livery.toolroom.store import Surface
+
+    return Record(
+        name,
+        kind="uv-tool",
+        package="ruff-package" if name == "ruff" else "",
+        deltas=tuple(
+            RecordDelta(
+                n, v, "", surface=Surface(("Linux",), 1, "A tool." if n == 1 else None)
+            )
+            for n, v in enumerate(versions or ("1.0.0",), start=1)
+        ),
+    )
+
+
+def test_an_installer_that_fails_or_writes_no_launcher_leaves_nothing(
+    home: Home, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = Store(home, host=HOST)
+    calls: list[tuple[list[str], dict[str, str]]] = []
+
+    def failing(argv: list[str], env: dict[str, str]) -> int:
+        calls.append((argv, env))
+        return 3
+
+    monkeypatch.setattr(_engine, "run_installer", failing)
+    record = _uv_tool("ruff", "1.0.0")
+    with pytest.raises(
+        StoreError,
+        match=r"ruff 1\.0\.0: `uv tool install ruff-package==1\.0\.0` exited 3",
+    ):
+        store.ensure(record, "1.0.0")
+    assert not (home.uv / "tools" / "ruff@1.0.0").exists()
+    assert calls[0][0] == ["uv", "tool", "install", "ruff-package==1.0.0"]
+    assert calls[0][1]["UV_TOOL_BIN_DIR"].endswith(os.path.join("ruff@1.0.0", "bin"))
+
+    # An installer that exits 0 and writes no launcher is a failure too.
+    monkeypatch.setattr(_engine, "run_installer", lambda argv, env: 0)
+    with pytest.raises(StoreError, match=r"exited 0 and left no launcher"):
+        store.ensure(record, "1.0.0")
+    assert store.probe(record, "1.0.0") is None
+
+
+def test_a_uv_tool_is_installed_once_into_its_own_directory(
+    home: Home, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def installing(argv: list[str], env: dict[str, str]) -> int:
+        bin_dir = Path(env["UV_TOOL_BIN_DIR"])
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        (bin_dir / f"ruff{EXE}").write_text("launcher")
+        (bin_dir / "helper").write_text("launcher")
+        return 0
+
+    calls: list[list[str]] = []
+
+    def counting(argv: list[str], env: dict[str, str]) -> int:
+        calls.append(argv)
+        return installing(argv, env)
+
+    monkeypatch.setattr(_engine, "run_installer", counting)
+    events: list[Event] = []
+    store = Store(home, host=HOST, progress=events.append)
+    record = _uv_tool("ruff", "1.0.0")
+    ensured = store.ensure(record, "1.0.0")
+    assert ensured.installed and ensured.tree is None
+    assert ensured.tool_dir == home.uv / "tools" / "ruff@1.0.0"
+    assert ensured.deployment.entry_points == ("bin/helper", f"bin/ruff{EXE}")
+    assert ensured.paths == (ensured.tool_dir / "bin",)
+    assert [e.action for e in events] == ["probe", "install"]
+    # A second ensure is a probe: nothing installs again.
+    again = store.ensure(record, "1.0.0")
+    assert not again.installed and len(calls) == 1
+    assert store.probe(record, "1.0.0") is not None
+    # Offline, the installer is told so.
+    Store(home, host=HOST, offline=True).ensure(_uv_tool("ruff", "2.0.0"), "2.0.0")
+    assert calls[-1] == ["uv", "tool", "install", "ruff-package==2.0.0", "--offline"]
+    # The launchers link like any entry point.
+    links = store.link([ensured], home.root / "bin")
+    assert sorted(p.name for p in links) == ["helper", f"ruff{EXE}"]
+
+
+def test_a_system_tool_is_found_on_path_and_held_to_its_floor(
+    home: Home, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = Store(home, host=HOST)
+    record = Record(
+        "git",
+        kind="system-check",
+        min_version="2.40",
+        deltas=_uv_tool("git", "2.55.0").deltas,
+    )
+    monkeypatch.setattr("shutil.which", lambda name: None)
+    with pytest.raises(StoreError, match=r"git: not on PATH; a system-check tool"):
+        store.ensure(record, "2.55.0")
+    assert store.probe(record, "2.55.0") is None
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/git")
+    monkeypatch.setattr(_engine, "read_version", lambda argv: "git version 2.39.1")
+    with pytest.raises(
+        StoreError, match=r"git: /usr/bin/git reports 2\.39\.1, below the floor 2\.40"
+    ):
+        store.ensure(record, "2.55.0")
+    monkeypatch.setattr(_engine, "read_version", lambda argv: "git version 2.55.0")
+    ensured = store.ensure(record, "2.55.0")
+    assert not ensured.installed and ensured.tool_dir == Path("/usr/bin")
+    assert ensured.deployment.entry_points == () and ensured.paths == ()
+    probed = store.probe(record, "2.55.0")
+    assert probed is not None and probed.tool_dir == Path("/usr/bin")
+    # No floor in the record: the locked version is the floor.
+    bare = Record("git", kind="system-check", deltas=record.deltas)
+    monkeypatch.setattr(_engine, "read_version", lambda argv: "")
+    with pytest.raises(
+        StoreError, match=r"reports no version, below the floor 2\.55\.0"
+    ):
+        store.ensure(bare, "2.55.0")
+
+
+def test_the_version_reader_reads_the_first_numeric_run_and_survives_no_tool(
+    tmp_path: Path,
+) -> None:
+    printed = _engine._read_version([sys.executable, "--version"])
+    assert _engine._version_in(printed).count(".") >= 1
+    assert _engine._read_version([str(tmp_path / "nope")]) == ""
+    assert _engine._version_in("none") == ""
+
+
+def test_a_delegated_install_runs_its_installer_with_the_environment_handed_over(
+    tmp_path: Path,
+) -> None:
+    script = tmp_path / "echo.py"
+    script.write_text(
+        "import os, sys; open(sys.argv[1], 'w').write(os.environ['UV_TOOL_DIR'])"
+    )
+    out = tmp_path / "out"
+    code = _engine._run_installer(
+        [sys.executable, str(script), str(out)], {"UV_TOOL_DIR": "here"}
+    )
+    assert code == 0 and out.read_text() == "here"
