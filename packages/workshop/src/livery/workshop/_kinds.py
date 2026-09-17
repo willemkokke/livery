@@ -163,8 +163,10 @@ class KindRecord:
         parent: The kind this one extends; the chain renders parent
             first, then this kind's files over it, and the managed
             set is the union along the chain.
-        tools: What the kind contributes to the derived tool
-            profile by existing in a workspace.
+        tools: The tools the kind requires by existing in a
+            workspace, each spelled `name` or `name>=floor`; the
+            lock resolves them beside the packages' and the
+            project's own.
         host_tools: What the host must already provide and no cache
             will ever install (a C compiler); ``fm doctor`` and
             ``fm env.check`` name an absence instead of letting a
@@ -311,7 +313,7 @@ def managed_files(type_name: str) -> tuple[str, ...]:
 
 
 def kind_tools(present_types: set[str]) -> tuple[str, ...]:
-    """The union of tools the present kinds contribute, sorted."""
+    """The union of tool requirements the present kinds declare, sorted."""
     tools: set[str] = set()
     for type_name in present_types:
         for record in kind_chain(type_name):
@@ -369,11 +371,19 @@ def _register_builtin() -> None:
     # Two contract kinds exist today. The layer package template
     # (package-python-layer) is a template variant of python, not
     # a contract type of its own: every member declares "python".
+    # The python kind's tools: uv makes the venv the checkers run in,
+    # and the checkers, the formatter and the test runner are what the
+    # gate runs on every python package. Declared here as data, so a
+    # workspace's lock takes them from the kind like any other
+    # requirement and no branch in code knows the list. pyrefly joins
+    # when it has a record (livery#632): a requirement with no record
+    # refuses, and the gate runs it from the venv meanwhile.
     register_kind(
         KindRecord(
             name="python",
             backend=_python,
             template="package-python",
+            tools=("uv", "ruff", "pytest", "basedpyright", "mypy", "ty"),
             managed=("cliff.toml",),
         )
     )

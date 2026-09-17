@@ -29,6 +29,29 @@ guidance fragments into `.workshop/`, skills and hooks into
 managed `CLAUDE.md` stub whose imports end at the instance's own
 `CLAUDE.project.md`.
 
+## The tools a workspace requires
+
+Three sites declare tool requirements, each a name with a floor,
+`ruff` or `ruff>=0.16`: a package kind, in its record, for the tools
+its checks run, which is how the python kind requires uv, ruff, pytest
+and the checkers; a package instance, in its `workshop.toml` under
+`[tools] requires`, for what its kind cannot know; and the project, in
+the root contract's `[tools] requires`, for what belongs to the
+repository. The root contract's `[tools] index` names where the
+catalogue is read from, the published index's URL or a directory
+holding the index or the records that build one, and `[tools] hosts`
+the hosts the repository locks for, the gated three unless it says
+otherwise.
+
+`fm tools.lock` resolves every site's requirements against the
+catalogue and writes `tools.lock` at the root: one version per tool for
+the whole repository, the newest that satisfies every floor and
+resolves on every locked host, refusing by name otherwise. `fm
+tools.add <requirement>` declares a tool at the project site and locks
+it; `fm tools.upgrade <tool>` moves one entry to the newest eligible
+version, and every package with it, since no package runs a version of
+its own. `fm env.check` verifies the tools the sites require.
+
 ## The task surface
 
 - `fm check`: format, lint, four gating type checkers, public-API

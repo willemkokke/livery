@@ -156,7 +156,14 @@ def test_tools_union_along_the_chain_only_when_present(restored_registry) -> Non
             name="cpp-fake-child", backend=fake, parent="cpp-fake", tools=("conan",)
         )
     )
-    assert kind_tools({"python"}) == ()
+    assert kind_tools({"python"}) == (
+        "basedpyright",
+        "mypy",
+        "pytest",
+        "ruff",
+        "ty",
+        "uv",
+    )
     assert kind_tools({"cpp-fake-child"}) == ("cmake", "conan", "ninja")
 
 

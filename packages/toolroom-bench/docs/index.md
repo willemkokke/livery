@@ -53,6 +53,7 @@ beside `refs/` and the manifest, which any static host serves, and
 
 ```text
 tool                        the tool axis, tool.json as canonical JSON
+versions                    every version tracked, oldest first
 <version>/observation       who read the version: its help, platforms, extractor and absences
 <version>/hosts/<host>      the deployment resolved for that host
 <version>/surface/<verb>    one blob per verb; the tool's own options under `_`

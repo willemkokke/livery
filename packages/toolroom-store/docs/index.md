@@ -75,6 +75,29 @@ tracked for its surface alone: it has no host and nothing installs it.
 its options in name order, and `observations` resolves every version
 that has a surface, in sequence.
 
+## The catalogue and the lock
+
+A consumer resolves against the catalogue, never against a record. The
+catalogue lists every tool with its versions in order, per version the
+hosts it has an artifact for with the digest of each host's deployment,
+and per version read the digest of its stub in the index. It is read
+from the published index, by URL or from a directory holding one,
+through the machine's store, which keeps what it fetched so a second
+read is offline; the authoring site reads its records directly and gets
+the same catalogue, since a deployment's digest is the digest of its
+canonical JSON either way.
+
+A requirement is a tool's name with a floor, `ruff` or `ruff>=0.16`.
+The lock takes for each tool the newest version the catalogue lists
+that satisfies every floor and resolves on every locked host: a
+downloaded kind resolves on a host when it has that host's artifact, a
+delegated kind everywhere its installer does. A requirement that cannot
+be met refuses naming the tool, each floor with the site that declared
+it, and for a host no eligible version has, the first version that has
+it. The lock is `tools.lock` at the repository root, one version per
+tool with the deployment digest per locked host; an entry stands while
+it still satisfies and resolves, and moves only when asked.
+
 ## What a load refuses
 
 Loading a record resolves every host of every version and every

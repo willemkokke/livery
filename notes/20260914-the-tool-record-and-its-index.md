@@ -1,9 +1,11 @@
 # The tool record and its index
 
 Status: ruled 2026-09-16 as drafted. Phases 1 to 4 landed 2026-09-16
-(livery#620, livery#622, livery#625, livery#627); phase 5's index half in
-progress (livery#629), its wheel half deferred to phase 6 by the ruling
-of 2026-09-17.
+(livery#620, livery#622, livery#625, livery#627); phase 5's index half
+landed 2026-09-17 (livery#629), its wheel half deferred to phase 6 by
+the ruling of 2026-09-17. Phase 6 lands in parts: the three sites,
+resolution and the lock (livery#631) in progress; receipts,
+materialisation and the modes, then the stubs' home, follow.
 Runs after [CI declared, contributed, and dispatched on command][ci-plan],
 which delivers the mechanism this plan's last phase uses.
 Subsumes phase 2 onward of [the tool store over strongroom][store-plan],
@@ -731,6 +733,33 @@ Acceptance:
   golden and the test passed; the golden was restored byte for byte.
   The index on the 31 records builds with 569 stubs in 6 s; `fm check`
   exits 0. The wheel item and the folder-source restub stay open above.
+- 2026-09-17, Willem, for phase 6, as recommended: a constraint is a
+  floor, `name` or `name>=floor`, and the lock takes the newest known
+  version that satisfies (open question 3); a receipt records the
+  deployment's digest, the current deployment is materialised, and
+  `fm env.check` reports the drift (open question 2); the word receipt
+  stays and is explained where introduced (open question 7); macOS x64
+  stays a host key in the records, and a repository locks for the
+  gated three unless its contract names others (open question 4). Open
+  question 5 stays open through phase 6.
+- 2026-09-17, the agent, at phase 6, the first part: a consumer resolves
+  against a catalogue read from the index, never from a record, since
+  "offline against the record" for a consumer is the record's
+  materialised form; the authoring site reads its records and gets the
+  same catalogue, and a deployment's digest is its canonical JSON's
+  either way, so the tool's tree gained a `versions` blob carrying the
+  order the tree's names cannot. The three sites are the kind record's
+  `tools`, now requirement spellings, a package contract's
+  `[tools] requires`, and the root contract's, which also carries
+  `[tools] index` and `[tools] hosts`. The lock is `tools.lock` at the
+  root, JSON like the records, one version per tool with the deployment
+  digest per locked host; an entry stands until `fm tools.upgrade` or a
+  floor it no longer satisfies. Found live: pyrefly has no record
+  (livery#632), so the python kind requires the six checkers and
+  runners that have one and the gate runs pyrefly from the venv until
+  it does. This repository's contract names `index = "records"`, and
+  its lock holds the six at the versions the records resolve on the
+  gated three: ty and uv at the one version each has artifacts for.
 - 2026-09-16, the agent, at phase 1: the records live at this
   repository's root, `records/<tool>/`, the authoring site the design
   names; the schema beside them is one document with `Tool` and `Delta`

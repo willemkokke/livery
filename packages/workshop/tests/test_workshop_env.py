@@ -309,8 +309,8 @@ def test_the_github_emission_persists_the_moved_temp(
 
 
 def test_the_tool_profile_derives_from_package_types(tmp_path: Path) -> None:
-    profile = tool_profile(tmp_path)  # no packages: the base profile
-    assert "uv" in profile and "ruff" in profile and "pyrefly" in profile
+    profile = tool_profile(tmp_path)  # no packages: the python kind's tools
+    assert "uv" in profile and "ruff" in profile and "ty" in profile
 
 
 # --- clean: the protections before the removals ---

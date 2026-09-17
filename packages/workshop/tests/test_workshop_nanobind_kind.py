@@ -100,7 +100,17 @@ def test_the_kind_chains_from_python() -> None:
     # The managed union is the parent's: the leaf adds build files
     # the package owns, not rendered-managed ones.
     assert managed_files("python-nanobind") == ("cliff.toml",)
-    assert kind_tools({"python-nanobind"}) == ("cmake", "ninja")
+    # The chain's union: python's tools beneath the kind's own two.
+    assert kind_tools({"python-nanobind"}) == (
+        "basedpyright",
+        "cmake",
+        "mypy",
+        "ninja",
+        "pytest",
+        "ruff",
+        "ty",
+        "uv",
+    )
     record = kind_for("python-nanobind")
     assert record.parent == "python"
     assert record.ci.check_verbs == (

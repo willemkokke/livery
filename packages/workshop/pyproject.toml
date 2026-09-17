@@ -30,6 +30,9 @@ dependencies = [
     # namespace, whose tools module the workshop imports; the release
     # act's lowest-direct leg installs the floor and proves it.
     "livery-toolroom>=0.7.0",
+    # The tool records, the catalogue and the lock: what `fm tools.*`
+    # resolves against.
+    "livery-toolroom-store>=0.1.0",
     # The template engine behind `fm template.check` and `fm
     # new.package`; pyyaml reads the adopted answers files. The
     # pyyaml floor is the oldest release whose wheels cover every

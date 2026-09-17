@@ -1,0 +1,107 @@
+"""The ``tools`` group: declare a tool, lock the repository's versions, upgrade one.
+
+Every verb resolves against the catalogue `[tools] index` names and
+writes `tools.lock` at the root; a lock that cannot be met refuses
+naming the tool, each floor with the site that declared it, and the
+host no eligible version has.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Annotated
+
+from livery.footman import doc, fail, group
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from livery.toolroom.store import Lock
+
+tools = group("tools", help="The tools the workspace requires: declare, lock, upgrade")
+
+
+def _root() -> Path:
+    from livery.workshop._layers import workspace_root
+
+    root = workspace_root()
+    if root is None:
+        fail("no workspace: no workshop.toml above the working directory")
+    return root
+
+
+def _report(lock: Lock, moved: tuple[str, ...] = ()) -> None:
+    from livery.toolroom.store import LOCK_FILE
+
+    for name in sorted(lock.tools):
+        mark = "  moved" if name in moved else ""
+        print(f"  {name} {lock.tools[name].version}{mark}")
+    print(f"  {LOCK_FILE}: {len(lock.tools)} tool(s) on {', '.join(lock.hosts)}")
+
+
+@tools.task(name="lock")
+def tools_lock() -> None:
+    """Resolve every site's requirements and write `tools.lock`.
+
+    An entry the lock already holds stands while it still satisfies
+    every floor and resolves on every locked host; a tool no site
+    requires any more leaves the lock. Nothing on a machine changes:
+    the lock says what a checkout installs, and `sync` installs it.
+    """
+    from livery.workshop._tools import write_lock
+
+    _report(write_lock(_root()))
+
+
+@tools.task(name="add")
+def tools_add(
+    requirement: Annotated[str, doc("the tool, `name` or `name>=floor`")],
+) -> None:
+    """Declare a tool at the project site and lock it.
+
+    The requirement joins `[tools] requires` in the root `workshop.toml`
+    unless it is already there, and the lock is resolved with it. A
+    spelling that is not a requirement refuses before anything is
+    written.
+    """
+    from livery.workshop._tools import declare, write_lock
+
+    root = _root()
+    if declare(root, requirement):
+        print(f"  workshop.toml: [tools] requires {requirement}")
+    else:
+        print(f"  workshop.toml: {requirement} was declared already")
+    _report(write_lock(root))
+
+
+@tools.task(name="upgrade")
+def tools_upgrade(
+    names: Annotated[
+        list[str], doc("the tools to move to their newest eligible version")
+    ],
+) -> None:
+    """Move the named tools' lock entries to the newest version that satisfies.
+
+    An upgrade is an act on the repository: every package runs the
+    version the lock names, so one entry moves and every package with
+    it. The other entries stand.
+    """
+    from livery.workshop._tools import current_lock, write_lock
+
+    root = _root()
+    before = current_lock(root)
+    lock = write_lock(root, upgrade=tuple(names))
+    for name in names:
+        if name not in lock.tools:
+            held = ", ".join(sorted(lock.tools)) or "nothing"
+            fail(f"{name} is not a tool the sites require; the lock holds {held}")
+    moved = tuple(
+        name
+        for name in names
+        if before is None
+        or name not in before.tools
+        or before.tools[name].version != lock.tools[name].version
+    )
+    _report(lock, moved)
+    if not moved:
+        listed = ", ".join(names)
+        print(f"  nothing moved: {listed} already at the newest eligible version")

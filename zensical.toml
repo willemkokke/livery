@@ -276,8 +276,10 @@ nav = [
         { "Changelog" = "_generated/packages/toolroom-store/changelog.md" },
         { "API" = [
             { "livery.toolroom.store" = "_generated/api/toolroom-store/index.md" },
+            { "livery.toolroom.store._catalogue" = "_generated/api/toolroom-store/_catalogue.md" },
             { "livery.toolroom.store._engine" = "_generated/api/toolroom-store/_engine.md" },
             { "livery.toolroom.store._home" = "_generated/api/toolroom-store/_home.md" },
+            { "livery.toolroom.store._lock" = "_generated/api/toolroom-store/_lock.md" },
             { "livery.toolroom.store._record" = "_generated/api/toolroom-store/_record.md" },
         ] },
     ] },
@@ -387,6 +389,12 @@ nav = [
                 { "apply" = "_generated/packages/workshop/_generated/tasks/template/apply.md" },
                 { "check" = "_generated/packages/workshop/_generated/tasks/template/check.md" },
             ] },
+            { "tools" = [
+                { "Overview" = "_generated/packages/workshop/_generated/tasks/tools/index.md" },
+                { "add" = "_generated/packages/workshop/_generated/tasks/tools/add.md" },
+                { "lock" = "_generated/packages/workshop/_generated/tasks/tools/lock.md" },
+                { "upgrade" = "_generated/packages/workshop/_generated/tasks/tools/upgrade.md" },
+            ] },
             { "workflow" = [
                 { "Overview" = "_generated/packages/workshop/_generated/tasks/workflow/index.md" },
                 { "abort" = "_generated/packages/workshop/_generated/tasks/workflow/abort.md" },
@@ -486,6 +494,8 @@ nav = [
             { "livery.workshop._tasks" = "_generated/api/workshop/_tasks.md" },
             { "livery.workshop._templates" = "_generated/api/workshop/_templates.md" },
             { "livery.workshop._tokens" = "_generated/api/workshop/_tokens.md" },
+            { "livery.workshop._tool_tasks" = "_generated/api/workshop/_tool_tasks.md" },
+            { "livery.workshop._tools" = "_generated/api/workshop/_tools.md" },
             { "livery.workshop._tree" = "_generated/api/workshop/_tree.md" },
             { "livery.workshop._update" = "_generated/api/workshop/_update.md" },
             { "livery.workshop._update_driver" = "_generated/api/workshop/_update_driver.md" },
