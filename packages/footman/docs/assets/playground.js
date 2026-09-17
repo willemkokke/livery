@@ -253,15 +253,19 @@ def _fm_fetch(url):
         return response.read().decode("utf-8")
 
 
-def _fm_install_stubs(index_url):
+def _fm_install_stubs(index_url, target=None):
     # The tool stubs, from the index the site serves beside this page: the
     # wheel ships none, and jedi reads a stub only from inside the installed
     # package, so the newest rendering of every tool is written into it.
-    # Every object is verified against the digest that names it.
+    # Every object is verified against the digest that names it. A
+    # rehearsal names another target, so it never touches its own package.
     import hashlib
 
-    import livery.toolroom.tools as tools
+    if target is None:
+        import livery.toolroom.tools as tools
 
+        target = Path(tools.__file__).resolve().parent / "_stubs"
+    target = Path(target)
     base = index_url.rstrip("/") + "/"
 
     def read(digest):
@@ -276,8 +280,7 @@ def _fm_install_stubs(index_url):
         return {e["name"]: e["digest"] for e in json.loads(read(digest))["entries"]}
 
     pointer = json.loads(_fm_fetch(base + "pointer.json"))
-    target = Path(tools.__file__).resolve().parent / "_stubs"
-    target.mkdir(exist_ok=True)
+    target.mkdir(parents=True, exist_ok=True)
     (target / "__init__.pyi").write_text("", encoding="utf-8")
     written = 0
     for name, entry in pointer["tools"].items():

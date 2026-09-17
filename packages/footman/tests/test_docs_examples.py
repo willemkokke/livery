@@ -732,12 +732,15 @@ def stubbed_toolroom(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def test_the_playground_installs_the_newest_stubs_from_the_index_and_refuses_a_bad_object(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
 ) -> None:
     """The page's own installer, run in CPython over an index built here:
     refusals first. An object whose bytes do not match the digest naming
     it is refused, and a tool with no stubs is skipped; then the newest
-    version's stub lands inside the package, beside an empty `__init__`.
+    version's stub lands in the target, beside an empty `__init__`. The
+    target is named: re-importing the tools package from a copy in this
+    process would leave the parent package pointing at the copy for every
+    later test on the worker.
     """
     import hashlib
 
@@ -745,34 +748,22 @@ def test_the_playground_installs_the_newest_stubs_from_the_index_and_refuses_a_b
     exec(_js_bootstrap(), namespace)
     install = namespace["_fm_install_stubs"]
 
-    import livery.toolroom.tools as tools
-
-    pkg = tmp_path / "pkg"
-    target = pkg / "livery" / "toolroom" / "tools"
-    shutil.copytree(
-        Path(tools.__file__).resolve().parent,
-        target,
-        ignore=shutil.ignore_patterns("__pycache__", "_stubs"),
-    )
-    monkeypatch.syspath_prepend(str(pkg))
-    monkeypatch.delitem(sys.modules, "livery.toolroom.tools", raising=False)
-    import livery.toolroom.tools as copied
-
-    assert Path(copied.__file__).resolve().parent == target
-
+    target = tmp_path / "pkg" / "_stubs"
     index = tmp_path / "index"
     _write_index(index, {"ruff": {"0.9.0": "old\n", "0.16.0": _RUFF_STUB}, "bare": {}})
     digest = hashlib.sha256(_RUFF_STUB.encode("utf-8")).hexdigest()
     stub_object = index / "objects" / "sha256" / digest[:2] / digest[2:]
-    stub_object.write_text("tampered\n")
+    # Bytes, not text: a text write on Windows would land CRLF and the
+    # restored object would still fail its digest.
+    stub_object.write_bytes(b"tampered\n")
     with pytest.raises(ValueError, match=r"sha256:" + digest + r" does not match"):
-        install(index.as_uri())
-    stub_object.write_text(_RUFF_STUB)
+        install(index.as_uri(), target=str(target))
+    stub_object.write_bytes(_RUFF_STUB.encode("utf-8"))
 
-    assert install(index.as_uri()) == 1
-    assert (target / "_stubs" / "ruff.pyi").read_text() == _RUFF_STUB
-    assert (target / "_stubs" / "__init__.pyi").read_text() == ""
-    assert not (target / "_stubs" / "bare.pyi").exists()
+    assert install(index.as_uri(), target=str(target)) == 1
+    assert (target / "ruff.pyi").read_text() == _RUFF_STUB
+    assert (target / "__init__.pyi").read_text() == ""
+    assert not (target / "bare.pyi").exists()
 
 
 def _editor_complete(

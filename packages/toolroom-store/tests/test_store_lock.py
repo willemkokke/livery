@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from livery.strongroom import Digest
+from livery.strongroom import Digest, Entry
 from livery.toolroom.store import (
     Artifact,
     Catalogue,
@@ -614,6 +614,20 @@ def test_a_stub_is_read_from_the_index_and_refused_where_there_is_none(tmp_path)
         catalogue.stub("ruff", "1.1.0")
     with pytest.raises(CatalogueError, match=r"no record of black"):
         catalogue.stub("black", "1.0.0")
+    # A stub the tree names and no source holds.
+    missing = "sha256:" + "1" * 64
+    gone = _tree_entry(
+        store, "ruff", [Entry("1.1.0", "blob", Digest.parse(missing), 3)]
+    )
+    _pointer(
+        index,
+        {"ruff": {"tree": str(top.digest), "record": "x", "stubs": str(gone.digest)}},
+    )
+    lost = Catalogue.of_index(str(index), home=Home(tmp_path / "home2"))
+    with pytest.raises(
+        CatalogueError, match=r"ruff 1.1.0: the stub sha256:1+ cannot be read"
+    ):
+        lost.stub("ruff", "1.1.0")
 
     records = tmp_path / "records"
     _delegated("ruff", "1.0.0").save(records / "ruff")
