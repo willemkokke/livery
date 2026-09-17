@@ -146,8 +146,9 @@ into a directory of its own under the home, the record's `package`
 naming what uv installs when it differs from the tool's name, and its
 launchers under `bin` are its entry points; a `system-check` tool is
 the machine's own, found on PATH and held to the record's
-`min_version` or the locked version, and the store installs nothing
-for it. `bun-install` and `uv-python` refuse naming the kind until
+`min_version` alone, since its locked version is the newest reading
+the stubs render for and not a version anyone installs, and the store
+installs nothing for it. `bun-install` and `uv-python` refuse naming the kind until
 they are supplied the same way. A delegated tool has no tree.
 
 A record's `mode` says how a materialised tool reaches PATH: `link`

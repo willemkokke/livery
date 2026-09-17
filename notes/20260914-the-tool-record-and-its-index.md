@@ -896,6 +896,13 @@ Acceptance:
 
 ## Open
 
+0. **A system tool's stub and the machine's own version.** A
+   `system-check` tool is never installed by the store, so its lock
+   entry is the newest reading the stub renders for, and the machine's
+   own copy may be older or newer; the record's `min_version` is the
+   only floor. Whether the stub should follow the version found on the
+   machine instead, and what the receipt should then say, is open.
+   Owner: Willem.
 1. **Where the merged record's reader lives.** Proposal above: the format,
    the resolution and the read path in `livery.toolroom.store`, with the
    bench depending on the store, so the graph is
