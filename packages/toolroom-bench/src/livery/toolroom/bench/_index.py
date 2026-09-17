@@ -5,6 +5,7 @@ every tool and lands what it resolves to as content-addressed objects,
 one tree per tool:
 
     tool                        the tool axis, `tool.json` as canonical JSON
+    versions                    every version tracked, oldest first
     <version>/observation       who read the version; its help, extractor, absences
     <version>/hosts/<host>      the deployment resolved for that host
     <version>/surface/<verb>    one blob per verb, the tool's own options under `_`
@@ -38,7 +39,6 @@ move either, an optimisation and never authority, since
 
 from __future__ import annotations
 
-import dataclasses
 import inspect
 import json
 from collections.abc import Iterable
@@ -325,7 +325,10 @@ def materialise(store: Store, record: Record) -> Digest:
         ValueError: for a verb the index cannot carry: one named
             `ROOT_VERB`, which the tool's own options take.
     """
-    entries: list[Entry] = [_blob(store, "tool", record.to_json())]
+    entries: list[Entry] = [
+        _blob(store, "tool", record.to_json()),
+        _blob(store, "versions", list(record.versions)),
+    ]
     seen = {found.version: found for found in observations(record)}
     for delta in record.deltas:
         version: list[Entry] = []
@@ -374,11 +377,7 @@ def materialise(store: Store, record: Record) -> Digest:
 
 
 def _deployment(record: Record, version: str, host: str) -> dict[str, Any]:
-    fields = dataclasses.asdict(resolve(record, version, host))
-    return {
-        key: list(value) if isinstance(value, tuple) else value
-        for key, value in fields.items()
-    }
+    return resolve(record, version, host).to_json()
 
 
 def _blob(store: Store, name: str, value: Any) -> Entry:

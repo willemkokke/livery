@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "hosts": [
+    "linux-x64",
+    "macos-arm",
+    "windows-x64"
+  ],
+  "tools": {
+    "basedpyright": {
+      "version": "1.39.10",
+      "hosts": {}
+    },
+    "mypy": {
+      "version": "2.3.1",
+      "hosts": {}
+    },
+    "pytest": {
+      "version": "9.1.1",
+      "hosts": {}
+    },
+    "ruff": {
+      "version": "0.16.4",
+      "hosts": {}
+    },
+    "ty": {
+      "version": "0.0.62",
+      "hosts": {
+        "linux-x64": "sha256:eb398876b2440ed58451fe5a141b783b8412a10f3b4fbdfacad5f1545442cbfb",
+        "macos-arm": "sha256:db146b3ea0271bd862d739e6a0b12bc6ead4c8c2b621adc4ab5bd179657f14dd",
+        "windows-x64": "sha256:267b878ccba2df3d3dccd4a2e7044a0af60d52a18659c51efead82a46f1b09ca"
+      }
+    },
+    "uv": {
+      "version": "0.11.26",
+      "hosts": {
+        "linux-x64": "sha256:0a16e9ed1399a1823dc5b5c575db35e83c33e28fb81a5161d90176d99bfb5eaa",
+        "macos-arm": "sha256:4b0fb7a45a0db28c41b9a1c14ac1434d4ca2ae4e4a790607ca8569a79162f1d2",
+        "windows-x64": "sha256:a8ad57e3978b405b035c20f463d96b0ce83c28583655a63bca6fd2e570a829dd"
+      }
+    }
+  }
+}

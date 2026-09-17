@@ -606,26 +606,16 @@ def _uv_drift(root: Path) -> str:
 
 
 def tool_profile(root: Path) -> tuple[str, ...]:
-    """The tools the present package types require, by discovery.
+    """The tools the three declaration sites require, each once.
 
-    No package of a type, no tool for it: a pure-python workspace
-    answers uv plus the venv toolchain, and a future package type
-    contributes its own tools by existing.
+    The kinds the present packages declare, the packages' own
+    contracts and the project's, as `livery.workshop._tools` reads
+    them; a workspace with no package requires what the python kind
+    does, since its `tasks.py` runs on python.
     """
-    from livery.workshop._packages import discover_packages
+    from livery.workshop._tools import tool_names
 
-    types = (
-        {package.type for package in discover_packages(root)}
-        if (root / "packages").is_dir()
-        else set()
-    )
-    from livery.workshop._kinds import kind_tools
-
-    profile: list[str] = ["uv"]
-    if not types or "python" in types:
-        profile += ["ruff", "pytest", "basedpyright", "mypy", "ty", "pyrefly"]
-    profile += [tool for tool in kind_tools(types) if tool not in profile]
-    return tuple(profile)
+    return tool_names(root)
 
 
 def missing_host_tools(root: Path) -> tuple[str, ...]:

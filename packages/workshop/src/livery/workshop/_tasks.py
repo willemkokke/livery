@@ -40,6 +40,7 @@ from livery.workshop import (  # noqa: F401
     _submit,
     _sync,
     _templates,
+    _tool_tasks,
     _update,
     _update_driver,
     _workflow_tasks,

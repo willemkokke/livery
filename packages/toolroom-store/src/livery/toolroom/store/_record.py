@@ -35,6 +35,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from livery.strongroom import Digest, canonical, digest_of
+from livery.toolroom.tools import version_tuple
+
 PLATFORMS = ("windows", "macos", "linux")
 """The operating systems a record may name."""
 
@@ -285,6 +288,64 @@ class Deployment:
     env: dict[str, str]
     shims: dict[str, str]
     exclude: tuple[str, ...]
+
+    def to_json(self) -> dict[str, Any]:
+        """The deployment as a JSON object, every field, lists for the tuples.
+
+        The canonical encoding of this object is what the index lands
+        for the host and what a receipt's deployment digest names.
+        """
+        return {
+            "url": self.url,
+            "sha256": self.sha256,
+            "root": self.root,
+            "exe": self.exe,
+            "entry_points": list(self.entry_points),
+            "paths": list(self.paths),
+            "env": dict(self.env),
+            "shims": dict(self.shims),
+            "exclude": list(self.exclude),
+        }
+
+    @classmethod
+    def from_json(cls, value: Any, *, where: str) -> Deployment:
+        """A deployment from its JSON object, as the index carries it.
+
+        Raises:
+            RecordError: when the object is not a deployment, naming *where*.
+        """
+        data = _object(value, _DEPLOYMENT_KEYS, where=where)
+        for required in _DEPLOYMENT_KEYS:
+            if required not in data:
+                raise RecordError(f"{where}: no {required}")
+        return cls(
+            _text(data["url"], where=f"{where} url"),
+            _text(data["sha256"], where=f"{where} sha256"),
+            _text(data["root"], where=f"{where} root"),
+            _text(data["exe"], where=f"{where} exe"),
+            _texts(data["entry_points"], where=f"{where} entry_points"),
+            _texts(data["paths"], where=f"{where} paths"),
+            _mapping(data["env"], where=f"{where} env"),
+            _mapping(data["shims"], where=f"{where} shims"),
+            _texts(data["exclude"], where=f"{where} exclude"),
+        )
+
+    def digest(self) -> Digest:
+        """The deployment's name: the digest of its canonical JSON."""
+        return digest_of(canonical(self.to_json()))
+
+
+_DEPLOYMENT_KEYS = (
+    "url",
+    "sha256",
+    "root",
+    "exe",
+    "entry_points",
+    "paths",
+    "env",
+    "shims",
+    "exclude",
+)
 
 
 #: What a field resolves to when no layer sets it.
@@ -1013,6 +1074,20 @@ def _incomplete(record: Record, values: Mapping[str, Any]) -> str:
     if record.kind == "binary" and values["exe"] not in values["entry_points"]:
         return f"the binary's exe {values['exe']!r} is not among its entry points"
     return ""
+
+
+_PATCHLEVEL = re.compile(r"p(\d+)$")
+
+
+def version_key(version: str, date: str = "") -> tuple[tuple[int, ...], int, str]:
+    """How versions order: the numeric run, OpenSSH's patchlevel, then the date.
+
+    `version_tuple` reads two builds of one base as equal and leaves the
+    tie to the caller; the patchlevel places `9.9p2` after `9.9p1`, and
+    the date breaks what remains. A record's deltas run in this order.
+    """
+    match = _PATCHLEVEL.search(version)
+    return version_tuple(version), int(match[1]) if match else 0, date
 
 
 def host_key(system: str, machine: str) -> str:

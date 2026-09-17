@@ -147,8 +147,9 @@ def test_a_tool_lands_as_one_tree_of_its_versions_hosts_and_verbs(tmp_path):
     assert built.rebuilt == ("tool",) and built.reused == () and built.dropped == ()
     store = _index.open_index(tmp_path / "index")
     tree = _tree(store, Digest.parse(built.tools["tool"]))
-    assert [e.name for e in tree.entries] == ["1.0.0", "1.1.0", "tool"]
+    assert [e.name for e in tree.entries] == ["1.0.0", "1.1.0", "tool", "versions"]
     assert _read(store, tree, "tool") == record.to_json()
+    assert _read(store, tree, "versions") == ["1.0.0", "1.1.0"]
 
     # The read version: its observation, its one host, its surface per verb.
     one = _tree(store, _entry(store, tree, "1.0.0").digest)
@@ -246,9 +247,11 @@ def test_a_new_delta_writes_only_the_objects_it_reaches(tmp_path):
     new_tree = Digest.parse(after.tools["other"])
     written = set(store.objects()) - was
     assert written == set(store.reachable(new_tree)) - set(store.reachable(old_tree))
-    # The unchanged version's blobs are shared: the new tree reaches all
-    # the old one did but the old root itself, and none was written again.
-    assert set(store.reachable(old_tree)) - {old_tree} < set(store.reachable(new_tree))
+    # The unchanged version's subtree is shared: the new tree reaches it
+    # as it was, and none of its blobs was written again.
+    shared = _entry(store, _tree(store, old_tree), "2.0.0").digest
+    assert shared in set(store.reachable(new_tree))
+    assert shared == _entry(store, _tree(store, new_tree), "2.0.0").digest
     assert store.ref(_index.INDEX, "other") == new_tree
 
     # From genesis lands the same result, every tool rebuilt.
