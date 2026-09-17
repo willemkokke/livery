@@ -610,6 +610,162 @@ def test_playground_dynamic_completion_answers_fresh(tmp_path: Path):
     assert handoff == [], handoff
 
 
+# The probes import the tools package from a copy when a test says so, and
+# write the stubs into that copy from an index the test built, since the
+# wheel ships no stubs and jedi reads them only from inside the package.
+_PROBE_PRELUDE = (
+    "import os as _os, sys\n"
+    "if _os.environ.get('_FM_PROBE_PKG'):\n"
+    "    sys.path.insert(0, _os.environ['_FM_PROBE_PKG'])\n"
+)
+_PROBE_STUBS = (
+    "\nif _os.environ.get('_FM_STUB_INDEX'):\n"
+    "    _fm_install_stubs(_os.environ['_FM_STUB_INDEX'])\n"
+)
+
+# A ruff stub shaped as the records render one: the verb is a nested
+# class, the handle an attribute of that type, the flags typed and
+# documented in an Args section.
+_RUFF_STUB = '''\
+from typing import Any, TypeVar
+
+from livery.toolroom.tools import Argv, Flag, Tool as ToolBase, Value
+
+_R = TypeVar("_R")
+_R2 = TypeVar("_R2")
+
+class Ruff(ToolBase[_R]):
+    class Check(ToolBase[_R2]):
+        def __call__(  # type: ignore[override]
+            self,
+            *args: str,
+            diff: Flag = ...,
+            fix: Flag = ...,
+            select: Value = ...,
+            **flags: Any,
+        ) -> _R2:
+            """Run Ruff on the given files or directories
+
+            Args:
+                diff: Avoid writing any fixed files back; instead, output a diff.
+                fix: Apply fixes to resolve lint violations.
+                select: Comma-separated list of rule codes to enable.
+            """
+            ...
+        @property
+        def argv(self) -> Ruff.Check[Argv]: ...
+    check: Check[_R]
+    @property
+    def argv(self) -> Ruff[Argv]: ...
+'''
+
+
+def _write_index(index: Path, tools: dict[str, dict[str, str]]) -> None:
+    """An index directory in the store's layout: *tools* maps a name to its
+    stub text per version, oldest first; a tool with no versions lists no
+    stubs at all.
+    """
+    import hashlib
+
+    def put(data: bytes) -> str:
+        digest = hashlib.sha256(data).hexdigest()
+        path = index / "objects" / "sha256" / digest[:2] / digest[2:]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+        return "sha256:" + digest
+
+    def tree(entries: dict[str, str]) -> str:
+        listed = [
+            {
+                "digest": digest,
+                "executable": False,
+                "kind": "blob",
+                "name": name,
+                "size": 0,
+            }
+            for name, digest in entries.items()
+        ]
+        return put(json.dumps({"entries": listed}).encode("utf-8"))
+
+    pointer: dict[str, dict[str, str]] = {}
+    for name, versions in tools.items():
+        top = tree(
+            {
+                "tool": put(b"{}"),
+                "versions": put(json.dumps(list(versions)).encode("utf-8")),
+            }
+        )
+        entry = {"tree": top, "record": "x"}
+        if versions:
+            entry["stubs"] = tree(
+                {
+                    version: put(text.encode("utf-8"))
+                    for version, text in versions.items()
+                }
+            )
+        pointer[name] = entry
+    (index / "pointer.json").write_text(json.dumps({"schema": 1, "tools": pointer}))
+
+
+@pytest.fixture
+def stubbed_toolroom(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """The probes import a copy of the tools package, and write into it the
+    newest ruff stub of an index built here. Returns the copy.
+    """
+    import livery.toolroom.tools as tools
+
+    pkg = tmp_path / "pkg"
+    target = pkg / "livery" / "toolroom" / "tools"
+    shutil.copytree(
+        Path(tools.__file__).resolve().parent,
+        target,
+        ignore=shutil.ignore_patterns("__pycache__", "_stubs"),
+    )
+    index = tmp_path / "index"
+    _write_index(
+        index,
+        {"ruff": {"0.9.0": "class Ruff: ...\n", "0.16.0": _RUFF_STUB}, "bare": {}},
+    )
+    monkeypatch.setenv("_FM_PROBE_PKG", str(pkg))
+    monkeypatch.setenv("_FM_STUB_INDEX", index.as_uri())
+    return target
+
+
+def test_the_playground_installs_the_newest_stubs_from_the_index_and_refuses_a_bad_object(
+    tmp_path: Path,
+) -> None:
+    """The page's own installer, run in CPython over an index built here:
+    refusals first. An object whose bytes do not match the digest naming
+    it is refused, and a tool with no stubs is skipped; then the newest
+    version's stub lands in the target, beside an empty `__init__`. The
+    target is named: re-importing the tools package from a copy in this
+    process would leave the parent package pointing at the copy for every
+    later test on the worker.
+    """
+    import hashlib
+
+    namespace: dict[str, Any] = {}
+    exec(_js_bootstrap(), namespace)
+    install = namespace["_fm_install_stubs"]
+
+    target = tmp_path / "pkg" / "_stubs"
+    index = tmp_path / "index"
+    _write_index(index, {"ruff": {"0.9.0": "old\n", "0.16.0": _RUFF_STUB}, "bare": {}})
+    digest = hashlib.sha256(_RUFF_STUB.encode("utf-8")).hexdigest()
+    stub_object = index / "objects" / "sha256" / digest[:2] / digest[2:]
+    # Bytes, not text: a text write on Windows would land CRLF and the
+    # restored object would still fail its digest.
+    stub_object.write_bytes(b"tampered\n")
+    with pytest.raises(ValueError, match=r"sha256:" + digest + r" does not match"):
+        install(index.as_uri(), target=str(target))
+    stub_object.write_bytes(_RUFF_STUB.encode("utf-8"))
+
+    assert install(index.as_uri(), target=str(target)) == 1
+    assert (target / "ruff.pyi").read_text() == _RUFF_STUB
+    assert (target / "__init__.pyi").read_text() == ""
+    assert not (target / "bare.pyi").exists()
+
+
 def _editor_complete(
     tmp_path: Path, source: str, line: int, column: int
 ) -> tuple[list[dict[str, Any]], str]:
@@ -618,7 +774,9 @@ def _editor_complete(
     Windows CreateProcess round-trip intact."""
     probe = tmp_path / "editor_probe.py"
     probe.write_text(
-        _js_bootstrap()
+        _PROBE_PRELUDE
+        + _js_bootstrap()
+        + _PROBE_STUBS
         + "\nimport sys\nfrom pathlib import Path as _P\n"
         # A parso cache per worker: concurrent probes sharing one cache
         # dir race its non-atomic pickle writes (EOFError on Windows CI),
@@ -650,7 +808,9 @@ def _editor_complete(
     return answer, out.stderr
 
 
-def test_playground_editor_completion_carries_docstrings(tmp_path: Path):
+def test_playground_editor_completion_carries_docstrings(
+    tmp_path: Path, stubbed_toolroom: Path
+):
     """The editor's completion asks jedi over the buffer with footman and
     toolroom importable — so a toolroom handle completes its real methods
     and carries their docstrings, which is the whole point. (The shipped
@@ -685,7 +845,9 @@ def test_playground_editor_completion_is_relevant(tmp_path: Path):
     assert labels and all(name.startswith("_") for name in labels), (labels, err)
 
 
-def test_playground_editor_completion_ranks_like_an_ide(tmp_path: Path):
+def test_playground_editor_completion_ranks_like_an_ide(
+    tmp_path: Path, stubbed_toolroom: Path
+):
     """Willem's screenshot, pinned: Ctrl-Space inside a call answered an
     alphabetical soup starting at `abs`. The IDE order instead: the call's
     own keyword parameters lead (boosted, each carrying its declaration and
@@ -719,7 +881,9 @@ def _editor_help(
     for the same Windows argv-newline reason as `_editor_complete`."""
     probe = tmp_path / "help_probe.py"
     probe.write_text(
-        _js_bootstrap()
+        _PROBE_PRELUDE
+        + _js_bootstrap()
+        + _PROBE_STUBS
         + "\nimport sys\nfrom pathlib import Path as _P\n"
         # The worker's parso cache, as `_editor_complete` explains.
         + "import jedi.settings\n"
@@ -747,7 +911,9 @@ def _editor_help(
     return answer, out.stderr
 
 
-def test_playground_hover_help_answers_signatures(tmp_path: Path):
+def test_playground_hover_help_answers_signatures(
+    tmp_path: Path, stubbed_toolroom: Path
+):
     """Hover answers about the symbol under the pointer: a name renders
     its signature and the docstring behind it. The toolroom case is the
     point — hover ruff.check and read its stub."""
@@ -823,7 +989,7 @@ def test_playground_hover_help_answers_signatures(tmp_path: Path):
     assert help_["returns"] == "The artifact's path.", help_
 
 
-def test_playground_hover_needs_a_symbol(tmp_path: Path):
+def test_playground_hover_needs_a_symbol(tmp_path: Path, stubbed_toolroom: Path):
     """Willem's screenshot: resting the pointer just right of the comma
     in `ruff.check("src", fix=fix)` recited the callee's whole signature.
     Hover answers about a SYMBOL — no identifier under the pointer means
@@ -856,7 +1022,9 @@ def _editor_sighelp(
     file for the same Windows argv-newline reason as `_editor_complete`."""
     probe = tmp_path / "sighelp_probe.py"
     probe.write_text(
-        _js_bootstrap()
+        _PROBE_PRELUDE
+        + _js_bootstrap()
+        + _PROBE_STUBS
         + "\nimport sys\nfrom pathlib import Path as _P\n"
         # The worker's parso cache, as `_editor_complete` explains.
         + "import jedi.settings\n"
@@ -884,7 +1052,9 @@ def _editor_sighelp(
     return answer, out.stderr
 
 
-def test_playground_parameter_hints_track_the_cursor(tmp_path: Path):
+def test_playground_parameter_hints_track_the_cursor(
+    tmp_path: Path, stubbed_toolroom: Path
+):
     """The IDE gesture for positionals: typing ( or , asks which parameter
     the cursor is on (jedi's Signature.index) and the panel answers
     prose-first (Willem's layout): docstring summary, what the call

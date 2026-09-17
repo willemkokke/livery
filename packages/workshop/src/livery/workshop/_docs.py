@@ -461,6 +461,25 @@ def abbreviation_files(root: Path) -> list[str]:
     return files
 
 
+def package_python_paths(package: Package) -> list[str]:
+    """The search paths a package's ``[docs] python-paths`` hands the API renderer.
+
+    Each is a directory relative to the package, holding modules the
+    pages reference beyond the package's sources: rendered stubs, for
+    one. Anything but a list of strings refuses naming the file.
+    """
+    contract_path = package.directory / "workshop.toml"
+    table = load_contract(contract_path).get("docs") or {}
+    if not isinstance(table, dict):
+        return []
+    declared = table.get("python-paths", [])
+    if not isinstance(declared, list) or not all(
+        isinstance(entry, str) for entry in declared
+    ):
+        fail(f"{contract_path}: [docs] python-paths must be a list of paths")
+    return list(declared)
+
+
 def package_docs_extras(package: Package) -> tuple[list[str], list[object]]:
     """The css and javascript a package's ``[docs]`` table declares.
 
@@ -756,6 +775,10 @@ def zensical_config(root: Path) -> str:
         lines += section
         if has_modules:
             handler_paths.append(f"packages/{package.directory.name}/src")
+        handler_paths += [
+            f"packages/{package.directory.name}/{extra}"
+            for extra in package_python_paths(package)
+        ]
     lines.append(f"    {NAV_END}")
     lines.append("]")
     lines += _extra_asset_lines(root)

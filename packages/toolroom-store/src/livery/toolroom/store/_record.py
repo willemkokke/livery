@@ -1118,6 +1118,17 @@ def _incomplete(record: Record, values: Mapping[str, Any]) -> str:
 _PATCHLEVEL = re.compile(r"p(\d+)$")
 
 
+def class_name(name: str) -> str:
+    """The class a tool's stub declares: `ruff_format` is `RuffFormat`.
+
+    Each part of the name, split on `_` and `-`, is title-cased and the
+    parts are joined. The workshop composes a typing package's index
+    from this rule, and the bench renders the stub's class with it, so
+    the two agree without either reading the other's output.
+    """
+    return "".join(part.title() for part in name.replace("-", "_").split("_"))
+
+
 def version_key(version: str, date: str = "") -> tuple[tuple[int, ...], int, str]:
     """How versions order: the numeric run, OpenSSH's patchlevel, then the date.
 

@@ -1,0 +1,7 @@
+{
+  "name": "pwsh",
+  "description": "PowerShell",
+  "kind": "system-check",
+  "min_version": "",
+  "hosts": []
+}

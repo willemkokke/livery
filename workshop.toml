@@ -29,11 +29,13 @@ kind = "github"
 owner = "willemkokke"
 
 [tools]
-# The catalogue the lock resolves against. This repository is the
-# authoring site, so it reads its own records; a consumer names the
-# published index's URL. The locked hosts are the gated three unless
-# `hosts` names others.
-index = "records"
+# The catalogue the lock and the stubs resolve against. This
+# repository is the authoring site: it reads the index the bench builds
+# from its own records, and `index-build` names the verb that builds it
+# before every read. A consumer names the published index's URL. The
+# locked hosts are the gated three unless `hosts` names others.
+index = "docs/_generated/index"
+index-build = "tools.index.build"
 
 # Who reviews the workspace's own governance. These owners guard
 # this contract and the rendered codeowners file, so raising a

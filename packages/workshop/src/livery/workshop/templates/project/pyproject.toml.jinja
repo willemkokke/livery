@@ -116,10 +116,6 @@ convention = "google"
 "tasks.py" = ["E501"]
 "tests/test_workspace_contracts.py" = ["E501"]
 "tests/test_docs_drift.py" = ["E501"]
-# Generated tool stubs keep each Args entry on one line so hovers
-# reflow them, and the text is the tool's own; the .pyi is not where
-# prose rules apply. Toolroom's standing ruling, carried over.
-"packages/*/src/**/_stubs/*.pyi" = ["E501", "D"]
 # The CI emitters carry workflow YAML as string content; its lines
 # are the generated files' lines, not prose to wrap.
 "**/_ci_generate.py" = ["E501"]
@@ -132,6 +128,9 @@ include = [{% if packages %}"packages", {% endif %}"tests", "tasks.py"]
 # there whatever interpreter the editor has selected.
 venvPath = "."
 venv = ".venv"
+# The tool stubs `fm tools.restub` writes; the default stub path,
+# named so the four checkers visibly read one directory.
+stubPath = "typings"
 pythonVersion = "{{ python_floor }}"
 typeCheckingMode = "standard"
 reportMissingModuleSource = false
@@ -170,6 +169,7 @@ files = [
     "tasks.py",
 ]
 mypy_path = [
+    "typings",
 {% for package in py %}    "packages/{{ package.dir }}/src",
     "packages/{{ package.dir }}/tests",
 {% endfor %}]
@@ -216,6 +216,8 @@ include = [{% if py %}{% for package in py %}"packages/{{ package.dir }}/src"{% 
 # Every platform at once (ty checks the union), {{ python_floor }} floor.
 python-platform = "all"
 python-version = "{{ python_floor }}"
+# The tool stubs `fm tools.restub` writes.
+extra-paths = ["typings"]
 
 [tool.pyrefly]
 # Fourth gate, same scope as ty. Preset `default`, not `strict`:
@@ -230,6 +232,8 @@ project-includes = [{% if py %}{% for package in py %}"packages/{{ package.dir }
 # changes anything.
 use-ignore-files = false
 disable-project-excludes-heuristics = true
+# The tool stubs `fm tools.restub` writes.
+search-path = ["typings"]
 # Every platform at once, {{ python_floor }} floor.
 python-platform = "all"
 python-version = "{{ python_floor }}"

@@ -356,10 +356,11 @@ def materialise_tools(root: Path) -> list[str]:
     """Supply every locked tool through the store and write the receipts; the lines.
 
     The bundle the sites require, materialised as `fm sync` enters the
-    environment: a checkout with no `tools.lock` yet has nothing to
-    materialise and says so.
+    environment, and the stubs the checkers read written after it: a
+    checkout with no `tools.lock` yet has nothing to materialise and
+    says so.
     """
-    from livery.workshop._tools import current_lock, materialise
+    from livery.workshop._tools import current_lock, materialise, stub_lines
 
     if current_lock(root) is None:
         return [f"  tools: no tools.lock; `{footman.prog()} tools.lock` writes one"]
@@ -371,7 +372,7 @@ def materialise_tools(root: Path) -> list[str]:
         + (f", installed {', '.join(installed)}" if installed else ", all present")
     ]
     lines += [f"  tools: could not materialise: {m.failure}" for m in done if m.failure]
-    return lines
+    return lines + stub_lines(root, strict=False)
 
 
 @task

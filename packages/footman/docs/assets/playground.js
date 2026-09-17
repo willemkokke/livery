@@ -239,6 +239,65 @@ const BOOTSTRAP = `
 import json, os, sys, traceback
 from pathlib import Path
 
+
+def _fm_fetch(url):
+    # The one seam between the page and a rehearsal: Pyodide fetches the
+    # site's own files synchronously, CPython reads a file URL.
+    if sys.platform == "emscripten":
+        from pyodide.http import open_url
+
+        return open_url(url).read()
+    from urllib.request import urlopen
+
+    with urlopen(url) as response:
+        return response.read().decode("utf-8")
+
+
+def _fm_install_stubs(index_url, target=None):
+    # The tool stubs, from the index the site serves beside this page: the
+    # wheel ships none, and jedi reads a stub only from inside the installed
+    # package, so the newest rendering of every tool is written into it.
+    # Every object is verified against the digest that names it. A
+    # rehearsal names another target, so it never touches its own package.
+    import hashlib
+
+    if target is None:
+        import livery.toolroom.tools as tools
+
+        target = Path(tools.__file__).resolve().parent / "_stubs"
+    target = Path(target)
+    base = index_url.rstrip("/") + "/"
+
+    def read(digest):
+        algorithm, _, encoded = digest.partition(":")
+        where = base + "objects/" + algorithm + "/" + encoded[:2] + "/" + encoded[2:]
+        text = _fm_fetch(where)
+        if hashlib.new(algorithm, text.encode("utf-8")).hexdigest() != encoded:
+            raise ValueError("the index object " + digest + " does not match its digest")
+        return text
+
+    def entries(digest):
+        return {e["name"]: e["digest"] for e in json.loads(read(digest))["entries"]}
+
+    pointer = json.loads(_fm_fetch(base + "pointer.json"))
+    target.mkdir(parents=True, exist_ok=True)
+    (target / "__init__.pyi").write_text("", encoding="utf-8")
+    written = 0
+    for name, entry in pointer["tools"].items():
+        if not entry.get("stubs"):
+            continue
+        versions = json.loads(read(entries(entry["tree"])["versions"]))
+        stubs = entries(entry["stubs"])
+        for version in reversed(versions):
+            if version in stubs:
+                (target / (name + ".pyi")).write_text(
+                    read(stubs[version]), encoding="utf-8"
+                )
+                written += 1
+                break
+    return written
+
+
 if sys.platform == "emscripten" or os.environ.get("_FM_PLAYGROUND_SIM"):
     import subprocess
     import threading
@@ -1277,6 +1336,15 @@ function loadRuntime(status) {
       const micropip = pyodide.pyimport("micropip");
       await micropip.install(["livery-footman", "livery-toolroom"]);
       pyodide.runPython(BOOTSTRAP);
+      // The tool stubs, from the site's own index: the wheel ships none,
+      // and jedi reads them only from inside the installed package. A
+      // site without the index costs the typed completions, nothing else.
+      try {
+        const index = new URL("_generated/index/", SITE_ROOT).href;
+        pyodide.runPython(`_fm_install_stubs(${JSON.stringify(index)})`);
+      } catch (error) {
+        console.warn("tool stubs not installed; handles complete as Tool", error);
+      }
       return pyodide;
     })();
     pyodideReady.catch(() => {

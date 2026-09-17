@@ -742,7 +742,7 @@ def test_long_arg_help_stays_on_one_line():
     """Hovers treat a docstring's line breaks as hard breaks, so a wrap
     chosen for the .pyi's column limit used to land mid-sentence in every
     tooltip. An `Args:` entry is one line now — each renderer reflows to
-    its own width, and E501 is waived for `_stubs/` in exchange.
+    its own width, and a stub is never linted as prose in exchange.
     """
     spec = _spec(
         Option(
@@ -915,10 +915,10 @@ def test_in_process_capability_is_the_entry_point():
 
 
 @pytest.mark.parametrize("key", [d.key for d in _drivers.DRIVERS])
-def test_every_curated_tool_has_a_checked_in_stub(key):
+def test_every_curated_tool_has_a_record(key):
     from livery.toolroom.bench import _tasks as tools_tasks
 
-    assert tools_tasks._stub_path(key).exists(), f"no stub for {key}"
+    assert tools_tasks._record_path(key).exists(), f"no record for {key}"
 
 
 # --- the tasks that talk to real binaries ---------------------------------
@@ -928,20 +928,73 @@ def test_every_curated_tool_has_a_checked_in_stub(key):
 def stubs(tmp_path, monkeypatch):
     """Point the tasks at scratch directories, not the checked-in ones.
 
-    All three: generating a stub also records the reading in the option
-    history, and a refresh writes its events into the CHANGELOG. A fixture
-    that isolated only `_STUBS` would let a test write this machine's tool
-    versions into the repo's history — which is exactly what happened the
-    first time this fixture forgot, and again when the CHANGELOG gained a
-    writer. Every new write path belongs here in the same commit that adds
-    it.
+    Both: a sync records the reading in the tool's record, and a refresh
+    writes its events into the CHANGELOG. A fixture that isolated only
+    one would let a test write this machine's tool versions into the
+    repo's history — which is exactly what happened the first time this
+    fixture forgot, and again when the CHANGELOG gained a writer. Every
+    new write path belongs here in the same commit that adds it.
+
+    Returns the scratch root; the records live under its `records/`.
     """
     from livery.toolroom.bench import _tasks as tools_tasks
 
-    monkeypatch.setattr(tools_tasks, "_STUBS", tmp_path)
     monkeypatch.setattr(tools_tasks, "_RECORDS", tmp_path / "records")
     monkeypatch.setattr(tools_tasks, "_CHANGELOG", tmp_path / "CHANGELOG.md")
     return tmp_path
+
+
+def _rendered(stubs, key: str) -> str:
+    """The stub the scratch record of *key* renders to, or empty without one."""
+    from livery.toolroom.bench import _drivers, _surfaces
+    from livery.toolroom.bench import _tasks as tools_tasks
+
+    record = _surfaces.load(stubs / "records" / key)
+    driver = _drivers.find(key)
+    assert driver is not None
+    return tools_tasks._stub_from(driver, record) if record is not None else ""
+
+
+def _rendered_checked_in(key: str) -> str:
+    """The stub the repository's own record of *key* renders to."""
+    from livery.toolroom.bench import _surfaces
+    from livery.toolroom.bench import _tasks as tools_tasks
+
+    record = _surfaces.load(tools_tasks._records_dir() / key)
+    driver = _drivers.find(key)
+    assert record is not None and driver is not None, key
+    return tools_tasks._stub_from(driver, record)
+
+
+def _behind(stubs, key: str) -> None:
+    """Replace the scratch record of *key* with one reading, of a version
+    every real release is newer than, so the tool reads as moved on.
+    """
+    import shutil
+
+    from livery.toolroom.bench import _surfaces
+
+    shutil.rmtree(stubs / "records" / key, ignore_errors=True)
+    record = _surfaces.new(
+        key,
+        kind="uv-tool",
+        version="0.0.1",
+        date="2020-01-01",
+        surface={
+            "help": key,
+            "verbs": {
+                "": {
+                    "help": "",
+                    "wraps": False,
+                    "positional": "any",
+                    "lead": "",
+                    "options": {},
+                }
+            },
+        },
+        platforms=["Linux"],
+    )
+    _surfaces.save(record, stubs / "records" / key)
 
 
 needs_ruff = pytest.mark.skipif(
@@ -1096,15 +1149,18 @@ def test_colorprobe_render_round_trips():
 
 
 @needs_ruff
-def test_sync_writes_a_stub_and_audit_then_agrees(stubs, capsys):
+def test_sync_records_a_reading_and_audit_then_agrees(stubs, capsys):
     from livery.toolroom.bench import _tasks as tools_tasks
 
     tools_tasks.sync(only="ruff")
-    written = stubs / "ruff.pyi"
-    assert written.exists()
-    ast.parse(written.read_text())
-    assert "class Ruff(ToolBase[_R]):" in written.read_text()
-    capsys.readouterr()
+    assert (stubs / "records" / "ruff" / "tool.json").exists()
+    assert "recorded 1 reading(s): ruff" in capsys.readouterr().out
+    rendered = _rendered(stubs, "ruff")
+    ast.parse(rendered)
+    assert "class Ruff(ToolBase[_R]):" in rendered
+    # A second sync of the same tool changes nothing.
+    tools_tasks.sync(only="ruff")
+    assert "recorded 0 reading(s): none changed" in capsys.readouterr().out
 
     tools_tasks.audit(only="ruff")
     assert "match the tools they were read from" in capsys.readouterr().out
@@ -1138,8 +1194,7 @@ def test_audit_reports_a_behind_snapshot_without_failing(stubs, capsys):
     """
     from livery.toolroom.bench import _tasks as tools_tasks
 
-    tools_tasks.sync(only="ruff")
-    (stubs / "ruff.pyi").write_text("class Ruff(_Tool): ...\n")
+    _behind(stubs, "ruff")
     capsys.readouterr()
 
     report = tools_tasks.audit(only="ruff")
@@ -1148,20 +1203,21 @@ def test_audit_reports_a_behind_snapshot_without_failing(stubs, capsys):
     assert "nothing is broken" in out
     assert report["behind"] == ["ruff"]
 
-    # ...and --fix takes the fresh snapshot instead of reporting it.
+    # ...and --fix takes the fresh reading into the record instead of
+    # reporting it.
     tools_tasks.audit(only="ruff", fix=True)
     assert "took a fresh snapshot of 1" in capsys.readouterr().out
-    fresh = (stubs / "ruff.pyi").read_text()
+    fresh = _rendered(stubs, "ruff")
     assert "class Ruff(ToolBase[_R]):" in fresh
     assert "def __call__(" in fresh
+    assert "0.0.1" not in fresh.split("class ")[0]  # the header names the reading
 
 
 @needs_ruff
 def test_audit_strict_gives_automation_something_to_trip_on(stubs, capsys):
     from livery.toolroom.bench import _tasks as tools_tasks
 
-    tools_tasks.sync(only="ruff")
-    (stubs / "ruff.pyi").write_text("class Ruff(_Tool): ...\n")
+    _behind(stubs, "ruff")
     capsys.readouterr()
     with pytest.raises(SystemExit) as caught:
         tools_tasks.audit(only="ruff", strict=True)
@@ -1198,7 +1254,7 @@ def test_sync_skips_and_names_the_tools_it_cannot_ask(stubs, capsys):
 
     tools_tasks.sync(only="definitely-not-installed")
     out = capsys.readouterr().out
-    assert "wrote 0 stub(s)" in out
+    assert "recorded 0 reading(s)" in out
 
 
 def test_formatting_falls_back_when_ruff_cannot_run(monkeypatch):
@@ -1379,19 +1435,21 @@ def test_a_throwaway_home_inside_the_real_one_is_replaced_whole(tmp_path):
     assert clean.verbs[0].options[0].default == "~/.d"
 
 
-def test_no_stub_carries_a_home_directory():
-    """The invariant the scrub exists to hold, checked against what ships."""
+def test_no_record_carries_a_home_directory():
+    """The invariant the scrub exists to hold, checked against what the
+    stubs render from: every reading in the repository's records.
+    """
     import re
-    from pathlib import Path
+
+    from livery.toolroom.bench import _tasks as tools_tasks
 
     looks_like_home = re.compile(r"/Users/[a-z]|/home/[a-z]|C:\\\\Users\\\\[a-z]", re.I)
-    stubs = Path(_drivers.__file__).parent / "_stubs"
     guilty = {
-        path.name
-        for path in stubs.glob("*.pyi")
-        # `encoding=` is not optional here: a stub carries whatever its tool's
-        # help does, and Windows decodes with cp1252 by default — where the
-        # UTF-8 tail byte of a man page's U+2010 is simply undefined.
+        f"{path.parent.parent.name}/{path.name}"
+        for path in tools_tasks._records_dir().glob("*/deltas/*.json")
+        # `encoding=` is not optional here: a record carries whatever its
+        # tool's help does, and Windows decodes with cp1252 by default —
+        # where the UTF-8 tail byte of a man page's U+2010 is undefined.
         if looks_like_home.search(path.read_text(encoding="utf-8"))
     }
     assert guilty == set()
@@ -1743,15 +1801,18 @@ def test_rebasing_a_verb_that_is_not_there():
 def test_pages_writes_one_per_tool_plus_an_index(tmp_path):
     from livery.toolroom.bench import _tasks as tools_tasks
 
-    tools_tasks.pages(tmp_path)
-    index = (tmp_path / "index.md").read_text()
+    tools_tasks.pages(tmp_path / "tools")
+    index = (tmp_path / "tools" / "index.md").read_text()
+    module = tmp_path / "stubs" / tools_tasks.STUBS_MODULE
+    assert (module / "__init__.pyi").exists()
     for driver in _drivers.DRIVERS:
-        page = tmp_path / f"{driver.key}.md"
+        page = tmp_path / "tools" / f"{driver.key}.md"
         assert page.exists(), driver.key
         body = page.read_text()
-        # mkdocstrings renders the class out of the stub, so the page is a
-        # pointer rather than a copy — nothing to drift.
-        assert f"::: livery.toolroom.tools._stubs.{driver.key}." in body
+        # mkdocstrings renders the class out of the stub rendered beside
+        # the pages, so the page is a pointer rather than a copy.
+        assert f"::: {tools_tasks.STUBS_MODULE}.{driver.key}." in body
+        assert (module / f"{driver.key}.pyi").exists(), driver.key
         assert f"({driver.key}.md)" in index
         if driver.url:
             assert driver.url in index, "the table links out to the tool itself"
@@ -1782,7 +1843,7 @@ def test_checked_in_tools_nav_lists_every_stubbed_driver():
 
     config = _toolroom_root() / "docs" / "nav.toml"
     expected = sorted(
-        d.key for d in _drivers.DRIVERS if tools_tasks._stub_path(d.key).exists()
+        d.key for d in _drivers.DRIVERS if tools_tasks._record_path(d.key).exists()
     )
     assert tools_tasks.nav_keys(config) == expected
 
@@ -1803,17 +1864,15 @@ def test_the_index_states_the_version_each_stub_was_read_from(tmp_path):
     assert "`build`" in row
 
 
-def test_a_hand_written_stub_says_so_rather_than_inventing_a_version(tmp_path):
+def test_a_stub_without_a_header_says_so_rather_than_inventing_a_version(tmp_path):
     from livery.toolroom.bench import _tasks as tools_tasks
 
     stub = tmp_path / "x.pyi"
-    stub.write_text("# Hand-written, not generated: x is not installed\n")
-    # A hand-written stub exists because there is no Python package to
-    # extract from — so in-process is a definite "no", never "unknown".
-    assert tools_tasks._header(stub) == ("hand-written", "no")
+    stub.write_text("# Not a rendered stub: x is not installed\n")
+    assert tools_tasks._header(stub) == ("unknown", "no")
 
     stub.write_text(
-        "# Generated by `fm toolroom.sync`\n"
+        "# Rendered from the tool's record\n"
         "#\n"
         "# Read from ruff 0.15.0 on Linux. In-process: no.\n"
     )
@@ -2396,10 +2455,10 @@ def test_a_tool_older_than_the_snapshot_is_left_alone(stubs, capsys, monkeypatch
     from livery.toolroom.bench import _tasks as tools_tasks
 
     tools_tasks.sync(only="ruff")
-    written = (stubs / "ruff.pyi").read_text()
+    written = _rendered(stubs, "ruff")
     capsys.readouterr()
 
-    # The same tool, one release older than the stub records.
+    # The same tool, one release older than the record holds.
     monkeypatch.setattr(_drivers, "version", lambda name: "0.0.1")
     report = tools_tasks.audit(only="ruff")
     out = capsys.readouterr().out
@@ -2408,7 +2467,7 @@ def test_a_tool_older_than_the_snapshot_is_left_alone(stubs, capsys, monkeypatch
     assert report["checked"] == 0
 
     tools_tasks.sync(only="ruff")
-    assert (stubs / "ruff.pyi").read_text() == written  # unchanged
+    assert _rendered(stubs, "ruff") == written  # unchanged
 
 
 def test_a_tool_missing_from_the_prefix_is_left_alone(stubs, tmp_path, capsys):
@@ -2500,7 +2559,7 @@ def test_subcommand_groups_are_nested_classes():
     from livery.toolroom.bench import _drivers
     from livery.toolroom.bench import _tasks as tools_tasks
 
-    source = tools_tasks._stub_path("docker").read_text(encoding="utf-8")
+    source = _rendered_checked_in("docker")
     tree = ast.parse(source)
     roots = [n for n in tree.body if isinstance(n, ast.ClassDef)]
     assert [n.name for n in roots] == ["Docker"]  # one class at module level
@@ -2514,7 +2573,7 @@ def test_subcommand_groups_are_nested_classes():
     assert "Up" in {n.name for n in compose.body if isinstance(n, ast.ClassDef)}
 
     # gh nests its eight groups (and now its leaf verbs), all inside Gh.
-    gh = ast.parse(tools_tasks._stub_path("gh").read_text(encoding="utf-8"))
+    gh = ast.parse(_rendered_checked_in("gh"))
     gh_root = next(n for n in gh.body if isinstance(n, ast.ClassDef))
     assert {
         "Auth",
@@ -2537,26 +2596,32 @@ def test_a_nested_class_flags_returns_self():
     """A nested class cannot name itself from inside its own body, and `Self`
     is what the chain means anyway: `docker.flags(host=…).compose.up()`.
     """
-    import livery.toolroom.tools as tools
+    from livery.toolroom.bench import _surfaces
+    from livery.toolroom.bench import _tasks as tools_tasks
 
-    # The stub ships in the wheel, so the installed copy is the one to read.
-    source = (
-        Path(tools.__file__).resolve().parent / "_stubs" / "docker.pyi"
-    ).read_text()
+    # Rendered from the repository's own record, as the index renders it.
+    record = _surfaces.load(tools_tasks._records_dir() / "docker")
+    driver = _drivers.find("docker")
+    assert record is not None and driver is not None
+    source = tools_tasks._stub_from(driver, record)
     assert "-> Self:" in source
     assert "-> Docker:" not in source and "-> DockerCompose:" not in source
 
 
-def test_index_verbs_are_dotted_so_they_read_as_they_are_called():
+def test_index_verbs_are_dotted_so_they_read_as_they_are_called(tmp_path):
     """Flattened to bare names, `compose.up` reads as `up` and uv's two
     `install` verbs collapse into one — the index then claims a tool has
     fewer verbs than it has.
     """
     from livery.toolroom.bench import _tasks as tools_tasks
 
-    uv = tools_tasks._verbs_of(tools_tasks._stub_path("uv"))
+    (tmp_path / "uv.pyi").write_text(_rendered_checked_in("uv"), encoding="utf-8")
+    (tmp_path / "docker.pyi").write_text(
+        _rendered_checked_in("docker"), encoding="utf-8"
+    )
+    uv = tools_tasks._verbs_of(tmp_path / "uv.pyi")
     assert "pip.install" in uv and "tool.install" in uv
-    docker = tools_tasks._verbs_of(tools_tasks._stub_path("docker"))
+    docker = tools_tasks._verbs_of(tmp_path / "docker.pyi")
     assert "compose.up" in docker and "up" not in docker
     # `flags` is footman's own typed-globals accessor, not a verb of the tool.
     assert not any(v.endswith("flags") for v in uv + docker)

@@ -21,7 +21,6 @@ nav = [
             { "prime" = "_generated/tasks/tools/prime.md" },
             { "provision" = "_generated/tasks/tools/provision.md" },
             { "refresh" = "_generated/tasks/tools/refresh.md" },
-            { "restub" = "_generated/tasks/tools/restub.md" },
             { "spec" = "_generated/tasks/tools/spec.md" },
             { "sync" = "_generated/tasks/tools/sync.md" },
         ] },

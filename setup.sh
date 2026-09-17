@@ -2,8 +2,9 @@
 # it matching. Edit the contract (or the emitters) and run
 # `fm template.apply`; an edit here is drift.
 # The entry contract: uv at the lock's pin -> the venv synced against
-# the lock -> the environment emitted. Source it to enter this shell;
-# `setup.sh github` persists the emission (GITHUB_ENV/GITHUB_PATH)
+# the lock -> the tool stubs written -> the environment emitted. Source
+# it to enter this shell; `setup.sh github` persists the emission
+# (GITHUB_ENV/GITHUB_PATH)
 # for the CI steps after it, which then call fm bare.
 _root="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 if ! command -v uv >/dev/null 2>&1; then
@@ -30,5 +31,10 @@ uv sync --project "$_root" "${_sync_args[@]}" >&2 \
 # per-command reconcile compares the two and re-syncs on drift.
 [ -f "$_root/uv.lock" ] && cp "$_root/uv.lock" "$_root/.venv/.workshop-sync-receipt"
 _run() { uv run --project "$_root" --no-sync fm "$@"; }
+# The stubs the type checkers read, rendered from the index into
+# typings/. Not fatal: without them every tool handle types as Tool,
+# and the gate says which check that cost.
+_run tools.restub >&2 \
+    || echo "setup: the tool stubs were not written; every handle types as Tool" >&2
 if [ "${1:-}" = github ]; then _run env.emit --github >/dev/null
 elif (return 0 2>/dev/null); then eval "$(_run env.emit posix)"; fi

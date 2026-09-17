@@ -1,0 +1,7 @@
+{
+  "name": "bash",
+  "description": "The GNU shell",
+  "kind": "system-check",
+  "min_version": "",
+  "hosts": []
+}

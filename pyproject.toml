@@ -116,10 +116,6 @@ convention = "google"
 "tasks.py" = ["E501"]
 "tests/test_workspace_contracts.py" = ["E501"]
 "tests/test_docs_drift.py" = ["E501"]
-# Generated tool stubs keep each Args entry on one line so hovers
-# reflow them, and the text is the tool's own; the .pyi is not where
-# prose rules apply. Toolroom's standing ruling, carried over.
-"packages/*/src/**/_stubs/*.pyi" = ["E501", "D"]
 # The CI emitters carry workflow YAML as string content; its lines
 # are the generated files' lines, not prose to wrap.
 "**/_ci_generate.py" = ["E501"]
@@ -131,6 +127,9 @@ include = ["packages", "tests", "tasks.py"]
 # there whatever interpreter the editor has selected.
 venvPath = "."
 venv = ".venv"
+# The tool stubs `fm tools.restub` writes; the default stub path,
+# named so the four checkers visibly read one directory.
+stubPath = "typings"
 pythonVersion = "3.11"
 typeCheckingMode = "standard"
 reportMissingModuleSource = false
@@ -181,6 +180,7 @@ files = [
     "tasks.py",
 ]
 mypy_path = [
+    "typings",
     "packages/forge/src",
     "packages/forge/tests",
     "packages/workshop/src",
@@ -239,6 +239,8 @@ include = ["packages/forge/src", "packages/workshop/src", "packages/toolroom/src
 # Every platform at once (ty checks the union), 3.11 floor.
 python-platform = "all"
 python-version = "3.11"
+# The tool stubs `fm tools.restub` writes.
+extra-paths = ["typings"]
 
 [tool.pyrefly]
 # Fourth gate, same scope as ty. Preset `default`, not `strict`:
@@ -253,6 +255,8 @@ project-includes = ["packages/forge/src", "packages/workshop/src", "packages/too
 # changes anything.
 use-ignore-files = false
 disable-project-excludes-heuristics = true
+# The tool stubs `fm tools.restub` writes.
+search-path = ["typings"]
 # Every platform at once, 3.11 floor.
 python-platform = "all"
 python-version = "3.11"

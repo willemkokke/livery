@@ -250,7 +250,6 @@ nav = [
                 { "prime" = "_generated/packages/toolroom-bench/_generated/tasks/tools/prime.md" },
                 { "provision" = "_generated/packages/toolroom-bench/_generated/tasks/tools/provision.md" },
                 { "refresh" = "_generated/packages/toolroom-bench/_generated/tasks/tools/refresh.md" },
-                { "restub" = "_generated/packages/toolroom-bench/_generated/tasks/tools/restub.md" },
                 { "spec" = "_generated/packages/toolroom-bench/_generated/tasks/tools/spec.md" },
                 { "sync" = "_generated/packages/toolroom-bench/_generated/tasks/tools/sync.md" },
             ] },
@@ -393,6 +392,7 @@ nav = [
                 { "Overview" = "_generated/packages/workshop/_generated/tasks/tools/index.md" },
                 { "add" = "_generated/packages/workshop/_generated/tasks/tools/add.md" },
                 { "lock" = "_generated/packages/workshop/_generated/tasks/tools/lock.md" },
+                { "restub" = "_generated/packages/workshop/_generated/tasks/tools/restub.md" },
                 { "upgrade" = "_generated/packages/workshop/_generated/tasks/tools/upgrade.md" },
             ] },
             { "workflow" = [
@@ -610,7 +610,7 @@ auto_append = [
 ]
 
 [project.plugins.mkdocstrings.handlers.python]
-paths = ["packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/workshop/src"]
+paths = ["packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom/docs/_generated/stubs", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/workshop/src"]
 inventories = ["https://docs.python.org/3/objects.inv", "https://willemkokke.github.io/footman/objects.inv", "https://willemkokke.github.io/toolroom/objects.inv"]
 
 [project.plugins.mkdocstrings.handlers.python.options]

@@ -228,15 +228,13 @@ def tools_run(line: str | list[str]) -> Any:
 
 
 def isolate(tools: Any, monkeypatch: Any, tmp_path: pathlib.Path) -> pathlib.Path:
-    """Point the bench at a scratch records directory, stubs directory and changelog.
+    """Point the bench at a scratch records directory and changelog.
 
     Returns the records directory.
     """
     monkeypatch.setattr(tools, "_RECORDS", tmp_path / "records")
-    monkeypatch.setattr(tools, "_STUBS", tmp_path / "stubs")
     monkeypatch.setattr(tools, "_CHANGELOG", tmp_path / "CHANGELOG.md")
     (tmp_path / "records").mkdir()
-    (tmp_path / "stubs").mkdir()
     (tmp_path / "CHANGELOG.md").write_text(
         "# Changelog\n\n## [Unreleased]\n", encoding="utf-8"
     )
