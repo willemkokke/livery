@@ -13,6 +13,7 @@ fm-gate.json
 .mypy_cache/
 .forge.dev.env
 .workshop/
+typings/
 .repo.env.local
 site/
 docs/_generated/

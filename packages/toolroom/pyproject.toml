@@ -54,6 +54,3 @@ extend = "../../pyproject.toml"
 # cut-time rewrite. Retired by that pass.
 "src/**" = ["D105", "D102", "D107", "D205", "D301", "D415"]
 "tests/**" = ["D1", "D205", "D301", "D415", "E501"]
-# The generated stubs' ruling rides here too when ruff resolves this
-# nested config for the package's own tree.
-"src/livery/toolroom/tools/_stubs/*.pyi" = ["E501", "D"]

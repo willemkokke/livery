@@ -11,10 +11,12 @@
 #   it and the stub merely hasn't heard of it yet;
 # - unknown verbs fall through to `Tool` via `__getattr__`, so nothing the
 #   runtime accepts is a type error.
-# Flag lists are *generated* from the installed tools — `fm tools.sync`
-# writes one file per tool under `_stubs/`, and `fm tools.audit`
-# fails when a checked-in stub and its tool disagree. Stub drift
-# therefore degrades a hint, never a run.
+# The per-tool classes are not in the wheel. They are rendered from the
+# tool records into a workspace's `typings/livery/toolroom/tools/_stubs/`
+# by `fm tools.restub`, the stub path every checker reads first, and the
+# imports below resolve there. Without them every handle is what
+# `__getattr__` answers, a `Tool[Result]`, so a stub missing degrades a
+# hint, never a run.
 
 # The private aliases (`_re`, `_run`, …) mirror tools.py: they keep those names
 # out of the public namespace so `tools.run`/`tools.sys`/… resolve to Tools via
@@ -32,14 +34,8 @@ from pathlib import Path as _Path
 from typing import Any, Generic, Literal, NamedTuple, Self, TypeAlias
 from typing import cast as _cast  # noqa: F401
 
-from typing_extensions import TypeVar
-
-from livery.toolroom.tools import _host as _host
+# One rendered file per tool record, materialised by `fm tools.restub`.
 from livery.toolroom.tools._stubs.basedpyright import Basedpyright as Basedpyright
-
-# One generated file per tool — `fm tools.sync` writes them from
-# the installed binaries, and `audit` fails when they drift. They import
-# `Tool` and the aliases from here, which a stub may do circularly.
 from livery.toolroom.tools._stubs.bash import Bash as Bash
 from livery.toolroom.tools._stubs.build import Build as Build
 from livery.toolroom.tools._stubs.bun import Bun as Bun
@@ -70,11 +66,15 @@ from livery.toolroom.tools._stubs.ruff_format import RuffFormat as RuffFormat
 from livery.toolroom.tools._stubs.ssh import Ssh as Ssh
 from livery.toolroom.tools._stubs.ssh_keygen import SshKeygen as SshKeygen
 from livery.toolroom.tools._stubs.ssh_keyscan import SshKeyscan as SshKeyscan
+from livery.toolroom.tools._stubs.tea import Tea as Tea
 from livery.toolroom.tools._stubs.twine import Twine as Twine
 from livery.toolroom.tools._stubs.ty import Ty as Ty
 from livery.toolroom.tools._stubs.uv import Uv as Uv
 from livery.toolroom.tools._stubs.zensical import Zensical as Zensical
 from livery.toolroom.tools._stubs.zsh import Zsh as Zsh
+from typing_extensions import TypeVar
+
+from livery.toolroom.tools import _host as _host
 
 # The pre_record callback parameter: hosted, it receives footman's
 # ResultView; the stub says Any so type-checking toolroom never requires
@@ -292,41 +292,42 @@ class ArgvTool(Tool[Argv]): ...
 # Parameterised by what a call returns: `Result` here, and `.argv` re-spells
 # the same class over `Argv` — one flag block serving both the run and the
 # build path.
-ruff: Ruff[Result]
-ruff_format: RuffFormat[Result]
 basedpyright: Basedpyright[Result]
-uv: Uv[Result]
-git: Git[Result]
-docker: Docker[Result]
+bash: Bash[Result]
+build: Build[Result]
 bun: Bun[Result]
-mkdocs: Mkdocs[Result]
-zensical: Zensical[Result]
+claude: Claude[Result]
+cmake: Cmake[Result]
+cmd: Cmd[Result]
 coverage: Coverage[Result]
 cspell: Cspell[Result]
-prek: Prek[Result]
-markdownlint: Markdownlint[Result]
-claude: Claude[Result]
+djlint: Djlint[Result]
+docker: Docker[Result]
+eclint: Eclint[Result]
+fish: Fish[Result]
 gh: Gh[Result]
+git: Git[Result]
+git_changelog: GitChangelog[Result]
+git_cliff: GitCliff[Result]
+markdownlint: Markdownlint[Result]
+mkdocs: Mkdocs[Result]
+mypy: Mypy[Result]
+ninja: Ninja[Result]
+nu: Nu[Result]
+prek: Prek[Result]
+pwsh: Pwsh[Result]
+pytest: Pytest[Result]
+python: Python[Result]
+ruff: Ruff[Result]
+ruff_format: RuffFormat[Result]
 ssh: Ssh[Result]
 ssh_keygen: SshKeygen[Result]
 ssh_keyscan: SshKeyscan[Result]
-eclint: Eclint[Result]
-djlint: Djlint[Result]
-mypy: Mypy[Result]
-ty: Ty[Result]
+tea: Tea[Result]
 twine: Twine[Result]
-git_changelog: GitChangelog[Result]
-git_cliff: GitCliff[Result]
-build: Build[Result]
-cmake: Cmake[Result]
-ninja: Ninja[Result]
-pytest: Pytest[Result]
-python: Python[Result]
-bash: Bash[Result]
+ty: Ty[Result]
+uv: Uv[Result]
+zensical: Zensical[Result]
 zsh: Zsh[Result]
-fish: Fish[Result]
-pwsh: Pwsh[Result]
-nu: Nu[Result]
-cmd: Cmd[Result]
 
 def __getattr__(name: str) -> Tool[Result]: ...

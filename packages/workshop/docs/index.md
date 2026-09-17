@@ -41,7 +41,9 @@ repository. The root contract's `[tools] index` names where the
 catalogue is read from, the published index's URL or a directory
 holding the index or the records that build one, and `[tools] hosts`
 the hosts the repository locks for, the gated three unless it says
-otherwise.
+otherwise. The repository that authors the records names the verb that
+builds their index in `[tools] index-build`, and every read of the
+catalogue runs it first.
 
 `fm tools.lock` resolves every site's requirements against the
 catalogue and writes `tools.lock` at the root: one version per tool for
@@ -70,6 +72,16 @@ receipts' paths and variables, and `fm env.check` names each required
 tool's receipt and the drift when the lock's deployment has moved
 under it, a tool with no receipt that still resolves from PATH being
 named and not a problem.
+
+The stubs the four type checkers read are materialised too. `fm
+tools.restub` writes them into `typings/` at the root, pyright's
+default stub path and a search path the rendered configuration hands
+mypy, ty and pyrefly: one stub per tool the catalogue lists, at the
+locked version or the newest read, as the `_stubs` modules the
+installed tools package's own index imports. `fm sync`, the lock verbs
+and the entry script write them as well, so a checkout and a CI runner
+type against the same stubs; `fm env.check` counts them and names
+their absence.
 
 ## The task surface
 

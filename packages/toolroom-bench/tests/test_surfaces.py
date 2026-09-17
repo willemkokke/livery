@@ -233,66 +233,6 @@ def _curated_keys() -> list[str]:
     return [d.key for d in _drivers.DRIVERS if d.source != "manual"]
 
 
-@pytest.mark.parametrize("key", _curated_keys())
-def test_the_checked_in_record_regenerates_its_stub(key):
-    """The seeding claim, checked against what ships: rendering from the
-    record reproduces the checked-in stub.
-
-    Compared as parsed source, not as bytes, and formatted first the way
-    the writer formats it, since the formatter reflows a docstring. Two
-    things in a stub file are nobody's business but the machine that wrote
-    it: the header stamps which platform looked and whether it could import
-    the tool, and the import layout is the formatter's, whose isort splits
-    an aliased import on some platforms and joins it on others. Neither is
-    information the record holds. What the record owes is every verb,
-    option, flag, negation, default and choice set, and an AST comparison
-    is exactly that claim.
-
-    (Byte identity is checked where it means something: `fm tools.restub`
-    rewrites a stub only when the text differs.)
-    """
-    import ast
-
-    from livery.toolroom.bench import _stubgen
-    from livery.toolroom.bench import _tasks as tools_tasks
-
-    record = _surfaces.load(_records_dir() / key)
-    assert record is not None, f"{key} has no record"
-    stub = tools_tasks._stub_path(key)
-
-    recorded, mode = tools_tasks._header(stub)
-    version, _, platform_ = recorded.partition(" ")
-    assert _surfaces.versions(record)[0] == version, (
-        "the record and the stub disagree about which release was read"
-    )
-
-    rendered = tools_tasks._formatted(
-        _stubgen.render(
-            # The union, as generation renders it: every option the tool has
-            # ever had, so a flag it later dropped stays completable.
-            _surfaces.union(record, name=key.replace("_", "-")),
-            platform=platform_.strip("()"),
-            class_name=_stubgen._class_name(key),
-            in_process=mode,
-        )
-    )
-
-    def classes(source: str) -> str:
-        """The class tree alone: every verb, option, flag, negation, default
-        and choice set. The import block is derived from the body and laid
-        out by the formatter, which is layout, not content.
-        """
-        parsed = ast.parse(source)
-        return ast.dump(
-            ast.Module(
-                body=[n for n in parsed.body if isinstance(n, ast.ClassDef)],
-                type_ignores=[],
-            )
-        )
-
-    assert classes(rendered) == classes(stub.read_text(encoding="utf-8"))
-
-
 def test_every_checked_in_record_reads_whole_and_names_who_looked():
     """What is checked in must resolve end to end, and every version read
     must say where the reading came from: a later multi-platform refresh
@@ -312,14 +252,15 @@ def test_every_checked_in_record_reads_whole_and_names_who_looked():
     assert len(_surfaces.versions(prek)) > 1, "prek was primed; it carries deltas"
 
 
-def test_priming_rewrites_the_stub_it_invalidates():
+def test_priming_changes_the_stub_the_record_renders_to():
     """A deeper record changes what a stub may say: an option that looked
     original at the old floor may turn out to have arrived. The stub is a
-    rendering of the record, so extending the record rewrites it rather than
-    waiting for someone to remember a `sync`.
+    rendering of the record, so extending the record changes the rendering
+    with no further step.
     """
     import re
 
+    from livery.toolroom.bench import _drivers
     from livery.toolroom.bench import _tasks as tools_tasks
 
     record = _surfaces.load(_records_dir() / "prek")
@@ -327,7 +268,9 @@ def test_priming_rewrites_the_stub_it_invalidates():
     chain = _surfaces.versions(record)
     assert len(chain) > 5, "prek is the primed tool; this test needs its chain"
 
-    stub = tools_tasks._stub_path("prek").read_text(encoding="utf-8")
+    driver = _drivers.find("prek")
+    assert driver is not None
+    stub = tools_tasks._stub_from(driver, record)
     assert "Added in" in stub, "a primed tool's stub carries what the record proved"
     # ...and only versions the record actually holds.
     for claimed in set(re.findall(r"Added in ([0-9][^.\s]*(?:\.[^.\s]+)*)\.", stub)):

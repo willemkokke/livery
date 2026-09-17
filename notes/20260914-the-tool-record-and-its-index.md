@@ -5,8 +5,8 @@ Status: ruled 2026-09-16 as drafted. Phases 1 to 4 landed 2026-09-16
 landed 2026-09-17 (livery#629), its wheel half deferred to phase 6 by
 the ruling of 2026-09-17. Phase 6 lands in parts: the three sites,
 resolution and the lock landed 2026-09-17 (livery#631); receipts,
-materialisation and the modes in progress (livery#634); the stubs'
-home follows.
+materialisation and the modes landed 2026-09-17 (livery#634); the
+stubs' home, `typings/`, in progress (livery#638).
 Runs after [CI declared, contributed, and dispatched on command][ci-plan],
 which delivers the mechanism this plan's last phase uses.
 Subsumes phase 2 onward of [the tool store over strongroom][store-plan],
@@ -447,9 +447,9 @@ Acceptance:
 - `uv run fm tools.restub` against a folder source, with the network
   unreachable, writes every stub a workspace uses.
 
-Open, by the ruling of 2026-09-17: the first and third items are phase
-6's, with the lock that names the tools a workspace uses; they stay open
-here until that evidence lands. The second item is met.
+Met, by the ruling of 2026-09-17, in phase 6's third part: the wheel
+ships `tools/__init__.pyi` alone and the stubs are written into a
+workspace's `typings/` by `fm tools.restub` (livery#638).
 
 Open, from phase 6's second part: `bun-install` and `uv-python` are not
 supplied through the store yet and refuse naming the kind; they follow
@@ -536,7 +536,7 @@ Acceptance:
 | Temporary | Replaced by |
 | --- | --- |
 | `_history/<tool>.json` in the bench's wheel, 1.3 MB, 31 files | phase 3 |
-| `_stubs/` shipped in the toolroom wheel, 732 KB, 38 files | phase 6, by the ruling of 2026-09-17 |
+| `_stubs/` shipped in the toolroom wheel, 732 KB, 38 files | phase 6, deleted |
 | `executable=(definition.exe,)` in `_engine.py` | phase 2 |
 | `Spec.pinned` as the per-project version | phase 6 |
 | `specs/<name>.json` and `_spec.py` | phase 1, deleted |
@@ -786,6 +786,52 @@ Acceptance:
   provision prefix was the store's home, `data_dir()/toolroom`, so a
   materialised store read as a provisioned prefix; the bench's prefix
   is `data_dir()/toolroom-bench` now.
+- 2026-09-17, the agent, at phase 6's third part, the stubs' home: the
+  toolroom wheel ships `tools/__init__.pyi` alone, its vocabulary and
+  the `__getattr__` that answers every name with `Tool[Result]`; the
+  per-tool classes are rendered into a workspace's `typings/`, pyright's
+  default stub path, which the rendered configuration also hands mypy
+  (`mypy_path`), ty (`extra-paths`) and pyrefly (`search-path`). The
+  workshop's `fm tools.restub` writes one stub per tool the catalogue
+  lists, at the locked version or the newest read, so a handle a
+  workspace types against without requiring it still completes; `fm
+  sync`, the lock verbs and the entry script write them too, and `fm
+  env.check` counts them. Only the `_stubs` modules live there: the
+  wheel's `tools/__init__.pyi` keeps one import and one handle per
+  curated tool, resolved from `typings/`, because a `typings/` copy of
+  the package index shadows the package for every checker and loses
+  its submodules (`_host`, `_colordata`), which the first cut proved.
+  The stubs come from the index alone: a source that is a directory of
+  records refuses, and this repository, the authoring site, names the
+  index the bench builds from its records in `[tools] index` with
+  `[tools] index-build = "tools.index.build"`, a verb the workshop runs
+  before every catalogue read the way it runs a docs generator. The
+  bench no longer writes a stub anywhere: `sync` records readings,
+  `audit` compares a fresh reading's rendering with the record's, its
+  `restub` verb is gone, and the tool pages render their stubs beside
+  themselves as the module `toolroom_stubs` under toolroom's
+  `docs/_generated/stubs`, a path toolroom's `[docs] python-paths`
+  hands the API renderer, since griffe reads a regular package from one
+  search path only. The six shells, hand-written stubs until now, are
+  records of kind `system-check` with one authored surface each, so
+  they render like every other tool; their `manual` drivers still keep
+  `sync` and `audit` from reading them. One consumer needs the stubs
+  inside the installed package: footman's docs playground asks jedi in
+  Pyodide over the wheel installed from PyPI, and jedi resolves a stub
+  from nowhere else, proven against `typings/`, a `livery-stubs` package
+  on the path, and a link into the package. So the playground's
+  bootstrap fetches the newest stub of every tool from the index the
+  site serves beside it and writes them into the installed package,
+  each object verified against its digest; a site without the index
+  costs the typed completions and nothing else, and the rehearsal in
+  CPython builds an index by hand. Found live and filed the same day:
+  the global `fm` fails to mount the workshop inside this repository
+  (livery#639).
+- 2026-09-17, the agent, at phase 6's second part, the acceptance as
+  met since: a real `fm sync` on this repository, after livery#623
+  landed (livery#636), materialised all six tools, six receipts with uv
+  and ty installed through the redirect, and `fm env.check` names every
+  receipt ok.
 - 2026-09-17, the agent, at phase 6's second part, the acceptance as
   met so far: `fm tools.add` writes a receipt and a lock entry with no
   network, proven with the sources set to a folder and the download

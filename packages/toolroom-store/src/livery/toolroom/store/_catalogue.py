@@ -132,6 +132,31 @@ class Catalogue:
         self._deployments[(name, version, host)] = found
         return found
 
+    def stub(self, name: str, version: str) -> str:
+        """The stub of *name* at *version*: the index's rendering, as text.
+
+        Raises:
+            CatalogueError: when the catalogue was read from records,
+                which hold no rendering, when the version has no stub,
+                or when the blob cannot be read.
+        """
+        listed = self.listed(name)
+        if self._store is None:
+            raise CatalogueError(
+                f"{name}: a directory of records holds no stubs; read the index"
+                " built from them"
+            )
+        digest = listed.stubs.get(version)
+        if digest is None:
+            has = ", ".join(listed.stubs) or "none"
+            raise CatalogueError(f"{name} {version}: no stub; the index has {has}")
+        try:
+            return self._store.fetch(digest).read_bytes().decode("utf-8")
+        except Exception as error:
+            raise CatalogueError(
+                f"{name} {version}: the stub {digest} cannot be read: {error}"
+            ) from error
+
     @classmethod
     def of_records(cls, directory: Path) -> Catalogue:
         """The catalogue of the records under *directory*, the authoring site's.

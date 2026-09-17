@@ -582,3 +582,43 @@ def test_a_published_index_is_read_by_url_through_an_http_source(tmp_path, monke
     )
     assert catalogue.tools == {} and asked == ["https://x.test/index/pointer.json"]
     assert isinstance(_catalogue._source_of("https://x.test/index"), HttpSource)
+
+
+def test_a_stub_is_read_from_the_index_and_refused_where_there_is_none(tmp_path):
+    from livery.toolroom.store import Home, class_name
+
+    store = _index_store(tmp_path)
+    index = tmp_path / "index"
+    axis = _delegated("ruff", "1.0.0").to_json()
+    top = _tree_entry(
+        store,
+        "ruff",
+        [
+            _blob(store, "tool", axis),
+            _blob(store, "versions", ["1.0.0", "1.1.0"]),
+            _tree_entry(store, "1.0.0", []),
+            _tree_entry(store, "1.1.0", []),
+        ],
+    )
+    stubs = _tree_entry(store, "ruff", [_blob(store, "1.0.0", "class Ruff: ...")])
+    _pointer(
+        index,
+        {"ruff": {"tree": str(top.digest), "record": "x", "stubs": str(stubs.digest)}},
+    )
+    catalogue = Catalogue.of_index(str(index), home=Home(tmp_path / "home"))
+    # canonical() serialised the text as a JSON string; the index writes bytes.
+    assert catalogue.stub("ruff", "1.0.0") == '"class Ruff: ..."'
+    with pytest.raises(
+        CatalogueError, match=r"ruff 1.1.0: no stub; the index has 1.0.0"
+    ):
+        catalogue.stub("ruff", "1.1.0")
+    with pytest.raises(CatalogueError, match=r"no record of black"):
+        catalogue.stub("black", "1.0.0")
+
+    records = tmp_path / "records"
+    _delegated("ruff", "1.0.0").save(records / "ruff")
+    with pytest.raises(CatalogueError, match=r"a directory of records holds no stubs"):
+        Catalogue.of_records(records).stub("ruff", "1.0.0")
+
+    assert class_name("ruff_format") == "RuffFormat"
+    assert class_name("markdownlint-cli2") == "MarkdownlintCli2"

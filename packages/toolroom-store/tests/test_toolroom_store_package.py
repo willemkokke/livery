@@ -57,6 +57,7 @@ def test_the_public_surface_is_pinned() -> None:
         "__version__",
         "default_mode",
         "export_schema",
+        "class_name",
         "host_key",
         "observations",
         "resolve",

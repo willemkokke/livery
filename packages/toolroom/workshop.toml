@@ -9,6 +9,8 @@ name = "livery-toolroom"
 
 [docs]
 generators = ["tools.docs"]
+# The stubs the tool pages point at, rendered by the generator.
+python-paths = ["docs/_generated/stubs"]
 
 [release]
 # The line continues past the origin's last index release (0.6.1);

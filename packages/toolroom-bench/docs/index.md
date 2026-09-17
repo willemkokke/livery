@@ -23,24 +23,28 @@ workspace that keeps the handles current names the bench as a layer,
 and its verbs mount under `fm tools.*`:
 
 - `fm tools.refresh` observes what is new on this platform and folds
-  it into the records and the stubs; with `--submit` it commits what
-  moved on a branch and opens the pull request, armed when every
-  change only added to a surface.
+  it into the records; with `--submit` it commits what moved on a
+  branch and opens the pull request, armed when every change only
+  added to a surface.
 - `fm tools.gather`, `fm tools.assemble` and `fm tools.observe` are
   the refresh's halves, for a matrix that observes on several
   machines and assembles once.
-- `fm tools.prime` reads older releases below a record's floor, and
-  `fm tools.restub` re-renders every stub from the records with no
-  tool and no network.
+- `fm tools.prime` reads older releases below a record's floor.
 - `fm tools.audit`, `fm tools.list` and `fm tools.spec` read the
-  tools and the stubs back.
+  tools and the records back.
 - `fm tools.index.build` materialises every record into the index, a
   strongroom store served as static files with a pointer document
   naming each tool's current tree; the bench declares it as a docs
   generator, so the site's build writes it under
   `docs/_generated/index` and the site's deploy serves it.
 - `fm tools.docs` writes the per-tool pages into toolroom's docs
-  tree; toolroom declares it as its docs generator.
+  tree, with the stubs they point at rendered beside them; toolroom
+  declares it as its docs generator.
+
+A stub is a rendering of a record. The index build renders one per
+version read, and a workspace materialises the ones it uses with the
+workshop's `fm tools.restub`; nothing in the bench writes a stub into
+a package.
 
 The bench depends on `livery-toolroom`, `livery-toolroom-store` and
 `livery-footman` and loads only through footman's plugin entry.

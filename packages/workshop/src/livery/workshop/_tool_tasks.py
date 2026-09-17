@@ -1,9 +1,10 @@
-"""The ``tools`` group: declare a tool, lock the repository's versions, upgrade one.
+"""The ``tools`` group: declare a tool, lock the versions, upgrade one, write the stubs.
 
 Every verb resolves against the catalogue `[tools] index` names and
 writes `tools.lock` at the root; a lock that cannot be met refuses
 naming the tool, each floor with the site that declared it, and the
-host no eligible version has.
+host no eligible version has. Each lock verb then writes the stubs
+under `typings/`, and `restub` writes them alone.
 """
 
 from __future__ import annotations
@@ -17,7 +18,9 @@ if TYPE_CHECKING:
 
     from livery.toolroom.store import Lock
 
-tools = group("tools", help="The tools the workspace requires: declare, lock, upgrade")
+tools = group(
+    "tools", help="The tools the workspace requires: declare, lock, upgrade, restub"
+)
 
 
 def _root() -> Path:
@@ -47,9 +50,12 @@ def tools_lock() -> None:
     requires any more leaves the lock. Nothing on a machine changes:
     the lock says what a checkout installs, and `sync` installs it.
     """
-    from livery.workshop._tools import write_lock
+    from livery.workshop._tools import stub_lines, write_lock
 
-    _report(write_lock(_root()))
+    root = _root()
+    _report(write_lock(root))
+    for line in stub_lines(root, strict=False):
+        print(line)
 
 
 @tools.task(name="add")
@@ -65,7 +71,7 @@ def tools_add(
     anything is written.
     """
     from livery.toolroom.store import Requirement
-    from livery.workshop._tools import declare, materialise, write_lock
+    from livery.workshop._tools import declare, materialise, stub_lines, write_lock
 
     root = _root()
     if declare(root, requirement):
@@ -80,6 +86,8 @@ def tools_add(
     where = made.receipt.tool_dir
     state = "installed" if made.installed else "present"
     print(f"  {name} {made.receipt.version}: {state} at {where}, receipt written")
+    for line in stub_lines(root, strict=False):
+        print(line)
 
 
 @tools.task(name="upgrade")
@@ -94,7 +102,7 @@ def tools_upgrade(
     version the lock names, so one entry moves and every package with
     it. The other entries stand.
     """
-    from livery.workshop._tools import current_lock, write_lock
+    from livery.workshop._tools import current_lock, stub_lines, write_lock
 
     root = _root()
     before = current_lock(root)
@@ -114,3 +122,27 @@ def tools_upgrade(
     if not moved:
         listed = ", ".join(names)
         print(f"  nothing moved: {listed} already at the newest eligible version")
+    for line in stub_lines(root, strict=False):
+        print(line)
+
+
+@tools.task(name="restub")
+def tools_restub(
+    offline: Annotated[
+        bool, doc("read the index from the machine's store only")
+    ] = False,
+) -> None:
+    """Write the stubs the catalogue offers into `typings/`.
+
+    One stub per tool the catalogue lists, at the version the lock holds
+    for it or the newest read otherwise, as the `_stubs` modules the
+    tools package's own index imports. The four checkers read `typings/`
+    first, so a handle completes with the tool's own verbs and flags;
+    without the stubs every handle is a bare `Tool`. `sync` and the lock
+    verbs write them too; this writes them alone, offline from the
+    machine's store with `--offline`.
+    """
+    from livery.workshop._tools import stub_lines
+
+    for line in stub_lines(_root(), offline=offline):
+        print(line)

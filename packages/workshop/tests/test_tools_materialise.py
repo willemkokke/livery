@@ -207,7 +207,9 @@ def test_sync_materialises_the_bundle_from_the_folder_source_with_no_network(
     root = _workspace(tmp_path, monkeypatch)
     _tools.write_lock(root)
     lines = _sync.materialise_tools(root)
-    assert lines == ["  tools: 2 receipt(s), installed ruff, tea"]
+    assert lines[0] == "  tools: 2 receipt(s), installed ruff, tea"
+    # The stubs follow the bundle and never stop it: this source is records.
+    assert lines[1].startswith("  stubs: not written: [tools] index names records")
     held = _tools.receipts(root)
     assert set(held) == {"ruff", "tea"}
     tea = held["tea"]
@@ -220,7 +222,7 @@ def test_sync_materialises_the_bundle_from_the_folder_source_with_no_network(
     assert (ruff.kind, ruff.mode, ruff.deployment) == ("uv-tool", "path", "")
     assert ruff.paths == (str(Path(ruff.tool_dir) / "bin"),)
     # A second sync finds everything present.
-    assert _sync.materialise_tools(root) == ["  tools: 2 receipt(s), all present"]
+    assert _sync.materialise_tools(root)[0] == "  tools: 2 receipt(s), all present"
     written = json.loads((_tools.receipts_dir(root) / "tea.json").read_text())
     assert written["schema"] == 1 and written["entry_points"] == []
 

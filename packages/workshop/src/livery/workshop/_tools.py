@@ -23,6 +23,16 @@ PATH. A receipt is a checkout's statement of what it installed, as the
 release train's receipt is a release's; `fm env.check` reads them
 back and names the drift when the lock's deployment has moved under
 one.
+
+The stubs the type checkers read are materialised too, into `typings/`
+at the root, pyright's default stub path and a search path the rendered
+configuration hands the other three checkers: one rendering per tool
+the catalogue lists, at the locked version or the newest listed, as the
+`_stubs` modules the installed tools package's own index imports, so
+the typings directory never shadows the package. `fm tools.restub`
+writes them, and so do `fm sync` and every lock verb. A source that is a
+directory of records holds no rendering; `[tools] index-build` names the
+verb that builds the index there before the catalogue is read.
 """
 
 from __future__ import annotations
@@ -33,6 +43,7 @@ from pathlib import Path
 from typing import Any
 
 from livery.footman import fail, prog
+from livery.footman.context import Failed
 from livery.strongroom import FolderSource, HttpSource, Source
 from livery.toolroom.store import (
     LOCK_FILE,
@@ -61,6 +72,12 @@ TOOLS = "tools"
 
 DEFAULT_HOSTS = ("linux-x64", "macos-arm", "windows-x64")
 """The hosts locked for unless the contract names others: the gated three."""
+
+TYPINGS = "typings"
+"""The directory under the root the stubs are written into, pyright's default."""
+
+STUBS_PACKAGE = ("livery", "toolroom", "tools")
+"""The package the stubs belong to, as directories under the typings directory."""
 
 
 def tools_table(path: Path) -> dict[str, object]:
@@ -135,21 +152,84 @@ def index_source(root: Path) -> str:
     return str(root / declared)
 
 
+def has_index(root: Path) -> bool:
+    """Whether the root contract names a catalogue source at all."""
+    declared = tools_table(root / "workshop.toml").get("index")
+    return isinstance(declared, str) and bool(declared)
+
+
+def stubs_expected(root: Path) -> bool:
+    """Whether the source can render stubs: an index, or records with a build verb."""
+    if not has_index(root):
+        return False
+    return not _is_records(index_source(root)) or bool(index_build(root))
+
+
+def index_build(root: Path) -> str:
+    """The verb that builds the index at `[tools] index`, or empty when none is named.
+
+    The bench's `tools.index.build` in the repository that authors the
+    records: run before the catalogue is read, so the index the lock and
+    the stubs come from is the records as they are.
+    """
+    declared = tools_table(root / "workshop.toml").get("index-build")
+    if declared is None:
+        return ""
+    if not isinstance(declared, str) or not declared:
+        fail("workshop.toml: [tools] index-build is not a verb name")
+    return declared
+
+
+def _is_records(source: str) -> bool:
+    """Whether *source* is a directory of records rather than an index."""
+    if "://" in source:
+        return False
+    directory = Path(source)
+    return not (directory / POINTER).is_file() and any(
+        (child / TOOL_FILE).is_file()
+        for child in (directory.iterdir() if directory.is_dir() else ())
+    )
+
+
+def build_index(root: Path) -> str:
+    """Run the `[tools] index-build` verb when one is named; the verb run, or empty.
+
+    The verb runs as its own runner invocation at the root, the way a
+    docs generator does, so it is exactly what a person would type. A
+    verb that exits non-zero refuses, naming it.
+    """
+    import shutil
+
+    import livery.footman as footman
+
+    verb = index_build(root)
+    if not verb:
+        return ""
+    runner = shutil.which(footman.prog())
+    if not runner:
+        fail(
+            f"{footman.prog()} is not on PATH, so `[tools] index-build`"
+            f" ({verb}) cannot run; enter the environment first"
+        )
+    code = footman.run([runner, verb], cwd=root, nofail=True)
+    if int(code) != 0:
+        fail(f"`{footman.prog()} {verb}` ([tools] index-build) exited {int(code)}")
+    return verb
+
+
 def catalogue(root: Path, *, offline: bool = False) -> Catalogue:
     """The catalogue the repository resolves against, from `[tools] index`.
 
     A directory of records is read as the authoring site reads it; an
     index, by URL or directory, through the machine's store, which
-    keeps what it fetched so a second read is offline.
+    keeps what it fetched so a second read is offline. An index a
+    `[tools] index-build` verb builds is built first.
     """
     source = index_source(root)
     if "://" not in source:
-        directory = Path(source)
-        if not (directory / POINTER).is_file() and any(
-            (child / TOOL_FILE).is_file()
-            for child in (directory.iterdir() if directory.is_dir() else ())
-        ):
-            return Catalogue.of_records(directory)
+        build_index(root)
+    if _is_records(source):
+        return Catalogue.of_records(Path(source))
     try:
         return Catalogue.of_index(source, home=_home(), offline=offline)
     except CatalogueError as error:
@@ -500,6 +580,127 @@ def materialise(
             json.dumps(made.receipt.to_json(), indent=2) + "\n", encoding="utf-8"
         )
     return tuple(done)
+
+
+def typings_dir(root: Path) -> Path:
+    """The typings directory the stubs are written under."""
+    return root / TYPINGS
+
+
+def stubs_dir(root: Path) -> Path:
+    """The `_stubs` directory under the typings directory's tools package."""
+    return typings_dir(root).joinpath(*STUBS_PACKAGE) / "_stubs"
+
+
+def stubs_present(root: Path) -> int:
+    """How many tool stubs the typings directory holds."""
+    return sum(1 for p in stubs_dir(root).glob("*.pyi") if p.stem != "__init__")
+
+
+@dataclass(frozen=True)
+class Stubbed:
+    """What `write_stubs` did.
+
+    Attributes:
+        written: The tools whose stub changed on disk, or was new.
+        kept: The tools whose stub was already what the catalogue holds.
+        skipped: Per tool the catalogue lists and no stub was written
+            for, why.
+        removed: Stubs of tools the catalogue no longer lists.
+    """
+
+    written: tuple[str, ...]
+    kept: tuple[str, ...]
+    skipped: dict[str, str]
+    removed: tuple[str, ...]
+
+
+def write_stubs(root: Path, *, offline: bool = False) -> Stubbed:
+    """Write every stub the catalogue offers into the typings directory.
+
+    One stub per tool the catalogue lists, at the version the lock holds
+    for it or the newest listed otherwise, so a handle the workspace
+    types against but does not require still completes. The installed
+    tools package's own index imports each by name and declares the
+    handles, so the typings directory holds the `_stubs` modules alone
+    and never shadows the package. A stub already on disk as the
+    catalogue holds it is kept, so a checker's cache stands.
+
+    Refuses when `[tools] index` names a directory of records and no
+    `[tools] index-build` verb: records hold no rendering.
+    """
+    source = index_source(root)
+    if _is_records(source) and not index_build(root):
+        fail(
+            f"[tools] index names records ({source}), which hold no stubs; name"
+            " the index built from them, or `[tools] index-build`, the verb"
+            " that builds it"
+        )
+    listing = catalogue(root, offline=offline)
+    lock = current_lock(root)
+    directory = stubs_dir(root)
+    directory.mkdir(parents=True, exist_ok=True)
+    written: list[str] = []
+    kept: list[str] = []
+    skipped: dict[str, str] = {}
+    for name in sorted(listing.tools):
+        listed = listing.tools[name]
+        if lock is not None and name in lock.tools:
+            version = lock.tools[name].version
+        elif listed.versions:
+            version = listed.versions[-1]
+        else:
+            skipped[name] = "no version read"
+            continue
+        try:
+            text = listing.stub(name, version)
+        except CatalogueError as error:
+            skipped[name] = str(error)
+            continue
+        path = directory / f"{name}.pyi"
+        if path.is_file() and path.read_text(encoding="utf-8") == text:
+            kept.append(name)
+        else:
+            path.write_text(text, encoding="utf-8")
+            written.append(name)
+    removed: list[str] = []
+    for stale in sorted(directory.glob("*.pyi")):
+        if stale.stem != "__init__" and stale.stem not in listing.tools:
+            stale.unlink()
+            removed.append(stale.stem)
+    _write_if_changed(directory / "__init__.pyi", "")
+    return Stubbed(tuple(written), tuple(kept), skipped, tuple(removed))
+
+
+def _write_if_changed(path: Path, text: str) -> None:
+    if path.is_file() and path.read_text(encoding="utf-8") == text:
+        return
+    path.write_text(text, encoding="utf-8")
+
+
+def stub_lines(root: Path, *, offline: bool = False, strict: bool = True) -> list[str]:
+    """Write the stubs and say what happened, as `sync` and the lock verbs print it.
+
+    A refusal is raised when *strict*; otherwise it is the one line
+    returned, naming the reason, since a lock written or a bundle
+    materialised stands whether or not the stubs could follow.
+    """
+    if strict:
+        made = write_stubs(root, offline=offline)
+    else:
+        try:
+            made = write_stubs(root, offline=offline)
+        except Failed as refusal:
+            return [f"  stubs: not written: {refusal}"]
+    held = len(made.written) + len(made.kept)
+    line = f"  stubs: {held} in {TYPINGS}/"
+    if made.written:
+        line += f", wrote {len(made.written)}"
+    if made.removed:
+        line += f", removed {', '.join(made.removed)}"
+    lines = [line]
+    lines += [f"  stubs: {name}: {why}" for name, why in made.skipped.items()]
+    return lines
 
 
 def emission(root: Path) -> tuple[tuple[str, ...], dict[str, str]]:

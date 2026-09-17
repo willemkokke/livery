@@ -1,24 +1,27 @@
-"""Keep the `tools.*` stubs honest — `fm tools …`.
+"""Keep the tool records honest — `fm tools …`.
 
-The bridge never goes stale, because it transcribes nothing. Its *stub*
-can: a stub is a description of a tool at a version, and tools move. These
-tasks close that gap by regenerating the description from the installed
-tools and by failing a check when the two disagree.
+The bridge never goes stale, because it transcribes nothing. A tool's
+*record* can: it describes the tool at the versions read, and tools
+move. These tasks close that gap by reading the installed tools into
+the records and by failing a check when a tool and its record disagree.
+A stub is a rendering of a record, written by the index build and
+materialised into a workspace by `fm tools.restub`; nothing here writes
+one into a package.
 
     fm tools.list                  what footman curates, and what's installed
     fm tools.spec ruff             what one tool says about itself, right now
-    fm tools.sync                  rewrite the stubs from the installed tools
-    fm tools.audit                 which tools have moved past their snapshot
+    fm tools.sync                  read the installed tools into their records
+    fm tools.audit                 which tools have moved past their record
     fm tools.color                 how footman forces colour, per tool
 
-A stub is a snapshot, not a contract: `sync` takes one, `audit` says which
-tools have released a newer version since. Being behind is news rather than
-a fault, so `audit` reports and exits zero unless you ask for `--strict`,
-and the snapshots are retaken at release time rather than the moment a tool
-ships. A snapshot only ever moves forward: a tool that isn't installed, is
-missing from a `--prefix`, or reads older than the stub already records is
-named and left alone — a check that quietly covered three of thirteen would
-be worse than no check.
+A reading is a snapshot, not a contract: `sync` takes one, `audit` says
+which tools have released a newer version since. Being behind is news
+rather than a fault, so `audit` reports and exits zero unless you ask for
+`--strict`, and the readings are retaken by the refresh rather than the
+moment a tool ships. A snapshot only ever moves forward: a tool that isn't
+installed, is missing from a `--prefix`, or reads older than the record
+already holds is named and left alone — a check that quietly covered three
+of thirteen would be worse than no check.
 """
 
 from __future__ import annotations
@@ -37,6 +40,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 
 from livery.toolroom.bench import _drivers, _index, _stubgen, _surfaces, _toolspec
+from livery.toolroom.store import class_name
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -51,9 +55,7 @@ from livery.footman.params import doc
 from livery.footman.registry import Group
 from livery.toolroom.tools import version_tuple as _version_tuple
 
-tasks: Group = Group("tools", help="Keep the tools.* stubs honest")
-
-_STUBS = Path(_tools.__file__).resolve().parent / "_stubs"
+tasks: Group = Group("tools", help="Keep the tool records honest")
 
 # The records live at the repository root, `records/<tool>/`, the
 # authoring site the store reads. The bench writes them from a checkout
@@ -82,10 +84,6 @@ class _Ambiguous(Exception):
     def __init__(self, key: str, reading: str, base: str) -> None:
         super().__init__(f"{key}: cannot tell {reading} from the recorded {base}")
         self.key, self.reading, self.base = key, reading, base
-
-
-def _stub_path(key: str) -> Path:
-    return _STUBS / f"{key}.pyi"
 
 
 def _record_path(key: str) -> Path:
@@ -368,16 +366,15 @@ def _platform() -> str:
     return {"darwin": "macOS", "win32": "Windows"}.get(sys.platform, "Linux")
 
 
-def _generate(driver: _drivers.Driver) -> str:
-    """The stub text for one installed tool, formatted the way ruff would.
+def _generate(driver: _drivers.Driver) -> tuple[Record | None, Record]:
+    """Read one installed tool into its record: the record before and after.
 
-    The reading goes into the history first, and the stub is rendered from
-    *that* — so what ships is a view of the record rather than a second
-    record that can disagree with it.
+    The reading goes into the record, and a stub is rendered from *that*
+    by the index build, so what a workspace materialises is a view of the
+    record rather than a second record that can disagree with it.
     """
-    spec = _extract(driver)
-    record = _observe(driver, spec)
-    return _stub_from(driver, record, in_process=spec.in_process)
+    before = _surfaces.load(_record_path(driver.key))
+    return before, _observe(driver, _extract(driver))
 
 
 def _stub_from(
@@ -490,7 +487,7 @@ def _mode(driver: _drivers.Driver, spec: _toolspec.ToolSpec) -> str:
 
 
 def _class_name(key: str) -> str:
-    return "".join(part.title() for part in key.split("_"))
+    return class_name(key)
 
 
 def _formatted(text: str) -> str:
@@ -580,13 +577,13 @@ def list_(
             version, why = versions[driver.name]
         capable = _drivers.in_process_capable(driver.name) if here else False
         mode = "in-process" if driver.in_process else ("capable" if capable else "—")
-        stub = "yes" if _stub_path(driver.key).exists() else "no"
+        record = "yes" if _record_path(driver.key).exists() else "no"
         blank = f"unreadable ({why})" if here else "not installed"
-        rows.append((driver.key, version or blank, mode, stub))
+        rows.append((driver.key, version or blank, mode, record))
     width = max((len(r[0]) for r in rows), default=4)
-    print(bold(f"{'tool'.ljust(width)}  version      in-process  stub", on))
-    for key, version, mode, stub in rows:
-        print(f"{key.ljust(width)}  {version:<12} {mode:<11} {stub}")
+    print(bold(f"{'tool'.ljust(width)}  version      in-process  record", on))
+    for key, version, mode, record in rows:
+        print(f"{key.ljust(width)}  {version:<12} {mode:<11} {record}")
 
 
 @tasks.task
@@ -652,10 +649,10 @@ def _ignore(driver: _drivers.Driver, root: Path | None) -> str:
             return "not installed"
         if root is not None and not _from_prefix(binary, root):
             return "not in the prefix"
-    stub = _stub_path(driver.key)
-    if not stub.exists():
+    record = _surfaces.load(_record_path(driver.key))
+    if record is None:
         return ""
-    recorded = _header(stub)[0].partition(" ")[0]
+    recorded = _surfaces.versions(record)[0]
     found = (
         _toolhelp.man_version(Path(manual), driver.name)
         if manual
@@ -684,109 +681,45 @@ def sync(
     only: Annotated[str, doc("regenerate just this tool")] = "",
     prefix: Annotated[str, doc("read binaries from this prefix's bin/")] = "",
 ) -> None:
-    """Rewrite the stubs from the tools installed on this machine.
+    """Read the tools installed on this machine into their records.
 
-    A stub is a *snapshot*: what one tool accepted at one version, on one
-    machine. Point `--prefix` at a `fm tools.provision` directory to take
-    that snapshot from the isolated latest set instead of whatever this
-    machine has — a dev environment's pytest carries its plugins' flags
-    too, and those do not belong in a stub whose driver never asked for
-    them.
+    A reading is a *snapshot*: what one tool accepted at one version, on
+    one machine. Point `--prefix` at a `fm tools.provision` directory to
+    take that snapshot from the isolated latest set instead of whatever
+    this machine has — a dev environment's pytest carries its plugins'
+    flags too, and those do not belong in a record whose driver never
+    asked for them.
 
-    A tool that isn't installed keeps the stub that is checked in — there
-    is nothing to read it from, and a stub that exists beats one that was
-    deleted because a laptop happened to be missing a binary.
+    A tool that isn't installed keeps the record that is checked in —
+    there is nothing to read it from, and a record that exists beats one
+    that was emptied because a laptop happened to be missing a binary.
     """
     with _on_path(prefix):
         _sync(only, _prefix_root(prefix))
 
 
 def _sync(only: str, root: Path | None = None) -> None:
-    _STUBS.mkdir(exist_ok=True)
     wrote, skipped = [], []
     for driver in _drivers.DRIVERS:
         if only and driver.key != only:
             continue
         if driver.source == "manual":
-            continue  # hand-written stub — never extracted or overwritten
+            continue  # an authored record — never extracted or overwritten
         if reason := _ignore(driver, root):
             # A snapshot only ever moves forward: a reading worth less than
-            # the checked-in one leaves the stub exactly as it is.
+            # the recorded one leaves the record exactly as it is.
             skipped.append(f"{driver.key} ({reason})")
             continue
         try:
-            text = _generate(driver)
+            before, after = _generate(driver)
         except _Ambiguous as ambiguous:
             skipped.append(f"{driver.key} ({ambiguous.reading} vs {ambiguous.base})")
             continue
-        except _stubgen.NameCollision as clash:
-            # A verb that would shadow a stub import: keep the checked-in
-            # stub and say why, rather than write one that means the wrong
-            # thing (see NameCollision).
-            skipped.append(f"{driver.key} ({clash})")
-            continue
-        path = _stub_path(driver.key)
-        if not path.exists() or path.read_text(encoding="utf-8") != text:
-            path.write_text(text, encoding="utf-8")
+        if before != after:
             wrote.append(driver.key)
-    print(f"wrote {len(wrote)} stub(s): {', '.join(wrote) or 'none changed'}")
+    print(f"recorded {len(wrote)} reading(s): {', '.join(wrote) or 'none changed'}")
     if skipped:
         print(f"left alone: {', '.join(skipped)}")
-
-
-@tasks.task
-def restub(
-    only: Annotated[str, doc("re-render just this tool")] = "",
-) -> dict[str, object]:
-    """Re-render every stub from the checked-in records: no tools, no network.
-
-    A stub is a *rendering* of a stored surface, and the two move for
-    different reasons. `sync` re-reads the tools and can change what is
-    stored; this changes only how what is already stored is written out.
-    Reach for it when the **renderer** moved — a new method on every verb, a
-    widened signature — where the readings themselves are exactly as they
-    were.
-
-    That separation is what keeps a delta readable. Regenerating through
-    `sync` would fold this machine's tool versions into the answer, so a
-    template change would arrive mixed with version drift and neither could
-    be reviewed. Here the records are opened read-only: whatever comes out
-    differs from what is checked in *only* because the renderer does.
-
-    The six shells (`bash`, `zsh`, `fish`, `nu`, `pwsh`, `cmd`) have
-    hand-written stubs and no record to render from, so they are listed as
-    left alone and edited by hand.
-    """
-    wrote, unchanged, no_record = [], [], []
-    for driver in _drivers.DRIVERS:
-        if only and driver.key != only:
-            continue
-        if driver.source == "manual":
-            no_record.append(driver.key)
-            continue
-        record = _surfaces.load(_record_path(driver.key))
-        if record is None:
-            no_record.append(driver.key)
-            continue
-        path = _stub_path(driver.key)
-        # Exactly `assemble`'s call, so a re-render is byte-identical to what
-        # the refresh workflow would have written from the same record.
-        try:
-            text = _stub_from(driver, record)
-        except _stubgen.NameCollision as clash:
-            print(f"refused {driver.key}: {clash}")
-            continue
-        if path.exists() and path.read_text(encoding="utf-8") == text:
-            unchanged.append(driver.key)
-            continue
-        path.write_text(text, encoding="utf-8")
-        wrote.append(driver.key)
-    print(f"re-rendered {len(wrote)}: {', '.join(wrote) or 'none changed'}")
-    if unchanged:
-        print(f"unchanged: {len(unchanged)}")
-    if no_record:
-        print(f"no record (hand-written): {', '.join(no_record)}")
-    return {"rendered": wrote, "unchanged": unchanged, "no_record": no_record}
 
 
 @tasks.task
@@ -796,23 +729,25 @@ def audit(
     prefix: Annotated[str, doc("read binaries from this prefix's bin/")] = "",
     strict: Annotated[bool, doc("exit non-zero when a snapshot is behind")] = False,
 ) -> dict[str, object]:
-    """Report which tools have moved on since their stub snapshot.
+    """Report which tools have moved on since their record's newest reading.
 
-    A stub records what one tool accepted at the version it was read from.
-    Tools keep releasing, and footman promises no particular speed at
-    following them — so a tool showing up here means a newer version exists,
-    **not** that anything is wrong. Every stubbed verb ends in
-    `**flags: Any`, so the bridge already speaks a flag the stub has never
-    heard of; only the *hint* is behind. `--fix` takes a fresh snapshot,
-    `--strict` gives automation something to trip on, and `--prefix` asks
-    the question against a provisioned latest set rather than this machine.
+    A record holds what one tool accepted at the versions it was read
+    from. Tools keep releasing, and footman promises no particular speed
+    at following them — so a tool showing up here means a newer version
+    exists, **not** that anything is wrong. Every stubbed verb ends in
+    `**flags: Any`, so the bridge already speaks a flag the record has
+    never heard of; only the *hint* is behind. `--fix` takes a fresh
+    reading, `--strict` gives automation something to trip on, and
+    `--prefix` asks the question against a provisioned latest set rather
+    than this machine.
 
     A snapshot only ever moves **forward**, so two readings are worth less
-    than the file already checked in and are named and left alone: a tool
-    missing from `--prefix` (a partial provision must not read as drift,
-    and the host's copy is not the answer), and one whose version is older
-    than the stub records (a machine behind the one that took the snapshot
-    has nothing to add). Neither counts as behind — they are unanswered.
+    than the record already checked in and are named and left alone: a
+    tool missing from `--prefix` (a partial provision must not read as
+    drift, and the host's copy is not the answer), and one whose version
+    is older than the record holds (a machine behind the one that took
+    the snapshot has nothing to add). Neither counts as behind — they are
+    unanswered.
 
     One finding here *is* a fault, and always exits non-zero: footman's
     negation and wrapper tables are read by the runtime, so a disagreement
@@ -832,21 +767,22 @@ def _audit(
         if only and driver.key != only:
             continue
         if driver.source == "manual":
-            continue  # hand-written stub — nothing to compare against
+            continue  # an authored record — nothing to read it against
         if reason := _ignore(driver, root):
             # Nothing to say about a tool this machine can't read *better*
             # than the snapshot already did — it is not behind, it is
             # unanswered, and the difference matters to a release job.
             skipped.append(f"{driver.key} ({reason})")
             continue
-        path = _stub_path(driver.key)
+        record = _surfaces.load(_record_path(driver.key))
         spec = _extract(driver)
         fresh = _formatted(_render(driver, spec))
+        held = _stub_from(driver, record) if record is not None else ""
         checked += 1
-        if not path.exists() or path.read_text(encoding="utf-8") != fresh:
+        if held != fresh:
             stale.append(driver.key)
             if fix:
-                path.write_text(fresh, encoding="utf-8")
+                _observe(driver, spec)
         # Two extracted facts the *runtime* reads: the negation table `off`
         # consults, and the wrapper set that decides flag ordering. Both
         # must match the installed tool, or a task emits the wrong command.
@@ -1546,7 +1482,6 @@ def _assemble_documents(documents: list[dict[str, Any]]) -> Refreshed:
             # is exactly the week whose findings would otherwise be
             # recomputed from scratch every Monday.
             _surfaces.save(record, _record_path(tool))
-            _stub_path(tool).write_text(_stub_from(driver, record), encoding="utf-8")
         if moved := _events_of(record, fresh, above=highest):
             events[tool] = moved
     return Refreshed(
@@ -1870,7 +1805,7 @@ def _write_changelog(entries: list[str], path: Path | None = None) -> bool:
     """Put *entries* under `[Unreleased]` → `### Changed`, in place.
 
     Written rather than printed because the refresh already edits the
-    records and the stubs and has to land through a PR either way —
+    records and has to land through a PR either way —
     a scheduled job that emitted release notes to stdout would be producing
     them for nobody. `### Changed` because a tool gaining a flag changes
     footman's *stub*; footman itself added nothing.
@@ -2302,9 +2237,6 @@ def _assemble(
         chain = _surfaces.versions(record)  # newest first
         fresh.sort(key=chain.index, reverse=True)  # oldest first
         _surfaces.save(record, _record_path(driver.key))
-        # The stub is a rendering of the record, so it follows the record
-        # rather than waiting for someone to remember a `sync`.
-        _stub_path(driver.key).write_text(_stub_from(driver, record), encoding="utf-8")
     return record, fresh, holes
 
 
@@ -2468,15 +2400,15 @@ def provision(
 ) -> None:
     """Fetch the latest curated tools into an isolated prefix — no pollution.
 
-    The stubs are read from installed binaries, so syncing against the newest
+    The records are read from installed binaries, so syncing against the newest
     release means having it on PATH. This gathers the latest of every curated
     tool under one isolated prefix — `uv tool install` for the PyPI wheels
     (the Rust and C++ tools included), bun's own release then `bun add` for the
     node CLIs, a release asset for the Go ones — touching nothing outside it.
     Omitted, the prefix is the `toolroom-bench` room in footman's data directory,
     which every empty-prefix reading looks in first, so provisioning once
-    serves every later `sync`/`audit` on this machine. `--sync` rewrites the
-    stubs against the prefix; `--clean` deletes it, which is the whole undo.
+    serves every later `sync`/`audit` on this machine. `--sync` reads the
+    records against the prefix; `--clean` deletes it, which is the whole undo.
 
     `--strict` turns a failed tier into a failed run. Without it the table
     names what did not arrive and the run still succeeds, which is right
@@ -2548,6 +2480,9 @@ _READ_FROM = _re.compile(
     r"(?: In-process: (?P<mode>\w+)\.)?"
 )
 
+STUBS_MODULE = "toolroom_stubs"
+"""The module the docs pages' stubs are rendered as, for the docs build's renderer."""
+
 _INDEX = """\
 ---
 icon: lucide/layout-grid
@@ -2559,12 +2494,13 @@ Import a tool by name — `from livery.toolroom.tools import git` — and call i
 `git.commit(…)`. No declaration needed: [the bridge](../../usage.md)
 translates keyword arguments into flags mechanically, and every tool on
 your PATH already works. These pages document the **stubs**: what each
-curated tool accepted at the version footman last read it from, with that
+curated tool accepted at the versions its record was read from, with that
 tool's own help text per flag.
 
-Nothing here is a wrapper. The stubs are generated by `fm tools.sync`,
-which asks the installed binaries what they take, and `fm tools.audit`
-reports which tools have released a newer version since. A flag missing
+Nothing here is a wrapper. The records are read by `fm tools.sync`, which
+asks the installed binaries what they take, and `fm tools.audit` reports
+which tools have released a newer version since; a workspace materialises
+the stubs the records render to with `fm tools.restub`. A flag missing
 from a stub still runs — every verb ends in `**flags: Any`, so a stub can
 suggest but never forbid.
 
@@ -2595,20 +2531,17 @@ tools stay parallel (and the one case that can't).
 
 
 def _header(path: Path) -> tuple[str, str]:
-    """`(read from, in-process)` as a checked-in stub records them.
+    """`(read from, in-process)` as a rendered stub's header records them.
 
-    The table is built from the files rather than from the tools, so
-    building the docs needs nothing on PATH and the page says exactly what
-    ships — including for the tools this machine cannot ask.
+    The table is built from the rendered files rather than from the
+    tools, so building the docs needs nothing on PATH and the page says
+    exactly what the records hold — including for the tools this machine
+    cannot ask.
     """
     head = path.read_text(encoding="utf-8")[:600].replace("\n# ", " ")
     match = _READ_FROM.search(head)
     if not match:
-        # A hand-written stub exists precisely because the tool is not a
-        # Python package to extract from (the shells, cmd): there is no
-        # entry point to call, so in-process is structurally "no" — not
-        # unknown.
-        return "hand-written", "no"
+        return "unknown", "no"
     return f"{match['version']} ({match['platform']})", match["mode"] or "unknown"
 
 
@@ -2679,23 +2612,40 @@ def pages(
     nav: Annotated[
         Path | None, doc("a config whose Tools nav block to rewrite")
     ] = None,
+    stubs: Annotated[
+        Path | None, doc("directory to render the pages' stubs into")
+    ] = None,
 ) -> None:
     """Write one reference page per tool, plus the index table.
 
-    Built from the checked-in stubs rather than from the installed tools, so
-    the docs build needs nothing on PATH and says exactly what ships. Tools
-    are ordered alphabetically. With *nav*, the tool entries of that config's
-    Tools list are regenerated too (between markers), so the sidebar can never
-    fall behind the drivers again.
+    Rendered from the records rather than from the installed tools, so
+    the docs build needs nothing on PATH and says exactly what the records
+    hold. The stubs the pages point at are written as the module
+    `toolroom_stubs` under *stubs*, `<out>/../stubs/toolroom_stubs` by
+    default, a search path the docs build adds for its renderer. Tools
+    are ordered alphabetically. With *nav*, the tool entries of that
+    config's Tools list are regenerated too (between markers), so the
+    sidebar can never fall behind the drivers again.
     """
     out.mkdir(parents=True, exist_ok=True)
-    stubbed = sorted(
-        (d for d in _drivers.DRIVERS if _stub_path(d.key).exists()),
-        key=lambda d: d.key,
-    )
+    module = stubs if stubs is not None else out.parent / "stubs" / STUBS_MODULE
+    module.mkdir(parents=True, exist_ok=True)
+    (module / "__init__.pyi").write_text("", encoding="utf-8")
+    stubbed: list[_drivers.Driver] = []
+    for driver in sorted(_drivers.DRIVERS, key=lambda d: d.key):
+        record = _surfaces.load(_record_path(driver.key))
+        if record is None:
+            continue
+        (module / f"{driver.key}.pyi").write_text(
+            _stub_from(driver, record), encoding="utf-8"
+        )
+        stubbed.append(driver)
+    for stale in module.glob("*.pyi"):
+        if stale.stem != "__init__" and stale.stem not in {d.key for d in stubbed}:
+            stale.unlink()
     rows = ["| Tool | Read from | In-process | Verbs |", "| --- | --- | --- | --- |"]
     for driver in stubbed:
-        rows.append(_row(driver, _stub_path(driver.key)))
+        rows.append(_row(driver, module / f"{driver.key}.pyi"))
         (out / f"{driver.key}.md").write_text(_page(driver), encoding="utf-8")
     (out / "index.md").write_text(
         _INDEX.format(table="\n".join(rows)), encoding="utf-8"
@@ -2755,7 +2705,10 @@ def _page(driver: _drivers.Driver) -> str:
     home = f"[{driver.name} documentation]({driver.url})\n\n" if driver.url else ""
     return (
         f"# {driver.key}\n\n{home}"
-        f"::: livery.toolroom.tools._stubs.{driver.key}.{_class_name(driver.key)}\n"
+        f"::: {STUBS_MODULE}.{driver.key}.{_class_name(driver.key)}\n"
+        "    options:\n"
+        "      show_root_full_path: false\n"
+        "      show_source: false\n"
     )
 
 

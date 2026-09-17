@@ -1,0 +1,7 @@
+{
+  "name": "fish",
+  "description": "The friendly interactive shell",
+  "kind": "system-check",
+  "min_version": "",
+  "hosts": []
+}

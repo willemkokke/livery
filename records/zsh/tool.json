@@ -1,0 +1,7 @@
+{
+  "name": "zsh",
+  "description": "The Z shell",
+  "kind": "system-check",
+  "min_version": "",
+  "hosts": []
+}

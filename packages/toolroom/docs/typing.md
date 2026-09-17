@@ -21,12 +21,28 @@ Stub drift therefore degrades a hint, never a run.
 
 ## Where the stubs come from
 
-One generated file per curated tool, read from the installed binaries
-on Linux, Windows, and macOS — each header records the tool version it
-was read from. The generator, the tool records it writes each reading
-into, and the refresh are `livery-toolroom-bench`, the bench package
-beside this one; a workspace that keeps the stubs current names it as
-a layer, and a consumer of the handles never installs it.
+The wheel ships the vocabulary alone: `tools/__init__.pyi` declares
+`Tool`, `Argv`, `Result`, the aliases below, and a `__getattr__` that
+answers every tool name with a `Tool[Result]`. The per-tool classes are
+rendered from the tool records into a workspace's `typings/` directory,
+pyright's default stub path and a search path the workspace's rendered
+configuration hands mypy, ty and pyrefly: `fm tools.restub` writes one
+stub per tool the catalogue lists, at the version the workspace locks
+or the newest read, as the `_stubs` modules the wheel's own index
+imports. `fm sync` and the lock verbs write them too, and the
+workspace's entry script writes them before its type checkers run.
+Without them every handle types as a bare `Tool`, which forbids
+nothing and completes nothing.
+
+The docs playground reads the same stubs from the index the site
+serves beside it, written into the package it installs, since an
+editor's completer reads a stub only from inside the package.
+
+Each stub's header records the tool version and the platforms it was
+read on. The records, their readings and the index that renders them
+are `livery-toolroom-bench`, the bench package beside this one; a
+workspace that keeps the records current names it as a layer, and a
+consumer of the handles never installs it.
 
 ## The vocabulary of a signature
 
@@ -76,5 +92,5 @@ sha_cmd = git.rev_parse.argv("HEAD")  # Argv, same completions, same checks
 
 The package ships `py.typed`, the hand stub declares the whole public
 surface (`Tool`, `Argv`, `Result`, `ToolError`, `off`, `Flag`, `Value`,
-`ValuedFlag`, the curated handles), and type-checking a toolroom
-consumer requires nothing but toolroom — the stubs never import footman.
+`ValuedFlag`), and type-checking a toolroom consumer requires nothing
+but toolroom — the rendered stubs never import footman.

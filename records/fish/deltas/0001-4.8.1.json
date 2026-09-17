@@ -1,0 +1,23 @@
+{
+  "sequence": 1,
+  "version": "4.8.1",
+  "date": "2026-08-25",
+  "artifacts": {},
+  "surface": {
+    "platforms": [
+      "Linux",
+      "macOS"
+    ],
+    "extractor": 3,
+    "help": "The friendly interactive shell",
+    "verbs": {
+      "": {
+        "help": "Run a command string in fish: `fish -c \"<command>\"`. A real shell: pipes, redirects, globbing and variables all work. `run(...)` stays shell-free.",
+        "wraps": false,
+        "positional": "required",
+        "lead": "command",
+        "options": {}
+      }
+    }
+  }
+}

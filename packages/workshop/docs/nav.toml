@@ -114,6 +114,7 @@ nav = [
             { "Overview" = "_generated/tasks/tools/index.md" },
             { "add" = "_generated/tasks/tools/add.md" },
             { "lock" = "_generated/tasks/tools/lock.md" },
+            { "restub" = "_generated/tasks/tools/restub.md" },
             { "upgrade" = "_generated/tasks/tools/upgrade.md" },
         ] },
         { "workflow" = [
