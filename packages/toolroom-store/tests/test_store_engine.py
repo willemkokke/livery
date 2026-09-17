@@ -664,13 +664,17 @@ def test_a_system_tool_is_found_on_path_and_held_to_its_floor(
     assert ensured.deployment.entry_points == () and ensured.paths == ()
     probed = store.probe(record, "2.55.0")
     assert probed is not None and probed.tool_dir == Path("/usr/bin")
-    # No floor in the record: the locked version is the floor.
+    # No floor in the record: the locked version is the newest reading, not
+    # a floor, so the machine's own tool passes at any version, or at none.
     bare = Record("git", kind="system-check", deltas=record.deltas)
+    monkeypatch.setattr(_engine, "read_version", lambda argv: "git version 2.39.1")
+    assert store.ensure(bare, "2.55.0").tool_dir == Path("/usr/bin")
     monkeypatch.setattr(_engine, "read_version", lambda argv: "")
-    with pytest.raises(
-        StoreError, match=r"reports no version, below the floor 2\.55\.0"
-    ):
-        store.ensure(bare, "2.55.0")
+    assert store.ensure(bare, "2.55.0").tool_dir == Path("/usr/bin")
+    # A floored record still refuses a tool that prints no version.
+    monkeypatch.setattr(_engine, "read_version", lambda argv: "")
+    with pytest.raises(StoreError, match=r"reports no version, below the floor 2\.40"):
+        store.ensure(record, "2.55.0")
 
 
 def test_the_version_reader_reads_the_first_numeric_run_and_survives_no_tool(

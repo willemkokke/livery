@@ -494,7 +494,13 @@ class Store:
         return Ensured(name, version, True, tool_dir, _delegated(launchers), None)
 
     def _supply_system(self, name: str, version: str, min_version: str) -> Ensured:
-        """The machine's own *name*, found on PATH and at or above *min_version*."""
+        """The machine's own *name*, found on PATH and at or above *min_version*.
+
+        The floor is the record's alone. The locked *version* is the
+        newest reading the stubs render for, not a version anyone
+        installs, so a record without a floor accepts whatever the
+        machine has, a tool that prints no version included.
+        """
         self._progress(Event(name, version, "probe"))
         found = shutil.which(name)
         if found is None:
@@ -502,8 +508,8 @@ class Store:
                 f"{name}: not on PATH; a system-check tool is the machine's own and"
                 " the store installs nothing for it"
             )
-        floor = min_version or version
-        reported = _version_in(read_version([found, "--version"]))
+        floor = min_version
+        reported = _version_in(read_version([found, "--version"])) if floor else ""
         if floor and version_tuple(reported) < version_tuple(floor):
             raise StoreError(
                 f"{name}: {found} reports {reported or 'no version'}, below the"
