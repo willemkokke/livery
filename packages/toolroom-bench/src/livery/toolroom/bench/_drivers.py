@@ -185,6 +185,18 @@ class Driver:
     """git's `--help` opens a man page; `-h` is the help text."""
     in_process: bool = False
     """Whether `tools.<attr>` prefers in-process, as `tools.py` builds it."""
+
+    def mode(self, capable: bool) -> str:
+        """How this tool runs, as a stub's header says: `default`, `available`, `no`.
+
+        A Python tool publishes a `[console_scripts]` entry point, which
+        is what `Tool.__call__` resolves, so *capable* is detected, not
+        listed. Whether footman prefers it is this driver's business.
+        """
+        if self.in_process:
+            return "default"
+        return "available" if capable else "no"
+
     base: tuple[str, ...] = field(default_factory=tuple)
     """A pre-bound verb: `tools.ruff_format` is `Tool("ruff", "format")`."""
     source: str = "auto"

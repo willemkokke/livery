@@ -241,6 +241,7 @@ nav = [
                 { "color" = "_generated/packages/toolroom-bench/_generated/tasks/tools/color.md" },
                 { "docs" = "_generated/packages/toolroom-bench/_generated/tasks/tools/docs.md" },
                 { "gather" = "_generated/packages/toolroom-bench/_generated/tasks/tools/gather.md" },
+                { "goldens" = "_generated/packages/toolroom-bench/_generated/tasks/tools/goldens.md" },
                 { "index.build" = "_generated/packages/toolroom-bench/_generated/tasks/tools/index/build.md" },
                 { "list" = "_generated/packages/toolroom-bench/_generated/tasks/tools/list.md" },
                 { "observe" = "_generated/packages/toolroom-bench/_generated/tasks/tools/observe.md" },

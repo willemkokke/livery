@@ -853,7 +853,62 @@ def save(record: Record, directory: Path) -> None:
 # --- the union: what a stub renders --------------------------------------------
 
 
-def union(record: Record, *, name: str, in_process: bool = False) -> ToolSpec:
+@dataclass(frozen=True)
+class Chain:
+    """A record resolved once: every version read, newest first, with its observation.
+
+    The union asks the same questions of every version for every option,
+    so the record is resolved one time and read from here, never through
+    the record again.
+
+    Attributes:
+        versions: The versions read, newest first.
+        seen: Each version's observation.
+    """
+
+    versions: list[str]
+    seen: dict[str, Observation]
+
+    @classmethod
+    def of(cls, record: Record, *, upto: str = "") -> Chain:
+        """*record* resolved; with *upto*, only the versions up to and including it.
+
+        Raises:
+            ValueError: when *upto* is not a version the record has read,
+                or nothing was read at all.
+        """
+        found = list(observations(record))
+        if upto:
+            spots = [n for n, seen in enumerate(found) if seen.version == upto]
+            if not spots:
+                raise ValueError(
+                    f"{record.name}: no reading of {upto}; the versions read are"
+                    f" {', '.join(seen.version for seen in found) or 'none'}"
+                )
+            found = found[: spots[0] + 1]
+        if not found:
+            raise ValueError(f"{record.name}: no version was read")
+        return cls(
+            [seen.version for seen in reversed(found)], {s.version: s for s in found}
+        )
+
+    def surface(self, version: str) -> dict[str, Any]:
+        """The help and verbs of *version*."""
+        seen = self.seen[version]
+        return {"help": seen.help, "verbs": seen.verbs}
+
+    def platforms(self, version: str) -> list[str]:
+        """Who read *version*."""
+        return list(self.seen[version].platforms)
+
+    def absent(self, version: str) -> dict[str, list[str]]:
+        """Who looked at *version* and did not find each option, by `verb\\toption`."""
+        return _flatten(self.seen[version].absent)
+
+
+def union(
+    record: Record, *, name: str, in_process: bool = False, upto: str = ""
+) -> ToolSpec:
     """Every option the tool has ever had, each with its interval.
 
     The stub renders this rather than the newest version alone: a removed
@@ -864,18 +919,28 @@ def union(record: Record, *, name: str, in_process: bool = False) -> ToolSpec:
 
     `since` is left empty for anything already present at the oldest
     version read. The record reaches only as far as it was primed, and
-    "at or before the floor" is not a `since`.
+    "at or before the floor" is not a `since`. With *upto*, the union
+    runs to that version and no further: what a reader at that version
+    may be told, which is what its stub in the index carries.
+
+    Raises:
+        ValueError: when *upto* is not a version the record has read.
     """
-    chain = versions(record)  # newest first
-    floor_ = chain[-1]
-    surfaces = {version: at(record, version) for version in chain}
-    verdicts = _verdicts(record, chain, surfaces)
+    return union_of(Chain.of(record, upto=upto), name=name, in_process=in_process)
+
+
+def union_of(chain: Chain, *, name: str, in_process: bool = False) -> ToolSpec:
+    """The union over *chain*; see `union`."""
+    versions_ = chain.versions  # newest first
+    floor_ = versions_[-1]
+    surfaces = {version: chain.surface(version) for version in versions_}
+    verdicts = _verdicts(chain, surfaces)
 
     verbs: dict[str, dict[str, Any]] = {}
     first: dict[tuple[str, str], str] = {}
     last: dict[tuple[str, str], str] = {}
-    for version in reversed(chain):  # oldest first, so "first" means first
-        surface = surfaces[version] or {}
+    for version in reversed(versions_):  # oldest first, so "first" means first
+        surface = surfaces[version]
         for verb_name, verb in surface.get("verbs", {}).items():
             verbs.setdefault(verb_name, verb)
             merged = {
@@ -891,11 +956,11 @@ def union(record: Record, *, name: str, in_process: bool = False) -> ToolSpec:
                 first.setdefault(key, version)
                 last[key] = version
 
-    newer = {older: new for new, older in itertools.pairwise(chain)}
+    newer = {older: new for new, older in itertools.pairwise(versions_)}
     spec = spec_from(
-        {"help": (surfaces[chain[0]] or {}).get("help", ""), "verbs": verbs},
+        {"help": surfaces[versions_[0]].get("help", ""), "verbs": verbs},
         name=name,
-        version=chain[0],
+        version=versions_[0],
         in_process=in_process,
     )
     return ToolSpec(
@@ -919,19 +984,16 @@ def union(record: Record, *, name: str, in_process: bool = False) -> ToolSpec:
                             since=""
                             if first[(verb.name, option.name)] == floor_
                             or _only_here(
-                                record,
+                                chain,
                                 first[(verb.name, option.name)],
                                 verb.name,
                                 option,
                             )
                             else first[(verb.name, option.name)],
                             until=newer.get(last[(verb.name, option.name)], "")
-                            if last[(verb.name, option.name)] != chain[0]
+                            if last[(verb.name, option.name)] != versions_[0]
                             and _corroborated(
-                                record,
-                                last[(verb.name, option.name)],
-                                verb.name,
-                                option,
+                                chain, last[(verb.name, option.name)], verb.name, option
                             )
                             else "",
                         )
@@ -945,9 +1007,7 @@ def union(record: Record, *, name: str, in_process: bool = False) -> ToolSpec:
 
 
 def _verdicts(
-    record: Record,
-    chain: list[str],
-    surfaces: dict[str, dict[str, Any] | None],
+    chain: Chain, surfaces: dict[str, dict[str, Any]]
 ) -> dict[str, tuple[str, ...]]:
     """Which platforms currently lack each option: derived, never stored.
 
@@ -963,15 +1023,15 @@ def _verdicts(
     record. Walked newest-first, so the first verdict found wins.
     """
     settled: dict[str, dict[str, bool]] = {}
-    for version in chain:  # newest first
-        missing = absent_of(record, version)
-        surface = surfaces.get(version) or {}
+    for version in chain.versions:  # newest first
+        missing = chain.absent(version)
+        surface = surfaces[version]
         here = set(_flat(surface))
         for verb_name, verb in surface.get("verbs", {}).items():
             here.add(f"{verb_name}\t")
             for option_name in verb.get("options", {}):
                 here.add(f"{verb_name}\t{option_name}")
-        for platform in platforms_of(record, version):
+        for platform in chain.platforms(version):
             for key in here:
                 lacked = platform in missing.get(key, ())
                 settled.setdefault(key, {}).setdefault(platform, lacked)
@@ -982,13 +1042,13 @@ def _verdicts(
     }
 
 
-def _holders(record: Record, version: str, verb: str, option: Option) -> list[str]:
+def _holders(chain: Chain, version: str, verb: str, option: Option) -> list[str]:
     """The platforms that observed *version* and found this option."""
-    missing = absent_of(record, version).get(f"{verb}\t{option.name}", ())
-    return [p for p in platforms_of(record, version) if p not in missing]
+    missing = chain.absent(version).get(f"{verb}\t{option.name}", ())
+    return [p for p in chain.platforms(version) if p not in missing]
 
 
-def _only_here(record: Record, first: str, verb: str, option: Option) -> bool:
+def _only_here(chain: Chain, first: str, verb: str, option: Option) -> bool:
     """Whether a `since` at *first* would out-run the evidence.
 
     An option first seen where only one platform's floor reaches is not
@@ -997,11 +1057,10 @@ def _only_here(record: Record, first: str, verb: str, option: Option) -> bool:
     own floor rule, one level down: at or before this platform's floor is
     not a since.
     """
-    chain = versions(record)
-    below = chain[chain.index(first) + 1 :]
-    holders = set(_holders(record, first, verb, option))
+    below = chain.versions[chain.versions.index(first) + 1 :]
+    holders = set(_holders(chain, first, verb, option))
     for older in below:
-        was_read_by = platforms_of(record, older)
+        was_read_by = chain.platforms(older)
         if not was_read_by or holders.intersection(was_read_by):
             # Either a holder did read further back, or nobody recorded who
             # read it, and unknown coverage is not evidence of absence.
@@ -1009,19 +1068,18 @@ def _only_here(record: Record, first: str, verb: str, option: Option) -> bool:
     return bool(holders)
 
 
-def _corroborated(record: Record, last: str, verb: str, option: Option) -> bool:
+def _corroborated(chain: Chain, last: str, verb: str, option: Option) -> bool:
     """Whether "gone since" is a claim the observations support.
 
     A platform that never held the option cannot witness its removal, and
     a version read only by such a platform is silence rather than
     evidence.
     """
-    chain = versions(record)
-    spot = chain.index(last)
+    spot = chain.versions.index(last)
     if spot == 0:
         return False
-    holders = set(_holders(record, last, verb, option))
-    witnesses = platforms_of(record, chain[spot - 1])
+    holders = set(_holders(chain, last, verb, option))
+    witnesses = chain.platforms(chain.versions[spot - 1])
     if not holders or not witnesses:
         # No platform evidence either way: a single-platform record, or a
         # version whose readers were not recorded. The guard exists to stop
