@@ -134,13 +134,13 @@ def tools_restub(
 ) -> None:
     """Write the stubs the catalogue offers into `typings/`.
 
-    One stub per tool the catalogue lists, at the version the lock holds
-    for it or the newest read otherwise, as the `_stubs` modules the
-    tools package's own index imports. The four checkers read `typings/`
-    first, so a handle completes with the tool's own verbs and flags;
-    without the stubs every handle is a bare `Tool`. `sync` and the lock
-    verbs write them too; this writes them alone, offline from the
-    machine's store with `--offline`.
+    One stub per tool the lock holds, at the locked version, and the
+    `_handles` module beside them declaring the handles for the tools
+    package's index to import. The four checkers read `typings/` first,
+    so a locked tool's handle completes with its own verbs and flags;
+    a tool the workspace does not deploy gets no stub and types as a
+    bare `Tool`. `sync` and the lock verbs write them too; this writes
+    them alone, offline from the machine's store with `--offline`.
     """
     from livery.workshop._tools import stub_lines
 

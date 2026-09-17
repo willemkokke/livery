@@ -27,9 +27,11 @@ one.
 The stubs the type checkers read are materialised too, into `typings/`
 at the root, pyright's default stub path and a search path the rendered
 configuration hands the other three checkers: one rendering per tool
-the catalogue lists, at the locked version or the newest listed, as the
-`_stubs` modules the installed tools package's own index imports, so
-the typings directory never shadows the package. `fm tools.restub`
+the lock holds, at the locked version, as `_stubs` modules with a
+`_handles` module beside them declaring each handle, which the
+installed tools package's index imports, so the typings directory
+never shadows the package. A tool the workspace does not deploy gets
+no stub. `fm tools.restub`
 writes them, and so do `fm sync` and every lock verb. A source that is a
 directory of records holds no rendering; `[tools] index-build` names the
 verb that builds the index there before the catalogue is read.
@@ -60,6 +62,7 @@ from livery.toolroom.store import (
     Requirement,
     Store,
     StoreError,
+    class_name,
     default_mode,
     resolve_lock,
 )
@@ -616,15 +619,19 @@ class Stubbed:
 
 
 def write_stubs(root: Path, *, offline: bool = False) -> Stubbed:
-    """Write every stub the catalogue offers into the typings directory.
+    """Write the stubs of the locked tools into the typings directory.
 
-    One stub per tool the catalogue lists, at the version the lock holds
-    for it or the newest listed otherwise, so a handle the workspace
-    types against but does not require still completes. The installed
-    tools package's own index imports each by name and declares the
-    handles, so the typings directory holds the `_stubs` modules alone
-    and never shadows the package. A stub already on disk as the
-    catalogue holds it is kept, so a checker's cache stands.
+    One stub per tool `tools.lock` holds, at the locked version: a tool
+    the workspace does not deploy gets no stub, and its handle types as
+    a bare `Tool`. The `_handles` module beside the stubs declares the
+    handles, one import and one `name: Class[Result]` per stub written,
+    and the installed tools package's index imports every name from it,
+    so the typings directory never shadows the package. The handles
+    cannot live in the stubs package's own index: a package's index
+    binds its submodules, and `ruff` would name `ruff.pyi` rather than
+    the handle. A stub already on disk as the catalogue holds it is
+    kept, so a checker's cache stands. Without a lock nothing is
+    written.
 
     Refuses when `[tools] index` names a directory of records and no
     `[tools] index-build` verb: records hold no rendering.
@@ -636,23 +643,19 @@ def write_stubs(root: Path, *, offline: bool = False) -> Stubbed:
             " the index built from them, or `[tools] index-build`, the verb"
             " that builds it"
         )
-    listing = catalogue(root, offline=offline)
     lock = current_lock(root)
+    locked = dict(lock.tools) if lock is not None else {}
+    listing = catalogue(root, offline=offline) if locked else None
     directory = stubs_dir(root)
     directory.mkdir(parents=True, exist_ok=True)
     written: list[str] = []
     kept: list[str] = []
     skipped: dict[str, str] = {}
-    for name in sorted(listing.tools):
-        listed = listing.tools[name]
-        if lock is not None and name in lock.tools:
-            version = lock.tools[name].version
-        elif listed.versions:
-            version = listed.versions[-1]
-        else:
-            skipped[name] = "no version read"
-            continue
+    declared: list[str] = []
+    for name in sorted(locked):
+        version = locked[name].version
         try:
+            assert listing is not None
             text = listing.stub(name, version)
         except CatalogueError as error:
             skipped[name] = str(error)
@@ -663,13 +666,42 @@ def write_stubs(root: Path, *, offline: bool = False) -> Stubbed:
         else:
             path.write_text(text, encoding="utf-8")
             written.append(name)
+        declared.append(name)
     removed: list[str] = []
     for stale in sorted(directory.glob("*.pyi")):
-        if stale.stem != "__init__" and stale.stem not in listing.tools:
+        if stale.stem != "__init__" and stale.stem not in declared:
             stale.unlink()
             removed.append(stale.stem)
     _write_if_changed(directory / "__init__.pyi", "")
+    _write_if_changed(handles_path(root), handles_index(declared))
     return Stubbed(tuple(written), tuple(kept), skipped, tuple(removed))
+
+
+def handles_path(root: Path) -> Path:
+    """The `_handles.pyi` module beside the stubs, declaring the typed handles."""
+    return typings_dir(root).joinpath(*STUBS_PACKAGE) / "_handles.pyi"
+
+
+def handles_index(names: list[str]) -> str:
+    """The `_handles` module declaring the handles of *names*, in order.
+
+    The installed tools package's own index imports every name from
+    this module, so the handle `ruff` types as `Ruff[Result]` exactly
+    when `_stubs/ruff.pyi` is beside it.
+    """
+    lines = [
+        f"# Rendered by `{prog()} tools.restub`: the handles this workspace",
+        "# locks. Do not edit by hand.",
+        "from livery.toolroom.tools import Result",
+    ]
+    lines += [
+        f"from livery.toolroom.tools._stubs.{name} import"
+        f" {class_name(name)} as {class_name(name)}"
+        for name in names
+    ]
+    lines.append("")
+    lines += [f"{name}: {class_name(name)}[Result]" for name in names]
+    return "\n".join(lines) + "\n"
 
 
 def _write_if_changed(path: Path, text: str) -> None:

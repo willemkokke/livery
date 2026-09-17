@@ -786,6 +786,23 @@ Acceptance:
   provision prefix was the store's home, `data_dir()/toolroom`, so a
   materialised store read as a provisioned prefix; the bench's prefix
   is `data_dir()/toolroom-bench` now.
+- 2026-09-17, Willem, on the stubs' home: a tool the workspace does not
+  deploy gets no stub, since a stub nobody uses only spends resources;
+  the stubs are rendered to pass the linter. So `fm tools.restub` writes
+  the locked tools alone, a `_handles` module beside the stubs declares
+  the handles (not the stubs package's own index, whose submodule `ruff`
+  would shadow the handle for mypy) and the wheel's index imports every
+  name from it, the
+  renderer lays the aliased import on its own line and carries a
+  file-level `noqa` for the long help lines, and this repository
+  requires in its root contract the tools its own tasks run beyond the
+  python kind's: git, docker, coverage, zensical and cmake. The
+  type-level test asserts on those alone. `ruff_format`, a handle over
+  ruff's own binary, has no lock entry of its own and types as `Tool`
+  until its record can say it rides ruff. The published index's URL
+  carries `_generated`, the leak livery#268 names; the index follows
+  whatever that fix decides, since the contract names the URL and the
+  playground derives it from the site root.
 - 2026-09-17, the agent, at phase 6's third part, the stubs' home: the
   toolroom wheel ships `tools/__init__.pyi` alone, its vocabulary and
   the `__getattr__` that answers every name with `Tool[Result]`; the

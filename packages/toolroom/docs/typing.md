@@ -27,12 +27,12 @@ answers every tool name with a `Tool[Result]`. The per-tool classes are
 rendered from the tool records into a workspace's `typings/` directory,
 pyright's default stub path and a search path the workspace's rendered
 configuration hands mypy, ty and pyrefly: `fm tools.restub` writes one
-stub per tool the catalogue lists, at the version the workspace locks
-or the newest read, as the `_stubs` modules the wheel's own index
-imports. `fm sync` and the lock verbs write them too, and the
+stub per tool the workspace locks, at the locked version, and a
+`_handles` module beside them declaring each handle, which the wheel's
+index imports. A tool the workspace does not deploy gets no stub, and
+its handle is a bare `Tool`, which forbids nothing and completes
+nothing. `fm sync` and the lock verbs write them too, and the
 workspace's entry script writes them before its type checkers run.
-Without them every handle types as a bare `Tool`, which forbids
-nothing and completes nothing.
 
 The docs playground reads the same stubs from the index the site
 serves beside it, written into the package it installs, since an

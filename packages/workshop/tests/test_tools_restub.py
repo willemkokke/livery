@@ -140,13 +140,13 @@ def test_a_build_verb_that_fails_or_cannot_run_refuses_naming_it(
 # --- the writing ------------------------------------------------------------------
 
 
-def test_the_stubs_are_written_at_the_locked_or_newest_version_and_kept_current(
+def test_the_stubs_are_written_for_the_locked_tools_at_their_locked_version(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _workspace(
         tmp_path,
         monkeypatch,
-        '[workspace]\n\n[tools]\nindex = "index"\nrequires = ["ruff"]\n',
+        '[workspace]\n\n[tools]\nindex = "index"\nrequires = ["ruff", "bare"]\n',
     )
     _index(
         root,
@@ -161,26 +161,39 @@ def test_the_stubs_are_written_at_the_locked_or_newest_version_and_kept_current(
     Lock(THREE, {"ruff": Locked("1.0.0", {})}).save(_tools.lock_path(root))
     assert _tools.write_lock(root).tools["ruff"].version == "1.0.0"
     made = _tools.write_stubs(root)
-    assert made.written == ("ruff", "ty") and made.kept == ()
+    assert made.written == ("ruff",) and made.kept == ()
     assert made.removed == ("gone",)
     assert made.skipped == {"bare": "bare 2.0.0: no stub; the index has none"}
     assert (stubs / "ruff.pyi").read_text() == "stub ruff 1.0.0\n"  # the lock's
-    assert (stubs / "ty.pyi").read_text() == "stub ty 0.1.0\n"  # the newest read
+    assert not (stubs / "ty.pyi").exists()  # listed, not locked: no stub
     assert (stubs / "__init__.pyi").read_text() == ""
+    assert _tools.handles_path(root).read_text() == (
+        "# Rendered by `fm tools.restub`: the handles this workspace\n"
+        "# locks. Do not edit by hand.\n"
+        "from livery.toolroom.tools import Result\n"
+        "from livery.toolroom.tools._stubs.ruff import Ruff as Ruff\n"
+        "\n"
+        "ruff: Ruff[Result]\n"
+    )
     # The package's own index is never shadowed: nothing else is written.
     assert sorted(p.name for p in _tools.typings_dir(root).rglob("*.pyi")) == [
         "__init__.pyi",
+        "_handles.pyi",
         "ruff.pyi",
-        "ty.pyi",
     ]
-    assert _tools.stubs_present(root) == 2
+    assert _tools.stubs_present(root) == 1
     # A second write changes nothing on disk.
     again = _tools.write_stubs(root)
-    assert again.written == () and again.kept == ("ruff", "ty")
+    assert again.written == () and again.kept == ("ruff",)
     assert _tools.stub_lines(root) == [
-        "  stubs: 2 in typings/",
+        "  stubs: 1 in typings/",
         "  stubs: bare: bare 2.0.0: no stub; the index has none",
     ]
+    # Without a lock nothing is written, and the stale stub goes.
+    _tools.lock_path(root).unlink()
+    none = _tools.write_stubs(root)
+    assert none.written == () and none.removed == ("ruff",)
+    assert _tools.handles_path(root).read_text().endswith("import Result\n\n")
 
 
 def test_the_lock_verbs_and_sync_write_the_stubs_and_env_check_counts_them(

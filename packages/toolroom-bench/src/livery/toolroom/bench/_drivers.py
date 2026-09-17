@@ -123,7 +123,9 @@ RECORD_KINDS = {
     "python": "uv-python",
     "node": "bun-install",
     "man": "system-check",
-    "docker": "archive",
+    # The docker tier fetches a CLI to read; a consumer checks the docker it
+    # has, since the daemon is its own install and the CLI belongs with it.
+    "docker": "system-check",
     "bun": "archive",
     "github": "archive",
     "gitlab": "archive",

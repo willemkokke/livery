@@ -281,8 +281,7 @@ def _fm_install_stubs(index_url, target=None):
 
     pointer = json.loads(_fm_fetch(base + "pointer.json"))
     target.mkdir(parents=True, exist_ok=True)
-    (target / "__init__.pyi").write_text("", encoding="utf-8")
-    written = 0
+    written = []
     for name, entry in pointer["tools"].items():
         if not entry.get("stubs"):
             continue
@@ -293,9 +292,25 @@ def _fm_install_stubs(index_url, target=None):
                 (target / (name + ".pyi")).write_text(
                     read(stubs[version]), encoding="utf-8"
                 )
-                written += 1
+                written.append(name)
                 break
-    return written
+    (target / "__init__.pyi").write_text("", encoding="utf-8")
+    # The package's own index imports the handles from the module beside
+    # the stubs: one import and one typed handle per stub, the class named
+    # as the records name it.
+    def cls(name):
+        return "".join(part.title() for part in name.replace("-", "_").split("_"))
+
+    index = ["from livery.toolroom.tools import Result"]
+    index += [
+        "from livery.toolroom.tools._stubs." + n + " import " + cls(n) + " as " + cls(n)
+        for n in written
+    ]
+    index += [""] + [n + ": " + cls(n) + "[Result]" for n in written]
+    (target.parent / "_handles.pyi").write_text(
+        chr(10).join(index) + chr(10), encoding="utf-8"
+    )
+    return len(written)
 
 
 if sys.platform == "emscripten" or os.environ.get("_FM_PLAYGROUND_SIM"):

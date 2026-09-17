@@ -14,9 +14,9 @@
 # The per-tool classes are not in the wheel. They are rendered from the
 # tool records into a workspace's `typings/livery/toolroom/tools/_stubs/`
 # by `fm tools.restub`, the stub path every checker reads first, and the
-# imports below resolve there. Without them every handle is what
-# `__getattr__` answers, a `Tool[Result]`, so a stub missing degrades a
-# hint, never a run.
+# import of `_handles` below resolves there. Without it every handle is
+# what `__getattr__` answers, a `Tool[Result]`, so a stub missing
+# degrades a hint, never a run.
 
 # The private aliases (`_re`, `_run`, …) mirror tools.py: they keep those names
 # out of the public namespace so `tools.run`/`tools.sys`/… resolve to Tools via
@@ -34,44 +34,11 @@ from pathlib import Path as _Path
 from typing import Any, Generic, Literal, NamedTuple, Self, TypeAlias
 from typing import cast as _cast  # noqa: F401
 
-# One rendered file per tool record, materialised by `fm tools.restub`.
-from livery.toolroom.tools._stubs.basedpyright import Basedpyright as Basedpyright
-from livery.toolroom.tools._stubs.bash import Bash as Bash
-from livery.toolroom.tools._stubs.build import Build as Build
-from livery.toolroom.tools._stubs.bun import Bun as Bun
-from livery.toolroom.tools._stubs.claude import Claude as Claude
-from livery.toolroom.tools._stubs.cmake import Cmake as Cmake
-from livery.toolroom.tools._stubs.cmd import Cmd as Cmd
-from livery.toolroom.tools._stubs.coverage import Coverage as Coverage
-from livery.toolroom.tools._stubs.cspell import Cspell as Cspell
-from livery.toolroom.tools._stubs.djlint import Djlint as Djlint
-from livery.toolroom.tools._stubs.docker import Docker as Docker
-from livery.toolroom.tools._stubs.eclint import Eclint as Eclint
-from livery.toolroom.tools._stubs.fish import Fish as Fish
-from livery.toolroom.tools._stubs.gh import Gh as Gh
-from livery.toolroom.tools._stubs.git import Git as Git
-from livery.toolroom.tools._stubs.git_changelog import GitChangelog as GitChangelog
-from livery.toolroom.tools._stubs.git_cliff import GitCliff as GitCliff
-from livery.toolroom.tools._stubs.markdownlint import Markdownlint as Markdownlint
-from livery.toolroom.tools._stubs.mkdocs import Mkdocs as Mkdocs
-from livery.toolroom.tools._stubs.mypy import Mypy as Mypy
-from livery.toolroom.tools._stubs.ninja import Ninja as Ninja
-from livery.toolroom.tools._stubs.nu import Nu as Nu
-from livery.toolroom.tools._stubs.prek import Prek as Prek
-from livery.toolroom.tools._stubs.pwsh import Pwsh as Pwsh
-from livery.toolroom.tools._stubs.pytest import Pytest as Pytest
-from livery.toolroom.tools._stubs.python import Python as Python
-from livery.toolroom.tools._stubs.ruff import Ruff as Ruff
-from livery.toolroom.tools._stubs.ruff_format import RuffFormat as RuffFormat
-from livery.toolroom.tools._stubs.ssh import Ssh as Ssh
-from livery.toolroom.tools._stubs.ssh_keygen import SshKeygen as SshKeygen
-from livery.toolroom.tools._stubs.ssh_keyscan import SshKeyscan as SshKeyscan
-from livery.toolroom.tools._stubs.tea import Tea as Tea
-from livery.toolroom.tools._stubs.twine import Twine as Twine
-from livery.toolroom.tools._stubs.ty import Ty as Ty
-from livery.toolroom.tools._stubs.uv import Uv as Uv
-from livery.toolroom.tools._stubs.zensical import Zensical as Zensical
-from livery.toolroom.tools._stubs.zsh import Zsh as Zsh
+# The handles, one per tool the workspace locks: `ruff: Ruff[Result]`
+# and its class, declared by the `_handles` module that `fm tools.restub`
+# renders into the workspace's `typings/` beside the stubs. A tool not
+# locked has no name there and answers through `__getattr__`.
+from livery.toolroom.tools._handles import *  # noqa: F403
 from typing_extensions import TypeVar
 
 from livery.toolroom.tools import _host as _host
@@ -288,46 +255,5 @@ class Tool(Generic[_R]):
 # concrete class to chain through `_sub`, and the annotation `Tool[Argv]`
 # is how the stubs spell it.
 class ArgvTool(Tool[Argv]): ...
-
-# Parameterised by what a call returns: `Result` here, and `.argv` re-spells
-# the same class over `Argv` — one flag block serving both the run and the
-# build path.
-basedpyright: Basedpyright[Result]
-bash: Bash[Result]
-build: Build[Result]
-bun: Bun[Result]
-claude: Claude[Result]
-cmake: Cmake[Result]
-cmd: Cmd[Result]
-coverage: Coverage[Result]
-cspell: Cspell[Result]
-djlint: Djlint[Result]
-docker: Docker[Result]
-eclint: Eclint[Result]
-fish: Fish[Result]
-gh: Gh[Result]
-git: Git[Result]
-git_changelog: GitChangelog[Result]
-git_cliff: GitCliff[Result]
-markdownlint: Markdownlint[Result]
-mkdocs: Mkdocs[Result]
-mypy: Mypy[Result]
-ninja: Ninja[Result]
-nu: Nu[Result]
-prek: Prek[Result]
-pwsh: Pwsh[Result]
-pytest: Pytest[Result]
-python: Python[Result]
-ruff: Ruff[Result]
-ruff_format: RuffFormat[Result]
-ssh: Ssh[Result]
-ssh_keygen: SshKeygen[Result]
-ssh_keyscan: SshKeyscan[Result]
-tea: Tea[Result]
-twine: Twine[Result]
-ty: Ty[Result]
-uv: Uv[Result]
-zensical: Zensical[Result]
-zsh: Zsh[Result]
 
 def __getattr__(name: str) -> Tool[Result]: ...

@@ -30,6 +30,7 @@ from livery.toolroom.store import class_name
 
 _HEADER = """\
 # Rendered from the tool's record — do not edit by hand.
+# ruff: noqa: E501
 #
 # Read from {name} {version} on {platform}. In-process: {in_process}.
 # Every verb ends in `**flags: Any`: the stub suggests what this tool
@@ -123,7 +124,7 @@ def _imports(body: str, aliases: str = "") -> str:
     # `class Tool(Tool)`, which cannot derive from itself. `ToolBase` reads
     # public in every class header a hover shows; render() refuses the
     # pathological verb that could collide with it (see NameCollision).
-    names = ["Argv", "Tool as ToolBase"] + [
+    names = ["Argv"] + [
         n for n in ("Flag", "Value", "ValuedFlag") if re.search(rf"\b{n}\b", code)
     ]
     lines = []
@@ -134,6 +135,9 @@ def _imports(body: str, aliases: str = "") -> str:
     lines.append(f"from typing import {', '.join(typing)}")
     lines.append("")
     lines.append(f"from livery.toolroom.tools import {', '.join(sorted(names))}")
+    # The aliased import on its own line, as the import sorter lays it
+    # out, so a rendered stub is already in the shape the linter wants.
+    lines.append("from livery.toolroom.tools import Tool as ToolBase")
     return "\n".join(lines)
 
 

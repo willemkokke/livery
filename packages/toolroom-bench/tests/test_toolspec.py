@@ -640,7 +640,10 @@ def test_rendered_stub_imports_only_what_it_uses():
     # `Tool` alone is aliased — a subcommand becomes a class named after the
     # verb, and `uv tool` would otherwise write `class Tool(Tool)`. The rest
     # import bare: reader-facing names in every hover.
-    assert "from livery.toolroom.tools import Argv, Flag, Tool as ToolBase" in plain
+    assert (
+        "from livery.toolroom.tools import Argv, Flag\n"
+        "from livery.toolroom.tools import Tool as ToolBase"
+    ) in plain
 
     choosy = _stubgen.render(
         _spec(Option("color", ("--color",), type_name="choice", choices=("a", "b")))

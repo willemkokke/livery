@@ -301,8 +301,25 @@ def test_tools_stub_declares_every_runtime_binding():
                 names.add(node.target.id)
         return names
 
+    def handles(source: str) -> set[str]:
+        """The curated handles, `ruff = Tool("ruff")`: declared by the
+        workspace's rendered stubs, never by the wheel's own index.
+        """
+        found: set[str] = set()
+        for node in ast.parse(source).body:
+            if not isinstance(node, ast.Assign):
+                continue
+            value = node.value
+            if (
+                isinstance(value, ast.Call)
+                and isinstance(value.func, ast.Name)
+                and value.func.id == "Tool"
+            ):
+                found |= {t.id for t in node.targets if isinstance(t, ast.Name)}
+        return found
+
     src = Path(tools.__file__)
-    runtime = bindings(src.read_text())
+    runtime = bindings(src.read_text()) - handles(src.read_text())
     declared = bindings(src.with_suffix(".pyi").read_text())
     missing = runtime - declared - {"annotations"}  # __future__ import allowlisted
     assert not missing, f"tools.pyi is missing runtime bindings: {sorted(missing)}"
@@ -1228,7 +1245,7 @@ def test_a_bare_argv_in_a_positional_is_refused_with_both_spellings():
     # refusal teaches both rather than guessing either.
     payload = tools.git.log.argv(n=1)
     with pytest.raises(TypeError, match=r"splat it \(`\*cmd`\)") as err:
-        tools.ssh("host", payload)  # type: ignore[arg-type]
+        tools.ssh("host", payload)
     assert "cmd.posix()" in str(err.value)
 
 

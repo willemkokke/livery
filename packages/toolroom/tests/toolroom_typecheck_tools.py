@@ -17,13 +17,16 @@ Two kinds of assertion, and the second is the load-bearing one:
   swallows any keyword the stub has never heard of, so a *passing* call
   proves nothing — misspell a flag and it still passes. But a call that is
   required to *fail* proves the flag is declared and typed: if
-  `mkdocs.build(strict=...)` ever stopped being stubbed, `strict="yes"`
+  `ruff.check(fix=...)` ever stopped being stubbed, `fix="always"`
   would be swallowed by `**flags`, the error would vanish, and the
   `# type: ignore` above it would become unnecessary — which this file
   turns into an error via the pragma on line 1 (basedpyright honours and
   polices `# type: ignore` too) and via mypy's `warn_unused_ignores`.
 
-So: to assert that a flag exists, pass it something wrong.
+So: to assert that a flag exists, pass it something wrong. Only a tool
+this repository locks has a stub (`[tools] requires` in the root
+contract and the python kind), so the negative calls name those tools
+alone; a handle with no stub is a bare `Tool` that accepts every call.
 """
 
 from __future__ import annotations
@@ -102,11 +105,11 @@ def _docker() -> None:
 
 
 def _docs_tools() -> None:
+    tools.zensical.build(clean=True, strict=True)
+    # A tool this repository does not lock has no stub, so its handle is a
+    # bare `Tool` and every call is accepted; the shape below is the fallback.
     tools.mkdocs.build(strict=True, clean=off)
     tools.mkdocs.build(use_directory_urls=off, site_dir="site")
-    tools.mkdocs.serve(dirty=True, dev_addr="127.0.0.1:8000")
-    tools.mkdocs.gh_deploy(force=True, message="deploy")
-    tools.zensical.build(clean=True, strict=True)
 
 
 def _coverage() -> None:
@@ -119,25 +122,7 @@ def _coverage() -> None:
 
 def _node_and_rust() -> None:
     tools.basedpyright("src", outputjson=True)
-    tools.bun.add("left-pad", global_=True)
-    tools.bun.install(frozen_lockfile=True)
-    tools.cspell.lint("**/*.md", quiet=True, gitignore=True)
-    tools.prek.run(all_files=True)
-    tools.markdownlint("**/*.md", fix=True)
-
-
-def _claude() -> None:
-    """Claude Code's headless surface is the root call, so the prompt is a
-    positional and the flags hang off `__call__`; the verbs are what wires a
-    session up around it. `continue_` carries footman's trailing underscore —
-    `continue` is a Python keyword, and the bridge strips it back off.
-    """
-    tools.claude("explain this diff", print=True, output_format="json")
-    tools.claude("review", model="sonnet", permission_mode="plan", effort="high")
-    tools.claude(continue_=True, fork_session=True)
-    tools.claude.mcp.add("sentry", "https://mcp.sentry.dev/mcp", transport="http")
-    tools.claude.plugin.marketplace.add("owner/repo", scope="project")
-    tools.claude.auth.status(json=True)
+    tools.cmake("-S", ".", "-B", "build", G="Ninja")
 
 
 def _tool_globals_via_flags() -> None:
@@ -193,24 +178,15 @@ def _flags_are_declared_and_typed() -> None:
     being declared — and `**flags: Any` starts swallowing it — this file
     fails rather than quietly testing nothing.
     """
-    tools.mkdocs.build(strict="yes")  # type: ignore[arg-type]
-    tools.mkdocs.build(clean="no")  # type: ignore[arg-type]
     tools.ruff.check(fix="always")  # type: ignore[arg-type]
     tools.ruff.check(output_format="nope")  # type: ignore[arg-type]
-    tools.ruff_format(check="yes")  # type: ignore[arg-type]
     tools.uv.sync(frozen="yes")  # type: ignore[arg-type]
     tools.git.commit(signoff="yes")  # type: ignore[arg-type]
     tools.docker.compose.up(detach="yes")  # type: ignore[arg-type]
     tools.coverage.report(show_missing="yes")  # type: ignore[arg-type]
     tools.zensical.build(clean="yes")  # type: ignore[arg-type]
     tools.basedpyright(outputjson="yes")  # type: ignore[arg-type]
-    tools.bun.add(dev="yes")  # type: ignore[arg-type]
-    tools.cspell.lint(quiet="yes")  # type: ignore[arg-type]
-    tools.prek.run(all_files="yes")  # type: ignore[arg-type]
-    tools.markdownlint(fix="yes")  # type: ignore[arg-type]
-    tools.claude(print="yes")  # type: ignore[arg-type]
-    tools.claude(continue_="yes")  # type: ignore[arg-type]
-    tools.claude.auth.status(json="yes")  # type: ignore[arg-type]
+    tools.cmake(L="yes")  # type: ignore[arg-type]
     tools.docker.flags(debug="yes")  # type: ignore[arg-type]
     tools.git.opts(nofail="yes")  # type: ignore[arg-type]
     tools.git.opts(bogus=True)  # type: ignore[call-arg]
@@ -219,12 +195,11 @@ def _flags_are_declared_and_typed() -> None:
 def _positional_shape_is_enforced() -> None:
     """The usage line's positional shape, as type errors.
 
-    `mkdocs build` declares only options, so a positional is wrong;
-    `docker run` requires IMAGE positionally, so passing it by keyword — or
+    `uv sync` declares only options, so a positional is wrong; `docker
+    run` requires IMAGE positionally, so passing it by keyword — or
     omitting it — is wrong. Each MUST fail, so the shape can't silently
     decay to `*args` without this file noticing.
     """
-    tools.mkdocs.build("site")  # type: ignore[call-arg, arg-type]
     tools.uv.sync("extra")  # type: ignore[call-arg, arg-type]
     tools.docker.run(image="alpine")  # type: ignore[call-arg]
     tools.docker.run()  # type: ignore[call-arg]

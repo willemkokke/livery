@@ -1,4 +1,5 @@
 # Rendered from the tool's record — do not edit by hand.
+# ruff: noqa: E501
 #
 # Read from demo 1.0.0 on Linux and macOS. In-process: no.
 # Every verb ends in `**flags: Any`: the stub suggests what this tool
@@ -10,7 +11,8 @@ from collections.abc import Sequence
 from os import PathLike
 from typing import Any, Literal, Self, TypeAlias, TypeVar
 
-from livery.toolroom.tools import Argv, Flag, Tool as ToolBase, Value
+from livery.toolroom.tools import Argv, Flag, Value
+from livery.toolroom.tools import Tool as ToolBase
 
 _R = TypeVar("_R")
 _R2 = TypeVar("_R2")
