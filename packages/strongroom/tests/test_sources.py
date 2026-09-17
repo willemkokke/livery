@@ -37,6 +37,7 @@ from livery.strongroom import (
     fetch_url,
     silent,
 )
+from livery.strongroom._sources import REDIRECTS
 
 HELLO = digest_of(b"hello")
 
@@ -285,6 +286,115 @@ def test_fetch_url_refuses_every_non_200_and_every_failure(tmp_path: Path) -> No
         ),
     ):
         pass
+
+
+@contextlib.contextmanager
+def _redirecting(directory: Path) -> Iterator[str]:
+    """A server whose `/hop/<n>` redirects to `/hop/<n-1>` and `/hop/0` to `/ok`.
+
+    `/loop` redirects to itself, `/nowhere` redirects with no location,
+    and `/see` answers 303 to `/ok`; the rest serves *directory*.
+    """
+    import re
+
+    class Handler(http.server.SimpleHTTPRequestHandler):
+        def log_message(self, format: str, *args: Any) -> None:
+            pass
+
+        def do_HEAD(self) -> None:
+            if not self._redirect():
+                super().do_HEAD()
+
+        def do_GET(self) -> None:
+            if not self._redirect():
+                super().do_GET()
+
+        def _redirect(self) -> bool:
+            hop = re.fullmatch(r"/hop/(\d+)", self.path)
+            if hop is not None:
+                n = int(hop[1])
+                self.send_response(302)
+                self.send_header("Location", f"/hop/{n - 1}" if n else "/ok")
+                self.end_headers()
+                return True
+            if self.path == "/loop":
+                self.send_response(301)
+                self.send_header("Location", "/loop")
+                self.end_headers()
+                return True
+            if self.path == "/nowhere":
+                self.send_response(302)
+                self.end_headers()
+                return True
+            if self.path == "/see":
+                self.send_response(303)
+                self.send_header("Location", "/ok")
+                self.end_headers()
+                return True
+            if self.path == "/off":
+                self.send_response(302)
+                self.send_header("Location", "ftp://nowhere.test/x")
+                self.end_headers()
+                return True
+            return False
+
+    server = http.server.ThreadingHTTPServer(
+        ("127.0.0.1", 0), lambda *args: Handler(*args, directory=str(directory))
+    )
+    thread = threading.Thread(target=server.serve_forever, args=(0.01,), daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_fetch_url_follows_a_bounded_redirect_chain_and_refuses_the_rest(
+    tmp_path: Path,
+) -> None:
+    folder = tmp_path / "f"
+    folder.mkdir()
+    (folder / "ok").write_bytes(b"ok")
+    with _redirecting(folder) as base:
+        # A release asset behind a redirect lands, for GET and HEAD alike.
+        with fetch_url(f"{base}/hop/1", connect_timeout=1, transfer_timeout=1) as got:
+            assert got.status == 200 and got.read() == b"ok"
+        with fetch_url(f"{base}/see", connect_timeout=1, transfer_timeout=1) as got:
+            assert got.read() == b"ok"
+        with fetch_url(
+            f"{base}/hop/0", connect_timeout=1, transfer_timeout=1, method="HEAD"
+        ) as head:
+            assert head.status == 200
+        # Exactly the bound is followed; one hop more refuses naming the chain.
+        with fetch_url(
+            f"{base}/hop/{REDIRECTS - 1}", connect_timeout=1, transfer_timeout=1
+        ) as got:
+            assert got.read() == b"ok"
+        with (
+            pytest.raises(
+                Unreachable,
+                match=rf"more than {REDIRECTS} redirects \(.*-> .*/hop/0 -> /ok\)",
+            ),
+            fetch_url(f"{base}/hop/{REDIRECTS}", connect_timeout=1, transfer_timeout=1),
+        ):
+            pass
+        with (
+            pytest.raises(Unreachable, match=r"/loop: more than|more than 5 redirects"),
+            fetch_url(f"{base}/loop", connect_timeout=1, transfer_timeout=1),
+        ):
+            pass
+        with (
+            pytest.raises(Unreachable, match=r"/nowhere: HTTP 302 names no location"),
+            fetch_url(f"{base}/nowhere", connect_timeout=1, transfer_timeout=1),
+        ):
+            pass
+        # A redirect off http is refused as no URL at all.
+        with (
+            pytest.raises(Unreachable, match=r"is not http or https"),
+            fetch_url(f"{base}/off", connect_timeout=1, transfer_timeout=1),
+        ):
+            pass
 
 
 def test_fill_refuses_a_folder_of_another_algorithm(

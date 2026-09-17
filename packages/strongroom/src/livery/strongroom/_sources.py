@@ -22,7 +22,7 @@ from collections.abc import Callable, Generator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 from livery.strongroom._digest import Digest
 
@@ -134,6 +134,12 @@ class Unreachable(Exception):
     """A source did not answer for this object; the fetch skips it and reports."""
 
 
+REDIRECTS = 5
+"""How many redirects a fetch follows before it refuses the chain."""
+
+_REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
+
+
 @contextlib.contextmanager
 def fetch_url(
     url: str, *, connect_timeout: float, transfer_timeout: float, method: str = "GET"
@@ -146,32 +152,60 @@ def fetch_url(
     each wait for bytes, headers included. `method` is `GET`, or
     `HEAD` to learn whether a source holds an object without reading it.
 
+    A redirect (301, 302, 303, 307, 308) is followed to its `Location`,
+    resolved against the URL that answered it, with the same method
+    and both timeouts per hop, up to `REDIRECTS` hops: a forge serves
+    a release asset from a storage host it redirects to, and the bytes
+    are the same bytes. A chain longer than that, or a redirect naming
+    no location, is refused naming the chain.
+
     Yields:
         The response, status 200, positioned at its first byte.
 
     Raises:
-        Unreachable: on a connection error, a timeout, or any status
-            other than 200. A 404 is the source saying it does not
-            have the object, which for the fetch is the same thing.
+        Unreachable: on a connection error, a timeout, a redirect chain
+            that does not end, or any final status other than 200. A
+            404 is the source saying it does not have the object, which
+            for the fetch is the same thing.
     """
-    parts = urlsplit(url)
-    connection = _CONNECTIONS[parts.scheme](
-        cast(str, parts.hostname), parts.port, timeout=connect_timeout
-    )
-    try:
-        target = parts.path or "/"
-        if parts.query:
-            target = f"{target}?{parts.query}"
-        # Connecting is bounded by the connect timeout; once the socket
-        # exists, every later wait is bounded by the transfer timeout.
-        connection.connect()
-        cast(socket.socket, connection.sock).settimeout(transfer_timeout)
-        connection.request(method, target)
-        response = connection.getresponse()
-        if response.status != 200:
-            raise Unreachable(f"{url}: HTTP {response.status}")
-        yield response
-    except (OSError, http.client.HTTPException) as error:
-        raise Unreachable(f"{url}: {error}") from None
-    finally:
-        connection.close()
+    chain = [url]
+    while True:
+        parts = urlsplit(chain[-1])
+        connection = _CONNECTIONS[parts.scheme](
+            cast(str, parts.hostname), parts.port, timeout=connect_timeout
+        )
+        try:
+            target = parts.path or "/"
+            if parts.query:
+                target = f"{target}?{parts.query}"
+            # Connecting is bounded by the connect timeout; once the socket
+            # exists, every later wait is bounded by the transfer timeout.
+            connection.connect()
+            cast(socket.socket, connection.sock).settimeout(transfer_timeout)
+            connection.request(method, target)
+            response = connection.getresponse()
+            if response.status in _REDIRECT_STATUSES:
+                location = response.getheader("Location")
+                if not location:
+                    raise Unreachable(
+                        f"{chain[-1]}: HTTP {response.status} names no location"
+                        f" (after {' -> '.join(chain)})"
+                    )
+                if len(chain) > REDIRECTS:
+                    raise Unreachable(
+                        f"{url}: more than {REDIRECTS} redirects"
+                        f" ({' -> '.join([*chain, location])})"
+                    )
+                chain.append(urljoin(chain[-1], location))
+                _check_url(chain[-1])
+                continue
+            if response.status != 200:
+                raise Unreachable(f"{chain[-1]}: HTTP {response.status}")
+            yield response
+            return
+        except (OSError, http.client.HTTPException) as error:
+            raise Unreachable(f"{chain[-1]}: {error}") from None
+        except ValueError as error:
+            raise Unreachable(f"{chain[-1]}: {error}") from None
+        finally:
+            connection.close()
