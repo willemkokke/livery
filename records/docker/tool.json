@@ -1,7 +1,7 @@
 {
   "name": "docker",
   "description": "",
-  "kind": "archive",
+  "kind": "system-check",
   "min_version": "",
   "hosts": []
 }

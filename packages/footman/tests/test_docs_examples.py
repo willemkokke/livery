@@ -763,6 +763,12 @@ def test_the_playground_installs_the_newest_stubs_from_the_index_and_refuses_a_b
     assert install(index.as_uri(), target=str(target)) == 1
     assert (target / "ruff.pyi").read_text() == _RUFF_STUB
     assert (target / "__init__.pyi").read_text() == ""
+    assert (target.parent / "_handles.pyi").read_text() == (
+        "from livery.toolroom.tools import Result\n"
+        "from livery.toolroom.tools._stubs.ruff import Ruff as Ruff\n"
+        "\n"
+        "ruff: Ruff[Result]\n"
+    )
     assert not (target / "bare.pyi").exists()
 
 

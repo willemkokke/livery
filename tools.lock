@@ -10,6 +10,22 @@
       "version": "1.39.10",
       "hosts": {}
     },
+    "cmake": {
+      "version": "4.4.2",
+      "hosts": {}
+    },
+    "coverage": {
+      "version": "7.15.4",
+      "hosts": {}
+    },
+    "docker": {
+      "version": "29.7.2",
+      "hosts": {}
+    },
+    "git": {
+      "version": "2.55.0",
+      "hosts": {}
+    },
     "mypy": {
       "version": "2.3.1",
       "hosts": {}
@@ -37,6 +53,10 @@
         "macos-arm": "sha256:4b0fb7a45a0db28c41b9a1c14ac1434d4ca2ae4e4a790607ca8569a79162f1d2",
         "windows-x64": "sha256:a8ad57e3978b405b035c20f463d96b0ce83c28583655a63bca6fd2e570a829dd"
       }
+    },
+    "zensical": {
+      "version": "0.0.56",
+      "hosts": {}
     }
   }
 }
