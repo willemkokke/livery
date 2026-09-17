@@ -16,16 +16,30 @@ tool's current tree and the digest of the record it was built from.
 Everything under a tree is immutable and cacheable for as long as anyone
 likes; only the pointer needs a short lifetime.
 
+Beside the authored trees the build lands one derived tree, the stubs:
+
+    stubs/<tool>/<version>      the stub a reader at that version gets
+
+A stub is rendered from the union of every version read up to that one,
+so a flag the tool later dropped stays completable and its docstring
+says when it went. The pointer names the derived tree and records the
+renderer's identity, the digest of the code that renders, as a fact
+rather than an address: a publish after the renderer moved lands new
+blobs, names them in a new tree and moves the pointer, and the blobs it
+replaced stay reachable by digest.
+
 The authored half replays to identical digests: two builds from genesis
 land equal objects and equal pointers. A build into a directory holding
 an earlier build reads that pointer and reuses every tool whose record
-digest did not move, an optimisation and never authority, since
+digest did not move, and every tool's stubs when the renderer did not
+move either, an optimisation and never authority, since
 `--from-genesis` rebuilds every tool from the records alone.
 """
 
 from __future__ import annotations
 
 import dataclasses
+import inspect
 import json
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -42,10 +56,17 @@ from livery.strongroom import (
     canonical,
     digest_of,
 )
+from livery.toolroom.bench import _drivers, _stubgen, _surfaces, _toolspec
 from livery.toolroom.store import TOOL_FILE, Record, observations, resolve
 
 INDEX = "index"
 """The namespace of the index store: `index/<tool>` names the tool's tree; volatile."""
+
+DERIVED = "derived"
+"""The namespace of what the index renders; `derived/stubs` names the stubs' tree."""
+
+STUBS = "stubs"
+"""The derived tree of stubs, and its ref under `DERIVED`."""
 
 POINTER = "pointer.json"
 """The pointer document, beside the store's layout at the index root."""
@@ -70,6 +91,8 @@ class Built:
         rebuilt: The tools materialised on this build.
         reused: The tools whose earlier tree stood, their record unmoved.
         dropped: The tools the earlier pointer named and no record has.
+        stubs: The digest of the derived tree of stubs.
+        rendered: The tools whose stubs were rendered on this build.
     """
 
     into: str
@@ -77,6 +100,8 @@ class Built:
     rebuilt: tuple[str, ...]
     reused: tuple[str, ...]
     dropped: tuple[str, ...]
+    stubs: str = ""
+    rendered: tuple[str, ...] = ()
 
 
 def record_digest(record: Record) -> Digest:
@@ -97,7 +122,7 @@ def open_index(into: Path) -> Store:
     Raises:
         ManifestError: when *into* holds a store of another layout.
     """
-    namespaces = (Namespace(INDEX, "volatile"),)
+    namespaces = (Namespace(INDEX, "volatile"), Namespace(DERIVED, "volatile"))
     if (into / "strongroom.json").is_file():
         return Store.open(into, namespaces=namespaces)
     return Store.create(into, namespaces=namespaces)
@@ -144,8 +169,10 @@ def build(records: Path, into: Path, *, from_genesis: bool = False) -> Built:
 
     A tool whose record digest matches the pointer's, and whose tree the
     store still names, is reused; every other tool is materialised and
-    its ref moved. A tool the pointer names and no record has is dropped.
-    *from_genesis* ignores the pointer and materialises every tool.
+    its ref moved. A tool's stubs are reused when the tool is and the
+    renderer did not move, and rendered otherwise. A tool the pointer
+    names and no record has is dropped. *from_genesis* ignores the
+    pointer and materialises every tool.
 
     Returns:
         What the build did.
@@ -158,31 +185,65 @@ def build(records: Path, into: Path, *, from_genesis: bool = False) -> Built:
     loaded = load_records(records)
     store = open_index(into)
     previous: dict[str, Any] = {}
+    same_renderer = False
     if not from_genesis:
         pointer = read_pointer(into)
         previous = dict(pointer["tools"]) if pointer else {}
+        same_renderer = pointer is not None and pointer.get("renderer") == renderer()
     tools: dict[str, str] = {}
+    stubs: dict[str, Entry] = {}
     rebuilt: list[str] = []
     reused: list[str] = []
+    rendered: list[str] = []
     for record in loaded:
         fingerprint = str(record_digest(record))
         current = store.ref(INDEX, record.name)
         held = previous.get(record.name)
-        if (
+        stood = (
             isinstance(held, dict)
             and held.get("record") == fingerprint
             and current is not None
             and str(current) == held.get("tree")
             and store.state(current) == "present"
-        ):
+        )
+        if stood and current is not None:
             tools[record.name] = str(current)
             reused.append(record.name)
+        else:
+            tree = materialise(store, record)
+            if current != tree:
+                store.set_ref(INDEX, record.name, tree, previous=current, by=BY)
+            tools[record.name] = str(tree)
+            rebuilt.append(record.name)
+        driver = _drivers.find(record.name)
+        if driver is None:
             continue
-        tree = materialise(store, record)
-        if current != tree:
-            store.set_ref(INDEX, record.name, tree, previous=current, by=BY)
-        tools[record.name] = str(tree)
-        rebuilt.append(record.name)
+        kept = held.get("stubs") if stood and same_renderer and held else None
+        if isinstance(kept, str) and store.state(Digest.parse(kept)) == "present":
+            data = store.read(Digest.parse(kept))
+            stubs[record.name] = Entry(
+                record.name, "tree", Digest.parse(kept), len(data)
+            )
+            continue
+        stubs[record.name] = _tree(
+            store,
+            record.name,
+            [
+                Entry(
+                    version,
+                    "blob",
+                    store.put(text),
+                    len(text),
+                )
+                for version in _surfaces.versions(record)
+                for text in (stub_for(record, version, driver=driver).encode("utf-8"),)
+            ],
+        )
+        rendered.append(record.name)
+    derived = _tree(store, STUBS, stubs.values()).digest
+    standing = store.ref(DERIVED, STUBS)
+    if standing != derived:
+        store.set_ref(DERIVED, STUBS, derived, previous=standing, by=BY)
     dropped: list[str] = []
     named = {record.name for record in loaded}
     for stale in store.refs(INDEX):
@@ -195,10 +256,17 @@ def build(records: Path, into: Path, *, from_genesis: bool = False) -> Built:
     document = {
         "schema": SCHEMA,
         "algorithm": store.algorithm.name,
+        "renderer": renderer(),
+        "stubs": str(derived),
         "tools": {
             record.name: {
                 "tree": tools[record.name],
                 "record": str(record_digest(record)),
+                **(
+                    {"stubs": str(stubs[record.name].digest)}
+                    if record.name in stubs
+                    else {}
+                ),
             }
             for record in loaded
         },
@@ -206,7 +274,48 @@ def build(records: Path, into: Path, *, from_genesis: bool = False) -> Built:
     (into / POINTER).write_text(
         json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
-    return Built(str(into), tools, tuple(rebuilt), tuple(reused), tuple(dropped))
+    return Built(
+        str(into),
+        tools,
+        tuple(rebuilt),
+        tuple(reused),
+        tuple(dropped),
+        str(derived),
+        tuple(rendered),
+    )
+
+
+def renderer() -> dict[str, str]:
+    """The renderer's identity: the digest of the code that renders a stub.
+
+    A fact rather than an address, so a published stub can be traced to
+    the code that wrote it, and a build can tell whether the stubs it
+    holds were rendered by the code it runs. The digest is over the
+    sources of the renderer, the union and the spec model.
+    """
+    code = "".join(
+        inspect.getsource(module) for module in (_stubgen, _surfaces, _toolspec)
+    ).encode("utf-8")
+    return {"code": str(digest_of(code))}
+
+
+def stub_for(record: Record, version: str, *, driver: _drivers.Driver) -> str:
+    """The stub a reader at *version* gets: the union up to that version, rendered.
+
+    The header names the platforms that read *version* and how the tool
+    runs in footman's process, as the checked-in stubs' headers do.
+
+    Raises:
+        ValueError: when *version* is not one the record has read.
+    """
+    chain = _surfaces.Chain.of(record, upto=version)
+    spec = _surfaces.union_of(chain, name=driver.name)
+    return _stubgen.render(
+        spec,
+        platform=_stubgen._listed(tuple(chain.platforms(version))),
+        class_name=_stubgen._class_name(record.name),
+        in_process=driver.mode(spec.in_process),
+    )
 
 
 def materialise(store: Store, record: Record) -> Digest:

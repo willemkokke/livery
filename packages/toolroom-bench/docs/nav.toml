@@ -12,6 +12,7 @@ nav = [
             { "color" = "_generated/tasks/tools/color.md" },
             { "docs" = "_generated/tasks/tools/docs.md" },
             { "gather" = "_generated/tasks/tools/gather.md" },
+            { "goldens" = "_generated/tasks/tools/goldens.md" },
             { "index.build" = "_generated/tasks/tools/index/build.md" },
             { "list" = "_generated/tasks/tools/list.md" },
             { "observe" = "_generated/tasks/tools/observe.md" },

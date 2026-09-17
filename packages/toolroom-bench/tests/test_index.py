@@ -342,3 +342,108 @@ def test_the_checked_in_records_build_and_the_bench_declares_the_generator():
         built = _index.build(records, pathlib.Path(scratch) / "index")
     assert len(built.rebuilt) >= 31
     assert "uv" in built.tools and "ruff_format" in built.tools
+
+
+# --- the stubs, the derived half ---------------------------------------------------
+
+
+def _driven(tmp_path: pathlib.Path, monkeypatch: Any) -> pathlib.Path:
+    """Records named like curated tools, so the build finds a driver for them."""
+    from livery.toolroom.bench import _drivers
+
+    ruff = history(
+        "ruff",
+        ("1.0.0", "2026-01-01", reading("quiet"), ["Linux"]),
+        ("1.1.0", "2026-02-01", reading("quiet", "fix"), ["Linux", "macOS"]),
+    )
+    assert _drivers.find("ruff") is not None
+    return _records(
+        tmp_path, ruff, history("other", ("2.0.0", "2026-03-01", with_flags("x")))
+    )
+
+
+def test_a_stub_per_version_lands_in_the_derived_tree_and_the_pointer_names_it(
+    tmp_path, monkeypatch
+):
+    from livery.toolroom.bench import _drivers
+
+    root = _driven(tmp_path, monkeypatch)
+    into = tmp_path / "index"
+    built = _index.build(root, into)
+    assert built.rendered == ("ruff",)  # `other` has no driver, so no stub
+    store = _index.open_index(into)
+    derived = _tree(store, Digest.parse(built.stubs))
+    assert [e.name for e in derived.entries] == ["ruff"]
+    assert store.ref(_index.DERIVED, _index.STUBS) == Digest.parse(built.stubs)
+    ruff = _tree(store, _entry(store, derived, "ruff").digest)
+    assert [e.name for e in ruff.entries] == ["1.0.0", "1.1.0"]
+    record = _index.load_records(root)[1]
+    driver = _drivers.find("ruff")
+    assert driver is not None
+    for version in ("1.0.0", "1.1.0"):
+        text = store.read(_entry(store, derived, "ruff", version).digest).decode(
+            "utf-8"
+        )
+        assert text == _index.stub_for(record, version, driver=driver)
+    older = store.read(_entry(store, derived, "ruff", "1.0.0").digest).decode("utf-8")
+    newer = store.read(_entry(store, derived, "ruff", "1.1.0").digest).decode("utf-8")
+    assert "Read from ruff 1.0.0 on Linux." in older and "fix" not in older
+    assert "Read from ruff 1.1.0 on Linux and macOS." in newer
+    assert "fix: Value" in newer and "Added in 1.1.0" in newer
+
+    pointer = _index.read_pointer(into)
+    assert pointer is not None
+    assert pointer["stubs"] == built.stubs
+    assert pointer["renderer"] == _index.renderer()
+    assert pointer["tools"]["ruff"]["stubs"] == str(
+        _entry(store, derived, "ruff").digest
+    )
+    assert "stubs" not in pointer["tools"]["other"]
+
+
+def test_the_stubs_are_reused_with_the_tool_and_rendered_again_when_the_renderer_moves(
+    tmp_path, monkeypatch
+):
+    root = _driven(tmp_path, monkeypatch)
+    into = tmp_path / "index"
+    first = _index.build(root, into)
+    again = _index.build(root, into)
+    assert again.reused == ("other", "ruff") and again.rendered == ()
+    assert again.stubs == first.stubs
+
+    moved = {"code": "sha256:" + "0" * 64}
+    monkeypatch.setattr(_index, "renderer", lambda: moved)
+    fresh = _index.build(root, into)
+    assert fresh.reused == ("other", "ruff")  # the authored half stood
+    assert fresh.rendered == ("ruff",)  # the derived half did not
+    pointer = _index.read_pointer(into)
+    assert pointer is not None and pointer["renderer"] == moved
+
+
+def test_the_renderer_identity_is_a_digest_over_its_code():
+    identity = _index.renderer()
+    assert set(identity) == {"code"}
+    assert Digest.parse(identity["code"]).algorithm == "sha256"
+    assert _index.renderer() == identity
+
+
+def test_a_stub_for_a_version_never_read_is_refused_naming_the_versions_read(tmp_path):
+    from livery.toolroom.bench import _drivers
+
+    record = _installable()
+    driver = _drivers.Driver("tool")
+    with pytest.raises(
+        ValueError, match=r"tool: no reading of 1\.1\.0; the versions read are 1\.0\.0"
+    ):
+        _index.stub_for(record, "1.1.0", driver=driver)
+    unread = Record(
+        "tool",
+        kind="archive",
+        hosts=("linux-x64",),
+        layout=Layout(entry_points=("tool",), paths=(".",)),
+        deltas=(
+            RecordDelta(1, "1.0.0", "", {"linux-x64": Artifact("https://x/1", SHA)}),
+        ),
+    )
+    with pytest.raises(ValueError, match=r"tool: no version was read"):
+        _surfaces.Chain.of(unread)

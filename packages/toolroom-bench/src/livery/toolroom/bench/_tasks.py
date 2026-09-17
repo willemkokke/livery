@@ -482,15 +482,8 @@ def _render(driver: _drivers.Driver, spec: _toolspec.ToolSpec) -> str:
 
 
 def _mode(driver: _drivers.Driver, spec: _toolspec.ToolSpec) -> str:
-    """How this tool runs: in footman's process by default, or on request.
-
-    A Python tool publishes a `[console_scripts]` entry point, which is
-    what `Tool.__call__` resolves — so the capability is detected, not
-    listed. Whether footman *prefers* it is the driver's business.
-    """
-    if driver.in_process:
-        return "default"
-    return "available" if spec.in_process else "no"
+    """How this tool runs: in footman's process by default, or on request."""
+    return driver.mode(spec.in_process)
 
 
 def _class_name(key: str) -> str:
@@ -2394,10 +2387,67 @@ def index_build(
         print(f"built {name} {built.tools[name]}")
     if built.reused:
         print(f"reused {len(built.reused)}: {', '.join(built.reused)}")
+    if built.rendered:
+        print(f"rendered stubs for {len(built.rendered)}: {', '.join(built.rendered)}")
     if built.dropped:
         print(f"dropped: {', '.join(built.dropped)}")
     print(f"pointer: {target / _index.POINTER} ({len(built.tools)} tools)")
     return built
+
+
+# The golden records and the stubs they render to, checked in beside the
+# bench's tests. A render change fails the gate until `fm tools.goldens`
+# moves them in the same change.
+_GOLDENS = Path(__file__).resolve().parents[4] / "tests" / "goldens"
+
+
+def golden_records() -> list[Record]:
+    """The golden records, small and shaped to exercise the renderer."""
+    return _index.load_records(_GOLDENS / "records")
+
+
+def golden_path(record: Record, version: str) -> Path:
+    """Where *record*'s stub at *version* is checked in."""
+    return _GOLDENS / "stubs" / record.name / f"{version}.pyi.golden"
+
+
+def golden_driver(record: Record) -> _drivers.Driver:
+    """The driver a golden renders under: its name, in process when the name says so."""
+    return _drivers.Driver(record.name, in_process=record.name.endswith("_inproc"))
+
+
+@tasks.task
+def goldens(
+    check: Annotated[bool, doc("report what differs instead of writing")] = False,
+) -> dict[str, list[str]]:
+    """Render the golden records and write the golden stubs beside the tests.
+
+    A golden is a small record shaped to exercise the renderer, and its
+    stub at every version is checked in. The test compares each render
+    with its golden byte for byte, so a change to the renderer fails the
+    gate until this verb moves the goldens in the same change, which is
+    what keeps a render change deliberate. `--check` names what would
+    move and writes nothing.
+    """
+    wrote: list[str] = []
+    unchanged: list[str] = []
+    for record in golden_records():
+        driver = golden_driver(record)
+        for version in _surfaces.versions(record):
+            path = golden_path(record, version)
+            text = _index.stub_for(record, version, driver=driver)
+            if path.is_file() and path.read_text(encoding="utf-8") == text:
+                unchanged.append(f"{record.name} {version}")
+                continue
+            if not check:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text, encoding="utf-8")
+            wrote.append(f"{record.name} {version}")
+    verb = "would move" if check else "wrote"
+    print(f"{verb} {len(wrote)}: {', '.join(wrote) or 'none'}")
+    if unchanged:
+        print(f"unchanged: {len(unchanged)}")
+    return {"wrote": wrote, "unchanged": unchanged}
 
 
 @tasks.task

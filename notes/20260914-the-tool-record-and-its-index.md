@@ -1,7 +1,9 @@
 # The tool record and its index
 
-Status: ruled 2026-09-16 as drafted. Phases 1 to 3 landed 2026-09-16
-(livery#620, livery#622, livery#625); phase 4 in progress (livery#627).
+Status: ruled 2026-09-16 as drafted. Phases 1 to 4 landed 2026-09-16
+(livery#620, livery#622, livery#625, livery#627); phase 5's index half in
+progress (livery#629), its wheel half deferred to phase 6 by the ruling
+of 2026-09-17.
 Runs after [CI declared, contributed, and dispatched on command][ci-plan],
 which delivers the mechanism this plan's last phase uses.
 Subsumes phase 2 onward of [the tool store over strongroom][store-plan],
@@ -442,6 +444,10 @@ Acceptance:
 - `uv run fm tools.restub` against a folder source, with the network
   unreachable, writes every stub a workspace uses.
 
+Open, by the ruling of 2026-09-17: the first and third items are phase
+6's, with the lock that names the tools a workspace uses; they stay open
+here until that evidence lands. The second item is met.
+
 ### Phase 6: receipts, per-package requirements, the lock
 
 Deliverables:
@@ -523,7 +529,7 @@ Acceptance:
 | Temporary | Replaced by |
 | --- | --- |
 | `_history/<tool>.json` in the bench's wheel, 1.3 MB, 31 files | phase 3 |
-| `_stubs/` shipped in the toolroom wheel, 732 KB, 38 files | phase 5 |
+| `_stubs/` shipped in the toolroom wheel, 732 KB, 38 files | phase 6, by the ruling of 2026-09-17 |
 | `executable=(definition.exe,)` in `_engine.py` | phase 2 |
 | `Spec.pinned` as the per-project version | phase 6 |
 | `specs/<name>.json` and `_spec.py` | phase 1, deleted |
@@ -695,6 +701,36 @@ Acceptance:
   exactly the objects its new tree reaches beyond the old one, proven in
   the bench's tests; `fm docs.build` ran the generator and the site
   carries `_generated/index/pointer.json`; `fm check` exits 0.
+- 2026-09-17, Willem: phase 5 lands its index half now, and `_stubs/`
+  leaves the toolroom wheel with phase 6, beside the lock that says
+  which tools a workspace uses. The agent had asked where materialised
+  stubs live once they leave the wheel; the proposal carried into phase
+  6 is a stub root at `typings/`, which pyright and basedpyright read
+  with no configuration and mypy, ty and pyrefly through one path entry
+  each in the rendered configs. Phase 5's acceptance item on the wheel
+  stays an open line until phase 6 delivers it.
+- 2026-09-17, the agent, at phase 5, the derived tree: `stubs/<tool>/
+  <version>` in the index, each stub rendered from the union of every
+  version read up to that one, with the header naming the platforms that
+  read the version; the pointer names the derived tree per tool and
+  whole, and records the renderer's identity as the digest over the
+  sources of the renderer, the union and the spec model, a fact and not
+  a version, since the bench's version is stamped only at a release. A
+  tool's stubs are reused with its tree when the renderer's identity
+  matches the pointer's and rendered again otherwise. The union resolved
+  the record again for every question it asked, 42 s for the 569 stubs
+  of the checked-in records; resolved once per union it takes 0.8 s, and
+  the whole index builds in 6 s.
+- 2026-09-17, the agent, at phase 5, the goldens: two records shaped to
+  exercise the renderer live beside the bench's tests with each version's
+  stub checked in as `.pyi.golden`, `fm tools.goldens` is the one way
+  they move, and the gate compares each render byte for byte.
+- 2026-09-17, the agent, at phase 5, the acceptance as met: a byte
+  appended to a checked-in golden failed `test_stub_golden.py` naming
+  the record, the version and `fm tools.goldens`; the verb moved one
+  golden and the test passed; the golden was restored byte for byte.
+  The index on the 31 records builds with 569 stubs in 6 s; `fm check`
+  exits 0. The wheel item and the folder-source restub stay open above.
 - 2026-09-16, the agent, at phase 1: the records live at this
   repository's root, `records/<tool>/`, the authoring site the design
   names; the schema beside them is one document with `Tool` and `Delta`

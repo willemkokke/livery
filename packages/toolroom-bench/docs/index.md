@@ -65,6 +65,19 @@ version is addressable with no replay. The pointer names each tool's
 current tree and the digest of the record it was built from; everything
 under a tree is immutable, and only the pointer needs a short lifetime.
 
+Beside the authored trees the build lands one derived tree,
+`stubs/<tool>/<version>`: the stub a reader at that version gets,
+rendered from the union of every version read up to that one, so a
+flag the tool later dropped stays completable and its docstring says
+when it went. The pointer names the derived tree and records the
+renderer's identity, the digest of the code that renders, as a fact
+rather than an address; a build after the renderer moved renders every
+stub again and the blobs it replaced stay reachable by digest.
+`fm tools.goldens` keeps a render change deliberate: two golden records
+beside the bench's tests render to checked-in golden stubs, the gate
+compares each render byte for byte, and a change to the renderer fails
+until that verb moves the goldens in the same change.
+
 The authored half replays to identical digests: two builds from genesis
 land equal objects and an equal pointer. A build into a directory that
 holds an earlier build reads its pointer and reuses every tool whose

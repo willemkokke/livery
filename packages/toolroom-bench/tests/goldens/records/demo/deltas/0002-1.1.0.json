@@ -1,0 +1,86 @@
+{
+  "sequence": 2,
+  "version": "1.1.0",
+  "date": "2026-02-01",
+  "artifacts": {},
+  "surface": {
+    "platforms": [
+      "Linux",
+      "Windows",
+      "macOS"
+    ],
+    "extractor": 4,
+    "verbs": {
+      "build": {
+        "help": "Build it.",
+        "wraps": false,
+        "positional": "required",
+        "lead": "target",
+        "options": {
+          "clean": {
+            "flags": [
+              "--clean"
+            ],
+            "negation": "--dirty",
+            "help": "Clean first.",
+            "type": "bool",
+            "default": true,
+            "choices": []
+          },
+          "fork": {
+            "flags": [
+              "--fork"
+            ],
+            "negation": "",
+            "help": "Fork first.",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          },
+          "output": {
+            "flags": [
+              "-o",
+              "--output"
+            ],
+            "negation": "",
+            "help": "Where to write.",
+            "type": "str",
+            "default": "dist",
+            "choices": []
+          }
+        }
+      },
+      "compose.up": {
+        "help": "Bring the services up.",
+        "wraps": false,
+        "positional": "any",
+        "lead": "",
+        "options": {
+          "detach": {
+            "flags": [
+              "-d",
+              "--detach"
+            ],
+            "negation": "",
+            "help": "Run in the background.",
+            "type": "bool",
+            "default": null,
+            "choices": []
+          }
+        }
+      }
+    },
+    "absent": {
+      "build": {
+        "fork": [
+          "Windows"
+        ]
+      },
+      "compose.up": {
+        "": [
+          "Windows"
+        ]
+      }
+    }
+  }
+}
