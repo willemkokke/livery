@@ -25,7 +25,11 @@ is consulted in order:
 
 - a source that does not answer within its connect timeout, or
   answers with a status other than success, is skipped and reported;
-  the next source is consulted;
+  the next source is consulted. A redirect is followed to its
+  location, resolved against the URL that answered it, with the same
+  method and the same timeouts per hop, up to an implementation's
+  bound; a chain past the bound or a redirect naming no location is
+  a source that did not answer;
 - a source that serves bytes whose digest is not the name is refused
   and reported; the corrupt bytes never land; the next source is
   consulted;
