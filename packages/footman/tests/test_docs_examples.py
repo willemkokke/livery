@@ -719,7 +719,7 @@ def stubbed_toolroom(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     shutil.copytree(
         Path(tools.__file__).resolve().parent,
         target,
-        ignore=shutil.ignore_patterns("__pycache__", "_stubs"),
+        ignore=shutil.ignore_patterns("__pycache__"),
     )
     index = tmp_path / "index"
     _write_index(
@@ -748,7 +748,7 @@ def test_the_playground_installs_the_newest_stubs_from_the_index_and_refuses_a_b
     exec(_js_bootstrap(), namespace)
     install = namespace["_fm_install_stubs"]
 
-    target = tmp_path / "pkg" / "_stubs"
+    target = tmp_path / "pkg"
     index = tmp_path / "index"
     _write_index(index, {"ruff": {"0.9.0": "old\n", "0.16.0": _RUFF_STUB}, "bare": {}})
     digest = hashlib.sha256(_RUFF_STUB.encode("utf-8")).hexdigest()
@@ -761,15 +761,15 @@ def test_the_playground_installs_the_newest_stubs_from_the_index_and_refuses_a_b
     stub_object.write_bytes(_RUFF_STUB.encode("utf-8"))
 
     assert install(index.as_uri(), target=str(target)) == 1
-    assert (target / "ruff.pyi").read_text() == _RUFF_STUB
-    assert (target / "__init__.pyi").read_text() == ""
-    assert (target.parent / "_handles.pyi").read_text() == (
+    assert (target / "stubs" / "ruff.pyi").read_text() == _RUFF_STUB
+    assert (target / "stubs" / "__init__.pyi").read_text() == ""
+    assert (target / "handles.pyi").read_text() == (
         "from livery.toolroom.tools import Result\n"
-        "from livery.toolroom.tools._stubs.ruff import Ruff as Ruff\n"
+        "from livery.toolroom.stubs.ruff import Ruff as Ruff\n"
         "\n"
         "ruff: Ruff[Result]\n"
     )
-    assert not (target / "bare.pyi").exists()
+    assert not (target / "stubs" / "bare.pyi").exists()
 
 
 def _editor_complete(

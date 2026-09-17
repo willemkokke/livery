@@ -77,8 +77,10 @@ The stubs the four type checkers read are materialised too. `fm
 tools.restub` writes them into `typings/` at the root, pyright's
 default stub path and a search path the rendered configuration hands
 mypy, ty and pyrefly: one stub per tool the lock holds, at the locked
-version, with a `_handles` module beside them declaring the handles
-for the installed tools package's index to import; a tool the
+version, as `livery.toolroom.stubs` modules with `livery.toolroom.handles`
+beside them declaring the handles for the installed tools package's
+index to import, under the namespace package and never inside the tools
+package's own directory; a tool the
 workspace does not deploy gets no stub. `fm sync`, the lock verbs
 and the entry script write them as well, so a checkout and a CI runner
 type against the same stubs; `fm env.check` counts them and names
