@@ -4,7 +4,10 @@ A consumer never replays a record. It reads the index, one tree per
 tool with the versions in order, each host's deployment and each
 version's stub, and resolves against that; the authoring site, which
 holds the records that build the index, reads them directly and gets
-the same catalogue. Either way a deployment's digest is the digest of
+the same catalogue. An index is read on demand: the pointer first, a
+tool's tree when the tool is asked for, a version's hosts when a lock
+needs them, so listing eleven locked tools costs eleven trees and
+never every version of every tool. Either way a deployment's digest is the digest of
 its canonical JSON, so a lock written against the records names the
 same deployment a consumer fetches from the index.
 
@@ -15,6 +18,7 @@ Reach for [livery.toolroom.store.Catalogue.of_records][] and
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -22,6 +26,7 @@ from urllib.parse import urlparse
 
 from livery.strongroom import Digest, Entry, FolderSource, HttpSource, Source, Tree
 from livery.strongroom import Store as ObjectStore
+from livery.toolroom.store._fingerprint import tree_fingerprint
 from livery.toolroom.store._home import Home
 from livery.toolroom.store._record import (
     TOOL_FILE,
@@ -36,6 +41,9 @@ POINTER = "pointer.json"
 
 POINTER_SCHEMA = 1
 """The pointer document's shape this reader understands."""
+
+BUILD_FILE = "build.json"
+"""The build's record beside the pointer: what it fingerprinted, so a gate can ask."""
 
 
 class CatalogueError(ValueError):
@@ -65,7 +73,7 @@ class Listed:
     kind: str
     description: str
     versions: tuple[str, ...]
-    hosts: dict[str, dict[str, Digest]]
+    hosts: Mapping[str, Mapping[str, Digest]]
     stubs: dict[str, Digest] = field(default_factory=dict)
     package: str = ""
     mode: str = ""
@@ -80,7 +88,7 @@ class Catalogue:
         tools: Tool name to its listing.
     """
 
-    tools: dict[str, Listed]
+    tools: Mapping[str, Listed]
     _deployments: dict[tuple[str, str, str], Deployment] = field(
         default_factory=dict, repr=False, compare=False
     )
@@ -193,13 +201,15 @@ class Catalogue:
     def of_index(cls, source: str, *, home: Home, offline: bool = False) -> Catalogue:
         """The catalogue of the index at *source*, a directory or an HTTP base URL.
 
-        The pointer is read from the source, and every tree it names is
-        fetched into the home's store through the source, so a second
-        read answers from the machine.
+        The pointer is read from the source; a tool's tree is fetched
+        into the home's store through the source when the tool is first
+        asked for, and a version's hosts when they are, so a second read
+        answers from the machine and a read touches only what it needs.
 
         Raises:
             CatalogueError: when the pointer cannot be read or is not
-                one, or a tree the pointer names cannot be fetched.
+                one; a tree the pointer names and cannot be fetched
+                refuses when its tool is asked for.
         """
         pointer = _read_pointer(source)
         entries: dict[str, dict[str, Any]] = {}
@@ -210,11 +220,110 @@ class Catalogue:
                 )
             entries[str(name)] = entry
         store = home.open_store(sources=(_source_of(source),), offline=offline)
-        tools: dict[str, Listed] = {}
-        for name, entry in entries.items():
-            tree = _tree(store, Digest.parse(entry["tree"]), where=f"{source} {name}")
-            tools[name] = _listed(store, name, tree, entry, where=f"{source} {name}")
-        return cls(tools, {}, store)
+        return cls(_LazyTools(store, entries, source), {}, store)
+
+
+class _LazyTools(Mapping[str, Listed]):
+    """The pointer's tools, each listed from its tree on first access."""
+
+    def __init__(
+        self, store: ObjectStore, entries: dict[str, dict[str, Any]], source: str
+    ) -> None:
+        self._store = store
+        self._entries = entries
+        self._source = source
+        self._read: dict[str, Listed] = {}
+
+    def __getitem__(self, name: str) -> Listed:
+        held = self._read.get(name)
+        if held is None:
+            entry = self._entries[name]
+            where = f"{self._source} {name}"
+            tree = _tree(self._store, Digest.parse(entry["tree"]), where=where)
+            held = self._read[name] = _listed(
+                self._store, name, tree, entry, where=where
+            )
+        return held
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._entries)
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+
+class _LazyHosts(Mapping[str, Mapping[str, Digest]]):
+    """Per version the hosts' deployment digests; a version's tree is read on access."""
+
+    def __init__(
+        self,
+        store: ObjectStore,
+        members: dict[str, Any],
+        versions: tuple[str, ...],
+        where: str,
+    ) -> None:
+        self._store = store
+        self._members = members
+        self._versions = versions
+        self._where = where
+        self._read: dict[str, dict[str, Digest]] = {}
+
+    def __getitem__(self, version: str) -> Mapping[str, Digest]:
+        if version not in self._versions:
+            raise KeyError(version)
+        held = self._read.get(version)
+        if held is None:
+            held = self._read[version] = _hosts_of(
+                self._store, self._members, version, where=self._where
+            )
+        return held
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._versions)
+
+    def __len__(self) -> int:
+        return len(self._versions)
+
+
+def read_pointer(source: str) -> dict[str, Any]:
+    """The pointer document at *source*, a directory or an HTTP base URL.
+
+    Raises:
+        CatalogueError: when no pointer can be read there, or what is
+            read is not one.
+    """
+    return _read_pointer(source)
+
+
+def build_current(index: Path) -> bool:
+    """Whether the index at *index* stands as its build record fingerprints it.
+
+    The build writes `build.json` beside the pointer, naming the records
+    directory and the renderer's source files with a stat fingerprint
+    of each. Current means the pointer is there, the record reads, and
+    both fingerprints stand; anything else, an absent record included,
+    is not current. Stats alone are read, so the answer costs
+    milliseconds and a caller can skip a build, or the spawn of one,
+    without reading a record.
+    """
+    try:
+        held = json.loads((index / BUILD_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(held, dict) or not (index / POINTER).is_file():
+        return False
+    records = held.get("records")
+    renderer = held.get("renderer")
+    if not isinstance(records, dict) or not isinstance(renderer, dict):
+        return False
+    path = records.get("path")
+    files = renderer.get("files")
+    if not isinstance(path, str) or not isinstance(files, list):
+        return False
+    return bool(
+        tree_fingerprint([path]) == records.get("fingerprint")
+        and tree_fingerprint(files) == renderer.get("fingerprint")
+    )
 
 
 def _read_pointer(source: str) -> dict[str, Any]:
@@ -275,20 +384,7 @@ def _listed(
         ) from None
     if not isinstance(versions, list) or not all(isinstance(v, str) for v in versions):
         raise CatalogueError(f"{where}: the versions blob is not a list of strings")
-    hosts: dict[str, dict[str, Digest]] = {}
-    for version in versions:
-        hosts[version] = {}
-        member = by_name.get(version)
-        if not isinstance(member, Entry):
-            raise CatalogueError(f"{where}: the tree has no entry for {version}")
-        version_tree = _tree(store, member.digest, where=f"{where} {version}")
-        for part in version_tree.entries:
-            if part.name == "hosts" and isinstance(part, Entry):
-                for host in _tree(
-                    store, part.digest, where=f"{where} {version} hosts"
-                ).entries:
-                    if isinstance(host, Entry):
-                        hosts[version][host.name] = host.digest
+    hosts = _LazyHosts(store, dict(by_name), tuple(versions), where)
     stubs: dict[str, Digest] = {}
     named = entry.get("stubs")
     if isinstance(named, str):
@@ -306,3 +402,22 @@ def _listed(
         mode=record.mode,
         min_version=record.min_version,
     )
+
+
+def _hosts_of(
+    store: ObjectStore, members: dict[str, Any], version: str, *, where: str
+) -> dict[str, Digest]:
+    """The hosts' deployment digests of *version*, from its tree under the tool's."""
+    member = members.get(version)
+    if not isinstance(member, Entry):
+        raise CatalogueError(f"{where}: the tree has no entry for {version}")
+    found: dict[str, Digest] = {}
+    version_tree = _tree(store, member.digest, where=f"{where} {version}")
+    for part in version_tree.entries:
+        if part.name == "hosts" and isinstance(part, Entry):
+            for host in _tree(
+                store, part.digest, where=f"{where} {version} hosts"
+            ).entries:
+                if isinstance(host, Entry):
+                    found[host.name] = host.digest
+    return found

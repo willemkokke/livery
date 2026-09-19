@@ -786,6 +786,27 @@ Acceptance:
   provision prefix was the store's home, `data_dir()/toolroom`, so a
   materialised store read as a provisioned prefix; the bench's prefix
   is `data_dir()/toolroom-bench` now.
+- 2026-09-19, the agent, on the steady state, by Willem's word for the
+  four options: a nothing-moved gate, records digested once from their
+  bytes, a lazy catalogue, and no second interpreter while nothing
+  moved. The build keeps `build.json` beside the pointer with a stat
+  fingerprint of the records directory and of the renderer's sources;
+  when both stand, the pointer's renderer is the code's, and every tree
+  the pointer names is present, the build answers from the pointer and
+  reads no record, and the workshop asks the same question before it
+  spawns the build verb, so a sync or lock with nothing moved spawns
+  nothing. The restub keeps `.workshop/stubs.json` naming the lock and
+  the index's stubs tree it last saw, and writes and reads nothing
+  while both stand and the files are there. The record digest in the
+  pointer is now over the record's files' bytes, once per build, rather
+  than a canonical re-serialisation made twice. The catalogue reads the
+  index on demand: the pointer opens it, a tool's tree is read when the
+  tool is asked for, a version's hosts when a lock needs them, so a
+  refusal for a tree that cannot be read lands at that access. The
+  fourth option as offered, running the hook inside the runner's own
+  registry, is not done: footman's in-process entry is its testing
+  runner and the CLI's private run, and the gate removes the spawn from
+  the steady state, which was the cost that mattered.
 - 2026-09-18, the agent, on the typings layout: a tree inside the tools
   package's own directory, `typings/livery/toolroom/tools/`, shadows the
   package for a checker run on explicit paths, which the affected gate

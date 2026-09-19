@@ -20,10 +20,13 @@ and [livery.toolroom.store.resolve_lock][] for the repository's lock,
 from __future__ import annotations
 
 from livery.toolroom.store._catalogue import (
+    BUILD_FILE,
     POINTER,
     Catalogue,
     CatalogueError,
     Listed,
+    build_current,
+    read_pointer,
 )
 from livery.toolroom.store._engine import (
     LINKS,
@@ -36,6 +39,7 @@ from livery.toolroom.store._engine import (
     StoreError,
     silent,
 )
+from livery.toolroom.store._fingerprint import tree_fingerprint
 from livery.toolroom.store._home import TOOLS, URLS, Home
 from livery.toolroom.store._lock import (
     LOCK_FILE,
@@ -81,6 +85,7 @@ from livery.toolroom.store._record import Delta as RecordDelta
 
 __all__ = [
     "ARCHES",
+    "BUILD_FILE",
     "DELTAS_DIR",
     "DOWNLOAD_KINDS",
     "HOSTS",
@@ -122,16 +127,19 @@ __all__ = [
     "StoreError",
     "Surface",
     "__version__",
+    "build_current",
     "class_name",
     "default_mode",
     "export_schema",
     "host_key",
     "observations",
+    "read_pointer",
     "resolve",
     "resolve_lock",
     "schema",
     "silent",
     "surface_at",
+    "tree_fingerprint",
     "validate",
     "version_key",
 ]

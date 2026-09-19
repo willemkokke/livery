@@ -118,6 +118,65 @@ def test_a_records_source_without_a_build_verb_refuses_naming_the_fix(
         _tools.write_stubs(root)
 
 
+def test_the_build_verb_does_not_run_while_the_index_stands(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The nothing-moved gate before the spawn.
+
+    An index whose build record fingerprints the records and the
+    renderer as they are costs no second interpreter; a touched record
+    file makes the verb run again.
+    """
+    import os
+    import time
+
+    from livery.toolroom.store import BUILD_FILE, tree_fingerprint
+
+    root = _workspace(
+        tmp_path,
+        monkeypatch,
+        '[workspace]\n\n[tools]\nindex = "index"\nindex-build = "tools.index.build"\n',
+    )
+    records = root / "records"
+    (records / "ruff").mkdir(parents=True)
+    (records / "ruff" / "tool.json").write_text("{}")
+    renderer = tmp_path / "renderer.py"
+    renderer.write_text("x = 1\n")
+    index = root / "index"
+    index.mkdir()
+    (index / "pointer.json").write_text('{"schema": 1, "tools": {}}')
+    (index / BUILD_FILE).write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "records": {
+                    "path": str(records),
+                    "fingerprint": tree_fingerprint([records]),
+                },
+                "renderer": {
+                    "code": "sha256:0",
+                    "files": [str(renderer)],
+                    "fingerprint": tree_fingerprint([str(renderer)]),
+                },
+            }
+        )
+    )
+    ran: list[list[str]] = []
+
+    def spawned(argv: list[str], **kwargs: object) -> int:
+        ran.append(list(argv))
+        return 0
+
+    monkeypatch.setattr("shutil.which", lambda name: "/x/fm")
+    monkeypatch.setattr("livery.footman.run", spawned)
+    assert _tools.build_index(root) == "tools.index.build"
+    assert ran == []
+    stamp = time.time_ns() + 2_000_000_000
+    os.utime(records / "ruff" / "tool.json", ns=(stamp, stamp))
+    assert _tools.build_index(root) == "tools.index.build"
+    assert ran == [["/x/fm", "tools.index.build"]]
+
+
 def test_a_build_verb_that_fails_or_cannot_run_refuses_naming_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -195,6 +254,19 @@ def test_the_stubs_are_written_for_the_locked_tools_at_their_locked_version(
         "  stubs: 1 in typings/",
         "  stubs: bare: bare 2.0.0: no stub; the index has none",
     ]
+
+    # A locked tool with no stub is named on every write: the receipt never
+    # answers for this lock, so the catalogue is read again.
+    assert (root / ".workshop" / "stubs.json").is_file()
+    reads: list[str] = []
+    real = _tools._read_catalogue
+
+    def counted(source: str, *, offline: bool) -> object:
+        reads.append(source)
+        return real(source, offline=offline)
+
+    monkeypatch.setattr(_tools, "_read_catalogue", counted)
+    assert _tools.write_stubs(root).kept == ("ruff",) and reads
     # Without a lock nothing is written, and the stale stub goes.
     _tools.lock_path(root).unlink()
     none = _tools.write_stubs(root)
@@ -225,6 +297,20 @@ def test_the_lock_verbs_and_sync_write_the_stubs_and_env_check_counts_them(
     assert "  stubs: 1 in typings/, wrote 1" in capsys.readouterr().out
     _tool_tasks.tools_restub()
     assert capsys.readouterr().out.strip() == "stubs: 1 in typings/"
+    # The receipt gate: with the lock, the index's stubs and the files
+    # standing, the next write reads no catalogue at all.
+    real = _tools._read_catalogue
+
+    def unread(*args: object, **kwargs: object) -> object:
+        raise AssertionError("the catalogue was read while nothing had moved")
+
+    monkeypatch.setattr(_tools, "_read_catalogue", unread)
+    again = _tools.write_stubs(root)
+    assert again.written == () and again.kept == ("ruff",)
+    # A stub gone from disk is written again, through the catalogue.
+    monkeypatch.setattr(_tools, "_read_catalogue", real)
+    (_tools.stubs_dir(root) / "ruff.pyi").unlink()
+    assert _tools.write_stubs(root).written == ("ruff",)
     _tool_tasks.tools_upgrade(["ruff"])
     assert "  stubs: 1 in typings/" in capsys.readouterr().out
     assert _sync.materialise_tools(root)[-1] == "  stubs: 1 in typings/"
