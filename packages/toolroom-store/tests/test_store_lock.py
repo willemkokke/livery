@@ -655,31 +655,59 @@ def test_the_index_is_read_on_demand_a_tool_and_a_version_at_a_time(tmp_path):
 
     store = _index_store(tmp_path)
     index = tmp_path / "index"
+    from livery.strongroom import Link
+    from livery.toolroom.store import read_pointer
+
     axis = _delegated("ruff", "1.0.0").to_json()
     missing = "sha256:" + "2" * 64
+    # A version tree as the build lays it out, a link among the members: the
+    # observation blob is not hosts, and a link is not a host.
+    deployed = _tree_entry(
+        store,
+        "1.0.0",
+        [
+            _blob(store, "observation", {"who": "x"}),
+            _tree_entry(
+                store,
+                "hosts",
+                [_blob(store, "linux-x64", {"d": 1}), Link("aside", "linux-x64")],
+            ),
+        ],
+    )
     top = _tree_entry(
         store,
         "ruff",
         [
             _blob(store, "tool", axis),
             _blob(store, "versions", ["1.0.0", "1.1.0"]),
-            _tree_entry(store, "1.0.0", []),
+            deployed,
             Entry("1.1.0", "tree", Digest.parse(missing), 3),
         ],
+    )
+    stubs = _tree_entry(
+        store, "ruff", [_blob(store, "1.0.0", "stub"), Link("latest", "1.0.0")]
     )
     _pointer(
         index,
         {
-            "ruff": {"tree": str(top.digest), "record": "x"},
+            "ruff": {
+                "tree": str(top.digest),
+                "record": "x",
+                "stubs": str(stubs.digest),
+            },
             "gone": {"tree": missing, "record": "x"},
         },
     )
+    assert read_pointer(str(index))["schema"] == 1
+    with pytest.raises(CatalogueError, match=r"no pointer can be read"):
+        read_pointer(str(tmp_path / "nowhere"))
     catalogue = Catalogue.of_index(str(index), home=Home(tmp_path / "home"))
     assert sorted(catalogue.tools) == ["gone", "ruff"]  # the pointer's names
     listed = catalogue.listed("ruff")
     assert listed.versions == ("1.0.0", "1.1.0")
     assert list(listed.hosts) == ["1.0.0", "1.1.0"] and len(listed.hosts) == 2
-    assert dict(listed.hosts["1.0.0"]) == {}  # its tree is there, hostless
+    assert list(listed.hosts["1.0.0"]) == ["linux-x64"]  # the link is no host
+    assert list(listed.stubs) == ["1.0.0"]  # nor is the link a stub
     with pytest.raises(CatalogueError, match=r"ruff 1.1.0: the tree sha256:2+ cannot"):
         listed.hosts["1.1.0"]
     with pytest.raises(KeyError):
@@ -721,9 +749,17 @@ def test_the_fingerprint_moves_with_a_file_and_the_build_record_gates_on_it(tmp_
     index = tmp_path / "index"
     index.mkdir()
     assert build_current(index) is False  # no record, no pointer
+    (index / BUILD_FILE).write_text('{"schema": 1}')
+    assert build_current(index) is False  # a record, no pointer
     (index / "pointer.json").write_text('{"schema": 1, "tools": {}}')
-    (index / BUILD_FILE).write_text("not json")
-    assert build_current(index) is False
+    for off_shape in (
+        "not json",
+        "[]",
+        '{"schema": 1}',
+        '{"records": {}, "renderer": {}}',
+    ):
+        (index / BUILD_FILE).write_text(off_shape)
+        assert build_current(index) is False, off_shape
     document: dict[str, Any] = {
         "schema": 1,
         "records": {"path": str(records), "fingerprint": tree_fingerprint([records])},
