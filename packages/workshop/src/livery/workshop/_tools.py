@@ -41,6 +41,7 @@ verb that builds the index there before the catalogue is read.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 from dataclasses import dataclass, field
@@ -65,8 +66,10 @@ from livery.toolroom.store import (
     Requirement,
     Store,
     StoreError,
+    build_current,
     class_name,
     default_mode,
+    read_pointer,
     resolve_lock,
 )
 from livery.workshop._contract import load_contract
@@ -201,16 +204,21 @@ def build_index(root: Path) -> str:
     """Run the `[tools] index-build` verb when one is named; the verb run, or empty.
 
     The verb runs as its own runner invocation at the root, the way a
-    docs generator does, so it is exactly what a person would type. A
-    verb that exits non-zero refuses, naming it.
+    docs generator does, so it is exactly what a person would type. It
+    does not run at all when the index stands as its build record
+    fingerprints it, the records and the renderer's sources unmoved
+    since the last build, which is the steady state of every sync and
+    lock; that answer costs the stats alone and no second interpreter.
+    A verb that exits non-zero refuses, naming it.
     """
-    import shutil
-
     import livery.footman as footman
 
     verb = index_build(root)
     if not verb:
         return ""
+    source = index_source(root)
+    if "://" not in source and build_current(Path(source)):
+        return verb
     runner = shutil.which(footman.prog())
     if not runner:
         fail(
@@ -234,6 +242,11 @@ def catalogue(root: Path, *, offline: bool = False) -> Catalogue:
     source = index_source(root)
     if "://" not in source:
         build_index(root)
+    return _read_catalogue(source, offline=offline)
+
+
+def _read_catalogue(source: str, *, offline: bool) -> Catalogue:
+    """The catalogue at *source*, records or index, with no build first."""
     if _is_records(source):
         return Catalogue.of_records(Path(source))
     try:
@@ -633,9 +646,15 @@ def write_stubs(root: Path, *, offline: bool = False) -> Stubbed:
     package's index binds its submodules, and `ruff` would name
     `ruff.pyi` rather than the handle. Nothing is written inside the
     tools package's own directory, and a tree left there is removed:
-    it shadows the package for a checker run on explicit paths. A stub
-    already on disk as the catalogue holds it is kept, so a checker's
-    cache stands. Without a lock nothing is written.
+    it shadows the package for a checker run on explicit paths. Without
+    a lock nothing is written.
+
+    A receipt under `.workshop/` names the lock and the index's stubs
+    tree the last write saw. When both stand and every file it wrote is
+    there, nothing is read from the catalogue and nothing is written,
+    which is the steady state of every sync; otherwise a stub already
+    on disk as the catalogue holds it is kept, so a checker's cache
+    stands.
 
     Refuses when `[tools] index` names a directory of records and no
     `[tools] index-build` verb: records hold no rendering.
@@ -649,12 +668,22 @@ def write_stubs(root: Path, *, offline: bool = False) -> Stubbed:
         )
     lock = current_lock(root)
     locked = dict(lock.tools) if lock is not None else {}
-    listing = catalogue(root, offline=offline) if locked else None
     shutil.rmtree(
         typings_dir(root).joinpath(*TYPINGS_PACKAGE, "tools"), ignore_errors=True
     )
     directory = stubs_dir(root)
     directory.mkdir(parents=True, exist_ok=True)
+    seen = None
+    if locked:
+        build_index(root)
+        try:
+            seen = str(read_pointer(source).get("stubs", ""))
+        except CatalogueError as error:
+            fail(str(error))
+        standing = _stubs_standing(root, seen, sorted(locked))
+        if standing is not None:
+            return standing
+    listing = _read_catalogue(source, offline=offline) if locked else None
     written: list[str] = []
     kept: list[str] = []
     skipped: dict[str, str] = {}
@@ -681,7 +710,61 @@ def write_stubs(root: Path, *, offline: bool = False) -> Stubbed:
             removed.append(stale.stem)
     _write_if_changed(directory / "__init__.pyi", "")
     _write_if_changed(handles_path(root), handles_index(declared))
+    if seen is not None:
+        _write_stubs_receipt(root, seen, sorted(locked), declared)
     return Stubbed(tuple(written), tuple(kept), skipped, tuple(removed))
+
+
+STUBS_RECEIPT = ".workshop/stubs.json"
+"""The receipt naming the lock and the index's stubs tree the last stub write saw."""
+
+
+def _stubs_receipt_path(root: Path) -> Path:
+    return root / STUBS_RECEIPT
+
+
+def _lock_digest(root: Path) -> str:
+    return "sha256:" + hashlib.sha256(lock_path(root).read_bytes()).hexdigest()
+
+
+def _stubs_standing(root: Path, stubs: str, locked: list[str]) -> Stubbed | None:
+    """The last write's answer when the lock, the index's stubs and the files stand."""
+    try:
+        held = json.loads(_stubs_receipt_path(root).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(held, dict) or held.get("schema") != 1:
+        return None
+    if held.get("stubs") != stubs or held.get("lock") != _lock_digest(root):
+        return None
+    if held.get("locked") != locked:
+        return None
+    written = held.get("written")
+    if not isinstance(written, list) or not all(isinstance(n, str) for n in written):
+        return None
+    # A locked tool with no stub is named on every write, so a write that
+    # skipped one is never answered from the receipt.
+    if written != locked:
+        return None
+    present = {p.stem for p in stubs_dir(root).glob("*.pyi")} - {"__init__"}
+    if present != set(written) or not handles_path(root).is_file():
+        return None
+    return Stubbed((), tuple(written), {}, ())
+
+
+def _write_stubs_receipt(
+    root: Path, stubs: str, locked: list[str], written: list[str]
+) -> None:
+    path = _stubs_receipt_path(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    document = {
+        "schema": 1,
+        "stubs": stubs,
+        "lock": _lock_digest(root),
+        "locked": locked,
+        "written": written,
+    }
+    path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
 
 
 def handles_path(root: Path) -> Path:

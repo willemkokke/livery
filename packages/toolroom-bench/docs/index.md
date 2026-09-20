@@ -86,7 +86,10 @@ until that verb moves the goldens in the same change.
 The authored half replays to identical digests: two builds from genesis
 land equal objects and an equal pointer. A build into a directory that
 holds an earlier build reads its pointer and reuses every tool whose
-record did not move, which is an optimisation and never authority;
+record did not move, and a build whose records directory and renderer
+sources are unmoved since the last, by the stat fingerprint the build
+keeps in `build.json` beside the pointer, reads no record at all and
+answers from the pointer, which is an optimisation and never authority;
 `--from-genesis` ignores the pointer and materialises every tool from
 the records alone. A tool the pointer named and no record has is
 dropped from the pointer and its ref.

@@ -57,7 +57,15 @@ from livery.strongroom import (
     digest_of,
 )
 from livery.toolroom.bench import _drivers, _stubgen, _surfaces, _toolspec
-from livery.toolroom.store import TOOL_FILE, Record, observations, resolve
+from livery.toolroom.store import (
+    BUILD_FILE,
+    TOOL_FILE,
+    Record,
+    build_current,
+    observations,
+    resolve,
+    tree_fingerprint,
+)
 
 INDEX = "index"
 """The namespace of the index store: `index/<tool>` names the tool's tree; volatile."""
@@ -104,16 +112,20 @@ class Built:
     rendered: tuple[str, ...] = ()
 
 
-def record_digest(record: Record) -> Digest:
-    """The digest of *record* as authored: its tool axis and every delta, canonical."""
-    return digest_of(
-        canonical(
-            {
-                "tool": record.to_json(),
-                "deltas": [delta.to_json() for delta in record.deltas],
-            }
-        )
+def record_digest(directory: Path) -> Digest:
+    """The digest of the record under *directory* as authored: its files' bytes.
+
+    `tool.json` and every delta file, each named by its path under the
+    directory and hashed as written, never re-serialised: a record moved
+    anywhere digests the same, one edited anywhere does not, and the
+    cost is a read of the bytes rather than a parse and a canonical dump.
+    """
+    parts = sorted(p for p in directory.rglob("*.json") if p.is_file())
+    payload = b"".join(
+        f"{p.relative_to(directory).as_posix()}\0".encode() + p.read_bytes() + b"\0"
+        for p in parts
     )
+    return digest_of(payload)
 
 
 def open_index(into: Path) -> Store:
@@ -174,6 +186,13 @@ def build(records: Path, into: Path, *, from_genesis: bool = False) -> Built:
     names and no record has is dropped. *from_genesis* ignores the
     pointer and materialises every tool.
 
+    Before any record is read, the build asks whether anything moved:
+    `build.json` beside the pointer holds a stat fingerprint of the
+    records directory and of the renderer's sources from the last
+    build, and when both stand, the renderer's code digest is the
+    pointer's, and every tree the pointer names is present, the build
+    answers from the pointer alone.
+
     Returns:
         What the build did.
 
@@ -182,7 +201,20 @@ def build(records: Path, into: Path, *, from_genesis: bool = False) -> Built:
         ValueError: for a pointer that is not one, or a verb whose name
             the index cannot carry.
     """
+    files = renderer_files()
+    code = renderer()
+    prints = {
+        "records": tree_fingerprint([str(records.resolve())]),
+        "renderer": tree_fingerprint(files),
+    }
+    if not from_genesis and build_current(into):
+        answer = _standing(into, code)
+        if answer is not None:
+            return answer
     loaded = load_records(records)
+    digests = {
+        record.name: str(record_digest(records / record.name)) for record in loaded
+    }
     store = open_index(into)
     previous: dict[str, Any] = {}
     same_renderer = False
@@ -196,7 +228,7 @@ def build(records: Path, into: Path, *, from_genesis: bool = False) -> Built:
     reused: list[str] = []
     rendered: list[str] = []
     for record in loaded:
-        fingerprint = str(record_digest(record))
+        fingerprint = digests[record.name]
         current = store.ref(INDEX, record.name)
         held = previous.get(record.name)
         stood = (
@@ -256,12 +288,12 @@ def build(records: Path, into: Path, *, from_genesis: bool = False) -> Built:
     document = {
         "schema": SCHEMA,
         "algorithm": store.algorithm.name,
-        "renderer": renderer(),
+        "renderer": code,
         "stubs": str(derived),
         "tools": {
             record.name: {
                 "tree": tools[record.name],
-                "record": str(record_digest(record)),
+                "record": digests[record.name],
                 **(
                     {"stubs": str(stubs[record.name].digest)}
                     if record.name in stubs
@@ -274,6 +306,14 @@ def build(records: Path, into: Path, *, from_genesis: bool = False) -> Built:
     (into / POINTER).write_text(
         json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
+    built_from = {
+        "schema": SCHEMA,
+        "records": {"path": str(records.resolve()), "fingerprint": prints["records"]},
+        "renderer": {**code, "files": files, "fingerprint": prints["renderer"]},
+    }
+    (into / BUILD_FILE).write_text(
+        json.dumps(built_from, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     return Built(
         str(into),
         tools,
@@ -283,6 +323,53 @@ def build(records: Path, into: Path, *, from_genesis: bool = False) -> Built:
         str(derived),
         tuple(rendered),
     )
+
+
+def _standing(into: Path, code: dict[str, str]) -> Built | None:
+    """The last build's answer, when the pointer's renderer and every tree stand."""
+    pointer = read_pointer(into)
+    if pointer is None or pointer.get("renderer") != code:
+        return None
+    store = open_index(into)
+    trees = {str(name): entry.get("tree") for name, entry in pointer["tools"].items()}
+    if any(not isinstance(tree, str) for tree in trees.values()):
+        return None
+    # Every tree the pointer names: each tool's, and the stubs of the tools
+    # that have any; a tool with no driver has no stubs entry to check.
+    stubs = [e.get("stubs") for e in pointer["tools"].values() if e.get("stubs")]
+    for digest in [*trees.values(), *stubs]:
+        if not isinstance(digest, str):
+            return None
+        if store.state(Digest.parse(digest)) != "present":
+            return None
+    # The refs as well as the objects: a ref dropped or moved under the
+    # pointer is what a full build repairs, so it is what this must notice.
+    for name, tree in trees.items():
+        if store.ref(INDEX, name) != Digest.parse(str(tree)):
+            return None
+    derived = pointer.get("stubs")
+    if isinstance(derived, str) and store.ref(DERIVED, STUBS) != Digest.parse(derived):
+        return None
+    names = sorted(trees)
+    return Built(
+        str(into),
+        {name: str(trees[name]) for name in names},
+        (),
+        tuple(names),
+        (),
+        str(pointer.get("stubs", "")),
+        (),
+    )
+
+
+def renderer_files() -> list[str]:
+    """The renderer's source files, the paths `build.json` fingerprints."""
+    found: list[str] = []
+    for module in (_stubgen, _surfaces, _toolspec):
+        source = inspect.getsourcefile(module)
+        if source:
+            found.append(str(Path(source).resolve()))
+    return found
 
 
 def renderer() -> dict[str, str]:

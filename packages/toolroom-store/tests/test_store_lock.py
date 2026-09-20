@@ -426,6 +426,10 @@ def _pointer(index: Path, tools: dict[str, Any]) -> None:
 
 
 def test_an_index_whose_trees_are_off_their_shape_refuses_naming_the_tool(tmp_path):
+    """Each refusal lands when the tool, or its version, is asked for.
+
+    The catalogue reads on demand, and the pointer alone opens it.
+    """
     from livery.toolroom.store import Home
 
     store = _index_store(tmp_path)
@@ -438,13 +442,13 @@ def test_an_index_whose_trees_are_off_their_shape_refuses_naming_the_tool(tmp_pa
     with pytest.raises(
         CatalogueError, match=r"index ruff: the tree sha256:0+ cannot be read"
     ):
-        Catalogue.of_index(str(index), home=home)
+        Catalogue.of_index(str(index), home=home).listed("ruff")
 
     # A tool's tree with no tool or versions blob.
     bare = _tree_entry(store, "ruff", [])
     _pointer(index, {"ruff": {"tree": str(bare.digest), "record": "x"}})
     with pytest.raises(CatalogueError, match=r"names no tool or versions"):
-        Catalogue.of_index(str(index), home=Home(tmp_path / "home2"))
+        Catalogue.of_index(str(index), home=Home(tmp_path / "home2")).listed("ruff")
 
     # A tool blob that is not a record's axis.
     odd = _tree_entry(
@@ -452,7 +456,7 @@ def test_an_index_whose_trees_are_off_their_shape_refuses_naming_the_tool(tmp_pa
     )
     _pointer(index, {"ruff": {"tree": str(odd.digest), "record": "x"}})
     with pytest.raises(CatalogueError, match=r"the tool's axis cannot be read"):
-        Catalogue.of_index(str(index), home=Home(tmp_path / "home3"))
+        Catalogue.of_index(str(index), home=Home(tmp_path / "home3")).listed("ruff")
 
     # A versions blob that is not a list of strings.
     axis = _delegated("ruff", "1.0.0").to_json()
@@ -463,7 +467,7 @@ def test_an_index_whose_trees_are_off_their_shape_refuses_naming_the_tool(tmp_pa
     with pytest.raises(
         CatalogueError, match=r"the versions blob is not a list of strings"
     ):
-        Catalogue.of_index(str(index), home=Home(tmp_path / "home4"))
+        Catalogue.of_index(str(index), home=Home(tmp_path / "home4")).listed("ruff")
 
     # A version the versions blob names and the tree lacks.
     gap = _tree_entry(
@@ -471,7 +475,9 @@ def test_an_index_whose_trees_are_off_their_shape_refuses_naming_the_tool(tmp_pa
     )
     _pointer(index, {"ruff": {"tree": str(gap.digest), "record": "x"}})
     with pytest.raises(CatalogueError, match=r"the tree has no entry for 1\.0\.0"):
-        Catalogue.of_index(str(index), home=Home(tmp_path / "home5"))
+        Catalogue.of_index(str(index), home=Home(tmp_path / "home5")).listed(
+            "ruff"
+        ).hosts["1.0.0"]
 
 
 def test_a_deployment_the_source_cannot_serve_refuses_naming_it(tmp_path):
@@ -636,3 +642,139 @@ def test_a_stub_is_read_from_the_index_and_refused_where_there_is_none(tmp_path)
 
     assert class_name("ruff_format") == "RuffFormat"
     assert class_name("markdownlint-cli2") == "MarkdownlintCli2"
+
+
+def test_the_index_is_read_on_demand_a_tool_and_a_version_at_a_time(tmp_path):
+    """Opening the catalogue reads the pointer alone.
+
+    A tool's tree is read when the tool is asked for and a version's
+    hosts when they are, so a version tree nobody asks for can be
+    missing without a refusal.
+    """
+    from livery.toolroom.store import Home
+
+    store = _index_store(tmp_path)
+    index = tmp_path / "index"
+    from livery.strongroom import Link
+    from livery.toolroom.store import read_pointer
+
+    axis = _delegated("ruff", "1.0.0").to_json()
+    missing = "sha256:" + "2" * 64
+    # A version tree as the build lays it out, a link among the members: the
+    # observation blob is not hosts, and a link is not a host.
+    deployed = _tree_entry(
+        store,
+        "1.0.0",
+        [
+            _blob(store, "observation", {"who": "x"}),
+            _tree_entry(
+                store,
+                "hosts",
+                [_blob(store, "linux-x64", {"d": 1}), Link("aside", "linux-x64")],
+            ),
+        ],
+    )
+    top = _tree_entry(
+        store,
+        "ruff",
+        [
+            _blob(store, "tool", axis),
+            _blob(store, "versions", ["1.0.0", "1.1.0"]),
+            deployed,
+            Entry("1.1.0", "tree", Digest.parse(missing), 3),
+        ],
+    )
+    stubs = _tree_entry(
+        store, "ruff", [_blob(store, "1.0.0", "stub"), Link("latest", "1.0.0")]
+    )
+    _pointer(
+        index,
+        {
+            "ruff": {
+                "tree": str(top.digest),
+                "record": "x",
+                "stubs": str(stubs.digest),
+            },
+            "gone": {"tree": missing, "record": "x"},
+        },
+    )
+    assert read_pointer(str(index))["schema"] == 1
+    with pytest.raises(CatalogueError, match=r"no pointer can be read"):
+        read_pointer(str(tmp_path / "nowhere"))
+    catalogue = Catalogue.of_index(str(index), home=Home(tmp_path / "home"))
+    assert sorted(catalogue.tools) == ["gone", "ruff"]  # the pointer's names
+    listed = catalogue.listed("ruff")
+    assert listed.versions == ("1.0.0", "1.1.0")
+    assert list(listed.hosts) == ["1.0.0", "1.1.0"] and len(listed.hosts) == 2
+    assert list(listed.hosts["1.0.0"]) == ["linux-x64"]  # the link is no host
+    assert list(listed.stubs) == ["1.0.0"]  # nor is the link a stub
+    with pytest.raises(CatalogueError, match=r"ruff 1.1.0: the tree sha256:2+ cannot"):
+        listed.hosts["1.1.0"]
+    with pytest.raises(KeyError):
+        listed.hosts["9.9.9"]
+    assert catalogue.listed("ruff") is listed  # read once
+    with pytest.raises(
+        CatalogueError, match=r"gone: the tree sha256:2+ cannot be read"
+    ):
+        catalogue.listed("gone")
+
+
+def test_the_fingerprint_moves_with_a_file_and_the_build_record_gates_on_it(tmp_path):
+    """The stat fingerprint reads no content, and the build record gates on it.
+
+    A rewrite with the same bytes and a later mtime moves the
+    fingerprint, and an absent path is a fingerprint of its own.
+    `build_current` is false without a record, with a moved records
+    tree, and with a moved renderer file, and true when both stand.
+    """
+    import os
+    import time
+
+    from livery.toolroom.store import BUILD_FILE, build_current, tree_fingerprint
+
+    records = tmp_path / "records"
+    (records / "ruff").mkdir(parents=True)
+    (records / "ruff" / "tool.json").write_text("{}")
+    renderer = tmp_path / "render.py"
+    renderer.write_text("x = 1\n")
+    first = tree_fingerprint([records])
+    assert first == tree_fingerprint([records])
+    assert tree_fingerprint([tmp_path / "nowhere"]) != tree_fingerprint(
+        [tmp_path / "elsewhere"]
+    )
+    stamp = time.time_ns() + 2_000_000_000
+    os.utime(records / "ruff" / "tool.json", ns=(stamp, stamp))
+    assert tree_fingerprint([records]) != first
+
+    index = tmp_path / "index"
+    index.mkdir()
+    assert build_current(index) is False  # no record, no pointer
+    (index / BUILD_FILE).write_text('{"schema": 1}')
+    assert build_current(index) is False  # a record, no pointer
+    (index / "pointer.json").write_text('{"schema": 1, "tools": {}}')
+    for off_shape in (
+        "not json",
+        "[]",
+        '{"schema": 1}',
+        '{"records": {}, "renderer": {}}',
+    ):
+        (index / BUILD_FILE).write_text(off_shape)
+        assert build_current(index) is False, off_shape
+    document: dict[str, Any] = {
+        "schema": 1,
+        "records": {"path": str(records), "fingerprint": tree_fingerprint([records])},
+        "renderer": {
+            "code": "sha256:0",
+            "files": [str(renderer)],
+            "fingerprint": tree_fingerprint([str(renderer)]),
+        },
+    }
+    (index / BUILD_FILE).write_text(json.dumps(document))
+    assert build_current(index) is True
+    os.utime(renderer, ns=(stamp, stamp))
+    assert build_current(index) is False
+    document["renderer"]["fingerprint"] = tree_fingerprint([str(renderer)])
+    (index / BUILD_FILE).write_text(json.dumps(document))
+    assert build_current(index) is True
+    (records / "ruff" / "extra.json").write_text("{}")
+    assert build_current(index) is False

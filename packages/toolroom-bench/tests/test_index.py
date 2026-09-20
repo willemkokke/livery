@@ -195,7 +195,7 @@ def test_the_pointer_names_every_tool_and_the_record_it_was_built_from(tmp_path)
     assert list(pointer["tools"]) == ["other", "tool"]
     assert pointer["tools"]["tool"] == {
         "tree": built.tools["tool"],
-        "record": str(_index.record_digest(a)),
+        "record": str(_index.record_digest(root / "tool")),
     }
     assert _index.read_pointer(tmp_path / "nowhere") is None
 
@@ -402,6 +402,55 @@ def test_a_stub_per_version_lands_in_the_derived_tree_and_the_pointer_names_it(
         _entry(store, derived, "ruff").digest
     )
     assert "stubs" not in pointer["tools"]["other"]
+
+
+def test_a_build_after_which_nothing_moved_reads_no_record(tmp_path, monkeypatch):
+    """The nothing-moved gate: the second build answers from the pointer
+    without loading a record; a touched record file, a touched renderer
+    source, or a tree gone from the store each make the next build real.
+    """
+    import os
+    import time
+
+    from livery.toolroom.store import build_current
+
+    root = _driven(tmp_path, monkeypatch)
+    into = tmp_path / "index"
+    renderer_file = tmp_path / "renderer.py"
+    renderer_file.write_text("x = 1\n")
+    monkeypatch.setattr(_index, "renderer_files", lambda: [str(renderer_file)])
+    first = _index.build(root, into)
+    assert build_current(into)
+    loads: list[str] = []
+    real = _index.load_records
+
+    def counted(records):
+        loads.append(str(records))
+        return real(records)
+
+    monkeypatch.setattr(_index, "load_records", counted)
+    again = _index.build(root, into)
+    assert loads == [] and again.tools == first.tools
+    assert again.reused == ("other", "ruff") and again.rebuilt == ()
+    assert again.stubs == first.stubs and again.rendered == ()
+
+    stamp = time.time_ns() + 2_000_000_000
+    os.utime(root / "ruff" / "tool.json", ns=(stamp, stamp))
+    assert not build_current(into)
+    third = _index.build(root, into)
+    assert loads and third.reused == ("other", "ruff")  # same bytes: reused, but read
+    assert build_current(into)
+
+    loads.clear()
+    os.utime(renderer_file, ns=(stamp, stamp))
+    assert not build_current(into)
+    _index.build(root, into)
+    assert loads  # a moved renderer source reads again
+    loads.clear()
+    _index.build(root, into, from_genesis=True)
+    assert loads  # genesis always reads
+    loads.clear()
+    assert _index.build(root, into).reused == ("other", "ruff") and loads == []
 
 
 def test_the_stubs_are_reused_with_the_tool_and_rendered_again_when_the_renderer_moves(
