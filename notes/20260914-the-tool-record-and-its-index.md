@@ -2,11 +2,15 @@
 
 Status: ruled 2026-09-16 as drafted. Phases 1 to 4 landed 2026-09-16
 (livery#620, livery#622, livery#625, livery#627); phase 5's index half
-landed 2026-09-17 (livery#629), its wheel half deferred to phase 6 by
-the ruling of 2026-09-17. Phase 6 lands in parts: the three sites,
-resolution and the lock landed 2026-09-17 (livery#631); receipts,
-materialisation and the modes landed 2026-09-17 (livery#634); the
-stubs' home, `typings/`, in progress (livery#638).
+landed 2026-09-17 (livery#629), its wheel half with phase 6. Phase 6
+landed in parts: the three sites, resolution and the lock (livery#631);
+receipts, materialisation and the modes (livery#634); the stubs' home
+(livery#638, then livery#641, livery#644 and livery#643 on 2026-09-18);
+the steady state's gates landed 2026-09-20 (livery#648). By the ruling
+of 2026-09-23 the tickets phase 6 raised are resolved before phase 7:
+livery#632, livery#639, livery#597, livery#560, livery#651, with
+livery#649 under discussion and livery#615 after the deterministic
+ones.
 Runs after [CI declared, contributed, and dispatched on command][ci-plan],
 which delivers the mechanism this plan's last phase uses.
 Subsumes phase 2 onward of [the tool store over strongroom][store-plan],
@@ -786,6 +790,18 @@ Acceptance:
   provision prefix was the store's home, `data_dir()/toolroom`, so a
   materialised store read as a provisioned prefix; the bench's prefix
   is `data_dir()/toolroom-bench` now.
+- 2026-09-23, Willem, on the order of work: the tickets raised while a
+  plan is implemented are resolved before the next phase, while the
+  context is fresh. Of the tickets phase 6 raised: livery#632 (a pyrefly
+  record) and livery#639 (the global runner mounting the workshop) are
+  fixed; livery#597 goes through one token resolution per forge with
+  the forge's own CLI as the fallback and one voice for the refusals;
+  livery#560 reuses the armed submit's follow; livery#615 waits until
+  the deterministic ones are done; livery#647 is not part of this plan;
+  livery#649 is discussed before anything is acted on. The same
+  exchange raised livery#651, a system tool held to the sites' floors,
+  and the two open questions above on optional tools and on the gate's
+  reads of origin.
 - 2026-09-19, the agent, on the steady state, by Willem's word for the
   four options: a nothing-moved gate, records digested once from their
   bytes, a lazy catalogue, and no second interpreter while nothing
@@ -921,9 +937,27 @@ Acceptance:
    `system-check` tool is never installed by the store, so its lock
    entry is the newest reading the stub renders for, and the machine's
    own copy may be older or newer; the record's `min_version` is the
-   only floor. Whether the stub should follow the version found on the
-   machine instead, and what the receipt should then say, is open.
-   Owner: Willem.
+   floor today, and the sites' floors join it under livery#651. Whether
+   the stub should follow the version found on the machine instead, and
+   what the receipt should then say, is open. Owner: Willem.
+0a. **Optional tools.** Every requirement is required: a tool a site
+   names is locked, materialised on sync (a refusal is reported, never
+   fatal) and named MISSING by `fm env.check` when it does not resolve.
+   There is no way to say a tool is wanted where present and not owed,
+   docker on a machine without a daemon, say. The shape on the table: a
+   requirement spelled optional at its site, still locked so its stub
+   and version are known, skipped without a line by `materialise` when
+   the store cannot supply it, and reported by `env.check` as optional
+   and absent rather than MISSING. Owner: Willem.
+0b. **The gate's reads of origin.** `fm check` reads the state store's
+   refs from origin, the verified record, the coverage records and the
+   speed marks among them, through `git ls-remote`, which is what hung
+   the gate three times on 2026-09-20 with the SSH agent silent
+   (livery#649). The speed marks are CI's own measurements per runner
+   label, so a local run judged against them compares a laptop with a
+   runner. On the table: the gate reads only the snapshot the last
+   `fm sync` or `fm start` fetched and never reaches origin itself, and
+   the speed judgement runs on the CI legs alone. Owner: Willem.
 1. **Where the merged record's reader lives.** Proposal above: the format,
    the resolution and the read path in `livery.toolroom.store`, with the
    bench depending on the store, so the graph is
