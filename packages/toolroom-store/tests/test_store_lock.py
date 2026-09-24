@@ -425,6 +425,45 @@ def _pointer(index: Path, tools: dict[str, Any]) -> None:
     (index / "pointer.json").write_text(json.dumps({"schema": 1, "tools": tools}))
 
 
+def test_an_index_version_whose_reading_is_off_its_shape_is_refused(tmp_path):
+    """A version listed as read still refuses when its blobs are not a reading.
+
+    The tree may lack the version's entry, a blob may not parse, or it
+    may parse to something other than an object; each names the tool,
+    the version and the fault.
+    """
+    from livery.toolroom.store import Home
+
+    store = _index_store(tmp_path)
+    index = tmp_path / "index"
+    axis = _delegated("ruff", "1.0.0").to_json()
+    raw = b"not json"
+    broken = Entry("surface", "blob", store.put(raw), len(raw))
+    about = {"help": "", "platforms": ["Linux"], "extractor": 1, "absent": {}}
+    top = _tree_entry(
+        store,
+        "ruff",
+        [
+            _blob(store, "tool", axis),
+            _blob(store, "versions", ["1.0.0", "1.1.0", "1.2.0"]),
+            _tree_entry(store, "1.0.0", [_blob(store, "observation", about), broken]),
+            _tree_entry(
+                store,
+                "1.1.0",
+                [_blob(store, "observation", about), _blob(store, "surface", [])],
+            ),
+        ],
+    )
+    _pointer(index, {"ruff": {"tree": str(top.digest), "record": "x"}})
+    catalogue = Catalogue.of_index(str(index), home=Home(tmp_path / "home"))
+    with pytest.raises(CatalogueError, match=r"ruff 1.0.0: the surface cannot be read"):
+        catalogue.stub("ruff", "1.0.0")
+    with pytest.raises(CatalogueError, match=r"ruff 1.1.0: the surface is not one"):
+        catalogue.stub("ruff", "1.1.0")
+    with pytest.raises(CatalogueError, match=r"ruff 1.2.0: the tree has no entry"):
+        catalogue.stub("ruff", "1.2.0")
+
+
 def test_an_index_whose_trees_are_off_their_shape_refuses_naming_the_tool(tmp_path):
     """Each refusal lands when the tool, or its version, is asked for.
 
@@ -729,7 +768,8 @@ def test_the_fingerprint_moves_with_a_file_and_the_build_record_gates_on_it(tmp_
     """The stat fingerprint reads no content, and the build record gates on it.
 
     A rewrite with the same bytes and a later mtime moves the
-    fingerprint, and an absent path is a fingerprint of its own.
+    fingerprint, an absent path is a fingerprint of its own, and one
+    file fingerprints alone.
     `build_current` is false without a record, with one off its shape,
     and with a moved records tree, and true when the tree stands.
     """
@@ -749,6 +789,10 @@ def test_the_fingerprint_moves_with_a_file_and_the_build_record_gates_on_it(tmp_
     stamp = time.time_ns() + 2_000_000_000
     os.utime(records / "ruff" / "tool.json", ns=(stamp, stamp))
     assert tree_fingerprint([records]) != first
+    # One file names itself, so a file and a directory of it differ.
+    one = tree_fingerprint([records / "ruff" / "tool.json"])
+    assert one == tree_fingerprint([records / "ruff" / "tool.json"])
+    assert one != tree_fingerprint([records / "ruff"])
 
     index = tmp_path / "index"
     index.mkdir()

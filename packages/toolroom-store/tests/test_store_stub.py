@@ -2,8 +2,17 @@
 
 from __future__ import annotations
 
-from livery.toolroom.store import Option
-from livery.toolroom.store._stub import _annotation, _arg_lines, _esc, _md_safe, _quoted
+from livery.toolroom.store import Option, Verb
+from livery.toolroom.store._stub import (
+    _annotation,
+    _arg_lines,
+    _argv_property,
+    _esc,
+    _md_safe,
+    _quoted,
+    _verbs,
+    platforms_phrase,
+)
 
 
 def test_an_option_that_takes_a_value_or_stands_alone_is_a_valued_flag():
@@ -54,3 +63,34 @@ def test_md_safe_touches_only_a_leading_header_and_quote():
     assert safe[0].endswith("\\\\#2 heading")
     assert safe[1].endswith("\\\\> quote")
     assert safe[2].endswith("mid # hash")  # a mid-line hash is not a block
+
+
+def test_a_choice_set_without_an_alias_is_spelled_inline():
+    option = Option("color", ("--color",), choices=("auto", "never"))
+    inline = 'Literal["auto", "never"]'
+    assert _annotation(option) == f"{inline} | Sequence[{inline}] | None"
+    hoisted: dict[tuple[str, tuple[str, ...]], str] = {
+        ("color", ("auto", "never")): "Color"
+    }
+    assert _annotation(option, hoisted) == "Color | Sequence[Color] | None"
+
+
+def test_the_verb_walk_skips_a_node_that_is_neither_group_nor_verb():
+    verb = Verb("check")
+    tree: dict[str, object] = {"check": verb, "compose": {"up": verb}, "": "root"}
+    assert list(_verbs(tree)) == [verb, verb]
+
+
+def test_a_long_argv_return_type_wraps_the_signature():
+    short = _argv_property(("Ruff",), 0)
+    assert short == "    @property\n    def argv(self) -> Ruff[Argv]: ..."
+    path = ("Docker", *(f"VeryLongSubcommandName{i}" for i in range(3)))
+    long = _argv_property(path, 3)
+    assert long.startswith("    @property\n    def argv(\n        self,\n    ) -> ")
+    assert long.endswith("[Argv]: ...")
+
+
+def test_the_platforms_phrase_names_none_one_and_many():
+    assert platforms_phrase([]) == "this machine"
+    assert platforms_phrase(["Linux"]) == "Linux"
+    assert platforms_phrase(["Linux", "Windows", "macOS"]) == "Linux, Windows and macOS"
