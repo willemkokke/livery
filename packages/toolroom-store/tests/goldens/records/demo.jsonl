@@ -1,0 +1,19 @@
+{"name": "demo", "description": "", "kind": "uv-tool", "min_version": "", "hosts": []}
+{"version": "1.0.0", "date": "2026-01-01", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 4, "help": "A demo tool."}}
+{"verb": "", "help": "A demo tool.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "", "option": "color", "flags": ["--color"], "negation": "", "help": "When to colour.", "type": "choice", "default": null, "choices": ["auto", "always", "never"]}
+{"verb": "", "option": "quiet", "flags": ["-q", "--quiet"], "negation": "", "help": "Say less.", "type": "bool", "default": null, "choices": []}
+{"verb": "build", "help": "Build it.", "wraps": false, "positional": "required", "lead": "target"}
+{"verb": "build", "option": "clean", "flags": ["--clean"], "negation": "--dirty", "help": "Clean first.", "type": "bool", "default": true, "choices": []}
+{"verb": "build", "option": "jobs", "flags": ["-j", "--jobs"], "negation": "", "help": "Parallel jobs.", "type": "int", "default": 1, "choices": []}
+{"verb": "build", "option": "output", "flags": ["-o", "--output"], "negation": "", "help": "Where to write.", "type": "str", "default": "dist", "choices": []}
+{"version": "1.1.0", "date": "2026-02-01", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 4}}
+{"verb": "build", "option": "fork", "flags": ["--fork"], "negation": "", "help": "Fork first.", "type": "bool", "default": null, "choices": []}
+{"verb": "build", "option": "jobs", "gone": true}
+{"verb": "compose.up", "help": "Bring the services up.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "compose.up", "option": "detach", "flags": ["-d", "--detach"], "negation": "", "help": "Run in the background.", "type": "bool", "default": null, "choices": []}
+{"verb": "build", "option": "fork", "absent": ["Windows"]}
+{"verb": "compose.up", "absent": ["Windows"]}
+{"version": "2.0.0", "date": "2026-03-01", "artifacts": {}, "read": {"platforms": ["Linux"], "extractor": 4, "help": "A demo tool, faster."}}
+{"verb": "", "help": "A demo tool, faster."}
+{"verb": "", "option": "verbose", "flags": ["-v", "--verbose"], "negation": "", "help": "Say more.", "type": "bool", "default": null, "choices": []}

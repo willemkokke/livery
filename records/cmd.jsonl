@@ -1,0 +1,3 @@
+{"name": "cmd", "description": "The Windows command interpreter", "kind": "system-check", "min_version": "", "hosts": []}
+{"version": "10.0", "date": "2015-07-29", "artifacts": {}, "read": {"platforms": ["Windows"], "extractor": 3, "help": "The Windows command interpreter"}}
+{"verb": "", "help": "Run a command string in cmd: `cmd /c \"<command>\"`. A real shell: pipes, redirects, globbing and variables all work. `run(...)` stays shell-free.", "wraps": false, "positional": "required", "lead": "command"}

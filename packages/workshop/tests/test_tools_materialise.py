@@ -98,10 +98,8 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
                 },
             ),
         ),
-    ).save(root / "records" / "tea")
-    Record("ruff", kind="uv-tool", deltas=_read("0.16.0")).save(
-        root / "records" / "ruff"
-    )
+    ).save(root / "records")
+    Record("ruff", kind="uv-tool", deltas=_read("0.16.0")).save(root / "records")
     mirror = ObjectStore.create(root / "mirror")
     mirror.put(payload)
     monkeypatch.setattr(
@@ -205,7 +203,7 @@ def test_a_system_tool_is_held_to_the_highest_floor_and_the_site_is_named(
     root = _workspace(tmp_path, monkeypatch)
     Record(
         "git", kind="system-check", min_version="2.40", deltas=_read("2.40.0", "2.55.0")
-    ).save(root / "records" / "git")
+    ).save(root / "records")
     contract = root / "workshop.toml"
     contract.write_text(contract.read_text().replace('"ruff"]', '"ruff", "git>=2.50"]'))
     _tools.write_lock(root)
@@ -340,7 +338,7 @@ def test_env_check_names_each_receipt_and_the_drift_under_it(
     assert "tea: receipt ok" in out and "ruff: receipt ok" in out
 
     # The record moves under the lock: a new artifact for the same version.
-    record = Record.load(root / "records" / "tea")
+    record = Record.load(root / "records" / "tea.jsonl")
     moved = Record(
         "tea",
         kind="archive",
@@ -358,7 +356,7 @@ def test_env_check_names_each_receipt_and_the_drift_under_it(
             ),
         ),
     )
-    moved.save(root / "records" / "tea")
+    moved.save(root / "records")
     _tools.write_lock(root)  # the lock's deployment digest moves with the record
     assert _env_tasks.env_check() == 1
     out = capsys.readouterr().out
@@ -377,7 +375,7 @@ def test_env_check_names_each_receipt_and_the_drift_under_it(
         "livery.workshop._env_tasks.shutil.which", lambda tool: "/x/" + tool
     )
     Record("ruff", kind="uv-tool", deltas=_read("0.16.0", "0.17.0")).save(
-        root / "records" / "ruff"
+        root / "records"
     )
     _tools.materialise(root, ("ruff",))
     _tools.write_lock(root, upgrade=("ruff",))

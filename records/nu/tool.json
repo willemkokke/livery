@@ -1,7 +1,0 @@
-{
-  "name": "nu",
-  "description": "Nushell",
-  "kind": "system-check",
-  "min_version": "",
-  "hosts": []
-}

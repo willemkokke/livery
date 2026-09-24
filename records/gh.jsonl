@@ -1,0 +1,256 @@
+{"name": "gh", "description": "", "kind": "archive", "min_version": "", "hosts": []}
+{"version": "2.88.0", "date": "2026-03-10", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Work seamlessly with GitHub from the command line."}}
+{"verb": "", "help": "Work seamlessly with GitHub from the command line.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "api", "help": "Makes an authenticated HTTP request to the GitHub API and prints the response.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "api", "option": "cache", "flags": ["--cache"], "negation": "", "help": "Cache the response, e.g. \"3600s\", \"60m\", \"1h\"", "type": "str", "default": null, "choices": []}
+{"verb": "api", "option": "field", "flags": ["--field", "-F"], "negation": "", "help": "Add a typed parameter in key=value format (use \"@<path>\" or \"@-\" to read value from file or stdin)", "type": "str", "default": null, "choices": []}
+{"verb": "api", "option": "header", "flags": ["--header", "-H"], "negation": "", "help": "Add a HTTP request header in key:value format", "type": "str", "default": null, "choices": []}
+{"verb": "api", "option": "hostname", "flags": ["--hostname"], "negation": "", "help": "The GitHub hostname for the request", "type": "str", "default": "github.com", "choices": []}
+{"verb": "api", "option": "include", "flags": ["--include", "-i"], "negation": "", "help": "Include HTTP response status line and headers in the output", "type": "bool", "default": null, "choices": []}
+{"verb": "api", "option": "input", "flags": ["--input"], "negation": "", "help": "The file to use as body for the HTTP request (use \"-\" to read from standard input)", "type": "str", "default": null, "choices": []}
+{"verb": "api", "option": "jq", "flags": ["--jq", "-q"], "negation": "", "help": "Query to select values from the response using jq syntax", "type": "str", "default": null, "choices": []}
+{"verb": "api", "option": "method", "flags": ["--method", "-X"], "negation": "", "help": "The HTTP method for the request", "type": "str", "default": "GET", "choices": []}
+{"verb": "api", "option": "paginate", "flags": ["--paginate"], "negation": "", "help": "Make additional HTTP requests to fetch all pages of results", "type": "bool", "default": null, "choices": []}
+{"verb": "api", "option": "preview", "flags": ["--preview", "-p"], "negation": "", "help": "Opt into GitHub API previews (names should omit '-preview')", "type": "str", "default": null, "choices": []}
+{"verb": "api", "option": "raw_field", "flags": ["--raw-field", "-f"], "negation": "", "help": "Add a string parameter in key=value format", "type": "str", "default": null, "choices": []}
+{"verb": "api", "option": "silent", "flags": ["--silent"], "negation": "", "help": "Do not print the response body", "type": "bool", "default": null, "choices": []}
+{"verb": "api", "option": "slurp", "flags": ["--slurp"], "negation": "", "help": "Use with \"--paginate\" to return an array of all pages of either JSON arrays or objects", "type": "bool", "default": null, "choices": []}
+{"verb": "api", "option": "template", "flags": ["--template", "-t"], "negation": "", "help": "Format JSON output using a Go template; see \"gh help formatting\"", "type": "str", "default": null, "choices": []}
+{"verb": "api", "option": "verbose", "flags": ["--verbose"], "negation": "", "help": "Include full HTTP request and response in the output", "type": "bool", "default": null, "choices": []}
+{"verb": "auth.login", "help": "Authenticate with a GitHub host.", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "auth.login", "option": "clipboard", "flags": ["--clipboard", "-c"], "negation": "", "help": "Copy one-time OAuth device code to clipboard", "type": "bool", "default": null, "choices": []}
+{"verb": "auth.login", "option": "git_protocol", "flags": ["--git-protocol", "-p"], "negation": "", "help": "The protocol to use for git operations on this host: {ssh|https}", "type": "str", "default": null, "choices": []}
+{"verb": "auth.login", "option": "hostname", "flags": ["--hostname", "-h"], "negation": "", "help": "The hostname of the GitHub instance to authenticate with", "type": "str", "default": null, "choices": []}
+{"verb": "auth.login", "option": "insecure_storage", "flags": ["--insecure-storage"], "negation": "", "help": "Save authentication credentials in plain text instead of credential store", "type": "bool", "default": null, "choices": []}
+{"verb": "auth.login", "option": "scopes", "flags": ["--scopes", "-s"], "negation": "", "help": "Additional authentication scopes to request", "type": "str", "default": null, "choices": []}
+{"verb": "auth.login", "option": "skip_ssh_key", "flags": ["--skip-ssh-key"], "negation": "", "help": "Skip generate/upload SSH key prompt", "type": "bool", "default": null, "choices": []}
+{"verb": "auth.login", "option": "web", "flags": ["--web", "-w"], "negation": "", "help": "Open a browser to authenticate", "type": "bool", "default": null, "choices": []}
+{"verb": "auth.login", "option": "with_token", "flags": ["--with-token"], "negation": "", "help": "Read token from standard input", "type": "bool", "default": null, "choices": []}
+{"verb": "auth.status", "help": "Display active account and authentication state on each known GitHub host.", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "auth.status", "option": "active", "flags": ["--active", "-a"], "negation": "", "help": "Display the active account only", "type": "bool", "default": null, "choices": []}
+{"verb": "auth.status", "option": "hostname", "flags": ["--hostname", "-h"], "negation": "", "help": "Check only a specific hostname's auth status", "type": "str", "default": null, "choices": []}
+{"verb": "auth.status", "option": "jq", "flags": ["--jq"], "negation": "", "help": "Filter JSON output using a jq expression", "type": "str", "default": null, "choices": []}
+{"verb": "auth.status", "option": "json", "flags": ["--json"], "negation": "", "help": "Output JSON with the specified fields", "type": "str", "default": null, "choices": []}
+{"verb": "auth.status", "option": "show_token", "flags": ["--show-token", "-t"], "negation": "", "help": "Display the auth token", "type": "bool", "default": null, "choices": []}
+{"verb": "auth.status", "option": "template", "flags": ["--template"], "negation": "", "help": "Format JSON output using a Go template; see \"gh help formatting\"", "type": "str", "default": null, "choices": []}
+{"verb": "issue.create", "help": "Create an issue on GitHub.", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "issue.create", "option": "assignee", "flags": ["--assignee", "-a"], "negation": "", "help": "Assign people by their login", "type": "str", "default": null, "choices": []}
+{"verb": "issue.create", "option": "body", "flags": ["--body", "-b"], "negation": "", "help": "Supply a body", "type": "str", "default": null, "choices": []}
+{"verb": "issue.create", "option": "body_file", "flags": ["--body-file", "-F"], "negation": "", "help": "Read body text from file (use \"-\" to read from standard input)", "type": "str", "default": null, "choices": []}
+{"verb": "issue.create", "option": "editor", "flags": ["--editor", "-e"], "negation": "", "help": "Skip prompts and open the text editor to write the title and body in", "type": "bool", "default": null, "choices": []}
+{"verb": "issue.create", "option": "label", "flags": ["--label", "-l"], "negation": "", "help": "Add labels by name", "type": "str", "default": null, "choices": []}
+{"verb": "issue.create", "option": "milestone", "flags": ["--milestone", "-m"], "negation": "", "help": "Add the issue to a milestone by name", "type": "str", "default": null, "choices": []}
+{"verb": "issue.create", "option": "project", "flags": ["--project", "-p"], "negation": "", "help": "Add the issue to projects by title", "type": "str", "default": null, "choices": []}
+{"verb": "issue.create", "option": "recover", "flags": ["--recover"], "negation": "", "help": "Recover input from a failed run of create", "type": "str", "default": null, "choices": []}
+{"verb": "issue.create", "option": "repo", "flags": ["--repo", "-R"], "negation": "", "help": "Select another repository using the [HOST/]OWNER/REPO format", "type": "str", "default": null, "choices": []}
+{"verb": "issue.create", "option": "template", "flags": ["--template", "-T"], "negation": "", "help": "Template name to use as starting body text", "type": "str", "default": null, "choices": []}
+{"verb": "issue.create", "option": "title", "flags": ["--title", "-t"], "negation": "", "help": "Supply a title", "type": "str", "default": null, "choices": []}
+{"verb": "issue.create", "option": "web", "flags": ["--web", "-w"], "negation": "", "help": "Open the browser to create an issue", "type": "bool", "default": null, "choices": []}
+{"verb": "issue.list", "help": "List issues in a GitHub repository. By default, this only lists open issues.", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "issue.list", "option": "app", "flags": ["--app"], "negation": "", "help": "Filter by GitHub App author", "type": "str", "default": null, "choices": []}
+{"verb": "issue.list", "option": "assignee", "flags": ["--assignee", "-a"], "negation": "", "help": "Filter by assignee", "type": "str", "default": null, "choices": []}
+{"verb": "issue.list", "option": "author", "flags": ["--author", "-A"], "negation": "", "help": "Filter by author", "type": "str", "default": null, "choices": []}
+{"verb": "issue.list", "option": "jq", "flags": ["--jq", "-q"], "negation": "", "help": "Filter JSON output using a jq expression", "type": "str", "default": null, "choices": []}
+{"verb": "issue.list", "option": "json", "flags": ["--json"], "negation": "", "help": "Output JSON with the specified fields", "type": "str", "default": null, "choices": []}
+{"verb": "issue.list", "option": "label", "flags": ["--label", "-l"], "negation": "", "help": "Filter by label", "type": "str", "default": null, "choices": []}
+{"verb": "issue.list", "option": "limit", "flags": ["--limit", "-L"], "negation": "", "help": "Maximum number of issues to fetch", "type": "str", "default": "30", "choices": []}
+{"verb": "issue.list", "option": "mention", "flags": ["--mention"], "negation": "", "help": "Filter by mention", "type": "str", "default": null, "choices": []}
+{"verb": "issue.list", "option": "milestone", "flags": ["--milestone", "-m"], "negation": "", "help": "Filter by milestone number or title", "type": "str", "default": null, "choices": []}
+{"verb": "issue.list", "option": "repo", "flags": ["--repo", "-R"], "negation": "", "help": "Select another repository using the [HOST/]OWNER/REPO format", "type": "str", "default": null, "choices": []}
+{"verb": "issue.list", "option": "search", "flags": ["--search", "-S"], "negation": "", "help": "Search issues with query", "type": "str", "default": null, "choices": []}
+{"verb": "issue.list", "option": "state", "flags": ["--state", "-s"], "negation": "", "help": "Filter by state: {open|closed|all}", "type": "str", "default": "open", "choices": []}
+{"verb": "issue.list", "option": "template", "flags": ["--template", "-t"], "negation": "", "help": "Format JSON output using a Go template; see \"gh help formatting\"", "type": "str", "default": null, "choices": []}
+{"verb": "issue.list", "option": "web", "flags": ["--web", "-w"], "negation": "", "help": "List issues in the web browser", "type": "bool", "default": null, "choices": []}
+{"verb": "issue.view", "help": "Display the title, body, and other information about an issue.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "issue.view", "option": "comments", "flags": ["--comments", "-c"], "negation": "", "help": "View issue comments", "type": "bool", "default": null, "choices": []}
+{"verb": "issue.view", "option": "jq", "flags": ["--jq", "-q"], "negation": "", "help": "Filter JSON output using a jq expression", "type": "str", "default": null, "choices": []}
+{"verb": "issue.view", "option": "json", "flags": ["--json"], "negation": "", "help": "Output JSON with the specified fields", "type": "str", "default": null, "choices": []}
+{"verb": "issue.view", "option": "repo", "flags": ["--repo", "-R"], "negation": "", "help": "Select another repository using the [HOST/]OWNER/REPO format", "type": "str", "default": null, "choices": []}
+{"verb": "issue.view", "option": "template", "flags": ["--template", "-t"], "negation": "", "help": "Format JSON output using a Go template; see \"gh help formatting\"", "type": "str", "default": null, "choices": []}
+{"verb": "issue.view", "option": "web", "flags": ["--web", "-w"], "negation": "", "help": "Open an issue in the browser", "type": "bool", "default": null, "choices": []}
+{"verb": "label.create", "help": "Create a new label on GitHub, or update an existing one with `--force`.", "wraps": false, "positional": "required", "lead": "name"}
+{"verb": "label.create", "option": "color", "flags": ["--color", "-c"], "negation": "", "help": "Color of the label", "type": "str", "default": null, "choices": []}
+{"verb": "label.create", "option": "description", "flags": ["--description", "-d"], "negation": "", "help": "Description of the label", "type": "str", "default": null, "choices": []}
+{"verb": "label.create", "option": "force", "flags": ["--force", "-f"], "negation": "", "help": "Update the label color and description if label already exists", "type": "bool", "default": null, "choices": []}
+{"verb": "label.create", "option": "repo", "flags": ["--repo", "-R"], "negation": "", "help": "Select another repository using the [HOST/]OWNER/REPO format", "type": "str", "default": null, "choices": []}
+{"verb": "label.list", "help": "Display labels in a GitHub repository.", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "label.list", "option": "jq", "flags": ["--jq", "-q"], "negation": "", "help": "Filter JSON output using a jq expression", "type": "str", "default": null, "choices": []}
+{"verb": "label.list", "option": "json", "flags": ["--json"], "negation": "", "help": "Output JSON with the specified fields", "type": "str", "default": null, "choices": []}
+{"verb": "label.list", "option": "limit", "flags": ["--limit", "-L"], "negation": "", "help": "Maximum number of labels to fetch", "type": "str", "default": "30", "choices": []}
+{"verb": "label.list", "option": "order", "flags": ["--order"], "negation": "", "help": "Order of labels returned: {asc|desc}", "type": "str", "default": "asc", "choices": []}
+{"verb": "label.list", "option": "repo", "flags": ["--repo", "-R"], "negation": "", "help": "Select another repository using the [HOST/]OWNER/REPO format", "type": "str", "default": null, "choices": []}
+{"verb": "label.list", "option": "search", "flags": ["--search", "-S"], "negation": "", "help": "Search label names and descriptions", "type": "str", "default": null, "choices": []}
+{"verb": "label.list", "option": "sort", "flags": ["--sort"], "negation": "", "help": "Sort fetched labels: {created|name}", "type": "str", "default": "created", "choices": []}
+{"verb": "label.list", "option": "template", "flags": ["--template", "-t"], "negation": "", "help": "Format JSON output using a Go template; see \"gh help formatting\"", "type": "str", "default": null, "choices": []}
+{"verb": "label.list", "option": "web", "flags": ["--web", "-w"], "negation": "", "help": "List labels in the web browser", "type": "bool", "default": null, "choices": []}
+{"verb": "pr.checkout", "help": "Check out a pull request in git", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "pr.checkout", "option": "branch", "flags": ["--branch", "-b"], "negation": "", "help": "Local branch name to use", "type": "str", "default": "[the name of the head branch]", "choices": []}
+{"verb": "pr.checkout", "option": "detach", "flags": ["--detach"], "negation": "", "help": "Checkout PR with a detached HEAD", "type": "bool", "default": null, "choices": []}
+{"verb": "pr.checkout", "option": "force", "flags": ["--force", "-f"], "negation": "", "help": "Reset the existing local branch to the latest state of the pull request", "type": "bool", "default": null, "choices": []}
+{"verb": "pr.checkout", "option": "recurse_submodules", "flags": ["--recurse-submodules"], "negation": "", "help": "Update all submodules after checkout", "type": "bool", "default": null, "choices": []}
+{"verb": "pr.checkout", "option": "repo", "flags": ["--repo", "-R"], "negation": "", "help": "Select another repository using the [HOST/]OWNER/REPO format", "type": "str", "default": null, "choices": []}
+{"verb": "pr.create", "help": "Create a pull request on GitHub.", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "pr.create", "option": "assignee", "flags": ["--assignee", "-a"], "negation": "", "help": "Assign people by their login", "type": "str", "default": null, "choices": []}
+{"verb": "pr.create", "option": "base", "flags": ["--base", "-B"], "negation": "", "help": "The branch into which you want your code merged", "type": "str", "default": null, "choices": []}
+{"verb": "pr.create", "option": "body", "flags": ["--body", "-b"], "negation": "", "help": "Body for the pull request", "type": "str", "default": null, "choices": []}
+{"verb": "pr.create", "option": "body_file", "flags": ["--body-file", "-F"], "negation": "", "help": "Read body text from file (use \"-\" to read from standard input)", "type": "str", "default": null, "choices": []}
+{"verb": "pr.create", "option": "draft", "flags": ["--draft", "-d"], "negation": "", "help": "Mark pull request as a draft", "type": "bool", "default": null, "choices": []}
+{"verb": "pr.create", "option": "dry_run", "flags": ["--dry-run"], "negation": "", "help": "Print details instead of creating the PR", "type": "bool", "default": null, "choices": []}
+{"verb": "pr.create", "option": "editor", "flags": ["--editor", "-e"], "negation": "", "help": "Skip prompts and open the text editor to write the title and body in", "type": "bool", "default": null, "choices": []}
+{"verb": "pr.create", "option": "fill", "flags": ["--fill", "-f"], "negation": "", "help": "Use commit info for title and body", "type": "bool", "default": null, "choices": []}
+{"verb": "pr.create", "option": "fill_first", "flags": ["--fill-first"], "negation": "", "help": "Use first commit info for title and body", "type": "bool", "default": null, "choices": []}
+{"verb": "pr.create", "option": "fill_verbose", "flags": ["--fill-verbose"], "negation": "", "help": "Use commits msg+body for description", "type": "bool", "default": null, "choices": []}
+{"verb": "pr.create", "option": "head", "flags": ["--head", "-H"], "negation": "", "help": "The branch that contains commits for your pull request", "type": "str", "default": "[current branch]", "choices": []}
+{"verb": "pr.create", "option": "label", "flags": ["--label", "-l"], "negation": "", "help": "Add labels by name", "type": "str", "default": null, "choices": []}
+{"verb": "pr.create", "option": "milestone", "flags": ["--milestone", "-m"], "negation": "", "help": "Add the pull request to a milestone by name", "type": "str", "default": null, "choices": []}
+{"verb": "pr.create", "option": "no_maintainer_edit", "flags": ["--no-maintainer-edit"], "negation": "", "help": "Disable maintainer's ability to modify pull request", "type": "bool", "default": null, "choices": []}
+{"verb": "pr.create", "option": "project", "flags": ["--project", "-p"], "negation": "", "help": "Add the pull request to projects by title", "type": "str", "default": null, "choices": []}
+{"verb": "pr.create", "option": "recover", "flags": ["--recover"], "negation": "", "help": "Recover input from a failed run of create", "type": "str", "default": null, "choices": []}
+{"verb": "pr.create", "option": "repo", "flags": ["--repo", "-R"], "negation": "", "help": "Select another repository using the [HOST/]OWNER/REPO format", "type": "str", "default": null, "choices": []}
+{"verb": "pr.create", "option": "reviewer", "flags": ["--reviewer", "-r"], "negation": "", "help": "Request reviews from people or teams by their handle", "type": "str", "default": null, "choices": []}
+{"verb": "pr.create", "option": "template", "flags": ["--template", "-T"], "negation": "", "help": "Template file to use as starting body text", "type": "str", "default": null, "choices": []}
+{"verb": "pr.create", "option": "title", "flags": ["--title", "-t"], "negation": "", "help": "Title for the pull request", "type": "str", "default": null, "choices": []}
+{"verb": "pr.create", "option": "web", "flags": ["--web", "-w"], "negation": "", "help": "Open the web browser to create a pull request", "type": "bool", "default": null, "choices": []}
+{"verb": "pr.list", "help": "List pull requests in a GitHub repository. By default, this only lists open PRs.", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "pr.list", "option": "app", "flags": ["--app"], "negation": "", "help": "Filter by GitHub App author", "type": "str", "default": null, "choices": []}
+{"verb": "pr.list", "option": "assignee", "flags": ["--assignee", "-a"], "negation": "", "help": "Filter by assignee", "type": "str", "default": null, "choices": []}
+{"verb": "pr.list", "option": "author", "flags": ["--author", "-A"], "negation": "", "help": "Filter by author", "type": "str", "default": null, "choices": []}
+{"verb": "pr.list", "option": "base", "flags": ["--base", "-B"], "negation": "", "help": "Filter by base branch", "type": "str", "default": null, "choices": []}
+{"verb": "pr.list", "option": "draft", "flags": ["--draft", "-d"], "negation": "", "help": "Filter by draft state", "type": "bool", "default": null, "choices": []}
+{"verb": "pr.list", "option": "head", "flags": ["--head", "-H"], "negation": "", "help": "Filter by head branch (\"<owner>:<branch>\" syntax not supported)", "type": "str", "default": null, "choices": []}
+{"verb": "pr.list", "option": "jq", "flags": ["--jq", "-q"], "negation": "", "help": "Filter JSON output using a jq expression", "type": "str", "default": null, "choices": []}
+{"verb": "pr.list", "option": "json", "flags": ["--json"], "negation": "", "help": "Output JSON with the specified fields", "type": "str", "default": null, "choices": []}
+{"verb": "pr.list", "option": "label", "flags": ["--label", "-l"], "negation": "", "help": "Filter by label", "type": "str", "default": null, "choices": []}
+{"verb": "pr.list", "option": "limit", "flags": ["--limit", "-L"], "negation": "", "help": "Maximum number of items to fetch", "type": "str", "default": "30", "choices": []}
+{"verb": "pr.list", "option": "repo", "flags": ["--repo", "-R"], "negation": "", "help": "Select another repository using the [HOST/]OWNER/REPO format", "type": "str", "default": null, "choices": []}
+{"verb": "pr.list", "option": "search", "flags": ["--search", "-S"], "negation": "", "help": "Search pull requests with query", "type": "str", "default": null, "choices": []}
+{"verb": "pr.list", "option": "state", "flags": ["--state", "-s"], "negation": "", "help": "Filter by state: {open|closed|merged|all}", "type": "str", "default": "open", "choices": []}
+{"verb": "pr.list", "option": "template", "flags": ["--template", "-t"], "negation": "", "help": "Format JSON output using a Go template; see \"gh help formatting\"", "type": "str", "default": null, "choices": []}
+{"verb": "pr.list", "option": "web", "flags": ["--web", "-w"], "negation": "", "help": "List pull requests in the web browser", "type": "bool", "default": null, "choices": []}
+{"verb": "pr.merge", "help": "Merge a pull request on GitHub.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "pr.merge", "option": "admin", "flags": ["--admin"], "negation": "", "help": "Use administrator privileges to merge a pull request that does not meet requirements", "type": "bool", "default": null, "choices": []}
+{"verb": "pr.merge", "option": "author_email", "flags": ["--author-email", "-A"], "negation": "", "help": "Email text for merge commit author", "type": "str", "default": null, "choices": []}
+{"verb": "pr.merge", "option": "auto", "flags": ["--auto"], "negation": "", "help": "Automatically merge only after necessary requirements are met", "type": "bool", "default": null, "choices": []}
+{"verb": "pr.merge", "option": "body", "flags": ["--body", "-b"], "negation": "", "help": "Body text for the merge commit", "type": "str", "default": null, "choices": []}
+{"verb": "pr.merge", "option": "body_file", "flags": ["--body-file", "-F"], "negation": "", "help": "Read body text from file (use \"-\" to read from standard input)", "type": "str", "default": null, "choices": []}
+{"verb": "pr.merge", "option": "delete_branch", "flags": ["--delete-branch", "-d"], "negation": "", "help": "Delete the local and remote branch after merge", "type": "bool", "default": null, "choices": []}
+{"verb": "pr.merge", "option": "disable_auto", "flags": ["--disable-auto"], "negation": "", "help": "Disable auto-merge for this pull request", "type": "bool", "default": null, "choices": []}
+{"verb": "pr.merge", "option": "match_head_commit", "flags": ["--match-head-commit"], "negation": "", "help": "Commit SHA that the pull request head must match to allow merge", "type": "str", "default": null, "choices": []}
+{"verb": "pr.merge", "option": "merge", "flags": ["--merge", "-m"], "negation": "", "help": "Merge the commits with the base branch", "type": "bool", "default": null, "choices": []}
+{"verb": "pr.merge", "option": "rebase", "flags": ["--rebase", "-r"], "negation": "", "help": "Rebase the commits onto the base branch", "type": "bool", "default": null, "choices": []}
+{"verb": "pr.merge", "option": "repo", "flags": ["--repo", "-R"], "negation": "", "help": "Select another repository using the [HOST/]OWNER/REPO format", "type": "str", "default": null, "choices": []}
+{"verb": "pr.merge", "option": "squash", "flags": ["--squash", "-s"], "negation": "", "help": "Squash the commits into one commit and merge it into the base branch", "type": "bool", "default": null, "choices": []}
+{"verb": "pr.merge", "option": "subject", "flags": ["--subject", "-t"], "negation": "", "help": "Subject text for the merge commit", "type": "str", "default": null, "choices": []}
+{"verb": "pr.view", "help": "Display the title, body, and other information about a pull request.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "pr.view", "option": "comments", "flags": ["--comments", "-c"], "negation": "", "help": "View pull request comments", "type": "bool", "default": null, "choices": []}
+{"verb": "pr.view", "option": "jq", "flags": ["--jq", "-q"], "negation": "", "help": "Filter JSON output using a jq expression", "type": "str", "default": null, "choices": []}
+{"verb": "pr.view", "option": "json", "flags": ["--json"], "negation": "", "help": "Output JSON with the specified fields", "type": "str", "default": null, "choices": []}
+{"verb": "pr.view", "option": "repo", "flags": ["--repo", "-R"], "negation": "", "help": "Select another repository using the [HOST/]OWNER/REPO format", "type": "str", "default": null, "choices": []}
+{"verb": "pr.view", "option": "template", "flags": ["--template", "-t"], "negation": "", "help": "Format JSON output using a Go template; see \"gh help formatting\"", "type": "str", "default": null, "choices": []}
+{"verb": "pr.view", "option": "web", "flags": ["--web", "-w"], "negation": "", "help": "Open a pull request in the browser", "type": "bool", "default": null, "choices": []}
+{"verb": "release.create", "help": "Create a new GitHub Release for a repository.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "release.create", "option": "discussion_category", "flags": ["--discussion-category"], "negation": "", "help": "Start a discussion in the specified category", "type": "str", "default": null, "choices": []}
+{"verb": "release.create", "option": "draft", "flags": ["--draft", "-d"], "negation": "", "help": "Save the release as a draft instead of publishing it", "type": "bool", "default": null, "choices": []}
+{"verb": "release.create", "option": "fail_on_no_commits", "flags": ["--fail-on-no-commits"], "negation": "", "help": "Fail if there are no commits since the last release (no impact on the first release)", "type": "bool", "default": null, "choices": []}
+{"verb": "release.create", "option": "generate_notes", "flags": ["--generate-notes"], "negation": "", "help": "Automatically generate title and notes for the release via GitHub Release Notes API", "type": "bool", "default": null, "choices": []}
+{"verb": "release.create", "option": "latest", "flags": ["--latest"], "negation": "", "help": "Mark this release as \"Latest\" ", "type": "bool", "default": false, "choices": []}
+{"verb": "release.create", "option": "notes", "flags": ["--notes", "-n"], "negation": "", "help": "Release notes", "type": "str", "default": null, "choices": []}
+{"verb": "release.create", "option": "notes_file", "flags": ["--notes-file", "-F"], "negation": "", "help": "Read release notes from file (use \"-\" to read from standard input)", "type": "str", "default": null, "choices": []}
+{"verb": "release.create", "option": "notes_from_tag", "flags": ["--notes-from-tag"], "negation": "", "help": "Fetch notes from the tag annotation or message of commit associated with tag", "type": "bool", "default": null, "choices": []}
+{"verb": "release.create", "option": "notes_start_tag", "flags": ["--notes-start-tag"], "negation": "", "help": "Tag to use as the starting point for generating release notes", "type": "str", "default": null, "choices": []}
+{"verb": "release.create", "option": "prerelease", "flags": ["--prerelease", "-p"], "negation": "", "help": "Mark the release as a prerelease", "type": "bool", "default": null, "choices": []}
+{"verb": "release.create", "option": "repo", "flags": ["--repo", "-R"], "negation": "", "help": "Select another repository using the [HOST/]OWNER/REPO format", "type": "str", "default": null, "choices": []}
+{"verb": "release.create", "option": "target", "flags": ["--target"], "negation": "", "help": "Target branch or full commit SHA", "type": "str", "default": "[main branch]", "choices": []}
+{"verb": "release.create", "option": "title", "flags": ["--title", "-t"], "negation": "", "help": "Release title", "type": "str", "default": null, "choices": []}
+{"verb": "release.create", "option": "verify_tag", "flags": ["--verify-tag"], "negation": "", "help": "Abort in case the git tag doesn't already exist in the remote repository", "type": "bool", "default": null, "choices": []}
+{"verb": "release.list", "help": "List releases in a repository", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "release.list", "option": "exclude_drafts", "flags": ["--exclude-drafts"], "negation": "", "help": "Exclude draft releases", "type": "bool", "default": null, "choices": []}
+{"verb": "release.list", "option": "exclude_pre_releases", "flags": ["--exclude-pre-releases"], "negation": "", "help": "Exclude pre-releases", "type": "bool", "default": null, "choices": []}
+{"verb": "release.list", "option": "jq", "flags": ["--jq", "-q"], "negation": "", "help": "Filter JSON output using a jq expression", "type": "str", "default": null, "choices": []}
+{"verb": "release.list", "option": "json", "flags": ["--json"], "negation": "", "help": "Output JSON with the specified fields", "type": "str", "default": null, "choices": []}
+{"verb": "release.list", "option": "limit", "flags": ["--limit", "-L"], "negation": "", "help": "Maximum number of items to fetch", "type": "str", "default": "30", "choices": []}
+{"verb": "release.list", "option": "order", "flags": ["--order", "-O"], "negation": "", "help": "Order of releases returned: {asc|desc}", "type": "str", "default": "desc", "choices": []}
+{"verb": "release.list", "option": "repo", "flags": ["--repo", "-R"], "negation": "", "help": "Select another repository using the [HOST/]OWNER/REPO format", "type": "str", "default": null, "choices": []}
+{"verb": "release.list", "option": "template", "flags": ["--template", "-t"], "negation": "", "help": "Format JSON output using a Go template; see \"gh help formatting\"", "type": "str", "default": null, "choices": []}
+{"verb": "release.upload", "help": "Upload asset files to a GitHub Release.", "wraps": false, "positional": "required", "lead": "tag"}
+{"verb": "release.upload", "option": "clobber", "flags": ["--clobber"], "negation": "", "help": "Delete and re-upload existing assets of the same name", "type": "bool", "default": null, "choices": []}
+{"verb": "release.upload", "option": "repo", "flags": ["--repo", "-R"], "negation": "", "help": "Select another repository using the [HOST/]OWNER/REPO format", "type": "str", "default": null, "choices": []}
+{"verb": "release.view", "help": "View information about a GitHub Release.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "release.view", "option": "jq", "flags": ["--jq", "-q"], "negation": "", "help": "Filter JSON output using a jq expression", "type": "str", "default": null, "choices": []}
+{"verb": "release.view", "option": "json", "flags": ["--json"], "negation": "", "help": "Output JSON with the specified fields", "type": "str", "default": null, "choices": []}
+{"verb": "release.view", "option": "repo", "flags": ["--repo", "-R"], "negation": "", "help": "Select another repository using the [HOST/]OWNER/REPO format", "type": "str", "default": null, "choices": []}
+{"verb": "release.view", "option": "template", "flags": ["--template", "-t"], "negation": "", "help": "Format JSON output using a Go template; see \"gh help formatting\"", "type": "str", "default": null, "choices": []}
+{"verb": "release.view", "option": "web", "flags": ["--web", "-w"], "negation": "", "help": "Open the release in the browser", "type": "bool", "default": null, "choices": []}
+{"verb": "repo.clone", "help": "Clone a GitHub repository locally. Pass additional `git clone` flags by listing", "wraps": false, "positional": "required", "lead": "repository"}
+{"verb": "repo.clone", "option": "no_upstream", "flags": ["--no-upstream"], "negation": "", "help": "Do not add an upstream remote when cloning a fork", "type": "bool", "default": null, "choices": []}
+{"verb": "repo.clone", "option": "upstream_remote_name", "flags": ["--upstream-remote-name", "-u"], "negation": "", "help": "Upstream remote name when cloning a fork", "type": "str", "default": "upstream", "choices": []}
+{"verb": "repo.view", "help": "Display the description and the README of a GitHub repository.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "repo.view", "option": "branch", "flags": ["--branch", "-b"], "negation": "", "help": "View a specific branch of the repository", "type": "str", "default": null, "choices": []}
+{"verb": "repo.view", "option": "jq", "flags": ["--jq", "-q"], "negation": "", "help": "Filter JSON output using a jq expression", "type": "str", "default": null, "choices": []}
+{"verb": "repo.view", "option": "json", "flags": ["--json"], "negation": "", "help": "Output JSON with the specified fields", "type": "str", "default": null, "choices": []}
+{"verb": "repo.view", "option": "template", "flags": ["--template", "-t"], "negation": "", "help": "Format JSON output using a Go template; see \"gh help formatting\"", "type": "str", "default": null, "choices": []}
+{"verb": "repo.view", "option": "web", "flags": ["--web", "-w"], "negation": "", "help": "Open a repository in the browser", "type": "bool", "default": null, "choices": []}
+{"verb": "run.list", "help": "List recent workflow runs.", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "run.list", "option": "all", "flags": ["--all", "-a"], "negation": "", "help": "Include disabled workflows", "type": "bool", "default": null, "choices": []}
+{"verb": "run.list", "option": "branch", "flags": ["--branch", "-b"], "negation": "", "help": "Filter runs by branch", "type": "str", "default": null, "choices": []}
+{"verb": "run.list", "option": "commit", "flags": ["--commit", "-c"], "negation": "", "help": "Filter runs by the SHA of the commit", "type": "str", "default": null, "choices": []}
+{"verb": "run.list", "option": "created", "flags": ["--created"], "negation": "", "help": "Filter runs by the date it was created", "type": "str", "default": null, "choices": []}
+{"verb": "run.list", "option": "event", "flags": ["--event", "-e"], "negation": "", "help": "Filter runs by which event triggered the run", "type": "str", "default": null, "choices": []}
+{"verb": "run.list", "option": "jq", "flags": ["--jq", "-q"], "negation": "", "help": "Filter JSON output using a jq expression", "type": "str", "default": null, "choices": []}
+{"verb": "run.list", "option": "json", "flags": ["--json"], "negation": "", "help": "Output JSON with the specified fields", "type": "str", "default": null, "choices": []}
+{"verb": "run.list", "option": "limit", "flags": ["--limit", "-L"], "negation": "", "help": "Maximum number of runs to fetch", "type": "str", "default": "20", "choices": []}
+{"verb": "run.list", "option": "repo", "flags": ["--repo", "-R"], "negation": "", "help": "Select another repository using the [HOST/]OWNER/REPO format", "type": "str", "default": null, "choices": []}
+{"verb": "run.list", "option": "status", "flags": ["--status", "-s"], "negation": "", "help": "Filter runs by status: {queued|completed|in_progress|requested|waiting|pending|action_required|cancelled|failure|neutral|skipped|stale|startup_failure|success|timed_out}", "type": "str", "default": null, "choices": []}
+{"verb": "run.list", "option": "template", "flags": ["--template", "-t"], "negation": "", "help": "Format JSON output using a Go template; see \"gh help formatting\"", "type": "str", "default": null, "choices": []}
+{"verb": "run.list", "option": "user", "flags": ["--user", "-u"], "negation": "", "help": "Filter runs by user who triggered the run", "type": "str", "default": null, "choices": []}
+{"verb": "run.list", "option": "workflow", "flags": ["--workflow", "-w"], "negation": "", "help": "Filter runs by workflow", "type": "str", "default": null, "choices": []}
+{"verb": "run.view", "help": "View a summary of a workflow run.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "run.view", "option": "attempt", "flags": ["--attempt", "-a"], "negation": "", "help": "The attempt number of the workflow run", "type": "str", "default": null, "choices": []}
+{"verb": "run.view", "option": "exit_status", "flags": ["--exit-status"], "negation": "", "help": "Exit with non-zero status if run failed", "type": "bool", "default": null, "choices": []}
+{"verb": "run.view", "option": "job", "flags": ["--job", "-j"], "negation": "", "help": "View a specific job ID from a run", "type": "str", "default": null, "choices": []}
+{"verb": "run.view", "option": "jq", "flags": ["--jq", "-q"], "negation": "", "help": "Filter JSON output using a jq expression", "type": "str", "default": null, "choices": []}
+{"verb": "run.view", "option": "json", "flags": ["--json"], "negation": "", "help": "Output JSON with the specified fields", "type": "str", "default": null, "choices": []}
+{"verb": "run.view", "option": "log", "flags": ["--log"], "negation": "", "help": "View full log for either a run or specific job", "type": "bool", "default": null, "choices": []}
+{"verb": "run.view", "option": "log_failed", "flags": ["--log-failed"], "negation": "", "help": "View the log for any failed steps in a run or specific job", "type": "bool", "default": null, "choices": []}
+{"verb": "run.view", "option": "repo", "flags": ["--repo", "-R"], "negation": "", "help": "Select another repository using the [HOST/]OWNER/REPO format", "type": "str", "default": null, "choices": []}
+{"verb": "run.view", "option": "template", "flags": ["--template", "-t"], "negation": "", "help": "Format JSON output using a Go template; see \"gh help formatting\"", "type": "str", "default": null, "choices": []}
+{"verb": "run.view", "option": "verbose", "flags": ["--verbose", "-v"], "negation": "", "help": "Show job steps", "type": "bool", "default": null, "choices": []}
+{"verb": "run.view", "option": "web", "flags": ["--web", "-w"], "negation": "", "help": "Open run in the browser", "type": "bool", "default": null, "choices": []}
+{"verb": "run.watch", "help": "Watch a run until it completes, showing its progress.", "wraps": false, "positional": "required", "lead": "run_id"}
+{"verb": "run.watch", "option": "compact", "flags": ["--compact"], "negation": "", "help": "Show only relevant/failed steps", "type": "bool", "default": null, "choices": []}
+{"verb": "run.watch", "option": "exit_status", "flags": ["--exit-status"], "negation": "", "help": "Exit with non-zero status if run fails", "type": "bool", "default": null, "choices": []}
+{"verb": "run.watch", "option": "interval", "flags": ["--interval", "-i"], "negation": "", "help": "Refresh interval in seconds", "type": "str", "default": "3", "choices": []}
+{"verb": "run.watch", "option": "repo", "flags": ["--repo", "-R"], "negation": "", "help": "Select another repository using the [HOST/]OWNER/REPO format", "type": "str", "default": null, "choices": []}
+{"verb": "workflow.list", "help": "List workflow files, hiding disabled workflows by default.", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "workflow.list", "option": "all", "flags": ["--all", "-a"], "negation": "", "help": "Include disabled workflows", "type": "bool", "default": null, "choices": []}
+{"verb": "workflow.list", "option": "jq", "flags": ["--jq", "-q"], "negation": "", "help": "Filter JSON output using a jq expression", "type": "str", "default": null, "choices": []}
+{"verb": "workflow.list", "option": "json", "flags": ["--json"], "negation": "", "help": "Output JSON with the specified fields", "type": "str", "default": null, "choices": []}
+{"verb": "workflow.list", "option": "limit", "flags": ["--limit", "-L"], "negation": "", "help": "Maximum number of workflows to fetch", "type": "str", "default": "50", "choices": []}
+{"verb": "workflow.list", "option": "repo", "flags": ["--repo", "-R"], "negation": "", "help": "Select another repository using the [HOST/]OWNER/REPO format", "type": "str", "default": null, "choices": []}
+{"verb": "workflow.list", "option": "template", "flags": ["--template", "-t"], "negation": "", "help": "Format JSON output using a Go template; see \"gh help formatting\"", "type": "str", "default": null, "choices": []}
+{"verb": "workflow.run", "help": "Create a `workflow_dispatch` event for a given workflow.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "workflow.run", "option": "field", "flags": ["--field", "-F"], "negation": "", "help": "Add a string parameter in key=value format, respecting @ syntax (see \"gh help api\")", "type": "str", "default": null, "choices": []}
+{"verb": "workflow.run", "option": "json", "flags": ["--json"], "negation": "", "help": "Read workflow inputs as JSON via STDIN", "type": "bool", "default": null, "choices": []}
+{"verb": "workflow.run", "option": "raw_field", "flags": ["--raw-field", "-f"], "negation": "", "help": "Add a string parameter in key=value format", "type": "str", "default": null, "choices": []}
+{"verb": "workflow.run", "option": "ref", "flags": ["--ref", "-r"], "negation": "", "help": "Branch or tag name which contains the version of the workflow file you'd like to run", "type": "str", "default": null, "choices": []}
+{"verb": "workflow.run", "option": "repo", "flags": ["--repo", "-R"], "negation": "", "help": "Select another repository using the [HOST/]OWNER/REPO format", "type": "str", "default": null, "choices": []}
+{"version": "2.88.1", "date": "2026-03-12", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.89.0", "date": "2026-03-26", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.90.0", "date": "2026-04-16", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.91.0", "date": "2026-04-22", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.92.0", "date": "2026-04-28", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.93.0", "date": "2026-05-27", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.94.0", "date": "2026-06-10", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "issue.create", "option": "blocked_by", "flags": ["--blocked-by"], "negation": "", "help": "Mark the new issue as blocked by these issue numbers or URLs", "type": "str", "default": null, "choices": []}
+{"verb": "issue.create", "option": "blocking", "flags": ["--blocking"], "negation": "", "help": "Mark the new issue as blocking these issue numbers or URLs", "type": "str", "default": null, "choices": []}
+{"verb": "issue.create", "option": "parent", "flags": ["--parent"], "negation": "", "help": "Add the new issue as a sub-issue of the specified parent number or URL", "type": "str", "default": null, "choices": []}
+{"verb": "issue.create", "option": "type", "flags": ["--type"], "negation": "", "help": "Set the issue type by name", "type": "str", "default": null, "choices": []}
+{"verb": "issue.list", "option": "type", "flags": ["--type"], "negation": "", "help": "Filter by issue type name", "type": "str", "default": null, "choices": []}
+{"version": "2.95.0", "date": "2026-06-17", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "issue.list", "option": "author", "flags": ["--author", "-A"], "negation": "", "help": "Filter by author (use --app to filter by a GitHub App)", "type": "str", "default": null, "choices": []}
+{"verb": "pr.list", "option": "author", "flags": ["--author", "-A"], "negation": "", "help": "Filter by author (use --app to filter by a GitHub App)", "type": "str", "default": null, "choices": []}
+{"version": "2.96.0", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.97.0", "date": "2026-07-31", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "api", "option": "allow_escape_sequences", "flags": ["--allow-escape-sequences"], "negation": "", "help": "Allow printing terminal escape sequences", "type": "bool", "default": null, "choices": []}
+{"version": "2.98.0", "date": "2026-08-20", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "pr.checkout", "option": "worktree", "flags": ["--worktree"], "negation": "", "help": "Check out the pull request into a worktree at the given path", "type": "str", "default": null, "choices": []}

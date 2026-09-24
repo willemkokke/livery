@@ -1,7 +1,0 @@
-{
-  "name": "cmd",
-  "description": "The Windows command interpreter",
-  "kind": "system-check",
-  "min_version": "",
-  "hosts": []
-}

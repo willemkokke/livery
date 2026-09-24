@@ -1,0 +1,37 @@
+{"name": "git_changelog", "description": "", "kind": "uv-tool", "min_version": "", "hosts": []}
+{"version": "2.7.0", "date": "2025-11-21", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Automatic Changelog generator using Jinja2 templates."}}
+{"verb": "", "help": "Automatic Changelog generator using Jinja2 templates.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "", "option": "bump", "flags": ["--bump", "-B"], "negation": "", "help": "Specify the bump from latest version for the set of unreleased commits", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "bump_latest", "flags": ["--bump-latest", "-b"], "negation": "", "help": "Deprecated, use --bump=auto instead", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "bumped_version", "flags": ["--bumped-version"], "negation": "", "help": "Show bumped version and exit", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "config_file", "flags": ["--config-file"], "negation": "", "help": "Configuration file(s)", "type": "list[str]", "default": null, "choices": []}
+{"verb": "", "option": "convention", "flags": ["--commit-style", "--convention", "--style", "-c"], "negation": "", "help": "The commit convention to match against", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "debug_info", "flags": ["--debug-info"], "negation": "", "help": "Print debug information", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "filter_commits", "flags": ["--filter-commits", "-F"], "negation": "", "help": "The Git revision-range filter to use (e.g", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "in_place", "flags": ["--in-place", "-i"], "negation": "", "help": "Insert new entries (versions missing from changelog) in-place", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "include_all", "flags": ["--include-all", "-a"], "negation": "", "help": "Include all commits, even those without a recognized type", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "input", "flags": ["--input", "-I"], "negation": "", "help": "Read from given file when creating release notes", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "jinja_context", "flags": ["--jinja-context", "-j"], "negation": "", "help": "Pass additional key/value pairs to the template", "type": "list[str]", "default": null, "choices": []}
+{"verb": "", "option": "marker_line", "flags": ["--marker-line", "-m"], "negation": "", "help": "A marker line at which to insert new entries (versions missing from changelog)", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "no_zerover", "flags": ["--no-zerover", "-Z"], "negation": "", "help": "By default, breaking changes on a 0.x don't bump the major version, maintaining it at 0", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "omit_empty_versions", "flags": ["--omit-empty-versions", "-E"], "negation": "", "help": "Omit empty versions from the output", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "output", "flags": ["--output", "-o"], "negation": "", "help": "Output to given file", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "parse_refs", "flags": ["--parse-refs", "-r"], "negation": "", "help": "Parse provider-specific references in commit messages (GitHub/GitLab/Bitbucket issues, PRs, etc.)", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "provider", "flags": ["--provider", "-p"], "negation": "", "help": "Explicitly specify the repository provider", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "release_notes", "flags": ["--release-notes", "-R"], "negation": "", "help": "Output release notes to stdout based on the last entry in the changelog", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "sections", "flags": ["--sections", "-s"], "negation": "", "help": "A comma-separated list of sections to render", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "template", "flags": ["--template", "-t"], "negation": "", "help": "The Jinja2 template to use", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "trailers", "flags": ["--git-trailers", "--trailers", "-T"], "negation": "", "help": "Parse Git trailers in the commit message", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "version_regex", "flags": ["--version-regex", "-g"], "negation": "", "help": "A regular expression to match versions in the existing changelog (used to find the latest release) when writing in-place", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "versioning", "flags": ["--versioning", "-n"], "negation": "", "help": "Versioning scheme to use when bumping and comparing versions", "type": "str", "default": null, "choices": []}
+{"version": "2.7.1", "date": "2026-01-30", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.8.0", "date": "2026-03-12", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.8.1", "date": "2026-03-12", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.9.0", "date": "2026-03-13", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.9.1", "date": "2026-03-17", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.9.2", "date": "2026-03-20", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.9.3", "date": "2026-03-26", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.9.4", "date": "2026-04-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.9.5", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.9.6", "date": "2026-08-07", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.9.7", "date": "2026-08-20", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}

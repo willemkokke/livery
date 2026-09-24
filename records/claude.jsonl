@@ -1,0 +1,154 @@
+{"name": "claude", "description": "", "kind": "bun-install", "min_version": "", "hosts": []}
+{"version": "2.1.226", "date": "2026-08-09", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Claude Code - starts an interactive session by default, use -p/--print for"}}
+{"verb": "", "help": "Claude Code - starts an interactive session by default, use -p/--print for", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "", "option": "add_dir", "flags": ["--add-dir"], "negation": "", "help": "Additional directories to allow tool access to", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "agent", "flags": ["--agent"], "negation": "", "help": "Agent for the current session", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "agents", "flags": ["--agents"], "negation": "", "help": "JSON object defining custom agents (e.g", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "allow_dangerously_skip_permissions", "flags": ["--allow-dangerously-skip-permissions"], "negation": "", "help": "Enable bypassing all permission checks as an option, without it being enabled by default", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "allowed_tools", "flags": ["--allowed-tools", "--allowedTools"], "negation": "", "help": "Comma or space-separated list of tool names to allow (e.g", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "append_system_prompt", "flags": ["--append-system-prompt"], "negation": "", "help": "Append a system prompt to the default system prompt", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "autocompact", "flags": ["--autocompact"], "negation": "", "help": "Auto-compact window size (auto, or 100k-1M tokens)", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "ax_screen_reader", "flags": ["--ax-screen-reader"], "negation": "", "help": "Render screen-reader friendly output (flat text, no decorative borders or animations)", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "bare", "flags": ["--bare"], "negation": "", "help": "Minimal mode: skip hooks, LSP, plugin sync, attribution, auto-memory, background prefetches, keychain reads, and CLAUDE.md auto-discovery", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "betas", "flags": ["--betas"], "negation": "", "help": "Beta headers to include in API requests (API key users only)", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "bg", "flags": ["--background", "--bg"], "negation": "", "help": "Start the session as a background agent and return immediately (manage with `claude agents`)", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "brief", "flags": ["--brief"], "negation": "", "help": "Enable SendUserMessage tool for agent-to-user communication", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "chrome", "flags": ["--chrome"], "negation": "--no-chrome", "help": "Enable Claude in Chrome integration", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "cloud", "flags": ["--cloud"], "negation": "", "help": "Create a cloud session with the given description, or attach to an existing one by session ID or claude.ai/code URL", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "continue", "flags": ["--continue", "-c"], "negation": "", "help": "Continue the most recent conversation in the current directory", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "dangerously_skip_permissions", "flags": ["--dangerously-skip-permissions"], "negation": "", "help": "Bypass all permission checks", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "debug", "flags": ["--debug", "-d"], "negation": "", "help": "Enable debug mode with optional category filtering (e.g., \"api,hooks\" or \"!1p,!file\")", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "debug_file", "flags": ["--debug-file"], "negation": "", "help": "Write debug logs to a specific file path (implicitly enables debug mode)", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "disable_slash_commands", "flags": ["--disable-slash-commands"], "negation": "", "help": "Disable all skills", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "disallowed_tools", "flags": ["--disallowed-tools", "--disallowedTools"], "negation": "", "help": "Comma or space-separated list of tool names to deny (e.g", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "effort", "flags": ["--effort"], "negation": "", "help": "Effort level for the current session (low, medium, high, xhigh, max)", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "environment", "flags": ["--environment"], "negation": "", "help": "Create a new cloud session that runs on the given self-hosted environment (ccpool_...)", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "exclude_dynamic_system_prompt_sections", "flags": ["--exclude-dynamic-system-prompt-sections"], "negation": "", "help": "Move per-machine sections (cwd, env info, memory paths, git status) from the system prompt into the first user message", "type": "bool", "default": false, "choices": []}
+{"verb": "", "option": "fallback_model", "flags": ["--fallback-model"], "negation": "", "help": "Enable automatic fallback to specified model(s) when the default model is overloaded or not available", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "file", "flags": ["--file"], "negation": "", "help": "File resources to download at startup", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "fork_session", "flags": ["--fork-session"], "negation": "", "help": "When resuming, create a new session ID instead of reusing the original (use with --resume or --continue)", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "forward_subagent_text", "flags": ["--forward-subagent-text"], "negation": "", "help": "Forward subagent text and thinking blocks as assistant/user messages with parent_tool_use_id set (only works with --print and --output-format=stream-json)", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "from_pr", "flags": ["--from-pr"], "negation": "", "help": "Resume a session linked to a PR by PR number/URL, or open interactive picker with optional search term", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "ide", "flags": ["--ide"], "negation": "", "help": "Automatically connect to IDE on startup if exactly one valid IDE is available", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "include_hook_events", "flags": ["--include-hook-events"], "negation": "", "help": "Include all hook lifecycle events in the output stream (only works with --output-format=stream-json)", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "include_partial_messages", "flags": ["--include-partial-messages"], "negation": "", "help": "Include partial message chunks as they arrive (only works with --print and --output-format=stream-json)", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "input_format", "flags": ["--input-format"], "negation": "", "help": "Input format (only works with --print): \"text\" (default), or \"stream-json\" (realtime streaming input) (choices: \"text\", \"stream-json\")", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "json_schema", "flags": ["--json-schema"], "negation": "", "help": "JSON Schema for structured output validation", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "max_budget_usd", "flags": ["--max-budget-usd"], "negation": "", "help": "Maximum dollar amount to spend on API calls (only works with --print)", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "mcp_config", "flags": ["--mcp-config"], "negation": "", "help": "Load MCP servers from JSON files or strings (space-separated)", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "model", "flags": ["--model"], "negation": "", "help": "Model for the current session", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "name", "flags": ["--name", "-n"], "negation": "", "help": "Set a display name for this session (shown in the prompt box, /resume picker, and terminal title)", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "no_session_persistence", "flags": ["--no-session-persistence"], "negation": "", "help": "Disable session persistence - sessions will not be saved to disk and cannot be resumed (only works with --print)", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "output_format", "flags": ["--output-format"], "negation": "", "help": "Output format (only works with --print): \"text\" (default), \"json\" (single result), or \"stream-json\" (realtime streaming) (choices: \"text\", \"json\", \"stream-json\")", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "permission_mode", "flags": ["--permission-mode"], "negation": "", "help": "Permission mode to use for the session (choices: \"acceptEdits\", \"auto\", \"bypassPermissions\", \"manual\", \"dontAsk\", \"plan\")", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "plugin_dir", "flags": ["--plugin-dir"], "negation": "", "help": "Load a plugin from a directory or .zip for this session only (repeatable: --plugin-dir A --plugin-dir B.zip)", "type": "str", "default": "[]", "choices": []}
+{"verb": "", "option": "plugin_url", "flags": ["--plugin-url"], "negation": "", "help": "Fetch a plugin .zip from a URL for this session only (repeatable: --plugin-url A --plugin-url B)", "type": "str", "default": "[]", "choices": []}
+{"verb": "", "option": "print", "flags": ["--print", "-p"], "negation": "", "help": "Print response and exit (useful for pipes)", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "prompt_suggestions", "flags": ["--prompt-suggestions"], "negation": "", "help": "Enable prompt suggestions", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "remote_control", "flags": ["--remote-control"], "negation": "", "help": "Start an interactive session with Remote Control enabled (optionally named)", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "remote_control_session_name_prefix", "flags": ["--remote-control-session-name-prefix"], "negation": "", "help": "Prefix for auto-generated Remote Control session names", "type": "str", "default": "hostname", "choices": []}
+{"verb": "", "option": "replay_user_messages", "flags": ["--replay-user-messages"], "negation": "", "help": "Re-emit user messages from stdin back on stdout for acknowledgment (only works with --input-format=stream-json and --output-format=stream-json)", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "resume", "flags": ["--resume", "-r"], "negation": "", "help": "Resume a conversation by session ID, or open interactive picker with optional search term", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "safe_mode", "flags": ["--safe-mode"], "negation": "", "help": "Start with all customizations (CLAUDE.md, skills, plugins, hooks, MCP servers, custom commands and agents, output styles, workflows, custom themes, keybindings, and more) disabled - useful for troubleshooting a broken configuration", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "session_id", "flags": ["--session-id"], "negation": "", "help": "Use a specific session ID for the conversation (must be a valid UUID)", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "setting_sources", "flags": ["--setting-sources"], "negation": "", "help": "Comma-separated list of setting sources to load (user, project, local)", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "settings", "flags": ["--settings"], "negation": "", "help": "Path to a settings JSON file or a JSON string to load additional settings from", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "strict_mcp_config", "flags": ["--strict-mcp-config"], "negation": "", "help": "Only use MCP servers from --mcp-config, ignoring all other MCP configurations", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "system_prompt", "flags": ["--system-prompt"], "negation": "", "help": "System prompt to use for the session", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "teleport", "flags": ["--teleport"], "negation": "", "help": "Resume a teleport session, optionally specify session ID", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "tmux", "flags": ["--tmux"], "negation": "", "help": "Create a tmux session for the worktree (requires --worktree)", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "tools", "flags": ["--tools"], "negation": "", "help": "Specify the list of available tools from the built-in set", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "verbose", "flags": ["--verbose"], "negation": "", "help": "Override verbose mode setting from config", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "worktree", "flags": ["--worktree", "-w"], "negation": "", "help": "Create a new git worktree for this session (optionally specify a name)", "type": "str", "default": null, "choices": []}
+{"verb": "agents", "help": "Manage background agents", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "agents", "option": "add_dir", "flags": ["--add-dir"], "negation": "", "help": "Additional directory to allow tool access to in dispatched sessions (repeatable)", "type": "str", "default": null, "choices": []}
+{"verb": "agents", "option": "agent", "flags": ["--agent"], "negation": "", "help": "Default agent for sessions dispatched from agent view", "type": "str", "default": null, "choices": []}
+{"verb": "agents", "option": "all", "flags": ["--all"], "negation": "", "help": "With --json: also include completed background sessions", "type": "bool", "default": null, "choices": []}
+{"verb": "agents", "option": "allow_dangerously_skip_permissions", "flags": ["--allow-dangerously-skip-permissions"], "negation": "", "help": "Make bypass-permissions mode available to dispatched sessions without defaulting to it", "type": "bool", "default": null, "choices": []}
+{"verb": "agents", "option": "cwd", "flags": ["--cwd"], "negation": "", "help": "Show only background sessions started under <path>", "type": "str", "default": null, "choices": []}
+{"verb": "agents", "option": "dangerously_skip_permissions", "flags": ["--dangerously-skip-permissions"], "negation": "", "help": "Alias for --permission-mode bypassPermissions", "type": "bool", "default": null, "choices": []}
+{"verb": "agents", "option": "effort", "flags": ["--effort"], "negation": "", "help": "Default effort level for sessions dispatched from agent view", "type": "str", "default": null, "choices": []}
+{"verb": "agents", "option": "json", "flags": ["--json"], "negation": "", "help": "Print active sessions (interactive and background) as a JSON array and exit (for scripting; does not require a TTY)", "type": "bool", "default": null, "choices": []}
+{"verb": "agents", "option": "mcp_config", "flags": ["--mcp-config"], "negation": "", "help": "MCP server configuration to apply to dispatched sessions (repeatable)", "type": "str", "default": null, "choices": []}
+{"verb": "agents", "option": "model", "flags": ["--model"], "negation": "", "help": "Default model for sessions dispatched from agent view", "type": "str", "default": null, "choices": []}
+{"verb": "agents", "option": "permission_mode", "flags": ["--permission-mode"], "negation": "", "help": "Default permission mode for sessions dispatched from agent view", "type": "str", "default": null, "choices": []}
+{"verb": "agents", "option": "plugin_dir", "flags": ["--plugin-dir"], "negation": "", "help": "Load plugins from specified directory for the agent view and dispatched sessions (repeatable)", "type": "str", "default": null, "choices": []}
+{"verb": "agents", "option": "setting_sources", "flags": ["--setting-sources"], "negation": "", "help": "Comma-separated list of setting sources to load (user, project, local)", "type": "str", "default": null, "choices": []}
+{"verb": "agents", "option": "settings", "flags": ["--settings"], "negation": "", "help": "Settings file or JSON string to apply to the agent view and dispatched sessions", "type": "str", "default": null, "choices": []}
+{"verb": "agents", "option": "strict_mcp_config", "flags": ["--strict-mcp-config"], "negation": "", "help": "Only use MCP servers from --mcp-config in dispatched sessions", "type": "bool", "default": null, "choices": []}
+{"verb": "auth.login", "help": "Sign in to your Anthropic account", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "auth.login", "option": "claudeai", "flags": ["--claudeai"], "negation": "", "help": "Use Claude subscription (default)", "type": "bool", "default": null, "choices": []}
+{"verb": "auth.login", "option": "console", "flags": ["--console"], "negation": "", "help": "Use Anthropic Console (API usage billing) instead of Claude subscription", "type": "bool", "default": null, "choices": []}
+{"verb": "auth.login", "option": "email", "flags": ["--email"], "negation": "", "help": "Pre-populate email address on the login page", "type": "str", "default": null, "choices": []}
+{"verb": "auth.login", "option": "sso", "flags": ["--sso"], "negation": "", "help": "Force SSO login flow", "type": "bool", "default": null, "choices": []}
+{"verb": "auth.logout", "help": "Log out from your Anthropic account", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "auth.status", "help": "Show authentication status", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "auth.status", "option": "json", "flags": ["--json"], "negation": "", "help": "Output as JSON (default)", "type": "bool", "default": null, "choices": []}
+{"verb": "auth.status", "option": "text", "flags": ["--text"], "negation": "", "help": "Output as human-readable text", "type": "bool", "default": null, "choices": []}
+{"verb": "doctor", "help": "Check the health of your Claude Code installation. Reads settings files in the", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "install", "help": "Install Claude Code native build. Use [target] to specify version (stable,", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "install", "option": "force", "flags": ["--force"], "negation": "", "help": "Force installation even if already installed", "type": "bool", "default": null, "choices": []}
+{"verb": "mcp.add", "help": "Add an MCP server to Claude Code.", "wraps": false, "positional": "required", "lead": "name"}
+{"verb": "mcp.add", "option": "callback_port", "flags": ["--callback-port"], "negation": "", "help": "Fixed port for OAuth callback (for servers requiring pre-registered redirect URIs)", "type": "str", "default": null, "choices": []}
+{"verb": "mcp.add", "option": "client_id", "flags": ["--client-id"], "negation": "", "help": "OAuth client ID for HTTP/SSE servers", "type": "str", "default": null, "choices": []}
+{"verb": "mcp.add", "option": "client_secret", "flags": ["--client-secret"], "negation": "", "help": "Prompt for OAuth client secret (or set MCP_CLIENT_SECRET env var)", "type": "bool", "default": null, "choices": []}
+{"verb": "mcp.add", "option": "env", "flags": ["--env", "-e"], "negation": "", "help": "Set environment variables (e.g", "type": "str", "default": null, "choices": []}
+{"verb": "mcp.add", "option": "header", "flags": ["--header", "-H"], "negation": "", "help": "Set WebSocket headers (e.g", "type": "str", "default": null, "choices": []}
+{"verb": "mcp.add", "option": "scope", "flags": ["--scope", "-s"], "negation": "", "help": "Configuration scope (local, user, or project)", "type": "str", "default": "local", "choices": []}
+{"verb": "mcp.add", "option": "transport", "flags": ["--transport", "-t"], "negation": "", "help": "Transport type (stdio, sse, http)", "type": "str", "default": null, "choices": []}
+{"verb": "mcp.add_json", "help": "Add an MCP server (stdio or SSE) with a JSON string", "wraps": false, "positional": "required", "lead": "name"}
+{"verb": "mcp.add_json", "option": "client_secret", "flags": ["--client-secret"], "negation": "", "help": "Prompt for OAuth client secret (or set MCP_CLIENT_SECRET env var)", "type": "bool", "default": null, "choices": []}
+{"verb": "mcp.add_json", "option": "scope", "flags": ["--scope", "-s"], "negation": "", "help": "Configuration scope (local, user, or project)", "type": "str", "default": "local", "choices": []}
+{"verb": "mcp.get", "help": "Get details about an MCP server. Unapproved .mcp.json servers are shown as ⏸", "wraps": false, "positional": "required", "lead": "name"}
+{"verb": "mcp.list", "help": "List configured MCP servers. Unapproved .mcp.json servers are shown as ⏸ Pending", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "mcp.remove", "help": "Remove an MCP server", "wraps": false, "positional": "required", "lead": "name"}
+{"verb": "mcp.remove", "option": "scope", "flags": ["--scope", "-s"], "negation": "", "help": "Configuration scope (local, user, or project) - if not specified, removes from whichever scope it exists in", "type": "str", "default": null, "choices": []}
+{"verb": "mcp.serve", "help": "Start the Claude Code MCP server", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "mcp.serve", "option": "debug", "flags": ["--debug", "-d"], "negation": "", "help": "Enable debug mode", "type": "bool", "default": null, "choices": []}
+{"verb": "mcp.serve", "option": "verbose", "flags": ["--verbose"], "negation": "", "help": "Override verbose mode setting from config", "type": "bool", "default": null, "choices": []}
+{"verb": "plugin.disable", "help": "Disable an enabled plugin", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "plugin.disable", "option": "all", "flags": ["--all", "-a"], "negation": "", "help": "Disable all enabled plugins", "type": "bool", "default": null, "choices": []}
+{"verb": "plugin.disable", "option": "scope", "flags": ["--scope", "-s"], "negation": "", "help": "Installation scope: user, project, local", "type": "str", "default": "auto-detect", "choices": []}
+{"verb": "plugin.enable", "help": "Enable a disabled plugin", "wraps": false, "positional": "required", "lead": "plugin"}
+{"verb": "plugin.enable", "option": "scope", "flags": ["--scope", "-s"], "negation": "", "help": "Installation scope: user, project, local", "type": "str", "default": "auto-detect", "choices": []}
+{"verb": "plugin.install", "help": "Install a plugin from available marketplaces (use plugin@marketplace for", "wraps": false, "positional": "required", "lead": "plugin"}
+{"verb": "plugin.install", "option": "config", "flags": ["--config"], "negation": "", "help": "Set a userConfig option declared in the plugin's manifest (repeatable)", "type": "str", "default": null, "choices": []}
+{"verb": "plugin.install", "option": "scope", "flags": ["--scope", "-s"], "negation": "", "help": "Installation scope: user, project, or local", "type": "str", "default": "user", "choices": []}
+{"verb": "plugin.list", "help": "List installed plugins", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "plugin.list", "option": "available", "flags": ["--available"], "negation": "", "help": "Include available plugins from marketplaces (requires --json)", "type": "bool", "default": null, "choices": []}
+{"verb": "plugin.list", "option": "json", "flags": ["--json"], "negation": "", "help": "Output as JSON", "type": "bool", "default": null, "choices": []}
+{"verb": "plugin.marketplace.add", "help": "Add a marketplace from a URL, path, or GitHub repo", "wraps": false, "positional": "required", "lead": "source"}
+{"verb": "plugin.marketplace.add", "option": "scope", "flags": ["--scope"], "negation": "", "help": "Where to declare the marketplace: user (default), project, or local", "type": "str", "default": null, "choices": []}
+{"verb": "plugin.marketplace.add", "option": "sparse", "flags": ["--sparse"], "negation": "", "help": "Limit checkout to specific directories via git sparse-checkout (for monorepos)", "type": "str", "default": null, "choices": []}
+{"verb": "plugin.marketplace.list", "help": "List all configured marketplaces", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "plugin.marketplace.list", "option": "json", "flags": ["--json"], "negation": "", "help": "Output as JSON", "type": "bool", "default": null, "choices": []}
+{"verb": "plugin.marketplace.remove", "help": "Remove a configured marketplace", "wraps": false, "positional": "required", "lead": "name"}
+{"verb": "plugin.marketplace.remove", "option": "scope", "flags": ["--scope"], "negation": "", "help": "Remove the marketplace declaration from a specific settings scope: user, project, or local", "type": "str", "default": null, "choices": []}
+{"verb": "plugin.marketplace.update", "help": "Update marketplace(s) from their source - updates all if no name specified", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "plugin.uninstall", "help": "Uninstall an installed plugin", "wraps": false, "positional": "required", "lead": "plugin"}
+{"verb": "plugin.uninstall", "option": "keep_data", "flags": ["--keep-data"], "negation": "", "help": "Preserve the plugin's persistent data directory (~/.claude/plugins/data/{id}/)", "type": "bool", "default": null, "choices": []}
+{"verb": "plugin.uninstall", "option": "prune", "flags": ["--prune"], "negation": "", "help": "Also remove auto-installed dependencies that are no longer needed (requires -y in non-interactive contexts)", "type": "bool", "default": null, "choices": []}
+{"verb": "plugin.uninstall", "option": "scope", "flags": ["--scope", "-s"], "negation": "", "help": "Uninstall from scope: user, project, or local", "type": "str", "default": "user", "choices": []}
+{"verb": "plugin.uninstall", "option": "yes", "flags": ["--yes", "-y"], "negation": "", "help": "Skip the --prune confirmation prompt (required when stdin or stdout is not a TTY)", "type": "bool", "default": null, "choices": []}
+{"verb": "plugin.update", "help": "Update a plugin to the latest version (restart required to apply)", "wraps": false, "positional": "required", "lead": "plugin"}
+{"verb": "plugin.update", "option": "scope", "flags": ["--scope", "-s"], "negation": "", "help": "Installation scope: user, project, local, managed", "type": "str", "default": "user", "choices": []}
+{"verb": "plugin.validate", "help": "Validate a plugin or marketplace manifest", "wraps": false, "positional": "required", "lead": "path"}
+{"verb": "plugin.validate", "option": "strict", "flags": ["--strict"], "negation": "", "help": "Treat warnings as errors (exit 1)", "type": "bool", "default": null, "choices": []}
+{"verb": "setup_token", "help": "Set up a long-lived authentication token (requires Claude subscription)", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "update", "help": "Check for updates and install if available", "wraps": false, "positional": "none", "lead": ""}
+{"version": "2.1.227", "date": "2026-08-10", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.1.228", "date": "2026-08-11", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.1.229", "date": "2026-08-12", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "plugin.install", "option": "yes", "flags": ["--yes", "-y"], "negation": "", "help": "For a plugin installed by running a marketplace-declared command: accept the displayed command without the confirmation prompt (required when stdin or stdout is not a TTY)", "type": "bool", "default": null, "choices": []}
+{"verb": "plugin.update", "option": "yes", "flags": ["--yes", "-y"], "negation": "", "help": "For a plugin installed by running a marketplace-declared command: accept a changed command without the confirmation prompt (required when stdin or stdout is not a TTY)", "type": "bool", "default": null, "choices": []}
+{"version": "2.1.231", "date": "2026-08-13", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.1.232", "date": "2026-08-13", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.1.233", "date": "2026-08-14", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "plugin.validate", "help": "Validate a plugin or marketplace manifest, or the skills, agents, and commands"}
+{"version": "2.1.234", "date": "2026-08-17", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.1.235", "date": "2026-08-18", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.1.236", "date": "2026-08-19", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.1.237", "date": "2026-08-19", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "2.1.238", "date": "2026-08-20", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "plugin.install", "option": "yes", "flags": ["--yes", "-y"], "negation": "", "help": "Accept the displayed marketplace-declared command without the confirmation prompt - a plugin installed by running a command, or one whose archive is fetched through a headersHelper command (required when stdin or stdout is not a TTY)", "type": "bool", "default": null, "choices": []}
+{"verb": "plugin.update", "option": "yes", "flags": ["--yes", "-y"], "negation": "", "help": "Accept the displayed marketplace-declared command without the confirmation prompt - a changed install command, or the headersHelper command that fetches its archive (required when stdin or stdout is not a TTY)", "type": "bool", "default": null, "choices": []}

@@ -15,13 +15,13 @@ The store installs, links, emits and fetches:
 from pathlib import Path
 
 from livery.strongroom import FolderSource
-from livery.toolroom.store import Home, Record, Store
+from livery.toolroom.store import Home, Record, Store, records_in
 
 store = Store(
     Home(Path.home() / ".local/share/toolroom"),
     sources=[FolderSource(Path("/mirrors/tools/store"))],
 )
-records = [Record.load(path) for path in Path("records").iterdir() if path.is_dir()]
+records = [Record.load(path) for path in records_in(Path("records"))]
 ensured = [store.ensure(record, record.versions[-1]) for record in records]
 store.link(ensured, Path(".workshop/bin"))
 delta = store.delta(ensured, Path(".workshop/bin"))
@@ -29,14 +29,22 @@ delta = store.delta(ensured, Path(".workshop/bin"))
 
 ## The record
 
-`records/<tool>/tool.json` is the tool axis: the name, the description,
-the kind, the version floor a `system-check` tool must reach, the hosts
-the tool has, the tool's layout and its override for one host each.
-`records/<tool>/deltas/<nnnn>-<version>.json` is one version's arrival:
-its sequence, the version, its date, per host the artifact's URL and
-sha256, and the version's override of the layout, for every host or
-for one. Deltas run consecutively from `0001`, and a file's name is
-its sequence and version.
+A record is one file of JSON lines, `records/<tool>.jsonl`, named by
+the tool. The first line is the tool axis: the name, the description,
+the kind, the version floor a `system-check` tool must reach, `prime`,
+the oldest version the reading history reaches, the hosts the tool
+has, the tool's layout and its override for one host each. A version
+line is one version's arrival: the version, its date, per host the
+artifact's URL and sha256, the version's override of the layout, for
+every host or for one, and `read`, the platforms and the extractor
+that read it and the tool's description when it changed. The
+statement lines under a version line are what its reading changed:
+one option per line with the option's fields whole, one line for a
+verb's own fields when they moved, one line for an option or a verb
+withdrawn (`gone`), and one line per absence, the platforms that read
+the version and did not find the option. Versions run in file order,
+a release appends lines, and the review diff is the options that
+moved. An option unchanged since the previous reading has no line.
 
 A deployment resolves through four layers, most specific winning: the
 tool's layout, the tool's override for the host, the version's layout,

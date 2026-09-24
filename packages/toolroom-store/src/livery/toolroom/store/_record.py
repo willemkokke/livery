@@ -1,24 +1,28 @@
 """The tool record: one tool, every version tracked, each host's deployment and surface.
 
-A record is inert data, authored in git as one directory per tool:
-``tool.json`` carries the tool axis, what does not move with a
-version, and ``deltas/<nnnn>-<version>.json`` carries one version's
-arrival each, forward and append-only. A deployment resolves through
-four layers, most specific winning: the tool's layout, the host's
-override of it, the version's override, and the version's override for
-one host. A version's surface, what its command line accepts, is
-carried one verb at a time: a delta names the verbs the version
-changed and the tool's description when it changed, and every other
-verb is inherited from the nearest earlier version that has a surface.
-Resolution is total and checked: loading a record resolves every host
-of every version and every version's surface, and refuses a host that
-resolves incomplete, an override that names a host or version the
-record does not carry, an override or a verb that restates the value
-it inherits, a withdrawn verb no earlier version has, and a delta out
-of sequence. A record names a kind, per host an artifact with a
-mandatory digest, and the layout; it never runs a command. A version
-with no artifact is tracked for its surface alone: it has no host and
-nothing installs it.
+A record is inert data, authored in git as one file of JSON lines per
+tool, ``records/<tool>.jsonl``: the first line is the tool axis, what
+does not move with a version; a version line is one version's
+arrival, forward and append-only; and the statement lines under a
+version line are what its reading changed, one option, one verb's own
+fields, one withdrawal or one absence per line. A deployment resolves
+through four layers, most specific winning: the tool's layout, the
+host's override of it, the version's override, and the version's
+override for one host. A version's surface, what its command line
+accepts, is carried one option at a time: a reading names the options
+and the verb fields the version changed and the tool's description
+when it changed, and everything else is inherited from the nearest
+earlier version that has a surface. Resolution is total and checked:
+loading a record resolves every host of every version and every
+version's surface, and refuses a host that resolves incomplete, an
+override that names a host or version the record does not carry, an
+override, a verb field or an option that restates the value it
+inherits, a withdrawal of what no earlier version has, a statement
+under a version that was not read, and a reading below the record's
+``prime``, the oldest version its history reaches. A record names a
+kind, per host an artifact with a mandatory digest, and the layout; it
+never runs a command. A version with no artifact is tracked for its
+surface alone: it has no host and nothing installs it.
 
 Reach for [livery.toolroom.store.Record.load][] to read a record,
 [livery.toolroom.store.resolve][] for one host's deployment at one
@@ -87,14 +91,13 @@ def default_mode(kind: str) -> str:
 PACKAGE_VAR = "$package"
 """The one substitution a deployment's env values may carry: the install root."""
 
-TOOL_FILE = "tool.json"
-"""The tool axis, in the record's directory."""
+RECORD_SUFFIX = ".jsonl"
+"""A record file's suffix: `records/<tool>.jsonl`, named by the tool."""
 
-DELTAS_DIR = "deltas"
-"""The deltas' directory, in the record's directory."""
+_VERB_FIELDS = ("help", "wraps", "positional", "lead")
+"""A verb's own fields, the ones a statement may set one at a time."""
 
 _SHA256 = re.compile(r"^[a-f0-9]{64}$")
-_DELTA_NAME = re.compile(r"^(?P<sequence>\d{4})-(?P<version>.+)\.json$")
 
 LAYOUT_KEYS = ("root", "exe", "entry_points", "paths", "env", "shims", "exclude")
 """The layout fields an override may set, in the record's key order."""
@@ -115,21 +118,15 @@ _TOOL_KEYS = (
     "package",
     "mode",
     "min_version",
+    "prime",
     "hosts",
     "layout",
     "host_layouts",
 )
-_DELTA_KEYS = (
-    "sequence",
-    "version",
-    "date",
-    "artifacts",
-    "layout",
-    "host_layouts",
-    "surface",
-)
+_VERSION_KEYS = ("version", "date", "artifacts", "layout", "host_layouts", "read")
+_READ_KEYS = ("platforms", "extractor", "help")
+_STATEMENT_KEYS = ("verb", "option", "gone", "absent", *_VERB_FIELDS, *OPTION_KEYS)
 _ARTIFACT_KEYS = ("url", "sha256")
-_SURFACE_KEYS = ("platforms", "extractor", "help", "verbs", "absent")
 
 
 class RecordError(ValueError):
@@ -385,13 +382,15 @@ _BUILTIN: dict[str, Any] = {
 
 @dataclass(frozen=True)
 class Surface:
-    """One version's reading of the tool's command line, as its delta carries it.
+    """One version's reading of the tool's command line, as its record carries it.
 
-    Sparse: the tool's description and each verb are inherited from the
-    nearest earlier version with a surface unless this version sets
-    them, a verb set to `None` is withdrawn, and a description or verb
-    set to the value it inherits is refused at load as dead data. The
-    facts about the observation ride beside it and are never inherited.
+    Sparse at the option: the tool's description, each verb's own
+    fields and each option are inherited from the nearest earlier
+    version with a surface unless this version sets them. A verb's
+    first patch carries every field, since there is nothing to
+    inherit; a field or an option set to the value it inherits is
+    refused at load as dead data. The facts about the observation
+    ride beside it and are never inherited.
 
     Attributes:
         platforms: The platforms that read this version, from
@@ -400,11 +399,13 @@ class Surface:
             a positive integer.
         help: The tool's own description, or `None` to inherit it; the
             first surface of a record sets it.
-        verbs: Verb name to the verb whole, an object with `VERB_KEYS`
-            whose options are objects with `OPTION_KEYS`, or `None` for
-            a verb this version withdraws; a verb not named is
-            inherited. The tool's own options hang off the verb named
-            `""`.
+        verbs: Verb name to its patch: an object with any of the verb's
+            own fields (`help`, `wraps`, `positional`, `lead`) and
+            `options`, option name to the option whole, with
+            `OPTION_KEYS`, or `None` for an option this version
+            withdraws; or `None` for a verb withdrawn whole. A verb not
+            named is inherited. The tool's own options hang off the
+            verb named `""`.
         absent: Verb name to option name to the platforms that read the
             version and did not find that option; the option name `""`
             stands for the verb itself. Every platform named is among
@@ -418,99 +419,69 @@ class Surface:
     verbs: Mapping[str, Mapping[str, Any] | None] = field(default_factory=dict)
     absent: Mapping[str, Mapping[str, tuple[str, ...]]] = field(default_factory=dict)
 
-    def to_json(self) -> dict[str, Any]:
-        """The surface as a JSON object, verbs and options in name order."""
-        out: dict[str, Any] = {
-            "platforms": list(self.platforms),
-            "extractor": self.extractor,
-        }
-        if self.help is not None:
-            out["help"] = self.help
-        if self.verbs:
-            out["verbs"] = {
-                name: None if verb is None else _canonical_verb(verb)
-                for name, verb in sorted(self.verbs.items())
-            }
-        if self.absent:
-            out["absent"] = {
-                verb: {option: list(who) for option, who in sorted(options.items())}
-                for verb, options in sorted(self.absent.items())
-            }
-        return out
 
-    @classmethod
-    def from_json(cls, value: Any, *, where: str) -> Surface:
-        """A surface from its JSON object; the verbs' shape is checked at load.
+def _patch_fault(patch: Mapping[str, Any]) -> str:
+    """What is wrong with a verb patch's shape, or empty when it is one."""
+    extra = sorted(set(patch) - set(VERB_KEYS))
+    if extra:
+        return f"a patch carries only {', '.join(VERB_KEYS)}, not {', '.join(extra)}"
+    for key in ("help", "positional", "lead"):
+        if key in patch and not isinstance(patch[key], str):
+            return f"{key} is not a string"
+    if "wraps" in patch and not isinstance(patch["wraps"], bool):
+        return "wraps is not a boolean"
+    options = patch.get("options", {})
+    if not isinstance(options, Mapping):
+        return "options is not an object"
+    for name, option in options.items():
+        if option is None:
+            continue
+        fault = _option_fault(option)
+        if fault:
+            joint = " " if fault.startswith("carries") else ": "
+            return f"option {name!r}{joint}{fault}"
+    return ""
 
-        Raises:
-            RecordError: when the object is not a surface, naming *where*.
-        """
-        data = _object(value, _SURFACE_KEYS, where=where)
-        for required in ("platforms", "extractor"):
-            if required not in data:
-                raise RecordError(f"{where}: no {required}")
-        extractor = data["extractor"]
-        if (
-            not isinstance(extractor, int)
-            or isinstance(extractor, bool)
-            or extractor < 1
+
+def _option_fault(option: Any) -> str:
+    """What is wrong with an option's shape; empty when it has `OPTION_KEYS` whole."""
+    if not isinstance(option, Mapping) or set(option) != set(OPTION_KEYS):
+        return f"carries exactly {', '.join(OPTION_KEYS)}"
+    for key in ("negation", "help", "type"):
+        if not isinstance(option[key], str):
+            return f"{key} is not a string"
+    for key in ("flags", "choices"):
+        if not isinstance(option[key], list | tuple) or not all(
+            isinstance(item, str) for item in option[key]
         ):
-            raise RecordError(f"{where}: extractor is not a positive integer")
-        raw_verbs = data.get("verbs", {})
-        if not isinstance(raw_verbs, dict):
-            raise RecordError(f"{where}: verbs is not an object")
-        raw_absent = data.get("absent", {})
-        if not isinstance(raw_absent, dict):
-            raise RecordError(f"{where}: absent is not an object")
-        absent: dict[str, dict[str, tuple[str, ...]]] = {}
-        for verb, options in raw_absent.items():
-            if not isinstance(options, dict):
-                raise RecordError(f"{where}: absent[{verb}] is not an object")
-            absent[str(verb)] = {
-                str(option): _texts(who, where=f"{where} absent[{verb}][{option}]")
-                for option, who in options.items()
-            }
-        return cls(
-            _texts(data["platforms"], where=f"{where} platforms"),
-            extractor,
-            _text(data["help"], where=f"{where} help") if "help" in data else None,
-            {
-                str(name): None if verb is None else _object_any(verb, where, name)
-                for name, verb in raw_verbs.items()
-            },
-            absent,
-        )
-
-
-def _object_any(value: Any, where: str, name: str) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        raise RecordError(f"{where}: verb {name!r} is neither an object nor null")
-    return value
+            return f"{key} is not a list of strings"
+    return ""
 
 
 def _verb_fault(verb: Mapping[str, Any]) -> str:
-    """What is wrong with a verb's shape, or empty when it has `VERB_KEYS` whole."""
-    if set(verb) != set(VERB_KEYS):
-        return f"a verb carries exactly {', '.join(VERB_KEYS)}"
-    for key in ("help", "positional", "lead"):
-        if not isinstance(verb[key], str):
-            return f"{key} is not a string"
-    if not isinstance(verb["wraps"], bool):
-        return "wraps is not a boolean"
-    if not isinstance(verb["options"], Mapping):
-        return "options is not an object"
-    for name, option in verb["options"].items():
-        if not isinstance(option, Mapping) or set(option) != set(OPTION_KEYS):
-            return f"option {name!r} carries exactly {', '.join(OPTION_KEYS)}"
-        for key in ("negation", "help", "type"):
-            if not isinstance(option[key], str):
-                return f"option {name!r}: {key} is not a string"
-        for key in ("flags", "choices"):
-            if not isinstance(option[key], list | tuple) or not all(
-                isinstance(item, str) for item in option[key]
-            ):
-                return f"option {name!r}: {key} is not a list of strings"
-    return ""
+    """What is wrong with a resolved verb, or empty when it has `VERB_KEYS` whole."""
+    missing = [key for key in VERB_KEYS if key not in verb]
+    if missing:
+        return f"first appears without {', '.join(missing)}"
+    return _patch_fault(verb)
+
+
+def _applied(
+    current: Mapping[str, Any] | None, patch: Mapping[str, Any]
+) -> dict[str, Any]:
+    """*patch* laid over *current*: the verb after this version, options folded."""
+    folded: dict[str, Any] = dict(current) if current is not None else {}
+    options: dict[str, Any] = dict(folded.get("options", {}))
+    for key in _VERB_FIELDS:
+        if key in patch:
+            folded[key] = patch[key]
+    for name, option in patch.get("options", {}).items():
+        if option is None:
+            options.pop(name, None)
+        else:
+            options[name] = option
+    folded["options"] = options
+    return folded
 
 
 def _canonical_verb(verb: Mapping[str, Any]) -> dict[str, Any]:
@@ -563,7 +534,8 @@ class Delta:
     """One version's arrival: its artifacts, what it overrides, and its surface.
 
     Attributes:
-        sequence: The delta's place in the record, from 1, consecutive.
+        sequence: The delta's place in the record, from 1, consecutive:
+            the version line's place in the file.
         version: The version string this delta adds.
         date: When the version arrived, `YYYY-MM-DD`; empty when the
             record does not know.
@@ -589,65 +561,6 @@ class Delta:
         """The hosts this version has, the artifacts' keys."""
         return tuple(self.artifacts)
 
-    @property
-    def file_name(self) -> str:
-        """The delta's file name, `<nnnn>-<version>.json`."""
-        return f"{self.sequence:04d}-{self.version}.json"
-
-    def to_json(self) -> dict[str, Any]:
-        """The delta as a JSON object, keys in the record's order."""
-        out: dict[str, Any] = {
-            "sequence": self.sequence,
-            "version": self.version,
-            "date": self.date,
-            "artifacts": {k: v.to_json() for k, v in self.artifacts.items()},
-        }
-        if self.layout.set_fields():
-            out["layout"] = self.layout.to_json()
-        if self.host_layouts:
-            out["host_layouts"] = {k: v.to_json() for k, v in self.host_layouts.items()}
-        if self.surface is not None:
-            out["surface"] = self.surface.to_json()
-        return out
-
-    @classmethod
-    def from_json(cls, value: Any, *, where: str) -> Delta:
-        """A delta from its JSON object.
-
-        Raises:
-            RecordError: when the object is not a delta.
-        """
-        data = _object(value, _DELTA_KEYS, where=where)
-        for required in ("sequence", "version", "artifacts"):
-            if required not in data:
-                raise RecordError(f"{where}: no {required}")
-        sequence = data["sequence"]
-        if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 1:
-            raise RecordError(f"{where}: sequence is not a positive integer")
-        raw_artifacts = data["artifacts"]
-        if not isinstance(raw_artifacts, dict):
-            raise RecordError(f"{where}: artifacts is not an object")
-        raw_hosts = data.get("host_layouts", {})
-        if not isinstance(raw_hosts, dict):
-            raise RecordError(f"{where}: host_layouts is not an object")
-        return cls(
-            sequence,
-            _text(data["version"], where=f"{where} version"),
-            _text(data.get("date", ""), where=f"{where} date"),
-            {
-                str(k): Artifact.from_json(v, where=f"{where} artifacts[{k}]")
-                for k, v in raw_artifacts.items()
-            },
-            Layout.from_json(data.get("layout", {}), where=f"{where} layout"),
-            {
-                str(k): Layout.from_json(v, where=f"{where} host_layouts[{k}]")
-                for k, v in raw_hosts.items()
-            },
-            Surface.from_json(data["surface"], where=f"{where} surface")
-            if "surface" in data
-            else None,
-        )
-
 
 @dataclass(frozen=True)
 class Record:
@@ -657,8 +570,8 @@ class Record:
     what a load refuses.
 
     Attributes:
-        name: The tool's name, the record directory's name and the
-            store's `tools/<name>@<version>` stem.
+        name: The tool's name, the record file's stem and the store's
+            `tools/<name>@<version>` stem.
         description: One line on what the tool is.
         kind: One of `KINDS`.
         package: What a delegated kind's installer installs, when it
@@ -671,6 +584,10 @@ class Record:
             inherits.
         host_layouts: The tool's override for one host each.
         deltas: The versions, in sequence.
+        prime: The oldest version the reading history reaches: no
+            version below it is read, so an option present at `prime`
+            claims no `since`. Empty when the history reaches as far
+            back as the releases go.
     """
 
     name: str
@@ -683,6 +600,7 @@ class Record:
     layout: Layout = field(default_factory=Layout)
     host_layouts: dict[str, Layout] = field(default_factory=dict)
     deltas: tuple[Delta, ...] = ()
+    prime: str = ""
 
     def __post_init__(self) -> None:
         validate(self)
@@ -712,7 +630,7 @@ class Record:
         return self.delta_for(version).hosts
 
     def to_json(self) -> dict[str, Any]:
-        """The tool axis as a JSON object, keys in the record's order."""
+        """The tool axis as a JSON object in the record's key order: the first line."""
         out: dict[str, Any] = {
             "name": self.name,
             "description": self.description,
@@ -723,6 +641,8 @@ class Record:
         if self.mode:
             out["mode"] = self.mode
         out["min_version"] = self.min_version
+        if self.prime:
+            out["prime"] = self.prime
         out["hosts"] = list(self.hosts)
         if self.layout.set_fields():
             out["layout"] = self.layout.to_json()
@@ -732,7 +652,7 @@ class Record:
 
     @classmethod
     def from_json(
-        cls, value: Any, deltas: tuple[Delta, ...] = (), *, where: str = TOOL_FILE
+        cls, value: Any, deltas: tuple[Delta, ...] = (), *, where: str = "line 1"
     ) -> Record:
         """A record from the tool axis's JSON object and its *deltas*.
 
@@ -760,89 +680,340 @@ class Record:
                 for k, v in raw_hosts.items()
             },
             deltas,
+            _text(data.get("prime", ""), where=f"{where} prime"),
         )
+
+    def lines(self) -> list[dict[str, Any]]:
+        """The record as its file's lines: the axis, each version, its statements."""
+        out: list[dict[str, Any]] = [self.to_json()]
+        for delta in self.deltas:
+            out.append(_version_line(delta))
+            if delta.surface is not None:
+                out.extend(_statements(delta.surface))
+        return out
 
     @classmethod
-    def load(cls, directory: Path) -> Record:
-        """The record at *directory*: its tool axis and every delta, in sequence.
+    def parse(cls, text: str, *, where: str) -> Record:
+        """A record from its file's text, one JSON object per line.
 
         Raises:
-            RecordError: naming the file, for a file that is not JSON,
-                a delta whose name and sequence disagree, or a record
-                that does not validate.
+            RecordError: naming *where* and the line, for a line that is
+                not JSON, a statement before any version line or under
+                a version that was not read, an option stated twice,
+                or a record that does not validate.
         """
-        tool_path = directory / TOOL_FILE
-        if not tool_path.is_file():
-            raise RecordError(f"{directory}: no {TOOL_FILE}")
+        lines = [line for line in text.splitlines() if line.strip()]
+        if not lines:
+            raise RecordError(f"{where}: empty")
+        objects: list[Any] = []
+        for number, line in enumerate(lines, start=1):
+            try:
+                objects.append(json.loads(line))
+            except json.JSONDecodeError as error:
+                raise RecordError(
+                    f"{where} line {number}: not JSON ({error})"
+                ) from None
         deltas: list[Delta] = []
-        deltas_dir = directory / DELTAS_DIR
-        names = (
-            sorted(p.name for p in deltas_dir.glob("*.json"))
-            if deltas_dir.is_dir()
-            else []
-        )
-        for name in names:
-            match = _DELTA_NAME.match(name)
-            if match is None:
-                raise RecordError(
-                    f"{directory.name}/{DELTAS_DIR}/{name}: not named"
-                    " <nnnn>-<version>.json"
-                )
-            delta = Delta.from_json(
-                _read_json(
-                    deltas_dir / name, where=f"{directory.name}/{DELTAS_DIR}/{name}"
-                ),
-                where=f"{directory.name}/{DELTAS_DIR}/{name}",
-            )
-            if delta.file_name != name:
-                raise RecordError(
-                    f"{directory.name}/{DELTAS_DIR}/{name}: the file says"
-                    f" {delta.file_name} (sequence {delta.sequence},"
-                    f" version {delta.version})"
-                )
-            deltas.append(delta)
-        record = cls.from_json(
-            _read_json(tool_path, where=f"{directory.name}/{TOOL_FILE}"),
-            tuple(deltas),
-            where=f"{directory.name}/{TOOL_FILE}",
-        )
-        if record.name != directory.name:
+        pending: _Pending | None = None
+        for number, obj in enumerate(objects[1:], start=2):
+            at = f"{where} line {number}"
+            if not isinstance(obj, dict):
+                raise RecordError(f"{at}: not a JSON object")
+            if "version" in obj:
+                if pending is not None:
+                    deltas.append(pending.delta(len(deltas) + 1))
+                pending = _Pending.from_json(obj, where=at)
+                continue
+            if "verb" not in obj:
+                raise RecordError(f"{at}: neither a version line nor a statement")
+            if pending is None:
+                raise RecordError(f"{at}: a statement before any version line")
+            pending.statement(obj, where=at)
+        if pending is not None:
+            deltas.append(pending.delta(len(deltas) + 1))
+        return cls.from_json(objects[0], tuple(deltas), where=f"{where} line 1")
+
+    @classmethod
+    def load(cls, path: Path) -> Record:
+        """The record in the file *path*, `records/<tool>.jsonl`.
+
+        Raises:
+            RecordError: naming the file, for a directory (the earlier
+                form, converted by `fm tools.convert-records`), a file
+                that is not a record, a record named other than its
+                file, or one that does not validate.
+        """
+        if path.is_dir():
             raise RecordError(
-                f"{directory.name}/{TOOL_FILE}: the record is named"
-                f" {record.name!r}, its directory {directory.name!r}"
+                f"{path}: a directory, not a record file; a record is"
+                f" `<tool>{RECORD_SUFFIX}`, and the directory form converts with"
+                " `fm tools.convert-records`"
+            )
+        if not path.is_file():
+            raise RecordError(f"{path}: no such record")
+        record = cls.parse(path.read_text("utf-8"), where=path.name)
+        stem = path.name.removesuffix(RECORD_SUFFIX)
+        if record.name != stem:
+            raise RecordError(
+                f"{path.name}: the record is named {record.name!r}, its file {stem!r}"
             )
         return record
 
     def save(self, directory: Path) -> None:
-        """Write the record under *directory*: the tool axis and every delta.
-
-        A delta file the record no longer names is removed, so a record
-        whose deltas were renumbered leaves no stale file behind for
-        the next load to refuse.
-        """
+        """Write the record as `<name>.jsonl` under *directory*, one object per line."""
         directory.mkdir(parents=True, exist_ok=True)
-        (directory / TOOL_FILE).write_text(_dumps(self.to_json()), encoding="utf-8")
-        deltas_dir = directory / DELTAS_DIR
-        deltas_dir.mkdir(exist_ok=True)
-        names = {delta.file_name for delta in self.deltas}
-        for stale in deltas_dir.glob("*.json"):
-            if stale.name not in names:
-                stale.unlink()
-        for delta in self.deltas:
-            (deltas_dir / delta.file_name).write_text(
-                _dumps(delta.to_json()), encoding="utf-8"
+        text = "".join(_line(obj) for obj in self.lines())
+        (directory / f"{self.name}{RECORD_SUFFIX}").write_text(text, encoding="utf-8")
+
+
+def records_in(directory: Path) -> list[Path]:
+    """The record files under *directory*, by name; empty when it is not one."""
+    if not directory.is_dir():
+        return []
+    return sorted(
+        path
+        for path in directory.iterdir()
+        if path.suffix == RECORD_SUFFIX and path.is_file()
+    )
+
+
+def _line(obj: Any) -> str:
+    return json.dumps(obj, ensure_ascii=False) + "\n"
+
+
+def _version_line(delta: Delta) -> dict[str, Any]:
+    """A delta as its version line, keys in the record's order."""
+    out: dict[str, Any] = {
+        "version": delta.version,
+        "date": delta.date,
+        "artifacts": {k: v.to_json() for k, v in delta.artifacts.items()},
+    }
+    if delta.layout.set_fields():
+        out["layout"] = delta.layout.to_json()
+    if delta.host_layouts:
+        out["host_layouts"] = {k: v.to_json() for k, v in delta.host_layouts.items()}
+    if delta.surface is not None:
+        read: dict[str, Any] = {
+            "platforms": list(delta.surface.platforms),
+            "extractor": delta.surface.extractor,
+        }
+        if delta.surface.help is not None:
+            read["help"] = delta.surface.help
+        out["read"] = read
+    return out
+
+
+def _statements(surface: Surface) -> list[dict[str, Any]]:
+    """A surface as its statement lines: verbs and options in name order."""
+    out: list[dict[str, Any]] = []
+    for name, patch in sorted(surface.verbs.items()):
+        if patch is None:
+            out.append({"verb": name, "gone": True})
+            continue
+        fields = {key: patch[key] for key in _VERB_FIELDS if key in patch}
+        if fields:
+            out.append({"verb": name, **fields})
+        for option, value in sorted(patch.get("options", {}).items()):
+            if value is None:
+                out.append({"verb": name, "option": option, "gone": True})
+            else:
+                out.append({"verb": name, "option": option, **_option_json(value)})
+    for verb, options in sorted(surface.absent.items()):
+        for option, who in sorted(options.items()):
+            line: dict[str, Any] = {"verb": verb}
+            if option:
+                line["option"] = option
+            line["absent"] = list(who)
+            out.append(line)
+    return out
+
+
+def _option_json(option: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "flags": list(option["flags"]),
+        "negation": option["negation"],
+        "help": option["help"],
+        "type": option["type"],
+        "default": option["default"],
+        "choices": list(option["choices"]),
+    }
+
+
+class _Pending:
+    """A version line and the statements read under it so far."""
+
+    def __init__(
+        self,
+        version: str,
+        date: str,
+        artifacts: dict[str, Artifact],
+        layout: Layout,
+        host_layouts: dict[str, Layout],
+        read: tuple[tuple[str, ...], int, str | None] | None,
+    ) -> None:
+        self.version = version
+        self.date = date
+        self.artifacts = artifacts
+        self.layout = layout
+        self.host_layouts = host_layouts
+        self.read = read
+        self.verbs: dict[str, dict[str, Any] | None] = {}
+        self.absent: dict[str, dict[str, tuple[str, ...]]] = {}
+
+    @classmethod
+    def from_json(cls, data: dict[str, Any], *, where: str) -> _Pending:
+        data = _object(data, _VERSION_KEYS, where=where)
+        raw_artifacts = data.get("artifacts", {})
+        if not isinstance(raw_artifacts, dict):
+            raise RecordError(f"{where}: artifacts is not an object")
+        raw_hosts = data.get("host_layouts", {})
+        if not isinstance(raw_hosts, dict):
+            raise RecordError(f"{where}: host_layouts is not an object")
+        read: tuple[tuple[str, ...], int, str | None] | None = None
+        if "read" in data:
+            raw = _object(data["read"], _READ_KEYS, where=f"{where} read")
+            for required in ("platforms", "extractor"):
+                if required not in raw:
+                    raise RecordError(f"{where} read: no {required}")
+            extractor = raw["extractor"]
+            if (
+                not isinstance(extractor, int)
+                or isinstance(extractor, bool)
+                or extractor < 1
+            ):
+                raise RecordError(f"{where} read: extractor is not a positive integer")
+            read = (
+                _texts(raw["platforms"], where=f"{where} read platforms"),
+                extractor,
+                _text(raw["help"], where=f"{where} read help")
+                if "help" in raw
+                else None,
             )
+        return cls(
+            _text(data["version"], where=f"{where} version"),
+            _text(data.get("date", ""), where=f"{where} date"),
+            {
+                str(k): Artifact.from_json(v, where=f"{where} artifacts[{k}]")
+                for k, v in raw_artifacts.items()
+            },
+            Layout.from_json(data.get("layout", {}), where=f"{where} layout"),
+            {
+                str(k): Layout.from_json(v, where=f"{where} host_layouts[{k}]")
+                for k, v in raw_hosts.items()
+            },
+            read,
+        )
 
+    def statement(self, data: dict[str, Any], *, where: str) -> None:
+        """Fold one statement line in.
 
-def _read_json(path: Path, *, where: str) -> Any:
-    try:
-        return json.loads(path.read_text("utf-8"))
-    except json.JSONDecodeError as error:
-        raise RecordError(f"{where}: not JSON ({error})") from None
+        Raises:
+            RecordError: for a statement under a version that was not
+                read, one off its shape, or an option stated twice.
+        """
+        if self.read is None:
+            raise RecordError(
+                f"{where}: a statement under version {self.version}, which was not read"
+            )
+        data = _object(data, _STATEMENT_KEYS, where=where)
+        verb = _text(data["verb"], where=f"{where} verb")
+        option = (
+            _text(data["option"], where=f"{where} option") if "option" in data else None
+        )
+        if "absent" in data:
+            extra = sorted(set(data) - {"verb", "option", "absent"})
+            if extra:
+                raise RecordError(f"{where}: an absence carries no {', '.join(extra)}")
+            who = _texts(data["absent"], where=f"{where} absent")
+            slot = self.absent.setdefault(verb, {})
+            if (option or "") in slot:
+                raise RecordError(f"{where}: an absence stated twice")
+            slot[option or ""] = who
+            return
+        if data.get("gone") is True:
+            extra = sorted(set(data) - {"verb", "option", "gone"})
+            if extra:
+                raise RecordError(
+                    f"{where}: a withdrawal carries no {', '.join(extra)}"
+                )
+            if option is None:
+                if verb in self.verbs:
+                    raise RecordError(f"{where}: verb {verb!r} stated twice")
+                self.verbs[verb] = None
+                return
+            self._option(verb, option, None, where=where)
+            return
+        if "gone" in data:
+            raise RecordError(f"{where}: gone is not true")
+        if option is None:
+            fields = {key: data[key] for key in _VERB_FIELDS if key in data}
+            extra = sorted(set(data) - {"verb", *_VERB_FIELDS})
+            if extra:
+                raise RecordError(f"{where}: a verb line carries no {', '.join(extra)}")
+            if not fields:
+                raise RecordError(f"{where}: a verb line sets nothing")
+            patch = self._patch(verb, where=where)
+            for key in fields:
+                if key in patch:
+                    raise RecordError(f"{where}: {key} of verb {verb!r} stated twice")
+            patch.update(fields)
+            return
+        extra = sorted(set(data) - {"verb", "option", *OPTION_KEYS})
+        if extra:
+            raise RecordError(f"{where}: an option line carries no {', '.join(extra)}")
+        if any(key not in data for key in OPTION_KEYS):
+            raise RecordError(
+                f"{where}: option {option!r} carries exactly {', '.join(OPTION_KEYS)}"
+            )
+        value = {key: data[key] for key in OPTION_KEYS}
+        fault = _option_fault(value)
+        if fault:
+            joint = " " if fault.startswith("carries") else ": "
+            raise RecordError(f"{where}: option {option!r}{joint}{fault}")
+        self._option(verb, option, value, where=where)
 
+    def _patch(self, verb: str, *, where: str) -> dict[str, Any]:
+        patch = self.verbs.get(verb)
+        if verb in self.verbs and patch is None:
+            raise RecordError(f"{where}: verb {verb!r} was withdrawn above")
+        if patch is None:
+            patch = {"options": {}}
+            self.verbs[verb] = patch
+        return patch
 
-def _dumps(value: Any) -> str:
-    return json.dumps(value, indent=2, ensure_ascii=False) + "\n"
+    def _option(
+        self, verb: str, option: str, value: dict[str, Any] | None, *, where: str
+    ) -> None:
+        patch = self._patch(verb, where=where)
+        if option in patch["options"]:
+            raise RecordError(
+                f"{where}: option {option!r} of verb {verb!r} stated twice"
+            )
+        patch["options"][option] = value
+
+    def delta(self, sequence: int) -> Delta:
+        surface: Surface | None = None
+        if self.read is not None:
+            platforms, extractor, help_ = self.read
+            verbs: dict[str, dict[str, Any] | None] = {}
+            for name, patch in self.verbs.items():
+                if patch is None:
+                    verbs[name] = None
+                    continue
+                trimmed = {k: v for k, v in patch.items() if k != "options"}
+                if patch["options"]:
+                    trimmed["options"] = patch["options"]
+                verbs[name] = trimmed
+            surface = Surface(platforms, extractor, help_, verbs, self.absent)
+        return Delta(
+            sequence,
+            self.version,
+            self.date,
+            self.artifacts,
+            self.layout,
+            self.host_layouts,
+            surface,
+        )
 
 
 def _layers(record: Record, delta: Delta, host: str) -> tuple[tuple[str, Layout], ...]:
@@ -921,11 +1092,11 @@ def observations(record: Record) -> tuple[Observation, ...]:
             continue
         if surface.help is not None:
             help_ = surface.help
-        for name, verb in surface.verbs.items():
-            if verb is None:
+        for name, patch in surface.verbs.items():
+            if patch is None:
                 verbs.pop(name, None)
             else:
-                verbs[name] = _canonical_verb(verb)
+                verbs[name] = _canonical_verb(_applied(verbs.get(name), patch))
         out.append(
             Observation(
                 delta.version,
@@ -991,11 +1162,11 @@ def validate(record: Record) -> None:
     help_: str | None = None
     verbs: dict[str, dict[str, Any]] = {}
     for index, delta in enumerate(record.deltas, start=1):
-        at = f"{where} {DELTAS_DIR}/{delta.file_name}"
+        at = f"{where} version {delta.version}"
         if delta.sequence != index:
             raise RecordError(
-                f"{at}: out of sequence; expected {index:04d}, the deltas run"
-                " consecutively from 0001"
+                f"{at}: out of sequence; expected {index}, the versions run"
+                " consecutively from 1"
             )
         if delta.version in seen:
             raise RecordError(f"{at}: version {delta.version} was added before")
@@ -1027,7 +1198,12 @@ def validate(record: Record) -> None:
                     " every version must resolve to a whole deployment"
                 )
         if delta.surface is not None:
-            help_ = _validate_surface(delta.surface, help_, verbs, at=f"{at} surface")
+            if record.prime and version_key(delta.version) < version_key(record.prime):
+                raise RecordError(
+                    f"{at}: read below prime {record.prime}; the history reaches"
+                    " no further back"
+                )
+            help_ = _validate_surface(delta.surface, help_, verbs, at=f"{at} read")
     # A tool-level layout that no version and host ever reads is not a
     # restatement, so a tool with no version is validated on its own.
     if not record.deltas:
@@ -1063,21 +1239,41 @@ def _validate_surface(
         raise RecordError(f"{at}: the record's first surface names no help")
     if surface.help is not None and surface.help == help_:
         raise RecordError(f"{at}: restates help as it inherits it")
-    for name, verb in surface.verbs.items():
-        if verb is None:
-            if name not in verbs:
+    for name, patch in surface.verbs.items():
+        current = verbs.get(name)
+        if patch is None:
+            if current is None:
                 raise RecordError(
                     f"{at}: withdraws verb {name!r}, which no earlier version has"
                 )
             del verbs[name]
             continue
-        fault = _verb_fault(verb)
+        fault = _patch_fault(patch)
         if fault:
             raise RecordError(f"{at} verb {name!r}: {fault}")
-        canonical = _canonical_verb(verb)
-        if verbs.get(name) == canonical:
-            raise RecordError(f"{at}: restates verb {name!r} as it inherits it")
-        verbs[name] = canonical
+        if current is not None:
+            for key in _VERB_FIELDS:
+                if key in patch and patch[key] == current[key]:
+                    raise RecordError(
+                        f"{at}: restates {key} of verb {name!r} as it inherits it"
+                    )
+        for option, value in patch.get("options", {}).items():
+            held = None if current is None else current["options"].get(option)
+            if value is None and held is None:
+                raise RecordError(
+                    f"{at}: withdraws option {option!r} of verb {name!r}, which the"
+                    " version lacks"
+                )
+            if value is not None and held is not None and _option_json(value) == held:
+                raise RecordError(
+                    f"{at}: restates option {option!r} of verb {name!r} as it"
+                    " inherits it"
+                )
+        folded = _applied(current, patch)
+        fault = _verb_fault(folded)
+        if fault:
+            raise RecordError(f"{at} verb {name!r}: {fault}")
+        verbs[name] = _canonical_verb(folded)
     for verb_name, options in surface.absent.items():
         if verb_name not in verbs:
             raise RecordError(
@@ -1162,11 +1358,11 @@ def host_key(system: str, machine: str) -> str:
 
 
 def schema() -> dict[str, Any]:
-    """The JSON schema of a record's two documents, for editor completion.
+    """The JSON schema of a record file's lines, for editor completion.
 
-    One schema, two shapes under `$defs`: `Tool` for `tool.json` and
-    `Delta` for a delta file; a document is one or the other. Every
-    object is closed to unknown keys.
+    One schema, three shapes under `$defs`: `Tool` for the first line,
+    `Version` for a version line and `Statement` for a line under it;
+    a line is one of the three. Every object is closed to unknown keys.
     """
     layout = {
         "type": "object",
@@ -1206,6 +1402,7 @@ def schema() -> dict[str, Any]:
             "package": {"type": "string", "default": ""},
             "mode": {"type": "string", "enum": list(MODES)},
             "min_version": {"type": "string", "default": ""},
+            "prime": {"type": "string", "default": ""},
             "hosts": {
                 "type": "array",
                 "items": {"type": "string", "enum": list(HOSTS)},
@@ -1216,71 +1413,24 @@ def schema() -> dict[str, Any]:
         },
     }
     option = {
-        "type": "object",
-        "additionalProperties": False,
-        "required": list(OPTION_KEYS),
-        "properties": {
-            "flags": {"type": "array", "items": {"type": "string"}},
-            "negation": {"type": "string"},
-            "help": {"type": "string"},
-            "type": {"type": "string"},
-            "default": {},
-            "choices": {"type": "array", "items": {"type": "string"}},
-        },
+        "flags": {"type": "array", "items": {"type": "string"}},
+        "negation": {"type": "string"},
+        "help": {"type": "string"},
+        "type": {"type": "string"},
+        "default": {},
+        "choices": {"type": "array", "items": {"type": "string"}},
     }
-    verb = {
-        "type": "object",
-        "additionalProperties": False,
-        "required": list(VERB_KEYS),
-        "properties": {
-            "help": {"type": "string"},
-            "wraps": {"type": "boolean"},
-            "positional": {"type": "string"},
-            "lead": {"type": "string"},
-            "options": {
-                "type": "object",
-                "additionalProperties": {"$ref": "#/$defs/Option"},
-            },
-        },
+    platforms = {
+        "type": "array",
+        "items": {"type": "string", "enum": list(SURFACE_PLATFORMS)},
+        "minItems": 1,
+        "uniqueItems": True,
     }
-    surface = {
+    version = {
         "type": "object",
         "additionalProperties": False,
-        "required": ["platforms", "extractor"],
+        "required": ["version"],
         "properties": {
-            "platforms": {
-                "type": "array",
-                "items": {"type": "string", "enum": list(SURFACE_PLATFORMS)},
-                "minItems": 1,
-                "uniqueItems": True,
-            },
-            "extractor": {"type": "integer", "minimum": 1},
-            "help": {"type": "string"},
-            "verbs": {
-                "type": "object",
-                "additionalProperties": {
-                    "oneOf": [{"$ref": "#/$defs/Verb"}, {"type": "null"}]
-                },
-            },
-            "absent": {
-                "type": "object",
-                "additionalProperties": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "array",
-                        "items": {"type": "string", "enum": list(SURFACE_PLATFORMS)},
-                        "minItems": 1,
-                    },
-                },
-            },
-        },
-    }
-    delta = {
-        "type": "object",
-        "additionalProperties": False,
-        "required": ["sequence", "version", "artifacts"],
-        "properties": {
-            "sequence": {"type": "integer", "minimum": 1},
             "version": {"type": "string", "minLength": 1},
             "date": {"type": "string", "default": ""},
             "artifacts": {
@@ -1290,21 +1440,47 @@ def schema() -> dict[str, Any]:
             },
             "layout": {"$ref": "#/$defs/Layout"},
             "host_layouts": host_layouts,
-            "surface": {"$ref": "#/$defs/Surface"},
+            "read": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["platforms", "extractor"],
+                "properties": {
+                    "platforms": platforms,
+                    "extractor": {"type": "integer", "minimum": 1},
+                    "help": {"type": "string"},
+                },
+            },
+        },
+    }
+    statement = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["verb"],
+        "properties": {
+            "verb": {"type": "string"},
+            "option": {"type": "string"},
+            "gone": {"const": True},
+            "absent": platforms,
+            "wraps": {"type": "boolean"},
+            "positional": {"type": "string"},
+            "lead": {"type": "string"},
+            **option,
         },
     }
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "title": "Record",
-        "oneOf": [{"$ref": "#/$defs/Tool"}, {"$ref": "#/$defs/Delta"}],
+        "oneOf": [
+            {"$ref": "#/$defs/Tool"},
+            {"$ref": "#/$defs/Version"},
+            {"$ref": "#/$defs/Statement"},
+        ],
         "$defs": {
             "Layout": layout,
             "Artifact": artifact,
-            "Option": option,
-            "Verb": verb,
-            "Surface": surface,
             "Tool": tool,
-            "Delta": delta,
+            "Version": version,
+            "Statement": statement,
         },
     }
 

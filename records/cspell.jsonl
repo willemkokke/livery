@@ -1,0 +1,88 @@
+{"name": "cspell", "description": "", "kind": "bun-install", "min_version": "", "hosts": []}
+{"version": "9.4.0", "date": "2025-12-01", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Spelling Checker for Code"}}
+{"verb": "", "help": "Spelling Checker for Code", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "check", "help": "Spell check file(s) and display the result. The full file is displayed in color.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "check", "option": "color", "flags": ["--color"], "negation": "--no-color", "help": "Force color", "type": "bool", "default": null, "choices": []}
+{"verb": "check", "option": "config", "flags": ["--config", "-c"], "negation": "", "help": "Configuration file to use", "type": "str", "default": null, "choices": []}
+{"verb": "check", "option": "no_default_configuration", "flags": ["--no-default-configuration"], "negation": "", "help": "Do not load the default configuration and dictionaries", "type": "bool", "default": null, "choices": []}
+{"verb": "check", "option": "no_exit_code", "flags": ["--no-exit-code"], "negation": "", "help": "Do not return an exit code if issues are found", "type": "bool", "default": null, "choices": []}
+{"verb": "check", "option": "validate_directives", "flags": ["--validate-directives"], "negation": "--no-validate-directives", "help": "Validate in-document CSpell directives", "type": "bool", "default": null, "choices": []}
+{"verb": "lint", "help": "", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "lint", "option": "cache", "flags": ["--cache"], "negation": "--no-cache", "help": "Use cache to only check changed files", "type": "bool", "default": null, "choices": []}
+{"verb": "lint", "option": "cache_location", "flags": ["--cache-location"], "negation": "", "help": "Path to the cache file or directory", "type": "str", "default": ".cspellcache", "choices": []}
+{"verb": "lint", "option": "cache_reset", "flags": ["--cache-reset"], "negation": "", "help": "Reset the cache file", "type": "bool", "default": null, "choices": []}
+{"verb": "lint", "option": "cache_strategy", "flags": ["--cache-strategy"], "negation": "", "help": "Strategy to use for detecting changed files", "type": "str", "default": null, "choices": []}
+{"verb": "lint", "option": "color", "flags": ["--color"], "negation": "--no-color", "help": "Force color", "type": "bool", "default": null, "choices": []}
+{"verb": "lint", "option": "config", "flags": ["--config", "-c"], "negation": "", "help": "Configuration file to use", "type": "str", "default": null, "choices": []}
+{"verb": "lint", "option": "continue_on_error", "flags": ["--continue-on-error"], "negation": "", "help": "Continue processing files even if there is a configuration error", "type": "bool", "default": null, "choices": []}
+{"verb": "lint", "option": "dictionary", "flags": ["--dictionary"], "negation": "", "help": "Enable a dictionary by name", "type": "str", "default": null, "choices": []}
+{"verb": "lint", "option": "disable_dictionary", "flags": ["--disable-dictionary"], "negation": "", "help": "Disable a dictionary by name", "type": "str", "default": null, "choices": []}
+{"verb": "lint", "option": "dot", "flags": ["--dot"], "negation": "", "help": "Include files and directories starting with `.` (period) when matching globs", "type": "bool", "default": null, "choices": []}
+{"verb": "lint", "option": "exclude", "flags": ["--exclude", "-e"], "negation": "", "help": "Exclude files matching the glob pattern", "type": "list[str]", "default": null, "choices": []}
+{"verb": "lint", "option": "fail_fast", "flags": ["--fail-fast"], "negation": "", "help": "Exit after first file with an issue or error", "type": "bool", "default": null, "choices": []}
+{"verb": "lint", "option": "file", "flags": ["--file"], "negation": "", "help": "Specify files to spell check", "type": "list[str]", "default": null, "choices": []}
+{"verb": "lint", "option": "file_list", "flags": ["--file-list"], "negation": "", "help": "Specify a list of files to be spell checked", "type": "str", "default": null, "choices": []}
+{"verb": "lint", "option": "gitignore", "flags": ["--gitignore"], "negation": "--no-gitignore", "help": "Ignore files matching glob patterns found in .gitignore files", "type": "bool", "default": null, "choices": []}
+{"verb": "lint", "option": "gitignore_root", "flags": ["--gitignore-root"], "negation": "", "help": "Prevent searching for .gitignore files past root", "type": "str", "default": null, "choices": []}
+{"verb": "lint", "option": "issue_template", "flags": ["--issue-template"], "negation": "", "help": "Use a custom issue template", "type": "str", "default": null, "choices": []}
+{"verb": "lint", "option": "language_id", "flags": ["--language-id"], "negation": "", "help": "Force programming language for unknown extensions", "type": "str", "default": null, "choices": []}
+{"verb": "lint", "option": "locale", "flags": ["--locale"], "negation": "", "help": "Set language locales", "type": "str", "default": null, "choices": []}
+{"verb": "lint", "option": "max_file_size", "flags": ["--max-file-size"], "negation": "", "help": "Prevent checking large files", "type": "str", "default": null, "choices": []}
+{"verb": "lint", "option": "no_config_search", "flags": ["--no-config-search"], "negation": "", "help": "Disable automatic searching for additional configuration files in parent directories", "type": "bool", "default": null, "choices": []}
+{"verb": "lint", "option": "no_default_configuration", "flags": ["--no-default-configuration"], "negation": "", "help": "Do not load the default configuration and dictionaries", "type": "bool", "default": null, "choices": []}
+{"verb": "lint", "option": "no_exit_code", "flags": ["--no-exit-code"], "negation": "", "help": "Do not return an exit code if issues are found", "type": "bool", "default": null, "choices": []}
+{"verb": "lint", "option": "no_issues", "flags": ["--no-issues"], "negation": "", "help": "Do not show the spelling errors", "type": "bool", "default": null, "choices": []}
+{"verb": "lint", "option": "no_must_find_files", "flags": ["--no-must-find-files"], "negation": "", "help": "Do not error if no files are found", "type": "bool", "default": null, "choices": []}
+{"verb": "lint", "option": "no_progress", "flags": ["--no-progress"], "negation": "", "help": "Turn off progress messages", "type": "bool", "default": null, "choices": []}
+{"verb": "lint", "option": "no_relative", "flags": ["--no-relative"], "negation": "", "help": "Issues are displayed with absolute path instead of relative to the root", "type": "bool", "default": null, "choices": []}
+{"verb": "lint", "option": "no_summary", "flags": ["--no-summary"], "negation": "", "help": "Turn off summary message in console", "type": "bool", "default": null, "choices": []}
+{"verb": "lint", "option": "quiet", "flags": ["--quiet"], "negation": "", "help": "Only show spelling issues or errors", "type": "bool", "default": null, "choices": []}
+{"verb": "lint", "option": "report", "flags": ["--report"], "negation": "", "help": "Set how unknown words are reported (choices: \"all\", \"simple\", \"typos\", \"flagged\")", "type": "str", "default": null, "choices": []}
+{"verb": "lint", "option": "reporter", "flags": ["--reporter"], "negation": "", "help": "Specify one or more reporters to use", "type": "str", "default": null, "choices": []}
+{"verb": "lint", "option": "root", "flags": ["--root", "-r"], "negation": "", "help": "Root directory, defaults to current directory", "type": "str", "default": null, "choices": []}
+{"verb": "lint", "option": "show_context", "flags": ["--show-context"], "negation": "", "help": "Show the surrounding text around an issue", "type": "bool", "default": null, "choices": []}
+{"verb": "lint", "option": "show_suggestions", "flags": ["--show-suggestions"], "negation": "--no-show-suggestions", "help": "Show spelling suggestions", "type": "bool", "default": null, "choices": []}
+{"verb": "lint", "option": "silent", "flags": ["--silent", "-s"], "negation": "", "help": "Silent mode, suppress error messages", "type": "bool", "default": null, "choices": []}
+{"verb": "lint", "option": "stop_config_search_at", "flags": ["--stop-config-search-at"], "negation": "", "help": "Specify a directory at which to stop searching for configuration files when walking up from the files being checked", "type": "str", "default": null, "choices": []}
+{"verb": "lint", "option": "unique", "flags": ["--unique", "-u"], "negation": "", "help": "Only output the first instance of a word not found in the dictionaries", "type": "bool", "default": null, "choices": []}
+{"verb": "lint", "option": "validate_directives", "flags": ["--validate-directives"], "negation": "", "help": "Validate in-document CSpell directives", "type": "bool", "default": null, "choices": []}
+{"verb": "lint", "option": "verbose", "flags": ["--verbose", "-v"], "negation": "", "help": "Display more information about the files being checked", "type": "bool", "default": null, "choices": []}
+{"verb": "lint", "option": "words_only", "flags": ["--words-only"], "negation": "", "help": "Only output the words not found in the dictionaries", "type": "bool", "default": null, "choices": []}
+{"verb": "suggest", "help": "Spelling Suggestions for words.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "suggest", "option": "color", "flags": ["--color"], "negation": "--no-color", "help": "Force color", "type": "bool", "default": null, "choices": []}
+{"verb": "suggest", "option": "config", "flags": ["--config", "-c"], "negation": "", "help": "Configuration file to use", "type": "str", "default": null, "choices": []}
+{"verb": "suggest", "option": "dictionaries", "flags": ["--dictionaries"], "negation": "", "help": "Use the dictionaries specified", "type": "str", "default": null, "choices": []}
+{"verb": "suggest", "option": "dictionary", "flags": ["--dictionary", "-d"], "negation": "", "help": "Use the dictionary specified", "type": "str", "default": null, "choices": []}
+{"verb": "suggest", "option": "ignore_case", "flags": ["--ignore-case"], "negation": "", "help": "Alias of --no-strict", "type": "bool", "default": null, "choices": []}
+{"verb": "suggest", "option": "language_id", "flags": ["--language-id"], "negation": "", "help": "Use programming language", "type": "str", "default": null, "choices": []}
+{"verb": "suggest", "option": "locale", "flags": ["--locale"], "negation": "", "help": "Set language locales", "type": "str", "default": null, "choices": []}
+{"verb": "suggest", "option": "no_include_ties", "flags": ["--no-include-ties"], "negation": "", "help": "Force the number of suggested to be limited, by not including suggestions that have the same edit cost", "type": "bool", "default": null, "choices": []}
+{"verb": "suggest", "option": "no_strict", "flags": ["--no-strict", "-s"], "negation": "", "help": "Ignore case and accents when searching for words", "type": "bool", "default": null, "choices": []}
+{"verb": "suggest", "option": "num_changes", "flags": ["--num-changes"], "negation": "", "help": "Number of changes allowed to a word", "type": "str", "default": "4", "choices": []}
+{"verb": "suggest", "option": "num_suggestions", "flags": ["--num-suggestions"], "negation": "", "help": "Number of suggestions", "type": "str", "default": "8", "choices": []}
+{"verb": "suggest", "option": "repl", "flags": ["--repl"], "negation": "", "help": "REPL interface for looking up suggestions", "type": "bool", "default": null, "choices": []}
+{"verb": "suggest", "option": "stdin", "flags": ["--stdin"], "negation": "", "help": "Use stdin for input", "type": "bool", "default": null, "choices": []}
+{"verb": "suggest", "option": "verbose", "flags": ["--verbose", "-v"], "negation": "", "help": "Show detailed output", "type": "bool", "default": null, "choices": []}
+{"verb": "trace", "help": "Trace words -- Search for words in the configuration and dictionaries.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "trace", "option": "all", "flags": ["--all"], "negation": "", "help": "Show all dictionaries", "type": "bool", "default": null, "choices": []}
+{"verb": "trace", "option": "allow_compound_words", "flags": ["--allow-compound-words"], "negation": "--no-allow-compound-words", "help": "Turn on allowCompoundWords", "type": "bool", "default": null, "choices": []}
+{"verb": "trace", "option": "color", "flags": ["--color"], "negation": "--no-color", "help": "Force color", "type": "bool", "default": null, "choices": []}
+{"verb": "trace", "option": "config", "flags": ["--config", "-c"], "negation": "", "help": "Configuration file to use", "type": "str", "default": null, "choices": []}
+{"verb": "trace", "option": "dictionary", "flags": ["--dictionary"], "negation": "", "help": "Enable a dictionary by name", "type": "list[str]", "default": null, "choices": []}
+{"verb": "trace", "option": "dictionary_path", "flags": ["--dictionary-path"], "negation": "", "help": "Configure how to display the dictionary path", "type": "str", "default": null, "choices": []}
+{"verb": "trace", "option": "ignore_case", "flags": ["--ignore-case"], "negation": "--no-ignore-case", "help": "Ignore case and accents when searching for words", "type": "bool", "default": null, "choices": []}
+{"verb": "trace", "option": "language_id", "flags": ["--language-id"], "negation": "", "help": "Use programming language", "type": "str", "default": null, "choices": []}
+{"verb": "trace", "option": "locale", "flags": ["--locale"], "negation": "", "help": "Set language locales", "type": "str", "default": null, "choices": []}
+{"verb": "trace", "option": "no_default_configuration", "flags": ["--no-default-configuration"], "negation": "", "help": "Do not load the default configuration and dictionaries", "type": "bool", "default": null, "choices": []}
+{"verb": "trace", "option": "only_found", "flags": ["--only-found"], "negation": "", "help": "Show only dictionaries that have the words", "type": "bool", "default": null, "choices": []}
+{"verb": "trace", "option": "stdin", "flags": ["--stdin"], "negation": "", "help": "Read words from stdin", "type": "bool", "default": null, "choices": []}
+{"version": "9.6.0", "date": "2026-01-12", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "9.6.1", "date": "2026-01-26", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "9.6.2", "date": "2026-01-26", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "9.6.3", "date": "2026-02-02", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "9.6.4", "date": "2026-02-04", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "trace", "option": "no_dictionary", "flags": ["--no-dictionary"], "negation": "", "help": "Disable a dictionary by name", "type": "list[str]", "default": null, "choices": []}
+{"version": "9.7.0", "date": "2026-02-23", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "9.8.0", "date": "2026-04-05", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "10.0.0", "date": "2026-04-06", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "10.0.1", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}

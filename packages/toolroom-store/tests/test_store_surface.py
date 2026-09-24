@@ -77,7 +77,7 @@ def _record(*deltas: RecordDelta, **over: Any) -> Record:
 
 
 def test_a_surface_needs_a_platform_from_the_three_and_a_positive_extractor() -> None:
-    with pytest.raises(RecordError, match=r"0001-1\.json surface: no platform read it"):
+    with pytest.raises(RecordError, match=r"version 1 read: no platform read it"):
         _record(_delta(1, "1", _surface(platforms=())))
     with pytest.raises(RecordError, match=r"platform 'Plan 9' is not one of Linux"):
         _record(_delta(1, "1", _surface(platforms=("Plan 9",))))
@@ -99,26 +99,66 @@ def test_the_first_surface_names_the_help_and_withdraws_nothing() -> None:
 def test_a_restated_help_or_verb_is_refused_as_dead_data() -> None:
     first = _delta(1, "1", _surface())
     with pytest.raises(
-        RecordError, match=r"0002-2\.json surface: restates help as it inherits it"
+        RecordError, match=r"version 2 read: restates help as it inherits it"
     ):
         _record(first, _delta(2, "2", _surface(help="A tool.", verbs={})))
-    with pytest.raises(RecordError, match=r"restates verb 'build' as it inherits it"):
+    with pytest.raises(
+        RecordError, match=r"restates help of verb 'build' as it inherits"
+    ):
         _record(
             first,
             _delta(
                 2, "2", _surface(help=None, verbs={"build": _verb("clean", "output")})
             ),
         )
-    # Order inside a verb is layout, not content: the same options in
-    # another order restate the verb.
-    reordered = _verb("output", "clean")
-    with pytest.raises(RecordError, match=r"restates verb 'build'"):
-        _record(first, _delta(2, "2", _surface(help=None, verbs={"build": reordered})))
+    with pytest.raises(
+        RecordError, match=r"restates option 'clean' of verb 'build' as"
+    ):
+        _record(
+            first,
+            _delta(
+                2,
+                "2",
+                _surface(
+                    help=None,
+                    verbs={"build": {"options": {"clean": _option(flags=["--clean"])}}},
+                ),
+            ),
+        )
+    with pytest.raises(
+        RecordError, match=r"withdraws option 'x' of verb 'build', which"
+    ):
+        _record(
+            first,
+            _delta(
+                2, "2", _surface(help=None, verbs={"build": {"options": {"x": None}}})
+            ),
+        )
+    # A patch states only what moved, and the rest is inherited.
+    record = _record(
+        first,
+        _delta(
+            2,
+            "2",
+            _surface(
+                help=None,
+                verbs={"build": {"wraps": True, "options": {"output": None}}},
+            ),
+        ),
+    )
+    (one, two) = observations(record)
+    assert two.verbs["build"]["wraps"] is True
+    assert list(two.verbs["build"]["options"]) == ["clean"]
+    assert two.verbs["build"]["help"] == one.verbs["build"]["help"]
 
 
 def test_a_verb_off_the_shape_is_refused_naming_the_field() -> None:
-    with pytest.raises(RecordError, match=r"verb 'build': a verb carries exactly help"):
+    with pytest.raises(
+        RecordError, match=r"verb 'build': first appears without wraps, positional"
+    ):
         _record(_delta(1, "1", _surface(verbs={"build": {"help": "x"}})))
+    with pytest.raises(RecordError, match=r"verb 'build': a patch carries only help"):
+        _record(_delta(1, "1", _surface(verbs={"build": _verb(since="1")})))
     with pytest.raises(RecordError, match=r"verb 'build': wraps is not a boolean"):
         _record(_delta(1, "1", _surface(verbs={"build": _verb(wraps="no")})))
     with pytest.raises(RecordError, match=r"verb 'build': lead is not a string"):
@@ -166,7 +206,7 @@ def test_an_absence_names_what_the_version_has_and_who_read_it() -> None:
             _surface(
                 platforms=("Linux", "Windows"),
                 help=None,
-                verbs={"": _verb("quiet", "verbose")},
+                verbs={"": {"options": {"verbose": _option(flags=["--verbose"])}}},
                 absent={"build": {"": ("Windows",)}, "": {"verbose": ("Windows",)}},
             ),
         ),
@@ -174,33 +214,62 @@ def test_an_absence_names_what_the_version_has_and_who_read_it() -> None:
     assert surface_at(record, "2") is not None
 
 
-def test_surface_json_off_the_shape_is_refused_naming_where() -> None:
-    def load(surface: Any) -> RecordDelta:
-        return RecordDelta.from_json(
-            {"sequence": 1, "version": "1", "artifacts": {}, "surface": surface},
-            where="d",
-        )
+def test_a_patch_replaces_an_option_and_keeps_its_neighbours(tmp_path: Path) -> None:
+    """One option restated with a change moves alone; the file says just that."""
+    moved = _option(flags=["--clean", "-c"])
+    record = _record(
+        _delta(1, "1", _surface()),
+        _delta(
+            2, "2", _surface(help=None, verbs={"build": {"options": {"clean": moved}}})
+        ),
+    )
+    one, two = observations(record)
+    assert two.verbs["build"]["options"]["clean"]["flags"] == ["--clean", "-c"]
+    assert (
+        two.verbs["build"]["options"]["output"]
+        == one.verbs["build"]["options"]["output"]
+    )
+    record.save(tmp_path)
+    lines = [
+        json.loads(line) for line in (tmp_path / "tool.jsonl").read_text().splitlines()
+    ]
+    statements = [line for line in lines if "verb" in line]
+    assert statements[-1] == {"verb": "build", "option": "clean", **moved}
+    # A verb's whole absence is a line with no option, and reads back.
+    whole = _record(
+        _delta(1, "1", _surface(platforms=("Linux", "Windows"))),
+        _delta(
+            2,
+            "2",
+            _surface(
+                platforms=("Linux", "Windows"),
+                help=None,
+                verbs={"build": {"wraps": True}},
+                absent={"build": {"": ("Windows",)}},
+            ),
+        ),
+    )
+    whole.save(tmp_path)
+    lines = [
+        json.loads(line) for line in (tmp_path / "tool.jsonl").read_text().splitlines()
+    ]
+    assert lines[-1] == {"verb": "build", "absent": ["Windows"]}
+    assert Record.load(tmp_path / "tool.jsonl") == whole
 
-    with pytest.raises(RecordError, match=r"d surface: not a JSON object"):
-        load([])
-    with pytest.raises(RecordError, match=r"d surface: unknown keys since"):
-        load({"platforms": ["Linux"], "extractor": 1, "since": "1"})
-    with pytest.raises(RecordError, match=r"d surface: no platforms"):
-        load({"extractor": 1})
-    with pytest.raises(RecordError, match=r"d surface: extractor is not a positive"):
-        load({"platforms": ["Linux"], "extractor": True})
-    with pytest.raises(RecordError, match=r"d surface: verbs is not an object"):
-        load({"platforms": ["Linux"], "extractor": 1, "verbs": []})
-    with pytest.raises(RecordError, match=r"verb 'x' is neither an object nor null"):
-        load({"platforms": ["Linux"], "extractor": 1, "verbs": {"x": 1}})
-    with pytest.raises(RecordError, match=r"d surface: absent is not an object"):
-        load({"platforms": ["Linux"], "extractor": 1, "absent": []})
-    with pytest.raises(RecordError, match=r"absent\[x\] is not an object"):
-        load({"platforms": ["Linux"], "extractor": 1, "absent": {"x": []}})
-    with pytest.raises(RecordError, match=r"absent\[x\]\[y\]: not a list of strings"):
-        load({"platforms": ["Linux"], "extractor": 1, "absent": {"x": {"y": "Linux"}}})
-    with pytest.raises(RecordError, match=r"d surface help: not a string"):
-        load({"platforms": ["Linux"], "extractor": 1, "help": 1})
+
+def test_a_reading_below_prime_is_refused_and_prime_rides_the_axis(
+    tmp_path: Path,
+) -> None:
+    """Prime is the oldest version the history reaches; nothing below it is read."""
+    with pytest.raises(
+        RecordError, match=r"version 1: read below prime 2; the history"
+    ):
+        _record(_delta(1, "1", _surface()), _delta(2, "2", None), prime="2")
+    record = _record(_delta(1, "1", _surface()), prime="1")
+    record.save(tmp_path)
+    first = json.loads((tmp_path / "tool.jsonl").read_text().splitlines()[0])
+    assert first["prime"] == "1"
+    assert Record.load(tmp_path / "tool.jsonl").prime == "1"
 
 
 # --- inheritance ---------------------------------------------------------------
@@ -224,7 +293,7 @@ def test_a_version_inherits_every_verb_it_does_not_name_and_the_help() -> None:
                     platforms=("macOS",),
                     extractor=5,
                     help=None,
-                    verbs={"build": _verb("clean"), "run": _verb()},
+                    verbs={"build": {"options": {"output": None}}, "run": _verb()},
                 ),
             ),
             _delta(4, "4", _surface(help="A newer tool.", verbs={"run": None})),
@@ -244,7 +313,7 @@ def test_a_version_inherits_every_verb_it_does_not_name_and_the_help() -> None:
     assert three.help == "A tool."  # inherited
     assert sorted(three.verbs) == ["", "build", "run"]
     assert three.verbs[""] == one.verbs[""]  # inherited whole
-    assert list(three.verbs["build"]["options"]) == ["clean"]  # replaced whole
+    assert list(three.verbs["build"]["options"]) == ["clean"]  # output withdrawn
     assert (three.platforms, three.extractor, three.date) == (
         ("macOS",),
         5,
@@ -285,6 +354,7 @@ def test_an_observation_orders_verbs_and_options_by_name() -> None:
 
 
 def test_a_surface_round_trips_through_save_and_load_sparse(tmp_path: Path) -> None:
+    verbose = _option(flags=["--verbose"])
     record = _record(
         _delta(1, "1", _surface(platforms=("Linux", "Windows"))),
         _delta(
@@ -293,44 +363,44 @@ def test_a_surface_round_trips_through_save_and_load_sparse(tmp_path: Path) -> N
             _surface(
                 platforms=("Windows", "Linux"),
                 help=None,
-                verbs={"build": None, "": _verb("quiet", "verbose")},
+                verbs={"build": None, "": {"options": {"verbose": verbose}}},
                 absent={"": {"verbose": ("Windows",)}},
             ),
         ),
     )
-    record.save(tmp_path / "tool")
-    loaded = Record.load(tmp_path / "tool")
+    record.save(tmp_path)
+    loaded = Record.load(tmp_path / "tool.jsonl")
     assert loaded == record
     assert observations(loaded) == observations(record)
-    written = json.loads(
-        (tmp_path / "tool" / "deltas" / "0002-2.json").read_text("utf-8")
-    )
-    assert list(written) == ["sequence", "version", "date", "artifacts", "surface"]
-    assert list(written["surface"]) == ["platforms", "extractor", "verbs", "absent"]
-    assert written["surface"]["platforms"] == ["Windows", "Linux"]
-    assert list(written["surface"]["verbs"]) == ["", "build"]  # name order
-    assert written["surface"]["verbs"]["build"] is None
-    assert written["surface"]["absent"] == {"": {"verbose": ["Windows"]}}
-    first = json.loads(
-        (tmp_path / "tool" / "deltas" / "0001-1.json").read_text("utf-8")
-    )
-    assert first["surface"]["help"] == "A tool."
-    assert "absent" not in first["surface"]
+    lines = [
+        json.loads(line) for line in (tmp_path / "tool.jsonl").read_text().splitlines()
+    ]
+    first = lines[1]
+    assert list(first) == ["version", "date", "artifacts", "read"]
+    assert first["read"] == {
+        "platforms": ["Linux", "Windows"],
+        "extractor": 4,
+        "help": "A tool.",
+    }
+    second = next(line for line in lines if line.get("version") == "2")
+    assert list(second["read"]) == ["platforms", "extractor"]
+    assert second["read"]["platforms"] == ["Windows", "Linux"]
+    after = lines[lines.index(second) + 1 :]
+    assert after == [
+        {"verb": "", "option": "verbose", **verbose},
+        {"verb": "build", "gone": True},
+        {"verb": "", "option": "verbose", "absent": ["Windows"]},
+    ]
 
 
-def test_save_removes_a_delta_file_the_record_no_longer_names(tmp_path: Path) -> None:
+def test_save_replaces_the_file_whole(tmp_path: Path) -> None:
     _record(
         _delta(1, "1", _surface()), _delta(2, "2", _surface(help="B", verbs={}))
-    ).save(tmp_path / "tool")
+    ).save(tmp_path)
     # The same versions renumbered, as an older version arriving does.
     _record(
         _delta(1, "0", _surface()),
         _delta(2, "1", _surface(help="A", verbs={})),
         _delta(3, "2", _surface(help="B", verbs={})),
-    ).save(tmp_path / "tool")
-    assert sorted(p.name for p in (tmp_path / "tool" / "deltas").iterdir()) == [
-        "0001-0.json",
-        "0002-1.json",
-        "0003-2.json",
-    ]
-    assert Record.load(tmp_path / "tool").versions == ("0", "1", "2")
+    ).save(tmp_path)
+    assert Record.load(tmp_path / "tool.jsonl").versions == ("0", "1", "2")

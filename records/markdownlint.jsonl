@@ -1,0 +1,17 @@
+{"name": "markdownlint", "description": "", "kind": "bun-install", "min_version": "", "hosts": []}
+{"version": "0.18.1", "date": "2025-05-15", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": ""}}
+{"verb": "", "help": "", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "", "option": "config", "flags": ["--config"], "negation": "", "help": "specifies the path to a configuration file to define the base configuration", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "fix", "flags": ["--fix"], "negation": "", "help": "updates files to resolve fixable issues (can be overridden in configuration)", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "no_globs", "flags": ["--no-globs"], "negation": "", "help": "ignores the \"globs\" property if present in the top-level options object", "type": "bool", "default": null, "choices": []}
+{"version": "0.19.0", "date": "2025-11-13", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "", "option": "format", "flags": ["--format"], "negation": "", "help": "reads standard input (stdin), applies fixes, writes standard output (stdout)", "type": "bool", "default": null, "choices": []}
+{"version": "0.19.1", "date": "2025-11-22", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.20.0", "date": "2025-12-07", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.21.0", "date": "2026-02-15", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.22.0", "date": "2026-03-22", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "", "option": "configPointer", "flags": ["--configPointer", "--config"], "negation": "", "help": "specifies a JSON Pointer to a configuration object within the --config file", "type": "str", "default": null, "choices": []}
+{"version": "0.22.1", "date": "2026-04-22", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.23.0", "date": "2026-07-01", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.23.1", "date": "2026-07-17", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.23.2", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}

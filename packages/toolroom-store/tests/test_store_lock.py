@@ -88,7 +88,7 @@ def _delegated(name: str, *versions: str) -> Record:
 def _records(tmp_path: Path, *records: Record) -> Path:
     root = tmp_path / "records"
     for record in records:
-        record.save(root / record.name)
+        record.save(root)
     return root
 
 
@@ -679,7 +679,7 @@ def test_a_stub_is_rendered_from_the_index_and_refused_for_a_version_never_read(
             ),
         ),
     )
-    record.save(records / "ruff")
+    record.save(records)
     assert Catalogue.of_records(records).stub("ruff", "1.0.0") == text
     with pytest.raises(
         CatalogueError, match=r"ruff 2.0.0: never read; the versions read"
@@ -779,20 +779,20 @@ def test_the_fingerprint_moves_with_a_file_and_the_build_record_gates_on_it(tmp_
     from livery.toolroom.store import BUILD_FILE, build_current, tree_fingerprint
 
     records = tmp_path / "records"
-    (records / "ruff").mkdir(parents=True)
-    (records / "ruff" / "tool.json").write_text("{}")
+    records.mkdir(parents=True)
+    (records / "ruff.jsonl").write_text("{}")
     first = tree_fingerprint([records])
     assert first == tree_fingerprint([records])
     assert tree_fingerprint([tmp_path / "nowhere"]) != tree_fingerprint(
         [tmp_path / "elsewhere"]
     )
     stamp = time.time_ns() + 2_000_000_000
-    os.utime(records / "ruff" / "tool.json", ns=(stamp, stamp))
+    os.utime(records / "ruff.jsonl", ns=(stamp, stamp))
     assert tree_fingerprint([records]) != first
     # One file names itself, so a file and a directory of it differ.
-    one = tree_fingerprint([records / "ruff" / "tool.json"])
-    assert one == tree_fingerprint([records / "ruff" / "tool.json"])
-    assert one != tree_fingerprint([records / "ruff"])
+    one = tree_fingerprint([records / "ruff.jsonl"])
+    assert one == tree_fingerprint([records / "ruff.jsonl"])
+    assert one != tree_fingerprint([records])
 
     index = tmp_path / "index"
     index.mkdir()
@@ -809,5 +809,5 @@ def test_the_fingerprint_moves_with_a_file_and_the_build_record_gates_on_it(tmp_
     }
     (index / BUILD_FILE).write_text(json.dumps(document))
     assert build_current(index) is True
-    (records / "ruff" / "extra.json").write_text("{}")
+    (records / "extra.jsonl").write_text("{}")
     assert build_current(index) is False

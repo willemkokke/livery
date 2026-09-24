@@ -57,7 +57,7 @@ def _installable() -> Record:
 def _records(tmp_path: pathlib.Path, *records: Record) -> pathlib.Path:
     root = tmp_path / "records"
     for record in records:
-        record.save(root / record.name)
+        record.save(root)
     return root
 
 
@@ -86,8 +86,9 @@ def _read(store: Any, tree: Tree, *path: str) -> Any:
 
 def test_a_record_that_does_not_validate_refuses_the_build(tmp_path):
     root = _records(tmp_path, _installable())
-    (root / "tool" / "deltas" / "0002-1.1.0.json").write_text("{not json")
-    with pytest.raises(RecordError, match=r"0002-1\.1\.0\.json: not JSON"):
+    path = root / "tool.jsonl"
+    path.write_text(path.read_text(encoding="utf-8") + "{not json\n", encoding="utf-8")
+    with pytest.raises(RecordError, match=r"tool\.jsonl line \d+: not JSON"):
         _index.build(root, tmp_path / "index")
     assert not (tmp_path / "index" / _index.POINTER).exists()
 
@@ -176,7 +177,7 @@ def test_the_pointer_names_every_tool_and_the_record_it_was_built_from(tmp_path)
     assert list(pointer["tools"]) == ["other", "tool"]
     assert pointer["tools"]["tool"] == {
         "tree": built.tools["tool"],
-        "record": str(_index.record_digest(root / "tool")),
+        "record": str(_index.record_digest(root / "tool.jsonl")),
     }
     assert _index.read_pointer(tmp_path / "nowhere") is None
 
@@ -220,7 +221,7 @@ def test_a_new_delta_writes_only_the_objects_it_reaches(tmp_path):
         platforms=["Linux"],
     )
     assert grown is not None
-    grown.save(root / "other")
+    grown.save(root)
 
     after = _index.build(root, into)
     assert after.rebuilt == ("other",) and after.reused == ("tool",)
@@ -253,7 +254,6 @@ def test_a_reused_tool_is_rebuilt_when_its_tree_left_the_store(tmp_path):
 
 
 def test_a_record_that_went_is_dropped_from_the_pointer_and_the_refs(tmp_path):
-    import shutil
 
     root = _records(
         tmp_path,
@@ -262,7 +262,7 @@ def test_a_record_that_went_is_dropped_from_the_pointer_and_the_refs(tmp_path):
     )
     into = tmp_path / "index"
     _index.build(root, into)
-    shutil.rmtree(root / "other")
+    (root / "other.jsonl").unlink()
     built = _index.build(root, into)
     assert built.dropped == ("other",) and list(built.tools) == ["tool"]
     store = _index.open_index(into)
@@ -370,7 +370,7 @@ def test_a_build_after_which_nothing_moved_reads_no_record(tmp_path, monkeypatch
     assert again.reused == ("other", "ruff") and again.rebuilt == ()
 
     stamp = time.time_ns() + 2_000_000_000
-    os.utime(root / "ruff" / "tool.json", ns=(stamp, stamp))
+    os.utime(root / "ruff.jsonl", ns=(stamp, stamp))
     assert not build_current(into)
     third = _index.build(root, into)
     assert loads and third.reused == ("other", "ruff")  # same bytes: reused, but read

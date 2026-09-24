@@ -1,0 +1,39 @@
+{"name": "python", "description": "", "kind": "uv-python", "min_version": "", "hosts": []}
+{"version": "3.13.12", "date": "2026-03-25", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": ""}}
+{"verb": "", "help": "", "wraps": true, "positional": "any", "lead": ""}
+{"verb": "", "option": "B", "flags": ["-B"], "negation": "", "help": "don't write .pyc files on import; also PYTHONDONTWRITEBYTECODE=x", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "E", "flags": ["-E"], "negation": "", "help": "ignore PYTHON* environment variables (such as PYTHONPATH)", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "I", "flags": ["-I"], "negation": "", "help": "isolate Python from the user's environment (implies -E, -P and -s)", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "O", "flags": ["-O"], "negation": "", "help": "remove assert and __debug__-dependent statements; add .opt-1 before .pyc extension; also PYTHONOPTIMIZE=x", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "OO", "flags": ["-OO"], "negation": "", "help": "do -O changes and also discard docstrings; add .opt-2 before .pyc extension", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "P", "flags": ["-P"], "negation": "", "help": "don't prepend a potentially unsafe path to sys.path; also PYTHONSAFEPATH", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "S", "flags": ["-S"], "negation": "", "help": "don't imply 'import site' on initialization", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "V", "flags": ["-V"], "negation": "", "help": "print the Python version number and exit (also --version) when given twice, print more information about the build", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "W", "flags": ["-W"], "negation": "", "help": "warning control; arg is action:message:category:module:lineno also PYTHONWARNINGS=arg", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "X", "flags": ["-X"], "negation": "", "help": "set implementation-specific option", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "b", "flags": ["-b"], "negation": "", "help": "issue warnings about converting bytes/bytearray to str and comparing bytes/bytearray with str or bytes with int", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "c", "flags": ["-c"], "negation": "", "help": "program passed in as string (terminates option list)", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "check_hash_based_pycs", "flags": ["--check-hash-based-pycs"], "negation": "", "help": "control how Python invalidates hash-based .pyc files", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "d", "flags": ["-d"], "negation": "", "help": "turn on parser debugging output (for experts only, only works on debug builds); also PYTHONDEBUG=x", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "h", "flags": ["-h"], "negation": "", "help": "print this help message and exit (also -? or --help)", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "help_all", "flags": ["--help-all"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "help_env", "flags": ["--help-env"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "help_xoptions", "flags": ["--help-xoptions", "-X"], "negation": "", "help": "", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "i", "flags": ["-i"], "negation": "", "help": "inspect interactively after running script; forces a prompt even if stdin does not appear to be a terminal; also PYTHONINSPECT=x", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "m", "flags": ["-m"], "negation": "", "help": "run library module as a script (terminates option list)", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "q", "flags": ["-q"], "negation": "", "help": "don't print version and copyright messages on interactive startup", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "s", "flags": ["-s"], "negation": "", "help": "don't add user site directory to sys.path; also PYTHONNOUSERSITE=x", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "u", "flags": ["-u"], "negation": "", "help": "force the stdout and stderr streams to be unbuffered; this option has no effect on stdin; also PYTHONUNBUFFERED=x", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "v", "flags": ["-v"], "negation": "", "help": "verbose (trace import statements); also PYTHONVERBOSE=x can be supplied multiple times to increase verbosity", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "x", "flags": ["-x"], "negation": "", "help": "skip first line of source, allowing use of non-Unix forms of #!cmd", "type": "bool", "default": null, "choices": []}
+{"version": "3.13.13", "date": "2026-06-02", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "3.13.14", "date": "2026-07-28", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "3.13.15", "date": "2026-08-07", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 3}}
+{"version": "3.14.0", "date": "2025-11-20", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "3.14.1", "date": "2025-12-02", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "3.14.2", "date": "2026-01-27", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "3.14.3", "date": "2026-03-25", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "3.14.4", "date": "2026-04-14", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "3.14.5", "date": "2026-06-02", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "3.14.6", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "3.14.7", "date": "2026-08-07", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 3}}

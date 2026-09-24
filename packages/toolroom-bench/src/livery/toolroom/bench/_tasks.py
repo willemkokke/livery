@@ -40,7 +40,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 
 from livery.toolroom.bench import _drivers, _index, _surfaces
-from livery.toolroom.store import Catalogue, ToolSpec, class_name, render
+from livery.toolroom.store import (
+    RECORD_SUFFIX,
+    Catalogue,
+    ToolSpec,
+    class_name,
+    render,
+)
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -49,6 +55,7 @@ if TYPE_CHECKING:
     from livery.toolroom.store import Record
 
 import livery.toolroom.tools as _tools
+from livery.footman import fail
 from livery.footman._describe import bold, cyan, wants_color
 from livery.footman.context import current, data_dir, project_root
 from livery.footman.params import doc
@@ -87,7 +94,7 @@ class _Ambiguous(Exception):
 
 
 def _record_path(key: str) -> Path:
-    return _records_dir() / key
+    return _records_dir() / f"{key}{RECORD_SUFFIX}"
 
 
 def default_prefix() -> Path:
@@ -425,6 +432,7 @@ def _observe(driver: _drivers.Driver, spec: ToolSpec) -> Record:
             date=_today(),
             surface=surface,
             platforms=[_platform()],
+            prime=driver.provision.floor,
         )
     elif version in record.versions:
         # A reading of a version the record already holds: a re-sync on
@@ -2266,6 +2274,98 @@ def _discard(bindir: Path) -> None:
 
 
 index_tasks = tasks.group("index", help="The published index of the tool records")
+
+
+def convert_records(root: Path, *, primes: dict[str, str] | None = None) -> list[str]:
+    """Rewrite every directory record under *root* as its line form; the lines.
+
+    Each directory converts through the bench's own writer, the proof
+    compares every version's surface, absences, date, platforms and
+    extractor before and after, byte for byte through the canonical
+    encoding, and the directory goes only when they agree. *primes*
+    names the `prime` to stamp per tool. A tree with no directory
+    record is left alone, so a second run does nothing.
+
+    Raises:
+        Failed: naming the tool and the version, when a version does
+            not resolve the same after the conversion.
+    """
+    from livery.strongroom import canonical
+    from livery.toolroom.bench import _legacy
+    from livery.toolroom.store import Record, observations
+
+    directories = sorted(p for p in root.iterdir() if _legacy.is_directory_record(p))
+    lines: list[str] = []
+    for directory in directories:
+        name = directory.name
+        _, _, resolved = _legacy.read_directory(directory)
+        record = _legacy.convert(directory, prime=(primes or {}).get(name, ""))
+        record.save(root)
+        after = observations(Record.load(root / f"{name}{RECORD_SUFFIX}"))
+        before = [found for found in resolved if found is not None]
+        if len(before) != len(after):
+            fail(
+                f"{name}: {len(before)} version(s) read before the conversion,"
+                f" {len(after)} after"
+            )
+        for was, now in zip(before, after, strict=True):
+            if was.version != now.version or canonical(
+                {
+                    "date": was.date,
+                    "platforms": list(was.platforms),
+                    "extractor": was.extractor,
+                    "help": was.help,
+                    "verbs": was.verbs,
+                    "absent": {
+                        v: {o: list(w) for o, w in os.items()}
+                        for v, os in was.absent.items()
+                    },
+                }
+            ) != canonical(
+                {
+                    "date": now.date,
+                    "platforms": list(now.platforms),
+                    "extractor": now.extractor,
+                    "help": now.help,
+                    "verbs": now.verbs,
+                    "absent": {
+                        v: {o: list(w) for o, w in os.items()}
+                        for v, os in now.absent.items()
+                    },
+                }
+            ):
+                fail(f"{name} {was.version}: resolves differently after the conversion")
+        shutil.rmtree(directory)
+        lines.append(
+            f"  {name}: {len(after)} version(s) agree, {len(record.deltas)} tracked"
+        )
+    if directories:
+        lines.append(f"  {len(directories)} of {len(directories)} agree")
+    else:
+        lines.append("  nothing to convert: every record is a file")
+    return lines
+
+
+@tasks.task(name="convert-records")
+def tools_convert_records() -> None:
+    """Rewrite each `records/<tool>/` directory as `records/<tool>.jsonl`, once.
+
+    The proof prints per tool: every version resolves to the same
+    surface, absences and date afterwards, or the run is red naming the
+    version. A tree already converted does nothing. `prime` is stamped
+    from the driver's provision floor where one is declared, and the
+    schema beside the records is written afresh either way.
+    """
+    from livery.toolroom.store import export_schema
+
+    primes = {
+        driver.key: driver.provision.floor
+        for driver in _drivers.DRIVERS
+        if driver.provision.floor
+    }
+    for line in convert_records(_records_dir(), primes=primes):
+        print(line)
+    export_schema(_records_dir() / "record.schema.json")
 
 
 @index_tasks.task(name="build")

@@ -15,18 +15,14 @@ from pathlib import Path
 
 import pytest
 
-from livery.toolroom.store import Catalogue, Record, observations
+from livery.toolroom.store import Catalogue, Record, observations, records_in
 
 GOLDENS = Path(__file__).resolve().parent / "goldens"
 
 
 def golden_records() -> list[Record]:
     """The golden records, by name."""
-    return [
-        Record.load(path)
-        for path in sorted((GOLDENS / "records").iterdir())
-        if (path / "tool.json").is_file()
-    ]
+    return [Record.load(path) for path in records_in(GOLDENS / "records")]
 
 
 def golden_path(name: str, version: str) -> Path:

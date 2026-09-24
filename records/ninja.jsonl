@@ -1,0 +1,22 @@
+{"name": "ninja", "description": "", "kind": "uv-tool", "min_version": "", "hosts": []}
+{"version": "1.10.2.2", "date": "2021-10-04", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "if targets are unspecified, builds the 'default' target (see manual)."}}
+{"verb": "", "help": "if targets are unspecified, builds the 'default' target (see manual).", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "", "option": "C", "flags": ["-C"], "negation": "", "help": "change to DIR before doing anything else", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "d", "flags": ["-d"], "negation": "", "help": "enable debugging (use '-d list' to list modes)", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "f", "flags": ["-f"], "negation": "", "help": "specify input build file [default=build.ninja]", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "j", "flags": ["-j"], "negation": "", "help": "run N jobs in parallel (0 means infinity) [default=6 on this system]", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "k", "flags": ["-k"], "negation": "", "help": "keep going until N jobs fail (0 means infinity) [default=1]", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "l", "flags": ["-l"], "negation": "", "help": "do not start new jobs if the load average is greater than N", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "n", "flags": ["-n"], "negation": "", "help": "dry run (don't run commands but act like they succeeded)", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "t", "flags": ["-t"], "negation": "", "help": "run a subtool (use '-t list' to list subtools) terminates toplevel options; further flags are passed to the tool", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "verbose", "flags": ["--verbose", "-v"], "negation": "", "help": "show all command lines while building", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "w", "flags": ["-w"], "negation": "", "help": "adjust warnings (use '-w list' to list warnings)", "type": "str", "default": null, "choices": []}
+{"version": "1.10.2.3", "date": "2021-11-21", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "1.10.2.4", "date": "2022-09-28", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "1.11.1", "date": "2022-11-05", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "", "option": "quiet", "flags": ["--quiet"], "negation": "", "help": "don't show progress status, just command output", "type": "bool", "default": null, "choices": []}
+{"version": "1.11.1.1", "date": "2023-10-09", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "1.11.1.2", "date": "2024-11-23", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "1.11.1.3", "date": "2024-12-15", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "1.11.1.4", "date": "2025-03-22", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "1.13.0", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
