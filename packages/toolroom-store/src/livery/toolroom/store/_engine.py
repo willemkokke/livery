@@ -398,12 +398,10 @@ class Store:
         if present is not None:
             return present
         digest = Digest("sha256", deployment.sha256)
-        artifact = self._land(name, version, deployment.url, digest)
-        self._progress(Event(name, version, "install", str(digest)))
         scratch = self._scratch(name, version)
         try:
-            self._unpack(name, kind, deployment, artifact, scratch)
-            _exclude(deployment, scratch)
+            self.stage(name, kind, version, deployment, scratch)
+            self._progress(Event(name, version, "install", str(digest)))
             _apply_shims(deployment, scratch)
             _require_entry_points(name, version, self.host, deployment, scratch)
             _annotate_modes(deployment, scratch)
@@ -439,6 +437,43 @@ class Store:
         tool_dir.parent.mkdir(parents=True, exist_ok=True)
         self._objects.view(tree.digest(), tool_dir)
         return Ensured(name, version, True, tool_dir, deployment, tree.digest())
+
+    def stage(
+        self,
+        name: str,
+        kind: str,
+        version: str,
+        deployment: Deployment,
+        into: Path,
+        *,
+        exclude: bool = True,
+    ) -> tuple[str, ...]:
+        """Land *deployment*'s artifact and unpack it into *into*, installing nothing.
+
+        The artifact comes from the tiers and, unless offline, the
+        origin; an archive is extracted and its declared root hoisted,
+        a binary placed as its `exe`, and with *exclude* the
+        deployment's exclusion patterns are applied. No entry point is
+        required, no shim is made, no tree is collected and no ref is
+        set: this is the look a check takes at a deployment for any
+        host from any machine, and the first half of an install.
+
+        Returns:
+            Every member of the unpacked tree before exclusion, as
+            install-relative forward-slashed paths, in name order.
+
+        Raises:
+            StoreError: for a miss while offline, a mismatch at a tier,
+                an archive that will not extract, or a declared root
+                the archive lacks.
+        """
+        digest = Digest("sha256", deployment.sha256)
+        artifact = self._land(name, version, deployment.url, digest)
+        self._unpack(name, kind, deployment, artifact, into)
+        members = tuple(sorted(p.relative_to(into).as_posix() for p in into.rglob("*")))
+        if exclude:
+            _exclude(deployment, into)
+        return members
 
     # --- the delegated kinds --------------------------------------------------
 
