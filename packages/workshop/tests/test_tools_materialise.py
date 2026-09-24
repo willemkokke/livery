@@ -203,7 +203,7 @@ def test_a_system_tool_is_held_to_the_highest_floor_and_the_site_is_named(
     root = _workspace(tmp_path, monkeypatch)
     Record(
         "git", kind="system-check", min_version="2.40", deltas=_read("2.40.0", "2.55.0")
-    ).save(root / "records" / "git")
+    ).save(root / "records")
     contract = root / "workshop.toml"
     contract.write_text(contract.read_text().replace('"ruff"]', '"ruff", "git>=2.50"]'))
     _tools.write_lock(root)

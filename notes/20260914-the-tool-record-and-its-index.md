@@ -11,8 +11,9 @@ of 2026-09-23 the tickets phase 6 raised are resolved before phase 7;
 on 2026-09-24 livery#653, livery#649, livery#632, livery#639 and
 livery#597 landed, livery#651 and livery#560 are in flight, and
 livery#615 follows the deterministic ones. Phase 9, the record as one
-file per tool with one line per option, runs before phases 7 and 8 by
-the ruling of 2026-09-24.
+file per tool with one line per option, ran before phases 7 and 8 by
+the ruling of 2026-09-24 and landed the same day (livery#661): 38 of
+38 records agree, 1.1 MB in 38 files where 4.5 MB in 615 stood.
 Runs after [CI declared, contributed, and dispatched on command][ci-plan],
 which delivers the mechanism this plan's last phase uses.
 Subsumes phase 2 onward of [the tool store over strongroom][store-plan],
@@ -599,7 +600,7 @@ Acceptance:
 - The conversion's proof prints `38 of 38 agree` for surfaces, absences
   and dates, and `git diff --stat` on `records/` shows only deletions of
   `.json` and additions of `.jsonl`.
-- `du -sh records/` is under 1.5 MB.
+- `du -sh records/` is under 1.5 MB (1.1M on 2026-09-24).
 - `uv run fm tools.restub` and `uv run fm tools.index.build` run from
   the converted records and `uv run fm check` exits 0.
 
@@ -858,6 +859,19 @@ Acceptance:
   provision prefix was the store's home, `data_dir()/toolroom`, so a
   materialised store read as a provisioned prefix; the bench's prefix
   is `data_dir()/toolroom-bench` now.
+- 2026-09-24, on phase 9 (livery#661): the record is `records/<tool>.jsonl`,
+  the axis line, a version line per version and one statement line per
+  option, verb field, withdrawal or absence; the surface model is
+  sparse at the option (a verb patch), `Record.load`, `Record.save`,
+  `observations`, `surface_at`, `resolve` and `validate` keep their
+  names, and `records_in` lists a directory's record files. `prime`
+  rides the axis as data: the conversion stamped it from each driver's
+  provision floor, and a new record takes it from the same. The 38
+  records converted through `fm tools.convert-records` with the proof
+  printing 38 of 38 agree; the bench keeps the directory reader in
+  `_legacy` for that verb alone. Measured after: 598 version lines,
+  4402 option lines where 13515 option statements stood, `du -sh
+  records/` 1.1M where 4.5M stood.
 - 2026-09-24, on livery#632: pyrefly is curated beside ty, a PyPI wheel
   read at its `check` verb, 21 versions primed from 0.57.1, the python
   kind requires it and this repository locks it at 1.3.1. The ruling
