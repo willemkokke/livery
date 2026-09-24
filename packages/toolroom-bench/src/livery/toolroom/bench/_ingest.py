@@ -312,6 +312,9 @@ def _looks_executable(path: Path, *, windows: bool) -> bool:
     """Whether a file reads as executable for the host.
 
     The suffix decides for a Windows host and the mode bit elsewhere.
+    A POSIX host's tree unpacked on Windows carries no bit, so a stray
+    executable in it is not seen there; the refresh runs on a POSIX
+    runner, where every host's tree is judged.
 
     A Windows artifact inspected on another platform carries its
     suffixes; a POSIX artifact inspected on Windows carries no bit, so
