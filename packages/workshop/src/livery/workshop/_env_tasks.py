@@ -691,10 +691,11 @@ def env_check() -> int:
     resolve, and each one's receipt is named with its version; a
     receipt the lock has moved under is drift, a tool with no receipt
     that still resolves from PATH is named and not a problem, and a
-    miss prints the PATH breakdown and the remedy. The stubs under
-    `typings/` are counted, and their absence is a problem too.
+    miss prints the PATH breakdown and the remedy. With a lock, the
+    stubs under `typings/` are counted, and their absence is a problem
+    too.
     """
-    from livery.workshop._tools import TYPINGS, stubs_expected, stubs_present
+    from livery.workshop._tools import TYPINGS, current_lock, has_index, stubs_present
     from livery.workshop._tools import drift as receipt_drift
 
     root, _cwd = _workspace()
@@ -724,7 +725,7 @@ def env_check() -> int:
             " toolchain: xcode-select --install on macOS,"
             " build-essential on Debian)"
         )
-    if stubs_expected(root):
+    if has_index(root) and current_lock(root) is not None:
         held = stubs_present(root)
         if held:
             print(f"  stubs: {held} in {TYPINGS}/")

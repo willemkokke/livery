@@ -82,6 +82,13 @@ from livery.toolroom.store._record import (
     version_key,
 )
 from livery.toolroom.store._record import Delta as RecordDelta
+from livery.toolroom.store._spec import Option, ToolSpec, Verb
+from livery.toolroom.store._stub import (
+    NameCollision,
+    render,
+    render_observation,
+    spec_from,
+)
 
 __all__ = [
     "ARCHES",
@@ -117,7 +124,9 @@ __all__ = [
     "Lock",
     "LockError",
     "Locked",
+    "NameCollision",
     "Observation",
+    "Option",
     "Progress",
     "Record",
     "RecordDelta",
@@ -126,6 +135,8 @@ __all__ = [
     "Store",
     "StoreError",
     "Surface",
+    "ToolSpec",
+    "Verb",
     "__version__",
     "build_current",
     "class_name",
@@ -134,10 +145,13 @@ __all__ = [
     "host_key",
     "observations",
     "read_pointer",
+    "render",
+    "render_observation",
     "resolve",
     "resolve_lock",
     "schema",
     "silent",
+    "spec_from",
     "surface_at",
     "tree_fingerprint",
     "validate",

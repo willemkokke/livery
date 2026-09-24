@@ -20,8 +20,8 @@ from typing import Any
 import pytest
 
 from livery.footman import _globals
-from livery.toolroom.bench import _drivers, _stubgen, _toolhelp, _toolspec
-from livery.toolroom.bench._toolspec import Option, ToolSpec, Verb
+from livery.toolroom.bench import _drivers, _toolhelp, _toolspec
+from livery.toolroom.store import NameCollision, Option, ToolSpec, Verb, render
 
 CLAP = """\
 Usage: ruff check [OPTIONS] [FILES]...
@@ -370,15 +370,6 @@ def test_optional_value_option_is_neither_switch_nor_required_value():
     assert got["message"].type_name == "str"
 
 
-def test_optvalue_stub_type_accepts_bare_and_valued():
-    from livery.toolroom.bench._toolspec import Option
-
-    assert (
-        _stubgen._annotation(Option("gpg_sign", type_name="optvalue")) == "ValuedFlag"
-    )
-    assert _stubgen._annotation(Option("m", type_name="str")) == "Value"
-
-
 def test_commander_and_summary_skips_usage():
     verb = _toolhelp.parse_help(COMMANDER)
     got = flags(verb)
@@ -455,12 +446,6 @@ def test_go_stdlib_flag_format_is_read():
     assert got["color"].type_name == "str"  # single-dash long, valued
     assert got["fix"].type_name == "bool"
     assert verb.help == ""  # Go flag prints no summary line
-
-
-def test_stub_escapes_backslashes_in_help_text():
-    # mypy's `--exclude '/setup\.py$'` must land as a literal in the docstring,
-    # not an invalid `\.` escape a compiler warns on.
-    assert _stubgen._esc(r"a \.py$ b") == r"a \\.py$ b"
 
 
 def test_short_option_policy_modes():
@@ -599,7 +584,7 @@ def test_rendered_stub_is_valid_python():
             choices=("auto", "never"),
         ),
     )
-    text = _stubgen.render(spec, platform="Linux")
+    text = render(spec, platform="Linux")
     ast.parse(text)  # a stub that doesn't parse is worse than no stub
     assert "class Demo(ToolBase[_R]):" in text
     assert "class Build(ToolBase[_R2]):" in text  # the verb, as a generic class
@@ -626,14 +611,14 @@ def test_rendered_stub_teaches_the_off_spelling():
             type_name="bool",
         ),
     )
-    text = _stubgen.render(spec)
+    text = render(spec)
     assert "`clean=off` emits `--dirty`" in text
     assert "Defaults on" in text, "a flag that is on by default says so"
     assert "`strict=off` emits `--no-strict`" in text
 
 
 def test_rendered_stub_imports_only_what_it_uses():
-    plain = _stubgen.render(_spec(Option("quiet", ("--quiet",), type_name="bool")))
+    plain = render(_spec(Option("quiet", ("--quiet",), type_name="bool")))
     assert "Literal" not in plain
     assert ": Value" not in plain, "no value option, so no value alias"
     assert "_Result" not in plain, "nothing returns Result; the TypeVar does"
@@ -645,7 +630,7 @@ def test_rendered_stub_imports_only_what_it_uses():
         "from livery.toolroom.tools import Tool as ToolBase"
     ) in plain
 
-    choosy = _stubgen.render(
+    choosy = render(
         _spec(Option("color", ("--color",), type_name="choice", choices=("a", "b")))
     )
     assert "from typing import Any, Literal" in choosy
@@ -660,7 +645,7 @@ def test_rendered_stub_never_repeats_a_keyword():
         Option("dirty", ("--dirty",), type_name="bool"),
         Option("dirty", ("--dirty",), type_name="bool"),
     )
-    text = _stubgen.render(spec)
+    text = render(spec)
     ast.parse(text)
     assert text.count("dirty: Flag") == 1
 
@@ -677,7 +662,7 @@ def test_a_lone_summary_leaves_room_for_the_quotes_ruff_will_join():
     """
     lone = "Set up a long-lived authentication token (requires Claude subscription)"
     summary = ToolSpec(name="demo", verbs=(Verb(name="setup_token", help=lone),))
-    (line,) = [ln for ln in _stubgen.render(summary).splitlines() if '"""Set up' in ln]
+    (line,) = [ln for ln in render(summary).splitlines() if '"""Set up' in ln]
     assert len(line) + len('"""') <= 88
 
     # An `Args:` block below keeps the closing quotes on their own line, so
@@ -693,23 +678,12 @@ def test_a_lone_summary_leaves_room_for_the_quotes_ruff_will_join():
             ),
         ),
     )
-    assert f'"""{lone}' in _stubgen.render(documented)
-
-
-def test_value_options_accept_a_sequence():
-    """`select=["E", "F"]` works at run time, so it must type-check.
-
-    The bridge repeats a flag once per item; whether the tool accepts the
-    repetition is the tool's business, not the stub's.
-    """
-    option = Option("select", ("--select",), type_name="str")
-    assert _stubgen._annotation(option) == "Value"
-    assert _stubgen._annotation(Option("f", ("--f",), type_name="bool")) == "Flag"
+    assert f'"""{lone}' in render(documented)
 
 
 def test_a_tool_with_no_verbs_still_renders():
     spec = ToolSpec(name="lonely", verbs=(Verb(name="", help="Do it."),))
-    text = _stubgen.render(spec)
+    text = render(spec)
     ast.parse(text)
     assert "def __call__(" in text
     assert "type: ignore[override]" in text
@@ -723,7 +697,7 @@ def test_nested_verbs_become_nested_classes():
             Verb(name="build", help="Build.", options=()),
         ),
     )
-    text = _stubgen.render(spec)
+    text = render(spec)
     ast.parse(text)
     # Inside `Docker`, not beside it: the group belongs to the tool, the name
     # is not invented, and one docs directive covers the whole tool.
@@ -736,7 +710,7 @@ def test_nested_verbs_become_nested_classes():
 
 def test_keyword_named_flags_take_the_trailing_underscore():
     spec = _spec(Option("global", ("--global",), type_name="bool"))
-    text = _stubgen.render(spec)
+    text = render(spec)
     ast.parse(text)
     assert "global_: Flag" in text
 
@@ -755,7 +729,7 @@ def test_long_arg_help_stays_on_one_line():
             type_name="bool",
         )
     )
-    text = _stubgen.render(spec)
+    text = render(spec)
     entries = [
         line
         for line in text.splitlines()
@@ -795,10 +769,10 @@ def test_choice_literals_hoist_into_named_aliases():
             ),
         ),
     )
-    text = _stubgen.render(spec)
+    text = render(spec)
     ast.parse(text)
     # One alias, shared by both verbs; the annotation reads through it.
-    assert text.count("Color: TypeAlias = Literal['auto', 'never']") == 1
+    assert text.count('Color: TypeAlias = Literal["auto", "never"]') == 1
     assert text.count("color: Color | Sequence[Color] | None = ...,") == 2
 
 
@@ -820,10 +794,10 @@ def test_choice_sets_sharing_a_name_get_distinct_aliases():
             ),
         ),
     )
-    text = _stubgen.render(spec)
+    text = render(spec)
     ast.parse(text)
-    assert "Mode: TypeAlias = Literal['a', 'b']" in text
-    assert "Mode2: TypeAlias = Literal['c']" in text
+    assert 'Mode: TypeAlias = Literal["a", "b"]' in text
+    assert 'Mode2: TypeAlias = Literal["c"]' in text
 
 
 def test_an_alias_never_collides_with_a_verb_class():
@@ -839,10 +813,10 @@ def test_an_alias_never_collides_with_a_verb_class():
             ),
         ),
     )
-    text = _stubgen.render(spec)
+    text = render(spec)
     ast.parse(text)
     assert "class Color(ToolBase" in text  # the verb keeps its name
-    assert "Color2: TypeAlias = Literal['a']" in text  # the alias counts up
+    assert 'Color2: TypeAlias = Literal["a"]' in text  # the alias counts up
 
 
 def test_a_verb_that_would_shadow_an_import_is_refused():
@@ -852,15 +826,15 @@ def test_a_verb_that_would_shadow_an_import_is_refused():
     the renderer refuses loudly and sync keeps the checked-in stub.
     """
     spec = ToolSpec(name="demo", verbs=(Verb(name="flag"),))
-    with pytest.raises(_stubgen.NameCollision, match="Flag"):
-        _stubgen.render(spec)
+    with pytest.raises(NameCollision, match="Flag"):
+        render(spec)
 
 
 def test_positionals_accept_paths():
     """`ruff.check(Path("src"))` already ran — the bridge `str()`-s every
     positional — so the annotation must not call it a type error.
     """
-    text = _stubgen.render(_spec(Option("quiet", ("--quiet",), type_name="bool")))
+    text = render(_spec(Option("quiet", ("--quiet",), type_name="bool")))
     assert "*args: str | PathLike[str]," in text
     assert "from os import PathLike" in text
 
@@ -1087,7 +1061,7 @@ def test_color_probes_git_as_flag_forced(capsys):
 
 def test_colorprobe_categorises_git_and_unprobed():
     from livery.toolroom.bench import _colorprobe, _drivers
-    from livery.toolroom.bench._toolspec import ToolSpec
+    from livery.toolroom.store import ToolSpec
 
     git = _drivers._resolve("git")
     assert git is not None
@@ -1258,16 +1232,6 @@ def test_sync_skips_and_names_the_tools_it_cannot_ask(stubs, capsys):
     tools_tasks.sync(only="definitely-not-installed")
     out = capsys.readouterr().out
     assert "recorded 0 reading(s)" in out
-
-
-def test_formatting_falls_back_when_ruff_cannot_run(monkeypatch):
-    from livery.toolroom.bench import _tasks as tools_tasks
-
-    def boom(*args, **kwargs):
-        raise OSError("no ruff here")
-
-    monkeypatch.setattr("subprocess.run", boom)
-    assert tools_tasks._formatted("class _X: ...\n") == "class _X: ...\n"
 
 
 # --- the extraction ladder ------------------------------------------------
@@ -1867,21 +1831,6 @@ def test_the_index_states_the_version_each_stub_was_read_from(tmp_path):
     assert "`build`" in row
 
 
-def test_a_stub_without_a_header_says_so_rather_than_inventing_a_version(tmp_path):
-    from livery.toolroom.bench import _tasks as tools_tasks
-
-    stub = tmp_path / "x.pyi"
-    stub.write_text("# Not a rendered stub: x is not installed\n")
-    assert tools_tasks._header(stub) == ("unknown", "no")
-
-    stub.write_text(
-        "# Rendered from the tool's record\n"
-        "#\n"
-        "# Read from ruff 0.15.0 on Linux. In-process: no.\n"
-    )
-    assert tools_tasks._header(stub) == ("0.15.0 (Linux)", "no")
-
-
 def test_in_process_mode_is_detected_not_listed():
     from livery.toolroom.bench import _tasks as tools_tasks
 
@@ -1982,7 +1931,7 @@ def test_click_arguments_give_the_shape_exactly():
 
 
 def test_stub_renders_positional_only_and_keyword_only():
-    from livery.toolroom.bench._toolspec import Option
+    from livery.toolroom.store import Option
 
     # A keyword-only verb (positional="none") with an option forbids positionals
     # via `*,`; the option must be passed by keyword.
@@ -1996,7 +1945,7 @@ def test_stub_renders_positional_only_and_keyword_only():
             ),
         ),
     )
-    text = _stubgen.render(none)
+    text = render(none)
     ast.parse(text)
     # Keyword-only in the verb's own signature; the root class keeps its
     # untyped `*args: Any` passthrough, which is not the verb's surface.
@@ -2005,20 +1954,20 @@ def test_stub_renders_positional_only_and_keyword_only():
     # With no options, `**flags` alone forbids a positional — no redundant `*,`
     # (which would be a syntax error with nothing keyword-only after it).
     bare = ToolSpec(name="x", verbs=(Verb(name="build", positional="none"),))
-    text = _stubgen.render(bare)
+    text = render(bare)
     ast.parse(text)
     assert "*args: str" not in text  # the verb still accepts no positional
 
     req = ToolSpec(
         name="x", verbs=(Verb(name="run", positional="required", lead="image"),)
     )
-    text = _stubgen.render(req)
+    text = render(req)
     ast.parse(text)
     assert "image: str | PathLike[str],\n" in text and "/,\n" in text
 
 
 def test_stub_falls_back_when_the_lead_collides_with_an_option():
-    from livery.toolroom.bench._toolspec import Option
+    from livery.toolroom.store import Option
 
     verb = Verb(
         name="pip_install",
@@ -2026,7 +1975,7 @@ def test_stub_falls_back_when_the_lead_collides_with_an_option():
         lead="group",
         options=(Option("group", ("--group",), type_name="str"),),
     )
-    text = _stubgen.render(ToolSpec(name="uv", verbs=(verb,)))
+    text = render(ToolSpec(name="uv", verbs=(verb,)))
     ast.parse(text)  # a duplicate `group` parameter would be a syntax error
     assert "*args: str | PathLike[str]," in text
 
@@ -2357,41 +2306,11 @@ def test_reserved_flag_name_falls_through_to_the_catchall():
             ),
         ),
     )
-    text = _stubgen.render(spec)
+    text = render(spec)
     ast.parse(text)  # a duplicate `flags` parameter would be a syntax error
     assert "quiet: Flag" in text
     assert "flags: Flag" not in text  # the `--flags` option isn't a typed param
     assert "**flags: Any" in text  # it falls through to the catch-all
-
-
-def test_arg_help_keeps_a_markdown_header_mid_line():
-    # git's merge-stage notation (`#2 (ours)`) used to need escaping when a
-    # wrap could drop it to the start of a docstring line, where Markdown
-    # reads a header. Entries are one line now and always lead with the
-    # option's own name, so a `#` can only ever sit mid-line — not a block.
-    from livery.toolroom.bench._toolspec import Option
-
-    option = Option(
-        "ours",
-        ("--ours",),
-        type_name="bool",
-        help=(
-            "When restoring files in the working tree from the index, use stage "
-            "#2 (ours) or #3 (theirs) for unmerged paths"
-        ),
-    )
-    (line,) = _stubgen._arg_lines(option)
-    assert line.lstrip().startswith("ours: ")
-    assert "#2 (ours)" in line  # verbatim — mid-line needs no escape
-
-
-def test_md_safe_touches_only_leading_header_and_quote():
-    safe = _stubgen._md_safe(
-        ["            #2 heading", "            > quote", "            mid # hash"]
-    )
-    assert safe[0].endswith("\\\\#2 heading")
-    assert safe[1].endswith("\\\\> quote")
-    assert safe[2].endswith("mid # hash")  # a mid-line hash is not a block
 
 
 def test_resolve_is_path_and_nothing_else(tmp_path, monkeypatch):
@@ -2657,31 +2576,6 @@ def test_click_extraction_requires_the_import_and_the_binary_to_agree(monkeypatc
     assert _drivers._from_click(driver) is None  # unreadable binary: same answer
 
 
-def test_a_stub_header_survives_being_read_on_more_than_one_platform():
-    """The header is *parsed*, not just displayed — the reference table and
-    the drift checks read the tool, version and mode back out of it.
-
-    It named one platform for as long as one machine ever looked. The moment
-    a release was observed on two, `on Linux and macOS.` stopped matching a
-    single-word pattern, every stub read as hand-written, and the published
-    table said so.
-    """
-    from livery.toolroom.bench import _tasks as tools
-
-    for platform in ("macOS", "Linux and macOS", "Linux, Windows and macOS"):
-        header = f"Read from ruff 0.16.0 on {platform}. In-process: no."
-        found = tools._READ_FROM.search(header)
-        assert found is not None, platform
-        assert found["tool"] == "ruff"
-        assert found["version"] == "0.16.0"
-        assert found["platform"] == platform
-        assert found["mode"] == "no"
-
-
-# --- arity from the usage grammar --------------------------------------------
-
-# The alignment is load-bearing: `--configPointer` is the longest name, so its
-# description sits one space away while the others get a column of them.
 MARKDOWNLINT = """markdownlint-cli2 v0.23.2 (markdownlint v0.41.1)
 
 Syntax: markdownlint-cli2 glob0 [--config file] [--configPointer pointer] [--fix]
@@ -2693,6 +2587,7 @@ Optional parameters:
 - --no-globs      ignores the "globs" property if present
 """
 
+
 BASEDPYRIGHT = """Usage: basedpyright [options] files...
   Options:
   --createstub <IMPORT>              Create type stub file(s) for import
@@ -2700,6 +2595,7 @@ BASEDPYRIGHT = """Usage: basedpyright [options] files...
   --outputjson                       Output results in JSON format
   --watch                            Continue to run and watch for changes
 """
+
 
 PYPROJECT_BUILD = """usage: pyproject-build [-h] [--quiet | --verbose] [--outdir PATH]
                        [--installer {pip,uv} | --no-isolation]

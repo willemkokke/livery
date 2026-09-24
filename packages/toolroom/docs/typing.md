@@ -24,7 +24,8 @@ Stub drift therefore degrades a hint, never a run.
 The wheel ships the vocabulary alone: `tools/__init__.pyi` declares
 `Tool`, `Argv`, `Result`, the aliases below, and a `__getattr__` that
 answers every tool name with a `Tool[Result]`. The per-tool classes are
-rendered from the tool records into a workspace's `typings/` directory,
+rendered by `livery-toolroom-store` from the tool records, or from the
+published index, into a workspace's `typings/` directory,
 pyright's default stub path and a search path the workspace's rendered
 configuration hands mypy, ty and pyrefly: `fm tools.restub` writes one
 stub per tool the workspace locks, at the locked version, as
@@ -36,9 +37,9 @@ its handle is a bare `Tool`, which forbids nothing and completes
 nothing. `fm sync` and the lock verbs write them too, and the
 workspace's entry script writes them before its type checkers run.
 
-The docs playground reads the same stubs from the index the site
-serves beside it, written into the package it installs, since an
-editor's completer reads a stub only from inside the package.
+The docs playground renders the same stubs from the index the site
+serves beside it, into the package it installs, since an editor's
+completer reads a stub only from inside the package.
 
 Each stub's header records the tool version and the platforms it was
 read on. The records, their readings and the index that renders them

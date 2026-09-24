@@ -34,17 +34,17 @@ and its verbs mount under `fm tools.*`:
   tools and the records back.
 - `fm tools.index.build` materialises every record into the index, a
   strongroom store served as static files with a pointer document
-  naming each tool's current tree; the bench declares it as a docs
+  naming each tool's current tree, each version's surface one blob; the bench declares it as a docs
   generator, so the site's build writes it under
   `docs/_generated/index` and the site's deploy serves it.
 - `fm tools.docs` writes the per-tool pages into toolroom's docs
   tree, with the stubs they point at rendered beside them; toolroom
   declares it as its docs generator.
 
-A stub is a rendering of a record. The index build renders one per
-version read, and a workspace materialises the ones it uses with the
-workshop's `fm tools.restub`; nothing in the bench writes a stub into
-a package.
+A stub is a rendering of a record, and the store renders it from a
+version's own surface: a workspace renders the versions it locks with
+the workshop's `fm tools.restub`, the docs pages render the union of
+every version read, and nothing, the index included, holds a stub.
 
 The bench depends on `livery-toolroom`, `livery-toolroom-store` and
 `livery-footman` and loads only through footman's plugin entry.
@@ -70,26 +70,13 @@ version is addressable with no replay. The pointer names each tool's
 current tree and the digest of the record it was built from; everything
 under a tree is immutable, and only the pointer needs a short lifetime.
 
-Beside the authored trees the build lands one derived tree,
-`stubs/<tool>/<version>`: the stub a reader at that version gets,
-rendered from the union of every version read up to that one, so a
-flag the tool later dropped stays completable and its docstring says
-when it went. The pointer names the derived tree and records the
-renderer's identity, the digest of the code that renders, as a fact
-rather than an address; a build after the renderer moved renders every
-stub again and the blobs it replaced stay reachable by digest.
-`fm tools.goldens` keeps a render change deliberate: two golden records
-beside the bench's tests render to checked-in golden stubs, the gate
-compares each render byte for byte, and a change to the renderer fails
-until that verb moves the goldens in the same change.
-
-The authored half replays to identical digests: two builds from genesis
+The build replays to identical digests: two builds from genesis
 land equal objects and an equal pointer. A build into a directory that
 holds an earlier build reads its pointer and reuses every tool whose
-record did not move, and a build whose records directory and renderer
-sources are unmoved since the last, by the stat fingerprint the build
-keeps in `build.json` beside the pointer, reads no record at all and
-answers from the pointer, which is an optimisation and never authority;
+record did not move, and a build whose records directory is unmoved
+since the last, by the stat fingerprint the build keeps in `build.json`
+beside the pointer, reads no record at all and answers from the
+pointer, which is an optimisation and never authority;
 `--from-genesis` ignores the pointer and materialises every tool from
 the records alone. A tool the pointer named and no record has is
 dropped from the pointer and its ref.

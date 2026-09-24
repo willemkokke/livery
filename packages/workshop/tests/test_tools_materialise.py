@@ -208,8 +208,9 @@ def test_sync_materialises_the_bundle_from_the_folder_source_with_no_network(
     _tools.write_lock(root)
     lines = _sync.materialise_tools(root)
     assert lines[0] == "  tools: 2 receipt(s), installed ruff, tea"
-    # The stubs follow the bundle and never stop it: this source is records.
-    assert lines[1].startswith("  stubs: not written: [tools] index names records")
+    # The stubs follow the bundle: ruff was read, tea only ever downloaded.
+    assert lines[1] == "  stubs: 1 in typings/, wrote 1"
+    assert lines[2].startswith("  stubs: tea: tea 1.0.0: never read")
     held = _tools.receipts(root)
     assert set(held) == {"ruff", "tea"}
     tea = held["tea"]
@@ -293,10 +294,14 @@ def test_env_check_names_each_receipt_and_the_drift_under_it(
     out = capsys.readouterr().out
     assert "tea: on PATH; not locked; run `fm tools.lock`" in out
     _tools.write_lock(root)
+    # A lock expects stubs; without them the check names the remedy.
+    assert _env_tasks.env_check() == 1
+    assert "stubs: MISSING; run `fm tools.restub`" in capsys.readouterr().out
+    _tools.write_stubs(root)
     assert _env_tasks.env_check() == 0
-    assert (
-        "ruff: on PATH; no receipt for 0.16.0; run `fm sync`" in capsys.readouterr().out
-    )
+    out = capsys.readouterr().out
+    assert "ruff: on PATH; no receipt for 0.16.0; run `fm sync`" in out
+    assert "stubs: 1 in typings/" in out
     _tools.materialise(root)
     assert _env_tasks.env_check() == 0
     out = capsys.readouterr().out

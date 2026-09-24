@@ -80,8 +80,8 @@ that has a surface, in sequence.
 A consumer resolves against the catalogue, never against a record. The
 catalogue lists every tool with its versions in order, per version the
 hosts it has an artifact for with the digest of each host's deployment,
-and per version read the digest of its stub in the index. It is read
-on demand, the pointer first, a tool's tree when the tool is asked for
+and per version read its surface, from which the store renders that
+version's stub. It is read on demand, the pointer first, a tool's tree when the tool is asked for
 and a version's hosts when a lock needs them, from the published
 index, by URL or from a directory holding one,
 through the machine's store, which keeps what it fetched so a second

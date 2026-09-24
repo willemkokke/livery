@@ -12,8 +12,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from livery.toolroom.bench import _surfaces
-from livery.toolroom.bench._toolspec import Option, ToolSpec, Verb
-from livery.toolroom.store import Record
+from livery.toolroom.store import Option, Record, ToolSpec, Verb
 
 
 def spec_of(**over: Any) -> ToolSpec:

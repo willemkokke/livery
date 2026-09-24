@@ -262,7 +262,6 @@ nav = [
             { "livery.toolroom.bench._drivers" = "_generated/api/toolroom-bench/_drivers.md" },
             { "livery.toolroom.bench._index" = "_generated/api/toolroom-bench/_index.md" },
             { "livery.toolroom.bench._provision" = "_generated/api/toolroom-bench/_provision.md" },
-            { "livery.toolroom.bench._stubgen" = "_generated/api/toolroom-bench/_stubgen.md" },
             { "livery.toolroom.bench._surfaces" = "_generated/api/toolroom-bench/_surfaces.md" },
             { "livery.toolroom.bench._tasks" = "_generated/api/toolroom-bench/_tasks.md" },
             { "livery.toolroom.bench._toolfetch" = "_generated/api/toolroom-bench/_toolfetch.md" },
@@ -281,6 +280,8 @@ nav = [
             { "livery.toolroom.store._home" = "_generated/api/toolroom-store/_home.md" },
             { "livery.toolroom.store._lock" = "_generated/api/toolroom-store/_lock.md" },
             { "livery.toolroom.store._record" = "_generated/api/toolroom-store/_record.md" },
+            { "livery.toolroom.store._spec" = "_generated/api/toolroom-store/_spec.md" },
+            { "livery.toolroom.store._stub" = "_generated/api/toolroom-store/_stub.md" },
         ] },
     ] },
     { "workshop" = [

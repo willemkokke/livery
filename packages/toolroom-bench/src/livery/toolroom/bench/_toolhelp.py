@@ -42,7 +42,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from livery.toolroom.bench._toolspec import Option, ToolSpec, Verb
+from livery.toolroom.store import Option, ToolSpec, Verb
 
 if TYPE_CHECKING:
     from livery.footman.context import Result

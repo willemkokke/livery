@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from livery.toolroom.bench._toolspec import Option, ToolSpec, Verb
+from livery.toolroom.store import Option, ToolSpec, Verb
 from toolroom_bench_readings import (
     chain_of,
     gathered,
