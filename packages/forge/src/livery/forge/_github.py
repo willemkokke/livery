@@ -200,9 +200,7 @@ class GithubForge:
         resolved = _resolve_token() if token is None else token
         if token is None and not resolved:
             raise ForgeError(
-                "no GitHub credential: set GITHUB_TOKEN or sign in with"
-                ' `gh auth login`, or pass token="" to read anonymously'
-                " on purpose"
+                "no GitHub credential: set GITHUB_TOKEN or sign in with `gh auth login`"
             )
         return cls(api, token=resolved, opener=opener)
 

@@ -174,6 +174,61 @@ def test_github_token_resolution_walks_its_ladder(
         GithubForge.connect()
 
 
+def test_gitlab_token_resolution_walks_its_ladder_and_gitea_has_no_cli(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The three refusals share one shape: no <forge> credential, then the ways in."""
+    from livery.forge import GiteaForge, GitlabForge
+
+    monkeypatch.delenv("GITLAB_TOKEN", raising=False)
+    asked: list[list[str]] = []
+
+    def minted(
+        args: Any, *rest: Any, **kwargs: Any
+    ) -> subprocess.CompletedProcess[str]:
+        asked.append(list(args))
+        return subprocess.CompletedProcess(args=[], returncode=0, stdout="glab-tok\n")
+
+    monkeypatch.setattr(subprocess, "run", minted)
+    forge = GitlabForge.connect(url="https://gitlab.example.com:8443/")
+    assert forge.token == "glab-tok"
+    assert asked == [
+        ["glab", "config", "get", "token", "--host", "gitlab.example.com:8443"]
+    ]
+
+    def refused(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args=[], returncode=1, stdout="")
+
+    monkeypatch.setattr(subprocess, "run", refused)
+    with pytest.raises(
+        ForgeError,
+        match=r"^no GitLab credential: set GITLAB_TOKEN or sign in with `glab auth"
+        r" login`$",
+    ):
+        GitlabForge.connect(url="https://gitlab.com")
+
+    def absent(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        raise OSError("no glab on PATH")
+
+    monkeypatch.setattr(subprocess, "run", absent)
+    with pytest.raises(ForgeError, match="GITLAB_TOKEN"):
+        GitlabForge.connect(url="https://gitlab.com")
+    monkeypatch.setenv("GITLAB_TOKEN", "from-env")
+    assert GitlabForge.connect(url="https://gitlab.com").token == "from-env"
+    # A GitHub refusal reads the same way.
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    with pytest.raises(
+        ForgeError,
+        match=r"^no GitHub credential: set GITHUB_TOKEN or sign in with `gh auth"
+        r" login`$",
+    ):
+        GithubForge.connect()
+    # Gitea: no CLI hands out a token, so the variable is the whole ladder.
+    monkeypatch.delenv("GITEA_TOKEN", raising=False)
+    with pytest.raises(ForgeError, match=r"^no Gitea credential: set GITEA_TOKEN$"):
+        GiteaForge.connect(url="https://gitea.example.com")
+
+
 def test_an_enterprise_url_gets_its_api_root() -> None:
     forge = GithubForge.connect(url="https://ghe.example", token="t")
     assert forge._client.api_base == "https://ghe.example/api/v3"

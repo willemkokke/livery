@@ -10,7 +10,8 @@ subgroup path. The full endpoint mapping is the package's
 
 Construction and the token rule: livery.forge.GitlabForge.connect
 resolves the server once, an explicit ``url`` beating the configured
-``GITLAB_URL``, and reads ``GITLAB_TOKEN`` unless a token is passed.
+``GITLAB_URL``, and reads ``GITLAB_TOKEN``, then the token ``glab``
+holds for the host, unless a token is passed.
 The token belongs to the configured host and no other.
 
 Capabilities: ``auto_merge`` (merge when pipeline succeeds),
@@ -26,10 +27,11 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 import time
 from collections.abc import Mapping
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 from livery.forge._errors import ForgeError, Unsupported
 from livery.forge._http import JsonClient, Opener
@@ -118,6 +120,35 @@ def _maskable(value: str) -> bool:
     return len(value) >= 8 and re.fullmatch(r"[A-Za-z0-9+/=@:.~_-]+", value) is not None
 
 
+def _resolve_token(web: str) -> str:
+    """``GITLAB_TOKEN`` first, then the token ``glab`` holds for *web*'s host.
+
+    Empty when neither answers.
+    """
+    token = os.environ.get("GITLAB_TOKEN", "")
+    if token:
+        return token
+    host = urlparse(web).netloc
+    if not host:
+        return ""
+    try:
+        # cwd and env are stated deliberately: the call is
+        # directory-independent and inherits the caller's world, and
+        # a task runner that guards ambient subprocess state (footman
+        # does) treats explicit arguments as the author's intent.
+        result = subprocess.run(
+            ["glab", "config", "get", "token", "--host", host],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=os.getcwd(),
+            env=dict(os.environ),
+        )
+    except OSError:
+        return ""
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
 class GitlabForge:
     """One GitLab server, spoken to through livery.forge.Forge's verbs.
 
@@ -165,20 +196,22 @@ class GitlabForge:
         """The server, resolved once, never inferred from ambient state.
 
         An explicit *url* wins; ``GITLAB_URL`` is the configured
-        default. *token* defaults to ``GITLAB_TOKEN``; a missing token
-        raises rather than silently reading anonymously. Pass
-        ``token=""`` to read anonymously on purpose.
+        default. *token* resolves as ``GITLAB_TOKEN`` first, then the
+        token ``glab`` holds for the server's host (``glab config get
+        token --host``); nothing found raises rather than silently
+        reading anonymously. Pass ``token=""`` to read anonymously on
+        purpose.
         """
         web = url or os.environ.get("GITLAB_URL", "")
         if not web:
             raise ForgeError(
                 "no GitLab server to connect to: pass url= or set GITLAB_URL"
             )
-        resolved = os.environ.get("GITLAB_TOKEN", "") if token is None else token
+        resolved = _resolve_token(web) if token is None else token
         if token is None and not resolved:
             raise ForgeError(
-                'GITLAB_TOKEN is not set: set it, or pass token="" to read'
-                " anonymously on purpose"
+                "no GitLab credential: set GITLAB_TOKEN or sign in with"
+                " `glab auth login`"
             )
         return cls(f"{web.rstrip('/')}/api/v4", token=resolved, opener=opener)
 
