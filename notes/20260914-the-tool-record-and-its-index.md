@@ -17,8 +17,10 @@ the ruling of 2026-09-24 and landed the same day (livery#661): 38 of
 Phase 7 landed 2026-09-24 (livery#665): the nine structural checks,
 the diff as the summary, the refresh armed on additions only and every
 check passed. Phase 8 landed 2026-09-24 (livery#666): the bench's
-`tool-hosts` point on six runners, fortnightly; its first dispatched
-run is the open acceptance item until it is green on all six legs.
+`tool-hosts` point on six runners, fortnightly; its dispatched run
+36053744931 was green on all six legs the same day, after livery#670
+kept git-cliff off Windows ARM. Every phase has landed; the plan is
+complete.
 Runs after [CI declared, contributed, and dispatched on command][ci-plan],
 which delivers the mechanism this plan's last phase uses.
 Subsumes phase 2 onward of [the tool store over strongroom][store-plan],
@@ -541,7 +543,8 @@ Acceptance:
 
 - `uv run fm template.apply` writes the point's workflow with the six
   runners, and `uv run fm template.check` exits 0 after it.
-- One dispatched run is green on all six legs.
+- One dispatched run is green on all six legs (run 36053744931 on
+  2026-09-24, after livery#670).
 - `uv run fm check` exits 0 and its runner list is unchanged, proven by
   `grep runners workshop.toml`.
 
