@@ -208,6 +208,7 @@ nav = [
             { "nu" = "_generated/packages/toolroom/_generated/tools/nu.md" },
             { "prek" = "_generated/packages/toolroom/_generated/tools/prek.md" },
             { "pwsh" = "_generated/packages/toolroom/_generated/tools/pwsh.md" },
+            { "pyrefly" = "_generated/packages/toolroom/_generated/tools/pyrefly.md" },
             { "pytest" = "_generated/packages/toolroom/_generated/tools/pytest.md" },
             { "python" = "_generated/packages/toolroom/_generated/tools/python.md" },
             { "ruff" = "_generated/packages/toolroom/_generated/tools/ruff.md" },

@@ -375,15 +375,13 @@ def _register_builtin() -> None:
     # and the checkers, the formatter and the test runner are what the
     # gate runs on every python package. Declared here as data, so a
     # workspace's lock takes them from the kind like any other
-    # requirement and no branch in code knows the list. pyrefly joins
-    # when it has a record (livery#632): a requirement with no record
-    # refuses, and the gate runs it from the venv meanwhile.
+    # requirement and no branch in code knows the list.
     register_kind(
         KindRecord(
             name="python",
             backend=_python,
             template="package-python",
-            tools=("uv", "ruff", "pytest", "basedpyright", "mypy", "ty"),
+            tools=("uv", "ruff", "pytest", "basedpyright", "mypy", "ty", "pyrefly"),
             managed=("cliff.toml",),
         )
     )

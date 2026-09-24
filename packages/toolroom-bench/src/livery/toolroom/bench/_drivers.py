@@ -598,6 +598,7 @@ DRIVERS: tuple[Driver, ...] = (
     Driver("djlint", url="https://www.djlint.com/"),
     Driver("mypy", url="https://mypy.readthedocs.io/"),
     Driver("ty", verbs=("check",), url="https://docs.astral.sh/ty/"),
+    Driver("pyrefly", verbs=("check",), url="https://pyrefly.org/"),
     Driver("twine", verbs=("upload", "check"), url="https://twine.readthedocs.io/"),
     Driver("git-changelog", url="https://pawamoy.github.io/git-changelog/"),
     Driver("git-cliff", url="https://git-cliff.org/"),

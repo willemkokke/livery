@@ -52,7 +52,7 @@ def _python_tools(*versions: str) -> list[Record]:
     """A record per tool the python kind requires, at *versions*."""
     return [
         Record(name, kind="uv-tool", deltas=_read(*versions))
-        for name in ("uv", "ruff", "pytest", "basedpyright", "mypy", "ty")
+        for name in ("uv", "ruff", "pytest", "basedpyright", "mypy", "ty", "pyrefly")
     ]
 
 
@@ -196,6 +196,7 @@ def test_a_python_package_with_no_tool_of_its_own_resolves_the_kinds_tools(
         "basedpyright",
         "mypy",
         "ty",
+        "pyrefly",
     }
     assert all(r.site == "kind python" for r in declared)
     lock = _tools.write_lock(root)
@@ -246,6 +247,7 @@ def test_a_workspace_without_packages_requires_what_python_does(tmp_path: Path) 
         "basedpyright",
         "mypy",
         "ty",
+        "pyrefly",
     )
 
 
@@ -276,7 +278,7 @@ def test_add_declares_at_the_project_site_and_locks_with_no_network(
     _tool_tasks.tools_add("git-cliff>=2.0")
     out = capsys.readouterr().out
     assert "workshop.toml: [tools] requires git-cliff>=2.0" in out
-    assert "git-cliff 2.1.0" in out and "tools.lock: 7 tool(s)" in out
+    assert "git-cliff 2.1.0" in out and "tools.lock: 8 tool(s)" in out
     assert "git-cliff 2.1.0: installed at" in out and "receipt written" in out
     assert (root / ".workshop" / "receipts" / "git-cliff.json").is_file()
     contract = (root / "workshop.toml").read_text(encoding="utf-8")

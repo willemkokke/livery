@@ -41,6 +41,7 @@ nav = [
         { "nu" = "_generated/tools/nu.md" },
         { "prek" = "_generated/tools/prek.md" },
         { "pwsh" = "_generated/tools/pwsh.md" },
+        { "pyrefly" = "_generated/tools/pyrefly.md" },
         { "pytest" = "_generated/tools/pytest.md" },
         { "python" = "_generated/tools/python.md" },
         { "ruff" = "_generated/tools/ruff.md" },

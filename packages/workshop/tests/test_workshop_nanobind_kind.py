@@ -106,6 +106,7 @@ def test_the_kind_chains_from_python() -> None:
         "cmake",
         "mypy",
         "ninja",
+        "pyrefly",
         "pytest",
         "ruff",
         "ty",
