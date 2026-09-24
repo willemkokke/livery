@@ -236,7 +236,12 @@ the rest; a local `fm test` selects for the gate, and
 A `[[ci.schedule]]` entry in `workshop.toml` attaches a task to a
 point's job; `every = "1w"` or `"2w"` runs it on Mondays, or on the
 Monday of an even ISO week, and any other run of the point skips it
-naming the day it runs next.
+naming the day it runs next. On Windows, a test whose child exits with
+`STATUS_CONTROL_C_EXIT`, the status a console control event leaves,
+gets a section in its failure report: the command, the process and
+its worker, the run, every control event the process itself saw, and
+every process attached to the console, so one sighting carries what
+the next reader needs.
 The nightly point runs the whole check with its own tests selected
 in, and never skips on the verified record or narrows.
 `fm ci.dispatch --point=nightly` starts the nightly now, on `main`

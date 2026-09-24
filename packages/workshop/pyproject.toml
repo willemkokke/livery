@@ -70,6 +70,7 @@ livery-workshop-isolation = "livery.workshop._pytest_isolation"
 # runner's environment selects.
 livery-workshop-points = "livery.workshop._pytest_points"
 livery-workshop-speed = "livery.workshop._pytest_speed"
+livery-workshop-console = "livery.workshop._pytest_console"
 # A helper module in a package's tests directory carries the package's
 # name; the session refuses one that does not, before any test runs.
 livery-workshop-layout = "livery.workshop._pytest_layout"
