@@ -1571,11 +1571,6 @@ def _ingest_events(events: dict[str, list[str]]) -> tuple[dict[str, list[str]], 
     return lines, ok
 
 
-def _bench_store() -> Store:
-    """The bench's own store, under its room in the runner's data directory."""
-    return Store(Home(default_prefix() / "store"))
-
-
 def _finish(found: Refreshed, changelog: bool) -> Refreshed:
     """Write the note, say what happened, and refuse to call ignorance news.
 
