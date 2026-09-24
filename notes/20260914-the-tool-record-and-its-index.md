@@ -790,6 +790,14 @@ Acceptance:
   provision prefix was the store's home, `data_dir()/toolroom`, so a
   materialised store read as a provisioned prefix; the bench's prefix
   is `data_dir()/toolroom-bench` now.
+- 2026-09-24, on livery#632: pyrefly is curated beside ty, a PyPI wheel
+  read at its `check` verb, 21 versions primed from 0.57.1, the python
+  kind requires it and this repository locks it at 1.3.1. The ruling
+  folded in the idea of publishing a ready `handles.pyi` per tool as a
+  derived blob of the index; not done, because the index holds no
+  derived blobs since the stubs left it the same day and the
+  playground already names classes through the store it installs, so
+  the blob would restate the store's rule in a second place.
 - 2026-09-24, Willem, on the gate's reads of origin (livery#649), "yes
   to both": a machine's `fm check` reads the state store only from the
   snapshot the last `fm sync` or `fm start` fetched and never reaches
