@@ -198,6 +198,38 @@ def test_a_store_refusal_and_a_host_the_lock_lacks_refuse_naming_the_tool(
         _tools.materialise(root, ("tea",))
 
 
+def test_a_system_tool_is_held_to_the_highest_floor_and_the_site_is_named(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The highest floor holds, the record's or a site's, and the site is named."""
+    root = _workspace(tmp_path, monkeypatch)
+    Record(
+        "git", kind="system-check", min_version="2.40", deltas=_read("2.40.0", "2.55.0")
+    ).save(root / "records" / "git")
+    contract = root / "workshop.toml"
+    contract.write_text(contract.read_text().replace('"ruff"]', '"ruff", "git>=2.50"]'))
+    _tools.write_lock(root)
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/git")
+    monkeypatch.setattr(_engine, "read_version", lambda argv: "git version 2.45.0")
+    with pytest.raises(
+        Failed,
+        match=r"git: /usr/bin/git reports 2\.45\.0, below the floor 2\.50;"
+        r" workshop\.toml requires git>=2\.50$",
+    ):
+        _tools.materialise(root, ("git",))
+    lines = _sync.materialise_tools(root)
+    assert any("workshop.toml requires git>=2.50" in line for line in lines)
+    monkeypatch.setattr(_engine, "read_version", lambda argv: "git version 2.55.0")
+    (done,) = _tools.materialise(root, ("git",))
+    assert done.receipt is not None and done.receipt.tool == "git"
+    # A site floor below the record's: the record's floor holds, unnamed.
+    contract.write_text(contract.read_text().replace("git>=2.50", "git>=2.30"))
+    monkeypatch.setattr(_engine, "read_version", lambda argv: "git version 2.35.0")
+    with pytest.raises(Failed, match=r"below the floor 2\.40$"):
+        _tools.materialise(root, ("git",))
+    assert _tools.site_floors(root) == {"git": ("2.30", "workshop.toml")}
+
+
 # --- materialisation, the modes and the receipts ------------------------------------
 
 
