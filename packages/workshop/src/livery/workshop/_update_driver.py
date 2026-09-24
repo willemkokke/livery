@@ -60,6 +60,8 @@ class UpdateDriver:
 
     kind = WorkflowKind.UPDATE
     members: tuple[str, ...] = ()
+    #: An update returns once its pull request is armed; nothing waits on it.
+    watch: float = 0.0
 
     def __init__(
         self,

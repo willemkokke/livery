@@ -66,6 +66,7 @@ class WorkflowDriver(Protocol):
     kind: WorkflowKind
     armed: bool
     members: tuple[str, ...]  # a release's package directories
+    watch: float  # seconds an armed act follows its pull request; 0 returns at once
 
     @property
     def branch(self) -> str:
@@ -206,6 +207,15 @@ def run_workflow(
             follow_to_verdict=False,
         )
         _leave_reserved(git, driver, started)
+        if arm and driver.watch > 0 and not _merged(repo, git, driver.branch):
+            # An armed act waits the way `submit --armed` waits: from
+            # the branch it returned to, since the pull request holds
+            # the reserved branch on the remote. A blocker exits with
+            # its code, the way the submit does.
+            from livery.workshop._verdict import follow
+
+            print(f"  following PR of {driver.branch} to its merge")
+            follow(repo, driver.branch, git, timeout=driver.watch)
         if _merged(repo, git, driver.branch):
             driver.on_merged()
         return

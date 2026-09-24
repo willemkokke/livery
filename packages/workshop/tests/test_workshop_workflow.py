@@ -487,6 +487,7 @@ class _StubDriver:
 
     kind = WorkflowKind.UPDATE
     members: tuple[str, ...] = ()
+    watch: float = 0.0
 
     def __init__(self, git: GitOps, *, armed: bool) -> None:
         self.name = "update/templates"

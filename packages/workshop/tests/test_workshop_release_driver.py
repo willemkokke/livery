@@ -294,6 +294,62 @@ def test_the_driver_prepares_commits_and_the_engine_lands_it(
     assert '"livery-core>=0.3.0"' in tool_pyproject
 
 
+def test_an_armed_release_follows_its_pull_request_and_then_the_wave(
+    workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """From main: the pull request to its squash, then the wave to its verdict."""
+    from types import SimpleNamespace
+
+    from livery.workshop import _release_driver, _workflow_engine
+
+    fake, _git_seam, root = workspace
+    _grow(root, "core", "feat: core grows (#1)")
+    _git(root, "push", "origin", "main")
+    rig = _RigGit(root, fake)
+    sha = rig.remote_head("main")
+    fake.push(OWNER, NAME, "main", sha=sha)
+    fake.settle(OWNER, NAME, sha)
+    monkeypatch.setattr(
+        "livery.workshop._release_driver.validate_member",
+        lambda _root, plan, dirs: None,
+    )
+    merged = iter([False, True])
+    monkeypatch.setattr(
+        _workflow_engine, "_merged", lambda repo, git, branch: next(merged)
+    )
+    followed: list[tuple[str, float]] = []
+
+    def following(repo: object, branch: str, git: object, **kw: float) -> None:
+        followed.append((branch, kw["timeout"]))
+
+    monkeypatch.setattr("livery.workshop._verdict.follow", following)
+    run = SimpleNamespace(id=7, status="completed", url="https://forge.test/run/7")
+    monkeypatch.setattr(
+        _release_driver, "await_wave", lambda repo, *, before, timeout: 7
+    )
+    monkeypatch.setattr(_release_driver, "_wave_runs", lambda repo: (run,))
+    watched: list[tuple[str, int]] = []
+
+    def watching(repo: object, point: str, seen: object, **kw: float) -> int:
+        watched.append((point, seen.id))  # type: ignore[attr-defined]
+        return 0
+
+    monkeypatch.setattr("livery.workshop._ci_tasks.follow_run", watching)
+    members = resolve_set(root, ("core",))
+    driver = ReleaseDriver(
+        root, fake.repository(OWNER, NAME), rig, members, armed=True, wave_timeout=90
+    )
+    run_workflow(driver, fake.repository(OWNER, NAME), rig, current_user="fake-user")
+    assert followed == [(driver.branch, 90.0)]
+    assert watched == [("release", 7)]
+    assert rig.current_branch() == "main"
+    # A red wave ends the act with the wave's exit.
+    monkeypatch.setattr("livery.workshop._ci_tasks.follow_run", lambda *a, **k: 13)
+    with pytest.raises(SystemExit) as caught:
+        driver.on_merged()
+    assert caught.value.code == 13
+
+
 def test_a_release_already_stamped_on_the_base_reprepares_cleanly(
     workspace: tuple[FakeForge, GitOps, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:

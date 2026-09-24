@@ -431,6 +431,9 @@ class ReleaseDriver:
         self.armed = armed
         self._force = force_unverified_base
         self._wave_timeout = wave_timeout
+        # An armed release follows its pull request for as long as it
+        # would wait for the wave; the engine's own tests pass zero.
+        self.watch = wave_timeout
 
     @property
     def branch(self) -> str:
@@ -575,11 +578,15 @@ class ReleaseDriver:
         return Submission(title=f"chore(release): released {listed}", body=body)
 
     def on_merged(self) -> None:
-        """The merge point dispatches the wave; done means its run id is confirmed.
+        """The merge point dispatches the wave; follow it to its verdict.
 
-        A wave timeout of zero reports the merge and names the
-        dispatch verb as the confirmation instead of waiting: the
-        engine's own tests run against a forge with no merge point.
+        The wave's run is awaited by its id, then followed the way
+        ``ci.status --point=release --wait`` follows it, so the act
+        ends with the wave's own verdict and exit; the receipt tags
+        say when each member is done. A wave timeout of zero reports
+        the merge and names the dispatch verb as the confirmation
+        instead of waiting: the engine's own tests run against a
+        forge with no merge point.
         """
         if self._wave_timeout <= 0:
             print(
@@ -602,6 +609,14 @@ class ReleaseDriver:
             f"  merged; the merge point dispatched the wave, run {run_id}; the"
             " receipt tags say when each member is done"
         )
+        run = next((r for r in _wave_runs(self._repo) if r.id == run_id), None)
+        if run is None:
+            return
+        from livery.workshop._ci_tasks import follow_run
+
+        code = follow_run(self._repo, "release", run, timeout=self._wave_timeout)
+        if code:
+            raise SystemExit(code)
 
 
 def local_release(root: Path, members: tuple[Package, ...]) -> None:
@@ -906,7 +921,10 @@ def workflow_release(
 
     Names the set positionally (``packages/forge`` or just ``forge``).
     On a main-family branch this is the release train: one PR,
-    receipts per member, re-running the recovery at every step. On
+    receipts per member, re-running the recovery at every step;
+    ``--armed`` follows the pull request to its squash and the wave
+    to its verdict, from main, the way ``submit --armed`` follows a
+    feature pull request, and an unarmed run returns at once. On
     any other branch it is the dev act: a wheel straight from the
     branch at a dev version, published only to the configured custom
     index after a confirmation, no reserved branch, no PR, no tags.
