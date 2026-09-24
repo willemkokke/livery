@@ -7,10 +7,12 @@ landed in parts: the three sites, resolution and the lock (livery#631);
 receipts, materialisation and the modes (livery#634); the stubs' home
 (livery#638, then livery#641, livery#644 and livery#643 on 2026-09-18);
 the steady state's gates landed 2026-09-20 (livery#648). By the ruling
-of 2026-09-23 the tickets phase 6 raised are resolved before phase 7:
-livery#632, livery#639, livery#597, livery#560, livery#651, with
-livery#649 under discussion and livery#615 after the deterministic
-ones.
+of 2026-09-23 the tickets phase 6 raised are resolved before phase 7;
+on 2026-09-24 livery#653, livery#649, livery#632, livery#639 and
+livery#597 landed, livery#651 and livery#560 are in flight, and
+livery#615 follows the deterministic ones. Phase 9, the record as one
+file per tool with one line per option, runs before phases 7 and 8 by
+the ruling of 2026-09-24.
 Runs after [CI declared, contributed, and dispatched on command][ci-plan],
 which delivers the mechanism this plan's last phase uses.
 Subsumes phase 2 onward of [the tool store over strongroom][store-plan],
@@ -534,6 +536,70 @@ Acceptance:
 - One dispatched run is green on all six legs.
 - `uv run fm check` exits 0 and its runner list is unchanged, proven by
   `grep runners workshop.toml`.
+
+### Phase 9: the record as one file per tool, one line per option
+
+Runs before phases 7 and 8. The record's shape is what resolution
+needs (contract 14), and the current shape restates 68 percent of its
+option statements: a delta carries a verb whole when one option of it
+changed, so 577 deltas hold 13515 option statements for 4316 changes,
+4.5 MB in 615 files. Per-option granularity is the long-term need, so
+the record becomes one file of lines:
+
+```
+records/<tool>.jsonl
+```
+
+- The first line is the tool axis: the name, the description, the
+  kind, the package and the mode, the version floor of a system tool,
+  the hosts, the layout and the per-host layouts, and `prime`, the
+  oldest version whose surface was read. Below `prime` no option
+  claims a `since`; priming deeper rewrites the file once.
+- One version line per version, in sequence: the version, its date,
+  the artifacts per host, the layout overrides, and the reading's
+  facts when one was taken, the platforms, the extractor and the
+  description when it changed.
+- One option line per option that changed since the previous
+  reading, under its version line: the verb, the option name and the
+  option's fields; a withdrawn option or verb is one line saying so,
+  and an `absent` fact is one line per verb and option. An option
+  unchanged since the previous reading has no line.
+
+A release appends lines, and the review diff is the changed options
+alone. `Record.load` and `Record.save` keep their names, and
+`observations`, `surface_at`, `resolve` and `validate` keep their
+signatures, so the catalogue, the index build, the docs pages and the
+workshop read nothing new. The bench's `_surfaces` writer emits option
+lines in place of whole verbs. The 38 records convert once, by a verb
+that reads the directory form and writes the line form, and the
+conversion proves itself the way phase 3 did: every version's resolved
+surface, absence and date agree before and after, byte for byte
+through `canonical`.
+
+Deliverables:
+
+- `livery.toolroom.store._record` reads and writes the line form;
+  the directory form is read by the conversion verb alone and then
+  refused, naming the verb.
+- `fm tools.convert-records` (bench), one run, idempotent: a converted
+  tree is left alone.
+- `records/<tool>.jsonl` for every curated tool, the directory form
+  deleted in the same change.
+- The index build lands each version's surface as before; the pointer
+  is unchanged.
+- The schema (`fm tools.schema`) describes the line form.
+
+Acceptance:
+
+- `uv run python -m pytest packages/toolroom-store/tests/test_store_record.py`
+  passes, the refusals first: a line out of sequence, an option line
+  under no version, a `since` below `prime`, and the directory form.
+- The conversion's proof prints `38 of 38 agree` for surfaces, absences
+  and dates, and `git diff --stat` on `records/` shows only deletions of
+  `.json` and additions of `.jsonl`.
+- `du -sh records/` is under 1.5 MB.
+- `uv run fm tools.restub` and `uv run fm tools.index.build` run from
+  the converted records and `uv run fm check` exits 0.
 
 ## Temporary, replaced by
 
