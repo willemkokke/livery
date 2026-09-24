@@ -159,6 +159,7 @@ def test_tools_union_along_the_chain_only_when_present(restored_registry) -> Non
     assert kind_tools({"python"}) == (
         "basedpyright",
         "mypy",
+        "pyrefly",
         "pytest",
         "ruff",
         "ty",
