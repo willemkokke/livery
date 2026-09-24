@@ -192,15 +192,15 @@ def test_a_missing_record_is_none_and_a_broken_one_is_refused(tmp_path):
     """No record yet is an answer; a record that will not load is a fault
     to correct, never read as a tool with no readings.
     """
-    assert _surfaces.load(tmp_path / "nope") is None
-    broken = tmp_path / "broken"
-    broken.mkdir()
-    (broken / "tool.json").write_text("{not json")
+    assert _surfaces.load(tmp_path / "nope.jsonl") is None
+    (tmp_path / "broken.jsonl").write_text("{not json")
     with pytest.raises(RecordError, match=r"not JSON"):
-        _surfaces.load(broken)
+        _surfaces.load(tmp_path / "broken.jsonl")
 
 
-def test_save_writes_one_file_per_delta_and_load_reads_it_back(tmp_path):
+def test_save_writes_one_file_of_lines_and_load_reads_it_back(tmp_path):
+    import json
+
     record = history(
         "demo",
         ("1.0.0", "2026-01-02", _surfaces.surface_of(spec_of())),
@@ -208,9 +208,13 @@ def test_save_writes_one_file_per_delta_and_load_reads_it_back(tmp_path):
     )
     save(record, tmp_path)
     assert load(tmp_path, "demo") == record
-    assert sorted(p.name for p in (tmp_path / "demo" / "deltas").iterdir()) == [
-        "0001-0.9.0.json",
-        "0002-1.0.0.json",
+    lines = [
+        json.loads(line) for line in (tmp_path / "demo.jsonl").read_text().splitlines()
+    ]
+    assert lines[0]["name"] == "demo"
+    assert [line["version"] for line in lines if "version" in line] == [
+        "0.9.0",
+        "1.0.0",
     ]
 
 
@@ -238,7 +242,7 @@ def test_every_checked_in_record_reads_whole_and_names_who_looked():
     reads that to decide what is an exclusion and what was never looked at.
     """
     for key in _curated_keys():
-        record = _surfaces.load(_records_dir() / key)
+        record = _surfaces.load(_records_dir() / f"{key}.jsonl")
         assert record is not None, key
         chain = _surfaces.versions(record)
         assert chain, f"{key} was never read"
@@ -246,7 +250,7 @@ def test_every_checked_in_record_reads_whole_and_names_who_looked():
         for version in chain:
             assert _surfaces.at(record, version) is not None, (key, version)
             assert _surfaces.platforms_of(record, version), (key, version)
-    prek = _surfaces.load(_records_dir() / "prek")
+    prek = _surfaces.load(_records_dir() / "prek.jsonl")
     assert prek is not None
     assert len(_surfaces.versions(prek)) > 1, "prek was primed; it carries deltas"
 
@@ -262,7 +266,7 @@ def test_priming_changes_the_stub_the_record_renders_to():
     from livery.toolroom.bench import _drivers
     from livery.toolroom.bench import _tasks as tools_tasks
 
-    record = _surfaces.load(_records_dir() / "prek")
+    record = _surfaces.load(_records_dir() / "prek.jsonl")
     assert record is not None
     chain = _surfaces.versions(record)
     assert len(chain) > 5, "prek is the primed tool; this test needs its chain"

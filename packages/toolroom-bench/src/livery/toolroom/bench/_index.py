@@ -4,7 +4,7 @@ A client never replays a record. The build resolves every version of
 every tool and lands what it resolves to as content-addressed objects,
 one tree per tool:
 
-    tool                        the tool axis, `tool.json` as canonical JSON
+    tool                        the tool axis, the record's first line as canonical JSON
     versions                    every version tracked, oldest first
     <version>/observation       who read the version; its help, extractor, absences
     <version>/hosts/<host>      the deployment resolved for that host
@@ -49,10 +49,11 @@ from livery.strongroom import (
 )
 from livery.toolroom.store import (
     BUILD_FILE,
-    TOOL_FILE,
+    RECORD_SUFFIX,
     Record,
     build_current,
     observations,
+    records_in,
     resolve,
     tree_fingerprint,
 )
@@ -89,20 +90,14 @@ class Built:
     dropped: tuple[str, ...]
 
 
-def record_digest(directory: Path) -> Digest:
-    """The digest of the record under *directory* as authored: its files' bytes.
+def record_digest(path: Path) -> Digest:
+    """The digest of the record file *path* as authored: its name and its bytes.
 
-    `tool.json` and every delta file, each named by its path under the
-    directory and hashed as written, never re-serialised: a record moved
-    anywhere digests the same, one edited anywhere does not, and the
-    cost is a read of the bytes rather than a parse and a canonical dump.
+    Hashed as written, never re-serialised: a record moved anywhere
+    digests the same, one edited anywhere does not, and the cost is a
+    read of the bytes rather than a parse and a canonical dump.
     """
-    parts = sorted(p for p in directory.rglob("*.json") if p.is_file())
-    payload = b"".join(
-        f"{p.relative_to(directory).as_posix()}\0".encode() + p.read_bytes() + b"\0"
-        for p in parts
-    )
-    return digest_of(payload)
+    return digest_of(f"{path.name}\0".encode() + path.read_bytes() + b"\0")
 
 
 def open_index(into: Path) -> Store:
@@ -146,11 +141,7 @@ def load_records(records: Path) -> list[Record]:
         RecordError: for a record that does not validate, as the store
             refuses it.
     """
-    return [
-        Record.load(path)
-        for path in sorted(records.iterdir())
-        if path.is_dir() and (path / TOOL_FILE).is_file()
-    ]
+    return [Record.load(path) for path in records_in(records)]
 
 
 def build(records: Path, into: Path, *, from_genesis: bool = False) -> Built:
@@ -182,7 +173,8 @@ def build(records: Path, into: Path, *, from_genesis: bool = False) -> Built:
             return answer
     loaded = load_records(records)
     digests = {
-        record.name: str(record_digest(records / record.name)) for record in loaded
+        record.name: str(record_digest(records / f"{record.name}{RECORD_SUFFIX}"))
+        for record in loaded
     }
     store = open_index(into)
     previous: dict[str, Any] = {}

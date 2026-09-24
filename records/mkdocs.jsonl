@@ -1,0 +1,109 @@
+{"name": "mkdocs", "description": "", "kind": "uv-tool", "min_version": "", "hosts": []}
+{"version": "1.4.0", "date": "2022-09-27", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "MkDocs - Project documentation with Markdown."}}
+{"verb": "", "help": "MkDocs - Project documentation with Markdown.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "", "option": "quiet", "flags": ["--quiet", "-q"], "negation": "", "help": "Silence warnings", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "verbose", "flags": ["--verbose", "-v"], "negation": "", "help": "Enable verbose output", "type": "bool", "default": null, "choices": []}
+{"verb": "build", "help": "Build the MkDocs documentation", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "build", "option": "clean", "flags": ["--clean", "--dirty", "-c"], "negation": "", "help": "Remove old files from the site_dir before building (the default)", "type": "bool", "default": null, "choices": []}
+{"verb": "build", "option": "config_file", "flags": ["--config-file", "-f"], "negation": "", "help": "Provide a specific MkDocs config", "type": "str", "default": null, "choices": []}
+{"verb": "build", "option": "quiet", "flags": ["--quiet", "-q"], "negation": "", "help": "Silence warnings", "type": "bool", "default": null, "choices": []}
+{"verb": "build", "option": "site_dir", "flags": ["--site-dir", "-d"], "negation": "", "help": "The directory to output the result of the documentation build", "type": "str", "default": null, "choices": []}
+{"verb": "build", "option": "strict", "flags": ["--strict", "-s"], "negation": "", "help": "Enable strict mode", "type": "bool", "default": null, "choices": []}
+{"verb": "build", "option": "theme", "flags": ["--theme", "-t"], "negation": "", "help": "The theme to use when building your documentation", "type": "str", "default": null, "choices": []}
+{"verb": "build", "option": "use_directory_urls", "flags": ["--use-directory-urls", "--no-directory-urls"], "negation": "", "help": "Use directory URLs when building pages (the default)", "type": "bool", "default": null, "choices": []}
+{"verb": "build", "option": "verbose", "flags": ["--verbose", "-v"], "negation": "", "help": "Enable verbose output", "type": "bool", "default": null, "choices": []}
+{"verb": "gh_deploy", "help": "Deploy your documentation to GitHub Pages", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "gh_deploy", "option": "clean", "flags": ["--clean", "--dirty", "-c"], "negation": "", "help": "Remove old files from the site_dir before building (the default)", "type": "bool", "default": null, "choices": []}
+{"verb": "gh_deploy", "option": "config_file", "flags": ["--config-file", "-f"], "negation": "", "help": "Provide a specific MkDocs config", "type": "str", "default": null, "choices": []}
+{"verb": "gh_deploy", "option": "force", "flags": ["--force"], "negation": "", "help": "Force the push to the repository", "type": "bool", "default": null, "choices": []}
+{"verb": "gh_deploy", "option": "ignore_version", "flags": ["--ignore-version"], "negation": "", "help": "Ignore check that build is not being deployed with an older version of MkDocs", "type": "bool", "default": null, "choices": []}
+{"verb": "gh_deploy", "option": "message", "flags": ["--message", "-m"], "negation": "", "help": "A commit message to use when committing to the GitHub Pages remote branch", "type": "str", "default": null, "choices": []}
+{"verb": "gh_deploy", "option": "no_history", "flags": ["--no-history"], "negation": "", "help": "Replace the whole Git history with one new commit", "type": "bool", "default": null, "choices": []}
+{"verb": "gh_deploy", "option": "quiet", "flags": ["--quiet", "-q"], "negation": "", "help": "Silence warnings", "type": "bool", "default": null, "choices": []}
+{"verb": "gh_deploy", "option": "remote_branch", "flags": ["--remote-branch", "-b"], "negation": "", "help": "The remote branch to commit to for GitHub Pages", "type": "str", "default": null, "choices": []}
+{"verb": "gh_deploy", "option": "remote_name", "flags": ["--remote-name", "-r"], "negation": "", "help": "The remote name to commit to for GitHub Pages", "type": "str", "default": null, "choices": []}
+{"verb": "gh_deploy", "option": "shell", "flags": ["--shell"], "negation": "", "help": "Use the shell when invoking Git", "type": "bool", "default": null, "choices": []}
+{"verb": "gh_deploy", "option": "site_dir", "flags": ["--site-dir", "-d"], "negation": "", "help": "The directory to output the result of the documentation build", "type": "str", "default": null, "choices": []}
+{"verb": "gh_deploy", "option": "strict", "flags": ["--strict", "-s"], "negation": "", "help": "Enable strict mode", "type": "bool", "default": null, "choices": []}
+{"verb": "gh_deploy", "option": "theme", "flags": ["--theme", "-t"], "negation": "", "help": "The theme to use when building your documentation", "type": "str", "default": null, "choices": []}
+{"verb": "gh_deploy", "option": "use_directory_urls", "flags": ["--use-directory-urls", "--no-directory-urls"], "negation": "", "help": "Use directory URLs when building pages (the default)", "type": "bool", "default": null, "choices": []}
+{"verb": "gh_deploy", "option": "verbose", "flags": ["--verbose", "-v"], "negation": "", "help": "Enable verbose output", "type": "bool", "default": null, "choices": []}
+{"verb": "new", "help": "Create a new MkDocs project", "wraps": false, "positional": "required", "lead": "project_directory"}
+{"verb": "new", "option": "quiet", "flags": ["--quiet", "-q"], "negation": "", "help": "Silence warnings", "type": "bool", "default": null, "choices": []}
+{"verb": "new", "option": "verbose", "flags": ["--verbose", "-v"], "negation": "", "help": "Enable verbose output", "type": "bool", "default": null, "choices": []}
+{"verb": "serve", "help": "Run the builtin development server", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "serve", "option": "config_file", "flags": ["--config-file", "-f"], "negation": "", "help": "Provide a specific MkDocs config", "type": "str", "default": null, "choices": []}
+{"verb": "serve", "option": "dev_addr", "flags": ["--dev-addr", "-a"], "negation": "", "help": "IP address and port to serve documentation locally", "type": "str", "default": "localhost:8000", "choices": []}
+{"verb": "serve", "option": "dirtyreload", "flags": ["--dirtyreload"], "negation": "", "help": "Enable the live reloading in the development server, but only re-build files that have changed", "type": "bool", "default": null, "choices": []}
+{"verb": "serve", "option": "livereload", "flags": ["--livereload"], "negation": "--no-livereload", "help": "Enable the live reloading in the development server (this is the default)", "type": "bool", "default": null, "choices": []}
+{"verb": "serve", "option": "quiet", "flags": ["--quiet", "-q"], "negation": "", "help": "Silence warnings", "type": "bool", "default": null, "choices": []}
+{"verb": "serve", "option": "strict", "flags": ["--strict", "-s"], "negation": "", "help": "Enable strict mode", "type": "bool", "default": null, "choices": []}
+{"verb": "serve", "option": "theme", "flags": ["--theme", "-t"], "negation": "", "help": "The theme to use when building your documentation", "type": "str", "default": null, "choices": []}
+{"verb": "serve", "option": "use_directory_urls", "flags": ["--use-directory-urls", "--no-directory-urls"], "negation": "", "help": "Use directory URLs when building pages (the default)", "type": "bool", "default": null, "choices": []}
+{"verb": "serve", "option": "verbose", "flags": ["--verbose", "-v"], "negation": "", "help": "Enable verbose output", "type": "bool", "default": null, "choices": []}
+{"verb": "serve", "option": "watch", "flags": ["--watch", "-w"], "negation": "", "help": "A directory or file to watch for live reloading", "type": "str", "default": null, "choices": []}
+{"verb": "serve", "option": "watch_theme", "flags": ["--watch-theme"], "negation": "", "help": "Include the theme in list of files to watch for live reloading", "type": "bool", "default": null, "choices": []}
+{"version": "1.4.1", "date": "2022-10-15", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "1.4.2", "date": "2022-11-01", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "1.4.3", "date": "2023-05-02", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "1.5.0", "date": "2023-07-26", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "", "option": "color", "flags": ["--no-color", "--color"], "negation": "", "help": "Force enable or disable color and wrapping for the output", "type": "bool", "default": null, "choices": []}
+{"verb": "build", "option": "strict", "flags": ["--no-strict", "--strict", "-s"], "negation": "", "help": "Enable strict mode", "type": "bool", "default": null, "choices": []}
+{"verb": "gh_deploy", "option": "strict", "flags": ["--no-strict", "--strict", "-s"], "negation": "", "help": "Enable strict mode", "type": "bool", "default": null, "choices": []}
+{"verb": "serve", "option": "clean", "flags": ["--clean", "-c"], "negation": "", "help": "Build the site without any effects of `mkdocs serve` - pure `mkdocs build`, then serve", "type": "bool", "default": null, "choices": []}
+{"verb": "serve", "option": "dirty", "flags": ["--dirty"], "negation": "", "help": "Only re-build files that have changed", "type": "bool", "default": null, "choices": []}
+{"verb": "serve", "option": "dirtyreload", "gone": true}
+{"verb": "serve", "option": "livereload", "gone": true}
+{"verb": "serve", "option": "no_livereload", "flags": ["--no-livereload"], "negation": "", "help": "Disable the live reloading in the development server", "type": "bool", "default": null, "choices": []}
+{"verb": "serve", "option": "strict", "flags": ["--no-strict", "--strict", "-s"], "negation": "", "help": "Enable strict mode", "type": "bool", "default": null, "choices": []}
+{"version": "1.5.1", "date": "2023-07-27", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "1.5.2", "date": "2023-08-02", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "1.5.3", "date": "2023-09-18", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "1.6.0", "date": "2024-04-20", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "build", "help": "Build the MkDocs documentation."}
+{"verb": "gh_deploy", "help": "Deploy your documentation to GitHub Pages."}
+{"verb": "new", "help": "Create a new MkDocs project."}
+{"verb": "serve", "help": "Run the builtin development server."}
+{"verb": "serve", "option": "open", "flags": ["--open", "-o"], "negation": "", "help": "Open the website in a Web browser after the initial build finishes", "type": "bool", "default": null, "choices": []}
+{"version": "1.6.1", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "", "gone": true}
+{"verb": "build", "option": "clean", "flags": ["--clean", "-c"], "negation": "--dirty", "help": "Remove old files from the site_dir before building (the default).", "type": "bool", "default": true, "choices": []}
+{"verb": "build", "option": "config_file", "flags": ["--config-file", "-f"], "negation": "", "help": "Provide a specific MkDocs config. This can be a file name, or '-' to read from stdin.", "type": "str", "default": null, "choices": []}
+{"verb": "build", "option": "quiet", "flags": ["--quiet", "-q"], "negation": "", "help": "Silence warnings", "type": "bool", "default": false, "choices": []}
+{"verb": "build", "option": "site_dir", "flags": ["--site-dir", "-d"], "negation": "", "help": "The directory to output the result of the documentation build.", "type": "str", "default": null, "choices": []}
+{"verb": "build", "option": "strict", "flags": ["--strict", "-s"], "negation": "--no-strict", "help": "Enable strict mode. This will cause MkDocs to abort the build on any warnings.", "type": "bool", "default": null, "choices": []}
+{"verb": "build", "option": "theme", "flags": ["--theme", "-t"], "negation": "", "help": "The theme to use when building your documentation.", "type": "str", "default": null, "choices": ["mkdocs", "readthedocs"]}
+{"verb": "build", "option": "use_directory_urls", "flags": ["--use-directory-urls"], "negation": "--no-directory-urls", "help": "Use directory URLs when building pages (the default).", "type": "bool", "default": null, "choices": []}
+{"verb": "build", "option": "verbose", "flags": ["--verbose", "-v"], "negation": "", "help": "Enable verbose output", "type": "bool", "default": false, "choices": []}
+{"verb": "gh_deploy", "option": "clean", "flags": ["--clean", "-c"], "negation": "--dirty", "help": "Remove old files from the site_dir before building (the default).", "type": "bool", "default": true, "choices": []}
+{"verb": "gh_deploy", "option": "config_file", "flags": ["--config-file", "-f"], "negation": "", "help": "Provide a specific MkDocs config. This can be a file name, or '-' to read from stdin.", "type": "str", "default": null, "choices": []}
+{"verb": "gh_deploy", "option": "force", "flags": ["--force"], "negation": "", "help": "Force the push to the repository.", "type": "bool", "default": false, "choices": []}
+{"verb": "gh_deploy", "option": "ignore_version", "flags": ["--ignore-version"], "negation": "", "help": "Ignore check that build is not being deployed with an older version of MkDocs.", "type": "bool", "default": false, "choices": []}
+{"verb": "gh_deploy", "option": "message", "flags": ["--message", "-m"], "negation": "", "help": "A commit message to use when committing to the GitHub Pages remote branch. Commit {sha} and MkDocs {version} are available as expansions", "type": "str", "default": null, "choices": []}
+{"verb": "gh_deploy", "option": "no_history", "flags": ["--no-history"], "negation": "", "help": "Replace the whole Git history with one new commit.", "type": "bool", "default": false, "choices": []}
+{"verb": "gh_deploy", "option": "quiet", "flags": ["--quiet", "-q"], "negation": "", "help": "Silence warnings", "type": "bool", "default": false, "choices": []}
+{"verb": "gh_deploy", "option": "remote_branch", "flags": ["--remote-branch", "-b"], "negation": "", "help": "The remote branch to commit to for GitHub Pages. This overrides the value specified in config", "type": "str", "default": null, "choices": []}
+{"verb": "gh_deploy", "option": "remote_name", "flags": ["--remote-name", "-r"], "negation": "", "help": "The remote name to commit to for GitHub Pages. This overrides the value specified in config", "type": "str", "default": null, "choices": []}
+{"verb": "gh_deploy", "option": "shell", "flags": ["--shell"], "negation": "", "help": "Use the shell when invoking Git.", "type": "bool", "default": false, "choices": []}
+{"verb": "gh_deploy", "option": "site_dir", "flags": ["--site-dir", "-d"], "negation": "", "help": "The directory to output the result of the documentation build.", "type": "str", "default": null, "choices": []}
+{"verb": "gh_deploy", "option": "strict", "flags": ["--strict", "-s"], "negation": "--no-strict", "help": "Enable strict mode. This will cause MkDocs to abort the build on any warnings.", "type": "bool", "default": null, "choices": []}
+{"verb": "gh_deploy", "option": "theme", "flags": ["--theme", "-t"], "negation": "", "help": "The theme to use when building your documentation.", "type": "str", "default": null, "choices": ["mkdocs", "readthedocs"]}
+{"verb": "gh_deploy", "option": "use_directory_urls", "flags": ["--use-directory-urls"], "negation": "--no-directory-urls", "help": "Use directory URLs when building pages (the default).", "type": "bool", "default": null, "choices": []}
+{"verb": "gh_deploy", "option": "verbose", "flags": ["--verbose", "-v"], "negation": "", "help": "Enable verbose output", "type": "bool", "default": false, "choices": []}
+{"verb": "new", "option": "quiet", "flags": ["--quiet", "-q"], "negation": "", "help": "Silence warnings", "type": "bool", "default": false, "choices": []}
+{"verb": "new", "option": "verbose", "flags": ["--verbose", "-v"], "negation": "", "help": "Enable verbose output", "type": "bool", "default": false, "choices": []}
+{"verb": "serve", "option": "clean", "flags": ["--clean", "-c"], "negation": "", "help": "Build the site without any effects of `mkdocs serve` - pure `mkdocs build`, then serve.", "type": "bool", "default": null, "choices": []}
+{"verb": "serve", "option": "config_file", "flags": ["--config-file", "-f"], "negation": "", "help": "Provide a specific MkDocs config. This can be a file name, or '-' to read from stdin.", "type": "str", "default": null, "choices": []}
+{"verb": "serve", "option": "dev_addr", "flags": ["--dev-addr", "-a"], "negation": "", "help": "IP address and port to serve documentation locally (default: localhost:8000)", "type": "str", "default": null, "choices": []}
+{"verb": "serve", "option": "dirty", "flags": ["--dirty"], "negation": "", "help": "Only re-build files that have changed.", "type": "bool", "default": null, "choices": []}
+{"verb": "serve", "option": "dirtyreload", "flags": ["--dirtyreload"], "negation": "", "help": "", "type": "bool", "default": null, "choices": []}
+{"verb": "serve", "option": "livereload", "flags": ["--livereload"], "negation": "", "help": "", "type": "bool", "default": true, "choices": []}
+{"verb": "serve", "option": "no_livereload", "flags": ["--no-livereload"], "negation": "", "help": "Disable the live reloading in the development server.", "type": "bool", "default": false, "choices": []}
+{"verb": "serve", "option": "open", "flags": ["--open", "-o"], "negation": "", "help": "Open the website in a Web browser after the initial build finishes.", "type": "bool", "default": false, "choices": []}
+{"verb": "serve", "option": "quiet", "flags": ["--quiet", "-q"], "negation": "", "help": "Silence warnings", "type": "bool", "default": false, "choices": []}
+{"verb": "serve", "option": "strict", "flags": ["--strict", "-s"], "negation": "--no-strict", "help": "Enable strict mode. This will cause MkDocs to abort the build on any warnings.", "type": "bool", "default": null, "choices": []}
+{"verb": "serve", "option": "theme", "flags": ["--theme", "-t"], "negation": "", "help": "The theme to use when building your documentation.", "type": "str", "default": null, "choices": ["mkdocs", "readthedocs"]}
+{"verb": "serve", "option": "use_directory_urls", "flags": ["--use-directory-urls"], "negation": "--no-directory-urls", "help": "Use directory URLs when building pages (the default).", "type": "bool", "default": null, "choices": []}
+{"verb": "serve", "option": "verbose", "flags": ["--verbose", "-v"], "negation": "", "help": "Enable verbose output", "type": "bool", "default": false, "choices": []}
+{"verb": "serve", "option": "watch", "flags": ["--watch", "-w"], "negation": "", "help": "A directory or file to watch for live reloading. Can be supplied multiple times.", "type": "list[str]", "default": null, "choices": []}
+{"verb": "serve", "option": "watch_theme", "flags": ["--watch-theme"], "negation": "", "help": "Include the theme in list of files to watch for live reloading. Ignored when live reload is not used.", "type": "bool", "default": false, "choices": []}

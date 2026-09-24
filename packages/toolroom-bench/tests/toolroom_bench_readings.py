@@ -202,12 +202,12 @@ def release_surface(n: int) -> dict[str, Any]:
 
 def save(record: Record, root: pathlib.Path) -> None:
     """Write *record* under *root*, the records directory a test isolated."""
-    _surfaces.save(record, root / record.name)
+    _surfaces.save(record, root / f"{record.name}.jsonl")
 
 
 def load(root: pathlib.Path, name: str) -> Record:
     """The record *name* under *root*; a test reading one expects it there."""
-    record = _surfaces.load(root / name)
+    record = _surfaces.load(root / f"{name}.jsonl")
     assert record is not None, name
     return record
 

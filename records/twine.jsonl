@@ -1,0 +1,32 @@
+{"name": "twine", "description": "", "kind": "uv-tool", "min_version": "", "hosts": []}
+{"version": "4.0.1", "date": "2022-06-01", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": ""}}
+{"verb": "", "help": "", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "", "option": "no_color", "flags": ["--no-color"], "negation": "", "help": "disable colored output", "type": "bool", "default": null, "choices": []}
+{"verb": "check", "help": "", "wraps": false, "positional": "required", "lead": "dist"}
+{"verb": "check", "option": "strict", "flags": ["--strict"], "negation": "", "help": "Fail on warnings", "type": "bool", "default": null, "choices": []}
+{"verb": "upload", "help": "", "wraps": false, "positional": "required", "lead": "dist"}
+{"verb": "upload", "option": "cert", "flags": ["--cert"], "negation": "", "help": "Path to alternate CA bundle (can also be set via TWINE_CERT environment variable)", "type": "str", "default": null, "choices": []}
+{"verb": "upload", "option": "client_cert", "flags": ["--client-cert"], "negation": "", "help": "Path to SSL client certificate, a single file containing the private key and the certificate in PEM format", "type": "str", "default": null, "choices": []}
+{"verb": "upload", "option": "comment", "flags": ["--comment", "-c"], "negation": "", "help": "The comment to include with the distribution file", "type": "str", "default": null, "choices": []}
+{"verb": "upload", "option": "config_file", "flags": ["--config-file"], "negation": "", "help": "The .pypirc config file to use", "type": "str", "default": null, "choices": []}
+{"verb": "upload", "option": "disable_progress_bar", "flags": ["--disable-progress-bar"], "negation": "", "help": "Disable the progress bar", "type": "bool", "default": null, "choices": []}
+{"verb": "upload", "option": "identity", "flags": ["--identity", "-i"], "negation": "", "help": "GPG identity used to sign files", "type": "str", "default": null, "choices": []}
+{"verb": "upload", "option": "non_interactive", "flags": ["--non-interactive"], "negation": "", "help": "Do not interactively prompt for username/password if the required credentials are missing", "type": "bool", "default": null, "choices": []}
+{"verb": "upload", "option": "password", "flags": ["--password", "-p"], "negation": "", "help": "The password to authenticate to the repository (package index) with", "type": "str", "default": null, "choices": []}
+{"verb": "upload", "option": "repository", "flags": ["--repository", "-r"], "negation": "", "help": "The repository (package index) to upload the package to", "type": "str", "default": "pypi", "choices": []}
+{"verb": "upload", "option": "repository_url", "flags": ["--repository-url"], "negation": "", "help": "The repository (package index) URL to upload the package to", "type": "str", "default": null, "choices": []}
+{"verb": "upload", "option": "sign", "flags": ["--sign", "-s"], "negation": "", "help": "Sign files to upload using GPG", "type": "bool", "default": null, "choices": []}
+{"verb": "upload", "option": "sign_with", "flags": ["--sign-with"], "negation": "", "help": "GPG program used to sign uploads", "type": "str", "default": "gpg", "choices": []}
+{"verb": "upload", "option": "skip_existing", "flags": ["--skip-existing"], "negation": "", "help": "Continue uploading files if one already exists", "type": "bool", "default": null, "choices": []}
+{"verb": "upload", "option": "username", "flags": ["--username", "-u"], "negation": "", "help": "The username to authenticate to the repository (package index) as", "type": "str", "default": null, "choices": []}
+{"verb": "upload", "option": "verbose", "flags": ["--verbose"], "negation": "", "help": "Show verbose output", "type": "bool", "default": null, "choices": []}
+{"version": "4.0.2", "date": "2022-12-01", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "5.0.0", "date": "2024-02-11", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "5.1.0", "date": "2024-05-16", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "upload", "option": "attestations", "flags": ["--attestations"], "negation": "", "help": "Upload each file's associated attestations", "type": "bool", "default": null, "choices": []}
+{"version": "5.1.1", "date": "2024-06-26", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "6.0.0", "date": "2024-11-30", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "6.0.1", "date": "2024-12-01", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "6.1.0", "date": "2025-01-21", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "6.2.0", "date": "2025-09-04", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "7.0.0", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}

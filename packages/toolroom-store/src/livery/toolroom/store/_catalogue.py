@@ -29,12 +29,12 @@ from livery.strongroom import Store as ObjectStore
 from livery.toolroom.store._fingerprint import tree_fingerprint
 from livery.toolroom.store._home import Home
 from livery.toolroom.store._record import (
-    TOOL_FILE,
     Deployment,
     Observation,
     Record,
     RecordError,
     observations,
+    records_in,
     resolve,
     surface_at,
 )
@@ -180,9 +180,7 @@ class Catalogue:
         tools: dict[str, Listed] = {}
         deployments: dict[tuple[str, str, str], Deployment] = {}
         records: dict[str, Record] = {}
-        for path in sorted(directory.iterdir()):
-            if not path.is_dir() or not (path / TOOL_FILE).is_file():
-                continue
+        for path in records_in(directory):
             record = Record.load(path)
             records[record.name] = record
             hosts: dict[str, dict[str, Digest]] = {}

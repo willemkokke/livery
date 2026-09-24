@@ -1,0 +1,27 @@
+{"name": "zensical", "description": "", "kind": "uv-tool", "min_version": "", "hosts": []}
+{"version": "0.0.41", "date": "2026-05-09", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Zensical - A modern static site generator."}}
+{"verb": "", "help": "Zensical - A modern static site generator.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "build", "help": "Build a project.", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "build", "option": "clean", "flags": ["--clean", "-c"], "negation": "", "help": "Clean cache", "type": "bool", "default": null, "choices": []}
+{"verb": "build", "option": "config_file", "flags": ["--config-file", "-f"], "negation": "", "help": "Path to config file", "type": "str", "default": null, "choices": []}
+{"verb": "build", "option": "strict", "flags": ["--strict", "-s"], "negation": "", "help": "Enable strict mode - abort the build on warnings", "type": "bool", "default": null, "choices": []}
+{"verb": "new", "help": "Create a new template project in the current or given directory.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "serve", "help": "Build and serve a project.", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "serve", "option": "config_file", "flags": ["--config-file", "-f"], "negation": "", "help": "Path to config file", "type": "str", "default": null, "choices": []}
+{"verb": "serve", "option": "dev_addr", "flags": ["--dev-addr", "-a"], "negation": "", "help": "IP address and port", "type": "str", "default": "localhost:8000", "choices": []}
+{"verb": "serve", "option": "open", "flags": ["--open", "-o"], "negation": "", "help": "Open preview in default browser", "type": "bool", "default": null, "choices": []}
+{"verb": "serve", "option": "strict", "flags": ["--strict", "-s"], "negation": "", "help": "Strict mode (currently unsupported)", "type": "bool", "default": null, "choices": []}
+{"version": "0.0.42", "date": "2026-05-15", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.0.43", "date": "2026-05-19", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.0.44", "date": "2026-06-04", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.0.45", "date": "2026-06-09", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.0.46", "date": "2026-06-21", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.0.47", "date": "2026-07-05", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.0.48", "date": "2026-07-09", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.0.50", "date": "2026-07-09", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.0.51", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.0.52", "date": "2026-07-30", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.0.53", "date": "2026-08-04", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.0.54", "date": "2026-08-13", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.0.55", "date": "2026-08-16", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.0.56", "date": "2026-08-18", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}

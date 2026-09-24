@@ -471,6 +471,7 @@ def _assemble(record: Record, readings: list[_Reading]) -> Record:
         layout=record.layout,
         host_layouts=record.host_layouts,
         deltas=tuple(deltas),
+        prime=record.prime,
     )
 
 
@@ -478,19 +479,44 @@ def _sparse(
     previous: dict[str, Any] | None, surface: dict[str, Any]
 ) -> tuple[str | None, dict[str, dict[str, Any] | None]]:
     """What *surface* sets against *previous*: the help when it moved, and
-    each verb that moved, whole, `None` for one withdrawn.
+    per verb the patch that moves it, `None` for one withdrawn.
+
+    A patch carries the verb's own fields that changed and, under
+    `options`, each option that changed or arrived whole and `None`
+    for one that went; a verb new to the record is stated whole. A verb
+    that did not move has no patch.
     """
     verbs = _ordered(surface.get("verbs", {}))
     help_ = surface.get("help", "")
-    if previous is None:
-        return help_, dict(verbs)
-    before: dict[str, Any] = previous["verbs"]
-    changed: dict[str, dict[str, Any] | None] = {
-        name: verb for name, verb in verbs.items() if before.get(name) != verb
-    }
+    before: dict[str, Any] = {} if previous is None else previous["verbs"]
+    changed: dict[str, dict[str, Any] | None] = {}
+    for name, verb in verbs.items():
+        old = before.get(name)
+        if old is None:
+            changed[name] = dict(verb)
+            continue
+        patch: dict[str, Any] = {
+            key: verb[key]
+            for key in ("help", "wraps", "positional", "lead")
+            if verb.get(key) != old.get(key)
+        }
+        options: dict[str, Any] = {
+            option: value
+            for option, value in verb.get("options", {}).items()
+            if old.get("options", {}).get(option) != value
+        }
+        for option in old.get("options", {}):
+            if option not in verb.get("options", {}):
+                options[option] = None
+        if options:
+            patch["options"] = options
+        if patch:
+            changed[name] = patch
     for name in before:
         if name not in verbs:
             changed[name] = None
+    if previous is None:
+        return help_, changed
     return (None if help_ == previous["help"] else help_), changed
 
 
@@ -525,13 +551,17 @@ def new(
     date: str,
     surface: dict[str, Any],
     platforms: list[str],
+    prime: str = "",
 ) -> Record:
     """A record of one version read. A record this short is a valid record,
     which is what lets a tool ship before anything has been primed.
+    *prime* is the oldest version the history will reach, the driver's
+    provision floor, stamped on the axis when one is declared.
     """
     return Record(
         name,
         kind=kind,
+        prime=prime,
         deltas=(
             RecordDelta(
                 1,
@@ -804,21 +834,21 @@ def spellings(record: Record, version: str, keys: Iterable[str]) -> dict[str, st
     return found
 
 
-def load(directory: Path) -> Record | None:
-    """The record at *directory*, or `None` when there is none yet.
+def load(path: Path) -> Record | None:
+    """The record in the file *path*, or `None` when there is none yet.
 
     Raises:
         RecordError: for a record that is there and does not validate;
             a broken record is corrected, never read as no record.
     """
-    if not (directory / "tool.json").is_file():
+    if not path.is_file():
         return None
-    return Record.load(directory)
+    return Record.load(path)
 
 
-def save(record: Record, directory: Path) -> None:
-    """Write *record* under *directory*, one file per delta."""
-    record.save(directory)
+def save(record: Record, path: Path) -> None:
+    """Write *record* to the file *path*, one JSON object per line."""
+    record.save(path.parent)
 
 
 # --- the union: what a stub renders --------------------------------------------

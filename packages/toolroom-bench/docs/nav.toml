@@ -10,6 +10,7 @@ nav = [
             { "assemble" = "_generated/tasks/tools/assemble.md" },
             { "audit" = "_generated/tasks/tools/audit.md" },
             { "color" = "_generated/tasks/tools/color.md" },
+            { "convert-records" = "_generated/tasks/tools/convert-records.md" },
             { "docs" = "_generated/tasks/tools/docs.md" },
             { "gather" = "_generated/tasks/tools/gather.md" },
             { "goldens" = "_generated/tasks/tools/goldens.md" },

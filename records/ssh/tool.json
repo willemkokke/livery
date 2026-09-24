@@ -1,7 +1,0 @@
-{
-  "name": "ssh",
-  "description": "",
-  "kind": "system-check",
-  "min_version": "",
-  "hosts": []
-}

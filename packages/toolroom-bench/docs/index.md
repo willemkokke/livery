@@ -3,8 +3,8 @@
 The bench is where toolroom's typed tool handles are made and kept
 current. It enumerates each tool's releases at its forge or index,
 installs a release in a throwaway to read its help on the platform,
-writes what each version accepted into the tool's record under
-`records/<tool>/` as that version's surface, generates the checked-in
+writes what each version accepted into the tool's record,
+`records/<tool>.jsonl`, as that version's surface, generates the checked-in
 stubs of `livery.toolroom.tools` from the records, and renders the
 per-tool reference pages of toolroom's docs.
 
@@ -56,7 +56,7 @@ beside `refs/` and the manifest, which any static host serves, and
 `pointer.json` beside it. Per tool the build lands one tree:
 
 ```text
-tool                        the tool axis, tool.json as canonical JSON
+tool                        the tool axis, the record's first line as canonical JSON
 versions                    every version tracked, oldest first
 <version>/observation       who read the version: its help, platforms, extractor and absences
 <version>/hosts/<host>      the deployment resolved for that host

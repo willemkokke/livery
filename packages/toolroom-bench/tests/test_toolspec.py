@@ -926,7 +926,7 @@ def _rendered(stubs, key: str) -> str:
     from livery.toolroom.bench import _drivers, _surfaces
     from livery.toolroom.bench import _tasks as tools_tasks
 
-    record = _surfaces.load(stubs / "records" / key)
+    record = _surfaces.load(stubs / "records" / f"{key}.jsonl")
     driver = _drivers.find(key)
     assert driver is not None
     return tools_tasks._stub_from(driver, record) if record is not None else ""
@@ -937,7 +937,7 @@ def _rendered_checked_in(key: str) -> str:
     from livery.toolroom.bench import _surfaces
     from livery.toolroom.bench import _tasks as tools_tasks
 
-    record = _surfaces.load(tools_tasks._records_dir() / key)
+    record = _surfaces.load(tools_tasks._records_dir() / f"{key}.jsonl")
     driver = _drivers.find(key)
     assert record is not None and driver is not None, key
     return tools_tasks._stub_from(driver, record)
@@ -971,7 +971,7 @@ def _behind(stubs, key: str) -> None:
         },
         platforms=["Linux"],
     )
-    _surfaces.save(record, stubs / "records" / key)
+    _surfaces.save(record, stubs / "records" / f"{key}.jsonl")
 
 
 needs_ruff = pytest.mark.skipif(
@@ -1130,7 +1130,7 @@ def test_sync_records_a_reading_and_audit_then_agrees(stubs, capsys):
     from livery.toolroom.bench import _tasks as tools_tasks
 
     tools_tasks.sync(only="ruff")
-    assert (stubs / "records" / "ruff" / "tool.json").exists()
+    assert (stubs / "records" / "ruff.jsonl").exists()
     assert "recorded 1 reading(s): ruff" in capsys.readouterr().out
     rendered = _rendered(stubs, "ruff")
     ast.parse(rendered)
@@ -1412,8 +1412,8 @@ def test_no_record_carries_a_home_directory():
 
     looks_like_home = re.compile(r"/Users/[a-z]|/home/[a-z]|C:\\\\Users\\\\[a-z]", re.I)
     guilty = {
-        f"{path.parent.parent.name}/{path.name}"
-        for path in tools_tasks._records_dir().glob("*/deltas/*.json")
+        path.name
+        for path in tools_tasks._records_dir().glob("*.jsonl")
         # `encoding=` is not optional here: a record carries whatever its
         # tool's help does, and Windows decodes with cp1252 by default —
         # where the UTF-8 tail byte of a man page's U+2010 is undefined.
@@ -2522,7 +2522,7 @@ def test_a_nested_class_flags_returns_self():
     from livery.toolroom.bench import _tasks as tools_tasks
 
     # Rendered from the repository's own record, as the index renders it.
-    record = _surfaces.load(tools_tasks._records_dir() / "docker")
+    record = _surfaces.load(tools_tasks._records_dir() / "docker.jsonl")
     driver = _drivers.find("docker")
     assert record is not None and driver is not None
     source = tools_tasks._stub_from(driver, record)

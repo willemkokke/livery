@@ -55,7 +55,6 @@ from livery.toolroom.store import (
     LOCK_FILE,
     MODES,
     POINTER,
-    TOOL_FILE,
     Catalogue,
     CatalogueError,
     Deployment,
@@ -69,6 +68,7 @@ from livery.toolroom.store import (
     class_name,
     default_mode,
     read_pointer,
+    records_in,
     resolve_lock,
     tree_fingerprint,
     version_key,
@@ -173,10 +173,7 @@ def _is_records(source: str) -> bool:
     if "://" in source:
         return False
     directory = Path(source)
-    return not (directory / POINTER).is_file() and any(
-        (child / TOOL_FILE).is_file()
-        for child in (directory.iterdir() if directory.is_dir() else ())
-    )
+    return not (directory / POINTER).is_file() and bool(records_in(directory))
 
 
 def catalogue(root: Path, *, offline: bool = False) -> Catalogue:

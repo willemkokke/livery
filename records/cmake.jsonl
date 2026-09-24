@@ -1,0 +1,97 @@
+{"name": "cmake", "description": "", "kind": "uv-tool", "min_version": "", "hosts": []}
+{"version": "4.1.2", "date": "2025-10-23", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "cmake [options] <path-to-source>"}}
+{"verb": "", "help": "cmake [options] <path-to-source>", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "", "option": "A", "flags": ["-A"], "negation": "", "help": "= Specify platform name if supported by generator", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "B", "flags": ["-B"], "negation": "", "help": "= Explicitly specify a build directory", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "C", "flags": ["-C"], "negation": "", "help": "= Pre-load a script to populate the cache", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "D", "flags": ["-D"], "negation": "", "help": "= Create or update a cmake cache entry", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "E", "flags": ["-E"], "negation": "", "help": "= CMake command mode", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "G", "flags": ["-G"], "negation": "", "help": "= Specify a build system generator", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "L", "flags": ["-L"], "negation": "", "help": "= List non-advanced cached variables", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "LR", "flags": ["-LR"], "negation": "", "help": "= Show cached variables that match the regex", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "N", "flags": ["-N"], "negation": "", "help": "= View mode only", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "P", "flags": ["-P"], "negation": "", "help": "= Process script mode", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "S", "flags": ["-S"], "negation": "", "help": "= Explicitly specify a source directory", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "T", "flags": ["-T"], "negation": "", "help": "= Specify toolset name if supported by generator", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "U", "flags": ["-U"], "negation": "", "help": "= Remove matching entries from CMake cache", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "Wdeprecated", "flags": ["-Wdeprecated"], "negation": "", "help": "= Enable deprecation warnings", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "Wdev", "flags": ["-Wdev"], "negation": "", "help": "= Enable developer warnings", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "Werror", "flags": ["-Werror"], "negation": "", "help": "= Make developer warnings errors", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "Wno_deprecated", "flags": ["-Wno-deprecated"], "negation": "", "help": "= Suppress deprecation warnings", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "Wno_dev", "flags": ["-Wno-dev"], "negation": "", "help": "= Suppress developer warnings", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "Wno_error", "flags": ["-Wno-error"], "negation": "", "help": "= Make developer warnings not errors", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "build", "flags": ["--build"], "negation": "", "help": "= Build a CMake-generated project binary tree", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "check_system_vars", "flags": ["--check-system-vars"], "negation": "", "help": "= Find problems with variable usage in system files", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "compile_no_warning_as_error", "flags": ["--compile-no-warning-as-error"], "negation": "", "help": "CMAKE_COMPILE_WARNING_AS_ERROR variable", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "debug_find", "flags": ["--debug-find"], "negation": "", "help": "= Put cmake find in a debug mode", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "debug_find_pkg", "flags": ["--debug-find-pkg"], "negation": "", "help": "= Limit cmake debug-find to the comma-separated list of packages", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "debug_find_var", "flags": ["--debug-find-var"], "negation": "", "help": "= Limit cmake debug-find to the comma-separated list of result variables", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "debug_output", "flags": ["--debug-output"], "negation": "", "help": "= Put cmake in a debug mode", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "debug_trycompile", "flags": ["--debug-trycompile"], "negation": "", "help": "= Do not delete the try_compile build tree", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "find_package", "flags": ["--find-package"], "negation": "", "help": "= Legacy pkg-config like mode", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "fresh", "flags": ["--fresh"], "negation": "", "help": "= Configure a fresh build tree, removing any existing cache file", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "graphviz", "flags": ["--graphviz"], "negation": "", "help": "= Generate graphviz of dependencies, see CMakeGraphVizOptions.cmake for more", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "help_command", "flags": ["--help-command"], "negation": "", "help": "", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "help_command_list", "flags": ["--help-command-list"], "negation": "", "help": "", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "help_commands", "flags": ["--help-commands"], "negation": "", "help": "= Print cmake-commands manual and exit", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "help_full", "flags": ["--help-full"], "negation": "", "help": "= Print all help manuals and exit", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "help_manual", "flags": ["--help-manual"], "negation": "", "help": "", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "help_manual_list", "flags": ["--help-manual-list"], "negation": "", "help": "= List help manuals available and exit", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "help_module", "flags": ["--help-module"], "negation": "", "help": "", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "help_module_list", "flags": ["--help-module-list"], "negation": "", "help": "= List modules with help available and exit", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "help_modules", "flags": ["--help-modules"], "negation": "", "help": "= Print cmake-modules manual and exit", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "help_policies", "flags": ["--help-policies"], "negation": "", "help": "= Print cmake-policies manual and exit", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "help_policy", "flags": ["--help-policy"], "negation": "", "help": "", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "help_policy_list", "flags": ["--help-policy-list"], "negation": "", "help": "= List policies with help available and exit", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "help_properties", "flags": ["--help-properties"], "negation": "", "help": "= Print cmake-properties manual and exit", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "help_property", "flags": ["--help-property"], "negation": "", "help": "= Print help for one property and exit", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "help_property_list", "flags": ["--help-property-list"], "negation": "", "help": "exit", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "help_variable", "flags": ["--help-variable"], "negation": "", "help": "", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "help_variable_list", "flags": ["--help-variable-list"], "negation": "", "help": "", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "help_variables", "flags": ["--help-variables"], "negation": "", "help": "= Print cmake-variables manual and exit", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "install", "flags": ["--install"], "negation": "", "help": "= Install a CMake-generated project binary tree", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "install_prefix", "flags": ["--install-prefix"], "negation": "", "help": "[CMAKE_INSTALL_PREFIX]", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "link_no_warning_as_error", "flags": ["--link-no-warning-as-error"], "negation": "", "help": "= Ignore LINK_WARNING_AS_ERROR property and CMAKE_LINK_WARNING_AS_ERROR variable", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "list_presets", "flags": ["--list-presets"], "negation": "", "help": "= List available presets", "type": "optvalue", "default": null, "choices": []}
+{"verb": "", "option": "log_context", "flags": ["--log-context"], "negation": "", "help": "= Prepend log messages with context, if given", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "log_level", "flags": ["--log-level"], "negation": "", "help": "= Set the verbosity of messages from CMake files", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "no_warn_unused_cli", "flags": ["--no-warn-unused-cli"], "negation": "", "help": "= Don't warn about command line options", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "open", "flags": ["--open"], "negation": "", "help": "= Open generated project in the associated application", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "preset", "flags": ["--preset", "--preset"], "negation": "", "help": "= Specify a configure preset", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "print_config_dir", "flags": ["--print-config-dir"], "negation": "", "help": "= Print CMake config directory for user-wide FileAPI queries", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "profiling_format", "flags": ["--profiling-format"], "negation": "", "help": "= Output data for profiling CMake scripts", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "profiling_output", "flags": ["--profiling-output"], "negation": "", "help": "= Select an output path for the profiling data enabled through --profiling-format", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "project_file", "flags": ["--project-file"], "negation": "", "help": "= Specify an alternate project file name", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "system_information", "flags": ["--system-information"], "negation": "", "help": "= Dump information about this system", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "toolchain", "flags": ["--toolchain"], "negation": "", "help": "= Specify toolchain file [CMAKE_TOOLCHAIN_FILE]", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "trace", "flags": ["--trace"], "negation": "", "help": "= Put cmake in trace mode", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "trace_expand", "flags": ["--trace-expand"], "negation": "", "help": "= Put cmake in trace mode with variable expansion", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "trace_format", "flags": ["--trace-format"], "negation": "", "help": "= Set the output format of the trace", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "trace_redirect", "flags": ["--trace-redirect"], "negation": "", "help": "= Redirect trace output to a file instead of stderr", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "trace_source", "flags": ["--trace-source"], "negation": "", "help": "= Trace only this CMake file/module", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "warn_uninitialized", "flags": ["--warn-uninitialized"], "negation": "", "help": "= Warn about uninitialized values", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "workflow", "flags": ["--workflow"], "negation": "", "help": "= Run a workflow preset", "type": "str", "default": null, "choices": []}
+{"version": "4.1.3", "date": "2025-11-19", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "4.2.0", "date": "2025-11-21", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "4.2.1", "date": "2025-12-21", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "4.2.3", "date": "2026-02-28", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "4.3.0", "date": "2026-03-23", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "4.3.1", "date": "2026-03-28", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "4.3.2", "date": "2026-04-23", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "4.3.4", "date": "2026-06-20", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "4.4.0", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "", "option": "W", "flags": ["-W"], "negation": "", "help": "= Enable the specified category of warnings", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "Wdeprecated", "gone": true}
+{"verb": "", "option": "Wdev", "gone": true}
+{"verb": "", "option": "Werror", "flags": ["-Werror"], "negation": "", "help": "= Make the specified category of warnings errors", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "Wno_", "flags": ["-Wno-"], "negation": "", "help": "= Suppress the specified category of warnings", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "Wno_deprecated", "gone": true}
+{"verb": "", "option": "Wno_dev", "gone": true}
+{"verb": "", "option": "Wno_error", "flags": ["-Wno-error"], "negation": "", "help": "= Make the specified category of warnings not errors", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "help_diagnostic", "flags": ["--help-diagnostic"], "negation": "", "help": "= Print help for one diagnostic and exit", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "help_diagnostic_list", "flags": ["--help-diagnostic-list"], "negation": "", "help": "= List diagnostics with help available and exit", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "help_diagnostics", "flags": ["--help-diagnostics"], "negation": "", "help": "= Print cmake-diagnostics manual and exit", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "no_warn_unused_cli", "gone": true}
+{"verb": "", "option": "presets_file", "flags": ["--presets-file", "--presets-file"], "negation": "", "help": "= Specify the path to a presets file", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "warn_uninitialized", "gone": true}
+{"version": "4.4.2", "date": "2026-08-04", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}

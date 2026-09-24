@@ -14,7 +14,6 @@ def test_the_version_is_the_installed_distributions() -> None:
 def test_the_public_surface_is_pinned() -> None:
     assert set(package.__all__) == {
         "ARCHES",
-        "DELTAS_DIR",
         "DOWNLOAD_KINDS",
         "HOSTS",
         "KINDS",
@@ -24,7 +23,7 @@ def test_the_public_surface_is_pinned() -> None:
         "PLATFORMS",
         "POINTER",
         "SURFACE_PLATFORMS",
-        "TOOL_FILE",
+        "RECORD_SUFFIX",
         "VERB_KEYS",
         "LINKS",
         "LOCK_FILE",
@@ -67,6 +66,7 @@ def test_the_public_surface_is_pinned() -> None:
         "host_key",
         "observations",
         "read_pointer",
+        "records_in",
         "render",
         "render_observation",
         "resolve",

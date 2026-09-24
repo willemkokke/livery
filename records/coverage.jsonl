@@ -1,0 +1,121 @@
+{"name": "coverage", "description": "", "kind": "uv-tool", "min_version": "", "hosts": []}
+{"version": "7.13.3", "date": "2026-02-03", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Coverage.py, version 7.13.3 with C extension"}}
+{"verb": "", "help": "Coverage.py, version 7.13.3 with C extension", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "annotate", "help": "Make annotated copies of the given files, marking statements that are executed with > and statements that are missed with !.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "annotate", "option": "data_file", "flags": ["--data-file"], "negation": "", "help": "Read coverage data for report generation from this file", "type": "str", "default": null, "choices": []}
+{"verb": "annotate", "option": "debug", "flags": ["--debug"], "negation": "", "help": "Debug options, separated by commas", "type": "str", "default": null, "choices": []}
+{"verb": "annotate", "option": "directory", "flags": ["--directory", "-d"], "negation": "", "help": "Write the output files to DIR", "type": "str", "default": null, "choices": []}
+{"verb": "annotate", "option": "ignore_errors", "flags": ["--ignore-errors", "-i"], "negation": "", "help": "Ignore errors while reading source files", "type": "bool", "default": null, "choices": []}
+{"verb": "annotate", "option": "include", "flags": ["--include"], "negation": "", "help": "Include only files whose paths match one of these patterns", "type": "list[str]", "default": null, "choices": []}
+{"verb": "annotate", "option": "omit", "flags": ["--omit"], "negation": "", "help": "Omit files whose paths match one of these patterns", "type": "list[str]", "default": null, "choices": []}
+{"verb": "annotate", "option": "rcfile", "flags": ["--rcfile"], "negation": "", "help": "Specify configuration file", "type": "str", "default": null, "choices": []}
+{"verb": "combine", "help": "Combine data from multiple coverage files. The combined results are written to a single file representing the union of the data. The positional arguments are data files or directories containing", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "combine", "option": "append", "flags": ["--append", "-a"], "negation": "", "help": "Append data to the data file", "type": "bool", "default": null, "choices": []}
+{"verb": "combine", "option": "data_file", "flags": ["--data-file"], "negation": "", "help": "Base name of the data files to operate on", "type": "str", "default": null, "choices": []}
+{"verb": "combine", "option": "debug", "flags": ["--debug"], "negation": "", "help": "Debug options, separated by commas", "type": "str", "default": null, "choices": []}
+{"verb": "combine", "option": "keep", "flags": ["--keep"], "negation": "", "help": "Keep original coverage files, otherwise they are deleted", "type": "bool", "default": null, "choices": []}
+{"verb": "combine", "option": "quiet", "flags": ["--quiet", "-q"], "negation": "", "help": "Don't print messages about what is happening", "type": "bool", "default": null, "choices": []}
+{"verb": "combine", "option": "rcfile", "flags": ["--rcfile"], "negation": "", "help": "Specify configuration file", "type": "str", "default": null, "choices": []}
+{"verb": "erase", "help": "Erase previously collected coverage data.", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "erase", "option": "data_file", "flags": ["--data-file"], "negation": "", "help": "Base name of the data files to operate on", "type": "str", "default": null, "choices": []}
+{"verb": "erase", "option": "debug", "flags": ["--debug"], "negation": "", "help": "Debug options, separated by commas", "type": "str", "default": null, "choices": []}
+{"verb": "erase", "option": "rcfile", "flags": ["--rcfile"], "negation": "", "help": "Specify configuration file", "type": "str", "default": null, "choices": []}
+{"verb": "html", "help": "Create an HTML report of the coverage of the files. Each file gets its own page, with the source decorated to show executed, excluded, and missed lines.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "html", "option": "contexts", "flags": ["--contexts"], "negation": "", "help": "Only display data from lines covered in the given contexts", "type": "list[str]", "default": null, "choices": []}
+{"verb": "html", "option": "data_file", "flags": ["--data-file"], "negation": "", "help": "Read coverage data for report generation from this file", "type": "str", "default": null, "choices": []}
+{"verb": "html", "option": "debug", "flags": ["--debug"], "negation": "", "help": "Debug options, separated by commas", "type": "str", "default": null, "choices": []}
+{"verb": "html", "option": "directory", "flags": ["--directory", "-d"], "negation": "", "help": "Write the output files to DIR", "type": "str", "default": null, "choices": []}
+{"verb": "html", "option": "fail_under", "flags": ["--fail-under"], "negation": "", "help": "Exit with a status of 2 if the total coverage is less than MIN", "type": "str", "default": null, "choices": []}
+{"verb": "html", "option": "ignore_errors", "flags": ["--ignore-errors", "-i"], "negation": "", "help": "Ignore errors while reading source files", "type": "bool", "default": null, "choices": []}
+{"verb": "html", "option": "include", "flags": ["--include"], "negation": "", "help": "Include only files whose paths match one of these patterns", "type": "list[str]", "default": null, "choices": []}
+{"verb": "html", "option": "omit", "flags": ["--omit"], "negation": "", "help": "Omit files whose paths match one of these patterns", "type": "list[str]", "default": null, "choices": []}
+{"verb": "html", "option": "precision", "flags": ["--precision"], "negation": "", "help": "Number of digits after the decimal point to display for reported coverage percentages", "type": "str", "default": null, "choices": []}
+{"verb": "html", "option": "quiet", "flags": ["--quiet", "-q"], "negation": "", "help": "Don't print messages about what is happening", "type": "bool", "default": null, "choices": []}
+{"verb": "html", "option": "rcfile", "flags": ["--rcfile"], "negation": "", "help": "Specify configuration file", "type": "str", "default": null, "choices": []}
+{"verb": "html", "option": "show_contexts", "flags": ["--show-contexts"], "negation": "", "help": "Show contexts for covered lines", "type": "bool", "default": null, "choices": []}
+{"verb": "html", "option": "skip_covered", "flags": ["--skip-covered"], "negation": "--no-skip-covered", "help": "Skip files with 100% coverage", "type": "bool", "default": null, "choices": []}
+{"verb": "html", "option": "skip_empty", "flags": ["--skip-empty"], "negation": "", "help": "Skip files with no code", "type": "bool", "default": null, "choices": []}
+{"verb": "html", "option": "title", "flags": ["--title"], "negation": "", "help": "A text string to use as the title on the HTML", "type": "str", "default": null, "choices": []}
+{"verb": "json", "help": "Generate a JSON report of coverage results.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "json", "option": "contexts", "flags": ["--contexts"], "negation": "", "help": "Only display data from lines covered in the given contexts", "type": "list[str]", "default": null, "choices": []}
+{"verb": "json", "option": "data_file", "flags": ["--data-file"], "negation": "", "help": "Read coverage data for report generation from this file", "type": "str", "default": null, "choices": []}
+{"verb": "json", "option": "debug", "flags": ["--debug"], "negation": "", "help": "Debug options, separated by commas", "type": "str", "default": null, "choices": []}
+{"verb": "json", "option": "fail_under", "flags": ["--fail-under"], "negation": "", "help": "Exit with a status of 2 if the total coverage is less than MIN", "type": "str", "default": null, "choices": []}
+{"verb": "json", "option": "ignore_errors", "flags": ["--ignore-errors", "-i"], "negation": "", "help": "Ignore errors while reading source files", "type": "bool", "default": null, "choices": []}
+{"verb": "json", "option": "include", "flags": ["--include"], "negation": "", "help": "Include only files whose paths match one of these patterns", "type": "list[str]", "default": null, "choices": []}
+{"verb": "json", "option": "o", "flags": ["-o"], "negation": "", "help": "Write the JSON report to this file", "type": "str", "default": null, "choices": []}
+{"verb": "json", "option": "omit", "flags": ["--omit"], "negation": "", "help": "Omit files whose paths match one of these patterns", "type": "list[str]", "default": null, "choices": []}
+{"verb": "json", "option": "pretty_print", "flags": ["--pretty-print"], "negation": "", "help": "Format the JSON for human readers", "type": "bool", "default": null, "choices": []}
+{"verb": "json", "option": "quiet", "flags": ["--quiet", "-q"], "negation": "", "help": "Don't print messages about what is happening", "type": "bool", "default": null, "choices": []}
+{"verb": "json", "option": "rcfile", "flags": ["--rcfile"], "negation": "", "help": "Specify configuration file", "type": "str", "default": null, "choices": []}
+{"verb": "json", "option": "show_contexts", "flags": ["--show-contexts"], "negation": "", "help": "Show contexts for covered lines", "type": "bool", "default": null, "choices": []}
+{"verb": "report", "help": "Report coverage statistics on modules.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "report", "option": "contexts", "flags": ["--contexts"], "negation": "", "help": "Only display data from lines covered in the given contexts", "type": "list[str]", "default": null, "choices": []}
+{"verb": "report", "option": "data_file", "flags": ["--data-file"], "negation": "", "help": "Read coverage data for report generation from this file", "type": "str", "default": null, "choices": []}
+{"verb": "report", "option": "debug", "flags": ["--debug"], "negation": "", "help": "Debug options, separated by commas", "type": "str", "default": null, "choices": []}
+{"verb": "report", "option": "fail_under", "flags": ["--fail-under"], "negation": "", "help": "Exit with a status of 2 if the total coverage is less than MIN", "type": "str", "default": null, "choices": []}
+{"verb": "report", "option": "format", "flags": ["--format"], "negation": "", "help": "Output format, either text (default), markdown, or total", "type": "str", "default": null, "choices": []}
+{"verb": "report", "option": "ignore_errors", "flags": ["--ignore-errors", "-i"], "negation": "", "help": "Ignore errors while reading source files", "type": "bool", "default": null, "choices": []}
+{"verb": "report", "option": "include", "flags": ["--include"], "negation": "", "help": "Include only files whose paths match one of these patterns", "type": "list[str]", "default": null, "choices": []}
+{"verb": "report", "option": "omit", "flags": ["--omit"], "negation": "", "help": "Omit files whose paths match one of these patterns", "type": "list[str]", "default": null, "choices": []}
+{"verb": "report", "option": "precision", "flags": ["--precision"], "negation": "", "help": "Number of digits after the decimal point to display for reported coverage percentages", "type": "str", "default": null, "choices": []}
+{"verb": "report", "option": "rcfile", "flags": ["--rcfile"], "negation": "", "help": "Specify configuration file", "type": "str", "default": null, "choices": []}
+{"verb": "report", "option": "show_missing", "flags": ["--show-missing", "-m"], "negation": "", "help": "Show line numbers of statements in each module that weren't executed", "type": "bool", "default": null, "choices": []}
+{"verb": "report", "option": "skip_covered", "flags": ["--skip-covered"], "negation": "--no-skip-covered", "help": "Skip files with 100% coverage", "type": "bool", "default": null, "choices": []}
+{"verb": "report", "option": "skip_empty", "flags": ["--skip-empty"], "negation": "", "help": "Skip files with no code", "type": "bool", "default": null, "choices": []}
+{"verb": "report", "option": "sort", "flags": ["--sort"], "negation": "", "help": "Sort the report by the named column: name, stmts, miss, branch, brpart, or cover", "type": "str", "default": null, "choices": []}
+{"verb": "run", "help": "Run a Python program, measuring code execution.", "wraps": true, "positional": "required", "lead": "pyfile"}
+{"verb": "run", "option": "append", "flags": ["--append", "-a"], "negation": "", "help": "Append data to the data file", "type": "bool", "default": null, "choices": []}
+{"verb": "run", "option": "branch", "flags": ["--branch"], "negation": "", "help": "Measure branch coverage in addition to statement coverage", "type": "bool", "default": null, "choices": []}
+{"verb": "run", "option": "concurrency", "flags": ["--concurrency"], "negation": "", "help": "Properly measure code using a concurrency library", "type": "str", "default": null, "choices": []}
+{"verb": "run", "option": "context", "flags": ["--context"], "negation": "", "help": "The context label to record for this coverage run", "type": "str", "default": null, "choices": []}
+{"verb": "run", "option": "data_file", "flags": ["--data-file"], "negation": "", "help": "Write the recorded coverage data to this file", "type": "str", "default": null, "choices": []}
+{"verb": "run", "option": "debug", "flags": ["--debug"], "negation": "", "help": "Debug options, separated by commas", "type": "str", "default": null, "choices": []}
+{"verb": "run", "option": "include", "flags": ["--include"], "negation": "", "help": "Include only files whose paths match one of these patterns", "type": "list[str]", "default": null, "choices": []}
+{"verb": "run", "option": "module", "flags": ["--module", "-m"], "negation": "", "help": "<pyfile> is an importable Python module, not a script path, to be run as 'python -m' would run it", "type": "bool", "default": null, "choices": []}
+{"verb": "run", "option": "omit", "flags": ["--omit"], "negation": "", "help": "Omit files whose paths match one of these patterns", "type": "list[str]", "default": null, "choices": []}
+{"verb": "run", "option": "parallel_mode", "flags": ["--parallel-mode", "-p"], "negation": "", "help": "Append a unique suffix to the data file name to collect separate data from multiple processes", "type": "bool", "default": null, "choices": []}
+{"verb": "run", "option": "pylib", "flags": ["--pylib", "-L"], "negation": "", "help": "Measure coverage even inside the Python installed library, which isn't done by default", "type": "bool", "default": null, "choices": []}
+{"verb": "run", "option": "rcfile", "flags": ["--rcfile"], "negation": "", "help": "Specify configuration file", "type": "str", "default": null, "choices": []}
+{"verb": "run", "option": "save_signal", "flags": ["--save-signal"], "negation": "", "help": "Specify a signal that will trigger coverage to write its collected data", "type": "str", "default": null, "choices": []}
+{"verb": "run", "option": "source", "flags": ["--source"], "negation": "", "help": "A list of directories or importable names of code to measure", "type": "list[str]", "default": null, "choices": []}
+{"verb": "run", "option": "timid", "flags": ["--timid"], "negation": "", "help": "Use the slower Python trace function core", "type": "bool", "default": null, "choices": []}
+{"verb": "xml", "help": "Generate an XML report of coverage results.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "xml", "option": "data_file", "flags": ["--data-file"], "negation": "", "help": "Read coverage data for report generation from this file", "type": "str", "default": null, "choices": []}
+{"verb": "xml", "option": "debug", "flags": ["--debug"], "negation": "", "help": "Debug options, separated by commas", "type": "str", "default": null, "choices": []}
+{"verb": "xml", "option": "fail_under", "flags": ["--fail-under"], "negation": "", "help": "Exit with a status of 2 if the total coverage is less than MIN", "type": "str", "default": null, "choices": []}
+{"verb": "xml", "option": "ignore_errors", "flags": ["--ignore-errors", "-i"], "negation": "", "help": "Ignore errors while reading source files", "type": "bool", "default": null, "choices": []}
+{"verb": "xml", "option": "include", "flags": ["--include"], "negation": "", "help": "Include only files whose paths match one of these patterns", "type": "list[str]", "default": null, "choices": []}
+{"verb": "xml", "option": "o", "flags": ["-o"], "negation": "", "help": "Write the XML report to this file", "type": "str", "default": null, "choices": []}
+{"verb": "xml", "option": "omit", "flags": ["--omit"], "negation": "", "help": "Omit files whose paths match one of these patterns", "type": "list[str]", "default": null, "choices": []}
+{"verb": "xml", "option": "quiet", "flags": ["--quiet", "-q"], "negation": "", "help": "Don't print messages about what is happening", "type": "bool", "default": null, "choices": []}
+{"verb": "xml", "option": "rcfile", "flags": ["--rcfile"], "negation": "", "help": "Specify configuration file", "type": "str", "default": null, "choices": []}
+{"verb": "xml", "option": "skip_empty", "flags": ["--skip-empty"], "negation": "", "help": "Skip files with no code", "type": "bool", "default": null, "choices": []}
+{"version": "7.13.4", "date": "2026-02-09", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Coverage.py, version 7.13.4 with C extension"}}
+{"verb": "", "help": "Coverage.py, version 7.13.4 with C extension"}
+{"version": "7.13.5", "date": "2026-03-17", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Coverage.py, version 7.13.5 with C extension"}}
+{"verb": "", "help": "Coverage.py, version 7.13.5 with C extension"}
+{"version": "7.14.0", "date": "2026-05-10", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Coverage.py, version 7.14.0 with C extension"}}
+{"verb": "", "help": "Coverage.py, version 7.14.0 with C extension"}
+{"version": "7.14.1", "date": "2026-05-26", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Coverage.py, version 7.14.1 with C extension"}}
+{"verb": "", "help": "Coverage.py, version 7.14.1 with C extension"}
+{"version": "7.14.2", "date": "2026-06-20", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Coverage.py, version 7.14.2 with C extension"}}
+{"verb": "", "help": "Coverage.py, version 7.14.2 with C extension"}
+{"version": "7.14.3", "date": "2026-06-22", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Coverage.py, version 7.14.3 with C extension"}}
+{"verb": "", "help": "Coverage.py, version 7.14.3 with C extension"}
+{"version": "7.15.0", "date": "2026-07-02", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Coverage.py, version 7.15.0 with C extension"}}
+{"verb": "", "help": "Coverage.py, version 7.15.0 with C extension"}
+{"verb": "annotate", "option": "keep_combined", "flags": ["--keep-combined"], "negation": "", "help": "Keep original coverage files, otherwise they are deleted after combining", "type": "bool", "default": null, "choices": []}
+{"verb": "html", "help": "Create an HTML report of coverage results. Each file gets its own page, with the source decorated to show executed, excluded, and missed lines."}
+{"verb": "html", "option": "keep_combined", "flags": ["--keep-combined"], "negation": "", "help": "Keep original coverage files, otherwise they are deleted after combining", "type": "bool", "default": null, "choices": []}
+{"verb": "json", "option": "keep_combined", "flags": ["--keep-combined"], "negation": "", "help": "Keep original coverage files, otherwise they are deleted after combining", "type": "bool", "default": null, "choices": []}
+{"verb": "report", "option": "keep_combined", "flags": ["--keep-combined"], "negation": "", "help": "Keep original coverage files, otherwise they are deleted after combining", "type": "bool", "default": null, "choices": []}
+{"verb": "xml", "option": "keep_combined", "flags": ["--keep-combined"], "negation": "", "help": "Keep original coverage files, otherwise they are deleted after combining", "type": "bool", "default": null, "choices": []}
+{"version": "7.15.1", "date": "2026-07-12", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Coverage.py, version 7.15.1 with C extension"}}
+{"verb": "", "help": "Coverage.py, version 7.15.1 with C extension"}
+{"version": "7.15.2", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Coverage.py, version 7.15.2 with C extension"}}
+{"verb": "", "help": "Coverage.py, version 7.15.2 with C extension"}
+{"version": "7.15.3", "date": "2026-08-02", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Coverage.py, version 7.15.3 with C extension"}}
+{"verb": "", "help": "Coverage.py, version 7.15.3 with C extension"}
+{"version": "7.15.4", "date": "2026-08-06", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Coverage.py, version 7.15.4 with C extension"}}
+{"verb": "", "help": "Coverage.py, version 7.15.4 with C extension"}

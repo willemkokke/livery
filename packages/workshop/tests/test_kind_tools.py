@@ -45,7 +45,7 @@ def _read(*versions: str) -> tuple[RecordDelta, ...]:
 
 def _records(root: Path, *records: Record) -> None:
     for record in records:
-        record.save(root / "records" / record.name)
+        record.save(root / "records")
 
 
 def _python_tools(*versions: str) -> list[Record]:

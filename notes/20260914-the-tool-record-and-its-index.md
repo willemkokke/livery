@@ -159,23 +159,25 @@ soon as this one is ruled. Only phase 8 waits, on that plan's phase 5.
 
 ### The record
 
-Authored in git, one directory per tool:
+Authored in git, one file of JSON lines per tool:
 
 ```
-records/<tool>/tool.json                    the tool axis
-records/<tool>/deltas/<nnnn>-<version>.json forward, append-only
+records/<tool>.jsonl    the tool axis, then per version its line and its statements
 ```
 
-`tool.json` carries what does not move with a version: the name, the
-description, the kind, the version floor for a `system-check` tool, the
-hosts the tool has, the tool-level deployment defaults and the per-host
-overrides of them.
+The first line carries what does not move with a version: the name, the
+description, the kind, the version floor for a `system-check` tool,
+`prime`, the oldest version the history reaches, the hosts the tool has,
+the tool-level deployment defaults and the per-host overrides of them.
 
-A delta is one version's arrival: its date, per host the artifact (URL and
-digest) and whatever deployment fields that version or that version and
-host override, and the surface read for it. Forward, because a new release
-is then a one-entry append and the whole of the review diff. Priming
-backwards is an occasional deepening and pays the rewrite instead.
+A version line is one version's arrival: its date, per host the artifact
+(URL and digest), whatever deployment fields that version or that version
+and host override, and the facts of its reading when one was taken. The
+statement lines under it are what the reading changed, one option, one
+verb's own fields, one withdrawal or one absence per line. Forward,
+because a new release is then an append and the review diff is the
+options that moved. Priming backwards is an occasional deepening and pays
+the rewrite instead.
 
 ### Resolution
 
@@ -194,10 +196,10 @@ agent's; open question 9 asks for the ruling.
 
 ### The surface
 
-A version's surface is a tree with one blob per verb, so adjacent versions
-share every unchanged verb by content address and any version is
-addressable with no replay. Per verb is the granularity: per option, a
-manifest entry costs about what the option costs.
+In the record a version's surface is stated one option at a time
+against the version before it. In the index it is one blob per
+version, the verbs whole, so any version is addressable with no
+replay.
 
 ### The published index
 

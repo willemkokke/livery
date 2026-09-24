@@ -1,0 +1,3 @@
+{"name": "fish", "description": "The friendly interactive shell", "kind": "system-check", "min_version": "", "hosts": []}
+{"version": "4.8.1", "date": "2026-08-25", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 3, "help": "The friendly interactive shell"}}
+{"verb": "", "help": "Run a command string in fish: `fish -c \"<command>\"`. A real shell: pipes, redirects, globbing and variables all work. `run(...)` stays shell-free.", "wraps": false, "positional": "required", "lead": "command"}

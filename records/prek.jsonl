@@ -1,0 +1,133 @@
+{"name": "prek", "description": "pre-commit runner, installed from the prebuilt release binary", "kind": "archive", "min_version": "", "hosts": ["macos-arm", "macos-x64", "linux-x64", "linux-arm", "windows-x64"], "layout": {"entry_points": ["prek"], "paths": ["."]}, "host_layouts": {"macos-arm": {"root": "prek-aarch64-apple-darwin"}, "macos-x64": {"root": "prek-x86_64-apple-darwin"}, "linux-x64": {"root": "prek-x86_64-unknown-linux-gnu"}, "linux-arm": {"root": "prek-aarch64-unknown-linux-gnu"}, "windows-x64": {"entry_points": ["prek.exe"]}}}
+{"version": "0.4.2", "date": "2026-05-26", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "A fast Git hook manager written in Rust, designed as a drop-in alternative to pre-commit, reimagined."}}
+{"verb": "", "help": "A fast Git hook manager written in Rust, designed as a drop-in alternative to pre-commit, reimagined.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "", "option": "all_files", "flags": ["--all-files", "-a"], "negation": "", "help": "Run on all files in the repo", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "cd", "flags": ["--cd", "-C"], "negation": "", "help": "Change to directory before running", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "color", "flags": ["--color"], "negation": "", "help": "Whether to use color in output", "type": "choice", "default": "auto", "choices": ["auto", "always", "never"]}
+{"verb": "", "option": "config", "flags": ["--config", "-c"], "negation": "", "help": "Path to alternate config file", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "directory", "flags": ["--directory", "-d"], "negation": "", "help": "Run hooks on all files in the specified directories", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "dry_run", "flags": ["--dry-run"], "negation": "", "help": "Do not run the hooks, but print the hooks that would have been run", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "fail_fast", "flags": ["--fail-fast"], "negation": "", "help": "Stop running hooks after the first failure", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "files", "flags": ["--files"], "negation": "", "help": "Specific filenames to run hooks on", "type": "list[str]", "default": null, "choices": []}
+{"verb": "", "option": "from_ref", "flags": ["--from-ref", "-s"], "negation": "", "help": "The original ref in a `<from_ref>...<to_ref>` diff expression", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "last_commit", "flags": ["--last-commit"], "negation": "", "help": "Run hooks against the last commit", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "log_file", "flags": ["--log-file"], "negation": "", "help": "Write trace logs to the specified file", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "no_progress", "flags": ["--no-progress"], "negation": "", "help": "Hide all progress outputs", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "quiet", "flags": ["--quiet", "-q"], "negation": "", "help": "Use quiet output", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "refresh", "flags": ["--refresh"], "negation": "", "help": "Refresh all cached data", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "show_diff_on_failure", "flags": ["--show-diff-on-failure"], "negation": "", "help": "When hooks fail, run `git diff` directly afterward", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "skip", "flags": ["--skip"], "negation": "", "help": "Skip the specified hooks or projects", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "stage", "flags": ["--stage"], "negation": "", "help": "The stage during which the hook is fired", "type": "choice", "default": null, "choices": ["manual", "commit-msg", "post-checkout", "post-commit", "post-merge", "post-rewrite", "pre-commit", "pre-merge-commit", "pre-push", "pre-rebase", "prepare-commit-msg"]}
+{"verb": "", "option": "to_ref", "flags": ["--to-ref", "-o"], "negation": "", "help": "The destination ref in a `from_ref...to_ref` diff expression", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "verbose", "flags": ["--verbose", "-v"], "negation": "", "help": "Use verbose output", "type": "bool", "default": null, "choices": []}
+{"verb": "autoupdate", "help": "Auto-update the `rev` field of repositories in the config file to the latest version", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "autoupdate", "option": "bleeding_edge", "flags": ["--bleeding-edge"], "negation": "", "help": "Update to the bleeding edge of the default branch instead of the latest tagged version", "type": "bool", "default": null, "choices": []}
+{"verb": "autoupdate", "option": "cd", "flags": ["--cd", "-C"], "negation": "", "help": "Change to directory before running", "type": "str", "default": null, "choices": []}
+{"verb": "autoupdate", "option": "check", "flags": ["--check"], "negation": "", "help": "Alias of `--dry-run --exit-code`", "type": "bool", "default": null, "choices": []}
+{"verb": "autoupdate", "option": "color", "flags": ["--color"], "negation": "", "help": "Whether to use color in output", "type": "choice", "default": "auto", "choices": ["auto", "always", "never"]}
+{"verb": "autoupdate", "option": "config", "flags": ["--config", "-c"], "negation": "", "help": "Path to alternate config file", "type": "str", "default": null, "choices": []}
+{"verb": "autoupdate", "option": "cooldown_days", "flags": ["--cooldown-days"], "negation": "", "help": "Minimum release age (in days) required for a version to be eligible", "type": "str", "default": null, "choices": []}
+{"verb": "autoupdate", "option": "dry_run", "flags": ["--dry-run"], "negation": "", "help": "Do not write changes to the config file, only display what would be changed", "type": "bool", "default": null, "choices": []}
+{"verb": "autoupdate", "option": "exclude_repo", "flags": ["--exclude-repo"], "negation": "", "help": "Do not update this repository", "type": "list[str]", "default": null, "choices": []}
+{"verb": "autoupdate", "option": "exclude_tag", "flags": ["--exclude-tag"], "negation": "", "help": "Ignore tags matching this glob pattern", "type": "list[str]", "default": null, "choices": []}
+{"verb": "autoupdate", "option": "exit_code", "flags": ["--exit-code"], "negation": "", "help": "Exit with status 1 if updates are available", "type": "bool", "default": null, "choices": []}
+{"verb": "autoupdate", "option": "freeze", "flags": ["--freeze"], "negation": "", "help": "Store \"frozen\" hashes in `rev` instead of tag names", "type": "bool", "default": null, "choices": []}
+{"verb": "autoupdate", "option": "include_tag", "flags": ["--include-tag"], "negation": "", "help": "Only consider tags matching this glob pattern", "type": "list[str]", "default": null, "choices": []}
+{"verb": "autoupdate", "option": "jobs", "flags": ["--jobs", "-j"], "negation": "", "help": "Number of threads to use", "type": "str", "default": "0", "choices": []}
+{"verb": "autoupdate", "option": "log_file", "flags": ["--log-file"], "negation": "", "help": "Write trace logs to the specified file", "type": "str", "default": null, "choices": []}
+{"verb": "autoupdate", "option": "no_progress", "flags": ["--no-progress"], "negation": "", "help": "Hide all progress outputs", "type": "bool", "default": null, "choices": []}
+{"verb": "autoupdate", "option": "quiet", "flags": ["--quiet", "-q"], "negation": "", "help": "Use quiet output", "type": "bool", "default": null, "choices": []}
+{"verb": "autoupdate", "option": "refresh", "flags": ["--refresh"], "negation": "", "help": "Refresh all cached data", "type": "bool", "default": null, "choices": []}
+{"verb": "autoupdate", "option": "repo", "flags": ["--repo"], "negation": "", "help": "Only update this repository", "type": "list[str]", "default": null, "choices": []}
+{"verb": "autoupdate", "option": "repo_exclude_tag", "flags": ["--repo-exclude-tag"], "negation": "", "help": "Ignore tags matching this glob pattern for a repository (`<repo>=<pattern>`)", "type": "list[str]", "default": null, "choices": []}
+{"verb": "autoupdate", "option": "repo_include_tag", "flags": ["--repo-include-tag"], "negation": "", "help": "Only consider tags matching this glob pattern for a repository (`<repo>=<pattern>`)", "type": "list[str]", "default": null, "choices": []}
+{"verb": "autoupdate", "option": "verbose", "flags": ["--verbose", "-v"], "negation": "", "help": "Use verbose output", "type": "bool", "default": null, "choices": []}
+{"verb": "clean", "help": "Remove all prek cached data", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "clean", "option": "cd", "flags": ["--cd", "-C"], "negation": "", "help": "Change to directory before running", "type": "str", "default": null, "choices": []}
+{"verb": "clean", "option": "color", "flags": ["--color"], "negation": "", "help": "Whether to use color in output", "type": "choice", "default": "auto", "choices": ["auto", "always", "never"]}
+{"verb": "clean", "option": "config", "flags": ["--config", "-c"], "negation": "", "help": "Path to alternate config file", "type": "str", "default": null, "choices": []}
+{"verb": "clean", "option": "log_file", "flags": ["--log-file"], "negation": "", "help": "Write trace logs to the specified file", "type": "str", "default": null, "choices": []}
+{"verb": "clean", "option": "no_progress", "flags": ["--no-progress"], "negation": "", "help": "Hide all progress outputs", "type": "bool", "default": null, "choices": []}
+{"verb": "clean", "option": "quiet", "flags": ["--quiet", "-q"], "negation": "", "help": "Use quiet output", "type": "bool", "default": null, "choices": []}
+{"verb": "clean", "option": "refresh", "flags": ["--refresh"], "negation": "", "help": "Refresh all cached data", "type": "bool", "default": null, "choices": []}
+{"verb": "clean", "option": "verbose", "flags": ["--verbose", "-v"], "negation": "", "help": "Use verbose output", "type": "bool", "default": null, "choices": []}
+{"verb": "install", "help": "Install prek Git shims into Git's effective hooks directory", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "install", "option": "allow_missing_config", "flags": ["--allow-missing-config"], "negation": "", "help": "Allow a missing configuration file", "type": "bool", "default": null, "choices": []}
+{"verb": "install", "option": "cd", "flags": ["--cd", "-C"], "negation": "", "help": "Change to directory before running", "type": "str", "default": null, "choices": []}
+{"verb": "install", "option": "color", "flags": ["--color"], "negation": "", "help": "Whether to use color in output", "type": "choice", "default": "auto", "choices": ["auto", "always", "never"]}
+{"verb": "install", "option": "config", "flags": ["--config", "-c"], "negation": "", "help": "Path to alternate config file", "type": "str", "default": null, "choices": []}
+{"verb": "install", "option": "git_dir", "flags": ["--git-dir"], "negation": "", "help": "Install Git shims into the `hooks` subdirectory of the given git directory (`<GIT_DIR>/hooks/`)", "type": "str", "default": null, "choices": []}
+{"verb": "install", "option": "hook_type", "flags": ["--hook-type", "-t"], "negation": "", "help": "Which Git shim(s) to install", "type": "choice", "default": null, "choices": ["commit-msg", "post-checkout", "post-commit", "post-merge", "post-rewrite", "pre-commit", "pre-merge-commit", "pre-push", "pre-rebase", "prepare-commit-msg"]}
+{"verb": "install", "option": "log_file", "flags": ["--log-file"], "negation": "", "help": "Write trace logs to the specified file", "type": "str", "default": null, "choices": []}
+{"verb": "install", "option": "no_progress", "flags": ["--no-progress"], "negation": "", "help": "Hide all progress outputs", "type": "bool", "default": null, "choices": []}
+{"verb": "install", "option": "overwrite", "flags": ["--overwrite", "-f"], "negation": "", "help": "Overwrite existing Git shims", "type": "bool", "default": null, "choices": []}
+{"verb": "install", "option": "prepare_hooks", "flags": ["--prepare-hooks"], "negation": "", "help": "Also prepare environments for all hooks used in the config file", "type": "bool", "default": null, "choices": []}
+{"verb": "install", "option": "quiet", "flags": ["--quiet", "-q"], "negation": "", "help": "Use quiet output", "type": "bool", "default": null, "choices": []}
+{"verb": "install", "option": "refresh", "flags": ["--refresh"], "negation": "", "help": "Refresh all cached data", "type": "bool", "default": null, "choices": []}
+{"verb": "install", "option": "skip", "flags": ["--skip"], "negation": "", "help": "Skip the specified hooks or projects", "type": "str", "default": null, "choices": []}
+{"verb": "install", "option": "verbose", "flags": ["--verbose", "-v"], "negation": "", "help": "Use verbose output", "type": "bool", "default": null, "choices": []}
+{"verb": "run", "help": "Run hooks", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "run", "option": "all_files", "flags": ["--all-files", "-a"], "negation": "", "help": "Run on all files in the repo", "type": "bool", "default": null, "choices": []}
+{"verb": "run", "option": "cd", "flags": ["--cd", "-C"], "negation": "", "help": "Change to directory before running", "type": "str", "default": null, "choices": []}
+{"verb": "run", "option": "color", "flags": ["--color"], "negation": "", "help": "Whether to use color in output", "type": "choice", "default": "auto", "choices": ["auto", "always", "never"]}
+{"verb": "run", "option": "config", "flags": ["--config", "-c"], "negation": "", "help": "Path to alternate config file", "type": "str", "default": null, "choices": []}
+{"verb": "run", "option": "directory", "flags": ["--directory", "-d"], "negation": "", "help": "Run hooks on all files in the specified directories", "type": "str", "default": null, "choices": []}
+{"verb": "run", "option": "dry_run", "flags": ["--dry-run"], "negation": "", "help": "Do not run the hooks, but print the hooks that would have been run", "type": "bool", "default": null, "choices": []}
+{"verb": "run", "option": "fail_fast", "flags": ["--fail-fast"], "negation": "", "help": "Stop running hooks after the first failure", "type": "bool", "default": null, "choices": []}
+{"verb": "run", "option": "files", "flags": ["--files"], "negation": "", "help": "Specific filenames to run hooks on", "type": "list[str]", "default": null, "choices": []}
+{"verb": "run", "option": "from_ref", "flags": ["--from-ref", "-s"], "negation": "", "help": "The original ref in a `<from_ref>...<to_ref>` diff expression", "type": "str", "default": null, "choices": []}
+{"verb": "run", "option": "last_commit", "flags": ["--last-commit"], "negation": "", "help": "Run hooks against the last commit", "type": "bool", "default": null, "choices": []}
+{"verb": "run", "option": "log_file", "flags": ["--log-file"], "negation": "", "help": "Write trace logs to the specified file", "type": "str", "default": null, "choices": []}
+{"verb": "run", "option": "no_progress", "flags": ["--no-progress"], "negation": "", "help": "Hide all progress outputs", "type": "bool", "default": null, "choices": []}
+{"verb": "run", "option": "quiet", "flags": ["--quiet", "-q"], "negation": "", "help": "Use quiet output", "type": "bool", "default": null, "choices": []}
+{"verb": "run", "option": "refresh", "flags": ["--refresh"], "negation": "", "help": "Refresh all cached data", "type": "bool", "default": null, "choices": []}
+{"verb": "run", "option": "show_diff_on_failure", "flags": ["--show-diff-on-failure"], "negation": "", "help": "When hooks fail, run `git diff` directly afterward", "type": "bool", "default": null, "choices": []}
+{"verb": "run", "option": "skip", "flags": ["--skip"], "negation": "", "help": "Skip the specified hooks or projects", "type": "str", "default": null, "choices": []}
+{"verb": "run", "option": "stage", "flags": ["--stage"], "negation": "", "help": "The stage during which the hook is fired", "type": "choice", "default": null, "choices": ["manual", "commit-msg", "post-checkout", "post-commit", "post-merge", "post-rewrite", "pre-commit", "pre-merge-commit", "pre-push", "pre-rebase", "prepare-commit-msg"]}
+{"verb": "run", "option": "to_ref", "flags": ["--to-ref", "-o"], "negation": "", "help": "The destination ref in a `from_ref...to_ref` diff expression", "type": "str", "default": null, "choices": []}
+{"verb": "run", "option": "verbose", "flags": ["--verbose", "-v"], "negation": "", "help": "Use verbose output", "type": "bool", "default": null, "choices": []}
+{"verb": "uninstall", "help": "Uninstall prek Git shims", "wraps": false, "positional": "none", "lead": ""}
+{"verb": "uninstall", "option": "all", "flags": ["--all"], "negation": "", "help": "Uninstall all prek-managed Git shims", "type": "bool", "default": null, "choices": []}
+{"verb": "uninstall", "option": "cd", "flags": ["--cd", "-C"], "negation": "", "help": "Change to directory before running", "type": "str", "default": null, "choices": []}
+{"verb": "uninstall", "option": "color", "flags": ["--color"], "negation": "", "help": "Whether to use color in output", "type": "choice", "default": "auto", "choices": ["auto", "always", "never"]}
+{"verb": "uninstall", "option": "config", "flags": ["--config", "-c"], "negation": "", "help": "Path to alternate config file", "type": "str", "default": null, "choices": []}
+{"verb": "uninstall", "option": "git_dir", "flags": ["--git-dir"], "negation": "", "help": "Uninstall Git shims from the `hooks` subdirectory of the given git directory (`<GIT_DIR>/hooks/`)", "type": "str", "default": null, "choices": []}
+{"verb": "uninstall", "option": "hook_type", "flags": ["--hook-type", "-t"], "negation": "", "help": "Which Git shim(s) to uninstall", "type": "choice", "default": null, "choices": ["commit-msg", "post-checkout", "post-commit", "post-merge", "post-rewrite", "pre-commit", "pre-merge-commit", "pre-push", "pre-rebase", "prepare-commit-msg"]}
+{"verb": "uninstall", "option": "log_file", "flags": ["--log-file"], "negation": "", "help": "Write trace logs to the specified file", "type": "str", "default": null, "choices": []}
+{"verb": "uninstall", "option": "no_progress", "flags": ["--no-progress"], "negation": "", "help": "Hide all progress outputs", "type": "bool", "default": null, "choices": []}
+{"verb": "uninstall", "option": "quiet", "flags": ["--quiet", "-q"], "negation": "", "help": "Use quiet output", "type": "bool", "default": null, "choices": []}
+{"verb": "uninstall", "option": "refresh", "flags": ["--refresh"], "negation": "", "help": "Refresh all cached data", "type": "bool", "default": null, "choices": []}
+{"verb": "uninstall", "option": "verbose", "flags": ["--verbose", "-v"], "negation": "", "help": "Use verbose output", "type": "bool", "default": null, "choices": []}
+{"version": "0.4.3", "date": "2026-05-27", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.4.4", "date": "2026-06-04", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "", "option": "group", "flags": ["--group"], "negation": "", "help": "Run hooks belonging to the specified group", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "no_group", "flags": ["--no-group"], "negation": "", "help": "Do not run hooks belonging to the specified group", "type": "str", "default": null, "choices": []}
+{"verb": "run", "option": "group", "flags": ["--group"], "negation": "", "help": "Run hooks belonging to the specified group", "type": "str", "default": null, "choices": []}
+{"verb": "run", "option": "no_group", "flags": ["--no-group"], "negation": "", "help": "Do not run hooks belonging to the specified group", "type": "str", "default": null, "choices": []}
+{"version": "0.4.5", "date": "2026-06-15", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.4.6", "date": "2026-07-01", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.4.7", "date": "2026-07-04", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "autoupdate", "help": "Update the `rev` field of repositories in the config file to the latest version"}
+{"version": "0.4.8", "date": "2026-07-04", "artifacts": {"macos-arm": {"url": "https://github.com/j178/prek/releases/download/v0.4.8/prek-aarch64-apple-darwin.tar.gz", "sha256": "f0084a9b5ce467c00306b2b329cc929744e2723ed1e7c369929a60ab10196fcc"}, "macos-x64": {"url": "https://github.com/j178/prek/releases/download/v0.4.8/prek-x86_64-apple-darwin.tar.gz", "sha256": "dc402357bc5074791f4f1bcf5ce8622da38272e210ff84a551d3044e8da6f05d"}, "linux-x64": {"url": "https://github.com/j178/prek/releases/download/v0.4.8/prek-x86_64-unknown-linux-gnu.tar.gz", "sha256": "9b6a7c2e825c1b916ab3bb843505902c07f3937975f935294852643510d721db"}, "linux-arm": {"url": "https://github.com/j178/prek/releases/download/v0.4.8/prek-aarch64-unknown-linux-gnu.tar.gz", "sha256": "4a4d6ee04ed8b9142548d52e9d1f3c22055a333af72022b52d3610a62ae084de"}, "windows-x64": {"url": "https://github.com/j178/prek/releases/download/v0.4.8/prek-x86_64-pc-windows-msvc.zip", "sha256": "7c17dba682812ab24e04a4982dccc228dbf74b695444bd9fa8cbb8c1dc78664c"}}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.4.9", "date": "2026-07-11", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.4.10", "date": "2026-07-16", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.4.11", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "", "option": "all_files", "flags": ["--all-files", "-a"], "negation": "", "help": "Run hooks on all tracked files in the repository", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "directory", "flags": ["--directory", "-d"], "negation": "", "help": "Run hooks on tracked files under the specified directory", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "files", "flags": ["--files"], "negation": "", "help": "Run hooks on the specified file paths", "type": "list[str]", "default": null, "choices": []}
+{"verb": "", "option": "glob", "flags": ["--glob"], "negation": "", "help": "Run hooks on tracked files matching the specified glob pattern", "type": "str", "default": null, "choices": []}
+{"verb": "run", "option": "all_files", "flags": ["--all-files", "-a"], "negation": "", "help": "Run hooks on all tracked files in the repository", "type": "bool", "default": null, "choices": []}
+{"verb": "run", "option": "directory", "flags": ["--directory", "-d"], "negation": "", "help": "Run hooks on tracked files under the specified directory", "type": "str", "default": null, "choices": []}
+{"verb": "run", "option": "files", "flags": ["--files"], "negation": "", "help": "Run hooks on the specified file paths", "type": "list[str]", "default": null, "choices": []}
+{"verb": "run", "option": "glob", "flags": ["--glob"], "negation": "", "help": "Run hooks on tracked files matching the specified glob pattern", "type": "str", "default": null, "choices": []}
+{"version": "0.4.12", "date": "2026-08-03", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "", "option": "require_group", "flags": ["--require-group"], "negation": "", "help": "Run hooks belonging to every specified group", "type": "str", "default": null, "choices": []}
+{"verb": "autoupdate", "help": "Update configured repositories"}
+{"verb": "install", "help": "Install prek Git hook shims"}
+{"verb": "install", "option": "force", "flags": ["--force", "-f"], "negation": "", "help": "Force installation and overwrite existing Git shims", "type": "bool", "default": null, "choices": []}
+{"verb": "install", "option": "overwrite", "gone": true}
+{"verb": "run", "help": "Run configured hooks"}
+{"verb": "run", "option": "require_group", "flags": ["--require-group"], "negation": "", "help": "Run hooks belonging to every specified group", "type": "str", "default": null, "choices": []}
+{"verb": "uninstall", "help": "Uninstall prek Git hook shims"}
+{"version": "0.4.13", "date": "2026-08-10", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "0.4.14", "date": "2026-08-17", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}

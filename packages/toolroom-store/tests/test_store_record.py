@@ -49,6 +49,10 @@ def _delta(
     )
 
 
+def _lines(path: Path) -> list[str]:
+    return path.read_text("utf-8").splitlines()
+
+
 def _record(**overrides: object) -> Record:
     fields: dict[str, object] = {
         "name": "tool",
@@ -170,93 +174,186 @@ def test_a_mode_outside_the_three_is_refused_and_the_kinds_default_by_shape(
     bare = _record()
     assert "package" not in bare.to_json() and "mode" not in bare.to_json()
     told = _record(kind="uv-tool", package="the-dist", mode="link")
-    told.save(tmp_path / "tool")
-    loaded = Record.load(tmp_path / "tool")
+    told.save(tmp_path)
+    loaded = Record.load(tmp_path / "tool.jsonl")
     assert (loaded.package, loaded.mode) == ("the-dist", "link")
-    written = json.loads((tmp_path / "tool" / "tool.json").read_text("utf-8"))
+    written = json.loads(_lines(tmp_path / "tool.jsonl")[0])
     assert list(written)[:5] == ["name", "description", "kind", "package", "mode"]
 
 
 def test_a_delta_out_of_sequence_or_repeating_a_version_is_refused() -> None:
-    with pytest.raises(
-        RecordError, match=r"0002-1\.json: out of sequence; expected 0001"
-    ):
+    with pytest.raises(RecordError, match=r"version 1: out of sequence; expected 1"):
         _record(deltas=(_delta(sequence=2),))
-    with pytest.raises(
-        RecordError, match=r"0003-3\.json: out of sequence; expected 0002"
-    ):
+    with pytest.raises(RecordError, match=r"version 3: out of sequence; expected 2"):
         _record(deltas=(_delta(1, "1"), _delta(3, "3")))
     with pytest.raises(RecordError, match=r"version 1 was added before"):
         _record(deltas=(_delta(1, "1"), _delta(2, "1")))
-    with pytest.raises(RecordError, match=r"sequence is not a positive integer"):
-        RecordDelta.from_json(
-            {"sequence": 0, "version": "1", "artifacts": {}}, where="d"
-        )
+
+
+def _parsed(*lines: object, where: str = "d") -> Record:
+    return Record.parse("\n".join(json.dumps(line) for line in lines), where=where)
 
 
 def test_json_that_is_not_a_record_is_refused_naming_where(tmp_path: Path) -> None:
-    with pytest.raises(RecordError, match=r"tool.json: unknown keys pinned"):
+    with pytest.raises(RecordError, match=r"line 1: unknown keys pinned"):
         Record.from_json({"name": "t", "hosts": [], "pinned": "1"})
-    with pytest.raises(RecordError, match=r"tool.json: no name"):
+    with pytest.raises(RecordError, match=r"line 1: no name"):
         Record.from_json({"hosts": []})
-    with pytest.raises(RecordError, match=r"d artifacts\[macos-arm\]: no sha256"):
-        RecordDelta.from_json(
-            {"sequence": 1, "version": "1", "artifacts": {"macos-arm": {"url": "u"}}},
-            where="d",
-        )
-    with pytest.raises(RecordError, match=r"d layout paths: not a list of strings"):
-        RecordDelta.from_json(
-            {
-                "sequence": 1,
-                "version": "1",
-                "artifacts": {},
-                "layout": {"paths": "bin"},
-            },
-            where="d",
-        )
-    with pytest.raises(RecordError, match=r"no tool.json"):
+    axis = {"name": "t", "hosts": ["macos-arm"]}
+    with pytest.raises(
+        RecordError, match=r"d line 2 artifacts\[macos-arm\]: no sha256"
+    ):
+        _parsed(axis, {"version": "1", "artifacts": {"macos-arm": {"url": "u"}}})
+    with pytest.raises(
+        RecordError, match=r"d line 2 layout paths: not a list of strings"
+    ):
+        _parsed(axis, {"version": "1", "artifacts": {}, "layout": {"paths": "bin"}})
+    with pytest.raises(RecordError, match=r"missing: no such record"):
         Record.load(tmp_path / "missing")
     (tmp_path / "t").mkdir()
-    (tmp_path / "t" / "tool.json").write_text("{", encoding="utf-8")
-    with pytest.raises(RecordError, match=r"t/tool.json: not JSON"):
+    with pytest.raises(RecordError, match=r"a directory, not a record file"):
         Record.load(tmp_path / "t")
+    (tmp_path / "t.jsonl").write_text("{", encoding="utf-8")
+    with pytest.raises(RecordError, match=r"t.jsonl line 1: not JSON"):
+        Record.load(tmp_path / "t.jsonl")
+    (tmp_path / "e.jsonl").write_text("\n", encoding="utf-8")
+    with pytest.raises(RecordError, match=r"e.jsonl: empty"):
+        Record.load(tmp_path / "e.jsonl")
 
 
 def test_every_json_shape_outside_the_model_is_refused_naming_where() -> None:
-    with pytest.raises(RecordError, match=r"tool.json: not a JSON object"):
+    with pytest.raises(RecordError, match=r"line 1: not a JSON object"):
         Record.from_json(["not", "an", "object"])
-    with pytest.raises(RecordError, match=r"tool.json name: not a string"):
+    with pytest.raises(RecordError, match=r"line 1 name: not a string"):
         Record.from_json({"name": 7, "hosts": []})
-    with pytest.raises(RecordError, match=r"tool.json: host_layouts is not an object"):
+    with pytest.raises(RecordError, match=r"line 1: host_layouts is not an object"):
         Record.from_json({"name": "t", "hosts": [], "host_layouts": []})
     with pytest.raises(
-        RecordError, match=r"tool.json layout env: not an object of strings"
+        RecordError, match=r"line 1 layout env: not an object of strings"
     ):
         Record.from_json({"name": "t", "hosts": [], "layout": {"env": {"A": 1}}})
-    with pytest.raises(RecordError, match=r"d: no version"):
-        RecordDelta.from_json({"sequence": 1, "artifacts": {}}, where="d")
-    with pytest.raises(RecordError, match=r"d: artifacts is not an object"):
-        RecordDelta.from_json(
-            {"sequence": 1, "version": "1", "artifacts": []}, where="d"
-        )
-    with pytest.raises(RecordError, match=r"d: host_layouts is not an object"):
-        RecordDelta.from_json(
-            {"sequence": 1, "version": "1", "artifacts": {}, "host_layouts": 3},
-            where="d",
-        )
+    axis = {"name": "t", "hosts": ["macos-arm"]}
+    with pytest.raises(RecordError, match=r"d line 2: not a JSON object"):
+        _parsed(axis, [])
+    with pytest.raises(RecordError, match=r"d line 2: neither a version line nor"):
+        _parsed(axis, {"artifacts": {}})
+    with pytest.raises(RecordError, match=r"d line 2: artifacts is not an object"):
+        _parsed(axis, {"version": "1", "artifacts": []})
+    with pytest.raises(RecordError, match=r"d line 2: host_layouts is not an object"):
+        _parsed(axis, {"version": "1", "artifacts": {}, "host_layouts": 3})
     with pytest.raises(
-        RecordError, match=r"d artifacts\[macos-arm\]: artifact sha256 'xyz'"
+        RecordError, match=r"artifacts\[macos-arm\]: artifact sha256 'xyz'"
     ):
-        RecordDelta.from_json(
-            {
-                "sequence": 1,
-                "version": "1",
-                "artifacts": {"macos-arm": {"url": "u", "sha256": "xyz"}},
-            },
-            where="d",
+        _parsed(
+            axis,
+            {"version": "1", "artifacts": {"macos-arm": {"url": "u", "sha256": "xyz"}}},
         )
     with pytest.raises(RecordError, match=r"a record needs a name"):
         Record("", hosts=())
+
+
+def test_a_statement_line_off_its_place_or_shape_is_refused_naming_the_line() -> None:
+    """The refusals of the line form: place, shape, and a thing stated twice."""
+    axis = {"name": "t", "kind": "uv-tool", "hosts": []}
+    read = {
+        "version": "1",
+        "read": {"platforms": ["Linux"], "extractor": 1, "help": "T"},
+    }
+    unread = {"version": "0"}
+    verb = {"verb": "", "help": "", "wraps": False, "positional": "any", "lead": ""}
+    option = {
+        "verb": "",
+        "option": "q",
+        "flags": ["-q"],
+        "negation": "",
+        "help": "",
+        "type": "bool",
+        "default": None,
+        "choices": [],
+    }
+    with pytest.raises(RecordError, match=r"d line 2: a statement before any version"):
+        _parsed(axis, verb)
+    with pytest.raises(
+        RecordError, match=r"d line 3: a statement under version 0, which"
+    ):
+        _parsed(axis, unread, verb)
+    with pytest.raises(RecordError, match=r"d line 3: unknown keys since"):
+        _parsed(axis, read, {**verb, "since": "1"})
+    with pytest.raises(RecordError, match=r"d line 3: a verb line sets nothing"):
+        _parsed(axis, read, {"verb": ""})
+    with pytest.raises(RecordError, match=r"d line 3: gone is not true"):
+        _parsed(axis, read, {"verb": "", "gone": False})
+    with pytest.raises(RecordError, match=r"d line 4: help of verb '' stated twice"):
+        _parsed(axis, read, verb, {"verb": "", "help": "again"})
+    with pytest.raises(
+        RecordError, match=r"d line 5: option 'q' of verb '' stated twice"
+    ):
+        _parsed(axis, read, verb, option, option)
+    with pytest.raises(RecordError, match=r"d line 4: verb '' stated twice"):
+        _parsed(axis, read, {"verb": "", "gone": True}, {"verb": "", "gone": True})
+    with pytest.raises(RecordError, match=r"d line 4: verb '' was withdrawn above"):
+        _parsed(axis, read, {"verb": "", "gone": True}, option)
+    with pytest.raises(RecordError, match=r"d line 4: a withdrawal carries no flags"):
+        _parsed(
+            axis, read, verb, {"verb": "", "option": "q", "gone": True, "flags": []}
+        )
+    with pytest.raises(RecordError, match=r"d line 4: an absence carries no help"):
+        _parsed(axis, read, verb, {"verb": "", "absent": ["Linux"], "help": "x"})
+    with pytest.raises(RecordError, match=r"d line 5: an absence stated twice"):
+        _parsed(
+            axis,
+            read,
+            verb,
+            {"verb": "", "absent": ["Linux"]},
+            {"verb": "", "absent": ["Linux"]},
+        )
+    with pytest.raises(RecordError, match=r"d line 4: gone is not true"):
+        _parsed(axis, read, verb, {**option, "gone": None})
+    with pytest.raises(RecordError, match=r"d line 4: an option line carries no lead"):
+        _parsed(axis, read, verb, {**option, "lead": "x"})
+    with pytest.raises(
+        RecordError, match=r"d line 4: option 'q' carries exactly flags"
+    ):
+        _parsed(axis, read, verb, {"verb": "", "option": "q", "flags": ["-q"]})
+    with pytest.raises(
+        RecordError, match=r"d line 4: option 'q': help is not a string"
+    ):
+        _parsed(axis, read, verb, {**option, "help": 1})
+    with pytest.raises(RecordError, match=r"d line 3: a verb line carries no flags"):
+        _parsed(axis, read, {**verb, "flags": []})
+    with pytest.raises(RecordError, match=r"d line 2 read: no platforms"):
+        _parsed(axis, {"version": "1", "read": {"extractor": 1}})
+    with pytest.raises(
+        RecordError, match=r"d line 2 read: extractor is not a positive"
+    ):
+        _parsed(
+            axis, {"version": "1", "read": {"platforms": ["Linux"], "extractor": True}}
+        )
+    with pytest.raises(RecordError, match=r"d line 2 read help: not a string"):
+        _parsed(
+            axis,
+            {
+                "version": "1",
+                "read": {"platforms": ["Linux"], "extractor": 1, "help": 1},
+            },
+        )
+    with pytest.raises(RecordError, match=r"d line 3 absent: not a list of strings"):
+        _parsed(axis, read, {"verb": "", "absent": "Linux"})
+    # A clean file parses, and the statements land as patches.
+    record = _parsed(
+        axis, read, verb, option, {"verb": "", "option": "q", "absent": ["Linux"]}
+    )
+    assert record.versions == ("1",)
+    (delta,) = record.deltas
+    assert delta.surface is not None
+    assert delta.surface.verbs[""] == {
+        "help": "",
+        "wraps": False,
+        "positional": "any",
+        "lead": "",
+        "options": {"q": {k: option[k] for k in OPTION_KEYS}},
+    }
+    assert delta.surface.absent == {"": {"q": ("Linux",)}}
 
 
 def test_a_record_with_no_version_yet_is_validated_on_its_own(tmp_path: Path) -> None:
@@ -265,39 +362,29 @@ def test_a_record_with_no_version_yet_is_validated_on_its_own(tmp_path: Path) ->
     with pytest.raises(RecordError, match=r"the tool's layout restates exe"):
         Record("young", hosts=("macos-arm",), layout=Layout(exe=""))
     young = Record("young", hosts=("macos-arm",))
-    young.save(tmp_path / "young")
-    assert Record.load(tmp_path / "young") == young
-    assert (tmp_path / "young" / "deltas").is_dir()
-    written = json.loads((tmp_path / "young" / "tool.json").read_text("utf-8"))
-    assert "layout" not in written
+    young.save(tmp_path)
+    assert Record.load(tmp_path / "young.jsonl") == young
+    lines = _lines(tmp_path / "young.jsonl")
+    assert len(lines) == 1 and "layout" not in json.loads(lines[0])
     # A version-level layout writes under its own key and reads back.
     grown = _record(deltas=(_delta(layout=Layout(root="v1")),))
-    grown.save(tmp_path / "tool")
-    delta = json.loads(
-        (tmp_path / "tool" / "deltas" / "0001-1.json").read_text("utf-8")
-    )
-    assert delta["layout"] == {"root": "v1"}
-    assert Record.load(tmp_path / "tool") == grown
+    grown.save(tmp_path)
+    version = json.loads(_lines(tmp_path / "tool.jsonl")[1])
+    assert version["layout"] == {"root": "v1"}
+    assert Record.load(tmp_path / "tool.jsonl") == grown
 
 
-def test_a_delta_file_must_be_named_by_its_sequence_and_version(tmp_path: Path) -> None:
-    record = _record()
-    record.save(tmp_path / "tool")
-    deltas = tmp_path / "tool" / "deltas"
-    (deltas / "0001-1.json").rename(deltas / "0001-2.json")
-    with pytest.raises(RecordError, match=r"0001-2\.json: the file says 0001-1\.json"):
-        Record.load(tmp_path / "tool")
-    (deltas / "0001-2.json").rename(deltas / "first.json")
-    with pytest.raises(
-        RecordError, match=r"first.json: not named <nnnn>-<version>.json"
-    ):
-        Record.load(tmp_path / "tool")
+def test_a_record_must_be_named_as_its_file(tmp_path: Path) -> None:
+    _record().save(tmp_path)
+    (tmp_path / "tool.jsonl").rename(tmp_path / "other.jsonl")
+    with pytest.raises(RecordError, match=r"named 'tool', its file 'other'"):
+        Record.load(tmp_path / "other.jsonl")
+    from livery.toolroom.store import records_in
 
-
-def test_a_record_must_be_named_as_its_directory(tmp_path: Path) -> None:
-    _record().save(tmp_path / "other")
-    with pytest.raises(RecordError, match=r"named 'tool', its directory 'other'"):
-        Record.load(tmp_path / "other")
+    (tmp_path / "notes").mkdir()
+    (tmp_path / "README.md").write_text("records")
+    assert records_in(tmp_path) == [tmp_path / "other.jsonl"]
+    assert records_in(tmp_path / "missing") == []
 
 
 def test_resolution_refuses_a_version_or_host_the_record_lacks_naming_what_it_has() -> (
@@ -371,15 +458,12 @@ def test_a_record_round_trips_through_save_and_load(tmp_path: Path) -> None:
             ),
         ),
     )
-    record.save(tmp_path / "tool")
-    assert sorted(p.name for p in (tmp_path / "tool" / "deltas").iterdir()) == [
-        "0001-1.json",
-        "0002-2.json",
-    ]
-    loaded = Record.load(tmp_path / "tool")
+    record.save(tmp_path)
+    lines = [json.loads(line) for line in _lines(tmp_path / "tool.jsonl")]
+    assert len(lines) == 3  # the axis and two versions, no reading
+    loaded = Record.load(tmp_path / "tool.jsonl")
     assert loaded == record
-    written = json.loads((tmp_path / "tool" / "tool.json").read_text("utf-8"))
-    assert list(written) == [
+    assert list(lines[0]) == [
         "name",
         "description",
         "kind",
@@ -388,12 +472,11 @@ def test_a_record_round_trips_through_save_and_load(tmp_path: Path) -> None:
         "layout",
         "host_layouts",
     ]
-    assert written["host_layouts"] == {"linux-x64": {"root": "l"}}
-    delta = json.loads(
-        (tmp_path / "tool" / "deltas" / "0002-2.json").read_text("utf-8")
-    )
-    assert list(delta) == ["sequence", "version", "date", "artifacts", "host_layouts"]
-    assert delta["host_layouts"]["macos-arm"] == {"root": "m", "exclude": ["*.txt"]}
+    assert lines[0]["host_layouts"] == {"linux-x64": {"root": "l"}}
+    assert list(lines[2]) == ["version", "date", "artifacts", "host_layouts"]
+    assert lines[2]["host_layouts"]["macos-arm"] == {"root": "m", "exclude": ["*.txt"]}
+    # prime rides the axis when set.
+    assert _record(prime="1").to_json()["prime"] == "1"
 
 
 def test_every_host_key_has_a_platform_and_arch_pair() -> None:
@@ -405,14 +488,27 @@ def test_every_host_key_has_a_platform_and_arch_pair() -> None:
         assert platform in ("windows", "macos", "linux") and arch in ("x64", "arm")
 
 
-def test_the_schema_names_both_documents_and_exports(tmp_path: Path) -> None:
+def test_the_schema_names_the_three_lines_and_exports(tmp_path: Path) -> None:
     shape = schema()
-    assert [ref["$ref"] for ref in shape["oneOf"]] == ["#/$defs/Tool", "#/$defs/Delta"]
+    assert [ref["$ref"] for ref in shape["oneOf"]] == [
+        "#/$defs/Tool",
+        "#/$defs/Version",
+        "#/$defs/Statement",
+    ]
     assert shape["$defs"]["Tool"]["required"] == ["name", "hosts"]
-    assert shape["$defs"]["Delta"]["required"] == ["sequence", "version", "artifacts"]
-    assert shape["$defs"]["Surface"]["required"] == ["platforms", "extractor"]
-    assert set(shape["$defs"]["Verb"]["required"]) == set(VERB_KEYS)
-    assert set(shape["$defs"]["Option"]["required"]) == set(OPTION_KEYS)
+    assert "prime" in shape["$defs"]["Tool"]["properties"]
+    assert shape["$defs"]["Version"]["required"] == ["version"]
+    assert shape["$defs"]["Version"]["properties"]["read"]["required"] == [
+        "platforms",
+        "extractor",
+    ]
+    assert shape["$defs"]["Statement"]["required"] == ["verb"]
+    assert set(OPTION_KEYS) | {"verb", "option", "gone", "absent", "wraps"} <= set(
+        shape["$defs"]["Statement"]["properties"]
+    )
+    assert set(VERB_KEYS) - {"options"} <= set(
+        shape["$defs"]["Statement"]["properties"]
+    )
     assert set(shape["$defs"]["Layout"]["properties"]) == {
         "root",
         "exe",
@@ -433,10 +529,13 @@ def test_the_schema_names_both_documents_and_exports(tmp_path: Path) -> None:
 def test_every_host_of_every_version_of_every_record_resolves_whole() -> None:
     if not RECORDS.is_dir():
         pytest.skip("the checked-in records are a checkout fact")
-    names = sorted(p.name for p in RECORDS.iterdir() if p.is_dir())
+    from livery.toolroom.store import records_in
+
+    paths = records_in(RECORDS)
+    names = [path.stem for path in paths]
     assert {"bun", "eclint", "git", "prek", "tea", "ty", "uv"} <= set(names)
-    for name in names:
-        record = Record.load(RECORDS / name)
+    for name, path in zip(names, paths, strict=True):
+        record = Record.load(path)
         assert record.versions, name
         for version in record.versions:
             for host in record.hosts_of(version):

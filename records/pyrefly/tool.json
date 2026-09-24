@@ -1,7 +1,0 @@
-{
-  "name": "pyrefly",
-  "description": "pyrefly, Meta's Python type checker",
-  "kind": "uv-tool",
-  "min_version": "",
-  "hosts": []
-}

@@ -1,0 +1,31 @@
+{"name": "build", "description": "", "kind": "uv-tool", "min_version": "", "hosts": []}
+{"version": "1.2.1", "date": "2024-03-28", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "A simple, correct Python build frontend."}}
+{"verb": "", "help": "A simple, correct Python build frontend.", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "", "option": "config_setting", "flags": ["--config-setting", "-C"], "negation": "", "help": "settings to pass to the backend", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "installer", "flags": ["--installer"], "negation": "", "help": "Python package installer to use (defaults to pip)", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "no_isolation", "flags": ["--no-isolation", "-n"], "negation": "", "help": "disable building the project in an isolated virtual environment", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "outdir", "flags": ["--outdir", "-o"], "negation": "", "help": "output directory (defaults to {srcdir}\\dist)", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "sdist", "flags": ["--sdist", "-s"], "negation": "", "help": "build a source distribution (disables the default behavior)", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "skip_dependency_check", "flags": ["--skip-dependency-check", "-x"], "negation": "", "help": "do not check that build dependencies are installed", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "verbose", "flags": ["--verbose", "-v"], "negation": "", "help": "increase verbosity", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "wheel", "flags": ["--wheel", "--sdist", "-w", "-s"], "negation": "", "help": "build a wheel (disables the default behavior)", "type": "str", "default": null, "choices": []}
+{"version": "1.2.2", "date": "2024-09-06", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "1.2.2.post1", "date": "2024-10-06", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "1.3.0", "date": "2025-08-01", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "", "option": "config_json", "flags": ["--config-json"], "negation": "", "help": "settings to pass to the backend as a JSON object", "type": "str", "default": null, "choices": []}
+{"version": "1.4.0", "date": "2026-01-08", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "", "option": "installer", "flags": ["--installer"], "negation": "", "help": "Python package installer to use (defaults to pip)", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "metadata", "flags": ["--metadata"], "negation": "", "help": "print out a wheel's metadata in JSON format", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "quiet", "flags": ["--quiet", "-q"], "negation": "", "help": "reduce verbosity", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "wheel", "flags": ["--wheel", "-w"], "negation": "", "help": "build a wheel (disables the default behavior)", "type": "bool", "default": null, "choices": []}
+{"version": "1.4.1", "date": "2026-03-24", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "", "option": "dependency_constraints_txt", "flags": ["--dependency-constraints-txt"], "negation": "", "help": "constrain build dependencies using a constraints.txt when installing dependencies", "type": "str", "default": null, "choices": []}
+{"version": "1.4.2", "date": "2026-03-25", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "1.4.3", "date": "2026-04-10", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "1.4.4", "date": "2026-04-22", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "1.5.0", "date": "2026-07-29", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"version": "1.5.1", "date": "2026-07-09", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3}}
+{"verb": "", "option": "env_dir", "flags": ["--env-dir"], "negation": "", "help": "create the isolated build environment at this location instead of a temporary directory", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "metadata", "flags": ["--metadata"], "negation": "", "help": "print out a wheel's metadata in JSON format, building it first unless the source argument is already a .whl", "type": "bool", "default": null, "choices": []}
+{"verb": "", "option": "report", "flags": ["--report"], "negation": "", "help": "write a machine-readable JSON report of the built artifacts (name, path, kind, size and SHA-256 hash) to this path", "type": "str", "default": null, "choices": []}
+{"verb": "", "option": "sdist_extract_dir", "flags": ["--sdist-extract-dir"], "negation": "", "help": "extract the intermediate sdist to PATH (created if missing and kept afterwards) instead of a random temporary directory; reusing it across rebuilds gives compiler caches such as ccache/sccache a stable source path", "type": "str", "default": null, "choices": []}
