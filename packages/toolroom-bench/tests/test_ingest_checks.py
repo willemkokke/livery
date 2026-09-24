@@ -8,6 +8,7 @@ stages and nothing else.
 from __future__ import annotations
 
 import io
+import sys
 import zipfile
 from pathlib import Path
 
@@ -219,12 +220,16 @@ def test_an_exclusion_that_matches_nothing_and_a_stray_executable_are_named(
         second={LINUX: payload}, second_layout=Layout(exclude=("docs/*", "nothing/*"))
     )
     report = _ingest.verify(record, "1.1.0", store=rig.store, hosts=(LINUX,))
-    assert _checks(report) == [("exclusions", LINUX), ("stray-executables", LINUX)]
     assert "exclusion 'nothing/*' matches nothing" in report.findings[0].detail
-    assert (
-        "'bin/helper' is executable in path directory 'bin'"
-        in report.findings[1].detail
-    )
+    if sys.platform == "win32":
+        # A POSIX tree carries no mode bit here: the stray goes unseen.
+        assert _checks(report) == [("exclusions", LINUX)]
+    else:
+        assert _checks(report) == [("exclusions", LINUX), ("stray-executables", LINUX)]
+        assert (
+            "'bin/helper' is executable in path directory 'bin'"
+            in report.findings[1].detail
+        )
     # The Windows tree reads its executables by suffix.
     stray = _zip({"tool-1/bin/tool.exe": b"MZ", "tool-1/bin/extra.exe": b"MZ"})
     record = rig.record(second={WINDOWS: stray})
