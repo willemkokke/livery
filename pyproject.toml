@@ -73,8 +73,11 @@ dev = [
     "pytest-xdist>=3.6",
     # The changelog engine the release train drives, per package,
     # through each package's rendered cliff.toml. A floor, not a pin:
-    # the lockfile decides the version, so a layer can move it.
-    "git-cliff>=2.13",
+    # the lockfile decides the version, so a layer can move it. Left
+    # out on Windows ARM: PyPI ships git-cliff as wheels with none for
+    # that platform, its sdist does not build, and nothing releases
+    # from that host; the six-host point syncs the workspace there.
+    "git-cliff>=2.13 ; sys_platform != 'win32' or platform_machine != 'ARM64'",
     "ruff>=0.6",
     # Stubs for the workshop's own yaml reads, so mypy stays strict.
     "types-pyyaml",
