@@ -31,10 +31,14 @@ from livery.toolroom.store._home import Home
 from livery.toolroom.store._record import (
     TOOL_FILE,
     Deployment,
+    Observation,
     Record,
     RecordError,
+    observations,
     resolve,
+    surface_at,
 )
+from livery.toolroom.store._stub import render_observation
 
 POINTER = "pointer.json"
 """The pointer document at an index's root, naming each tool's tree."""
@@ -65,8 +69,6 @@ class Listed:
             orders them.
         hosts: Per version, the host keys the version has an artifact
             for, with the digest of each host's deployment.
-        stubs: Per version read, the digest of its stub in the index;
-            empty for a catalogue read from the records.
     """
 
     name: str
@@ -74,7 +76,6 @@ class Listed:
     description: str
     versions: tuple[str, ...]
     hosts: Mapping[str, Mapping[str, Digest]]
-    stubs: dict[str, Digest] = field(default_factory=dict)
     package: str = ""
     mode: str = ""
     min_version: str = ""
@@ -93,6 +94,7 @@ class Catalogue:
         default_factory=dict, repr=False, compare=False
     )
     _store: ObjectStore | None = field(default=None, repr=False, compare=False)
+    _records: dict[str, Record] = field(default_factory=dict, repr=False, compare=False)
 
     def listed(self, name: str) -> Listed:
         """The listing of *name*.
@@ -141,29 +143,32 @@ class Catalogue:
         return found
 
     def stub(self, name: str, version: str) -> str:
-        """The stub of *name* at *version*: the index's rendering, as text.
+        """The stub of *name* at *version*, rendered from the version's surface.
+
+        From the records the surface is the version's resolved
+        observation; from the index it is the version's `observation`
+        and `surface` blobs. Either way the text is the same rendering,
+        the version's own verbs and options, exactly what a workspace
+        locking that version types against.
 
         Raises:
-            CatalogueError: when the catalogue was read from records,
-                which hold no rendering, when the version has no stub,
-                or when the blob cannot be read.
+            CatalogueError: when the version was never read, or its
+                blobs cannot be read.
         """
-        listed = self.listed(name)
-        if self._store is None:
-            raise CatalogueError(
-                f"{name}: a directory of records holds no stubs; read the index"
-                " built from them"
-            )
-        digest = listed.stubs.get(version)
-        if digest is None:
-            has = ", ".join(listed.stubs) or "none"
-            raise CatalogueError(f"{name} {version}: no stub; the index has {has}")
-        try:
-            return self._store.fetch(digest).read_bytes().decode("utf-8")
-        except Exception as error:
-            raise CatalogueError(
-                f"{name} {version}: the stub {digest} cannot be read: {error}"
-            ) from error
+        self.listed(name)
+        record = self._records.get(name)
+        if record is not None:
+            found = surface_at(record, version) if version in record.versions else None
+            if found is None:
+                read = ", ".join(o.version for o in observations(record)) or "none"
+                raise CatalogueError(
+                    f"{name} {version}: never read; the versions read are {read}"
+                )
+            return render_observation(name, found)
+        tools = self.tools
+        if not isinstance(tools, _LazyTools):  # pragma: no cover - records fill it
+            raise CatalogueError(f"{name} {version}: no surface was read")
+        return render_observation(name, tools.observation(name, version))
 
     @classmethod
     def of_records(cls, directory: Path) -> Catalogue:
@@ -174,10 +179,12 @@ class Catalogue:
         """
         tools: dict[str, Listed] = {}
         deployments: dict[tuple[str, str, str], Deployment] = {}
+        records: dict[str, Record] = {}
         for path in sorted(directory.iterdir()):
             if not path.is_dir() or not (path / TOOL_FILE).is_file():
                 continue
             record = Record.load(path)
+            records[record.name] = record
             hosts: dict[str, dict[str, Digest]] = {}
             for delta in record.deltas:
                 hosts[delta.version] = {}
@@ -195,7 +202,7 @@ class Catalogue:
                 mode=record.mode,
                 min_version=record.min_version,
             )
-        return cls(tools, deployments)
+        return cls(tools, deployments, None, records)
 
     @classmethod
     def of_index(cls, source: str, *, home: Home, offline: bool = False) -> Catalogue:
@@ -233,6 +240,7 @@ class _LazyTools(Mapping[str, Listed]):
         self._entries = entries
         self._source = source
         self._read: dict[str, Listed] = {}
+        self._members: dict[str, dict[str, Any]] = {}
 
     def __getitem__(self, name: str) -> Listed:
         held = self._read.get(name)
@@ -240,10 +248,58 @@ class _LazyTools(Mapping[str, Listed]):
             entry = self._entries[name]
             where = f"{self._source} {name}"
             tree = _tree(self._store, Digest.parse(entry["tree"]), where=where)
-            held = self._read[name] = _listed(
-                self._store, name, tree, entry, where=where
-            )
+            self._members[name] = {member.name: member for member in tree.entries}
+            held = self._read[name] = _listed(self._store, name, tree, where=where)
         return held
+
+    def observation(self, name: str, version: str) -> Observation:
+        """The version's observation, its surface read from the index.
+
+        Raises:
+            CatalogueError: when the version was never read, or its
+                blobs cannot be read.
+        """
+        listed = self[name]
+        if version not in listed.versions:
+            read = ", ".join(listed.versions) or "none"
+            raise CatalogueError(
+                f"{name} {version}: never read; the versions read are {read}"
+            )
+        where = f"{self._source} {name} {version}"
+        member = self._members[name].get(version)
+        if not isinstance(member, Entry):
+            raise CatalogueError(f"{where}: the tree has no entry for {version}")
+        parts = {
+            p.name: p for p in _tree(self._store, member.digest, where=where).entries
+        }
+        seen = parts.get("observation")
+        surface = parts.get("surface")
+        if not isinstance(seen, Entry) or not isinstance(surface, Entry):
+            raise CatalogueError(f"{where}: the version was never read")
+        try:
+            about = json.loads(self._store.fetch(seen.digest).read_bytes())
+            verbs = json.loads(self._store.fetch(surface.digest).read_bytes())
+        except Exception as error:
+            raise CatalogueError(
+                f"{where}: the surface cannot be read: {error}"
+            ) from error
+        if not isinstance(about, dict) or not isinstance(verbs, dict):
+            raise CatalogueError(f"{where}: the surface is not one")
+        return Observation(
+            version,
+            str(about.get("date", "")),
+            tuple(str(p) for p in about.get("platforms", ())),
+            int(about.get("extractor", 0) or 0),
+            str(about.get("help", "")),
+            verbs,
+            {
+                str(verb): {
+                    str(o): tuple(str(w) for w in who) for o, who in options.items()
+                }
+                for verb, options in (about.get("absent") or {}).items()
+                if isinstance(options, dict)
+            },
+        )
 
     def __iter__(self) -> Iterator[str]:
         return iter(self._entries)
@@ -299,10 +355,9 @@ def build_current(index: Path) -> bool:
     """Whether the index at *index* stands as its build record fingerprints it.
 
     The build writes `build.json` beside the pointer, naming the records
-    directory and the renderer's source files with a stat fingerprint
-    of each. Current means the pointer is there, the record reads, and
-    both fingerprints stand; anything else, an absent record included,
-    is not current. Stats alone are read, so the answer costs
+    directory with a stat fingerprint. Current means the pointer is
+    there, the record reads, and the fingerprint stands; anything else,
+    an absent record included, is not current. Stats alone are read, so the answer costs
     milliseconds and a caller can skip a build, or the spawn of one,
     without reading a record.
     """
@@ -313,17 +368,9 @@ def build_current(index: Path) -> bool:
     if not isinstance(held, dict) or not (index / POINTER).is_file():
         return False
     records = held.get("records")
-    renderer = held.get("renderer")
-    if not isinstance(records, dict) or not isinstance(renderer, dict):
+    if not isinstance(records, dict) or not isinstance(records.get("path"), str):
         return False
-    path = records.get("path")
-    files = renderer.get("files")
-    if not isinstance(path, str) or not isinstance(files, list):
-        return False
-    return bool(
-        tree_fingerprint([path]) == records.get("fingerprint")
-        and tree_fingerprint(files) == renderer.get("fingerprint")
-    )
+    return bool(tree_fingerprint([records["path"]]) == records.get("fingerprint"))
 
 
 def _read_pointer(source: str) -> dict[str, Any]:
@@ -365,9 +412,7 @@ def _tree(store: ObjectStore, digest: Digest, *, where: str) -> Tree:
         ) from error
 
 
-def _listed(
-    store: ObjectStore, name: str, tree: Tree, entry: dict[str, Any], *, where: str
-) -> Listed:
+def _listed(store: ObjectStore, name: str, tree: Tree, *, where: str) -> Listed:
     by_name = {member.name: member for member in tree.entries}
     axis = by_name.get("tool")
     order = by_name.get("versions")
@@ -385,19 +430,12 @@ def _listed(
     if not isinstance(versions, list) or not all(isinstance(v, str) for v in versions):
         raise CatalogueError(f"{where}: the versions blob is not a list of strings")
     hosts = _LazyHosts(store, dict(by_name), tuple(versions), where)
-    stubs: dict[str, Digest] = {}
-    named = entry.get("stubs")
-    if isinstance(named, str):
-        for stub in _tree(store, Digest.parse(named), where=f"{where} stubs").entries:
-            if isinstance(stub, Entry):
-                stubs[stub.name] = stub.digest
     return Listed(
         name,
         record.kind,
         record.description,
         tuple(versions),
         hosts,
-        stubs,
         package=record.package,
         mode=record.mode,
         min_version=record.min_version,

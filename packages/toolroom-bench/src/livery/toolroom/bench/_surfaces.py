@@ -26,13 +26,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from livery.toolroom.bench._toolspec import Option, ToolSpec, Verb
 from livery.toolroom.store import (
     Observation,
+    Option,
     Record,
     RecordDelta,
     Surface,
+    ToolSpec,
+    Verb,
     observations,
+    spec_from,
     surface_at,
 )
 from livery.toolroom.tools import version_tuple
@@ -144,40 +147,6 @@ def _surface(spec: ToolSpec) -> dict[str, Any]:
             for verb in spec.verbs
         },
     }
-
-
-def spec_from(
-    surface: dict[str, Any], *, name: str, version: str = "", in_process: bool = False
-) -> ToolSpec:
-    """The inverse of `surface_of`, what the stub renderer consumes."""
-    return ToolSpec(
-        name=name,
-        help=surface.get("help", ""),
-        version=version,
-        in_process=in_process,
-        verbs=tuple(
-            Verb(
-                name=verb_name,
-                help=verb.get("help", ""),
-                wraps=verb.get("wraps", False),
-                positional=verb.get("positional", "any"),
-                lead=verb.get("lead", ""),
-                options=tuple(
-                    Option(
-                        name=option_name,
-                        flags=tuple(option.get("flags", ())),
-                        negation=option.get("negation", ""),
-                        help=option.get("help", ""),
-                        type_name=option.get("type", "str"),
-                        default=option.get("default"),
-                        choices=tuple(option.get("choices", ())),
-                    )
-                    for option_name, option in verb.get("options", {}).items()
-                ),
-            )
-            for verb_name, verb in surface.get("verbs", {}).items()
-        ),
-    )
 
 
 def delta(newer: dict[str, Any], older: dict[str, Any]) -> dict[str, Any]:

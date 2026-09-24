@@ -1,7 +1,7 @@
 """Render a `ToolSpec` as the stub a type checker reads.
 
 The bridge in `tools.py` translates keyword arguments mechanically and will
-happily pass a flag no stub has heard of — that is what keeps it from going
+happily pass a flag no stub has heard of. That is what keeps it from going
 stale. The stub is the other half: it tells an IDE what the installed tool
 *currently* accepts, so the flags complete and their help text is right
 there on hover, without importing the tool to find out.
@@ -12,7 +12,7 @@ Three things make a generated stub better than a hand-written one:
 * it can be regenerated, so a tool moving on is a diff rather than an
   archaeology exercise (`fm tools.audit` reports that diff);
 * it can carry the tool's own prose per flag, including the one fact a
-  bridge can never infer — how *this* tool spells "off".
+  bridge can never infer: how *this* tool spells "off".
 
 Every generated verb still ends in `**flags: Any`, so a stub that lags the
 installed tool degrades a hint and never a run.
@@ -22,21 +22,21 @@ from __future__ import annotations
 
 import re
 import textwrap
-from collections.abc import Iterable
-from typing import cast
+from collections.abc import Iterable, Mapping
+from typing import Any, cast
 
-from livery.toolroom.bench._toolspec import Option, ToolSpec, Verb
-from livery.toolroom.store import class_name
+from livery.toolroom.store._record import Observation, class_name
+from livery.toolroom.store._spec import Option, ToolSpec, Verb
 
 _HEADER = """\
-# Rendered from the tool's record — do not edit by hand.
+# Rendered from the tool's record. Do not edit by hand.
 # ruff: noqa: E501
 #
 # Read from {name} {version} on {platform}. In-process: {in_process}.
 # Every verb ends in `**flags: Any`: the stub suggests what this tool
 # accepts, and can never forbid what the bridge would happily pass. Each
 # verb is a class parameterised by what its call returns, which is how
-# `.argv` re-spells the same signature over `Argv` — same flags, same
+# `.argv` re-spells the same signature over `Argv`: same flags, same
 # checking, a built command line instead of a run.
 {imports}
 """
@@ -105,12 +105,12 @@ def render(
 
 
 # Docstrings carry the tools' own prose, where words like "Value" are just
-# words — imports are decided by the *code*, so the prose is cut first.
+# words. Imports are decided by the *code*, so the prose is cut first.
 _DOCSTRING = re.compile(r'"""[\s\S]*?"""')
 
 
 def _imports(body: str, aliases: str = "") -> str:
-    """Just the imports the code uses — an unused one fails the lint gate."""
+    """Just the imports the code uses: an unused one fails the lint gate."""
     code = _DOCSTRING.sub("", body)
     scan = f"{code}\n{aliases}"
     typing = ["Any"] + (["Literal"] if "Literal[" in scan else [])
@@ -120,7 +120,7 @@ def _imports(body: str, aliases: str = "") -> str:
         typing.append("TypeAlias")
     typing.append("TypeVar")
     # `Tool` alone is aliased, because a subcommand becomes a nested class
-    # named after the verb — and `uv tool` would otherwise generate
+    # named after the verb, and `uv tool` would otherwise generate
     # `class Tool(Tool)`, which cannot derive from itself. `ToolBase` reads
     # public in every class header a hover shows; render() refuses the
     # pathological verb that could collide with it (see NameCollision).
@@ -142,7 +142,7 @@ def _imports(body: str, aliases: str = "") -> str:
 
 
 def _generated_names(tree: dict[str, object], root: str) -> set[str]:
-    """Every class name this tree will generate — the root and each verb."""
+    """Every class name this tree will generate: the root and each verb."""
     names = {root}
 
     def walk(node: dict[str, object]) -> None:
@@ -172,13 +172,13 @@ def _hoisted(
     """One module-level alias per distinct choice set, named after its option.
 
     Inlining a `Literal` spells the whole union twice per option
-    (`Literal[…] | Sequence[Literal[…]] | None`) — ruff's `output_format`
+    (`Literal[…] | Sequence[Literal[…]] | None`). ruff's `output_format`
     alone was eight hover lines. A named alias renders as its *name* in
     every checker's hover, so the signature stays one line per flag.
 
     Keyed by (option name, choices): the same option carrying the same
     choices across verbs shares one alias; a name that is already a class
-    in this file — or claimed by another choice set — counts up
+    in this file, or claimed by another choice set, counts up
     (`Color`, `Color2`) until it is free.
     """
     out: dict[tuple[str, tuple[str, ...]], str] = {}
@@ -203,7 +203,7 @@ def _hoisted(
 def _alias_block(hoisted: dict[tuple[str, tuple[str, ...]], str]) -> str:
     """The alias definitions, one line each, sorted by name."""
     lines = [
-        f"{name}: TypeAlias = Literal[{', '.join(repr(c) for c in choices)}]"
+        f"{name}: TypeAlias = Literal[{', '.join(_quoted(c) for c in choices)}]"
         for (_, choices), name in sorted(hoisted.items(), key=lambda kv: kv[1])
     ]
     return "\n".join(lines)
@@ -222,9 +222,10 @@ def _typevars(body: str) -> str:
 
 
 def _class_name(name: str) -> str:
-    """`ruff_format` → `RuffFormat`, the store's rule. Public: these classes
-    are the typed surface of `tools.<name>`, used (only in type position —
-    they are stub-only, never imported at run time) as if they were public.
+    """The class name for a tool, by the store's rule: `ruff_format` is `RuffFormat`.
+
+    The class is public: it is the typed surface of `tools.<name>`, used
+    in type position only, since the stub is never imported at run time.
     """
     return class_name(name)
 
@@ -246,8 +247,10 @@ def _tree(verbs: Iterable[Verb]) -> dict[str, object]:
 
 
 def _tv(depth: int) -> str:
-    """The TypeVar for classes at *depth* — a nested generic class cannot
-    rebind its encloser's, so each depth carries its own.
+    """The TypeVar for classes at *depth*.
+
+    A nested generic class cannot rebind its encloser's TypeVar, so each
+    depth carries its own.
     """
     return "_R" if depth == 0 else f"_R{depth + 1}"
 
@@ -259,11 +262,11 @@ def _classes(
     path: tuple[str, ...] = (),
     hoisted: dict[tuple[str, tuple[str, ...]], str] | None = None,
 ) -> str:
-    """One class, with every subcommand — group or verb — nested *inside* it.
+    """One class, with every subcommand, group or verb, nested *inside* it.
 
-    A subcommand belongs to its tool — `docker compose up` is not a
+    A subcommand belongs to its tool: `docker compose up` is not a
     `DockerCompose` that happens to sit beside `Docker`. Nesting says that
-    in the only place it can be said, and the names stop being invented —
+    in the only place it can be said, and the names stop being invented:
     `Docker.Compose.Up`, not `DockerComposeUp`, with no way for two tools
     to collide.
 
@@ -300,8 +303,8 @@ def _classes(
         globals_ = root.options if isinstance(root, Verb) else ()
         body.append(_flags_method(globals_, hoisted))
     # Deriving from the *parameterised* base is what makes every member a
-    # plain covariant override — `__call__` answers the inherited TypeVar
-    # and `argv` narrows `Tool[Argv]` to a subclass of it — so no checker
+    # plain covariant override (`__call__` answers the inherited TypeVar
+    # and `argv` narrows `Tool[Argv]` to a subclass of it), so no checker
     # needs a Liskov suppression.
     return f"class {name}(ToolBase[{_tv(depth)}]):\n" + "\n".join(body)
 
@@ -331,8 +334,10 @@ def _indent(block: str) -> str:
 
 
 def _has_subcommands(tree: dict[str, object]) -> bool:
-    """Whether this class has verbs to precede — the only case `.flags()`
-    means anything (a global belongs *before* a subcommand).
+    """Whether this class has verbs to precede.
+
+    That is the only case `.flags()` means anything: a global option
+    belongs before a subcommand.
     """
     return any(key != "" for key in tree)
 
@@ -341,11 +346,12 @@ def _flags_method(
     options: tuple[Option, ...],
     hoisted: dict[tuple[str, tuple[str, ...]], str] | None = None,
 ) -> str:
-    """The typed `flags()` for a tool's global options — returns `Self`, so
-    `tools.docker.flags(host=…).compose.up(…)` stays checked. With no
-    globals it is still declared, so the return type carries the chain.
-    (footman run-control — nofail/capture/cwd/rel/… — goes on the
-    inherited `.opts()`.)
+    """The typed `flags()` for a tool's global options.
+
+    It returns `Self`, so `tools.docker.flags(host=...).compose.up(...)`
+    stays checked. With no globals it is still declared, so the return
+    type carries the chain. footman's run control (nofail, capture, cwd,
+    rel) goes on the inherited `.opts()`.
     """
     lines = ["    def flags(", "        self,"]
     typed = _unique(options)
@@ -369,15 +375,15 @@ def _method(
     depth: int = 0,
     hoisted: dict[tuple[str, tuple[str, ...]], str] | None = None,
 ) -> str:
-    """A class's `__call__` — the verb's own signature, answering in the
-    class's TypeVar.
+    """A class's `__call__`: the verb's own signature, answering in the class's TypeVar.
 
-    footman run-control (nofail/capture/title/in_process/cwd/rel) lives on the inherited
-    `.opts()`, never the call, so a call signature is pure flags — which also
-    means an option literally named `capture` (pytest's) types through here.
+    footman's run control (nofail, capture, title, in_process, cwd, rel)
+    lives on the inherited `.opts()`, never the call, so a call signature
+    is flags alone. An option named `capture` (pytest's) therefore types
+    through here.
 
     With no root verb to read (a bare group), the signature stays as wide as
-    the inherited one — `*args: Any` — and adds only the return type, so
+    the inherited one, `*args: Any`, and adds only the return type, so
     nothing the runtime accepts becomes a type error.
     """
     header = "    def __call__(  # type: ignore[override]"
@@ -394,7 +400,7 @@ def _method(
     positional = _positional_lines(verb)
     options = _unique(verb.options)
     # A bare `*,` must be followed by a keyword-only parameter; when the only
-    # thing after it would be `**flags`, drop it — `def f(self, **flags)` already
+    # thing after it would be `**flags`, drop it: `def f(self, **flags)` already
     # forbids a positional. (Previously the nofail/in_process params backfilled
     # the `*,`; those moved to `.opts()`.)
     if positional == ["        *,"] and not options:
@@ -422,7 +428,7 @@ def _positional_lines(verb: Verb) -> list[str]:
     forbids nothing.
 
     `str | PathLike[str]`, because positionals are so often paths and the
-    bridge `str()`-s whatever it is handed — `ruff.check(Path("src"))`
+    bridge `str()`-s whatever it is handed. `ruff.check(Path("src"))`
     already ran; the annotation just stopped calling it a type error.
     """
     arg = "str | PathLike[str]"
@@ -440,16 +446,18 @@ def _positional_lines(verb: Verb) -> list[str]:
 
 
 # The method's own structural parameters. An option named the same (git
-# rev-parse has `--flags`) would be a duplicate parameter — it still works,
+# rev-parse has `--flags`) would be a duplicate parameter. It still works,
 # swallowed by `**flags` at type-check and `**kwargs` at run time, just not
-# typed. `nofail`/`in_process` are no longer here — they moved to `.opts()`, so
+# typed. `nofail`/`in_process` are not here: they live on `.opts()`, so
 # a tool that really has a `--nofail` flag now types through the call.
 _RESERVED = frozenset({"self", "args", "flags"})
 
 
 def _unique(options: tuple[Option, ...]) -> list[Option]:
-    """One parameter per keyword — a repeat would be a syntax error, and a
-    name that clashes with a fixed parameter is dropped to the catch-all.
+    """One parameter per keyword.
+
+    A repeat would be a syntax error, and a name that clashes with a
+    fixed parameter is dropped to the catch-all.
     """
     seen: dict[str, Option] = {}
     for option in options:
@@ -502,7 +510,7 @@ def _annotation(
     Deliberately wide, because the stub's contract is to suggest and never
     to forbid. `Value` takes a sequence as well as a scalar for *every*
     option, since the bridge repeats a flag for each item and whether the
-    tool accepts repetition is the tool's business, not the stub's —
+    tool accepts repetition is the tool's business, not the stub's.
     `select=["E", "F"]` works, so it must type-check.
 
     A closed set of values is the one place a narrow type earns itself: a
@@ -513,11 +521,11 @@ def _annotation(
     if option.type_name == "bool":
         return "Flag"
     if option.type_name == "optvalue":
-        return "ValuedFlag"  # usable bare or with a value — `--gpg-sign[=<key>]`
+        return "ValuedFlag"  # usable bare or with a value: `--gpg-sign[=<key>]`
     if option.choices:
         name = (hoisted or {}).get((option.name, tuple(option.choices)))
         if name is None:
-            name = "Literal[" + ", ".join(repr(c) for c in option.choices) + "]"
+            name = "Literal[" + ", ".join(_quoted(c) for c in option.choices) + "]"
         return f"{name} | Sequence[{name}] | None"
     return "Value"
 
@@ -530,7 +538,7 @@ def _summary(help_text: str, depth: int, *, alone: bool) -> list[str]:
     standing *alone* is different: the formatter pulls the whole docstring
     onto one line, closing quotes included, three characters past what the
     wrap allowed for. So an alone summary that comes out as one line is
-    wrapped again three narrower — it either still fits on one, or it
+    wrapped again three narrower: it either still fits on one, or it
     becomes two and there is no join left to fit.
 
     Not applied to every summary, because a summary that will not be joined
@@ -559,7 +567,7 @@ def _docstring(verb: Verb, depth: int = 0) -> str:
 
     Google-style because two readers want it: Pylance surfaces a
     parameter's line on hover and in the completion popup, and griffe reads
-    the same section to build the reference page — so the tool's help text
+    the same section to build the reference page, so the tool's help text
     is written once and lands in both.
     """
     documented = [o for o in _unique(verb.options) if o.help or o.negation]
@@ -590,8 +598,9 @@ def _md_safe(lines: list[str]) -> list[str]:
     """Escape a Markdown block marker a wrap left at a line's start.
 
     The backslash is doubled: this text becomes a docstring in the
-    generated `.pyi`, where a lone `\\#` would be an invalid escape
-    sequence — `\\\\#` is the literal `\\#` that Markdown renders as `#`.
+    generated `.pyi`, where a lone backslash before the marker would be
+    an invalid escape sequence. Two backslashes are the literal one that
+    Markdown reads as the escape.
     """
     out: list[str] = []
     for line in lines:
@@ -602,7 +611,7 @@ def _md_safe(lines: list[str]) -> list[str]:
 
 
 def _arg_lines(option: Option) -> list[str]:
-    """One `Args:` entry — one *line*, with the `off` spelling when it matters.
+    """One `Args:` entry on one *line*, with the `off` spelling when it matters.
 
     Unwrapped on purpose: hovers treat a docstring's line breaks as hard
     breaks, so a wrap chosen for the .pyi's column limit used to land
@@ -616,14 +625,14 @@ def _arg_lines(option: Option) -> list[str]:
         text = f"{text}. Value optional: `True` for the bare flag, or pass one"
     if option.negation:
         default_on = option.default is True
-        lead = "Defaults on — " if default_on else ""
+        lead = "Defaults on. " if default_on else ""
         text = f"{text}. {lead}`{option.name}=off` emits `{option.negation}`"
     elif option.default not in (None, "", False):
         text = f"{text}. Defaults to `{option.default}`"
     # What the history knows, and only what it knows: an option already
     # present at the oldest release read carries no `since`, because the
     # chain never looked far enough back to claim one. A removed option is
-    # still rendered — the reader may be on a version that has it — and this
+    # still rendered, since the reader may be on a version that has it, and this
     # is the line that says otherwise.
     if option.until:
         text = f"{text}. Gone since {option.until}"
@@ -636,3 +645,82 @@ def _arg_lines(option: Option) -> list[str]:
         text = f"{text}. Not available on {_listed(option.not_on)}"
     entry = f"{_safe(option.name)}: {text}.".replace("  ", " ")
     return [f"{' ' * 12}{entry}"]
+
+
+def _quoted(value: str) -> str:
+    """*value* as a double-quoted string literal, the formatter's spelling."""
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def spec_from(
+    surface: Mapping[str, Any],
+    *,
+    name: str,
+    version: str = "",
+    in_process: bool = False,
+) -> ToolSpec:
+    """The spec a surface describes: the shape the records and the index hold.
+
+    *surface* carries `help` and `verbs`, each verb its options in the
+    record's key shape; the inverse of what the bench writes.
+    """
+    return ToolSpec(
+        name=name,
+        help=surface.get("help", ""),
+        version=version,
+        in_process=in_process,
+        verbs=tuple(
+            Verb(
+                name=verb_name,
+                help=verb.get("help", ""),
+                wraps=verb.get("wraps", False),
+                positional=verb.get("positional", "any"),
+                lead=verb.get("lead", ""),
+                options=tuple(
+                    Option(
+                        name=option_name,
+                        flags=tuple(option.get("flags", ())),
+                        negation=option.get("negation", ""),
+                        help=option.get("help", ""),
+                        type_name=option.get("type", "str"),
+                        default=option.get("default"),
+                        choices=tuple(option.get("choices", ())),
+                    )
+                    for option_name, option in verb.get("options", {}).items()
+                ),
+            )
+            for verb_name, verb in surface.get("verbs", {}).items()
+        ),
+    )
+
+
+def platforms_phrase(platforms: Iterable[str]) -> str:
+    """`Linux, Windows and macOS`: the platforms a stub's header names."""
+    listed = list(platforms)
+    if not listed:
+        return "this machine"
+    if len(listed) == 1:
+        return listed[0]
+    return f"{', '.join(listed[:-1])} and {listed[-1]}"
+
+
+def render_observation(name: str, observation: Observation) -> str:
+    """The stub of *name* at one observed version, exactly as that version read.
+
+    The verbs and options are the version's own, no history folded in,
+    which is what a workspace types against when it locks that version.
+    The header names the version and the platforms that read it.
+
+    Raises:
+        NameCollision: for a verb whose class would shadow a stub import.
+    """
+    spec = spec_from(
+        {"help": observation.help, "verbs": observation.verbs},
+        name=name,
+        version=observation.version,
+    )
+    return render(
+        spec,
+        platform=platforms_phrase(observation.platforms),
+        class_name=class_name(name),
+    )

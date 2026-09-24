@@ -623,47 +623,50 @@ _PROBE_STUBS = (
     "    _fm_install_stubs(_os.environ['_FM_STUB_INDEX'])\n"
 )
 
-# A ruff stub shaped as the records render one: the verb is a nested
-# class, the handle an attribute of that type, the flags typed and
+# A ruff surface as the records hold one: the verb is a nested class in the
+# rendering, the handle an attribute of that type, the flags typed and
 # documented in an Args section.
-_RUFF_STUB = '''\
-from typing import Any, TypeVar
+_RUFF_SURFACE = {
+    "": {"help": "", "wraps": False, "positional": "any", "lead": "", "options": {}},
+    "check": {
+        "help": "Run Ruff on the given files or directories",
+        "wraps": False,
+        "positional": "any",
+        "lead": "",
+        "options": {
+            "diff": {
+                "flags": ["--diff"],
+                "negation": "",
+                "help": "Avoid writing any fixed files back; instead, output a diff.",
+                "type": "bool",
+                "default": None,
+                "choices": [],
+            },
+            "fix": {
+                "flags": ["--fix"],
+                "negation": "",
+                "help": "Apply fixes to resolve lint violations.",
+                "type": "bool",
+                "default": None,
+                "choices": [],
+            },
+            "select": {
+                "flags": ["--select"],
+                "negation": "",
+                "help": "Comma-separated list of rule codes to enable.",
+                "type": "str",
+                "default": None,
+                "choices": [],
+            },
+        },
+    },
+}
 
-from livery.toolroom.tools import Argv, Flag, Tool as ToolBase, Value
 
-_R = TypeVar("_R")
-_R2 = TypeVar("_R2")
-
-class Ruff(ToolBase[_R]):
-    class Check(ToolBase[_R2]):
-        def __call__(  # type: ignore[override]
-            self,
-            *args: str,
-            diff: Flag = ...,
-            fix: Flag = ...,
-            select: Value = ...,
-            **flags: Any,
-        ) -> _R2:
-            """Run Ruff on the given files or directories
-
-            Args:
-                diff: Avoid writing any fixed files back; instead, output a diff.
-                fix: Apply fixes to resolve lint violations.
-                select: Comma-separated list of rule codes to enable.
-            """
-            ...
-        @property
-        def argv(self) -> Ruff.Check[Argv]: ...
-    check: Check[_R]
-    @property
-    def argv(self) -> Ruff[Argv]: ...
-'''
-
-
-def _write_index(index: Path, tools: dict[str, dict[str, str]]) -> None:
+def _write_index(index: Path, tools: dict[str, dict[str, dict[str, Any]]]) -> None:
     """An index directory in the store's layout: *tools* maps a name to its
-    stub text per version, oldest first; a tool with no versions lists no
-    stubs at all.
+    versions, oldest first, each a surface (its verbs) or empty for a
+    version never read.
     """
     import hashlib
 
@@ -689,21 +692,18 @@ def _write_index(index: Path, tools: dict[str, dict[str, str]]) -> None:
 
     pointer: dict[str, dict[str, str]] = {}
     for name, versions in tools.items():
-        top = tree(
-            {
-                "tool": put(b"{}"),
-                "versions": put(json.dumps(list(versions)).encode("utf-8")),
-            }
-        )
-        entry = {"tree": top, "record": "x"}
-        if versions:
-            entry["stubs"] = tree(
-                {
-                    version: put(text.encode("utf-8"))
-                    for version, text in versions.items()
-                }
-            )
-        pointer[name] = entry
+        entries = {
+            "tool": put(b"{}"),
+            "versions": put(json.dumps(list(versions)).encode("utf-8")),
+        }
+        for version, verbs in versions.items():
+            parts: dict[str, str] = {}
+            if verbs:
+                about = {"help": "Ruff.", "platforms": ["Linux"], "extractor": 1}
+                parts["observation"] = put(json.dumps(about).encode("utf-8"))
+                parts["surface"] = put(json.dumps(verbs).encode("utf-8"))
+            entries[version] = tree(parts)
+        pointer[name] = {"tree": tree(entries), "record": "x"}
     (index / "pointer.json").write_text(json.dumps({"schema": 1, "tools": pointer}))
 
 
@@ -722,10 +722,7 @@ def stubbed_toolroom(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         ignore=shutil.ignore_patterns("__pycache__"),
     )
     index = tmp_path / "index"
-    _write_index(
-        index,
-        {"ruff": {"0.9.0": "class Ruff: ...\n", "0.16.0": _RUFF_STUB}, "bare": {}},
-    )
+    _write_index(index, {"ruff": {"0.9.0": {}, "0.16.0": _RUFF_SURFACE}, "bare": {}})
     monkeypatch.setenv("_FM_PROBE_PKG", str(pkg))
     monkeypatch.setenv("_FM_STUB_INDEX", index.as_uri())
     return target
@@ -737,7 +734,7 @@ def test_the_playground_installs_the_newest_stubs_from_the_index_and_refuses_a_b
     """The page's own installer, run in CPython over an index built here:
     refusals first. An object whose bytes do not match the digest naming
     it is refused, and a tool with no stubs is skipped; then the newest
-    version's stub lands in the target, beside an empty `__init__`. The
+    version's stub is rendered into the target, beside an empty `__init__`. The
     target is named: re-importing the tools package from a copy in this
     process would leave the parent package pointing at the copy for every
     later test on the worker.
@@ -750,18 +747,21 @@ def test_the_playground_installs_the_newest_stubs_from_the_index_and_refuses_a_b
 
     target = tmp_path / "pkg"
     index = tmp_path / "index"
-    _write_index(index, {"ruff": {"0.9.0": "old\n", "0.16.0": _RUFF_STUB}, "bare": {}})
-    digest = hashlib.sha256(_RUFF_STUB.encode("utf-8")).hexdigest()
-    stub_object = index / "objects" / "sha256" / digest[:2] / digest[2:]
+    _write_index(index, {"ruff": {"0.9.0": {}, "0.16.0": _RUFF_SURFACE}, "bare": {}})
+    surface = json.dumps(_RUFF_SURFACE).encode("utf-8")
+    digest = hashlib.sha256(surface).hexdigest()
+    surface_object = index / "objects" / "sha256" / digest[:2] / digest[2:]
     # Bytes, not text: a text write on Windows would land CRLF and the
     # restored object would still fail its digest.
-    stub_object.write_bytes(b"tampered\n")
+    surface_object.write_bytes(b"tampered\n")
     with pytest.raises(ValueError, match=r"sha256:" + digest + r" does not match"):
         install(index.as_uri(), target=str(target))
-    stub_object.write_bytes(_RUFF_STUB.encode("utf-8"))
+    surface_object.write_bytes(surface)
 
     assert install(index.as_uri(), target=str(target)) == 1
-    assert (target / "stubs" / "ruff.pyi").read_text() == _RUFF_STUB
+    text = (target / "stubs" / "ruff.pyi").read_text()
+    assert "# Read from ruff 0.16.0 on Linux." in text  # the newest read
+    assert "class Ruff(ToolBase[_R]):" in text and "def __call__(" in text
     assert (target / "stubs" / "__init__.pyi").read_text() == ""
     assert (target / "handles.pyi").read_text() == (
         "from livery.toolroom.tools import Result\n"

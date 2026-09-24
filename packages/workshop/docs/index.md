@@ -41,11 +41,7 @@ repository. The root contract's `[tools] index` names where the
 catalogue is read from, the published index's URL or a directory
 holding the index or the records that build one, and `[tools] hosts`
 the hosts the repository locks for, the gated three unless it says
-otherwise. The repository that authors the records names the verb that
-builds their index in `[tools] index-build`, and every read of the
-catalogue runs it first; it does not run while the index stands as its
-build record fingerprints it, so a sync or a lock with nothing moved
-costs the stats alone.
+otherwise. The repository that authors the records reads them directly.
 
 `fm tools.lock` resolves every site's requirements against the
 catalogue and writes `tools.lock` at the root: one version per tool for
@@ -85,9 +81,11 @@ index to import, under the namespace package and never inside the tools
 package's own directory; a tool the
 workspace does not deploy gets no stub. `fm sync`, the lock verbs
 and the entry script write them as well, so a checkout and a CI runner
-type against the same stubs; a receipt under `.workshop/` names the
-lock and the index's stubs the last write saw, and while both stand
-nothing is read or written. `fm env.check` counts them and names their
+type against the same stubs. The store renders each stub from the
+locked version's own surface, from the records or the index, so no
+source holds a stub; a receipt under `.workshop/` names the lock and
+the source the last write rendered from, and while both stand nothing
+is read or written. `fm env.check` counts them and names their
 absence.
 
 ## The task surface

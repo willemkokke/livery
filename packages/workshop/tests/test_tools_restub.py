@@ -7,8 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from livery.footman.context import Failed
-from livery.strongroom import Entry, Store, Tree, canonical
+from livery.strongroom import Entry, Store, Tree, Value, canonical
 from livery.toolroom.store import Lock, Locked, Record, RecordDelta, Surface
 from livery.workshop import _env_tasks, _sync, _tool_tasks, _tools
 
@@ -37,34 +36,57 @@ def _read(*versions: str) -> tuple[RecordDelta, ...]:
 
 
 def _index(
-    root: Path, tools: dict[str, tuple[str, ...]], stubs: dict[str, tuple[str, ...]]
+    root: Path, tools: dict[str, tuple[str, ...]], read: dict[str, tuple[str, ...]]
 ) -> Path:
     """An index directory listing *tools* with their versions.
 
-    A stub per version *stubs* names, its text `stub <tool> <version>`.
+    The versions *read* names carry an observation and a surface with one
+    root verb, which the store renders; the others were never read.
     """
     index = root / "index"
     store = Store.create(index)
     pointer: dict[str, object] = {}
+
+    def blob(name: str, value: Value) -> Entry:
+        data = canonical(value)
+        return Entry(name, "blob", store.put(data), len(data))
+
     for name, versions in tools.items():
         record = Record(name, kind="uv-tool", deltas=_read(*versions))
-        entries = []
-        for key, value in (("tool", record.to_json()), ("versions", list(versions))):
-            data = canonical(value)
-            entries.append(Entry(key, "blob", store.put(data), len(data)))
+        entries = [blob("tool", record.to_json()), blob("versions", list(versions))]
         for version in versions:
-            data = Tree.of([]).encode()
+            parts: list[Entry] = []
+            if version in read.get(name, ()):
+                parts.append(
+                    blob(
+                        "observation",
+                        {
+                            "date": "",
+                            "help": "A tool.",
+                            "platforms": ["Linux"],
+                            "extractor": 1,
+                            "absent": {},
+                        },
+                    )
+                )
+                parts.append(
+                    blob(
+                        "surface",
+                        {
+                            "": {
+                                "help": "",
+                                "wraps": False,
+                                "positional": "any",
+                                "lead": "",
+                                "options": {},
+                            }
+                        },
+                    )
+                )
+            data = Tree.of(parts).encode()
             entries.append(Entry(version, "tree", store.put(data), len(data)))
         data = Tree.of(entries).encode()
-        entry: dict[str, str] = {"tree": str(store.put(data)), "record": "x"}
-        if name in stubs:
-            blobs = []
-            for version in stubs[name]:
-                text = f"stub {name} {version}\n".encode()
-                blobs.append(Entry(version, "blob", store.put(text), len(text)))
-            data = Tree.of(blobs).encode()
-            entry["stubs"] = str(store.put(data))
-        pointer[name] = entry
+        pointer[name] = {"tree": str(store.put(data)), "record": "x"}
     (index / "pointer.json").write_text(json.dumps({"schema": 1, "tools": pointer}))
     return index
 
@@ -97,103 +119,34 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, contract: str) -
 # --- the refusals ---------------------------------------------------------------
 
 
-def test_a_records_source_without_a_build_verb_refuses_naming_the_fix(
+def test_a_records_source_renders_and_a_version_never_read_is_named(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """The authoring site's own records render like an index.
+
+    A lock naming a version nobody read is named tool by tool, and
+    nothing is written for it.
+    """
     root = _workspace(
-        tmp_path, monkeypatch, '[workspace]\n\n[tools]\nindex = "records"\n'
+        tmp_path,
+        monkeypatch,
+        '[workspace]\n\n[tools]\nindex = "records"\nrequires = ["ruff"]\n',
     )
     Record("ruff", kind="uv-tool", deltas=_read("1.0.0")).save(
         root / "records" / "ruff"
     )
-    with pytest.raises(Failed, match=r"records .*hold no stubs; name the index"):
-        _tools.write_stubs(root)
-    # sync and the lock verbs carry the refusal as a line instead.
-    (line,) = _tools.stub_lines(root, strict=False)
-    assert line.startswith("  stubs: not written: [tools] index names records")
-    with pytest.raises(Failed, match=r"index-build is not a verb name"):
-        (root / "workshop.toml").write_text(
-            '[workspace]\n\n[tools]\nindex = "records"\nindex-build = 3\n'
-        )
-        _tools.write_stubs(root)
-
-
-def test_the_build_verb_does_not_run_while_the_index_stands(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The nothing-moved gate before the spawn.
-
-    An index whose build record fingerprints the records and the
-    renderer as they are costs no second interpreter; a touched record
-    file makes the verb run again.
-    """
-    import os
-    import time
-
-    from livery.toolroom.store import BUILD_FILE, tree_fingerprint
-
-    root = _workspace(
-        tmp_path,
-        monkeypatch,
-        '[workspace]\n\n[tools]\nindex = "index"\nindex-build = "tools.index.build"\n',
-    )
-    records = root / "records"
-    (records / "ruff").mkdir(parents=True)
-    (records / "ruff" / "tool.json").write_text("{}")
-    renderer = tmp_path / "renderer.py"
-    renderer.write_text("x = 1\n")
-    index = root / "index"
-    index.mkdir()
-    (index / "pointer.json").write_text('{"schema": 1, "tools": {}}')
-    (index / BUILD_FILE).write_text(
-        json.dumps(
-            {
-                "schema": 1,
-                "records": {
-                    "path": str(records),
-                    "fingerprint": tree_fingerprint([records]),
-                },
-                "renderer": {
-                    "code": "sha256:0",
-                    "files": [str(renderer)],
-                    "fingerprint": tree_fingerprint([str(renderer)]),
-                },
-            }
-        )
-    )
-    ran: list[list[str]] = []
-
-    def spawned(argv: list[str], **kwargs: object) -> int:
-        ran.append(list(argv))
-        return 0
-
-    monkeypatch.setattr("shutil.which", lambda name: "/x/fm")
-    monkeypatch.setattr("livery.footman.run", spawned)
-    assert _tools.build_index(root) == "tools.index.build"
-    assert ran == []
-    stamp = time.time_ns() + 2_000_000_000
-    os.utime(records / "ruff" / "tool.json", ns=(stamp, stamp))
-    assert _tools.build_index(root) == "tools.index.build"
-    assert ran == [["/x/fm", "tools.index.build"]]
-
-
-def test_a_build_verb_that_fails_or_cannot_run_refuses_naming_it(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    root = _workspace(
-        tmp_path,
-        monkeypatch,
-        '[workspace]\n\n[tools]\nindex = "index"\nindex-build = "tools.index.build"\n',
-    )
-    monkeypatch.setattr("shutil.which", lambda name: None)
-    with pytest.raises(Failed, match=r"fm is not on PATH, so `\[tools\] index-build`"):
-        _tools.catalogue(root)
-    monkeypatch.setattr("shutil.which", lambda name: "/x/fm")
-    monkeypatch.setattr("livery.footman.run", lambda argv, **kw: 3)
-    with pytest.raises(
-        Failed, match=r"`fm tools.index.build` \(\[tools\] index-build\) exited 3"
-    ):
-        _tools.catalogue(root)
+    _tools.write_lock(root)
+    made = _tools.write_stubs(root)
+    assert made.written == ("ruff",) and made.skipped == {}
+    text = (_tools.stubs_dir(root) / "ruff.pyi").read_text()
+    assert "# Read from ruff 1.0.0 on Linux." in text
+    assert "class Ruff(ToolBase[_R]):" in text
+    Lock(THREE, {"ruff": Locked("9.9.9", {})}).save(_tools.lock_path(root))
+    made = _tools.write_stubs(root)
+    assert made.written == () and made.removed == ("ruff",)
+    assert made.skipped == {
+        "ruff": "ruff 9.9.9: never read; the versions read are 1.0.0"
+    }
 
 
 # --- the writing ------------------------------------------------------------------
@@ -227,8 +180,10 @@ def test_the_stubs_are_written_for_the_locked_tools_at_their_locked_version(
     made = _tools.write_stubs(root)
     assert made.written == ("ruff",) and made.kept == ()
     assert made.removed == ("gone",)
-    assert made.skipped == {"bare": "bare 2.0.0: no stub; the index has none"}
-    assert (stubs / "ruff.pyi").read_text() == "stub ruff 1.0.0\n"  # the lock's
+    assert made.skipped["bare"].endswith("bare 2.0.0: the version was never read")
+    text = (stubs / "ruff.pyi").read_text()
+    assert "# Read from ruff 1.0.0 on Linux." in text  # the lock's version
+    assert "class Ruff(ToolBase[_R]):" in text
     assert not (stubs / "ty.pyi").exists()  # listed, not locked: no stub
     assert (stubs / "__init__.pyi").read_text() == ""
     assert _tools.handles_path(root).read_text() == (
@@ -252,7 +207,7 @@ def test_the_stubs_are_written_for_the_locked_tools_at_their_locked_version(
     assert again.written == () and again.kept == ("ruff",)
     assert _tools.stub_lines(root) == [
         "  stubs: 1 in typings/",
-        "  stubs: bare: bare 2.0.0: no stub; the index has none",
+        "  stubs: bare: " + made.skipped["bare"],
     ]
 
     # A locked tool with no stub is named on every write: the receipt never
@@ -288,11 +243,12 @@ def test_the_lock_verbs_and_sync_write_the_stubs_and_env_check_counts_them(
     )
     monkeypatch.setattr("livery.workshop._env_tasks._uv_drift", lambda root: "")
     monkeypatch.setattr(_tools, "materialise", lambda root, names=(), **kw: ())
-    # Before any stub: a problem, naming the verb.
-    assert _env_tasks.env_check() == 1
-    assert "stubs: MISSING; run `fm tools.restub` to write them into typings/" in (
-        capsys.readouterr().out
-    )
+    # Before a lock nothing expects a stub: the check names the lock
+    # verb and no stubs line.
+    assert _env_tasks.env_check() == 0
+    out = capsys.readouterr().out
+    assert "ruff: on PATH; not locked; run `fm tools.lock`" in out
+    assert "stubs:" not in out
     _tool_tasks.tools_lock()
     assert "  stubs: 1 in typings/, wrote 1" in capsys.readouterr().out
     _tool_tasks.tools_restub()
@@ -318,21 +274,15 @@ def test_the_lock_verbs_and_sync_write_the_stubs_and_env_check_counts_them(
     assert "  stubs: 1 in typings/" in capsys.readouterr().out
 
 
-def test_a_workspace_whose_source_cannot_render_is_not_asked_for_stubs(
+def test_a_workspace_that_names_no_index_is_not_asked_for_stubs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    root = _workspace(tmp_path, monkeypatch, "[workspace]\n")
+    _workspace(tmp_path, monkeypatch, "[workspace]\n")
     monkeypatch.setattr(
         "livery.workshop._env_tasks.shutil.which", lambda tool: "/x/" + tool
     )
     monkeypatch.setattr("livery.workshop._env_tasks._uv_drift", lambda root: "")
     assert _env_tasks.env_check() == 0  # no index named at all
-    assert "stubs" not in capsys.readouterr().out
-    (root / "workshop.toml").write_text('[workspace]\n\n[tools]\nindex = "records"\n')
-    Record("ruff", kind="uv-tool", deltas=_read("1.0.0")).save(
-        root / "records" / "ruff"
-    )
-    assert _env_tasks.env_check() == 0  # records, and no verb to build them
     assert "stubs" not in capsys.readouterr().out
 
 

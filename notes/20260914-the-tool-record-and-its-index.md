@@ -790,6 +790,27 @@ Acceptance:
   provision prefix was the store's home, `data_dir()/toolroom`, so a
   materialised store read as a provisioned prefix; the bench's prefix
   is `data_dir()/toolroom-bench` now.
+- 2026-09-24, Willem, on where stubs live: the index holds no rendered
+  stubs, they were four times the surfaces they render from and one per
+  version per tool; the store renders a stub on demand from a version's
+  own surface. So the renderer, the spec model and the surface-to-spec
+  reader moved from the bench into the store, the bench keeps
+  extraction and the union the docs pages render, the index lands each
+  version's surface as one blob and loses its derived tree and the
+  renderer's identity, `Catalogue.stub` renders from records and index
+  alike, so the workshop's `[tools] index-build` hook goes and this
+  repository reads its records again, the stub receipt keys on the
+  source's fingerprint or pointer, and the playground renders through
+  the store it installs. The renderer emits its final text itself, so
+  no formatter runs on a stub and a rendered stub is the same on any
+  machine; a consumer's stub is the locked version's own surface, the
+  "added in" history stays with the docs pages. Phase 5's stubs half is
+  reversed by this; its goldens live with the store's tests. Also ruled:
+  the records format is next, option-level patches one per line, one
+  file per tool, a floor for `prime`; strongroom's on-disk format is
+  Willem's to investigate separately; optional tools are locked always
+  and installed by a package type's profile; the modular docs plan
+  (livery#647) is not part of this plan.
 - 2026-09-23, Willem, on the order of work: the tickets raised while a
   plan is implemented are resolved before the next phase, while the
   context is fresh. Of the tickets phase 6 raised: livery#632 (a pyrefly

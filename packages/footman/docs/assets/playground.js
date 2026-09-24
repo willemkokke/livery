@@ -254,12 +254,19 @@ def _fm_fetch(url):
 
 
 def _fm_install_stubs(index_url, target=None):
-    # The tool stubs, from the index the site serves beside this page: the
-    # wheel ships none, and jedi reads a stub only from inside the installed
-    # package, so the newest rendering of every tool is written into it.
-    # Every object is verified against the digest that names it. A
-    # rehearsal names another target, so it never touches its own package.
+    # The tool stubs, rendered from the index the site serves beside this
+    # page: the wheel ships none, and jedi reads a stub only from inside the
+    # installed package, so each tool's newest version is rendered into it
+    # by the store, from that version's own surface. Every object is
+    # verified against the digest that names it. A rehearsal names another
+    # target, so it never touches its own package. Without the store
+    # installed nothing is rendered and every handle types as Tool.
     import hashlib
+
+    try:
+        from livery.toolroom.store import Observation, render_observation
+    except ImportError:
+        return 0
 
     # The target is the livery.toolroom namespace directory: the stubs go
     # under its stubs/, the handles beside them, never inside the tools
@@ -287,17 +294,28 @@ def _fm_install_stubs(index_url, target=None):
     stubs_dir.mkdir(parents=True, exist_ok=True)
     written = []
     for name, entry in pointer["tools"].items():
-        if not entry.get("stubs"):
-            continue
-        versions = json.loads(read(entries(entry["tree"])["versions"]))
-        stubs = entries(entry["stubs"])
+        tool = entries(entry["tree"])
+        versions = json.loads(read(tool["versions"]))
         for version in reversed(versions):
-            if version in stubs:
-                (stubs_dir / (name + ".pyi")).write_text(
-                    read(stubs[version]), encoding="utf-8"
-                )
-                written.append(name)
-                break
+            parts = entries(tool[version]) if version in tool else {}
+            if "observation" not in parts or "surface" not in parts:
+                continue
+            about = json.loads(read(parts["observation"]))
+            verbs = json.loads(read(parts["surface"]))
+            seen = Observation(
+                version,
+                str(about.get("date", "")),
+                tuple(about.get("platforms", ())),
+                int(about.get("extractor", 0) or 0),
+                str(about.get("help", "")),
+                verbs,
+                {},
+            )
+            (stubs_dir / (name + ".pyi")).write_text(
+                render_observation(name, seen), encoding="utf-8"
+            )
+            written.append(name)
+            break
     (stubs_dir / "__init__.pyi").write_text("", encoding="utf-8")
     # The package's own index imports the handles from the module beside
     # the stubs: one import and one typed handle per stub, the class named
@@ -1352,10 +1370,16 @@ function loadRuntime(status) {
       await pyodide.loadPackage("micropip");
       const micropip = pyodide.pyimport("micropip");
       await micropip.install(["livery-footman", "livery-toolroom"]);
+      // The store renders the tool stubs; a release without it on the
+      // index costs the typed completions, nothing else.
+      try {
+        await micropip.install("livery-toolroom-store");
+      } catch (error) {
+        console.warn("livery-toolroom-store not installed; handles complete as Tool", error);
+      }
       pyodide.runPython(BOOTSTRAP);
-      // The tool stubs, from the site's own index: the wheel ships none,
-      // and jedi reads them only from inside the installed package. A
-      // site without the index costs the typed completions, nothing else.
+      // The tool stubs, rendered from the site's own index: the wheel ships
+      // none, and jedi reads them only from inside the installed package.
       try {
         const index = new URL("_generated/index/", SITE_ROOT).href;
         pyodide.runPython(`_fm_install_stubs(${JSON.stringify(index)})`);

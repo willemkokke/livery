@@ -39,8 +39,8 @@ from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 
-from livery.toolroom.bench import _drivers, _index, _stubgen, _surfaces, _toolspec
-from livery.toolroom.store import class_name
+from livery.toolroom.bench import _drivers, _index, _surfaces
+from livery.toolroom.store import Catalogue, ToolSpec, class_name, render
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -150,7 +150,7 @@ def _on_path(prefix: str | Path) -> Generator[None]:
         yield
 
 
-def _extract(driver: _drivers.Driver, home: Path | None = None) -> _toolspec.ToolSpec:
+def _extract(driver: _drivers.Driver, home: Path | None = None) -> ToolSpec:
     """Read an installed tool, with its plugins as the fetch left them.
 
     A plugin is not on `PATH`: the host tool looks for it under the user's
@@ -394,20 +394,18 @@ def _stub_from(
     """
     newest = _surfaces.versions(record)[0]
     spec = _surfaces.union(record, name=driver.name, in_process=in_process)
-    return _formatted(
-        _stubgen.render(
-            spec,
-            # Every platform that read it, not the first alphabetically: a
-            # version observed on two says so, or the header credits one
-            # and quietly disowns the other's evidence.
-            platform=_and(_surfaces.platforms_of(record, newest) or [_platform()]),
-            class_name=_class_name(driver.key),
-            in_process=_mode(driver, spec),
-        )
+    return render(
+        spec,
+        # Every platform that read it, not the first alphabetically: a
+        # version observed on two says so, or the header credits one
+        # and quietly disowns the other's evidence.
+        platform=_and(_surfaces.platforms_of(record, newest) or [_platform()]),
+        class_name=_class_name(driver.key),
+        in_process=_mode(driver, spec),
     )
 
 
-def _observe(driver: _drivers.Driver, spec: _toolspec.ToolSpec) -> Record:
+def _observe(driver: _drivers.Driver, spec: ToolSpec) -> Record:
     """Record this reading in the tool's record, and return the record.
 
     Three cases: a first reading opens the record; a reading of a version
@@ -472,8 +470,8 @@ def _today() -> str:
     return datetime.date.today().isoformat()
 
 
-def _render(driver: _drivers.Driver, spec: _toolspec.ToolSpec) -> str:
-    return _stubgen.render(
+def _render(driver: _drivers.Driver, spec: ToolSpec) -> str:
+    return render(
         spec,
         platform=_platform(),
         class_name=_class_name(driver.key),
@@ -481,56 +479,13 @@ def _render(driver: _drivers.Driver, spec: _toolspec.ToolSpec) -> str:
     )
 
 
-def _mode(driver: _drivers.Driver, spec: _toolspec.ToolSpec) -> str:
+def _mode(driver: _drivers.Driver, spec: ToolSpec) -> str:
     """How this tool runs: in footman's process by default, or on request."""
     return driver.mode(spec.in_process)
 
 
 def _class_name(key: str) -> str:
     return class_name(key)
-
-
-def _formatted(text: str) -> str:
-    """Run the generated text through the linter and formatter that guard the
-    repo.
-
-    Generated code lands in `src/`, where `ruff check` and `ruff format
-    --check` run on every commit — so it has to satisfy both by construction,
-    not by a follow-up nobody remembers. Import sorting is the half a
-    formatter cannot do: the generator writes one `from livery.toolroom.tools import
-    …` line and ruff's isort has its own opinion about aliased members.
-    """
-    import subprocess
-
-    cwd, env = _spawn_context()
-    for argv in (
-        [
-            "ruff",
-            "check",
-            "--fix",
-            "--select",
-            "I",
-            "--stdin-filename",
-            "stub.pyi",
-            "-",
-        ],
-        ["ruff", "format", "--stdin-filename", "stub.pyi", "-"],
-    ):
-        try:
-            done = subprocess.run(
-                argv,
-                input=text,
-                capture_output=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=60,
-                cwd=cwd,
-                env=env,
-            )
-        except (OSError, subprocess.SubprocessError):
-            return text
-        text = done.stdout or text
-    return text
 
 
 @tasks.task(name="list")
@@ -776,7 +731,7 @@ def _audit(
             continue
         record = _surfaces.load(_record_path(driver.key))
         spec = _extract(driver)
-        fresh = _formatted(_render(driver, spec))
+        fresh = _render(driver, spec)
         held = _stub_from(driver, record) if record is not None else ""
         checked += 1
         if held != fresh:
@@ -861,7 +816,7 @@ def _color_probe_and_write(
 ) -> None:
     from livery.toolroom.bench import _colorprobe
 
-    installed: list[tuple[str, str, str, _toolspec.ToolSpec]] = []
+    installed: list[tuple[str, str, str, ToolSpec]] = []
     for driver in _drivers.DRIVERS:
         if only and driver.key != only:
             continue
@@ -882,9 +837,7 @@ def _color_probe_and_write(
             driver.key in _colorprobe.TRIGGERS
             and driver.key not in _colorprobe._CURATED
         )
-        spec: _toolspec.ToolSpec = (
-            _extract(driver) if needs_spec else _toolspec.ToolSpec(name=driver.name)
-        )
+        spec: ToolSpec = _extract(driver) if needs_spec else ToolSpec(name=driver.name)
         installed.append((driver.key, driver.name, binary, spec))
 
     results = _colorprobe.probe_all(installed)
@@ -909,8 +862,34 @@ def _color_probe_and_write(
 
     data = Path(_tools.__file__).resolve().parent / "_colordata.py"
     folded = _colorprobe.merged(_colordata.COLOUR, results)
-    data.write_text(_formatted(_colorprobe.render(folded)), encoding="utf-8")
+    data.write_text(_ruff_formatted(_colorprobe.render(folded)), encoding="utf-8")
     print(f"\nwrote {data.name} ({len(folded)} tools, {len(results)} probed here)")
+
+
+def _ruff_formatted(text: str) -> str:
+    """Run generated source through `ruff format` before it lands in `src/`.
+
+    The formatter is one of the gate's checks, so a generated module has
+    to satisfy it when written. When ruff cannot run, the text is
+    written as rendered and the gate names what is left.
+    """
+    import subprocess
+
+    cwd, env = _spawn_context()
+    try:
+        done = subprocess.run(
+            ["ruff", "format", "--stdin-filename", "_colordata.py", "-"],
+            input=text,
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+            cwd=cwd,
+            env=env,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return text
+    return done.stdout or text
 
 
 # How each probed verdict reads in the docs support table.
@@ -2125,7 +2104,7 @@ def _refuse_a_broken_environment(scratch: Path) -> None:
         )
 
 
-def _describes_itself(spec: _toolspec.ToolSpec) -> bool:
+def _describes_itself(spec: ToolSpec) -> bool:
     """Whether a reading is a description of a tool at all.
 
     "It printed something" is not the test. A tool whose launcher is missing
@@ -2302,8 +2281,8 @@ def index_build(
 
     The index is a strongroom store served as static files, one tree per
     tool holding the tool axis, each version's deployment per host and
-    its surface one blob per verb, and beside it `pointer.json` naming
-    each tool's current tree. A build into a directory that already
+    its surface as one blob, and beside it `pointer.json` naming each
+    tool's current tree. A build into a directory that already
     holds one reads its pointer and reuses every tool whose record did
     not move; `--from-genesis` ignores the pointer and rebuilds every
     tool, and two builds from genesis land the same objects and the same
@@ -2322,8 +2301,6 @@ def index_build(
         print(f"built {name} {built.tools[name]}")
     if built.reused:
         print(f"reused {len(built.reused)}: {', '.join(built.reused)}")
-    if built.rendered:
-        print(f"rendered stubs for {len(built.rendered)}: {', '.join(built.rendered)}")
     if built.dropped:
         print(f"dropped: {', '.join(built.dropped)}")
     print(f"pointer: {target / _index.POINTER} ({len(built.tools)} tools)")
@@ -2331,9 +2308,9 @@ def index_build(
 
 
 # The golden records and the stubs they render to, checked in beside the
-# bench's tests. A render change fails the gate until `fm tools.goldens`
-# moves them in the same change.
-_GOLDENS = Path(__file__).resolve().parents[4] / "tests" / "goldens"
+# store's tests, since the store renders. A render change fails the gate
+# until `fm tools.goldens` moves them in the same change.
+_GOLDENS = Path(__file__).resolve().parents[5] / "toolroom-store" / "tests" / "goldens"
 
 
 def golden_records() -> list[Record]:
@@ -2346,31 +2323,27 @@ def golden_path(record: Record, version: str) -> Path:
     return _GOLDENS / "stubs" / record.name / f"{version}.pyi.golden"
 
 
-def golden_driver(record: Record) -> _drivers.Driver:
-    """The driver a golden renders under: its name, in process when the name says so."""
-    return _drivers.Driver(record.name, in_process=record.name.endswith("_inproc"))
-
-
 @tasks.task
 def goldens(
     check: Annotated[bool, doc("report what differs instead of writing")] = False,
 ) -> dict[str, list[str]]:
-    """Render the golden records and write the golden stubs beside the tests.
+    """Render the golden records and write the golden stubs beside the store's tests.
 
     A golden is a small record shaped to exercise the renderer, and its
-    stub at every version is checked in. The test compares each render
-    with its golden byte for byte, so a change to the renderer fails the
-    gate until this verb moves the goldens in the same change, which is
-    what keeps a render change deliberate. `--check` names what would
-    move and writes nothing.
+    stub at every version is checked in, rendered as a consumer renders
+    the version it locks. The test compares each render with its golden
+    byte for byte, so a change to the renderer fails the gate until this
+    verb moves the goldens in the same change, which is what keeps a
+    render change deliberate. `--check` names what would move and
+    writes nothing.
     """
     wrote: list[str] = []
     unchanged: list[str] = []
+    catalogue = Catalogue.of_records(_GOLDENS / "records")
     for record in golden_records():
-        driver = golden_driver(record)
         for version in _surfaces.versions(record):
             path = golden_path(record, version)
-            text = _index.stub_for(record, version, driver=driver)
+            text = catalogue.stub(record.name, version)
             if path.is_file() and path.read_text(encoding="utf-8") == text:
                 unchanged.append(f"{record.name} {version}")
                 continue
@@ -2475,11 +2448,6 @@ def _sync_against(prefix: Path, only: str) -> None:
 # than a single word. It was one word when only one machine ever looked, and
 # a header naming two silently stopped parsing: every stub read as
 # hand-written, which is what the reference table then published.
-_READ_FROM = _re.compile(
-    r"Read from (?P<tool>\S+) (?P<version>\S+) on (?P<platform>[^.]+)\."
-    r"(?: In-process: (?P<mode>\w+)\.)?"
-)
-
 STUBS_MODULE = "toolroom_stubs"
 """The module the docs pages' stubs are rendered as, for the docs build's renderer."""
 
@@ -2528,21 +2496,6 @@ tools stay parallel (and the one case that can't).
 
 {table}
 """
-
-
-def _header(path: Path) -> tuple[str, str]:
-    """`(read from, in-process)` as a rendered stub's header records them.
-
-    The table is built from the rendered files rather than from the
-    tools, so building the docs needs nothing on PATH and the page says
-    exactly what the records hold — including for the tools this machine
-    cannot ask.
-    """
-    head = path.read_text(encoding="utf-8")[:600].replace("\n# ", " ")
-    match = _READ_FROM.search(head)
-    if not match:
-        return "unknown", "no"
-    return f"{match['version']} ({match['platform']})", match["mode"] or "unknown"
 
 
 def _verb_tree(path: Path) -> dict[str, object]:
@@ -2631,7 +2584,7 @@ def pages(
     module = stubs if stubs is not None else out.parent / "stubs" / STUBS_MODULE
     module.mkdir(parents=True, exist_ok=True)
     (module / "__init__.pyi").write_text("", encoding="utf-8")
-    stubbed: list[_drivers.Driver] = []
+    stubbed: list[tuple[_drivers.Driver, Record]] = []
     for driver in sorted(_drivers.DRIVERS, key=lambda d: d.key):
         record = _surfaces.load(_record_path(driver.key))
         if record is None:
@@ -2639,19 +2592,19 @@ def pages(
         (module / f"{driver.key}.pyi").write_text(
             _stub_from(driver, record), encoding="utf-8"
         )
-        stubbed.append(driver)
+        stubbed.append((driver, record))
     for stale in module.glob("*.pyi"):
-        if stale.stem != "__init__" and stale.stem not in {d.key for d in stubbed}:
+        if stale.stem != "__init__" and stale.stem not in {d.key for d, _ in stubbed}:
             stale.unlink()
     rows = ["| Tool | Read from | In-process | Verbs |", "| --- | --- | --- | --- |"]
-    for driver in stubbed:
-        rows.append(_row(driver, module / f"{driver.key}.pyi"))
+    for driver, record in stubbed:
+        rows.append(_row(driver, record, module / f"{driver.key}.pyi"))
         (out / f"{driver.key}.md").write_text(_page(driver), encoding="utf-8")
     (out / "index.md").write_text(
         _INDEX.format(table="\n".join(rows)), encoding="utf-8"
     )
     if nav is not None:
-        write_tools_nav(nav, [d.key for d in stubbed])
+        write_tools_nav(nav, [d.key for d, _ in stubbed])
     print(f"wrote {len(stubbed)} tool page(s) into {out}")
 
 
@@ -2682,13 +2635,15 @@ def nav_keys(config: Path) -> list[str]:
     return [m["key"] for m in _NAV_ENTRY.finditer(match.group())] if match else []
 
 
-def _row(driver: _drivers.Driver, path: Path) -> str:
+def _row(driver: _drivers.Driver, record: Record, path: Path) -> str:
     """One line of the index table: what it is, and what it was read from."""
     verbs = _verbs_of(path)
     listed = ", ".join(f"`{v}`" for v in verbs[:5]) or "the tool itself"
     if len(verbs) > 5:
         listed += f", … ({len(verbs)} in all)"
-    version, mode = _header(path)
+    newest = _surfaces.versions(record)[0]
+    version = f"{newest} ({_and(_surfaces.platforms_of(record, newest))})"
+    mode = _mode(driver, _surfaces.union(record, name=driver.name))
     home = f" ([docs]({driver.url}))" if driver.url else ""
     return (
         f"| [`{driver.key}`]({driver.key}.md){home} | {version} | {mode} | {listed} |"

@@ -30,12 +30,10 @@ owner = "willemkokke"
 
 [tools]
 # The catalogue the lock and the stubs resolve against. This
-# repository is the authoring site: it reads the index the bench builds
-# from its own records, and `index-build` names the verb that builds it
-# before every read. A consumer names the published index's URL. The
-# locked hosts are the gated three unless `hosts` names others.
-index = "docs/_generated/index"
-index-build = "tools.index.build"
+# repository is the authoring site, so it reads its own records; a
+# consumer names the published index's URL. The locked hosts are the
+# gated three unless `hosts` names others.
+index = "records"
 # What this repository's own tasks run beyond the python kind's tools;
 # a tool locked here has a stub, and one that is not types as `Tool`.
 requires = ["git", "docker", "coverage", "zensical", "cmake"]

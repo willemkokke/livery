@@ -1,11 +1,11 @@
-# Rendered from the tool's record — do not edit by hand.
+# Rendered from the tool's record. Do not edit by hand.
 # ruff: noqa: E501
 #
-# Read from demo 1.0.0 on Linux and macOS. In-process: no.
+# Read from demo 1.1.0 on Linux, Windows and macOS. In-process: no.
 # Every verb ends in `**flags: Any`: the stub suggests what this tool
 # accepts, and can never forbid what the bridge would happily pass. Each
 # verb is a class parameterised by what its call returns, which is how
-# `.argv` re-spells the same signature over `Argv` — same flags, same
+# `.argv` re-spells the same signature over `Argv`: same flags, same
 # checking, a built command line instead of a run.
 from collections.abc import Sequence
 from os import PathLike
@@ -16,10 +16,45 @@ from livery.toolroom.tools import Tool as ToolBase
 
 _R = TypeVar("_R")
 _R2 = TypeVar("_R2")
+_R3 = TypeVar("_R3")
 
-Color: TypeAlias = Literal['auto', 'always', 'never']
+Color: TypeAlias = Literal["auto", "always", "never"]
 
 class Demo(ToolBase[_R]):
+    class Compose(ToolBase[_R2]):
+        class Up(ToolBase[_R3]):
+            def __call__(  # type: ignore[override]
+                self,
+                *args: str | PathLike[str],
+                detach: Flag = ...,
+                **flags: Any,
+            ) -> _R3:
+                """Bring the services up.
+
+                Args:
+                    detach: Run in the background.
+                """
+                ...
+            @property
+            def argv(self) -> Demo.Compose.Up[Argv]: ...
+        up: Up[_R2]
+        def __call__(  # type: ignore[override]
+            self,
+            *args: Any,
+            **flags: Any,
+        ) -> _R2: ...
+        @property
+        def argv(self) -> Demo.Compose[Argv]: ...
+        def flags(
+            self,
+            **flags: Any,
+        ) -> Self:
+            """Bind tool-level global options before the subcommand.
+
+            `tools.docker.flags(host=...)` puts a tool's own
+            options ahead of the verb, where they belong."""
+            ...
+    compose: Compose[_R]
     class Build(ToolBase[_R2]):
         def __call__(  # type: ignore[override]
             self,
@@ -27,15 +62,15 @@ class Demo(ToolBase[_R]):
             /,
             *args: str | PathLike[str],
             clean: Flag = ...,
-            jobs: Value = ...,
+            fork: Flag = ...,
             output: Value = ...,
             **flags: Any,
         ) -> _R2:
             """Build it.
 
             Args:
-                clean: Clean first. Defaults on — `clean=off` emits `--dirty`.
-                jobs: Parallel jobs. Defaults to `1`.
+                clean: Clean first. Defaults on. `clean=off` emits `--dirty`.
+                fork: Fork first.
                 output: Where to write. Defaults to `dist`.
             """
             ...

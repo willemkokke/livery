@@ -32,11 +32,11 @@ modules with `livery.toolroom.handles` beside them declaring each
 handle, which the installed tools package's index imports. Both live
 under the `livery.toolroom` namespace package, beside the tools package
 and never inside its directory: a tree inside it would shadow the
-package for a checker run on explicit paths. A tool the workspace does
-not deploy gets no stub. `fm tools.restub`
-writes them, and so do `fm sync` and every lock verb. A source that is a
-directory of records holds no rendering; `[tools] index-build` names the
-verb that builds the index there before the catalogue is read.
+package for a checker run on explicit paths. The store renders each
+stub from the locked version's own surface, from the records or from
+the index, so no source holds a stub. A tool the workspace does not
+deploy gets no stub. `fm tools.restub` writes them, and so do `fm sync`
+and every lock verb.
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ from typing import Any
 
 from livery.footman import fail, prog
 from livery.footman.context import Failed
-from livery.strongroom import FolderSource, HttpSource, Source
+from livery.strongroom import FolderSource, HttpSource, Source, canonical, digest_of
 from livery.toolroom.store import (
     LOCK_FILE,
     MODES,
@@ -66,11 +66,11 @@ from livery.toolroom.store import (
     Requirement,
     Store,
     StoreError,
-    build_current,
     class_name,
     default_mode,
     read_pointer,
     resolve_lock,
+    tree_fingerprint,
 )
 from livery.workshop._contract import load_contract
 from livery.workshop._kinds import kind_chain
@@ -167,28 +167,6 @@ def has_index(root: Path) -> bool:
     return isinstance(declared, str) and bool(declared)
 
 
-def stubs_expected(root: Path) -> bool:
-    """Whether the source can render stubs: an index, or records with a build verb."""
-    if not has_index(root):
-        return False
-    return not _is_records(index_source(root)) or bool(index_build(root))
-
-
-def index_build(root: Path) -> str:
-    """The verb that builds the index at `[tools] index`, or empty when none is named.
-
-    The bench's `tools.index.build` in the repository that authors the
-    records: run before the catalogue is read, so the index the lock and
-    the stubs come from is the records as they are.
-    """
-    declared = tools_table(root / "workshop.toml").get("index-build")
-    if declared is None:
-        return ""
-    if not isinstance(declared, str) or not declared:
-        fail("workshop.toml: [tools] index-build is not a verb name")
-    return declared
-
-
 def _is_records(source: str) -> bool:
     """Whether *source* is a directory of records rather than an index."""
     if "://" in source:
@@ -200,49 +178,14 @@ def _is_records(source: str) -> bool:
     )
 
 
-def build_index(root: Path) -> str:
-    """Run the `[tools] index-build` verb when one is named; the verb run, or empty.
-
-    The verb runs as its own runner invocation at the root, the way a
-    docs generator does, so it is exactly what a person would type. It
-    does not run at all when the index stands as its build record
-    fingerprints it, the records and the renderer's sources unmoved
-    since the last build, which is the steady state of every sync and
-    lock; that answer costs the stats alone and no second interpreter.
-    A verb that exits non-zero refuses, naming it.
-    """
-    import livery.footman as footman
-
-    verb = index_build(root)
-    if not verb:
-        return ""
-    source = index_source(root)
-    if "://" not in source and build_current(Path(source)):
-        return verb
-    runner = shutil.which(footman.prog())
-    if not runner:
-        fail(
-            f"{footman.prog()} is not on PATH, so `[tools] index-build`"
-            f" ({verb}) cannot run; enter the environment first"
-        )
-    code = footman.run([runner, verb], cwd=root, nofail=True)
-    if int(code) != 0:
-        fail(f"`{footman.prog()} {verb}` ([tools] index-build) exited {int(code)}")
-    return verb
-
-
 def catalogue(root: Path, *, offline: bool = False) -> Catalogue:
     """The catalogue the repository resolves against, from `[tools] index`.
 
     A directory of records is read as the authoring site reads it; an
     index, by URL or directory, through the machine's store, which
-    keeps what it fetched so a second read is offline. An index a
-    `[tools] index-build` verb builds is built first.
+    keeps what it fetched so a second read is offline.
     """
-    source = index_source(root)
-    if "://" not in source:
-        build_index(root)
-    return _read_catalogue(source, offline=offline)
+    return _read_catalogue(index_source(root), offline=offline)
 
 
 def _read_catalogue(source: str, *, offline: bool) -> Catalogue:
@@ -637,35 +580,27 @@ class Stubbed:
 def write_stubs(root: Path, *, offline: bool = False) -> Stubbed:
     """Write the stubs of the locked tools into the typings directory.
 
-    One stub per tool `tools.lock` holds, at the locked version: a tool
-    the workspace does not deploy gets no stub, and its handle types as
-    a bare `Tool`. The `handles` module beside the stubs declares the
-    handles, one import and one `name: Class[Result]` per stub written,
-    and the installed tools package's index imports every name from it.
-    The handles cannot live in the stubs package's own index: a
-    package's index binds its submodules, and `ruff` would name
+    One stub per tool `tools.lock` holds, rendered by the store from the
+    locked version's own surface, from the records or from the index:
+    a tool the workspace does not deploy gets no stub, and its handle
+    types as a bare `Tool`. The `handles` module beside the stubs
+    declares the handles, one import and one `name: Class[Result]` per
+    stub written, and the installed tools package's index imports every
+    name from it. The handles cannot live in the stubs package's own
+    index: a package's index binds its submodules, and `ruff` would name
     `ruff.pyi` rather than the handle. Nothing is written inside the
     tools package's own directory, and a tree left there is removed:
     it shadows the package for a checker run on explicit paths. Without
     a lock nothing is written.
 
-    A receipt under `.workshop/` names the lock and the index's stubs
-    tree the last write saw. When both stand and every file it wrote is
-    there, nothing is read from the catalogue and nothing is written,
-    which is the steady state of every sync; otherwise a stub already
-    on disk as the catalogue holds it is kept, so a checker's cache
-    stands.
-
-    Refuses when `[tools] index` names a directory of records and no
-    `[tools] index-build` verb: records hold no rendering.
+    A receipt under `.workshop/` names the lock and the source the last
+    write rendered from, a records directory by its stat fingerprint
+    and an index by its pointer. When both stand and every file it
+    wrote is there, nothing is read and nothing is written, which is
+    the steady state of every sync; otherwise a stub already on disk
+    as the source renders it is kept, so a checker's cache stands.
     """
     source = index_source(root)
-    if _is_records(source) and not index_build(root):
-        fail(
-            f"[tools] index names records ({source}), which hold no stubs; name"
-            " the index built from them, or `[tools] index-build`, the verb"
-            " that builds it"
-        )
     lock = current_lock(root)
     locked = dict(lock.tools) if lock is not None else {}
     shutil.rmtree(
@@ -675,9 +610,8 @@ def write_stubs(root: Path, *, offline: bool = False) -> Stubbed:
     directory.mkdir(parents=True, exist_ok=True)
     seen = None
     if locked:
-        build_index(root)
         try:
-            seen = str(read_pointer(source).get("stubs", ""))
+            seen = source_mark(source)
         except CatalogueError as error:
             fail(str(error))
         standing = _stubs_standing(root, seen, sorted(locked))
@@ -715,8 +649,19 @@ def write_stubs(root: Path, *, offline: bool = False) -> Stubbed:
     return Stubbed(tuple(written), tuple(kept), skipped, tuple(removed))
 
 
+def source_mark(source: str) -> str:
+    """What the catalogue source is right now, in one digest, without reading it whole.
+
+    A directory of records is its stat fingerprint; an index, by
+    directory or URL, is the digest of its pointer document.
+    """
+    if _is_records(source):
+        return tree_fingerprint([source])
+    return str(digest_of(canonical(read_pointer(source))))
+
+
 STUBS_RECEIPT = ".workshop/stubs.json"
-"""The receipt naming the lock and the index's stubs tree the last stub write saw."""
+"""The receipt naming the lock and the source the last stub write rendered from."""
 
 
 def _stubs_receipt_path(root: Path) -> Path:
@@ -728,14 +673,14 @@ def _lock_digest(root: Path) -> str:
 
 
 def _stubs_standing(root: Path, stubs: str, locked: list[str]) -> Stubbed | None:
-    """The last write's answer when the lock, the index's stubs and the files stand."""
+    """The last write's answer when the lock, the source and the files stand."""
     try:
         held = json.loads(_stubs_receipt_path(root).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     if not isinstance(held, dict) or held.get("schema") != 1:
         return None
-    if held.get("stubs") != stubs or held.get("lock") != _lock_digest(root):
+    if held.get("source") != stubs or held.get("lock") != _lock_digest(root):
         return None
     if held.get("locked") != locked:
         return None
@@ -759,7 +704,7 @@ def _write_stubs_receipt(
     path.parent.mkdir(parents=True, exist_ok=True)
     document = {
         "schema": 1,
-        "stubs": stubs,
+        "source": stubs,
         "lock": _lock_digest(root),
         "locked": locked,
         "written": written,

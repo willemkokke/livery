@@ -17,8 +17,7 @@ from typing import Any
 import pytest
 
 from livery.toolroom.bench import _surfaces
-from livery.toolroom.bench._toolspec import Option, ToolSpec, Verb
-from livery.toolroom.store import RecordError
+from livery.toolroom.store import Option, RecordError, ToolSpec, Verb
 from toolroom_bench_readings import (
     chain_of,
     described,

@@ -82,12 +82,15 @@ def _without_auto_maintenance(build: Build, seed: Path) -> None:
     runner: `objects/maintenance.lock` vanished mid-copy). The
     variables reach every git the build spawns and nothing after it.
     """
+    # Appended after the keys already in the environment (the suite's
+    # signing overlay), never in their place.
+    first = int(os.environ.get("GIT_CONFIG_COUNT", "0") or "0")
     added = {
-        "GIT_CONFIG_COUNT": "2",
-        "GIT_CONFIG_KEY_0": "gc.auto",
-        "GIT_CONFIG_VALUE_0": "0",
-        "GIT_CONFIG_KEY_1": "maintenance.auto",
-        "GIT_CONFIG_VALUE_1": "false",
+        "GIT_CONFIG_COUNT": str(first + 2),
+        f"GIT_CONFIG_KEY_{first}": "gc.auto",
+        f"GIT_CONFIG_VALUE_{first}": "0",
+        f"GIT_CONFIG_KEY_{first + 1}": "maintenance.auto",
+        f"GIT_CONFIG_VALUE_{first + 1}": "false",
     }
     before = {key: os.environ.get(key) for key in added}
     os.environ.update(added)
