@@ -36,6 +36,8 @@ def test_the_diagnosis_names_the_command_the_process_the_run_and_the_console(
     monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw3")
     monkeypatch.setenv("GITHUB_RUN_ID", "35050711742")
     monkeypatch.setenv("GITHUB_JOB", "check")
+    for runner_own in ("RUNNER_NAME", "RUNNER_OS"):  # a CI runner sets these itself
+        monkeypatch.delenv(runner_own, raising=False)
     monkeypatch.setattr(_pytest_console, "_EVENTS", [(0.0, 0), (1.0, 1)])
     error = subprocess.CalledProcessError(
         3221225786, ["git", "tag", "packages/tool/v0.2.0"]

@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import pytest
 
+#: pytest's own plugin for running an inner pytest, which the workshop's
+#: plugin tests drive; pytest accepts this declaration in the root
+#: conftest alone.
+pytest_plugins = ("pytester",)
+
 
 @pytest.fixture(autouse=True)
 def _unsigned_commits(monkeypatch: pytest.MonkeyPatch) -> None:
