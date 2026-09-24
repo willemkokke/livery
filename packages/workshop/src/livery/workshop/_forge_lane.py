@@ -14,10 +14,17 @@ import re
 from pathlib import Path
 
 from livery.footman import fail
-from livery.forge import Forge, GiteaForge, GithubForge, GitlabForge, Repository
+from livery.forge import (
+    Forge,
+    ForgeError,
+    GiteaForge,
+    GithubForge,
+    GitlabForge,
+    Repository,
+)
 from livery.toolroom import tools
 from livery.workshop._contract import load_contract
-from livery.workshop._tokens import admin_token, forge_token
+from livery.workshop._tokens import admin_token, forge_token, host_qualifier
 
 # http and https (ports and embedded credentials included), and the
 # git@host:owner/name form: the dev rig speaks plain http on a port.
@@ -40,13 +47,32 @@ def remote_repo_name(root: Path) -> str:
 
 
 def _connect(kind: str, url: str, token: str | None) -> Forge:
-    """One backend, connected; None lets its own resolution decide."""
-    if kind == "github":
-        return GithubForge.connect(url=url, token=token)
-    if kind == "gitea":
-        return GiteaForge.connect(url=url, token=token)
-    if kind == "gitlab":
-        return GitlabForge.connect(url=url, token=token)
+    """One backend, connected; ``None`` lets its own resolution decide.
+
+    The one place a workshop verb connects, so a refusal reads the
+    same from every verb: when the lane resolved nothing and the
+    backend found nothing either, the backend's own words (its
+    variable, its CLI) are followed by the workshop's names, so the
+    reader learns both ladders at once.
+
+    Raises:
+        ForgeError: when the backend cannot connect; a caller that
+            falls open catches it, and a verb lets it stand as the
+            refusal.
+    """
+    try:
+        if kind == "github":
+            return GithubForge.connect(url=url, token=token)
+        if kind == "gitea":
+            return GiteaForge.connect(url=url, token=token)
+        if kind == "gitlab":
+            return GitlabForge.connect(url=url, token=token)
+    except ForgeError as error:
+        if token is not None or "credential" not in str(error):
+            raise
+        qualifier = host_qualifier(kind, url)
+        names = "FORGE_TOKEN" + (f" or FORGE_TOKEN__{qualifier}" if qualifier else "")
+        raise ForgeError(f"{error}; the workshop reads {names} first") from error
     fail(f"unknown forge kind {kind!r}: use github, gitea, or gitlab")
 
 

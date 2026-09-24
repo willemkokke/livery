@@ -8,6 +8,15 @@ the conformance suite; what the container corrected is folded in, and
 the asynchronous behaviours it taught are in
 [quirks.md](quirks.md).
 
+## Construction and the token rule
+
+`GitlabForge.connect()` speaks to the server `GITLAB_URL` names
+unless a URL is given (its API root is `<url>/api/v4`). The token
+resolves as `GITLAB_TOKEN` first, then the token `glab` holds for the
+server's host (`glab config get token --host`), so a machine with a
+signed-in glab CLI needs no configuration; nothing found raises at
+connect time. Pass `token=""` to read anonymously on purpose.
+
 ## Addressing
 
 - **A project is addressed by its URL-encoded path**:

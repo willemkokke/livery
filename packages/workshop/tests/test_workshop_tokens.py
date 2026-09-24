@@ -86,3 +86,37 @@ def test_the_origin_remote_parses_every_spelling() -> None:
         match = _REMOTE_RE.search(url)
         assert match is not None, url
         assert match.group("name") in ("tools", "envset-ci-e2e", "name"), url
+
+
+def test_the_lane_names_its_own_variables_after_the_backends_refusal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One refusal voice: the backend's words, then FORGE_TOKEN and its host form."""
+    from livery.forge import ForgeError, GithubForge
+    from livery.workshop._forge_lane import _connect
+
+    def refusing(**kwargs: object) -> object:
+        raise ForgeError(
+            "no GitHub credential: set GITHUB_TOKEN or sign in with `gh auth login`"
+        )
+
+    monkeypatch.setattr(GithubForge, "connect", refusing)
+    with pytest.raises(ForgeError) as caught:
+        _connect("github", "", None)
+    assert str(caught.value) == (
+        "no GitHub credential: set GITHUB_TOKEN or sign in with `gh auth login`;"
+        " the workshop reads FORGE_TOKEN or FORGE_TOKEN__GITHUB_COM first"
+    )
+    # A token the lane did resolve was the credential: the backend's
+    # refusal stands alone, since the workshop's names were read.
+    with pytest.raises(ForgeError, match=r"gh auth login`$"):
+        _connect("github", "", "a-token")
+
+    def no_server(**kwargs: object) -> object:
+        raise ForgeError("no GitLab server to connect to: pass url= or set GITLAB_URL")
+
+    from livery.forge import GitlabForge
+
+    monkeypatch.setattr(GitlabForge, "connect", no_server)
+    with pytest.raises(ForgeError, match=r"GITLAB_URL$"):
+        _connect("gitlab", "", None)

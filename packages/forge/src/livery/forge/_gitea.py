@@ -193,7 +193,8 @@ class GiteaForge:
         default. *token* defaults to ``GITEA_TOKEN``; a missing token
         raises rather than silently reading anonymously, because an
         unauthenticated write fails later and further from the cause.
-        Pass ``token=""`` to read a foreign or public server
+        ``tea`` prints no token of its own, so there is no CLI to fall
+        back to. Pass ``token=""`` to read a foreign or public server
         anonymously on purpose.
         """
         web = url or os.environ.get("GITEA_URL", "")
@@ -203,10 +204,7 @@ class GiteaForge:
             )
         resolved = os.environ.get("GITEA_TOKEN", "") if token is None else token
         if token is None and not resolved:
-            raise ForgeError(
-                'GITEA_TOKEN is not set: set it, or pass token="" to read'
-                " anonymously on purpose"
-            )
+            raise ForgeError("no Gitea credential: set GITEA_TOKEN")
         return cls(f"{web.rstrip('/')}/api/v1", token=resolved, opener=opener)
 
     def whoami(self) -> str:
