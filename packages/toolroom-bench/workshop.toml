@@ -32,3 +32,19 @@ generators = ["tools.index.build"]
 # suite grows, lower it only deliberately.
 # The machinery's suite as it arrived from toolroom, whose floor is 85.
 coverage-floor = 85
+
+# The six-host verification point: every downloaded tool installs,
+# runs and reads on the host it was built for, fortnightly. One
+# runner per host key; the gate keeps its three.
+[[ci.point]]
+name = "tool-hosts"
+task = "tools.verify-host"
+every = "2w"
+runners = [
+    "ubuntu-latest",
+    "ubuntu-24.04-arm",
+    "macos-latest",
+    "macos-15-intel",
+    "windows-latest",
+    "windows-11-arm",
+]

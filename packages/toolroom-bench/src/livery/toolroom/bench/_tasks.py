@@ -37,14 +37,16 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import date
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol, cast
 
 from livery.toolroom.bench import _drivers, _index, _surfaces
 from livery.toolroom.store import (
     RECORD_SUFFIX,
     Catalogue,
+    Ensured,
     Home,
     Store,
+    StoreError,
     ToolSpec,
     class_name,
     records_in,
@@ -903,6 +905,179 @@ def _ruff_formatted(text: str) -> str:
     return done.stdout or text
 
 
+class _Installer(Protocol):
+    """What the host check asks of a store: its host, and an install by record."""
+
+    @property
+    def host(self) -> str: ...
+
+    def ensure(self, record: Record, version: str) -> Ensured: ...
+
+
+@dataclass(frozen=True)
+class HostCheck:
+    """One tool's executable check on this host.
+
+    Attributes:
+        tool: The record's name.
+        version: The version checked, the newest with a build for the host.
+        outcome: `ok`, `skipped` for a tool with no build for this host,
+            or `failed`.
+        detail: What happened, in the words a reviewer acts on.
+    """
+
+    tool: str
+    version: str
+    outcome: str
+    detail: str
+
+    def __str__(self) -> str:
+        at = f" {self.version}" if self.version else ""
+        return f"  {self.tool}{at}: {self.outcome}, {self.detail}"
+
+
+def verify_host(
+    *,
+    store: _Installer | None = None,
+    only: str = "",
+    run: Callable[[list[str]], tuple[int, str]] | None = None,
+    extract: Callable[[_drivers.Driver], ToolSpec] | None = None,
+) -> list[HostCheck]:
+    """The executable checks on this host: each downloaded tool installs, runs, reads.
+
+    For each curated tool whose record is a downloaded kind, the newest
+    version with a build for this host is supplied through *store*,
+    its first entry point is run with the driver's help flag, and its
+    surface is extracted from the installed tree and must describe the
+    tool. A tool with no build for this host is skipped and says so.
+    *store*, *run* and *extract* are the seams the tests drive; the
+    defaults are the bench's store, a subprocess with a two-minute
+    limit, and the bench's own extractor.
+    """
+    import subprocess
+
+    from livery.toolroom.store import DOWNLOAD_KINDS
+
+    engine = store or _bench_store()
+    checks: list[HostCheck] = []
+    for driver in _drivers.DRIVERS:
+        if only and driver.key != only:
+            continue
+        record = _surfaces.load(_record_path(driver.key))
+        if record is None or record.kind not in DOWNLOAD_KINDS:
+            continue
+        version = next(
+            (
+                delta.version
+                for delta in reversed(record.deltas)
+                if engine.host in delta.hosts
+            ),
+            "",
+        )
+        if not version:
+            checks.append(
+                HostCheck(driver.key, "", "skipped", f"no build for {engine.host}")
+            )
+            continue
+        try:
+            ensured = engine.ensure(record, version)
+        except StoreError as error:
+            checks.append(HostCheck(driver.key, version, "failed", f"install: {error}"))
+            continue
+        entry = ensured.tool_dir / ensured.deployment.entry_points[0]
+        try:
+            code, tail = (run or _run_entry)([str(entry), driver.help_flag])
+        except OSError as error:
+            checks.append(
+                HostCheck(
+                    driver.key,
+                    version,
+                    "failed",
+                    f"{entry.name} did not start: {error}",
+                )
+            )
+            continue
+        except subprocess.TimeoutExpired:
+            checks.append(
+                HostCheck(
+                    driver.key,
+                    version,
+                    "failed",
+                    f"{entry.name} {driver.help_flag} did not return in time",
+                )
+            )
+            continue
+        if code != 0:
+            checks.append(
+                HostCheck(
+                    driver.key,
+                    version,
+                    "failed",
+                    f"{entry.name} {driver.help_flag} exited {code}: {tail}",
+                )
+            )
+            continue
+        with _bin_on_path(entry.parent):
+            spec = (extract or _extract)(driver)
+        if not _describes_itself(spec):
+            checks.append(
+                HostCheck(
+                    driver.key,
+                    version,
+                    "failed",
+                    "the surface does not describe the tool",
+                )
+            )
+            continue
+        options = sum(len(verb.options) for verb in spec.verbs)
+        checks.append(
+            HostCheck(
+                driver.key,
+                version,
+                "ok",
+                f"{entry.name} runs, {options} option(s) read",
+            )
+        )
+    return checks
+
+
+def _run_entry(argv: list[str]) -> tuple[int, str]:
+    """Run *argv* with a two-minute limit; the exit and the last line of output."""
+    import subprocess
+
+    done = subprocess.run(
+        argv, capture_output=True, text=True, timeout=120, check=False, errors="replace"
+    )
+    lines = (done.stdout + done.stderr).strip().splitlines()
+    return done.returncode, (lines[-1] if lines else "no output")[:200]
+
+
+@tasks.task(name="verify-host")
+def tools_verify_host(
+    only: Annotated[str, doc("check just this tool")] = "",
+) -> None:
+    """Install, run and read every downloaded tool on this host; red when one fails.
+
+    The six-host verification point's task: for each curated tool of a
+    downloaded kind, the newest version with a build for this host
+    installs through the bench's store, its entry point runs with the
+    driver's help flag, and its surface extracts to a reading that
+    describes the tool. A tool with no build for this host is skipped
+    and says so.
+    """
+    checks = verify_host(only=only)
+    for check in checks:
+        print(check)
+    failed = [check for check in checks if check.outcome == "failed"]
+    counted = f"{len(checks) - len(failed)} of {len(checks)} tool(s) pass"
+    if failed:
+        fail(
+            f"{counted}: {', '.join(check.tool for check in failed)} failed on this"
+            " host"
+        )
+    print(f"  {counted}")
+
+
 # How each probed verdict reads in the docs support table.
 # `unprobed` is a gap in `_colorprobe.TRIGGERS` rather than a fact about the
 # tool — but it is a verdict the store can hold, and a page that raised a
@@ -1739,6 +1914,11 @@ def submit_refresh(
         f"  refreshed {moved} on {branch}",
         f"  submitted {'armed' if found.armed else 'unarmed'}: {reason}",
     ]
+
+
+def _bench_store() -> Store:
+    """The bench's own store, under its room in the runner's data directory."""
+    return Store(Home(default_prefix() / "store"))
 
 
 def _prog() -> str:

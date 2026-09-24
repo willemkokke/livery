@@ -502,13 +502,15 @@ MOUNTED: Tasks | None = None
 def _mounted(task: str) -> bool:
     """Whether the runner mounts the task at the dotted address *task*.
 
-    The invocation's merged tree when a run kept one, else whatever
-    the module-level root holds, which is a test's own registrations.
+    The invocation's merged tree when a run kept one. A process that
+    kept no tree, a test reading the repository's own contract, holds
+    only what it happened to import, never the workspace's mounted
+    set, so it cannot answer and defers: the runner checks at the
+    point's dispatch and at every load inside a run.
     """
-    from livery.footman import registry
-
-    view = MOUNTED if MOUNTED is not None else Tasks(registry.root)
-    return view.get(task) is not None
+    if MOUNTED is None:
+        return True
+    return MOUNTED.get(task) is not None
 
 
 @dataclass(frozen=True)

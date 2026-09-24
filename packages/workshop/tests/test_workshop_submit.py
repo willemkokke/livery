@@ -507,7 +507,7 @@ def test_ci_status_reads_the_heads_runs_and_exits_by_state(
 
 
 def test_ci_dispatch_refuses_points_without_a_dispatch_entry(
-    rig: tuple[FakeForge, SubmitGit],
+    rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop._ci_tasks import dispatch_flow
 
