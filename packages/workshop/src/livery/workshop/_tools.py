@@ -71,6 +71,7 @@ from livery.toolroom.store import (
     read_pointer,
     resolve_lock,
     tree_fingerprint,
+    version_key,
 )
 from livery.workshop._contract import load_contract
 from livery.workshop._kinds import kind_chain
@@ -452,6 +453,24 @@ class Materialised:
     failure: str = ""
 
 
+def site_floors(root: Path) -> dict[str, tuple[str, str]]:
+    """The highest floor the sites declare per tool, with the site that asked.
+
+    A tool no site floors is absent. The lock already honours these
+    floors when it chooses a version; the check of a system tool on a
+    machine honours them here, since the machine's own copy is never
+    the locked version.
+    """
+    highest: dict[str, tuple[str, str]] = {}
+    for requirement in requirements(root):
+        if not requirement.floor:
+            continue
+        held = highest.get(requirement.name)
+        if held is None or version_key(requirement.floor) > version_key(held[0]):
+            highest[requirement.name] = (requirement.floor, requirement.site)
+    return highest
+
+
 def materialise(
     root: Path,
     names: tuple[str, ...] = (),
@@ -464,9 +483,12 @@ def materialise(
     The bundle is what the sites require: every tool the lock holds.
     A downloaded kind is supplied from the catalogue's deployment for
     this host through the store's sources and the origin; a delegated
-    kind through its installer. Tools in `link` mode are linked into
-    the checkout's bin directory together, so a name two tools offer
-    goes to the first. A receipt is written per tool supplied.
+    kind through its installer. A system tool is the machine's own,
+    held to the highest of the record's floor and the sites' floors;
+    the refusal names the site whose floor it is under. Tools in
+    `link` mode are linked into the checkout's bin directory together,
+    so a name two tools offer goes to the first. A receipt is written
+    per tool supplied.
 
     Raises a refusal naming the tool when the lock does not hold it.
     A tool the store cannot supply refuses too, naming the reason,
@@ -488,11 +510,18 @@ def materialise(
     listing = catalogue(root, offline=offline)
     store = Store(_home(), sources=sources(root), offline=offline)
     host = store.host
+    floors = site_floors(root)
     done: list[Materialised] = []
     linked: list[tuple[Receipt, Ensured]] = []
     for name in wanted:
         locked = lock.tools[name]
         listed = listing.listed(name)
+        floor, site = listed.min_version, ""
+        asked = floors.get(name) if listed.kind == "system-check" else None
+        if asked is not None and (
+            not floor or version_key(asked[0]) > version_key(floor)
+        ):
+            floor, site = asked
         deployment: Deployment | None = None
         if listed.kind in ("archive", "binary"):
             try:
@@ -506,12 +535,15 @@ def materialise(
                 locked.version,
                 deployment,
                 package=listed.package,
-                min_version=listed.min_version,
+                min_version=floor,
             )
         except StoreError as error:
+            reason = str(error)
+            if site and "below the floor" in reason:
+                reason += f"; {site} requires {name}>={floor}"
             if strict:
-                fail(str(error))
-            done.append(Materialised(None, False, str(error)))
+                fail(reason)
+            done.append(Materialised(None, False, reason))
             continue
         mode = mode_of(root, name, listed.kind, listed.mode)
         receipt = Receipt(

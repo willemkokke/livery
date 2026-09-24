@@ -496,10 +496,12 @@ class Store:
     def _supply_system(self, name: str, version: str, min_version: str) -> Ensured:
         """The machine's own *name*, found on PATH and at or above *min_version*.
 
-        The floor is the record's alone. The locked *version* is the
-        newest reading the stubs render for, not a version anyone
-        installs, so a record without a floor accepts whatever the
-        machine has, a tool that prints no version included.
+        The floor is whatever the caller holds the tool to: the record's
+        own `min_version`, or the highest of that and the sites' floors,
+        which the workshop passes. The locked *version* is the newest
+        reading the stubs render for, not a version anyone installs, so
+        no floor at all accepts whatever the machine has, a tool that
+        prints no version included.
         """
         self._progress(Event(name, version, "probe"))
         found = shutil.which(name)

@@ -62,7 +62,10 @@ checkout's `.workshop/bin`, `path` its own directories on PATH, `none`
 neither, for a tool reached only through a typed handle. A binary
 links and a system tool takes `none` unless the record or the root
 contract's `[tools] modes` says otherwise; every other kind takes
-`path`. Each tool leaves a receipt under `.workshop/receipts/`, this
+`path`. A system tool is the machine's own: the store installs
+nothing for it and holds the copy on PATH to the highest of the
+record's floor and the sites' floors, naming the site whose floor it
+is under. Each tool leaves a receipt under `.workshop/receipts/`, this
 checkout's statement of what it installed: the exact version, the
 host, the deployment's digest and what reached PATH, as the release
 train's receipt is a release's statement. `fm env.emit` carries the
