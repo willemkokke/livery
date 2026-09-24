@@ -19,9 +19,12 @@ something, and no executable sits in a path directory without an
 annotation. The paths each host gained and lost are the pull request's
 summary, and the refresh arms its pull request only when every change
 is an addition and every check passed; `fm tools.verify <tool>` runs
-the same checks by hand. The executable checks, that the entry point
-runs and the surface extracts, need a matching host and belong to the
-six-host verification point.
+the same checks by hand. The executable checks need a matching host:
+the bench declares a point, `tool-hosts`, that runs fortnightly on the
+six runners the host keys map to, and its task, `fm tools.verify-host`,
+installs every downloaded tool at its newest version with a build for
+the host, runs its entry point, and extracts its surface, which must
+describe the tool. The gate keeps its three runners.
 
 A record is the store's: `livery.toolroom.store` reads and validates
 it, and the bench adds to it and publishes it. Each version's surface is carried one

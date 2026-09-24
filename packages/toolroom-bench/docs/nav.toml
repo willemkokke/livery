@@ -24,6 +24,7 @@ nav = [
             { "refresh" = "_generated/tasks/tools/refresh.md" },
             { "spec" = "_generated/tasks/tools/spec.md" },
             { "sync" = "_generated/tasks/tools/sync.md" },
+            { "verify-host" = "_generated/tasks/tools/verify-host.md" },
             { "verify" = "_generated/tasks/tools/verify.md" },
         ] },
     ] },
