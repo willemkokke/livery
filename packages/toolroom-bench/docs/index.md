@@ -8,6 +8,21 @@ writes what each version accepted into the tool's record,
 stubs of `livery.toolroom.tools` from the records, and renders the
 per-tool reference pages of toolroom's docs.
 
+A new version is checked before its pull request merges. The refresh
+stages every host's artifact through the store, from whichever machine
+runs it, and runs nine structural checks against the version before:
+the declared root is in the archive, every entry point is a file,
+every path directory and every shim target is there, every env value
+naming a path points at something present, no entry point and no host
+the previous version had is gone, every exclusion pattern matches
+something, and no executable sits in a path directory without an
+annotation. The paths each host gained and lost are the pull request's
+summary, and the refresh arms its pull request only when every change
+is an addition and every check passed; `fm tools.verify <tool>` runs
+the same checks by hand. The executable checks, that the entry point
+runs and the surface extracts, need a matching host and belong to the
+six-host verification point.
+
 A record is the store's: `livery.toolroom.store` reads and validates
 it, and the bench adds to it and publishes it. Each version's surface is carried one
 verb at a time, inherited forward from the version read before it, and

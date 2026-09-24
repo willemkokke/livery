@@ -43,8 +43,11 @@ from livery.toolroom.bench import _drivers, _index, _surfaces
 from livery.toolroom.store import (
     RECORD_SUFFIX,
     Catalogue,
+    Home,
+    Store,
     ToolSpec,
     class_name,
+    records_in,
     render,
 )
 
@@ -1364,6 +1367,40 @@ def _additions_only(events: dict[str, list[str]]) -> bool:
     return True
 
 
+def _ingest_events(events: dict[str, list[str]]) -> tuple[dict[str, list[str]], bool]:
+    """Verify every event version that has a host; the lines per tool, and the verdict.
+
+    Every host of the version is staged through the machine's store
+    from any machine, so the checks run wherever the refresh runs. A
+    tool whose event versions have no host contributes nothing and
+    passes; a version whose staging fails is a finding, never a
+    crash, so the refresh reports it and holds the pull request.
+    """
+    from livery.toolroom.bench import _ingest
+
+    lines: dict[str, list[str]] = {}
+    ok = True
+    store: Store | None = None
+    for key, versions in sorted(events.items()):
+        record = _surfaces.load(_record_path(key))
+        if record is None:
+            continue
+        for version in versions:
+            if not record.hosts_of(version):
+                continue
+            if store is None:
+                store = _bench_store()
+            report = _ingest.verify(record, version, store=store)
+            lines.setdefault(key, []).extend(_ingest.summary(report))
+            ok = ok and report.passed
+    return lines, ok
+
+
+def _bench_store() -> Store:
+    """The bench's own store, under its room in the runner's data directory."""
+    return Store(Home(default_prefix() / "store"))
+
+
 def _finish(found: Refreshed, changelog: bool) -> Refreshed:
     """Write the note, say what happened, and refuse to call ignorance news.
 
@@ -1373,6 +1410,8 @@ def _finish(found: Refreshed, changelog: bool) -> Refreshed:
     """
     if found.events:
         found = replace(found, additions_only=_additions_only(found.events))
+        ingest, ingest_ok = _ingest_events(found.events)
+        found = replace(found, ingest=ingest, ingest_ok=ingest_ok)
     if changelog and found.events:
         entries = [
             _entry_for(key, record, versions)
@@ -1565,12 +1604,27 @@ class Refreshed:
 
     additions_only: bool = False
     """Whether every surface change across every announced event only ADDED
-    to a tool's surface — nothing dropped, no verb withdrawn. The graded
-    release trigger's green light: additions cannot break a caller, so a
-    graded refresh ships them unattended and holds anything else for a
-    human. False when there are no events at all (nothing to ship is not
+    to a tool's surface — nothing dropped, no verb withdrawn. Half of the
+    graded release trigger's green light: additions cannot break a caller.
+    False when there are no events at all (nothing to ship is not
     "safe to ship"). Rewordings count as additions-safe: they change what a
     stub *says*, never what a tool accepts."""
+
+    ingest: dict[str, list[str]] = field(default_factory=dict)
+    """Per announced tool, the ingest verification's lines: the verdict,
+    each finding and each host's structural diff, for every event version
+    that has a host ([livery.toolroom.bench._ingest][]). Empty for a tool
+    whose versions have no host, since there is nothing to stage."""
+
+    ingest_ok: bool = True
+    """Whether every ingest check passed on every host of every event
+    version: the other half of the green light. True when nothing had a
+    host to check, so a tool read but never downloaded arms as before."""
+
+    @property
+    def armed(self) -> bool:
+        """Whether the pull request arms: additions only and every check passed."""
+        return self.additions_only and self.ingest_ok
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "release", any(self.events.values()))
@@ -1619,15 +1673,21 @@ def submit_refresh(
     git: Callable[..., object] | None = None,
     submit: Callable[[list[str]], int] | None = None,
     on: date | None = None,
+    dry_run: bool | None = None,
 ) -> list[str]:
     """Commit a refresh that moved something and open its pull request.
 
     The branch is ``chore/tools-refresh-<date>``; the pull request is
-    armed when `Refreshed.additions_only` holds and unarmed otherwise,
-    so a dropped verb waits for a person. A refresh that moved nothing
-    opens nothing and says so. *git*, *submit* and *on* are the seams
-    the tests drive; the defaults are the tool handle, the runner's
-    own submit verb, and today.
+    armed when `Refreshed.armed` holds, every change an addition and
+    every ingest check passed, and unarmed otherwise, so a dropped verb
+    or a deployment that does not stand waits for a person. The commit
+    body carries the ingest lines, so the pull request's summary is the
+    structural diff. A refresh that moved nothing opens nothing and
+    says so. Under a dry run nothing is committed or submitted: the
+    lines say what would happen, the arming decision included. *git*,
+    *submit*, *on* and *dry_run* are the seams the tests drive; the
+    defaults are the tool handle, the runner's own submit verb, today,
+    and the run's own dry-run flag.
 
     Returns:
         The lines to print, one per step.
@@ -1637,15 +1697,38 @@ def submit_refresh(
     if not found.release:
         return ["  nothing moved: no branch, no pull request"]
     when = on or date.today()
-    run_git = git or tools.git
     branch = f"chore/tools-refresh-{when:%Y%m%d}"
     moved = ", ".join(sorted(found.events))
     title = f"chore(toolroom): tool refresh {when:%Y-%m-%d}"
+    reason = (
+        "additions only, every ingest check passed"
+        if found.armed
+        else "a surface lost something, a person decides"
+        if found.ingest_ok
+        else "an ingest check found something, a person decides"
+    )
+    rehearsal = current().dry_run if dry_run is None else dry_run
+    if rehearsal:
+        return [
+            f"  would refresh {moved} on {branch}",
+            f"  would submit {'armed' if found.armed else 'unarmed'}: {reason}",
+        ]
+    run_git = git or tools.git
+    body = "\n".join(
+        [
+            moved,
+            *(
+                line.strip()
+                for key in sorted(found.ingest)
+                for line in found.ingest[key]
+            ),
+        ]
+    )
     run_git("switch", "-c", branch)
     run_git("add", "-A")
-    run_git("commit", "-m", f"{title}\n\n{moved}")
+    run_git("commit", "-m", f"{title}\n\n{body}")
     argv = [_prog(), "submit", f"--title={title}"]
-    if found.additions_only:
+    if found.armed:
         argv.append("--armed")
     code = (submit or _run_submit)(argv)
     if code != 0:
@@ -1654,9 +1737,7 @@ def submit_refresh(
         fail(f"the refresh's submit exited {code}; the branch {branch} stands")
     return [
         f"  refreshed {moved} on {branch}",
-        "  submitted armed: additions only"
-        if found.additions_only
-        else "  submitted unarmed: a surface lost something, a person decides",
+        f"  submitted {'armed' if found.armed else 'unarmed'}: {reason}",
     ]
 
 
@@ -1854,6 +1935,15 @@ def _report_refresh(found: Refreshed) -> None:
     if not found.read:
         print("nothing new")
     print(f"release warranted: {'yes' if found.release else 'no'}")
+    for key in sorted(found.ingest):
+        for line in found.ingest[key]:
+            print(line)
+    if found.events:
+        print(
+            "ingest checks: every check passed"
+            if found.ingest_ok
+            else "ingest checks: a finding holds the pull request for a person"
+        )
     for key, missing in sorted(found.holes.items()):
         print(f"holes in {key}: {', '.join(missing)} — a later run fills them")
     for key, why in sorted(found.unreachable.items()):
@@ -2344,6 +2434,40 @@ def convert_records(root: Path, *, primes: dict[str, str] | None = None) -> list
     else:
         lines.append("  nothing to convert: every record is a file")
     return lines
+
+
+@tasks.task(name="verify")
+def tools_verify(
+    tool: Annotated[str, doc("the curated tool, as its record is named")],
+    version: Annotated[
+        str, doc("the version to check; the newest with a host when empty")
+    ] = "",
+) -> None:
+    """Run the ingest checks on one version of a tool for every host, from here.
+
+    Each host's artifact is staged through the bench's store and looked
+    at; the verdict, each finding and each host's structural diff
+    against the version before it print, and a finding is red.
+    """
+    from livery.toolroom.bench import _ingest
+
+    record = _surfaces.load(_record_path(tool))
+    if record is None:
+        fail(f"no record of {tool}; the records are {', '.join(_record_names())}")
+    chosen = version or next(
+        (delta.version for delta in reversed(record.deltas) if delta.hosts), ""
+    )
+    if not chosen:
+        fail(f"{tool} has no version with a host; nothing to stage")
+    report = _ingest.verify(record, chosen, store=_bench_store())
+    for line in _ingest.summary(report):
+        print(line)
+    if not report.passed:
+        fail(f"{tool} {chosen}: {len(report.findings)} finding(s)")
+
+
+def _record_names() -> list[str]:
+    return [path.stem for path in records_in(_records_dir())]
 
 
 @tasks.task(name="convert-records")

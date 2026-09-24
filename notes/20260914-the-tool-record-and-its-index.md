@@ -14,6 +14,9 @@ livery#615 follows the deterministic ones. Phase 9, the record as one
 file per tool with one line per option, ran before phases 7 and 8 by
 the ruling of 2026-09-24 and landed the same day (livery#661): 38 of
 38 records agree, 1.1 MB in 38 files where 4.5 MB in 615 stood.
+Phase 7 landed 2026-09-24 (livery#665): the nine structural checks,
+the diff as the summary, the refresh armed on additions only and every
+check passed. Phase 8 is next.
 Runs after [CI declared, contributed, and dispatched on command][ci-plan],
 which delivers the mechanism this plan's last phase uses.
 Subsumes phase 2 onward of [the tool store over strongroom][store-plan],
@@ -859,6 +862,14 @@ Acceptance:
   provision prefix was the store's home, `data_dir()/toolroom`, so a
   materialised store read as a provisioned prefix; the bench's prefix
   is `data_dir()/toolroom-bench` now.
+- 2026-09-24, on phase 7 (livery#665): the checks live in the bench's
+  `_ingest`, staged through a new `Store.stage` that lands and unpacks a
+  deployment without installing it, so the checks run for any host from
+  any machine. "The arming predicate widens to every ingest check
+  passed" is read as both halves holding: additions only and every
+  check passed, since a dropped verb is still a person's call. The
+  refresh under footman's dry run prints the arming decision and touches
+  nothing; `fm tools.verify <tool>` runs the checks by hand.
 - 2026-09-24, on phase 9 (livery#661): the record is `records/<tool>.jsonl`,
   the axis line, a version line per version and one statement line per
   option, verb field, withdrawal or absence; the surface model is
