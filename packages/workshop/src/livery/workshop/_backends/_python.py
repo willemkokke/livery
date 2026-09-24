@@ -1349,14 +1349,17 @@ def run_test(
 
 
 def speed_lines(root: Path, sums: Path, *, leg: str = "") -> list[str]:
-    """Each package's summed test time beside its mark on *leg*; the lines.
+    """Each package's summed test time; on a check leg, beside its mark there.
 
-    *sums* is the file the speed plugin wrote. Without *leg* the mark
-    shown is the reference leg's. An unreadable store says so once and
-    the times still print; no file means the plugin did not run.
+    *sums* is the file the speed plugin wrote; no file means the
+    plugin did not run. With *leg* the run is a check leg's, and each
+    line carries the package's mark on that leg or says there is
+    none; an unreadable store says so once and the times still print.
+    Without *leg* the run is a machine's: the times print alone,
+    since the marks are judged on the CI legs and a machine's clock
+    is not one of them, and nothing here reads the store.
     """
     from livery.workshop import _speed
-    from livery.workshop._points import check_legs
 
     if not sums.is_file():
         return []
@@ -1366,28 +1369,28 @@ def speed_lines(root: Path, sums: Path, *, leg: str = "") -> list[str]:
         return []
     if not isinstance(loaded, dict) or not loaded:
         return []
-    if not leg:
-        legs = check_legs(root)
-        leg = next((item for item in legs if _speed.is_reference(item)), "")
-        if not leg and legs:
-            leg = legs[0]
-    current, why = _speed.marks(root)
+    current: dict[tuple[str, str], _speed.Mark] | None = None
     lines: list[str] = []
-    if current is None:
-        lines.append(f"  speed marks: not read ({why})")
+    if leg:
+        current, why = _speed.marks(root)
+        if current is None:
+            lines.append(f"  speed marks: not read ({why})")
     for package, data in sorted(loaded.items()):
         if not isinstance(data, dict):
             continue
         seconds = float(data.get("seconds", 0.0))
         tests = int(data.get("tests", 0))
-        mark = current.get((str(package), leg)) if current else None
-        beside = (
-            f"mark {mark.seconds:.1f}s on {leg}"
-            if mark is not None
-            else f"no mark on {leg}"
-            if current is not None
-            else "mark unknown"
-        )
+        if not leg:
+            beside = "judged on the CI legs"
+        elif current is None:
+            beside = "mark unknown"
+        else:
+            mark = current.get((str(package), leg))
+            beside = (
+                f"mark {mark.seconds:.1f}s on {leg}"
+                if mark is not None
+                else f"no mark on {leg}"
+            )
         lines.append(f"  speed {package}: {seconds:.1f}s over {tests} tests ({beside})")
     return lines
 

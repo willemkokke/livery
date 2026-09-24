@@ -28,6 +28,14 @@ empty. Its rows are read and written the same way. Only the transport
 differs: git's own ``update-ref`` with the old value, in place of a
 push with a lease.
 
+The gate reads the remote namespace without the network. `fetch_store`
+mirrors origin's namespace under ``refs/workshop-origin/`` and stamps
+the fetch on the local `FETCHED` series; `fetched_snapshot` then
+serves every read from that mirror, refuses every write of a remote
+series, and, in a checkout the store was never fetched into, fails
+every read naming the sync, never as an absence. `fm sync` and `fm
+start` fetch; `fm check` reads.
+
 The rules, ported from hse's stamp transport:
 
 - Only CI writes a series declared ``ci_only``; local runs read.
@@ -89,6 +97,12 @@ NAMESPACE = "refs/workshop/"
 #: a push never carries it, and a mirror push of ``refs/workshop/*``
 #: cannot carry it either. Worktrees share it; a fresh clone is empty.
 LOCAL_NAMESPACE = "refs/workshop-local/"
+
+#: Origin's store as this checkout last fetched it: every ref under
+#: `NAMESPACE` mirrored here by `fetch_store`, which `fm sync` and
+#: `fm start` run. A `fetched_snapshot` block reads the remote
+#: namespace from this mirror alone, so the gate never reaches origin.
+FETCHED_NAMESPACE = "refs/workshop-origin/"
 
 #: The per-run refs' prefix, for the janitor's orphan rule: one ref
 #: per leg, written by that leg alone, read and deleted by the run's
@@ -641,12 +655,18 @@ class _Snapshot:
         reason: The transport's words when it could not be.
         local: The shas the checkout is known to hold, checked or
             fetched inside this snapshot.
+        published: The file the listing was published to for child
+            processes, when it was.
+        offline: Whether the listing is the checkout's mirror of
+            origin, never origin itself: every commit is local, and a
+            write of a remote series is refused.
     """
 
     refs: dict[str, str] | None
     reason: str = ""
     local: set[str] = field(default_factory=set)
     published: Path | None = None
+    offline: bool = False
 
 
 #: The *fetch* of a `remote_snapshot` that wants every ref of the
@@ -656,6 +676,11 @@ WHOLE: tuple[str, ...] = ("",)
 #: The snapshot each checkout reads the remote namespace through while
 #: a `remote_snapshot` block is open for it; one per checkout at a time.
 _SNAPSHOTS: dict[Path, _Snapshot] = {}
+
+#: The stamp `fetch_store` leaves: one row, ``origin``, saying when the
+#: mirror was last taken and how many refs it holds. Its presence is
+#: what lets a `fetched_snapshot` read a missing ref as absent.
+FETCHED = Series("fetched", window=1, ci_only=False, local=True)
 
 #: The variable a published snapshot's file is named in: the job
 #: runner takes one listing for the whole job and every entry it
@@ -772,6 +797,85 @@ def remote_snapshot(
         _SNAPSHOTS.pop(key, None)
         if published_here:
             Path(published_here).unlink(missing_ok=True)
+
+
+def fetch_store(root: Path) -> tuple[int, str]:
+    """Mirror origin's namespace under `FETCHED_NAMESPACE` and stamp it.
+
+    One fetch with an explicit refspec, pruned, so a ref origin dropped
+    goes from the mirror too; then the ``origin`` row of `FETCHED`,
+    which is what tells a `fetched_snapshot` that a ref missing from
+    the mirror is absent rather than never fetched.
+
+    Returns:
+        ``(count, "")`` with the refs the mirror holds, or ``(0,
+        reason)`` when the fetch or the stamp failed, with git's
+        words; nothing here raises or prints.
+    """
+    fetched = _git(
+        root,
+        "fetch",
+        "--quiet",
+        "--prune",
+        "origin",
+        f"+{NAMESPACE}*:{FETCHED_NAMESPACE}*",
+    )
+    if fetched.code != 0:
+        return 0, _words(fetched)
+    mirrored = _local_refs(root, FETCHED_NAMESPACE)
+    if mirrored is None:
+        return 0, "the mirror could not be listed"
+    why = FETCHED.put(
+        root, {"origin": {"refs": len(mirrored)}}, message="fetched origin's store"
+    )
+    return (0, why) if why else (len(mirrored), "")
+
+
+@contextmanager
+def fetched_snapshot(root: Path) -> Generator[None]:
+    """Read the remote namespace from the checkout's mirror of origin, for the block.
+
+    Nothing inside reaches origin. The listing is the mirror
+    `fetch_store` took, with origin's branches beside it from the
+    remote-tracking refs, every commit is local already, and a write
+    of a remote series is refused with its reason; a local series
+    reads and writes as ever. In a checkout `fetch_store` never
+    stamped, the listing is a failure naming the sync, so every read
+    inside fails the way an unreachable origin fails, never as an
+    absence, and every caller falls open on it. A block opened inside
+    another snapshot for the same checkout shares the outer one.
+    """
+    key = root.resolve()
+    if key in _SNAPSHOTS:
+        yield
+        return
+    stamped, why = FETCHED.row(root, "origin")
+    if stamped is None:
+        reason = why or (
+            "origin's state store has not been fetched into this checkout:"
+            f" run `{footman.prog()} sync`"
+        )
+        snapshot = _Snapshot(None, reason, offline=True)
+    else:
+        mirrored = _local_refs(root, FETCHED_NAMESPACE)
+        branches = _local_refs(root, "refs/remotes/origin/")
+        if mirrored is None or branches is None:
+            snapshot = _Snapshot(None, "the mirror could not be listed", offline=True)
+        else:
+            refs = {
+                NAMESPACE + name.removeprefix(FETCHED_NAMESPACE): sha
+                for name, sha in mirrored.items()
+            }
+            for name, sha in branches.items():
+                short = name.removeprefix("refs/remotes/origin/")
+                if short != "HEAD":
+                    refs["refs/heads/" + short] = sha
+            snapshot = _Snapshot(refs, "", set(refs.values()), offline=True)
+    _SNAPSHOTS[key] = snapshot
+    try:
+        yield
+    finally:
+        _SNAPSHOTS.pop(key, None)
 
 
 def _published_snapshot(key: Path) -> _Snapshot | None:
@@ -904,11 +1008,12 @@ def read(root: Path, ref: str) -> Read:
     also fails the fetch, and that is the ordinary first-run case. A
     remote that cannot answer the probe either counts as failed: an
     unreachable forge must never read as "there was never a stamp".
-    A local ref is read from the checkout's own git directory: a
-    missing ref is absence, and anything else git refuses is a
-    failure with git's words.
+    A local ref, or one of the mirror under `FETCHED_NAMESPACE`, is
+    read from the checkout's own git directory: a missing ref is
+    absence, and anything else git refuses is a failure with git's
+    words.
     """
-    if ref.startswith(LOCAL_NAMESPACE):
+    if ref.startswith((LOCAL_NAMESPACE, FETCHED_NAMESPACE)):
         verified = _git(root, "rev-parse", "--verify", "--quiet", ref)
         if verified.code == 1 and not verified.stderr.strip():
             return Read(None, None, failed=False)
@@ -1017,22 +1122,33 @@ def _split_batch(
 
 
 def list_refs(root: Path, prefix: str) -> dict[str, str] | None:
-    """The refs under *prefix* by sha, remote or local; ``None`` when unlistable."""
-    if prefix.startswith(LOCAL_NAMESPACE):
-        listed = _git(
-            root, "for-each-ref", "--format=%(objectname)%09%(refname)", prefix
-        )
-    else:
-        snapshot = _snapshot(root)
-        if snapshot is not None and prefix.startswith(LISTED):
-            if snapshot.refs is None:
-                return None
-            return {
-                name: sha
-                for name, sha in snapshot.refs.items()
-                if name.startswith(prefix)
-            }
-        listed = _git(root, "ls-remote", "origin", prefix + "*")
+    """The refs under *prefix* by sha, remote or local; ``None`` when unlistable.
+
+    A prefix under the local namespace, the mirror, or the
+    remote-tracking refs is listed from the checkout's git directory;
+    any other answers from the open snapshot when one covers it, and
+    from origin otherwise.
+    """
+    if prefix.startswith((LOCAL_NAMESPACE, FETCHED_NAMESPACE, "refs/remotes/")):
+        return _local_refs(root, prefix)
+    snapshot = _snapshot(root)
+    if snapshot is not None and prefix.startswith(LISTED):
+        if snapshot.refs is None:
+            return None
+        return {
+            name: sha for name, sha in snapshot.refs.items() if name.startswith(prefix)
+        }
+    listed = _git(root, "ls-remote", "origin", prefix + "*")
+    return _parse_listing(listed)
+
+
+def _local_refs(root: Path, prefix: str) -> dict[str, str] | None:
+    """The checkout's own refs under *prefix* by sha; ``None`` when git refuses."""
+    listed = _git(root, "for-each-ref", "--format=%(objectname)%09%(refname)", prefix)
+    return _parse_listing(listed)
+
+
+def _parse_listing(listed: tools.Result) -> dict[str, str] | None:
     if listed.code != 0:
         return None
     refs: dict[str, str] = {}
@@ -1153,6 +1269,12 @@ def put(
         )
     if ci_only and run_context() is None:
         return f"refusing {ref}: only a CI run writes this series; local runs read"
+    opened = _snapshot(root)
+    if opened is not None and opened.offline and not ref.startswith(LOCAL_NAMESPACE):
+        return (
+            f"refusing {ref}: this block reads origin's store as last fetched"
+            " and writes nothing to origin"
+        )
     for _ in range(attempts):
         current = read(root, ref)
         if current.failed:

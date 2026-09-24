@@ -347,6 +347,10 @@ def start(
         briefing = f"Work on issue #{work.number}: {work.title}\n\n{work.body}"
         started = branch
     git.fetch()
+    from livery.workshop._sync import fetch_store_lines
+
+    for line in fetch_store_lines(root):
+        print(line)
     if worktree:
         from livery.workshop._sweep import sweep_worktrees
 

@@ -18,7 +18,7 @@ from livery.workshop import (
     _speed,
     _verified,
 )
-from livery.workshop._state import Keyed, Series
+from livery.workshop._state import FETCHED, Keyed, Series
 
 #: Every series and family, remote and local.
 DECLARED: tuple[Series | Keyed, ...] = (
@@ -30,4 +30,5 @@ DECLARED: tuple[Series | Keyed, ...] = (
     _coverage_store.RECORD,
     _gate_record.SERIES,
     _diagnostics.SERIES,
+    FETCHED,
 )

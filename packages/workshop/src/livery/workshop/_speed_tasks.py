@@ -6,7 +6,8 @@ against the marks ([livery.workshop._speed][]), records the first marks
 and the ratchets, warns on a run over the mark, and is red on the
 second run over in a row on a reference leg. ``speed.accept`` is the
 person's raise of a mark, with the reason on the record. Both verbs
-do nothing until the contract declares ``[ci] speed-marks = true``.
+do nothing until the contract declares ``[ci] speed-marks = true``,
+and ``speed.judge`` runs on a CI leg alone.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ from pathlib import Path
 from typing import Annotated
 
 import livery.footman as footman
-from livery.footman import doc, fail, group
+from livery.footman import doc, fail, group, requires
 from livery.workshop import _speed
 from livery.workshop._layers import workspace_root
 from livery.workshop._packages import discover_packages
@@ -57,28 +58,31 @@ def judge_flow(root: Path, run: RunContext) -> list[str]:
 
 
 @speed.task(name="judge", hidden=True)
+@requires(
+    lambda: run_context() is not None,
+    reason="a CI run: the speed marks are judged on the CI legs",
+)
 def speed_judge() -> None:
     """Judge the run's test times against the speed marks; red on the second run over.
 
     Runs in the gate job after the timing rows are collected. Off
     until the contract declares ``[ci] speed-marks = true``: it says
-    so, and in CI drops any marks left from before the switch, so a
-    later opt-in starts from the timings alone. Outside CI it says so
-    and judges nothing.
+    so, and drops any marks left from before the switch, so a later
+    opt-in starts from the timings alone. A CI verb: outside CI it is
+    listed as unavailable with the reason and refused, since a
+    machine's clock is not a leg the marks are taken on.
     """
     root = _root()
     run = run_context()
+    if run is None:
+        fail("not a CI run: the speed marks are judged on the CI legs")
     if not _speed.enabled(root):
         print(
             f"  speed marks are off: declare [ci] {_speed.ENABLED_KEY} = true"
             " in workshop.toml to judge test time"
         )
-        if run is not None:
-            for line in _speed.drop_marks(root):
-                print(line)
-        return
-    if run is None:
-        print("  not a CI run: the speed marks are judged by the gate job")
+        for line in _speed.drop_marks(root):
+            print(line)
         return
     red = judge_flow(root, run)
     if red:

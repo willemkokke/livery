@@ -790,6 +790,18 @@ Acceptance:
   provision prefix was the store's home, `data_dir()/toolroom`, so a
   materialised store read as a provisioned prefix; the bench's prefix
   is `data_dir()/toolroom-bench` now.
+- 2026-09-24, Willem, on the gate's reads of origin (livery#649), "yes
+  to both": a machine's `fm check` reads the state store only from the
+  snapshot the last `fm sync` or `fm start` fetched and never reaches
+  origin itself; the speed judgement runs on the CI legs alone. The
+  shape: `fm sync` and `fm start` mirror `refs/workshop/*` into
+  `refs/workshop-origin/*` with one pruned fetch and stamp it on the
+  local `fetched` series; `fm check` opens `fetched_snapshot`, under
+  which every remote read answers from the mirror, a remote write is
+  refused, and a checkout never fetched into reads the store as
+  unreachable and names the sync, so the chain roots on a full gate.
+  A machine's `fm test` prints the package times with no mark, and
+  `fm speed.judge` carries footman's `@requires` on a CI run.
 - 2026-09-24, Willem, on where stubs live: the index holds no rendered
   stubs, they were four times the surfaces they render from and one per
   version per tool; the store renders a stub on demand from a version's
@@ -970,15 +982,6 @@ Acceptance:
    and version are known, skipped without a line by `materialise` when
    the store cannot supply it, and reported by `env.check` as optional
    and absent rather than MISSING. Owner: Willem.
-0b. **The gate's reads of origin.** `fm check` reads the state store's
-   refs from origin, the verified record, the coverage records and the
-   speed marks among them, through `git ls-remote`, which is what hung
-   the gate three times on 2026-09-20 with the SSH agent silent
-   (livery#649). The speed marks are CI's own measurements per runner
-   label, so a local run judged against them compares a laptop with a
-   runner. On the table: the gate reads only the snapshot the last
-   `fm sync` or `fm start` fetched and never reaches origin itself, and
-   the speed judgement runs on the CI legs alone. Owner: Willem.
 1. **Where the merged record's reader lives.** Proposal above: the format,
    the resolution and the read path in `livery.toolroom.store`, with the
    bench depending on the store, so the graph is

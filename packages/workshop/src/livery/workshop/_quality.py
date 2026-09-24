@@ -296,7 +296,29 @@ def check(
     never rewritten, because a fix there mutates a copy nobody
     keeps and hides the finding from the verdict. Run the fix
     locally and push the result.
+
+    On a machine the state store is read from what the last ``sync``
+    or ``start`` fetched ([livery.workshop._state.fetched_snapshot][]):
+    nothing the gate runs reaches origin, and a checkout the store was
+    never fetched into roots its chain on a full gate and says so.
+    Inside CI the legs read the store as the run's own snapshot.
     """
+    from contextlib import nullcontext
+
+    from livery.workshop._state import fetched_snapshot, run_context
+
+    root = workspace_root()
+    scope = (
+        fetched_snapshot(root)
+        if root is not None and run_context() is None
+        else nullcontext()
+    )
+    with scope:
+        _run_check(full=full, fix=fix, base=base)
+
+
+def _run_check(full: bool, fix: bool, base: str) -> None:
+    """The gate itself; `check` opens the state store's snapshot around it."""
     import os
 
     if fix and os.environ.get("CI"):
