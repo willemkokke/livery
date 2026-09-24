@@ -15,7 +15,7 @@ spelling works everywhere the short one does. Added to a project, they
 live in that project's environment, so reach them with `uv run fm …` (or
 activate the virtualenv and type `fm` directly).
 
-You can also install it once, globally (`uv tool install "footman[uv]"` —
+You can also install it once, globally (`uv tool install "livery-footman[uv]"`;
 the `[uv]` extra bundles uv itself, so the handoffs below work even where
 no uv is on the PATH),
 and still type plain `fm` everywhere: a project whose lockfile pins footman
@@ -25,7 +25,7 @@ cookbook:
 [a tasks file that carries its own dependencies](cookbook.md#a-tasks-file-that-carries-its-own-dependencies).
 
 Any copy can do that global install for you: `fm self.install` runs
-`uv tool install --upgrade footman --with uv` — installing when nothing is
+`uv tool install --upgrade livery-footman --with uv`: installing when nothing is
 there, moving an existing install to the latest release otherwise, and
 bundling uv either way. It always installs the latest release, even from a
 project's older pinned copy (`uv run fm self.install`): the command is about
