@@ -48,9 +48,12 @@ pull request body becomes at the merge: a checkout standing on a
 release branch, whose last stamp commit carries no such line, is
 refused with the squash on the base named, so a wave that would
 refuse is never sent. The release act itself returns to the branch
-it started from once its pull request is armed, and its local copy
+it started from once its pull request is opened, and its local copy
 of the reserved branch goes; the pull request holds the branch on
-the remote, and a re-run resumes from there.
+the remote, and a re-run resumes from there. Armed, the act then
+follows the pull request to its squash and the wave to its verdict,
+the way `fm submit --armed` follows a feature pull request, and ends
+with the wave's exit; unarmed, it returns at once.
 
 Authors are credited by asking the forge, which a private repository
 answers only for a caller it can authenticate. Set the forge's token
