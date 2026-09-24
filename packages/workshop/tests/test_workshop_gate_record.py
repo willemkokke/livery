@@ -14,6 +14,7 @@ from livery.workshop import _gate_record, _state
 from livery.workshop._git_ops import GitOps
 from livery.workshop._verified import tree_id
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
+from workshop_spawns import counting_spawns
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -270,6 +271,30 @@ def test_verified_roots_are_the_trees_of_heads_history_cis_record_holds(
     # The merge base is a root as well.
     held.add(base)
     assert _gate_record.verified_roots(work, git, "main") == ({base, parent}, "")
+
+
+def test_verified_roots_read_cis_record_from_the_mirror_and_never_origin(
+    work: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A machine's gate roots its chain on what the last sync fetched, offline."""
+    from livery.workshop import _verified
+
+    git = GitOps(work)
+    base = tree_id(git)
+    run = _state.RunContext("github", "7", "push", "refs/heads/main")
+    monkeypatch.setattr(_state, "run_context", lambda environ=None: run)
+    assert _verified.SERIES.put(work, {base: {"scope": "full"}}, message="ci") == ""
+    monkeypatch.setattr(_state, "run_context", lambda environ=None: None)
+    assert _state.fetch_store(work) == (1, "")
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    with counting_spawns() as spawned, _state.fetched_snapshot(work):
+        assert _gate_record.verified_roots(work, git, "main") == ({base}, "")
+    assert spawned["git fetch"] == 0 and spawned["git ls-remote"] == 0
+    # Never fetched: rootless, and the line names the sync.
+    _git(work, "update-ref", "-d", _state.FETCHED.ref)
+    with _state.fetched_snapshot(work):
+        roots, why = _gate_record.verified_roots(work, git, "main")
+    assert roots == set() and "has not been fetched" in why and "sync`" in why
 
 
 # --- the reflex's plan --------------------------------------------------------------

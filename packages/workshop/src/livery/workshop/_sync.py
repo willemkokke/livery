@@ -328,8 +328,9 @@ def sync() -> None:
     """Bring the checkout current, materialise content, match the lock.
 
     The one-stop: fast-forward or rebase the current branch (asking
-    before anything conflicted or shared), then every layer's
-    fragments, skills, and hooks, then ``uv sync`` so the
+    before anything conflicted or shared), fetch origin's state store
+    into the checkout's mirror for the gate to read, then every
+    layer's fragments, skills, and hooks, then ``uv sync`` so the
     environment agrees with ``uv.lock``. Idempotent: re-running it
     is the recovery procedure.
     """
@@ -340,6 +341,8 @@ def sync() -> None:
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
     bring_current(root, GitOps(root), interactive=footman.attended())
+    for line in fetch_store_lines(root):
+        print(line)
     for line in sync_workspace(root):
         print(line)
     run_uv("sync", root=root)
@@ -350,6 +353,26 @@ def sync() -> None:
     record_receipt(root)
     for line in materialise_tools(root):
         print(line)
+
+
+def fetch_store_lines(root: Path) -> list[str]:
+    """Mirror origin's state store into the checkout; the line to print.
+
+    The mirror is what a machine's ``check`` reads
+    ([livery.workshop._state.fetched_snapshot][]), so a sync or a
+    start refreshes it while it has the network. A fetch that fails
+    prints its reason and stops nothing: the gate falls open on a
+    store it cannot read, and the last mirror stands.
+    """
+    from livery.workshop._state import fetch_store
+
+    count, why = fetch_store(root)
+    if why:
+        return [
+            f"  store: origin's state store not fetched ({why}); the last"
+            " snapshot stands"
+        ]
+    return [f"  store: {count} ref(s) of origin's state store fetched"]
 
 
 def materialise_tools(root: Path) -> list[str]:

@@ -1184,3 +1184,124 @@ def test_a_gitlab_pipeline_source_reads_in_the_one_event_vocabulary(
     assert merge.head_ref == "feat/1-work" and merge.base_ref == "main"
     for source in ("api", "web", "trigger"):
         assert event({**base, "CI_PIPELINE_SOURCE": source}) == "workflow_dispatch"
+
+
+# --- the fetched mirror: what a machine's gate reads ----------------------------
+
+
+def test_the_fetched_snapshot_fails_every_read_until_the_store_was_fetched(
+    repos: tuple[Path, Path],
+) -> None:
+    """Never fetched reads as unreachable, naming the sync, and never as absence."""
+    _, work = repos
+    with counting_spawns() as spawned, _state.fetched_snapshot(work):
+        found = _state.read(work, REF)
+        assert found.failed
+        assert "has not been fetched" in found.reason and "sync`" in found.reason
+        assert _state.list_refs(work, _state.NAMESPACE) is None
+        rows = _state.Series("metrics", window=50, ci_only=False).rows(work)
+        assert rows.failed and "has not been fetched" in rows.reason
+    assert spawned["git fetch"] == 0 and spawned["git ls-remote"] == 0
+
+
+def test_fetch_store_mirrors_origins_namespace_prunes_and_stamps(
+    repos: tuple[Path, Path], tmp_path: Path
+) -> None:
+    _, work = repos
+    other = _clone(tmp_path, "other", tmp_path / "origin.git")
+    alpha = _state.Series("alpha", window=50, ci_only=False)
+    beta = _state.Series("beta", window=50, ci_only=False)
+    for item in (alpha, beta):
+        assert item.put(other, {"r": {"x": item.name}}, message=item.name) == ""
+    assert _state.fetch_store(work) == (2, "")
+    mirrored = _state.list_refs(work, _state.FETCHED_NAMESPACE)
+    assert mirrored is not None and set(mirrored) == {
+        _state.FETCHED_NAMESPACE + "alpha",
+        _state.FETCHED_NAMESPACE + "beta",
+    }
+    stamped, why = _state.FETCHED.row(work, "origin")
+    assert why == "" and stamped is not None and stamped.data["refs"] == 2
+    # A ref origin dropped goes from the mirror on the next fetch.
+    assert _state.drop(other, beta.ref) == ""
+    assert _state.fetch_store(work) == (1, "")
+    assert _state.list_refs(work, _state.FETCHED_NAMESPACE) == {
+        _state.FETCHED_NAMESPACE + "alpha": mirrored[_state.FETCHED_NAMESPACE + "alpha"]
+    }
+    # The mirror is never pushed and never written by hand.
+    assert "workshop-origin" not in _git(work, "ls-remote", "origin")
+    assert "writes only under" in _state.put(
+        work, _state.FETCHED_NAMESPACE + "alpha", {"r": "{}"}, message="no"
+    )
+    # An origin that cannot answer is the reason, and the last mirror stands.
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    count, why = _state.fetch_store(work)
+    assert count == 0 and why
+    assert _state.list_refs(work, _state.FETCHED_NAMESPACE) is not None
+
+
+def test_the_fetched_snapshot_answers_from_the_mirror_and_never_reaches_origin(
+    repos: tuple[Path, Path], tmp_path: Path
+) -> None:
+    _, work = repos
+    other = _clone(tmp_path, "other", tmp_path / "origin.git")
+    alpha = _state.Series("alpha", window=50, ci_only=False)
+    assert alpha.put(other, {"r": {"x": "alpha"}}, message="alpha") == ""
+    assert _state.fetch_store(work) == (1, "")
+    # A ref written after the fetch is not in the mirror: the snapshot
+    # is what the last sync saw, by design.
+    beta = _state.Series("beta", window=50, ci_only=False)
+    assert beta.put(other, {"r": {"x": "beta"}}, message="beta") == ""
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    local = _state.Series("scratch", window=5, ci_only=False, local=True)
+    with counting_spawns() as spawned, _state.fetched_snapshot(work):
+        assert [row.data["x"] for row in alpha.rows(work).rows] == ["alpha"]
+        assert _state.read(work, beta.ref) == _state.Read(None, None, failed=False)
+        listed = _state.list_refs(work, _state.NAMESPACE)
+        assert listed is not None and set(listed) == {alpha.ref}
+        heads = _state.list_refs(work, "refs/heads/")
+        assert heads is not None and set(heads) == {"refs/heads/main"}
+        # A remote snapshot opened inside shares the mirror.
+        with _state.remote_snapshot(work, fetch=("alpha", "beta")):
+            assert not alpha.rows(work).failed
+        # A remote series is refused; a local one writes as ever.
+        why = alpha.put(work, {"r": {"x": "changed"}}, message="no")
+        assert "writes nothing to origin" in why
+        assert local.put(work, {"r": {"x": "local"}}, message="yes") == ""
+        assert [row.data["x"] for row in local.rows(work).rows] == ["local"]
+    assert spawned["git fetch"] == 0 and spawned["git ls-remote"] == 0
+    assert spawned["git push"] == 0
+
+
+def test_the_sync_line_says_what_the_fetch_did(
+    repos: tuple[Path, Path], tmp_path: Path
+) -> None:
+    from livery.workshop._sync import fetch_store_lines
+
+    _, work = repos
+    assert fetch_store_lines(work) == [
+        "  store: 0 ref(s) of origin's state store fetched"
+    ]
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    (line,) = fetch_store_lines(work)
+    assert line.startswith("  store: origin's state store not fetched (")
+    assert line.endswith("); the last snapshot stands")
+
+
+def test_the_mirror_that_cannot_be_listed_and_a_stamp_that_is_not_a_row_are_reasons(
+    repos: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every fallback is a printed reason, never an absence."""
+    _, work = repos
+    assert _state.fetch_store(work) == (0, "")
+    # A stamp that is not a row of the schema: the reason names it.
+    assert _state.put(work, _state.FETCHED.ref, {"origin": "junk"}, message="x") == ""
+    with _state.fetched_snapshot(work):
+        found = _state.read(work, REF)
+    assert found.failed and "origin:" in found.reason
+    assert _state.fetch_store(work) == (0, "")  # the stamp is a row again
+    # git refusing the listing, on the fetch and under the snapshot.
+    monkeypatch.setattr(_state, "_local_refs", lambda root, prefix: None)
+    assert _state.fetch_store(work) == (0, "the mirror could not be listed")
+    with _state.fetched_snapshot(work):
+        found = _state.read(work, REF)
+    assert found.failed and found.reason.endswith("the mirror could not be listed")

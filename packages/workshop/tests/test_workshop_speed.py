@@ -13,6 +13,7 @@ import pytest
 from livery.footman import Failed
 from livery.workshop import _metrics, _speed, _state
 from workshop_seeds import Seeds, _seed_home, pushed, seed_copier  # noqa: F401
+from workshop_spawns import counting_spawns
 
 _FAILURES = (SystemExit, Failed)
 
@@ -138,10 +139,11 @@ def test_the_judge_drops_the_stale_marks_in_ci_while_off(
         )
         == ""
     )
-    # Outside CI nothing is dropped: a local run never deletes a
-    # remote series.
+    # Outside CI the judge refuses before it reads anything: a local
+    # run never deletes a remote series.
     monkeypatch.setattr(_speed_tasks, "run_context", lambda: None)
-    _speed_tasks.speed_judge()
+    with pytest.raises(_FAILURES, match="not a CI run"):
+        _speed_tasks.speed_judge()
     assert "dropped" not in capsys.readouterr().out
     assert len(_speed.SERIES.rows(work).rows) == 1
     # A store the transport cannot answer for drops nothing and says why.
@@ -604,16 +606,46 @@ def test_the_plugin_sums_every_phase_per_package_from_the_controller_only(
     }
 
 
-def test_speed_lines_print_the_sums_beside_the_marks(
-    work: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_speed_lines_on_a_machine_print_the_sums_and_read_no_mark(
+    work: Path, tmp_path: Path
 ) -> None:
+    """The marks are judged on the CI legs, so a machine's run never asks for them."""
     from livery.workshop._backends._python import speed_lines
 
-    monkeypatch.setattr("livery.workshop._points.check_legs", lambda root: [LEG])
     sums = tmp_path / "speed.json"
     assert speed_lines(work, sums) == []  # the plugin did not run
     sums.write_text(json.dumps({"packages/forge": {"seconds": 12.3, "tests": 45}}))
-    assert speed_lines(work, sums) == [
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    with counting_spawns() as spawned:
+        assert speed_lines(work, sums) == [
+            "  speed packages/forge: 12.3s over 45 tests (judged on the CI legs)"
+        ]
+    assert spawned["git"] == 0
+
+
+def test_the_judge_is_a_ci_verb(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Footman lists it unavailable outside CI, and a direct call refuses too."""
+    from livery.footman.registry import availability
+    from livery.workshop import _speed_tasks
+
+    monkeypatch.setattr(_speed_tasks, "run_context", lambda: None)
+    assert availability(_speed_tasks.speed_judge) == (
+        "a CI run: the speed marks are judged on the CI legs"
+    )
+    with pytest.raises(_FAILURES, match="not a CI run"):
+        _speed_tasks.speed_judge()
+    monkeypatch.setattr(_speed_tasks, "run_context", lambda: RUN)
+    assert availability(_speed_tasks.speed_judge) is None
+
+
+def test_speed_lines_on_a_check_leg_print_the_sums_beside_the_marks(
+    work: Path, tmp_path: Path
+) -> None:
+    from livery.workshop._backends._python import speed_lines
+
+    sums = tmp_path / "speed.json"
+    sums.write_text(json.dumps({"packages/forge": {"seconds": 12.3, "tests": 45}}))
+    assert speed_lines(work, sums, leg=LEG) == [
         "  speed packages/forge: 12.3s over 45 tests"
         " (no mark on check-ubuntu-latest-3.14)"
     ]
@@ -628,7 +660,7 @@ def test_speed_lines_print_the_sums_beside_the_marks(
         )
         == ""
     )
-    assert speed_lines(work, sums) == [
+    assert speed_lines(work, sums, leg=LEG) == [
         "  speed packages/forge: 12.3s over 45 tests"
         " (mark 14.0s on check-ubuntu-latest-3.14)"
     ]

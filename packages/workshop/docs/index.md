@@ -332,8 +332,11 @@ against their own medians; the second run over in a row on the
 ubuntu leg is red, and the other legs warn only. A new heavy test is
 a cost someone chose: `fm speed.accept <package> <seconds>
 --reason=<why>` raises the mark, on the ubuntu leg unless `--leg`
-names another. `fm test` prints each package's summed time beside
-its mark, and `fm ci.timings` shows the marks beside the timings.
+names another. The marks are judged on the CI legs alone: a
+machine's clock is not a leg they were taken on, so `fm test` on a
+machine prints each package's summed time and reads no mark, and
+`fm speed.judge` is unavailable outside CI. `fm ci.timings` shows
+the marks beside the timings.
 
 ## The state store
 
@@ -342,7 +345,13 @@ store: JSON files on git refs, `refs/workshop/*` on the remote and
 `refs/workshop-local/*` in the checkout's git directory. A default
 clone or fetch never downloads the remote namespace, no refspec
 names the local one, and every row carries the schema the store
-stamped and the time it wrote it. The remote series are written by
+stamped and the time it wrote it. A machine's gate never reaches
+origin: `fm sync` and `fm start` mirror the remote namespace into
+`refs/workshop-origin/*` and stamp the fetch, and `fm check` reads
+the store from that mirror alone, so a hung SSH agent cannot hold
+the gate. The mirror is what the last sync saw, by design; a
+checkout the store was never fetched into reads it as unreachable,
+roots its chain on a full gate, and names the sync. The remote series are written by
 CI only, `fm coverage.accept` and `fm speed.accept` the exceptions;
 a local run reads them and writes only the local ones, which the
 checkout's worktrees share and a fresh clone starts without. A read
@@ -371,6 +380,7 @@ per-run ref once, its timing row beside its measured suites.
 | `coverage/marks` | a package's coverage mark and who set it | 400 | the gate job, `fm coverage.accept` |
 | `speed/marks` | a package's test time mark on one check leg and who set it | 400 | the gate job, `fm speed.accept` |
 | `gate-record` (local) | a tree this checkout's `fm check` proved green | 200, 7 days | a green local gate |
+| `fetched` (local) | when origin's namespace was last mirrored into `refs/workshop-origin/*`, and how many refs | 1 | `fm sync`, `fm start` |
 | `diagnostics` (local) | the follow classifier's inputs for an unmerged ending | 20 | every unmerged follow |
 
 `fm store.ls` lists them with what each holds; `fm store.show
