@@ -54,7 +54,10 @@ binary's executable name; `entry_points`, the install-relative paths of
 the executables the deployment puts on PATH, annotated here and never
 discovered by scanning a directory; `paths`, the install-relative
 directories put on PATH; `env`, with `$package` standing for the
-install root; `shims`, a link name to an executable the install
+install root, where a tool's own switches belong (an update check, a
+telemetry opt-out), since entering the environment exports them and
+every spawn of the tool inherits them; `shims`, a link name to an
+executable the install
 carries; and `exclude`, the archive members left out before import,
 `fnmatch` patterns over the install-relative path.
 

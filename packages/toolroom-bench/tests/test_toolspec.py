@@ -171,13 +171,46 @@ def test_reads_inherit_a_task_env_without_the_interpreter(monkeypatch):
     monkeypatch.setenv("PYTHONPATH", "/deliberate")
     monkeypatch.setenv("KEEP_ME", "yes")
 
-    env = {**_globals.base_env(), **_toolhelp.QUIET}
+    env = _globals.base_env()
 
     assert "PYTHONHOME" not in env
     assert "PYTHONEXECUTABLE" not in env
     assert env["PYTHONPATH"] == "/deliberate"
     assert env["KEEP_ME"] == "yes"
-    assert env["GH_NO_UPDATE_NOTIFIER"] == "1"  # no update check mid-read
+
+
+def test_a_tools_own_switches_come_from_its_record_and_reads_inherit_them(
+    monkeypatch,
+):
+    """Gh's update check is turned off by its record's env, never by a
+    constant in code: entering the environment exports the record's
+    variables, and a version read spawns with the process environment
+    alone, so the switch reaches the spawn only through the record.
+    """
+    from pathlib import Path
+
+    from livery.toolroom.bench import _drivers
+    from livery.toolroom.store import Record
+
+    record = Record.load(Path(__file__).resolve().parents[3] / "records" / "gh.jsonl")
+    assert record.layout.env == {"GH_NO_UPDATE_NOTIFIER": "1"}
+
+    spawned: list[dict[str, str]] = []
+
+    def fake_run(argv, **kwargs):
+        spawned.append(dict(kwargs["env"]))
+        return SimpleNamespace(
+            timed_out=False, stdout="gh version 2.88.0", stderr="", code=0
+        )
+
+    monkeypatch.setattr("livery.footman.context.run", fake_run)
+    monkeypatch.setattr(_drivers, "_resolve", lambda name: "/bin/gh")
+    monkeypatch.delenv("GH_NO_UPDATE_NOTIFIER", raising=False)
+    assert _drivers._read_version("gh")[0] == "2.88.0"
+    assert "GH_NO_UPDATE_NOTIFIER" not in spawned[-1]  # nothing injected by code
+    monkeypatch.setenv("GH_NO_UPDATE_NOTIFIER", "1")  # what the entry exports
+    _drivers._read_version("gh")
+    assert spawned[-1]["GH_NO_UPDATE_NOTIFIER"] == "1"
 
 
 def test_reads_spawn_off_the_callers_console():

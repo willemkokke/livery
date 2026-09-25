@@ -90,8 +90,6 @@ class ToolError(RuntimeError):
     result: Result
     def __init__(self, result: Result) -> None: ...
 
-_QUIET: dict[str, str]
-
 _argv_lock: _threading.Lock
 
 _version_cache: dict[str, tuple[int, ...]]
