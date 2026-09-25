@@ -387,6 +387,11 @@ Acceptance:
 
 ## Decision record
 
+- 2026-09-25, phase 4: the harness takes the pages repo-relative
+  (`packages/footman/docs/input.md`), the spelling the gate names a
+  change by, so two packages' harnesses in one pytest run each select
+  their own pages. Phase 4 in flight (livery#703).
+
 - 2026-09-25, phase 2: a generator's block keeps any name (`tasks`,
   `tools`); the emitter's own sections, changelog, coverage and api,
   are the ones with a fixed order when unplaced. An unknown block name
