@@ -32,6 +32,14 @@ from livery.workshop._pythons import gate_pythons, python_matrix
 #: Pinned action shas, one place; version comments ride each use.
 CHECKOUT = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1"
 SETUP_UV = "astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1"
+#: The cache action the GitHub lane restores and saves through: the tool
+#: store and uv's cache, each keyed by its lock with a prefix fallback.
+CACHE = "actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0"
+#: The tool store's home on every platform: footman's data directory is
+#: XDG-shaped everywhere (`~/.local/share/footman`), and the store is
+#: its `toolroom`. Literal here because the step runs before any verb
+#: can: the venv it would need is what the entry step makes.
+STORE_HOME = "~/.local/share/footman/toolroom"
 UPLOAD = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1"
 DOWNLOAD = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1"
 #: The upload action the gitea lane runs. An act_runner that delivers
@@ -148,22 +156,59 @@ def _rung_step(answers: dict[str, Any]) -> str:
     )
 
 
-def _setup_uv_step(answers: dict[str, Any], *, cache_suffix: str = "") -> str:
-    """The setup-uv step, uv pinned to the lock's own version."""
+def _setup_uv_step(answers: dict[str, Any]) -> str:
+    """The setup-uv step, uv pinned to the lock's own version, its cache off.
+
+    The workflow owns uv's cache (`_uv_cache_step`): setup-uv's own
+    discards the archive on any dependency change instead of restoring
+    the nearest one and saving again.
+    """
     pin = str(answers.get("uv_pin", ""))
-    lines = [f"      - uses: {SETUP_UV}"]
-    if pin or cache_suffix:
-        lines.append("        with:")
+    lines = [f"      - uses: {SETUP_UV}", "        with:"]
     if pin:
         lines.append(f'          version: "{pin}"')
-    if cache_suffix:
-        lines += [
-            "          # One cache identity per leg: a shared key makes",
-            "          # every leg but the first fail its save with a",
-            "          # reservation warning.",
-            f"          cache-suffix: {cache_suffix}",
-        ]
+    lines.append("          enable-cache: false")
     return "\n".join(lines) + "\n"
+
+
+def _uv_cache_step(identity: str) -> str:
+    """Uv's cache on the runner's working drive, restored by nearest key.
+
+    The key folds in the lock's hash; the restore key is the identity
+    alone, so a lock change restores the nearest archive and, since
+    the primary key missed, saves a fresh one at the end. One identity
+    per leg: wheels are platform-specific, so an ubuntu archive must
+    not serve macos. The placement is the entry contract's: the entry
+    script exports `UV_CACHE_DIR` under the runner's temp before its
+    sync and the GitHub emission persists it, so the path here is the
+    same one uv writes to; `ci.run` prunes it before the post-job save.
+    """
+    return (
+        f"      - uses: {CACHE}\n"
+        "        with:\n"
+        "          path: ${{ runner.temp }}/uv-cache\n"
+        f"          key: uv-{identity}-${{{{ hashFiles('uv.lock') }}}}\n"
+        f"          restore-keys: uv-{identity}-\n"
+    )
+
+
+def _store_cache_step() -> str:
+    """The tool store restored before the entry materialises it.
+
+    Keyed by the tools lock, the OS and the architecture, with the
+    prefix as the restore key, so a changed lock restores everything
+    unchanged and the store lands only the digests it lacks. A
+    restored folder is a tier the store verifies on access: an old or
+    torn archive costs a refetch, never a fault.
+    """
+    return (
+        f"      - uses: {CACHE}\n"
+        "        with:\n"
+        f"          path: {STORE_HOME}\n"
+        "          key: tools-${{ runner.os }}-${{ runner.arch }}"
+        "-${{ hashFiles('tools.lock') }}\n"
+        "          restore-keys: tools-${{ runner.os }}-${{ runner.arch }}-\n"
+    )
 
 
 def _docs_requirements_step(answers: dict[str, Any], *, sudo: bool = True) -> str:
@@ -543,11 +588,14 @@ def _actions_job(
     lines.append("    steps:\n")
     lines.append(_checkout_step(point, job, forge=forge))
     if forge == "github":
-        lines.append(_setup_uv_step(answers, cache_suffix=cache))
+        lines.append(_setup_uv_step(answers))
+        lines.append(_uv_cache_step(cache or job.name))
     lines.append(_collect_step(job, forge=forge))
     lines.append(_rung_step(answers))
     if job.docs_tools:
         lines.append(_docs_requirements_step(answers))
+    if forge == "github":
+        lines.append(_store_cache_step())
     lines.append(
         _enter_step(matrix_python=job.matrix in ("legs", "pythons", "declared"))
     )

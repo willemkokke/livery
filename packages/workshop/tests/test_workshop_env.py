@@ -17,9 +17,11 @@ from livery.workshop._env_tasks import (
     emit_lines,
     github_persist,
     tool_profile,
+    uv_cache_dir,
     venv_bin,
     windows_temp_policy,
     with_runner_temp,
+    with_uv_cache,
     workspace_delta,
 )
 from livery.workshop._envfile import (
@@ -997,3 +999,51 @@ def test_env_set_ci_writes_through_the_protocol(
     )
     with pytest.raises(BaseException, match="cannot store CI secrets"):
         env_set("KEY", "value", scope="ci")
+
+
+def test_the_uv_cache_is_placed_under_the_runners_temp_only_on_a_runner() -> None:
+    # Off a runner nothing is placed and the delta is untouched; on one
+    # the path is the runner's temp, the same one the workflow's cache
+    # step restores and the entry script exports before its sync.
+    delta = EnvDelta(values={"PLAIN": "1"}, paths=("/w/.venv/bin",))
+    assert uv_cache_dir({}) == ""
+    assert with_uv_cache(delta, {}) == delta
+    placed = with_uv_cache(delta, {"RUNNER_TEMP": "/r/_temp"})
+    assert placed.values == {"PLAIN": "1", "UV_CACHE_DIR": "/r/_temp/uv-cache"}
+    assert placed.paths == delta.paths
+
+
+def test_ci_run_prunes_the_uv_cache_only_on_a_github_job(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    from livery.toolroom import tools
+    from livery.workshop._ci_tasks import prune_uv_cache
+
+    seen: list[tuple[str, ...]] = []
+    code = {"value": 0}
+
+    def _opts(**kwargs: object) -> object:
+        assert kwargs.get("nofail") is True
+
+        def _run(*args: str) -> object:
+            seen.append(args)
+            return SimpleNamespace(code=code["value"], stdout="", stderr="")
+
+        return _run
+
+    monkeypatch.setattr(tools, "uv", SimpleNamespace(opts=_opts))
+    # Off a GitHub job, or with no cache placed, nothing runs.
+    assert prune_uv_cache({}) == ""
+    assert prune_uv_cache({"GITHUB_ACTIONS": "true"}) == ""
+    assert prune_uv_cache({"UV_CACHE_DIR": "/r/_temp/uv-cache"}) == ""
+    assert seen == []
+    on = {"GITHUB_ACTIONS": "true", "UV_CACHE_DIR": "/r/_temp/uv-cache"}
+    code["value"] = 2
+    assert prune_uv_cache(on) == (
+        "uv cache: prune failed (exit 2); the archive saves unpruned"
+    )
+    code["value"] = 0
+    assert prune_uv_cache(on) == "uv cache: pruned before the save"
+    assert seen == [("cache", "prune", "--ci"), ("cache", "prune", "--ci")]
