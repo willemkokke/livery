@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -463,7 +464,16 @@ def test_the_janitor_drops_a_closure_keyed_ref_and_keeps_the_record_and_the_mark
         == ""
     )
     branch_ref = _coverage_store.record_ref(LEG, "feat/x")
+    # An orphan lingers a day first: main's run for a merged squash reads
+    # the merged branch's record after the merge deleted the branch.
     lines = _state.sweep(work, (_coverage_store.RECORD,), remote=True)
+    assert any(
+        line.startswith(f"  {old}: no current base and leg produces it; kept ")
+        for line in lines
+    )
+    assert _state.read(work, old).files == {"x": "{}"}
+    later = datetime.now(UTC) + timedelta(days=2)
+    lines = _state.sweep(work, (_coverage_store.RECORD,), remote=True, now=later)
     assert f"  {old}: no current base and leg produces it; dropped" in lines
     assert f"  {_coverage_store.record_ref(LEG)}: 1 row(s), within its bounds" in lines
     assert f"  {branch_ref}: 1 row(s), within its bounds" in lines
@@ -472,6 +482,12 @@ def test_the_janitor_drops_a_closure_keyed_ref_and_keeps_the_record_and_the_mark
     assert _coverage_store.recorded(work, leg=LEG).units == fresh
     _git(work, "push", "-q", "origin", ":refs/heads/feat/x")
     lines = _state.sweep(work, (_coverage_store.RECORD,), remote=True)
+    assert any(
+        line.startswith(f"  {branch_ref}: no current base and leg produces it; kept ")
+        for line in lines
+    )
+    assert _state.read(work, branch_ref).files is not None
+    lines = _state.sweep(work, (_coverage_store.RECORD,), remote=True, now=later)
     assert f"  {branch_ref}: no current base and leg produces it; dropped" in lines
     assert _state.read(work, branch_ref).files is None
     assert _coverage_store.recorded(work, leg=LEG).units == fresh
