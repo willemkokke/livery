@@ -491,9 +491,11 @@ _SIDECARS = (
     ".json",  # compose ships provenance, sbom and sigstore beside each build
 )
 # Build variants that sit beside the canonical asset for the same platform:
-# bun's `-profile`/`-baseline`, a `-debug` build, a `musl` libc. Preferred
-# against, never excluded — the canonical build is what a task wants.
-_VARIANTS = ("profile", "baseline", "debug", "musl", "-static")
+# bun's `-profile`/`-baseline`, a `-debug` build, a `musl` libc, a MinGW
+# build beside the MSVC one (git-cliff ships `-pc-windows-gnu` and
+# `-pc-windows-msvc`, and the shorter name would win). Preferred against,
+# never excluded — the canonical build is what a task wants.
+_VARIANTS = ("profile", "baseline", "debug", "musl", "-static", "windows-gnu")
 
 
 HOST_TOKENS = {

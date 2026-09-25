@@ -315,7 +315,11 @@ class Receipt:
         paths: The absolute directories the tool puts on PATH in `path`
             mode; empty otherwise.
         env: The variables the tool sets, resolved against its directory.
-        entry_points: The names linked in `link` mode; empty otherwise.
+        entry_points: The executables' names the tool puts on PATH:
+            linked into the checkout's bin directory in `link` mode,
+            found on `paths` in `path` mode; empty in `none` mode. A
+            check resolves the tool by these, never by its name, since
+            a name (`git_cliff`) is not always a binary (`git-cliff`).
     """
 
     tool: str
@@ -554,7 +558,7 @@ def materialise(
             tuple(str(p) for p in ensured.paths) if mode == "path" else (),
             ensured.env,
             tuple(Path(e).name for e in ensured.deployment.entry_points)
-            if mode == "link"
+            if mode in ("link", "path")
             else (),
         )
         if mode == "link":

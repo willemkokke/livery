@@ -317,6 +317,16 @@ def test_pick_asset_arch_less_is_the_x64_build_or_the_universal_one(mac_arm):
         _provision._pick_asset(only_x64, host="windows-arm")
 
 
+def test_pick_asset_prefers_the_msvc_build_over_the_mingw_one(win_amd64):
+    """git-cliff ships both; the shorter MinGW name must not win by length."""
+    assets = [
+        ("tool-1.0-x86_64-pc-windows-gnu.zip", "gnu"),
+        ("tool-1.0-x86_64-pc-windows-msvc.zip", "msvc"),
+    ]
+    assert _provision._pick_asset(assets)[1] == "msvc"
+    assert _provision._pick_asset(assets, host="windows-x64")[1] == "msvc"
+
+
 def test_pick_asset_no_match_raises(mac_arm):
     with pytest.raises(_provision.ProvisionError, match="no release asset"):
         _provision._pick_asset([("tool_Windows_x86_64.zip", "u")])
@@ -721,7 +731,10 @@ def test_empty_prefix_resolves_to_the_default_room_once_provisioned(
 
     monkeypatch.setenv("FOOTMAN_DATA_DIR", str(tmp_path / "data"))
     assert _tasks._resolve_prefix("") is None  # nothing provisioned: host PATH
-    (tmp_path / "data" / "toolroom-bench").mkdir(parents=True)
+    # The bench's store lives in the room too; a store is not a provisioned set.
+    (tmp_path / "data" / "toolroom-bench" / "store").mkdir(parents=True)
+    assert _tasks._resolve_prefix("") is None
+    (tmp_path / "data" / "toolroom-bench" / "bin").mkdir()
     assert _tasks._resolve_prefix("") == tmp_path / "data" / "toolroom-bench"
 
 
@@ -729,6 +742,6 @@ def test_an_explicit_prefix_wins_over_the_default_room(tmp_path, monkeypatch):
     from livery.toolroom.bench import _tasks
 
     monkeypatch.setenv("FOOTMAN_DATA_DIR", str(tmp_path / "data"))
-    (tmp_path / "data" / "toolroom-bench").mkdir(parents=True)
+    (tmp_path / "data" / "toolroom-bench" / "bin").mkdir(parents=True)
     mine = tmp_path / "mine"
     assert _tasks._resolve_prefix(str(mine)) == mine.resolve()
