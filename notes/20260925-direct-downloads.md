@@ -359,6 +359,11 @@ Acceptance:
 - 2026-09-25, Willem: one download per new version per host, shared
   with the verification, is the correct shape: as few downloads as
   possible for the maximum use.
+- 2026-09-25: a verb-bound view of another driver's binary
+  (`ruff_format` is `ruff format`) records no artifacts and the verb
+  refuses it naming the driver to record; the binary's own record
+  carries them. uv's Windows archives carry `uvw.exe`, the windowless
+  launcher; the Windows layouts exclude it.
 - 2026-09-25, Willem: the order is whatever reaches the end result
   quickest. Phase 1 first, then git-cliff: authoring git-cliff by hand
   needs the same layout and six hashes phase 1 produces by code.

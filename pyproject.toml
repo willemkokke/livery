@@ -78,7 +78,6 @@ dev = [
     # that platform, its sdist does not build, and nothing releases
     # from that host; the six-host point syncs the workspace there.
     "git-cliff>=2.13 ; sys_platform != 'win32' or platform_machine != 'ARM64'",
-    "ruff>=0.6",
     # Stubs for the workshop's own yaml reads, so mypy stays strict.
     "types-pyyaml",
     # The four-checker typing gate, footman's shape: all gating, none
@@ -86,8 +85,6 @@ dev = [
     # lands through a deliberate lock bump.
     "basedpyright>=1.18",
     "mypy>=1.14",
-    "ty",
-    "pyrefly",
 ]
 
 # Ruff and basedpyright configuration cribbed from footman's pyproject:
