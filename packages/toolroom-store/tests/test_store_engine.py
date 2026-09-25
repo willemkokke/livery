@@ -127,8 +127,8 @@ def test_a_host_no_spec_names_and_a_delegated_kind_are_refused(home: Home) -> No
         Store(home, host="plan9-mips")
     store = Store(home, host=HOST)
     artifacts, _ = _tool()
-    delegated = _record("bunx", artifacts, kind="bun-install")
-    with pytest.raises(StoreError, match="kind 'bun-install' is delegated to its tool"):
+    delegated = _record("bunx", artifacts, kind="uv-python")
+    with pytest.raises(StoreError, match="kind 'uv-python' is delegated to its tool"):
         store.ensure(delegated, delegated.versions[-1])
     assert store.probe(delegated, delegated.versions[-1]) is None
     with pytest.raises(StoreError, match=r"tool: a archive needs its deployment"):
@@ -616,6 +616,55 @@ def test_an_installer_that_fails_or_writes_no_launcher_leaves_nothing(
     with pytest.raises(StoreError, match=r"exited 0 and left no launcher"):
         store.ensure(record, "1.0.0")
     assert store.probe(record, "1.0.0") is None
+
+
+def test_a_bun_install_without_a_bun_refuses_naming_it(home: Home) -> None:
+    from dataclasses import replace
+
+    record = replace(_uv_tool("cspell", "1.0.0"), kind="bun-install", package="")
+    with pytest.raises(StoreError, match=r"cspell: a bun-install needs bun; lock bun"):
+        Store(home, host=HOST).ensure(record, "1.0.0")
+    assert not (home.bun / "tools").exists()
+
+
+def test_a_bun_install_lands_through_the_bun_handed_over(
+    home: Home, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`bun add --global` into the tool's own directory, bun's directory heading PATH."""
+    from dataclasses import replace
+
+    calls: list[tuple[list[str], dict[str, str]]] = []
+
+    def installing(argv: list[str], env: dict[str, str]) -> int:
+        calls.append((argv, env))
+        bin_dir = Path(env["BUN_INSTALL"]) / "bin"
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        (bin_dir / f"cspell{EXE}").write_text("#!/usr/bin/env node\n")
+        return 0
+
+    monkeypatch.setattr(_engine, "run_installer", installing)
+    bun = home.root / "tools" / "bun@1.0.0" / f"bun{EXE}"
+    record = replace(_uv_tool("cspell", "1.0.0"), kind="bun-install", package="")
+    store = Store(home, host=HOST)
+    ensured = store.ensure(record, "1.0.0", bun=bun)
+    assert ensured.installed and ensured.tree is None
+    assert ensured.tool_dir == home.bun / "tools" / "cspell@1.0.0"
+    assert ensured.deployment.entry_points == (f"bin/cspell{EXE}",)
+    argv, env = calls[0]
+    assert argv == [str(bun), "add", "--global", "cspell@1.0.0"]
+    assert env["BUN_INSTALL"] == str(ensured.tool_dir)
+    assert env["PATH"].split(os.pathsep)[0] == str(bun.parent)
+    # A second ensure is a probe; a failing bun leaves nothing behind.
+    assert not store.ensure(record, "1.0.0", bun=bun).installed and len(calls) == 1
+    monkeypatch.setattr(_engine, "run_installer", lambda argv, env: 7)
+    with pytest.raises(
+        StoreError,
+        match=r"cspell 2\.0\.0: `.*bun.* add --global cspell@2\.0\.0` exited 7",
+    ):
+        store.ensure(
+            replace(record, deltas=_uv_tool("cspell", "2.0.0").deltas), "2.0.0", bun=bun
+        )
+    assert not (home.bun / "tools" / "cspell@2.0.0").exists()
 
 
 def test_a_uv_tool_is_installed_once_into_its_own_directory(

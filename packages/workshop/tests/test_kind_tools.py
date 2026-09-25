@@ -43,6 +43,28 @@ def _read(*versions: str) -> tuple[RecordDelta, ...]:
     )
 
 
+def _bun(*versions: str) -> Record:
+    """bun, the archive a bun-install tool is installed through, on the three hosts."""
+    return Record(
+        "bun",
+        kind="archive",
+        hosts=THREE,
+        layout=Layout(entry_points=("bun",), paths=(".",)),
+        deltas=tuple(
+            RecordDelta(
+                n,
+                v,
+                "",
+                {
+                    host: Artifact(f"https://x/bun/{v}/{host}.zip", SHA)
+                    for host in THREE
+                },
+            )
+            for n, v in enumerate(versions, start=1)
+        ),
+    )
+
+
 def _records(root: Path, *records: Record) -> None:
     for record in records:
         record.save(root / "records")
@@ -240,6 +262,7 @@ def test_the_three_sites_union_and_each_names_itself(
         root,
         Record("git-cliff", kind="uv-tool", deltas=_read("2.0.0")),
         Record("cspell", kind="bun-install", deltas=_read("1.0.0", "2.0.0")),
+        _bun("1.3.0"),
     )
     sites = {(r.name, r.site) for r in _tools.requirements(root)}
     assert ("cspell", "packages/member/workshop.toml") in sites
@@ -248,6 +271,10 @@ def test_the_three_sites_union_and_each_names_itself(
     lock = _tools.write_lock(root)
     assert lock.tools["cspell"].version == "2.0.0"
     assert lock.tools["git-cliff"].version == "2.0.0"
+    # bun is cspell's dependency: locked, though no site names it.
+    assert lock.tools["bun"].version == "1.3.0" and set(lock.tools["bun"].hosts) == set(
+        THREE
+    )
     # The kinds first, as declared: the base's tool, then python's.
     assert _tools.tool_names(root)[:3] == ("git_cliff", "uv", "ruff")
 
@@ -373,10 +400,15 @@ def test_a_tool_no_site_requires_any_more_leaves_the_lock(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _workspace(tmp_path, monkeypatch, tools='requires = ["cspell"]\n')
-    _records(root, Record("cspell", kind="bun-install", deltas=_read("2.0.0")))
-    assert "cspell" in _tools.write_lock(root).tools
+    _records(
+        root, Record("cspell", kind="bun-install", deltas=_read("2.0.0")), _bun("1.3.0")
+    )
+    locked = _tools.write_lock(root).tools
+    assert "cspell" in locked and "bun" in locked
     (root / "workshop.toml").write_text('[workspace]\n\n[tools]\nindex = "records"\n')
-    assert "cspell" not in _tools.write_lock(root).tools
+    locked = _tools.write_lock(root).tools
+    # bun leaves with the tool it was locked for.
+    assert "cspell" not in locked and "bun" not in locked
 
 
 def test_the_catalogue_reads_an_index_directory_through_the_machines_store(
