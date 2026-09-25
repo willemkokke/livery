@@ -1,18 +1,12 @@
 # Direct downloads: a tool comes from its own release, PyPI only for Python
 
 Status: ruled 2026-09-25 as drafted, with git-cliff on a base kind
-(decision record). Phase 1 landed 2026-09-25 (livery#674, PR #675): gh's
-newest version carries six artifacts and passes the nine checks on six
-hosts. Phase 2 landed 2026-09-25 (livery#676, PR #678): git-cliff 2.13.1
-carries six artifacts, passes on six hosts, the lock holds it on three,
-and every CI job materialises the lock's tools before the emission.
-Phase 3 in flight (livery#677): ruff 0.16.4 and pyrefly 1.3.1 carry six
-artifacts, ty, uv and prek gained `windows-arm`, and the venv carries
-none of ruff, ty, pyrefly. Phase 4 gate-green on its branch (livery#680). Sequenced before the modular docs plan by Willem's word of
-2026-09-25. The tool record plan
-(`notes/20260914-the-tool-record-and-its-index.md`) is complete, which
-is the precondition: the record, the store, the lock and the six-host
-verification point all exist.
+(decision record). Phases 1 to 4 landed 2026-09-25 (livery#674 PR #675,
+livery#676 PR #678, livery#677 PR #681, livery#680 PR #684): every tool
+with a release of its own comes from it, recorded on six hosts, and every
+CI job materialises the lock's tools before the emission. Phase 5 in
+flight (livery#683): basedpyright through bun, the PyPI tier the Python
+tools alone. The six-host point runs after it lands as the proof.
 
 ## The ruling (Willem, 2026-09-24)
 
