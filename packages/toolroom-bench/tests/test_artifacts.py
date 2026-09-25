@@ -331,3 +331,40 @@ def test_the_assembler_records_artifacts_for_a_fresh_forge_version_only(
     assert moved.hosts_of("1.0.0") == ()  # history is not backfilled here
     still = _surfaces.load(records / "pytool.jsonl")
     assert still is not None and still.hosts == () and still.hosts_of("1.1.0") == ()
+
+
+def test_a_verb_bound_view_of_another_binary_records_nothing(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """`ruff_format` reads ruff's binary; ruff's record carries the artifacts."""
+    records = isolate(tools, monkeypatch, tmp_path)
+    save(_record("1.0.0"), records)
+    view = _drivers.Driver(
+        "tool",
+        attr="tool_fmt",
+        base=("fmt",),
+        provision=_drivers.Provision(kind="github", repo="o/tool"),
+    )
+    _serve(monkeypatch, _payloads("1.1.0"), tags=("v1.1.0",))
+    monkeypatch.setattr(_drivers, "find", lambda key: view if key == "tool" else None)
+    monkeypatch.setattr(
+        tools, "_bench_store", lambda: Store(Home(tmp_path / "h"), host=LINUX)
+    )
+    with pytest.raises(Failed, match=r"tool is a view of tool's binary bound to `fmt`"):
+        tools.tools_artifacts("tool")
+    document = {
+        "platform": "Linux",
+        "observations": {
+            "tool": {
+                "1.1.0": {
+                    "date": "2026-02-01",
+                    "tag": "v1.1.0",
+                    "surface": with_flags("--q"),
+                }
+            }
+        },
+    }
+    found = tools._assemble_documents([document])
+    assert found.read == {"tool": ["1.1.0"]} and found.artifacts == {}
+    moved = _surfaces.load(records / "tool.jsonl")
+    assert moved is not None and moved.hosts_of("1.1.0") == ()

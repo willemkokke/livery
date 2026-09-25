@@ -110,18 +110,12 @@ PYTHON_ON_PYPI = (
 )
 
 #: Not Python, still read from PyPI until each one's move lands
-#: (`notes/20260925-direct-downloads.md`): the Rust tools in phase 3, the
-#: C++ tools in phase 4. A name leaves this tuple in
+#: (`notes/20260925-direct-downloads.md`): the C++ tools in phase 4. A name
+#: leaves this tuple in
 #: the change that moves it, never earlier.
 LEAVING_PYPI = (
     "cmake",
     "ninja",
-    "prek",
-    "pyrefly",
-    "ruff",
-    "ruff_format",
-    "ty",
-    "uv",
 )
 
 
