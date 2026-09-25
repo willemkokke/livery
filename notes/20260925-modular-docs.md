@@ -386,18 +386,15 @@ Acceptance:
 - 2026-09-25: drafted. The examples-run-on-page-change ask is met by a
   gate rule (phase 4), not by moving tests; the relocation (phase 5)
   is presented with what it buys and costs and ruled on its own.
+- 2026-09-25, Willem: the tool index publishes at `tools/` for now; it
+  is expected to become a permanent URL of its own later, no longer a
+  section of the docs. No redirects for the old URLs. The tasks block
+  is emitted with the other machine sections, not committed.
 
 ## Open
 
-1. **The tool index's public path.** `tools/` is proposed. It is a
-   consumer contract (contract 4), so it is named once. Willem.
-2. **Redirects for the old URLs.** None proposed: the site has been
-   public since 2026-09-05 and the only known deep links are the
-   runner's own, which move with the template. A redirect page set
-   would keep `_generated` alive in the site tree. Willem.
-3. **The tasks block: emitted or committed.** Emitted removes the last
-   committed generated block; committed keeps a package's task
-   surface visible in a review diff. Proposed: emitted, since the task
-   reference pages are already gitignored and the review sees the
-   verb itself. Willem.
-4. **Phase 5.** In or out, given it narrows no gate. Willem.
+1. **Phase 5.** In or out, given it narrows no gate. The `_tests` name
+   follows the rule that every module a package does not export is
+   underscore-named; a bare `tests/` inside the package would need
+   one named exception in the API pages, the wheel, typecomplete and
+   the pinning test. Willem.
