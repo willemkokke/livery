@@ -16,8 +16,9 @@ type-completeness verdict, and tests in parallel. Run it before every
 commit; CI runs the same command. On a machine it gates what the
 working tree changed since the nearest tree its record proves, and
 records the tree, so a proved tree runs nothing; `--full` runs
-everything. Nothing on the merge path may wait on anything outside
-the repository. The gate's verdict is its exit
+everything. Nothing on the merge path may wait on a person; a
+service reached with a configured token (an index, a registry, a
+remote) is allowed. The gate's verdict is its exit
 code, and a `PreToolUse` hook (`fm hooks.pre-bash`) refuses a footman
 command piped into head/tail and a push of a branch that conflicts
 with `origin/main`.
