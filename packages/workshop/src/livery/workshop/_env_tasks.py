@@ -116,15 +116,19 @@ def apply_entry(root: Path) -> tuple[str, ...]:
     The same PATH entries and variables `env.emit` hands an entered
     shell, applied to this process, so every `fm` invocation resolves
     the locked tools whatever launched it: an agent's shell, a CI
-    step, a bare terminal. An entry already on PATH stays where it
-    is and the missing ones go in front, in emission order; a
-    variable the environment already has wins, as the cascade's do,
-    and what the hook contributes is remembered in `_APPLIED`. A
-    receipts directory holding a file that is not a receipt costs the
-    tools' half alone, said on stderr, never the command. Idempotent.
+    step, a bare terminal. The emission leads PATH in its own order,
+    the venv's bin first and the tools after it, and the rest of PATH
+    follows; an entry the emission names moves to its place in front,
+    since a tool directory ahead of the venv would shadow the venv's
+    pytest and mypy with the store's plain ones. A variable the
+    environment already has wins, as the cascade's do, and what the
+    hook contributes is remembered in `_APPLIED`. A receipts directory
+    holding a file that is not a receipt costs the tools' half alone,
+    said on stderr, never the command. Idempotent: a second
+    application changes nothing.
 
     Returns:
-        The PATH entries added, in order.
+        The PATH entries that were not on PATH before, in order.
     """
     import sys
 
@@ -133,21 +137,28 @@ def apply_entry(root: Path) -> tuple[str, ...]:
     except ValueError as error:
         sys.stderr.write(f"tool receipts skipped ({error})\n")
         paths, env = (), {}
-    current = os.environ.get("PATH", "")
-    present = {os.path.normcase(e) for e in current.split(os.pathsep) if e}
-    added: list[str] = []
+    current = [e for e in os.environ.get("PATH", "").split(os.pathsep) if e]
+    leading: list[str] = []
+    seen: set[str] = set()
     for entry in (str(venv_bin(root)), *paths):
-        if os.path.normcase(entry) not in present:
-            added.append(entry)
-            present.add(os.path.normcase(entry))
-    if added:
-        os.environ["PATH"] = os.pathsep.join([*added, current] if current else added)
+        if os.path.normcase(entry) not in seen:
+            leading.append(entry)
+            seen.add(os.path.normcase(entry))
+    added = tuple(
+        e
+        for e in leading
+        if os.path.normcase(e) not in {os.path.normcase(c) for c in current}
+    )
+    rest = [c for c in current if os.path.normcase(c) not in seen]
+    composed = os.pathsep.join([*leading, *rest])
+    if composed != os.environ.get("PATH", ""):
+        os.environ["PATH"] = composed
     values = {"VIRTUAL_ENV": str(root / ".venv"), **env}
     for key, value in values.items():
         if not os.environ.get(key):
             os.environ[key] = value
             _APPLIED[key] = value
-    return tuple(added)
+    return added
 
 
 def _warn_unmounted_layers(root: Path) -> None:
