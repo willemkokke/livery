@@ -221,8 +221,8 @@ def test_the_reference_renders_the_advertised_tree_whole(
     nav = (root / "packages/core/docs/nav.toml").read_text()
     assert '"dev.up" = "_generated/tasks/forge/dev/up.md"' in nav
     assert '{ "sync" = "_generated/tasks/sync.md" },' in nav
-    alias = (root / "docs/_generated/tasks/forge-dev-up.md").read_text()
-    assert "../../packages/core/_generated/tasks/forge/dev/up/" in alias
+    alias = (root / "docs/tasks/forge-dev-up.md").read_text()
+    assert "../../packages/core/tasks/forge/dev/up/" in alias
     assert "window.location.replace" in alias
     # Idempotent: the same trees rewrite the same bytes.
     before = (root / "packages/core/docs/nav.toml").read_bytes()

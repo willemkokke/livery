@@ -20,6 +20,7 @@ deploy artifact.
 
 from __future__ import annotations
 
+import re
 import shutil
 import tomllib
 from pathlib import Path
@@ -36,11 +37,23 @@ NAV_END = "# docs-nav:end"
 
 #: Where package docs mount inside the site's tree, per package
 #: directory name. Gitignored; rebuilt on every docs verb.
-MOUNT = "docs/_generated/packages"
+MOUNT = "docs/packages"
+
+#: A package's own generated tree, under its ``docs/``: a name on disk,
+#: never a published path. The mount merges it into the package's root
+#: and strips the prefix from every link into it.
+GENERATED_DIR = "_generated"
+GENERATED = GENERATED_DIR + "/"
+
+#: The site tree's generated directories under the root ``docs/``,
+#: gitignored: the mounts, the release view, the runner's task aliases
+#: and the tool index. A root page never enumerates them.
+SITE_TREES = ("packages", "releases", "tasks", "tools")
 
 #: Where the generated API pages live, per package directory name.
-#: Gitignored; rebuilt on every docs verb.
-API = "docs/_generated/api"
+#: Where a package's generated API pages live: inside its mount, so
+#: they publish under the package's own path.
+API_DIR = "api"
 
 #: The inventories cross-ecosystem references resolve against.
 #: Pinned here so one workshop release moves every project; the
@@ -241,6 +254,18 @@ def run_generators(root: Path) -> list[str]:
     return ran
 
 
+def _root_pages(root: Path) -> list[str]:
+    """The authored pages under the root ``docs/``: the site trees are not pages."""
+    return [
+        page for page in _pages(root / "docs") if page.split("/")[0] not in SITE_TREES
+    ]
+
+
+def _published(page: str) -> str:
+    """*page* as it publishes inside its mount: a generated page loses the prefix."""
+    return page.removeprefix(GENERATED)
+
+
 def _pages(directory: Path) -> list[str]:
     """The markdown pages under *directory*, index first, then sorted."""
     if not directory.is_dir():
@@ -409,7 +434,9 @@ def _authored_nav_lines(entries: list[object], prefix: str, indent: str) -> list
             continue
         for label, value in entry.items():
             if isinstance(value, str):
-                lines.append(f'{indent}{{ "{label}" = "{prefix}{value}" }},')
+                lines.append(
+                    f'{indent}{{ "{label}" = "{prefix}{_published(value)}" }},'
+                )
             elif isinstance(value, list):
                 lines.append(f'{indent}{{ "{label}" = [')
                 lines += _authored_nav_lines(value, prefix, indent + "    ")
@@ -544,8 +571,8 @@ def _extra_asset_lines(root: Path) -> list[str]:
     js: list[str] = []
     for package in discover_packages(root):
         declared_css, declared_js = package_docs_extras(package)
-        prefix = f"_generated/packages/{package.directory.name}/"
-        css += [prefix + entry for entry in declared_css]
+        prefix = f"packages/{package.directory.name}/"
+        css += [prefix + _published(entry) for entry in declared_css]
         js += [_js_line(entry, prefix) for entry in declared_js]
     lines: list[str] = []
     if css:
@@ -753,9 +780,7 @@ def zensical_config(root: Path) -> str:
         lines.append(f'site_description = "{description}"')
     lines.append("nav = [")
     lines.append(f"    {NAV_BEGIN}")
-    for page in _pages(root / "docs"):
-        if page.startswith("_generated/"):
-            continue
+    for page in _root_pages(root):
         label = "Home" if page == "index.md" else _label(page)
         lines.append(f'    {{ "{label}" = "{page}" }},')
     if any(
@@ -766,7 +791,7 @@ def zensical_config(root: Path) -> str:
         # clone, and a nav derived from them would make the same
         # contract render differently per checkout. The landing page
         # links its own year archives at build time instead.
-        lines.append('    { "Releases" = "_generated/releases/index.md" },')
+        lines.append('    { "Releases" = "releases/index.md" },')
     handler_paths: list[str] = []
     for package in discover_packages(root):
         section, has_modules = _package_section(package)
@@ -806,7 +831,7 @@ def _package_section(package: Package, indent: str = "    ") -> tuple[list[str],
     if authored is None and not pages and not modules and not changelog:
         return ([], False)
     name = package.directory.name
-    prefix = f"_generated/packages/{name}/"
+    prefix = f"packages/{name}/"
     inner = indent + "    "
     lines = [f'{indent}{{ "{name}" = [']
     if authored is not None:
@@ -822,9 +847,7 @@ def _package_section(package: Package, indent: str = "    ") -> tuple[list[str],
     if modules:
         lines.append(f'{inner}{{ "API" = [')
         for page, dotted in modules:
-            lines.append(
-                f'{inner}    {{ "{dotted}" = "_generated/api/{name}/{page}" }},'
-            )
+            lines.append(f'{inner}    {{ "{dotted}" = "{prefix}{API_DIR}/{page}" }},')
         lines.append(f"{inner}] }},")
     lines.append(f"{indent}] }},")
     return (lines, bool(modules))
@@ -857,7 +880,7 @@ def _mkdocstrings_lines(paths: list[str], inventories: tuple[str, ...]) -> list[
     ]
 
 
-RELEASES = "docs/_generated/releases"
+RELEASES = "docs/releases"
 
 
 def _insert_after_title(text: str, block: str) -> str:
@@ -1034,7 +1057,12 @@ def mount_package_docs(root: Path) -> list[str]:
 
     The mount is rebuilt whole on every call, so a page deleted from
     a package never lingers in the site. ``nav.toml`` stays behind:
-    it configures the nav and is not site content.
+    it configures the nav and is not site content. The package's
+    generated tree merges into the mount's root and every link into it
+    in a mounted page loses the prefix, so ``_generated`` names a
+    directory on disk and never a published path. A generated page
+    that an authored page already holds the path of refuses, naming
+    both.
     """
     base = root / MOUNT
     shutil.rmtree(base, ignore_errors=True)
@@ -1043,15 +1071,72 @@ def mount_package_docs(root: Path) -> list[str]:
         docs = package.directory / "docs"
         if not docs.is_dir():
             continue
+        target = base / package.directory.name
         shutil.copytree(
             docs,
-            base / package.directory.name,
+            target,
             ignore=lambda directory, names, docs=docs: (
-                [NAV_TOML] if Path(directory) == docs else []
+                [NAV_TOML, GENERATED_DIR] if Path(directory) == docs else []
             ),
         )
+        _merge_generated(docs / GENERATED_DIR, target, package.path)
+        _strip_generated_links(target)
         mounted.append(package.directory.name)
     return mounted
+
+
+def _merge_generated(generated: Path, target: Path, package_path: str) -> None:
+    """Copy the package's generated tree into the mount's root, path by path.
+
+    A generated page links upward with the generated directory counted
+    in: ``../input.md`` from ``_generated/api.md`` names the authored
+    page beside the tree. Merged one level up, such a link loses one
+    ``../``; a link that stays inside the generated tree keeps its
+    shape, since both ends moved together.
+    """
+    if not generated.is_dir():
+        return
+    for source in sorted(generated.rglob("*")):
+        if source.is_dir():
+            continue
+        relative = source.relative_to(generated).as_posix()
+        destination = target / relative
+        if destination.exists():
+            fail(
+                f"{package_path}/docs: {GENERATED}{relative} and the authored"
+                f" {relative} would publish at one path; rename one"
+            )
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if source.suffix == ".md":
+            depth = relative.count("/")
+            text = source.read_text(encoding="utf-8")
+            destination.write_text(_climb_one_less(text, depth), encoding="utf-8")
+        else:
+            shutil.copy2(source, destination)
+
+
+_UPWARD_LINK = re.compile(r"\]\(((?:\.\./)+)")
+
+
+def _climb_one_less(text: str, depth: int) -> str:
+    """*text* with one ``../`` fewer on every link that climbs above *depth*."""
+
+    def shorten(match: re.Match[str]) -> str:
+        climbs = match.group(1).count("../")
+        if climbs <= depth:
+            return match.group(0)
+        return "](" + "../" * (climbs - 1)
+
+    return _UPWARD_LINK.sub(shorten, text)
+
+
+def _strip_generated_links(target: Path) -> None:
+    """Every link into the generated tree in a mounted page loses the prefix."""
+    for page in target.rglob("*.md"):
+        text = page.read_text(encoding="utf-8")
+        stripped = text.replace(f"]({GENERATED}", "](")
+        if stripped != text:
+            page.write_text(stripped, encoding="utf-8")
 
 
 #: The scoped previews' home, gitignored; one directory per package,
@@ -1082,9 +1167,7 @@ def scoped_config(root: Path, package: Package) -> str:
     table = docs_table(root)
     title = str(table.get("title", "")) or _project_name(root)
     lines = ["[project]", f'site_name = "{title}"', "nav = ["]
-    for page in _pages(root / "docs"):
-        if page.startswith("_generated/"):
-            continue
+    for page in _root_pages(root):
         label = "Home" if page == "index.md" else _label(page)
         lines.append(f'    {{ "{label}" = "{page}" }},')
     section, has_modules = _package_section(package)
@@ -1107,8 +1190,8 @@ def materialise_preview(root: Path, package: Package) -> Path:
     """Materialise one package's preview tree; the scoped config's path.
 
     Rebuilt whole under ``.docs-preview/<name>/``: the authored root
-    pages, the package's freshly generated mount and API trees, and
-    the scoped config beside them. The rendered root config is never
+    pages, the package's freshly generated mount with its API pages,
+    and the scoped config beside them. The rendered root config is never
     touched. Callers run the mount and generation passes first, so
     the copied trees are current.
     """
@@ -1122,15 +1205,12 @@ def materialise_preview(root: Path, package: Package) -> Path:
         root / "docs",
         docs,
         ignore=lambda directory, names: (
-            ["_generated"] if Path(directory) == root / "docs" else []
+            list(SITE_TREES) if Path(directory) == root / "docs" else []
         ),
     )
-    for source, destination in (
-        (root / MOUNT / name, docs / "_generated" / "packages" / name),
-        (root / API / name, docs / "_generated" / "api" / name),
-    ):
-        if source.is_dir():
-            shutil.copytree(source, destination)
+    mount = root / MOUNT / name
+    if mount.is_dir():
+        shutil.copytree(mount, docs / "packages" / name)
     overrides = root / "overrides"
     if overrides.is_dir():
         shutil.copytree(overrides, base / "overrides")
@@ -1194,20 +1274,21 @@ def api_modules(package: Package) -> list[tuple[str, str]]:
 
 
 def generate_api_pages(root: Path) -> list[str]:
-    """Write the API pages into the site tree; the package names.
+    """Write the API pages into each package's mount; the package names.
 
     One page per module, each a single directive: mkdocstrings walks
-    the members. The tree is rebuilt whole, machine territory.
+    the members. Written into the mount's ``api/`` after the mount is
+    rebuilt, so the pages publish under the package's own path.
     """
-    base = root / API
-    shutil.rmtree(base, ignore_errors=True)
     generated: list[str] = []
     for package in discover_packages(root):
         modules = api_modules(package)
         if not modules:
             continue
+        base = root / MOUNT / package.directory.name / API_DIR
+        shutil.rmtree(base, ignore_errors=True)
         for page, dotted in modules:
-            target = base / package.directory.name / page
+            target = base / page
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(f"# `{dotted}`\n\n::: {dotted}\n", encoding="utf-8")
         generated.append(package.directory.name)

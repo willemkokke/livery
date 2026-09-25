@@ -2768,7 +2768,7 @@ def tools_convert_records() -> None:
 @index_tasks.task(name="build")
 def index_build(
     into: Annotated[
-        str, doc("the index root; omitted = docs/_generated/index in the workspace")
+        str, doc("the index root; omitted = docs/tools in the workspace")
     ] = "",
     from_genesis: Annotated[
         bool, doc("ignore the build already there and materialise every tool")
@@ -2786,12 +2786,12 @@ def index_build(
     pointer.
 
     Declared as a docs generator, so the site's build writes the index
-    under `docs/_generated/index` and the site's deploy serves it.
+    under `docs/tools` and the site's deploy serves it at `tools/`.
     """
     target = (
         Path(into).expanduser().resolve()
         if into
-        else _records_dir().parent / "docs" / "_generated" / "index"
+        else _records_dir().parent / "docs" / "tools"
     )
     built = _index.build(_records_dir(), target, from_genesis=from_genesis)
     for name in built.rebuilt:

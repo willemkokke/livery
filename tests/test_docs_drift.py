@@ -19,6 +19,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+#: The site trees the build writes under the root docs: not authored pages.
+SITE_TREES = ("packages", "releases", "tasks", "tools")
+
 _LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 _HEADING_RE = re.compile(r"^#{1,6} +(.*)$", re.M)
 
@@ -48,15 +51,22 @@ def _docs_trees(root: Path) -> list[Path]:
 def _pages(root: Path) -> list[Path]:
     pages: list[Path] = []
     for tree in _docs_trees(root):
-        pages += [page for page in tree.rglob("*.md") if "_generated" not in page.parts]
+        pages += [
+            page
+            for page in tree.rglob("*.md")
+            if "_generated" not in page.parts
+            and not (
+                tree == root / "docs" and page.relative_to(tree).parts[0] in SITE_TREES
+            )
+        ]
     return pages
 
 
 def _link_problems(root: Path) -> list[str]:
     """Every unresolvable link or anchor in the authored docs.
 
-    Links into ``_generated/`` map back to their package sources;
-    the strict site build owns everything else generated.
+    Links into the mounts map back to their package sources; the
+    strict site build owns everything generated.
     """
     problems: list[str] = []
     for page in _pages(root):
@@ -74,7 +84,7 @@ def _link_problems(root: Path) -> list[str]:
                     # mount beside the authored pages; the strict
                     # build owns it.
                     continue
-                mounted = re.fullmatch(r"_generated/packages/([^/]+)/(.+)", path_part)
+                mounted = re.fullmatch(r"packages/([^/]+)/(.+)", path_part)
                 if mounted:
                     resolved = (
                         root / "packages" / mounted.group(1) / "docs" / mounted.group(2)

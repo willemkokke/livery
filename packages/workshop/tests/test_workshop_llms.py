@@ -76,10 +76,8 @@ def test_a_page_with_no_prose_has_no_description(tmp_path: Path) -> None:
 
 def test_relative_links_resolve_against_the_page(tmp_path: Path) -> None:
     text = "Read [the sibling](gitea.md) first.\n"
-    summary = first_sentence(
-        text, "https://s.example/", "_generated/packages/forge/protocol.md"
-    )
-    assert "(https://s.example/_generated/packages/forge/gitea/)" in summary
+    summary = first_sentence(text, "https://s.example/", "packages/forge/protocol.md")
+    assert "(https://s.example/packages/forge/gitea/)" in summary
 
 
 # Defect class: a directory index published at /index/.
@@ -116,7 +114,7 @@ def test_the_full_file_excludes_the_machine_sections(tmp_path: Path) -> None:
     index, full = llms_files(root)
     # The index links everything, the changelog and API included.
     assert "changelog/" in index
-    assert "_generated/api/core/" in index
+    assert "packages/core/api/" in index
     # The full file carries only the authored pages.
     assert "The home page's prose." in full
     assert "The core manual." in full
@@ -139,7 +137,7 @@ def test_the_files_land_at_the_site_root(tmp_path: Path) -> None:
     assert index.startswith("# Acme\n\n> Acme, described.\n")
     # A page line: title, absolute URL, one-line description.
     assert (
-        "- [Index](https://docs.acme.example/home/_generated/packages/core/):"
+        "- [Index](https://docs.acme.example/home/packages/core/):"
         " The core manual." in index
     )
     # The audited shapes, asserted absent over the whole index.

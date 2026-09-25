@@ -28,7 +28,7 @@ from livery.workshop._docs import _project_name, docs_table, zensical_config
 #: Site-tree prefixes whose pages never enter ``llms-full.txt``:
 #: machine territory whose content is history or reference the
 #: authored pages already link.
-MACHINE_PREFIXES = ("_generated/releases/", "_generated/api/")
+MACHINE_PREFIXES = ("releases/",)
 
 
 def _machine_page(path: str) -> bool:
@@ -36,7 +36,7 @@ def _machine_page(path: str) -> bool:
     if path.startswith(MACHINE_PREFIXES):
         return True
     return bool(
-        re.fullmatch(r"_generated/packages/[^/]+/(changelog|coverage)\.md", path)
+        re.fullmatch(r"packages/[^/]+/(changelog\.md|coverage\.md|api/.+)", path)
     )
 
 
