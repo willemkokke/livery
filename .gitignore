@@ -28,3 +28,6 @@ packages/*/docs/_generated/
 packages/*/_generated/
 packages/*/htmlcov/
 coverage-data/
+# Finder writes .DS_Store into any directory it opens; a workflow verb
+# refuses a dirty tree, so the file is never a change.
+.DS_Store
