@@ -659,7 +659,33 @@ def ci_run(
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
-    run_point(root, point, job, os_label=os, python=python)
+    try:
+        run_point(root, point, job, os_label=os, python=python)
+    finally:
+        note = prune_uv_cache()
+        if note:
+            print(f"  {note}")
+
+
+def prune_uv_cache(environ: dict[str, str] | None = None) -> str:
+    """Prune uv's cache on a GitHub job, before the post-job save; the note.
+
+    Built artifacts are not worth an archive slot: the repository's
+    cache is evicted by recency against a fixed budget. Off a GitHub
+    job, or with no cache placed, nothing runs and the note is empty.
+    A failed prune is named and never decides the job.
+    """
+    import os as _os
+
+    found = _os.environ if environ is None else environ
+    if not found.get("GITHUB_ACTIONS") or not found.get("UV_CACHE_DIR"):
+        return ""
+    from livery.toolroom import tools
+
+    done = tools.uv.opts(nofail=True, recorded=False)("cache", "prune", "--ci")
+    if done.code == 0:
+        return "uv cache: pruned before the save"
+    return f"uv cache: prune failed (exit {done.code}); the archive saves unpruned"
 
 
 def _conclusion_words(repo: Repository, run: Run, job: Job) -> str:

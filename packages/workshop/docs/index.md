@@ -152,6 +152,16 @@ absence.
   `[ci] windows-temp = "system"` leaves the system temp, for a runner
   without a separate working drive; `"runner"` asks for the move on
   any forge.
+- On a GitHub-shaped workspace every job restores two caches before
+  it enters: the tool store under footman's data directory, keyed by
+  `tools.lock` with the OS and architecture, and uv's cache on the
+  working drive, keyed by `uv.lock` per leg. Each falls back to the
+  nearest archive under its prefix, so a moved lock restores what is
+  unchanged and saves a fresh archive at the end; a restored store is
+  a tier the store verifies on access; the entry places uv's cache
+  under the runner's temp before its sync, and `fm ci.run` prunes it
+  before the save. The other lanes cache nothing until they have a
+  cache action.
   Tests are namespaced by their path (pytest's importlib mode, set by
   the project template), so two packages may share a test file's
   name; a helper module in a package's `tests/` carries the package's

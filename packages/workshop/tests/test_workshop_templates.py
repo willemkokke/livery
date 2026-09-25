@@ -1190,3 +1190,47 @@ def test_the_gitea_lane_meters_its_legs_and_unions_them_in_the_gate_job(
     assert not [step for step in gate if "artifact" in step.get("uses", "")]
     # The union is a gate entry, never a YAML line: the shell stays plumbing.
     assert "coverage combine" not in generate(root)[".gitea/workflows/ci.yml"]
+
+
+def test_a_github_job_restores_the_tool_store_and_owns_the_uv_cache(
+    tmp_path: Path,
+) -> None:
+    # The tool store, restored before the entry materialises it; uv's
+    # cache restored by nearest key and saved again when the lock moved,
+    # pruned first; setup-uv's own cache off, since it discards on any
+    # dependency change. The store step precedes the entry, the prune
+    # is last and runs whatever the verdict.
+    from livery.workshop._ci_generate import generate
+
+    ci = generate(_contract_root(tmp_path, "github"))[".github/workflows/ci.yml"]
+    assert "cache-suffix" not in ci
+    assert "enable-cache: false" in ci
+    # No shell in the YAML: the placement is the entry script's and the
+    # prune is ci.run's, so the job's run lines stay the entry and the verb.
+    assert "UV_CACHE_DIR" not in ci and "uv cache prune" not in ci
+    assert "path: ${{ runner.temp }}/uv-cache" in ci
+    assert (
+        "key: uv-${{ matrix.os }}-${{ matrix.python }}-${{ hashFiles('uv.lock') }}"
+        in ci
+    )
+    assert "restore-keys: uv-${{ matrix.os }}-${{ matrix.python }}-" in ci
+    assert "path: ~/.local/share/footman/toolroom" in ci
+    assert (
+        "key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools.lock') }}"
+        in ci
+    )
+    assert "restore-keys: tools-${{ runner.os }}-${{ runner.arch }}-" in ci
+    store = ci.index("path: ~/.local/share/footman/toolroom")
+    assert store < ci.index("Enter the workspace")
+
+
+def test_the_other_lanes_emit_no_cache_action(tmp_path: Path) -> None:
+    # Gitea's act runner and the GitLab lane have no cache action wired;
+    # a step that would fail there is emitted for neither.
+    from livery.workshop._ci_generate import generate
+
+    gitea = generate(_contract_root(tmp_path, "gitea", url="https://forge.example.com"))
+    gitlab = generate(_contract_root(tmp_path, "gitlab"))
+    for files in (gitea, gitlab):
+        for content in files.values():
+            assert "actions/cache@" not in content

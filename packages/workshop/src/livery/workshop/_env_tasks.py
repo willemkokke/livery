@@ -201,6 +201,25 @@ class EnvDelta:
 WINDOWS_TEMP_VALUES = ("runner", "system")
 
 
+def uv_cache_dir(environ: dict[str, str]) -> str:
+    """Where a GitHub job keeps uv's cache: under the runner's temp, or empty.
+
+    The entry script exports the same path before its sync, since it
+    runs before any verb can; the workflow's cache step restores and
+    saves that path. Empty off a runner that names no temp.
+    """
+    runner_temp = environ.get("RUNNER_TEMP", "")
+    return f"{runner_temp}/uv-cache" if runner_temp else ""
+
+
+def with_uv_cache(delta: EnvDelta, environ: dict[str, str]) -> EnvDelta:
+    """*delta* with ``UV_CACHE_DIR`` for a GitHub job, unchanged elsewhere."""
+    where = uv_cache_dir(environ)
+    if not where:
+        return delta
+    return EnvDelta(values={**delta.values, "UV_CACHE_DIR": where}, paths=delta.paths)
+
+
 def windows_temp_policy(root: Path) -> str:
     """The contract's ``[ci] windows-temp``, or the forge kind's default.
 
@@ -495,7 +514,9 @@ def env_emit(
     dialect = target or ("pwsh" if sys.platform == "win32" else "posix")
     if github:
         delta, note = with_runner_temp(
-            workspace_delta(root, cwd), root, dict(os.environ)
+            with_uv_cache(workspace_delta(root, cwd), dict(os.environ)),
+            root,
+            dict(os.environ),
         )
         written = github_persist(delta, dict(os.environ))
         return "\n".join([*written, note] if note else written)

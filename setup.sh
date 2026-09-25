@@ -19,6 +19,14 @@ if ! command -v uv >/dev/null 2>&1; then
         return 1 2>/dev/null || exit 1
     fi
 fi
+# On a GitHub job uv's cache lives under the runner's temp, the working
+# drive, where the workflow restores it before this script runs and
+# saves it after the job: exported before the sync so the sync fills
+# it, and persisted by the emission below for every later step.
+if [ "${1:-}" = github ] && [ -n "${RUNNER_TEMP:-}" ]; then
+    UV_CACHE_DIR="$RUNNER_TEMP/uv-cache"
+    export UV_CACHE_DIR
+fi
 # An ARRAY, not a string: CI may invoke this with zsh, which does not
 # word-split unquoted expansions, so a two-word string would arrive
 # as one argument. Arrays expand the same under bash and zsh.
