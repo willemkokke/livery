@@ -494,9 +494,9 @@ def test_the_emission_names_the_platform_bin_dir(
 def test_the_entry_places_the_uv_cache_before_its_sync_on_a_github_job(
     tmp_path: Path,
 ) -> None:
-    # The export precedes the sync so the sync fills the cache the
-    # workflow restored, and it is conditional on the github mode and
-    # a runner that names its temp, so a sourced shell places nothing.
+    # The export precedes the sync so the sync links wheels from the
+    # working drive, and it is conditional on the github mode and a
+    # runner that names its temp, so a sourced shell places nothing.
     from livery.footman import _paths  # pyright: ignore[reportPrivateUsage]
     from livery.workshop._entry import entry_script
 

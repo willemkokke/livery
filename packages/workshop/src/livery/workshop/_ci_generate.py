@@ -159,9 +159,12 @@ def _rung_step(answers: dict[str, Any]) -> str:
 def _setup_uv_step(answers: dict[str, Any]) -> str:
     """The setup-uv step, uv pinned to the lock's own version, its cache off.
 
-    The workflow owns uv's cache (`_uv_cache_step`): setup-uv's own
-    discards the archive on any dependency change instead of restoring
-    the nearest one and saving again.
+    Nothing of uv's is cached: the only wheels the sync builds from
+    source are the workspace's own, rebuilt on every commit, and the
+    wheels it downloads arrive faster than an archive of them restores.
+    The cache is still placed on the runner's working drive by the
+    entry, so the sync links wheels into the venv instead of copying
+    across drives.
     """
     pin = str(answers.get("uv_pin", ""))
     lines = [f"      - uses: {SETUP_UV}", "        with:"]
@@ -171,27 +174,6 @@ def _setup_uv_step(answers: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _uv_cache_step(identity: str) -> str:
-    """Uv's cache on the runner's working drive, restored by nearest key.
-
-    The key folds in the lock's hash; the restore key is the identity
-    alone, so a lock change restores the nearest archive and, since
-    the primary key missed, saves a fresh one at the end. One identity
-    per leg: wheels are platform-specific, so an ubuntu archive must
-    not serve macos. The placement is the entry contract's: the entry
-    script exports `UV_CACHE_DIR` under the runner's temp before its
-    sync and the GitHub emission persists it, so the path here is the
-    same one uv writes to; `ci.run` prunes it before the post-job save.
-    """
-    return (
-        f"      - uses: {CACHE}\n"
-        "        with:\n"
-        "          path: ${{ runner.temp }}/uv-cache\n"
-        f"          key: uv-{identity}-${{{{ hashFiles('uv.lock') }}}}\n"
-        f"          restore-keys: uv-{identity}-\n"
-    )
-
-
 def _store_cache_step() -> str:
     """The tool store restored before the entry materialises it.
 
@@ -199,7 +181,9 @@ def _store_cache_step() -> str:
     prefix as the restore key, so a changed lock restores everything
     unchanged and the store lands only the digests it lacks. A
     restored folder is a tier the store verifies on access: an old or
-    torn archive costs a refetch, never a fault.
+    torn archive costs a refetch, never a fault. `ci.run` sweeps the
+    store before the post-job save, so the archive carries the trees
+    the tools run from and not the artifacts they were extracted from.
     """
     return (
         f"      - uses: {CACHE}\n"
@@ -559,21 +543,18 @@ def _actions_job(
             f"        os: [{_csv(runners)}]\n        python: [{pythons}]\n"
             "    runs-on: ${{ matrix.os }}\n"
         )
-        cache = "${{ matrix.os }}-${{ matrix.python }}"
     elif job.matrix == "pythons":
         pythons = _csv(list(answers.get("python_versions", ["3.11"])), quoted=True)
         lines.append(
             "    strategy:\n      fail-fast: false\n      matrix:\n"
             f"        python: [{pythons}]\n    runs-on: {first}\n"
         )
-        cache = f"{point.name}-${{{{ matrix.python }}}}"
     elif job.matrix == "wheels":
         lines.append(
             "    strategy:\n      fail-fast: false\n      matrix:\n"
             f"        os: [{_csv(_wheel_runners(answers))}]\n"
             "    runs-on: ${{ matrix.os }}\n"
         )
-        cache = ""
     elif job.matrix == "declared":
         lines.append(
             "    strategy:\n      fail-fast: false\n      matrix:\n"
@@ -581,15 +562,12 @@ def _actions_job(
             f"        python: [{_csv(list(job.pythons), quoted=True)}]\n"
             "    runs-on: ${{ matrix.os }}\n"
         )
-        cache = "${{ matrix.os }}-${{ matrix.python }}"
     else:
         lines.append(f"    runs-on: {first}\n")
-        cache = "docs" if job.docs_tools else ""
     lines.append("    steps:\n")
     lines.append(_checkout_step(point, job, forge=forge))
     if forge == "github":
         lines.append(_setup_uv_step(answers))
-        lines.append(_uv_cache_step(cache or job.name))
     lines.append(_collect_step(job, forge=forge))
     lines.append(_rung_step(answers))
     if job.docs_tools:

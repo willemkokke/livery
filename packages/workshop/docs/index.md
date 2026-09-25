@@ -152,18 +152,20 @@ absence.
   `[ci] windows-temp = "system"` leaves the system temp, for a runner
   without a separate working drive; `"runner"` asks for the move on
   any forge.
-- On a GitHub-shaped workspace every job restores two caches before
-  it enters, both under the runner's temp, the working drive, where
+- On a GitHub-shaped workspace every job restores the tool store
+  before it enters, under the runner's temp, the working drive, where
   the checkout and the venv are and where the store's links into the
-  checkout stay links: the tool store under the data directory the
-  entry places there, keyed by `tools.lock` with the OS and
-  architecture, and uv's cache, keyed by `uv.lock` per leg. Each falls back to the
-  nearest archive under its prefix, so a moved lock restores what is
-  unchanged and saves a fresh archive at the end; a restored store is
-  a tier the store verifies on access; the entry exports both
-  placements before its sync and materialise, and `fm ci.run` prunes
-  uv's cache before the save. The other lanes cache nothing until they have a
-  cache action.
+  checkout stay links: the data directory the entry places there,
+  keyed by `tools.lock` with the OS and architecture, falling back to
+  the nearest archive under its prefix, so a moved lock restores what
+  is unchanged and saves a fresh archive at the end. A restored store
+  is a tier the store verifies on access, and `fm ci.run` sweeps it
+  before the save, so the archive carries the trees the tools run
+  from and not the artifacts they were extracted from. uv's cache is
+  placed on the same drive, so the sync links wheels into the venv
+  instead of copying, and is not cached: the wheels it would hold
+  arrive faster from the index than from an archive. The other lanes
+  cache nothing until they have a cache action.
   Tests are namespaced by their path (pytest's importlib mode, set by
   the project template), so two packages may share a test file's
   name; a helper module in a package's `tests/` carries the package's

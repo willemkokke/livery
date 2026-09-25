@@ -1005,8 +1005,8 @@ def test_the_runner_places_uv_cache_and_data_dir_under_its_temp_only_on_a_runner
     None
 ):
     # Off a runner nothing is placed and the delta is untouched; on one
-    # both paths are under the runner's temp, the same ones the
-    # workflow's cache steps restore and the entry script exports.
+    # both paths are under the runner's temp, the same ones the entry
+    # script exports, the store's the one the workflow restores.
     from livery.footman import _paths  # pyright: ignore[reportPrivateUsage]
 
     delta = EnvDelta(values={"PLAIN": "1"}, paths=("/w/.venv/bin",))
@@ -1021,37 +1021,35 @@ def test_the_runner_places_uv_cache_and_data_dir_under_its_temp_only_on_a_runner
     assert placed.paths == delta.paths
 
 
-def test_ci_run_prunes_the_uv_cache_only_on_a_github_job(
-    monkeypatch: pytest.MonkeyPatch,
+def test_ci_run_sweeps_the_tool_store_only_on_a_github_job(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from types import SimpleNamespace
+    from livery.strongroom import LockTimeout, Subject
+    from livery.toolroom.store import Home
+    from livery.workshop._ci_tasks import sweep_tool_store
 
-    from livery.toolroom import tools
-    from livery.workshop._ci_tasks import prune_uv_cache
+    monkeypatch.setenv("FOOTMAN_DATA_DIR", str(tmp_path))
+    store = Home(tmp_path / "toolroom").open_store()
+    kept = store.land(b"a tree a pinned version runs from").digest
+    orphan = store.land(b"the archive it was extracted from").digest
+    store.set_ref("tools", "x@1", kept, previous=None, by=Subject("person", "t"))
+    # Off a GitHub job nothing runs, so a desk keeps every object.
+    assert sweep_tool_store({}) == ""
+    assert store.state(orphan) == "present"
+    # A sweep that cannot take the lease is named and decides nothing.
 
-    seen: list[tuple[str, ...]] = []
-    code = {"value": 0}
+    def _held(self: object, **_: object) -> object:
+        raise LockTimeout("held")
 
-    def _opts(**kwargs: object) -> object:
-        assert kwargs.get("nofail") is True
-
-        def _run(*args: str) -> object:
-            seen.append(args)
-            return SimpleNamespace(code=code["value"], stdout="", stderr="")
-
-        return _run
-
-    monkeypatch.setattr(tools, "uv", SimpleNamespace(opts=_opts))
-    # Off a GitHub job, or with no cache placed, nothing runs.
-    assert prune_uv_cache({}) == ""
-    assert prune_uv_cache({"GITHUB_ACTIONS": "true"}) == ""
-    assert prune_uv_cache({"UV_CACHE_DIR": "/r/_temp/uv-cache"}) == ""
-    assert seen == []
-    on = {"GITHUB_ACTIONS": "true", "UV_CACHE_DIR": "/r/_temp/uv-cache"}
-    code["value"] = 2
-    assert prune_uv_cache(on) == (
-        "uv cache: prune failed (exit 2); the archive saves unpruned"
+    with pytest.MonkeyPatch.context() as held:
+        held.setattr(type(store), "sweep", _held)
+        note = sweep_tool_store({"GITHUB_ACTIONS": "true"})
+    assert note.startswith("tool store: sweep failed (") and note.endswith(
+        "; the archive saves unswept"
     )
-    code["value"] = 0
-    assert prune_uv_cache(on) == "uv cache: pruned before the save"
-    assert seen == [("cache", "prune", "--ci"), ("cache", "prune", "--ci")]
+    assert store.state(orphan) == "present"
+    # On a job the unreached archive goes and the rooted tree stays.
+    assert sweep_tool_store({"GITHUB_ACTIONS": "true"}) == (
+        "tool store: 1 unreached object(s) swept before the save"
+    )
+    assert store.state(orphan) != "present" and store.state(kept) == "present"
