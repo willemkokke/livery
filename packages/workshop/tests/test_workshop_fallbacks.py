@@ -310,55 +310,39 @@ def test_the_changelog_runs_offline_when_no_credential_is_in_reach(
     # it can authenticate, and git-cliff stops rather than degrading.
     # Without the token the run must go offline instead, or every
     # release on a private forge dies at the changelog.
-    import livery.footman as footman
+    from livery.toolroom.tools.testing import answers
     from livery.workshop import _cliff
 
     root, package = _cliff_workspace(tmp_path, "gitea")
     for name in ("GITEA_TOKEN", "FORGE_TOKEN", "FORGE_TOKEN__GITEA_COM"):
         monkeypatch.delenv(name, raising=False)
-    seen: list[list[str]] = []
-    environments: list[dict[str, str]] = []
-
-    def _fake_run(command: list[str], **kwargs: Any) -> Any:
-        from types import SimpleNamespace
-
-        seen.append(list(command))
-        environments.append(dict(kwargs.get("env") or {}))
-        return SimpleNamespace(code=0, stdout="## [Unreleased]\n", stderr="")
-
-    monkeypatch.setattr(footman, "run", _fake_run)
-    _cliff.unreleased_entry(root, package)
-    assert "--offline" in seen[0]
+    # The run leaves through the tool's handle; the seam answers for it.
+    with answers({("git-cliff",): "## [Unreleased]\n"}) as calls:
+        _cliff.unreleased_entry(root, package)
+    assert "--offline" in calls[0].argv
     out = capsys.readouterr().out
     assert "without its authors" in out and "FORGE_TOKEN" in out
     # With the credential in reach the lookup is asked for, and the
     # one mapping site hands FORGE_TOKEN to git-cliff under the name
     # its own contract reads.
-    seen.clear()
     monkeypatch.setenv("FORGE_TOKEN", "a-token")
-    _cliff.unreleased_entry(root, package)
-    assert "--offline" not in seen[0]
-    assert environments[-1].get("GITEA_TOKEN") == "a-token"
+    with answers({("git-cliff",): "## [Unreleased]\n"}) as calls:
+        _cliff.unreleased_entry(root, package)
+    assert "--offline" not in calls[0].argv
+    assert (calls[0].env or {}).get("GITEA_TOKEN") == "a-token"
 
 
 def test_a_refused_author_lookup_says_what_to_check(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import livery.footman as footman
+    from livery.toolroom.tools import Result
+    from livery.toolroom.tools.testing import answers
     from livery.workshop import _cliff
 
     root, package = _cliff_workspace(tmp_path, "gitea")
     monkeypatch.setenv("FORGE_TOKEN", "a-token")
-
-    def _refuse(command: list[str], **kwargs: Any) -> Any:
-        from types import SimpleNamespace
-
-        return SimpleNamespace(
-            code=101, stdout="", stderr="Could not get gitea metadata: Status(404)"
-        )
-
-    monkeypatch.setattr(footman, "run", _refuse)
-    with pytest.raises(_FAILURES) as caught:
+    refused = Result(101, stderr="Could not get gitea metadata: Status(404)")
+    with answers({("git-cliff",): refused}), pytest.raises(_FAILURES) as caught:
         _cliff.bumped_version(root, package)
     message = str(caught.value)
     assert "FORGE_TOKEN" in message and "api_url" in message
@@ -367,15 +351,15 @@ def test_a_refused_author_lookup_says_what_to_check(
 def test_a_missing_git_cliff_names_the_dependency(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import livery.footman as footman
     from livery.workshop import _cliff
 
     root, package = _cliff_workspace(tmp_path, "github")
 
-    def _absent(command: list[str], **kwargs: Any) -> Any:
-        raise FileNotFoundError(command[0])
+    def _absent(*args: Any, **kwargs: Any) -> Any:
+        raise FileNotFoundError("git-cliff")
 
-    monkeypatch.setattr(footman, "run", _absent)
+    # The seam every handle call leaves through, standalone or hosted.
+    monkeypatch.setattr("livery.toolroom.tools._host.run", _absent)
     with pytest.raises(_FAILURES) as caught:
         _cliff.bumped_version(root, package)
     assert "git-cliff" in str(caught.value) and "fm sync" in str(caught.value)

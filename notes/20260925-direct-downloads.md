@@ -1,8 +1,10 @@
 # Direct downloads: a tool comes from its own release, PyPI only for Python
 
 Status: ruled 2026-09-25 as drafted, with git-cliff on a base kind
-(decision record). Phase 1 in flight (livery#674): gh's newest version
-carries six artifacts and passes the nine checks on six hosts. Sequenced before the modular docs plan by Willem's word of
+(decision record). Phase 1 landed 2026-09-25 (livery#674, PR #675): gh's
+newest version carries six artifacts and passes the nine checks on six
+hosts. Phase 2 in flight (livery#676): git-cliff 2.13.1 carries six
+artifacts, passes on six hosts, and the lock holds it on three. Sequenced before the modular docs plan by Willem's word of
 2026-09-25. The tool record plan
 (`notes/20260914-the-tool-record-and-its-index.md`) is complete, which
 is the precondition: the record, the store, the lock and the six-host
@@ -271,8 +273,16 @@ Deliverables:
 - Drivers: `astral-sh/ruff` and `facebook/pyrefly` on the `github`
   tier; `ruff_format` follows ruff's record kind since it is ruff's
   binary.
-- Records: `archive`; ruff's `host_layouts` carry the per-triple root;
-  pyrefly's layout read from its archives in the phase.
+- Records: `archive`. ruff's archives are uv's shape: one root per
+  host triple (`ruff-x86_64-unknown-linux-gnu/ruff`) and a bare
+  `ruff.exe` at the top of the Windows zips, so its `host_layouts`
+  copy uv's. pyrefly's archives are the bare binary on every host
+  (`pyrefly`, `pyrefly.exe`), so its layout is `entry_points` and
+  `paths = ["."]` with no root; its linux assets come in gnu and
+  musl, and the picker prefers gnu.
+- The ty, uv and prek drivers move to the github tier too, so their
+  new versions list from the forge that publishes the artifacts their
+  records already carry.
 - The dev-group entries `ruff`, `ty` and `pyrefly` leave the template;
   ty is an `archive` in the lock already.
 
@@ -359,6 +369,15 @@ Acceptance:
 - 2026-09-25, Willem: one download per new version per host, shared
   with the verification, is the correct shape: as few downloads as
   possible for the maximum use.
+- 2026-09-25: a kind declares a tool by its record's name, which is
+  its handle's (`git_cliff`), since that is how the catalogue lists
+  it and how the lock and the receipts name it. The hyphen spelling
+  stays the binary's and the entry point's.
+- 2026-09-25: git-cliff's archives carry two helper binaries beside
+  the tool (`git-cliff-completions`, `git-cliff-mangen`); the record
+  excludes them, so neither reaches PATH. git-cliff ships a MinGW
+  build beside the MSVC one on Windows; the asset picker now prefers
+  against `windows-gnu` as it does against `musl`.
 - 2026-09-25, Willem: the order is whatever reaches the end result
   quickest. Phase 1 first, then git-cliff: authoring git-cliff by hand
   needs the same layout and six hashes phase 1 produces by code.

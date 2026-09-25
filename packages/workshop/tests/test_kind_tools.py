@@ -52,7 +52,16 @@ def _python_tools(*versions: str) -> list[Record]:
     """A record per tool the python kind requires, at *versions*."""
     return [
         Record(name, kind="uv-tool", deltas=_read(*versions))
-        for name in ("uv", "ruff", "pytest", "basedpyright", "mypy", "ty", "pyrefly")
+        for name in (
+            "git_cliff",
+            "uv",
+            "ruff",
+            "pytest",
+            "basedpyright",
+            "mypy",
+            "ty",
+            "pyrefly",
+        )
     ]
 
 
@@ -190,6 +199,7 @@ def test_a_python_package_with_no_tool_of_its_own_resolves_the_kinds_tools(
     root = _workspace(tmp_path, monkeypatch)
     declared = _tools.requirements(root)
     assert {r.name for r in declared} == {
+        "git_cliff",
         "uv",
         "ruff",
         "pytest",
@@ -198,7 +208,9 @@ def test_a_python_package_with_no_tool_of_its_own_resolves_the_kinds_tools(
         "ty",
         "pyrefly",
     }
-    assert all(r.site == "kind python" for r in declared)
+    # The base kind heads the chain: its tool is declared first, by it.
+    assert {r.name: r.site for r in declared}["git_cliff"] == "kind base"
+    assert all(r.site == "kind python" for r in declared if r.name != "git_cliff")
     lock = _tools.write_lock(root)
     assert {name: entry.version for name, entry in lock.tools.items()} == dict.fromkeys(
         {r.name for r in declared}, "1.1.0"
@@ -236,11 +248,13 @@ def test_the_three_sites_union_and_each_names_itself(
     lock = _tools.write_lock(root)
     assert lock.tools["cspell"].version == "2.0.0"
     assert lock.tools["git-cliff"].version == "2.0.0"
-    assert _tools.tool_names(root)[:2] == ("uv", "ruff")  # the kind first, as declared
+    # The kinds first, as declared: the base's tool, then python's.
+    assert _tools.tool_names(root)[:3] == ("git_cliff", "uv", "ruff")
 
 
 def test_a_workspace_without_packages_requires_what_python_does(tmp_path: Path) -> None:
     assert _tools.tool_names(tmp_path) == (
+        "git_cliff",  # the base kind's, first in the chain
         "uv",
         "ruff",
         "pytest",
@@ -278,7 +292,8 @@ def test_add_declares_at_the_project_site_and_locks_with_no_network(
     _tool_tasks.tools_add("git-cliff>=2.0")
     out = capsys.readouterr().out
     assert "workshop.toml: [tools] requires git-cliff>=2.0" in out
-    assert "git-cliff 2.1.0" in out and "tools.lock: 8 tool(s)" in out
+    # Seven of the python kind, the base kind's git_cliff, and this one.
+    assert "git-cliff 2.1.0" in out and "tools.lock: 9 tool(s)" in out
     assert "git-cliff 2.1.0: installed at" in out and "receipt written" in out
     assert (root / ".workshop" / "receipts" / "git-cliff.json").is_file()
     contract = (root / "workshop.toml").read_text(encoding="utf-8")
@@ -357,11 +372,11 @@ def test_the_verbs_refuse_outside_a_workspace(monkeypatch: pytest.MonkeyPatch) -
 def test_a_tool_no_site_requires_any_more_leaves_the_lock(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root = _workspace(tmp_path, monkeypatch, tools='requires = ["git-cliff"]\n')
-    _records(root, Record("git-cliff", kind="uv-tool", deltas=_read("2.0.0")))
-    assert "git-cliff" in _tools.write_lock(root).tools
+    root = _workspace(tmp_path, monkeypatch, tools='requires = ["cspell"]\n')
+    _records(root, Record("cspell", kind="bun-install", deltas=_read("2.0.0")))
+    assert "cspell" in _tools.write_lock(root).tools
     (root / "workshop.toml").write_text('[workspace]\n\n[tools]\nindex = "records"\n')
-    assert "git-cliff" not in _tools.write_lock(root).tools
+    assert "cspell" not in _tools.write_lock(root).tools
 
 
 def test_the_catalogue_reads_an_index_directory_through_the_machines_store(

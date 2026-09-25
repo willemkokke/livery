@@ -198,7 +198,10 @@ def test_the_agent_delta_selects_by_membership_secrets_included(
 def test_github_persist_needs_actions_and_filters_secrets(
     tmp_path: Path,
 ) -> None:
-    delta = EnvDelta(values={"PLAIN": "1", "API_TOKEN": "s"}, paths=("/w/.venv/bin",))
+    delta = EnvDelta(
+        values={"PLAIN": "1", "API_TOKEN": "s"},
+        paths=("/w/.venv/bin", "/store/tool@1/bin"),
+    )
     with pytest.raises(_FAILURES) as caught:
         github_persist(delta, {})
     assert "GITHUB_ENV" in str(caught.value)
@@ -213,7 +216,9 @@ def test_github_persist_needs_actions_and_filters_secrets(
         },
     )
     assert env_file.read_text() == "PLAIN=1\n"  # the secret never lands
-    assert path_file.read_text() == "/w/.venv/bin\n"
+    # The runner prepends each line in turn: written last to first, the
+    # venv's bin ends up ahead of the store's directories, as emitted.
+    assert path_file.read_text() == "/store/tool@1/bin\n/w/.venv/bin\n"
     assert "PLAIN" in written and "API_TOKEN" not in written
 
 

@@ -255,7 +255,24 @@ def test_sync_materialises_the_bundle_from_the_folder_source_with_no_network(
     # A second sync finds everything present.
     assert _sync.materialise_tools(root)[0] == "  tools: 2 receipt(s), all present"
     written = json.loads((_tools.receipts_dir(root) / "tea.json").read_text())
-    assert written["schema"] == 1 and written["entry_points"] == []
+    # The receipt names what reached PATH, in path mode too: a check
+    # resolves the tool by these names, never by its lock name.
+    assert written["schema"] == 1 and written["entry_points"] == ["tea"]
+
+
+def test_the_materialise_verb_supplies_the_bundle_and_writes_the_stubs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """What the entry script runs on a runner: receipts and stubs, nothing else."""
+    root = _workspace(tmp_path, monkeypatch)
+    _tool_tasks.tools_materialise()
+    assert "tools: no tools.lock; `fm tools.lock` writes one" in capsys.readouterr().out
+    _tools.write_lock(root)
+    _tool_tasks.tools_materialise()
+    out = capsys.readouterr().out
+    assert "tools: 2 receipt(s), installed ruff, tea" in out
+    assert "stubs: 1 in typings/" in out
+    assert set(_tools.receipts(root)) == {"ruff", "tea"}
 
 
 def test_link_mode_fills_the_checkouts_bin_directory_and_the_emission_leads_with_it(
@@ -309,6 +326,49 @@ def test_add_declares_locks_and_writes_a_receipt_with_no_network(
 
 
 # --- drift ------------------------------------------------------------------------
+
+
+def test_env_check_finds_a_tool_by_its_executables_not_its_lock_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`git_cliff` puts `git-cliff` on PATH: the lock name is no binary."""
+    root = _workspace(tmp_path, monkeypatch)
+    (root / "workshop.toml").write_text(
+        '[workspace]\n\n[tools]\nindex = "records"\nsources = ["mirror", "mirror2"]\n'
+        'requires = ["tea", "ruff", "cliff_tool"]\n'
+    )
+    payload = _zip({"cliff-tool": b"#!/bin/sh\necho cliff\n"})
+    digest = digest_of(payload)
+    Record(
+        "cliff_tool",
+        kind="archive",
+        hosts=THREE,
+        layout=Layout(entry_points=("cliff-tool",), paths=(".",)),
+        deltas=(
+            RecordDelta(
+                1,
+                "1.0.0",
+                "",
+                {
+                    host: Artifact(
+                        f"https://origin.test/cliff/{host}.zip", digest.encoded
+                    )
+                    for host in THREE
+                },
+            ),
+        ),
+    ).save(root / "records")
+    ObjectStore.create(root / "mirror2").put(payload)
+    _tools.write_lock(root)
+    _tools.write_stubs(root)
+    _tools.materialise(root)
+    assert _tools.receipts(root)["cliff_tool"].entry_points == ("cliff-tool",)
+    # Nothing on PATH: every tool resolves through its receipt's paths.
+    monkeypatch.setattr("livery.workshop._env_tasks.shutil.which", lambda tool: None)
+    monkeypatch.setattr("livery.workshop._env_tasks._uv_drift", lambda root: "")
+    assert _env_tasks.env_check() == 0
+    out = capsys.readouterr().out
+    assert "cliff_tool: receipt ok" in out and "tea: receipt ok" in out
 
 
 def test_env_check_names_each_receipt_and_the_drift_under_it(
