@@ -402,7 +402,13 @@ def github_persist(delta: EnvDelta, environ: dict[str, str]) -> list[str]:
     path_file = environ.get("GITHUB_PATH", "")
     if path_file:
         with Path(path_file).open("a", encoding="utf-8") as handle:
-            for entry in delta.paths:
+            # The runner prepends each line in turn, so the last line
+            # written ends up first on PATH. Written last to first, the
+            # emission's order holds: the venv's bin ahead of the
+            # receipts' directories, as `eval "$(fm env.emit posix)"`
+            # puts them, so the venv's pytest and mypy keep winning over
+            # the store's copies of the same names.
+            for entry in reversed(delta.paths):
                 handle.write(f"{entry}\n")
                 written.append(f"PATH+{entry}")
     return written
