@@ -382,6 +382,14 @@ Acceptance:
   quickest. Phase 1 first, then git-cliff: authoring git-cliff by hand
   needs the same layout and six hashes phase 1 produces by code.
 
+- 2026-09-25, phase 5: the store supplies a `bun-install` through the
+  bun the caller hands over, into `bun/tools/<name>@<version>` under
+  its home; the lock holds bun as the dependency of any `bun-install`
+  tool and the materialisation supplies bun first. basedpyright
+  1.39.10 runs from the store through bun 1.3.14's `node` shim, and
+  the venv carries none of the checkers any more: the PyPI tier is
+  the Python tools alone.
+
 ## Open
 
 None. Every question raised at drafting is in the decision record.

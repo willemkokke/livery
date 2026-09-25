@@ -249,7 +249,11 @@ DRIVERS: tuple[Driver, ...] = (
         base=("format",),
         url="https://docs.astral.sh/ruff/formatter/",
     ),
-    Driver("basedpyright", url="https://docs.basedpyright.com/"),
+    Driver(
+        "basedpyright",
+        url="https://docs.basedpyright.com/",
+        provision=Provision(kind="node"),  # a Node program; PyPI wraps it
+    ),
     Driver(
         "uv",
         provision=Provision(package="uv"),  # PyPI, `uv tool install uv` — never host

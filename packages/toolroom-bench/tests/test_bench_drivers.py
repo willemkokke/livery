@@ -97,7 +97,6 @@ def test_wrappers_table_matches_what_the_tools_declare():
 #: Rust or C++ binary is a wrapper with a platform gap wherever the wheel
 #: is missing (Willem, 2026-09-24). Adding a tool here is a reviewed edit.
 PYTHON_ON_PYPI = (
-    "basedpyright",  # a Node program PyPI ships with a bundled Node; leaves for the node tier
     "build",
     "coverage",
     "djlint",
