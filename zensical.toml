@@ -86,6 +86,7 @@ nav = [
             { "Errors & notes" = "packages/footman/errors.md" },
         ] },
         { "Playground" = "packages/footman/playground.md" },
+        { "Changelog" = "packages/footman/changelog.md" },
         { "Tasks" = [
             { "Overview" = "packages/footman/tasks/index.md" },
             { "docs" = [
@@ -116,7 +117,6 @@ nav = [
                 { "pages" = "packages/footman/tasks/footman/pages.md" },
             ] },
         ] },
-        { "Changelog" = "packages/footman/changelog.md" },
     ] },
     { "forge" = [
         { "Index" = "packages/forge/index.md" },
@@ -126,6 +126,7 @@ nav = [
         { "GitLab" = "packages/forge/gitlab.md" },
         { "Fixtures" = "packages/forge/fixtures.md" },
         { "Quirks" = "packages/forge/quirks.md" },
+        { "Changelog" = "packages/forge/changelog.md" },
         { "Tasks" = [
             { "Overview" = "packages/forge/tasks/index.md" },
             { "forge" = [
@@ -138,7 +139,6 @@ nav = [
                 { "fixtures.record" = "packages/forge/tasks/forge/fixtures/record.md" },
             ] },
         ] },
-        { "Changelog" = "packages/forge/changelog.md" },
         { "API" = [
             { "livery.forge" = "packages/forge/api/index.md" },
             { "livery.forge.testing" = "packages/forge/api/testing/index.md" },
@@ -242,6 +242,7 @@ nav = [
     ] },
     { "toolroom-bench" = [
         { "Index" = "packages/toolroom-bench/index.md" },
+        { "Changelog" = "packages/toolroom-bench/changelog.md" },
         { "Tasks" = [
             { "Overview" = "packages/toolroom-bench/tasks/index.md" },
             { "tools" = [
@@ -268,7 +269,6 @@ nav = [
                 { "verify" = "packages/toolroom-bench/tasks/tools/verify.md" },
             ] },
         ] },
-        { "Changelog" = "packages/toolroom-bench/changelog.md" },
         { "API" = [
             { "livery.toolroom.bench" = "packages/toolroom-bench/api/index.md" },
             { "livery.toolroom.bench._artifacts" = "packages/toolroom-bench/api/_artifacts.md" },
@@ -304,6 +304,8 @@ nav = [
     { "workshop" = [
         { "Index" = "packages/workshop/index.md" },
         { "Releases" = "packages/workshop/releases.md" },
+        { "Changelog" = "packages/workshop/changelog.md" },
+        { "Coverage" = "packages/workshop/coverage.md" },
         { "Tasks" = [
             { "Overview" = "packages/workshop/tasks/index.md" },
             { "caches" = [
@@ -446,8 +448,6 @@ nav = [
             { "typecheck" = "packages/workshop/tasks/typecheck.md" },
             { "typecomplete" = "packages/workshop/tasks/typecomplete.md" },
         ] },
-        { "Changelog" = "packages/workshop/changelog.md" },
-        { "Coverage" = "packages/workshop/coverage.md" },
         { "API" = [
             { "livery.workshop" = "packages/workshop/api/index.md" },
             { "livery.workshop._backends" = "packages/workshop/api/_backends/index.md" },

@@ -1311,3 +1311,121 @@ def test_no_published_path_carries_generated(tmp_path: Path) -> None:
     assert (root / "docs/releases/index.md").is_file() or not (
         root / "docs/releases"
     ).exists()
+
+
+# Phase 2 of the modular docs plan: the machine sections are marker blocks.
+
+
+def _nav_labels(config: str, name: str) -> list[str]:
+    parsed = tomllib.loads(config)
+    section = next(entry for entry in parsed["project"]["nav"] if name in entry)
+    return [next(iter(part)) for part in section[name]]
+
+
+def test_an_unpaired_nav_block_refuses_naming_it(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    nav = root / "packages/core/docs/nav.toml"
+    nav.write_text(
+        'nav = [\n    { "Index" = "index.md" },\n    { "guide" = "guide.md" },\n'
+        "    # nav:begin changelog\n]\n"
+    )
+    with pytest.raises(_FAILURES, match="nav block 'changelog' begins without ending"):
+        zensical_config(root)
+    nav.write_text(
+        'nav = [\n    { "Index" = "index.md" },\n    { "guide" = "guide.md" },\n'
+        "    # nav:end api\n]\n"
+    )
+    with pytest.raises(_FAILURES, match="nav block 'api' ends without beginning"):
+        zensical_config(root)
+
+
+def test_a_generators_own_block_renders_its_entries_where_placed(
+    tmp_path: Path,
+) -> None:
+    root = _workspace(tmp_path)
+    (root / "packages/core/docs/_generated/tools").mkdir(parents=True)
+    (root / "packages/core/docs/nav.toml").write_text(
+        'nav = [\n    { "Index" = "index.md" },\n'
+        "    # nav:begin tools\n"
+        '    { "Tools" = [\n'
+        '        { "ruff" = "_generated/tools/ruff.md" },\n'
+        "    ] },\n"
+        "    # nav:end tools\n"
+        '    { "guide" = "guide.md" },\n]\n'
+    )
+    config = zensical_config(root)
+    assert _nav_labels(config, "core") == ["Index", "Tools", "guide", "API"]
+    assert '{ "ruff" = "packages/core/tools/ruff.md" }' in config
+
+
+def test_a_placed_block_fills_where_its_markers_sit(tmp_path: Path) -> None:
+    root = _workspace(tmp_path)
+    (root / "packages/core/CHANGELOG.md").write_text("# Changelog\n\n## [Unreleased]\n")
+    (root / "packages/core/docs/nav.toml").write_text(
+        'nav = [\n    { "Index" = "index.md" },\n'
+        "    # nav:begin changelog\n    # nav:end changelog\n"
+        '    { "guide" = "guide.md" },\n'
+        "    # nav:begin api\n    # nav:end api\n"
+        "]\n"
+    )
+    assert _nav_labels(zensical_config(root), "core") == [
+        "Index",
+        "Changelog",
+        "guide",
+        "API",
+    ]
+
+
+def test_unplaced_blocks_land_in_order_around_the_tasks_block(tmp_path: Path) -> None:
+    """Changelog and Coverage ahead of the tasks block, the API after everything."""
+    root = _workspace(tmp_path)
+    (root / "packages/core/CHANGELOG.md").write_text("# Changelog\n\n## [Unreleased]\n")
+    _declare_generators(
+        root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
+    )
+    (root / "packages/core/docs/nav.toml").write_text(
+        'nav = [\n    { "Index" = "index.md" },\n    { "guide" = "guide.md" },\n'
+        "    # nav:begin tasks\n"
+        '    { "Tasks" = [\n'
+        '        { "Overview" = "_generated/tasks/index.md" },\n'
+        "    ] },\n"
+        "    # nav:end tasks\n]\n"
+    )
+    config = zensical_config(root)
+    assert _nav_labels(config, "core") == [
+        "Index",
+        "guide",
+        "Changelog",
+        "Coverage",
+        "Tasks",
+        "API",
+    ]
+    assert '{ "Overview" = "packages/core/tasks/index.md" }' in config
+    # Without a tasks block the sections append in the same order.
+    (root / "packages/core/docs/nav.toml").write_text(
+        'nav = [\n    { "Index" = "index.md" },\n    { "guide" = "guide.md" },\n]\n'
+    )
+    assert _nav_labels(zensical_config(root), "core") == [
+        "Index",
+        "guide",
+        "Changelog",
+        "Coverage",
+        "API",
+    ]
+    # The enumerated fallback keeps it too.
+    (root / "packages/core/docs/nav.toml").unlink()
+    assert _nav_labels(zensical_config(root), "core")[-3:] == [
+        "Changelog",
+        "Coverage",
+        "API",
+    ]
+
+
+def test_this_workspaces_sidebars_read_changelog_then_tasks_then_api() -> None:
+    root = Path(__file__).resolve().parents[3]
+    config = zensical_config(root)
+    for name in ("footman", "workshop", "forge"):
+        labels = _nav_labels(config, name)
+        assert labels.index("Changelog") < labels.index("Tasks"), (name, labels)
+        if "API" in labels:
+            assert labels.index("Tasks") < labels.index("API"), (name, labels)
