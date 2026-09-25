@@ -1,9 +1,8 @@
 # Modular docs: a package's section is the package's, and the site assembles
 
-Status: started 2026-09-25 on Willem's word, after the direct downloads
-plan (`notes/20260925-direct-downloads.md`) completed. The four open
-items proceed as proposed until ruled otherwise; phase 1 in progress.
-Tracks livery#647 and folds in livery#268.
+Status: drafted 2026-09-25, awaiting Willem's review. Nothing has
+started. Tracks livery#647 and folds in livery#268. The direct downloads
+plan (`notes/20260925-direct-downloads.md`) completed first, as ruled.
 
 ## What this is
 
