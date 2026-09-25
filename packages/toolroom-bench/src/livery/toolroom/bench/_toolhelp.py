@@ -1076,7 +1076,6 @@ def run_help(
             # while a wide one keeps `[default: …]` on the line it belongs to.
             env={
                 **os.environ,
-                **QUIET,
                 **DECIDED,
                 "COLUMNS": "200",
                 "TERM": "dumb",
@@ -1116,7 +1115,6 @@ def _decoded(text: str, argv: list[str], flag: str, timeout: float) -> str:
             encoding=None,  # the locale codec: what the tool actually spoke
             env={
                 **os.environ,
-                **QUIET,
                 **DECIDED,
                 "COLUMNS": "200",
                 "TERM": "dumb",
@@ -1241,7 +1239,6 @@ def _run_man(argv: list[str], timeout: float) -> str:
 
     env = {
         **os.environ,
-        **QUIET,
         "GIT_PAGER": "cat",
         "PAGER": "cat",
         "MANPAGER": "cat",
@@ -1314,17 +1311,6 @@ daemon and gets buildx like everyone else. Pinning the opt-in reads the
 builder that is actually installed, the same way `COLUMNS` and
 `help.format` are pinned so a reading describes the tool and not the
 machine that took it.
-"""
-
-QUIET = {"GH_NO_UPDATE_NOTIFIER": "1"}
-"""Tools told not to phone home while being read.
-
-gh runs its update check from *any* command unless told otherwise: a
-network call, and a banner it writes alongside the answer. A walk asks
-`gh --help` and `gh <verb> --help` once per release, so that is a request
-per read and a chance per read for the notice to land in the surface.
-
-Reading a tool must never depend on, or be delayed by, the network.
 """
 
 

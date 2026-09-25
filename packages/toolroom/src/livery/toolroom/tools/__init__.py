@@ -63,9 +63,6 @@ from livery.toolroom.tools._host import ToolError as ToolError
 
 __version__ = "0.7.0"
 
-_QUIET = {"GH_NO_UPDATE_NOTIFIER": "1"}
-"""Told not to phone home while being read — see `_toolhelp.QUIET`."""
-
 _version_cache: dict[str, tuple[int, ...]] = {}
 
 # The one way footman reads a version out of a tool's own words, shared with
@@ -1142,11 +1139,10 @@ class Tool:
             out = _host.probe(
                 argv,
                 shown=(self._argv0, *self._version_argv),
-                # Asking a tool its version must not make it check for a
-                # newer one: gh does that from any command unless told not
-                # to, so a task that guards on a version paid for a network
-                # round trip to find out.
-                env={**_os.environ, **_QUIET},
+                # A tool's own switches (gh's update check, a telemetry
+                # opt-out) live in its record's env, exported by the entered
+                # environment, so the read inherits them from the process.
+                env=dict(_os.environ),
                 timeout=30,
             )
             found = read_version(out.stdout or out.stderr)

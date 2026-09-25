@@ -772,7 +772,9 @@ def _read_version(name: str, *, timeout: float = 30.0) -> tuple[str, str]:
     # unbaked name resolves to a default `Tool`, whose spelling is the
     # `--version` everyone else speaks.
     spelling = getattr(tools, name.replace("-", "_"))._version_argv
-    # A version read must never touch the network — see `_toolhelp.QUIET`.
+    # A version read must never touch the network: a tool's own switch for
+    # that (gh's update check) lives in its record's env, which the entered
+    # environment exports, so the read inherits it from the process.
     #
     # Through `run()`: `recorded=False` keeps a probe out of the run's story,
     # `timeout=` kills the tree rather than leaving a hung tool's workers
@@ -787,7 +789,7 @@ def _read_version(name: str, *, timeout: float = 30.0) -> tuple[str, str]:
             recorded=False,
             timeout=timeout,
             nofail=True,
-            env={**os.environ, **_toolhelp.QUIET},
+            env=dict(os.environ),
         )
     except (OSError, subprocess.SubprocessError) as exc:
         return "", f"spawn failed: {type(exc).__name__}: {exc}"
