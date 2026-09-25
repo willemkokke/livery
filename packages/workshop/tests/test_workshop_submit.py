@@ -306,6 +306,18 @@ def test_slow_status_reads_keep_the_watch_in_flight(
     assert _repo(fake).pr.get(number) is not None
 
 
+def test_submit_refuses_a_branch_with_nothing_beyond_the_base(
+    rig: tuple[FakeForge, SubmitGit],
+) -> None:
+    fake, git = rig
+    _git(git.root, "checkout", "-b", "feat/2-empty", "origin/main")
+    with pytest.raises(_FAILURES, match="no commits beyond origin/main"):
+        _submit(fake, git, armed=True)
+    # Nothing was pushed and nothing was opened: the refusal came first.
+    assert git.remote_head("feat/2-empty") == ""
+    assert _repo(fake).pr.find_by_head("feat/2-empty", state="all") is None
+
+
 def test_submit_merge_refuses_red_and_waits_out_pending(
     rig: tuple[FakeForge, SubmitGit], monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -792,6 +792,13 @@ def submit_flow(
     # closed, keeps its title, and the merged and closed cases get
     # their own refusals further on.
     if repo.pr.find_by_head(plan.branch, state="all") is None:
+        if not git.subjects_ahead(plan.base):
+            fail(
+                f"{plan.branch} has no commits beyond origin/{plan.base}, so"
+                " there is nothing to submit: commit first"
+                f' (`{footman.prog()} commit <type> "<subject>"`), then re-run'
+                f" `{footman.prog()} submit`"
+            )
         refuse_ambiguous_title(git, plan)
     if gate:
         _gate(fix, root=git.root, base=base)
