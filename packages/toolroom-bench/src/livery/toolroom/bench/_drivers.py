@@ -70,10 +70,11 @@ class Provision:
 
     kind: str = "uv"
     """`uv` — a PyPI console script, `uv tool install --upgrade`d into an
-    isolated prefix (covers the Rust and C++ tools too: ruff, prek, cmake and
-    ninja all ship binary wheels). `node` — a package `bun install`s. `bun` —
-    bun's own GitHub release, provisioned first because the node tier runs
-    through it. `github` / `gitlab` / `gitea` — a prebuilt release asset.
+    isolated prefix; for programs that are Python alone, where the wheel is
+    the release (a test pins the tier's members). `node` — a package `bun
+    install`s. `bun` — bun's own GitHub release, provisioned first because
+    the node tier runs through it. `github` / `gitlab` / `gitea` — a prebuilt
+    release asset, the tier for every tool with a release of its own.
     `docker` — a static build from docker's own per-platform index, which is
     a directory listing rather than an asset list. `man` — a release's
     manual pages, for a tool read from its manual rather than its `-h`.

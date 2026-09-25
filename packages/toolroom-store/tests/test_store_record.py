@@ -407,6 +407,18 @@ def test_a_host_no_record_can_name_is_refused() -> None:
 # --- resolution ----------------------------------------------------------------
 
 
+def test_a_root_carrying_the_version_token_resolves_to_the_version() -> None:
+    """One `root` on the tool serves every version of an archive named after it."""
+    record = _record(
+        layout=Layout(root="tool-{version}", entry_points=("tool",), paths=(".",)),
+        deltas=(_delta(1, "1.0.0"), _delta(2, "1.1.0")),
+    )
+    assert resolve(record, "1.0.0", "macos-arm").root == "tool-1.0.0"
+    assert resolve(record, "1.1.0", "linux-x64").root == "tool-1.1.0"
+    # The record keeps the token; only the deployment is concrete.
+    assert record.layout.root == "tool-{version}"
+
+
 def test_the_four_layers_resolve_most_specific_winning() -> None:
     record = _record(
         hosts=("macos-arm", "linux-x64", "windows-x64"),
