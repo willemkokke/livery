@@ -16,7 +16,7 @@ lags the advertised tree (`stale_task_blocks`), naming the file and
 the verb that rewrites it.
 
 The runner's ``docs_url`` is one URL template, so a generated alias
-tree at the uniform ``_generated/tasks/<slug>/`` address redirects
+tree at the uniform ``tasks/<slug>/`` address redirects
 each task to its page in the owning package's section.
 """
 
@@ -246,7 +246,7 @@ def generate_task_reference(root: Path) -> list[str]:
         advertised_providers(package) for package in discover_packages(root)
     ):
         return []
-    aliases = root / "docs" / "_generated" / "tasks"
+    aliases = root / "docs" / "tasks"
     shutil.rmtree(aliases, ignore_errors=True)
     aliases.mkdir(parents=True)
     rendered: list[str] = []
@@ -283,7 +283,7 @@ def generate_task_reference(root: Path) -> list[str]:
         )
         for address in sorted(addresses):
             section = "/".join(address.split("."))
-            destination = f"../../packages/{owner}/_generated/tasks/{section}/"
+            destination = f"../../packages/{owner}/tasks/{section}/"
             (aliases / f"{address.replace('.', '-')}.md").write_text(
                 _alias_page(destination, address), encoding="utf-8"
             )

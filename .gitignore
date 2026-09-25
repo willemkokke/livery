@@ -16,7 +16,10 @@ fm-gate.json
 typings/
 .repo.env.local
 site/
-docs/_generated/
+docs/packages/
+docs/releases/
+docs/tasks/
+docs/tools/
 packages/*/src/**/_docs/
 .docs-preview/
 packages/*/docs/_generated/

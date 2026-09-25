@@ -60,7 +60,7 @@ and its verbs mount under `fm tools.*`:
   strongroom store served as static files with a pointer document
   naming each tool's current tree, each version's surface one blob; the bench declares it as a docs
   generator, so the site's build writes it under
-  `docs/_generated/index` and the site's deploy serves it.
+  `docs/tools` and the site's deploy serves it at `tools/`.
 - `fm tools.docs` writes the per-tool pages into toolroom's docs
   tree, with the stubs they point at rendered beside them; toolroom
   declares it as its docs generator.

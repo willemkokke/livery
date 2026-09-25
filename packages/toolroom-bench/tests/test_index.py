@@ -306,7 +306,7 @@ def test_the_verb_defaults_to_the_workspaces_generated_index(tmp_path, monkeypat
     monkeypatch.setattr(tools, "_RECORDS", root)
     result = tools_run("index.build")
     assert result.ok, result.stderr
-    assert (tmp_path / "docs" / "_generated" / "index" / _index.POINTER).is_file()
+    assert (tmp_path / "docs" / "tools" / _index.POINTER).is_file()
 
 
 def test_the_checked_in_records_build_and_the_bench_declares_the_generator():

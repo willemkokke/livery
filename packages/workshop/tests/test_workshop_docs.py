@@ -59,9 +59,9 @@ def test_the_config_defaults_without_a_docs_table(tmp_path: Path) -> None:
 def test_a_package_without_docs_mounts_nothing(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     # bare still appears in nav for its API, but mounts no docs pages.
-    assert "_generated/packages/bare" not in zensical_config(root)
+    assert '= "packages/bare/index.md"' not in zensical_config(root)
     assert mount_package_docs(root) == ["core"]
-    assert not (root / "docs/_generated/packages/bare").exists()
+    assert not (root / "docs/packages/bare").exists()
 
 
 def test_a_docsless_package_gets_its_stale_wheel_copy_removed(
@@ -80,11 +80,11 @@ def test_a_docsless_package_gets_its_stale_wheel_copy_removed(
 def test_the_mount_rebuilds_whole(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     mount_package_docs(root)
-    stale = root / "docs/_generated/packages/core/gone.md"
+    stale = root / "docs/packages/core/gone.md"
     stale.write_text("stale\n")
     mount_package_docs(root)
     assert not stale.exists()
-    assert (root / "docs/_generated/packages/core/guide.md").is_file()
+    assert (root / "docs/packages/core/guide.md").is_file()
 
 
 def test_the_config_carries_the_contract_and_the_nav(tmp_path: Path) -> None:
@@ -101,8 +101,8 @@ def test_the_config_carries_the_contract_and_the_nav(tmp_path: Path) -> None:
     assert nav[0] == {"Home": "index.md"}
     core = next(entry for entry in nav if "core" in entry)
     # Index first, then the rest sorted, all at the mount path.
-    assert core["core"][0] == {"Index": "_generated/packages/core/index.md"}
-    assert core["core"][1] == {"guide": "_generated/packages/core/guide.md"}
+    assert core["core"][0] == {"Index": "packages/core/index.md"}
+    assert core["core"][1] == {"guide": "packages/core/guide.md"}
 
 
 def test_the_wheel_side_docs_refresh_whole(tmp_path: Path) -> None:
@@ -179,15 +179,15 @@ def test_api_modules_sort_public_first_and_skip_the_machinery(
 
 
 def test_api_pages_rebuild_whole_with_one_directive_each(tmp_path: Path) -> None:
-    from livery.workshop._docs import API, generate_api_pages
+    from livery.workshop._docs import API_DIR, MOUNT, generate_api_pages
 
     root = _workspace(tmp_path)
-    stale = root / API / "core" / "gone.md"
+    stale = root / MOUNT / "core" / API_DIR / "gone.md"
     stale.parent.mkdir(parents=True)
     stale.write_text("stale\n")
     assert generate_api_pages(root) == ["bare", "core"]
     assert not stale.exists()
-    index = (root / API / "core" / "index.md").read_text()
+    index = (root / MOUNT / "core" / API_DIR / "index.md").read_text()
     assert "::: acme.core" in index
 
 
@@ -206,7 +206,7 @@ def test_the_config_wires_mkdocstrings_only_when_modules_exist(
     assert handler["options"]["show_if_no_docstring"] is True
     core = next(entry for entry in parsed["project"]["nav"] if "core" in entry)
     api = next(part for part in core["core"] if "API" in part)
-    assert api["API"][0] == {"acme.core": "_generated/api/core/index.md"}
+    assert api["API"][0] == {"acme.core": "packages/core/api/index.md"}
 
 
 # Phase 3: changelogs and the release view. Fallbacks first.
@@ -270,7 +270,7 @@ def test_no_tags_still_serves_the_page_the_nav_points_at(tmp_path: Path) -> None
     (root / "packages" / "core" / "CHANGELOG.md").write_text("# Changelog\n")
     assert generate_release_pages(root) == ["index.md"]
     assert "No release tags" in (root / RELEASES / "index.md").read_text()
-    assert '{ "Releases" = "_generated/releases/index.md" }' in zensical_config(root)
+    assert '{ "Releases" = "releases/index.md" }' in zensical_config(root)
 
 
 def test_no_changelogs_means_no_release_view(tmp_path: Path) -> None:
@@ -326,9 +326,9 @@ def test_the_nav_carries_releases_and_changelogs(tmp_path: Path) -> None:
     releases = next(entry for entry in nav if "Releases" in entry)
     # One nav entry from committed state; the landing links the
     # year archives itself, so a tagless checkout renders the same.
-    assert releases["Releases"] == "_generated/releases/index.md"
+    assert releases["Releases"] == "releases/index.md"
     core = next(entry for entry in nav if "core" in entry)
-    assert {"Changelog": "_generated/packages/core/changelog.md"} in core["core"]
+    assert {"Changelog": "packages/core/changelog.md"} in core["core"]
 
 
 # Phase 5: the publish seams. Fallbacks first.
@@ -511,7 +511,7 @@ def test_generated_pages_are_exempt_both_ways(tmp_path: Path) -> None:
         "    # nav:end tools\n]\n",
     )
     config = zensical_config(root)
-    assert "_generated/packages/core/_generated/ghost.md" in config
+    assert "packages/core/ghost.md" in config
 
 
 def test_a_glossary_under_includes_is_not_an_orphan(tmp_path: Path) -> None:
@@ -549,9 +549,9 @@ def test_the_authored_nav_drives_the_section(tmp_path: Path) -> None:
     core = next(e for e in parsed["project"]["nav"] if "core" in e)["core"]
     # Authored order wins (no index-first re-sort), nesting survives,
     # and every path lands under the package's mount.
-    assert core[0] == {"Guide": "_generated/packages/core/guide.md"}
-    assert core[1] == {"Start here": "_generated/packages/core/index.md"}
-    assert core[2] == {"Deep": [{"One": "_generated/packages/core/deep/one.md"}]}
+    assert core[0] == {"Guide": "packages/core/guide.md"}
+    assert core[1] == {"Start here": "packages/core/index.md"}
+    assert core[2] == {"Deep": [{"One": "packages/core/deep/one.md"}]}
 
 
 def test_a_navless_package_keeps_the_enumerated_fallback(tmp_path: Path) -> None:
@@ -562,8 +562,8 @@ def test_a_navless_package_keeps_the_enumerated_fallback(tmp_path: Path) -> None
     root = _workspace(tmp_path)
     parsed = toml.loads(zensical_config(root))
     core = next(e for e in parsed["project"]["nav"] if "core" in e)["core"]
-    assert core[0] == {"Index": "_generated/packages/core/index.md"}
-    assert core[1] == {"guide": "_generated/packages/core/guide.md"}
+    assert core[0] == {"Index": "packages/core/index.md"}
+    assert core[1] == {"guide": "packages/core/guide.md"}
 
 
 def test_the_mount_leaves_nav_toml_behind(tmp_path: Path) -> None:
@@ -574,8 +574,8 @@ def test_the_mount_leaves_nav_toml_behind(tmp_path: Path) -> None:
         'nav = [\n    { "Index" = "index.md" },\n    { "Guide" = "guide.md" },\n]\n',
     )
     mount_package_docs(root)
-    assert (root / "docs/_generated/packages/core/guide.md").is_file()
-    assert not (root / "docs/_generated/packages/core/nav.toml").exists()
+    assert (root / "docs/packages/core/guide.md").is_file()
+    assert not (root / "docs/packages/core/nav.toml").exists()
 
 
 # The marker rewrite: refusals first.
@@ -680,11 +680,11 @@ def test_the_preview_tree_rebuilds_whole_and_stays_scoped(tmp_path: Path) -> Non
     base = config.parent
     assert config.read_text().startswith("# Generated")
     assert (base / "docs" / "index.md").is_file()  # the chrome
-    assert (base / "docs" / "_generated" / "packages" / "core" / "guide.md").is_file()
-    assert (base / "docs" / "_generated" / "api" / "core" / "index.md").is_file()
+    assert (base / "docs" / "packages" / "core" / "guide.md").is_file()
+    assert (base / "docs" / "packages" / "core" / "api" / "index.md").is_file()
     # Only the scoped package's generated trees travel.
-    assert not (base / "docs" / "_generated" / "packages" / "bare").exists()
-    assert not (base / "docs" / "_generated" / "api" / "bare").exists()
+    assert not (base / "docs" / "packages" / "bare").exists()
+    assert not (base / "docs" / "packages" / "bare" / "api").exists()
 
 
 # The generator seam. Refusals and fallbacks first.
@@ -920,10 +920,10 @@ def test_declared_extras_render_at_the_mounted_paths(tmp_path: Path) -> None:
         '    { path = "assets/mod.js", type = "module", defer = true },\n]\n',
     )
     config = zensical_config(root)
-    assert '"_generated/packages/core/assets/core.css",' in config
-    assert '"_generated/packages/core/assets/plain.js",' in config
+    assert '"packages/core/assets/core.css",' in config
+    assert '"packages/core/assets/plain.js",' in config
     assert (
-        '{ path = "_generated/packages/core/assets/mod.js",'
+        '{ path = "packages/core/assets/mod.js",'
         ' type = "module", defer = true },' in config
     )
 
@@ -1030,7 +1030,7 @@ def test_a_missing_report_states_the_absence_and_stays_green(
         root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
     )
     assert generate_coverage_pages(root) == ["core"]
-    page = (root / "docs/_generated/packages/core/coverage.md").read_text()
+    page = (root / "docs/packages/core/coverage.md").read_text()
     assert "was not produced in this build" in page
     assert "iframe" not in page
 
@@ -1175,7 +1175,7 @@ def test_a_present_report_copies_whole_and_iframes(tmp_path: Path) -> None:
         (report / "style.css").write_text("body {}\n")
     mount_package_docs(root)
     assert generate_coverage_pages(root) == ["core"]
-    mount = root / "docs/_generated/packages/core"
+    mount = root / "docs/packages/core"
     page = (mount / "coverage.md").read_text()
     assert 'src="coverage/python/index.html"' in page
     assert 'src="coverage/native-fixture/index.html"' in page
@@ -1197,14 +1197,14 @@ def test_the_coverage_nav_entry_appends_like_the_changelog(
         root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
     )
     config = zensical_config(root)
-    assert '{ "Coverage" = "_generated/packages/core/coverage.md" },' in config
+    assert '{ "Coverage" = "packages/core/coverage.md" },' in config
 
 
 def test_the_coverage_page_stays_out_of_the_context_file(tmp_path: Path) -> None:
     from livery.workshop._llms import _machine_page
 
-    assert _machine_page("_generated/packages/core/coverage.md")
-    assert not _machine_page("_generated/packages/core/guide.md")
+    assert _machine_page("packages/core/coverage.md")
+    assert not _machine_page("packages/core/guide.md")
 
 
 def test_the_emitted_plumbing_follows_the_declaration(tmp_path: Path) -> None:
@@ -1245,3 +1245,69 @@ def test_the_emitted_plumbing_follows_the_declaration(tmp_path: Path) -> None:
     deploy = gate.split("  deploy:")[1].split("  govern:")[0]
     assert "coverage" not in deploy
     assert "workflow_run" not in gate and "run-id:" not in gate
+
+
+def test_the_mount_merges_the_generated_tree_and_keeps_every_link_true(
+    tmp_path: Path,
+) -> None:
+    """``_generated`` is a directory on disk and never a published path."""
+    from livery.workshop._docs import MOUNT
+
+    root = _workspace(tmp_path)
+    docs = root / "packages/core/docs"
+    (docs / "guide.md").write_text("see [the api](_generated/api.md)\n")
+    generated = docs / "_generated"
+    (generated / "tasks" / "docs").mkdir(parents=True)
+    (generated / "api.md").write_text("back to [the guide](../guide.md)\n")
+    (generated / "tasks" / "index.md").write_text(
+        "[guide](../../guide.md) [docs](docs/build.md)\n"
+    )
+    (generated / "tasks" / "docs" / "build.md").write_text(
+        "[up](../index.md) [guide](../../../guide.md)\n"
+    )
+    assert mount_package_docs(root) == ["core"]
+    mount = root / MOUNT / "core"
+    assert not (mount / "_generated").exists()
+    assert (mount / "guide.md").read_text() == "see [the api](api.md)\n"
+    assert (mount / "api.md").read_text() == "back to [the guide](guide.md)\n"
+    assert (mount / "tasks" / "index.md").read_text() == (
+        "[guide](../guide.md) [docs](docs/build.md)\n"
+    )
+    assert (mount / "tasks" / "docs" / "build.md").read_text() == (
+        "[up](../index.md) [guide](../../guide.md)\n"
+    )
+    # A generated page an authored page already holds the path of refuses.
+    (docs / "api.md").write_text("# authored\n")
+    with pytest.raises(_FAILURES, match=r"_generated/api\.md and the authored api\.md"):
+        mount_package_docs(root)
+
+
+def test_no_published_path_carries_generated(tmp_path: Path) -> None:
+    """The scheme, pinned: the config's every path and the alias tree are clean."""
+    from livery.workshop._docs import RELEASES, generate_release_pages
+
+    root = _workspace(tmp_path)
+    (root / "packages/core/docs/_generated").mkdir()
+    (root / "packages/core/docs/_generated/tool.md").write_text("# tool\n")
+    config = zensical_config(root)
+    parsed = tomllib.loads(config)
+    # Every nav leaf and every asset path publishes clean; the snippet
+    # base paths name the source tree, which is where the name lives.
+    from livery.workshop._docs import _nav_leaves
+
+    assert not [
+        leaf for leaf in _nav_leaves(parsed["project"]["nav"]) if "_generated" in leaf
+    ]
+    assert not [
+        entry
+        for entry in parsed["project"].get("extra_css", [])
+        if "_generated" in str(entry)
+    ]
+    core = next(entry for entry in parsed["project"]["nav"] if "core" in entry)
+    api = next(part for part in core["core"] if "API" in part)
+    assert api["API"][0]["acme.core"].startswith("packages/core/api/")
+    assert RELEASES == "docs/releases"
+    generate_release_pages(root)
+    assert (root / "docs/releases/index.md").is_file() or not (
+        root / "docs/releases"
+    ).exists()
