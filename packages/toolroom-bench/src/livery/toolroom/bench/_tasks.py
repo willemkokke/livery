@@ -124,7 +124,11 @@ def _resolve_prefix(prefix: str | Path) -> Path | None:
     if prefix:
         return Path(prefix).expanduser().resolve()
     home = default_prefix()
-    return home if home.is_dir() else None
+    # Provisioned means a bin directory to read from. The room also holds
+    # the bench's store (`_bench_store`), which every refresh creates, and
+    # a store is not a provisioned set: read as one, every tool the host
+    # has would be "not in the prefix".
+    return home if (home / "bin").is_dir() else None
 
 
 @contextmanager
