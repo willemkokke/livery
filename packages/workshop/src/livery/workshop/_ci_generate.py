@@ -793,7 +793,6 @@ def generate(root: Path) -> dict[str, str]:
     and a member layer ships the tree; an ordinary instance's
     release has no templates to publish.
     """
-    from livery.workshop._docs import zensical_config
     from livery.workshop._entry import entry_script
     from livery.workshop._provenance import generated_header
 
@@ -801,7 +800,6 @@ def generate(root: Path) -> dict[str, str]:
     facts = _facts(root)
     kind = str(facts["forge_kind"])
     header = generated_header("#")
-    site = {"zensical.toml": zensical_config(root)}
     everything = points(root)
     if kind in ("github", "gitea"):
         # One file per workflow: the gate and the merge point share
@@ -817,7 +815,6 @@ def generate(root: Path) -> dict[str, str]:
     else:
         files = {".gitlab-ci.yml": _gitlab_document(facts, prog, everything=everything)}
     files["setup.sh"] = entry_script(root)
-    files.update(site)
     rendered = {path: header + content for path, content in files.items()}
     from livery.workshop._docs import overrides_template
 

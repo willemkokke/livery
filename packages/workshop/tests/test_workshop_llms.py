@@ -45,9 +45,9 @@ def _mounted(root: Path) -> Path:
         mount_package_docs,
     )
 
-    mount_package_docs(root)
     generate_changelog_pages(root)
     generate_api_pages(root)
+    mount_package_docs(root)
     return root
 
 
