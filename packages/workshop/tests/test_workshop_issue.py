@@ -1010,3 +1010,25 @@ def test_reopen_refuses_a_missing_issue_then_reopens_and_assigns(
     assert "fake-user" in live.assignees
     issue_reopen(str(created.number))
     assert "already open" in capsys.readouterr().out
+
+
+def test_start_from_refuses_an_unpushed_parent_then_starts_on_it_and_records_it(
+    rig: tuple[Path, FakeForge, GitOps], capsys: pytest.CaptureFixture[str]
+) -> None:
+    root, _fake, git = rig
+    # The refusal first: a parent origin does not have is no base.
+    with pytest.raises(_FAILURES, match="origin has no branch 'feat/9-parent'"):
+        start("docs/child", worktree=False, from_="feat/9-parent")
+    assert git.current_branch() == "main"
+    git.create_branch("feat/9-parent")
+    (root / "parent.txt").write_text("p\n")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-m", "feat: the parent")
+    _git(root, "push", "-u", "origin", "feat/9-parent")
+    parent_head = git.head_sha()
+    git.switch("main")
+    start("docs/child", worktree=False, from_="feat/9-parent")
+    assert git.current_branch() == "docs/child"
+    assert git.head_sha() == parent_head
+    assert git.config_get("branch.docs/child.workshop-parent") == "feat/9-parent"
+    assert "parent: feat/9-parent" in capsys.readouterr().out

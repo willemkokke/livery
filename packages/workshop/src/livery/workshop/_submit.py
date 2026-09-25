@@ -386,6 +386,29 @@ def prepare(
     )
 
 
+def resolve_base(git: GitOps, base: str, *, given: bool) -> str:
+    """The branch the pull request targets.
+
+    A ``--base`` flag wins. Otherwise the parent ``fm start --from``
+    recorded for the branch is the target while origin still has it,
+    and *base* once it is gone: a merged parent's branch is deleted,
+    and the forge retargets the child's pull request to the parent's
+    own base at that moment.
+    """
+    if given:
+        return base
+    parent = git.config_get(f"branch.{git.current_branch()}.workshop-parent")
+    if not parent:
+        return base
+    with contextlib.suppress(GitError):
+        git.fetch()
+    if git.remote_head(parent):
+        print(f"  base: {parent}, the parent `{footman.prog()} start --from` recorded")
+        return parent
+    print(f"  base: {base}; the recorded parent {parent} is gone from origin (merged)")
+    return base
+
+
 def abort_if_merged(repo: Repository, git: GitOps, branch: str) -> int | None:
     """Stop before pushing into a pull request that already merged.
 
@@ -947,9 +970,11 @@ def submit_default(
 
     repo = this_repository(root)
     reason = arming_reason(armed=armed, flag_given=footman.given("armed"))
+    git = GitOps(root)
+    base = resolve_base(git, base, given=footman.given("base"))
     submit_flow(
         repo,
-        GitOps(root),
+        git,
         title=title,
         body=body,
         base=base,

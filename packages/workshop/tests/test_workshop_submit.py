@@ -1783,3 +1783,23 @@ def test_arming_a_green_pull_request_merges_it_when_the_forge_refuses_to_arm(
     assert "arming refused" in out and "merged now" in out
     pr = repo.pr.get(number)
     assert pr is not None and pr.merged
+
+
+def test_the_base_is_the_recorded_parent_while_origin_has_it(
+    rig: tuple[FakeForge, SubmitGit], capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop._submit import resolve_base
+
+    _fake, git = rig
+    # No record: the default stands, silently.
+    assert resolve_base(git, "main", given=False) == "main"
+    git.config_set("branch.feat/1-first.workshop-parent", "feat/0-parent")
+    # The parent gone from origin (merged, its branch deleted): the
+    # default again, said out loud. The fallback before the happy path.
+    assert resolve_base(git, "main", given=False) == "main"
+    assert "gone from origin" in capsys.readouterr().out
+    _git(git.root, "branch", "feat/0-parent", "origin/main")
+    _git(git.root, "push", "-u", "origin", "feat/0-parent")
+    assert resolve_base(git, "main", given=False) == "feat/0-parent"
+    # The flag wins over the record.
+    assert resolve_base(git, "release", given=True) == "release"

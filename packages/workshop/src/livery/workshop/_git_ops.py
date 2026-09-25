@@ -266,6 +266,17 @@ class GitOps:
         )
         return result.stdout.strip() if result.code == 0 else ""
 
+    def config_get(self, key: str) -> str:
+        """The repository's git config value for *key*; empty when unset."""
+        result = tools.git.opts(cwd=self.root, nofail=True, recorded=False)(
+            "config", "--get", key
+        )
+        return result.stdout.strip() if result.code == 0 else ""
+
+    def config_set(self, key: str, value: str) -> None:
+        """Set *key* to *value* in the repository's git config."""
+        self._run("config", key, value)
+
     def merge_base(self, base: str) -> str:
         """The merge base of HEAD and ``origin/<base>``; raises GitError without one.
 
