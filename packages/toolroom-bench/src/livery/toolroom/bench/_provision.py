@@ -677,6 +677,12 @@ def _extract_binary(
     write nothing. On Windows the placed file is named
     `tool.exe` whatever the archive called it — `shutil.which` resolves
     through `PATHEXT`, and an extensionless PE is invisible to it.
+
+    A directory app (PyInstaller's onedir layout, conan's release) loads
+    its runtime from an `_internal/` directory beside the binary and
+    refuses to start without it, so that directory is placed beside the
+    binary too when the archive has one; every other sibling stays in
+    the archive.
     """
     if windows is None:
         windows = os.name == "nt"
@@ -699,6 +705,7 @@ def _extract_binary(
             if source is None:
                 raise ProvisionError(f"{tool} is not a file inside {archive.name}")
             dest.write_bytes(source.read())
+            _place_internal_tar(tar, member.name, into)
     elif archive.name.lower().endswith(".zip"):
         with zipfile.ZipFile(archive) as zf:
             name = next(
@@ -712,10 +719,56 @@ def _extract_binary(
             if name is None:
                 raise ProvisionError(f"{tool} not found inside {archive.name}")
             dest.write_bytes(zf.read(name))
+            _place_internal_zip(zf, name, into)
     else:  # a bare binary, downloaded directly
         dest.write_bytes(archive.read_bytes())
     dest.chmod(0o755)
     return dest
+
+
+#: PyInstaller's onedir runtime directory, beside the binary.
+_INTERNAL = "_internal"
+
+
+def _internal_prefix(binary_name: str) -> str:
+    """The archive path prefix of the `_internal/` beside *binary_name*."""
+    parent = Path(binary_name).parent.as_posix()
+    return f"{_INTERNAL}/" if parent == "." else f"{parent}/{_INTERNAL}/"
+
+
+def _place_internal_tar(tar: tarfile.TarFile, binary_name: str, into: Path) -> None:
+    """Place the `_internal/` beside *binary_name* under *into*, if the tar has one."""
+    prefix = _internal_prefix(binary_name)
+    for member in tar.getmembers():
+        if not member.name.startswith(prefix):
+            continue
+        dest = into / _INTERNAL / member.name[len(prefix) :]
+        if member.isdir():
+            dest.mkdir(parents=True, exist_ok=True)
+        elif member.issym():
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.unlink(missing_ok=True)
+            dest.symlink_to(member.linkname)
+        elif member.isfile():
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            source = tar.extractfile(member)
+            if source is not None:
+                dest.write_bytes(source.read())
+                dest.chmod(member.mode | 0o600)
+
+
+def _place_internal_zip(zf: zipfile.ZipFile, binary_name: str, into: Path) -> None:
+    """Place the `_internal/` beside *binary_name* under *into*, if the zip has one."""
+    prefix = _internal_prefix(binary_name)
+    for name in zf.namelist():
+        if not name.startswith(prefix):
+            continue
+        dest = into / _INTERNAL / name[len(prefix) :]
+        if name.endswith("/"):
+            dest.mkdir(parents=True, exist_ok=True)
+        else:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(zf.read(name))
 
 
 # --- subprocess --------------------------------------------------------------

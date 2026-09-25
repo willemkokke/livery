@@ -374,6 +374,45 @@ def test_extract_binary_from_tar_gz(tmp_path):
         assert placed.stat().st_mode & 0o111  # +x — Windows has no exec bit
 
 
+def test_extract_binary_places_a_directory_apps_internal_beside_it(tmp_path):
+    """A PyInstaller onedir app (conan's release) needs `_internal/` beside
+    the binary; a plain archive places nothing but the binary.
+    """
+    plain = tmp_path / "plain.tgz"
+    with tarfile.open(plain, "w:gz") as tar:
+        _add(tar, "tool-1.0/bin/tool", b"bin")
+        _add(tar, "tool-1.0/share/readme", b"doc")
+    _provision._extract_binary(plain, "tool", tmp_path / "plain-bin")
+    assert sorted(p.name for p in (tmp_path / "plain-bin").iterdir()) == [
+        _provision.exe("tool")
+    ]
+    app = tmp_path / "app.tgz"
+    with tarfile.open(app, "w:gz") as tar:
+        _add(tar, "bin/tool", b"bin")
+        _add(tar, "bin/_internal/libpython.so", b"so")
+        _add(tar, "bin/_internal/pkg/data.txt", b"data")
+        _add(tar, "other/_internal/no.txt", b"not this one")
+    _provision._extract_binary(app, "tool", tmp_path / "app-bin")
+    internal = tmp_path / "app-bin" / "_internal"
+    assert (internal / "libpython.so").read_bytes() == b"so"
+    assert (internal / "pkg" / "data.txt").read_bytes() == b"data"
+    assert not (internal / "no.txt").exists()
+    zipped = tmp_path / "app.zip"
+    with zipfile.ZipFile(zipped, "w") as zf:
+        zf.writestr("tool.exe", b"pe")
+        zf.writestr("_internal/", b"")
+        zf.writestr("_internal/python.dll", b"dll")
+    _provision._extract_binary(zipped, "tool", tmp_path / "zip-bin", windows=True)
+    assert (tmp_path / "zip-bin" / "_internal" / "python.dll").read_bytes() == b"dll"
+
+
+def _add(tar: tarfile.TarFile, name: str, data: bytes) -> None:
+    info = tarfile.TarInfo(name)
+    info.size = len(data)
+    info.mode = 0o755
+    tar.addfile(info, io.BytesIO(data))
+
+
 def test_extract_binary_from_zip(tmp_path):
     archive = tmp_path / "gh_macOS_arm64.zip"
     _zip(archive, "gh_2.0_macOS_arm64/bin/gh", b"go-binary")

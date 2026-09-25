@@ -644,6 +644,23 @@ DRIVERS: tuple[Driver, ...] = (
         provision=Provision(kind="github", repo="ninja-build/ninja"),
     ),
     Driver(
+        "conan",
+        verbs=(
+            "install",
+            "create",
+            "upload",
+            "list",
+            "remote",
+            "cache",
+            "profile",
+            "editable",
+        ),
+        url="https://docs.conan.io/",
+        # Conan 1 is a different tool with different recipes; the kinds
+        # write conan 2 recipes, so the history starts at 2.0.0.
+        provision=Provision(kind="github", repo="conan-io/conan", floor="2.0.0"),
+    ),
+    Driver(
         "pytest",
         url="https://docs.pytest.org/",
         in_process=True,  # `tools.py` builds it in-process, via `pytest:main`
