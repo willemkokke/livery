@@ -285,7 +285,9 @@ def test_a_bun_install_is_supplied_after_bun_through_its_executable(
         '[workspace]\n\n[tools]\nindex = "records"\nsources = ["mirror", "mirror2"]\n'
         'requires = ["tea", "ruff", "cspell"]\n'
     )
-    payload = _zip({"bun": b"#!/bin/sh\necho bun\n"})
+    # Both spellings, since one archive serves the three hosts and the
+    # Windows shim is a copy of bun.exe.
+    payload = _zip({"bun": b"#!/bin/sh\necho bun\n", "bun.exe": b"MZ"})
     digest = digest_of(payload)
     Record(
         "bun",
@@ -332,7 +334,8 @@ def test_a_bun_install_is_supplied_after_bun_through_its_executable(
     assert names[0] == "bun" and "cspell" in names
     held = _tools.receipts(root)
     bun = held["bun"]
-    assert Path(bun.tool_dir, "bun").is_file() and Path(bun.tool_dir, "node").exists()
+    assert Path(bun.tool_dir, "bun").is_file()
+    assert any(Path(bun.tool_dir, n).exists() for n in ("node", "node.exe"))  # the shim
     argv, env = next(c for c in calls if "BUN_INSTALL" in c[1])
     assert argv == [str(Path(bun.tool_dir, "bun")), "add", "--global", "cspell@9.0.0"]
     assert env["PATH"].split(os.pathsep)[0] == bun.tool_dir
