@@ -104,7 +104,7 @@ def test_the_kind_chains_from_python() -> None:
     assert kind_tools({"python-nanobind"}) == (
         "basedpyright",
         "cmake",
-        "git-cliff",
+        "git_cliff",
         "mypy",
         "ninja",
         "pyrefly",

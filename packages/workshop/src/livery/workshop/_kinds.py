@@ -398,12 +398,14 @@ def _register_builtin() -> None:
     # The base every kind derives from: abstract, the record behind the
     # package-base template. Every kind releases, so the changelog
     # engine and the cliff.toml it reads are declared once, here, and
-    # a kind a layer adds gets them by naming its parent.
+    # a kind a layer adds gets them by naming its parent. A tool is
+    # named as its record and its handle are (`git_cliff`), which is
+    # how the catalogue lists it.
     register_kind(
         KindRecord(
             name="base",
             template=BASE_TEMPLATE,
-            tools=("git-cliff",),
+            tools=("git_cliff",),
             managed=("cliff.toml",),
             artifact="",
             wheel_identity="",

@@ -17,7 +17,7 @@ import os
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, Literal
 
 import livery.footman as footman
 from livery.footman import Arg, Stdout, doc, fail, group, pre_tasks
@@ -32,6 +32,9 @@ from livery.workshop._envfile import (
     parse_env_file,
     set_value,
 )
+
+if TYPE_CHECKING:
+    from livery.workshop._tools import Receipt
 
 #: Names never emitted for an agent: the PATH family is composed per
 #: shell, not copied between sessions.
@@ -682,6 +685,24 @@ def _set_ci_secret(root: Path, key: str, value: str) -> None:
         )
 
 
+def _resolves(tool: str, receipt: Receipt | None, bin_dir: Path) -> bool:
+    """Whether *tool* is found, by the names of its executables.
+
+    On PATH, in the venv's bin directory, or on the receipt's own
+    paths. The names come from the receipt, since a tool's name is not
+    always a binary's (`git_cliff` puts `git-cliff` on PATH); without
+    a receipt the name itself is looked for.
+    """
+    names = (receipt.entry_points if receipt is not None else ()) or (tool,)
+    own = [Path(p) for p in receipt.paths] if receipt is not None else []
+    return any(
+        shutil.which(name)
+        or (bin_dir / name).is_file()
+        or any((directory / name).is_file() for directory in own)
+        for name in names
+    )
+
+
 @env.task(name="check")
 def env_check() -> int:
     """Verify this shell against the tools the sites require.
@@ -695,15 +716,22 @@ def env_check() -> int:
     stubs under `typings/` are counted, and their absence is a problem
     too.
     """
-    from livery.workshop._tools import TYPINGS, current_lock, has_index, stubs_present
+    from livery.workshop._tools import (
+        TYPINGS,
+        current_lock,
+        has_index,
+        receipts,
+        stubs_present,
+    )
     from livery.workshop._tools import drift as receipt_drift
 
     root, _cwd = _workspace()
     problems: list[str] = []
     bin_dir = venv_bin(root)
     said = receipt_drift(root)
+    written = receipts(root)
     for tool in tool_profile(root):
-        resolves = bool(shutil.which(tool) or (bin_dir / tool).is_file())
+        resolves = _resolves(tool, written.get(tool), bin_dir)
         verdict = said.get(tool, "")
         if not resolves:
             problems.append(f"{tool}: MISSING" + (f" ({verdict})" if verdict else ""))

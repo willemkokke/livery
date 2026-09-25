@@ -53,7 +53,7 @@ def _python_tools(*versions: str) -> list[Record]:
     return [
         Record(name, kind="uv-tool", deltas=_read(*versions))
         for name in (
-            "git-cliff",
+            "git_cliff",
             "uv",
             "ruff",
             "pytest",
@@ -199,7 +199,7 @@ def test_a_python_package_with_no_tool_of_its_own_resolves_the_kinds_tools(
     root = _workspace(tmp_path, monkeypatch)
     declared = _tools.requirements(root)
     assert {r.name for r in declared} == {
-        "git-cliff",
+        "git_cliff",
         "uv",
         "ruff",
         "pytest",
@@ -209,8 +209,8 @@ def test_a_python_package_with_no_tool_of_its_own_resolves_the_kinds_tools(
         "pyrefly",
     }
     # The base kind heads the chain: its tool is declared first, by it.
-    assert {r.name: r.site for r in declared}["git-cliff"] == "kind base"
-    assert all(r.site == "kind python" for r in declared if r.name != "git-cliff")
+    assert {r.name: r.site for r in declared}["git_cliff"] == "kind base"
+    assert all(r.site == "kind python" for r in declared if r.name != "git_cliff")
     lock = _tools.write_lock(root)
     assert {name: entry.version for name, entry in lock.tools.items()} == dict.fromkeys(
         {r.name for r in declared}, "1.1.0"
@@ -249,12 +249,12 @@ def test_the_three_sites_union_and_each_names_itself(
     assert lock.tools["cspell"].version == "2.0.0"
     assert lock.tools["git-cliff"].version == "2.0.0"
     # The kinds first, as declared: the base's tool, then python's.
-    assert _tools.tool_names(root)[:3] == ("git-cliff", "uv", "ruff")
+    assert _tools.tool_names(root)[:3] == ("git_cliff", "uv", "ruff")
 
 
 def test_a_workspace_without_packages_requires_what_python_does(tmp_path: Path) -> None:
     assert _tools.tool_names(tmp_path) == (
-        "git-cliff",  # the base kind's, first in the chain
+        "git_cliff",  # the base kind's, first in the chain
         "uv",
         "ruff",
         "pytest",
@@ -292,7 +292,8 @@ def test_add_declares_at_the_project_site_and_locks_with_no_network(
     _tool_tasks.tools_add("git-cliff>=2.0")
     out = capsys.readouterr().out
     assert "workshop.toml: [tools] requires git-cliff>=2.0" in out
-    assert "git-cliff 2.1.0" in out and "tools.lock: 8 tool(s)" in out
+    # Seven of the python kind, the base kind's git_cliff, and this one.
+    assert "git-cliff 2.1.0" in out and "tools.lock: 9 tool(s)" in out
     assert "git-cliff 2.1.0: installed at" in out and "receipt written" in out
     assert (root / ".workshop" / "receipts" / "git-cliff.json").is_file()
     contract = (root / "workshop.toml").read_text(encoding="utf-8")

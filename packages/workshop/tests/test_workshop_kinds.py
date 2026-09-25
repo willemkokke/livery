@@ -120,7 +120,7 @@ def test_the_base_kind_is_abstract_and_heads_every_chain(tmp_path: Path) -> None
     assert "base" not in kind_names()
     for name in ("python", "python-nanobind", "cpp-conan"):
         assert kind_chain(name)[0].name == "base", name
-        assert "git-cliff" in kind_tools({name}), name
+        assert "git_cliff" in kind_tools({name}), name
         assert "cliff.toml" in managed_files(name), name
     with pytest.raises(_FAILURES, match="abstract kind and builds nothing"):
         backend_for(_package(tmp_path, "base"))
@@ -179,7 +179,7 @@ def test_tools_union_along_the_chain_only_when_present(restored_registry) -> Non
     )
     assert kind_tools({"python"}) == (
         "basedpyright",
-        "git-cliff",  # the base kind's, through the chain
+        "git_cliff",  # the base kind's, through the chain
         "mypy",
         "pyrefly",
         "pytest",
