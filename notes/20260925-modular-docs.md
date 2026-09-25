@@ -1,8 +1,8 @@
 # Modular docs: a package's section is the package's, and the site assembles
 
-Status: drafted 2026-09-25, awaiting Willem's review. Nothing has
-started. Tracks livery#647 and folds in livery#268. The direct downloads
-plan (`notes/20260925-direct-downloads.md`) completed first, as ruled.
+Status: ruled 2026-09-25 with phase 5 out; phase 1 in progress. Tracks
+livery#647 and folds in livery#268. The direct downloads plan
+(`notes/20260925-direct-downloads.md`) completed first, as ruled.
 
 ## What this is
 
@@ -351,9 +351,10 @@ Acceptance:
 - Tests over `affected_from_paths`: a package docs page selects; a
   root docs page, a note and a `README.md` select nothing.
 
-### Phase 5: tests in-package (ruled separately)
+### Phase 5: tests in-package (ruled out)
 
-Deliverables, if ruled in:
+Ruled out on 2026-09-25 (decision record); kept as the record of what
+was weighed. Deliverables, had it been ruled in:
 
 - `packages/<name>/tests/` moves to `src/livery/<name>/_tests/`, one
   package per commit so each rename is reviewable.
@@ -379,13 +380,20 @@ Acceptance:
 | `docs_url = ".../_generated/tasks/{slug}/"` in the template | phase 1 |
 | The 512-line nav block in the root `zensical.toml` | phase 3, deleted |
 | The tasks block in the authored `nav.toml` | phase 3, or kept by open question 3 |
-| `pythonpath` list and the helper-name refusal | phase 5, if ruled in |
 
 ## Decision record
 
 - 2026-09-25: drafted. The examples-run-on-page-change ask is met by a
   gate rule (phase 4), not by moving tests; the relocation (phase 5)
   is presented with what it buys and costs and ruled on its own.
+- 2026-09-25, Willem: phase 5 is out. Measured on the tree, 150 of 182
+  test files import their package's public face, and the tests are
+  written per behaviour, not per module: a mirror of the source tree
+  under the tests would select by a convention the imports do not
+  back, and the relocation narrows no gate. What it bought was three
+  naming rules that already work. A narrower gate for a source edit,
+  if ever wanted, comes from per-test coverage contexts, a plan of its
+  own.
 - 2026-09-25, Willem: the tool index publishes at `tools/` for now; it
   is expected to become a permanent URL of its own later, no longer a
   section of the docs. No redirects for the old URLs. The tasks block
@@ -393,8 +401,4 @@ Acceptance:
 
 ## Open
 
-1. **Phase 5.** In or out, given it narrows no gate. The `_tests` name
-   follows the rule that every module a package does not export is
-   underscore-named; a bare `tests/` inside the package would need
-   one named exception in the API pages, the wheel, typecomplete and
-   the pinning test. Willem.
+None. Every question raised at drafting is in the decision record.
