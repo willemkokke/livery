@@ -23,6 +23,7 @@ import os
 import re
 import shutil
 import subprocess
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -703,7 +704,50 @@ def version(name: str) -> str:
     return _read_version(name)[0]
 
 
-def _read_version(name: str) -> tuple[str, str]:
+def _timed_out(timeout: float) -> str:
+    return f"timed out after {timeout:g}s"
+
+
+def read_versions(
+    names: Sequence[str], *, timeout: float = 30.0, retry_timeout: float = 120.0
+) -> dict[str, tuple[str, str]]:
+    """`(version, diagnosis)` per tool, read side by side, the stalled ones again alone.
+
+    The first round spawns every tool at once, so a caller waits for the
+    slowest tool and not for the sum of them. On a fresh Windows runner
+    that round is also where Defender scans every binary on its first
+    spawn, all at once, and a scan that has not finished inside *timeout*
+    reads as a stall. So each tool that timed out is read again after the
+    round, one at a time with *retry_timeout*: the scans are cached or
+    finishing, and nothing contends. A tool that times out twice has
+    earned its diagnosis, which names both budgets. Any other failure
+    stands as read: a spawn that failed or answered nothing is not a
+    stall, and a second spawn would teach nothing.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    from functools import partial
+
+    wanted = list(names)
+    if not wanted:
+        return {}
+    with ThreadPoolExecutor(max_workers=len(wanted)) as pool:
+        first = pool.map(partial(_read_version, timeout=timeout), wanted)
+        read = dict(zip(wanted, first, strict=True))
+    for name in wanted:
+        found, why = read[name]
+        if found or why != _timed_out(timeout):
+            continue
+        again, why_again = _read_version(name, timeout=retry_timeout)
+        if again:
+            read[name] = (again, "")
+        elif why_again == _timed_out(retry_timeout):
+            read[name] = ("", f"{why}, then {why_again} alone")
+        else:
+            read[name] = ("", why_again)
+    return read
+
+
+def _read_version(name: str, *, timeout: float = 30.0) -> tuple[str, str]:
     """`(version, diagnosis)` — the second names *why* the first is empty.
 
     An empty version has three very different causes — the spawn failed, the
@@ -741,14 +785,14 @@ def _read_version(name: str) -> tuple[str, str]:
         done = _run(
             [binary, *spelling],
             recorded=False,
-            timeout=30,
+            timeout=timeout,
             nofail=True,
             env={**os.environ, **_toolhelp.QUIET},
         )
     except (OSError, subprocess.SubprocessError) as exc:
         return "", f"spawn failed: {type(exc).__name__}: {exc}"
     if done.timed_out:
-        return "", "timed out after 30s"
+        return "", _timed_out(timeout)
     found = _without_build_tail(tools.read_version(done.stdout or done.stderr))
     if found:
         return found, ""

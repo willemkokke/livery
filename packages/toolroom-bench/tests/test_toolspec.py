@@ -1018,16 +1018,19 @@ def test_list_says_unreadable_when_a_present_tools_version_wont_read(
     from livery.toolroom.bench import _drivers
     from livery.toolroom.bench import _tasks as tools_tasks
 
-    monkeypatch.setattr(
-        _drivers, "_read_version", lambda name: ("", "timed out after 30s")
-    )
+    def stalled(name: str, *, timeout: float = 30.0) -> tuple[str, str]:
+        return "", f"timed out after {timeout:g}s"
+
+    monkeypatch.setattr(_drivers, "_read_version", stalled)
     tools_tasks.list_(show="installed")
     out = capsys.readouterr().out
     body = out.splitlines()[1:]
     assert body, "at least one tool is installed wherever the suite runs"
     for line in body:
         assert "not installed" not in line
-        assert "unreadable (timed out after 30s)" in line
+        assert (
+            "unreadable (timed out after 30s, then timed out after 120s alone)" in line
+        )
 
 
 @needs_ruff
@@ -2420,6 +2423,49 @@ def test_the_prefix_launcher_counts_not_where_it_points(tmp_path):
     assert not _from_prefix("/usr/bin/thing", root)  # the host's own copy
 
 
+def test_read_versions_retries_a_stall_alone_with_a_longer_budget(monkeypatch):
+    # The refusal first. Convicted on CI twice on 2026-09-25: on a fresh
+    # Windows runner the parallel round spawns every tool at once, Defender
+    # scans every binary at once, and gh and docker both read as stalled
+    # twice inside 30s. The retry runs after the round, one tool at a time,
+    # with a budget the scan fits in; a tool that stalls twice names both.
+    from livery.toolroom.bench import _drivers
+
+    calls: list[tuple[str, float]] = []
+
+    def fake(name: str, *, timeout: float = 30.0) -> tuple[str, str]:
+        calls.append((name, timeout))
+        if name == "docker":
+            return "", f"timed out after {timeout:g}s"  # stalls whatever the budget
+        if name == "gh" and timeout == 30.0:
+            return "", "timed out after 30s"  # the scan finished before the retry
+        if name == "ruff":
+            return "", "no version token (exit 1): 'x'"  # not a stall
+        return "2.0.0", ""
+
+    monkeypatch.setattr(_drivers, "_read_version", fake)
+    read = _drivers.read_versions(["docker", "gh", "ruff"])
+    assert read["docker"] == (
+        "",
+        "timed out after 30s, then timed out after 120s alone",
+    )
+    assert read["gh"] == ("2.0.0", "")
+    assert read["ruff"] == ("", "no version token (exit 1): 'x'")
+    # The round is one spawn per tool at the first budget, in any order;
+    # the retries follow it, alone, in tool order, at the longer budget.
+    assert sorted(calls[:3]) == [("docker", 30.0), ("gh", 30.0), ("ruff", 30.0)]
+    assert calls[3:] == [("docker", 120.0), ("gh", 120.0)]
+    assert _drivers.read_versions([]) == {}
+
+
+def test_read_versions_keeps_a_retry_that_fails_another_way(monkeypatch):
+    from livery.toolroom.bench import _drivers
+
+    answers = iter([("", "timed out after 30s"), ("", "spawn failed: OSError: gone")])
+    monkeypatch.setattr(_drivers, "_read_version", lambda name, **_: next(answers))
+    assert _drivers.read_versions(["gh"]) == {"gh": ("", "spawn failed: OSError: gone")}
+
+
 def test_every_installed_driver_reports_a_readable_version(capsys):
     """A version-keyed history is only as good as this: a tool whose version
     can't be read would append events under an empty key, silently.
@@ -2428,29 +2474,14 @@ def test_every_installed_driver_reports_a_readable_version(capsys):
     `audit` follows — a check that quietly covered three of thirteen would be
     worse than no check.
     """
-    from concurrent.futures import ThreadPoolExecutor
-
     from livery.toolroom.bench import _drivers
-
-    def probe(name: str) -> tuple[str, str]:
-        found, why = _drivers._read_version(name)
-        if not found and why == "timed out after 30s":
-            # Convicted on CI: gh --version hangs past 30s on a fresh
-            # Windows runner with its update check disabled — Defender's
-            # first-touch scan of a large binary, not a scrape failure. The
-            # scan caches, so the second spawn answers; a tool that times
-            # out twice has genuinely earned the failure.
-            found, why = _drivers._read_version(name)
-        return found, why
 
     read, unreadable, absent = [], [], []
     present = [d for d in _drivers.DRIVERS if _drivers._resolve(d.name) is not None]
     absent = [d.key for d in _drivers.DRIVERS if _drivers._resolve(d.name) is None]
-    # One spawn per tool, side by side: the check waits for the slowest
-    # tool, not for the sum of them.
-    with ThreadPoolExecutor(max_workers=max(1, len(present))) as pool:
-        answers = list(pool.map(probe, [d.name for d in present]))
-    for driver, (found, why) in zip(present, answers, strict=True):
+    answers = _drivers.read_versions([d.name for d in present])
+    for driver in present:
+        found, why = answers[driver.name]
         if found:
             read.append(f"{driver.key} ({found})")
         else:
