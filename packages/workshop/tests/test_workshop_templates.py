@@ -1214,13 +1214,13 @@ def test_a_github_job_restores_the_tool_store_and_owns_the_uv_cache(
         in ci
     )
     assert "restore-keys: uv-${{ matrix.os }}-${{ matrix.python }}-" in ci
-    assert "path: ~/.local/share/footman/toolroom" in ci
+    assert "path: ${{ runner.temp }}/footman/toolroom" in ci
     assert (
         "key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools.lock') }}"
         in ci
     )
     assert "restore-keys: tools-${{ runner.os }}-${{ runner.arch }}-" in ci
-    store = ci.index("path: ~/.local/share/footman/toolroom")
+    store = ci.index("path: ${{ runner.temp }}/footman/toolroom")
     assert store < ci.index("Enter the workspace")
 
 
