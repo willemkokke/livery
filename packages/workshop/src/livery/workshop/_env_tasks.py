@@ -201,23 +201,34 @@ class EnvDelta:
 WINDOWS_TEMP_VALUES = ("runner", "system")
 
 
-def uv_cache_dir(environ: dict[str, str]) -> str:
-    """Where a GitHub job keeps uv's cache: under the runner's temp, or empty.
+def runner_placements(environ: dict[str, str]) -> dict[str, str]:
+    """What a GitHub job places under the runner's temp: uv's cache, the data directory.
 
-    The entry script exports the same path before its sync, since it
-    runs before any verb can; the workflow's cache step restores and
-    saves that path. Empty off a runner that names no temp.
+    The runner's temp is the working drive, where the checkout and the
+    venv are; on a Windows runner the home directory is another drive,
+    and a tool store there cannot hardlink into the checkout. The entry
+    script exports the same paths before its sync and materialise,
+    since it runs before any verb can; the workflow's cache steps
+    restore and save these paths. Empty off a runner that names no
+    temp.
     """
+    from livery.footman import _paths  # pyright: ignore[reportPrivateUsage]
+
     runner_temp = environ.get("RUNNER_TEMP", "")
-    return f"{runner_temp}/uv-cache" if runner_temp else ""
+    if not runner_temp:
+        return {}
+    return {
+        "UV_CACHE_DIR": f"{runner_temp}/uv-cache",
+        _paths.env_var("DATA_DIR"): f"{runner_temp}/footman",
+    }
 
 
-def with_uv_cache(delta: EnvDelta, environ: dict[str, str]) -> EnvDelta:
-    """*delta* with ``UV_CACHE_DIR`` for a GitHub job, unchanged elsewhere."""
-    where = uv_cache_dir(environ)
-    if not where:
+def with_runner_placements(delta: EnvDelta, environ: dict[str, str]) -> EnvDelta:
+    """*delta* with the runner's placements for a GitHub job, unchanged elsewhere."""
+    placed = runner_placements(environ)
+    if not placed:
         return delta
-    return EnvDelta(values={**delta.values, "UV_CACHE_DIR": where}, paths=delta.paths)
+    return EnvDelta(values={**delta.values, **placed}, paths=delta.paths)
 
 
 def windows_temp_policy(root: Path) -> str:
@@ -514,7 +525,7 @@ def env_emit(
     dialect = target or ("pwsh" if sys.platform == "win32" else "posix")
     if github:
         delta, note = with_runner_temp(
-            with_uv_cache(workspace_delta(root, cwd), dict(os.environ)),
+            with_runner_placements(workspace_delta(root, cwd), dict(os.environ)),
             root,
             dict(os.environ),
         )

@@ -16,12 +16,12 @@ from livery.workshop._env_tasks import (
     agent_delta,
     emit_lines,
     github_persist,
+    runner_placements,
     tool_profile,
-    uv_cache_dir,
     venv_bin,
     windows_temp_policy,
+    with_runner_placements,
     with_runner_temp,
-    with_uv_cache,
     workspace_delta,
 )
 from livery.workshop._envfile import (
@@ -1001,15 +1001,23 @@ def test_env_set_ci_writes_through_the_protocol(
         env_set("KEY", "value", scope="ci")
 
 
-def test_the_uv_cache_is_placed_under_the_runners_temp_only_on_a_runner() -> None:
+def test_the_runner_places_uv_cache_and_data_dir_under_its_temp_only_on_a_runner() -> (
+    None
+):
     # Off a runner nothing is placed and the delta is untouched; on one
-    # the path is the runner's temp, the same one the workflow's cache
-    # step restores and the entry script exports before its sync.
+    # both paths are under the runner's temp, the same ones the
+    # workflow's cache steps restore and the entry script exports.
+    from livery.footman import _paths  # pyright: ignore[reportPrivateUsage]
+
     delta = EnvDelta(values={"PLAIN": "1"}, paths=("/w/.venv/bin",))
-    assert uv_cache_dir({}) == ""
-    assert with_uv_cache(delta, {}) == delta
-    placed = with_uv_cache(delta, {"RUNNER_TEMP": "/r/_temp"})
-    assert placed.values == {"PLAIN": "1", "UV_CACHE_DIR": "/r/_temp/uv-cache"}
+    assert runner_placements({}) == {}
+    assert with_runner_placements(delta, {}) == delta
+    placed = with_runner_placements(delta, {"RUNNER_TEMP": "/r/_temp"})
+    assert placed.values == {
+        "PLAIN": "1",
+        "UV_CACHE_DIR": "/r/_temp/uv-cache",
+        _paths.env_var("DATA_DIR"): "/r/_temp/footman",
+    }
     assert placed.paths == delta.paths
 
 

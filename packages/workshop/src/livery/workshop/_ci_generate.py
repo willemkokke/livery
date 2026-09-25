@@ -35,11 +35,11 @@ SETUP_UV = "astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.
 #: The cache action the GitHub lane restores and saves through: the tool
 #: store and uv's cache, each keyed by its lock with a prefix fallback.
 CACHE = "actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0"
-#: The tool store's home on every platform: footman's data directory is
-#: XDG-shaped everywhere (`~/.local/share/footman`), and the store is
+#: The tool store's home on a GitHub job: the data directory the entry
+#: places under the runner's temp, the working drive, and the store as
 #: its `toolroom`. Literal here because the step runs before any verb
 #: can: the venv it would need is what the entry step makes.
-STORE_HOME = "~/.local/share/footman/toolroom"
+STORE_HOME = "${{ runner.temp }}/footman/toolroom"
 UPLOAD = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1"
 DOWNLOAD = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1"
 #: The upload action the gitea lane runs. An act_runner that delivers

@@ -497,10 +497,15 @@ def test_the_entry_places_the_uv_cache_before_its_sync_on_a_github_job(
     # The export precedes the sync so the sync fills the cache the
     # workflow restored, and it is conditional on the github mode and
     # a runner that names its temp, so a sourced shell places nothing.
+    from livery.footman import _paths  # pyright: ignore[reportPrivateUsage]
     from livery.workshop._entry import entry_script
 
     script = entry_script(tmp_path)
+    data_var = _paths.env_var("DATA_DIR")
     placed = script.index('UV_CACHE_DIR="$RUNNER_TEMP/uv-cache"')
     assert 'if [ "${1:-}" = github ] && [ -n "${RUNNER_TEMP:-}" ]; then' in script
+    assert f'{data_var}="$RUNNER_TEMP/footman"' in script
     assert placed < script.index("uv sync --project")
-    assert script.count("export UV_CACHE_DIR") == 1
+    assert script.index(f'{data_var}="') < script.index("tools.materialise")
+    assert script.count(f"export UV_CACHE_DIR {data_var}") == 1
+    assert "__DATA_DIR_VAR__" not in script

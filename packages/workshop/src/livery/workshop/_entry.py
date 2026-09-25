@@ -73,13 +73,18 @@ if ! command -v uv >/dev/null 2>&1; then
         return 1 2>/dev/null || exit 1
     fi
 fi
-# On a GitHub job uv's cache lives under the runner's temp, the working
-# drive, where the workflow restores it before this script runs and
-# saves it after the job: exported before the sync so the sync fills
-# it, and persisted by the emission below for every later step.
+# On a GitHub job uv's cache and the runner's data directory, the tool
+# store under it, live under the runner's temp, the working drive,
+# where the workflow restores them before this script runs and saves
+# them after the job. On a Windows runner the working drive is not the
+# home directory's: a store on the home drive cannot hardlink its
+# entry points into the checkout and copies instead. Exported before
+# the sync and the materialise so they fill what was restored, and
+# persisted by the emission below for every later step.
 if [ "${1:-}" = github ] && [ -n "${RUNNER_TEMP:-}" ]; then
     UV_CACHE_DIR="$RUNNER_TEMP/uv-cache"
-    export UV_CACHE_DIR
+    __DATA_DIR_VAR__="$RUNNER_TEMP/footman"
+    export UV_CACHE_DIR __DATA_DIR_VAR__
 fi
 # An ARRAY, not a string: CI may invoke this with zsh, which does not
 # word-split unquoted expansions, so a two-word string would arrive
@@ -108,7 +113,11 @@ elif (return 0 2>/dev/null); then eval "$(_run env.emit posix)"; fi
 
 def entry_script(root: Path) -> str:
     """The emitted ``setup.sh`` body for *root*, header not included."""
+    from livery.footman import _paths  # pyright: ignore[reportPrivateUsage]
+
     pin = locked_uv_version(root)
-    return _SCRIPT.replace("__PROG__", footman.prog()).replace(
-        "__INSTALLER__", installer_url(pin)
+    return (
+        _SCRIPT.replace("__PROG__", footman.prog())
+        .replace("__INSTALLER__", installer_url(pin))
+        .replace("__DATA_DIR_VAR__", _paths.env_var("DATA_DIR"))
     )
