@@ -162,7 +162,20 @@ def rerun_flow(repo: Repository, git: GitOps, *, failed_only: bool = True) -> No
         if run.status == "completed" and run.conclusion != "success"
     ]
     if not failed:
-        print(f"  nothing failed on this branch as of {sha[:10]}")
+        running = [run for run in newest.values() if run.status != "completed"]
+        for run in running:
+            red = [
+                job.name
+                for job in repo.checks.jobs(run.id)
+                if job.status == "completed" and job.conclusion not in _GREEN
+            ]
+            so_far = f" ({', '.join(red)} red so far)" if red else ""
+            print(
+                f"  {run.workflow} (run {run.id}) is still in progress{so_far}: a"
+                f" re-run needs its verdict first, `{footman.prog()} ci.status --wait`"
+            )
+        if not running:
+            print(f"  nothing failed on this branch as of {sha[:10]}")
         return
     from livery.workshop._points import BUILTIN, workflow_of
 
@@ -576,6 +589,26 @@ def ci_status(
         raise SystemExit(code)
 
 
+#: The marks of a line that names a failure: pytest's short summary,
+#: the runner's error annotations, and a verb's own refusal line.
+_FAILURE_MARKS = ("FAILED ", "##[error]", "fm: ")
+
+
+def failure_lines(log: str, *, limit: int = 40) -> list[str]:
+    """The lines of *log* that name a failure, the first *limit* of them.
+
+    A long leg buries pytest's ``FAILED`` summary hundreds of lines
+    above its end, behind the coverage table, so a tail alone shows
+    the exit code and not the test.
+    """
+    found = [
+        line
+        for line in log.splitlines()
+        if any(mark in line for mark in _FAILURE_MARKS)
+    ]
+    return found[:limit]
+
+
 def logs_flow(
     repo: Repository,
     git: GitOps,
@@ -587,8 +620,10 @@ def logs_flow(
     """Print the head commit's job logs, failed jobs first and by default.
 
     The tail of each log, newest run first, so a red branch explains
-    itself without leaving the terminal. With *point* the one run
-    read is the newest of that point's workflow.
+    itself without leaving the terminal; the log's failure lines
+    (livery.workshop._ci_tasks.failure_lines) come first when the tail
+    does not reach them. With *point* the one run read is the newest
+    of that point's workflow.
     """
     if point:
         runs = point_runs(repo, point)[:1]
@@ -615,7 +650,14 @@ def logs_flow(
                 # 404 from its blob store until the job completes.
                 print(f"    log not available yet ({exc.status or 'error'})")
                 continue
-            for line in log.splitlines()[-lines:]:
+            tail = log.splitlines()[-lines:]
+            named = [line for line in failure_lines(log) if line not in tail]
+            if named:
+                print("    failures named above the tail:")
+                for line in named:
+                    print(f"    {line}")
+                print("    tail:")
+            for line in tail:
                 print(f"    {line}")
             printed += 1
     if not printed:

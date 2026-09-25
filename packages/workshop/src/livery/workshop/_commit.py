@@ -16,7 +16,7 @@ from typing import Annotated
 import livery.footman as footman
 from livery.footman import Arg, doc, fail
 from livery.workshop._conventional import TITLE_RE, TYPES
-from livery.workshop._git_ops import GitOps
+from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._layers import workspace_root
 
 
@@ -119,7 +119,13 @@ def commit(
     args = ["commit", "-m", title]
     if body.strip():
         args += ["-m", body.strip()]
-    git._run(*args)
+    try:
+        git._run(*args)
+    except GitError as exc:
+        fail(
+            "git refused the commit; the change is still staged, so fix the"
+            f" cause and re-run:\n{exc}"
+        )
     print(
         f"  scope: {scope or 'none'} ({'given' if given else 'from the changed paths'})"
     )

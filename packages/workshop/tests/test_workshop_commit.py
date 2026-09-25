@@ -176,3 +176,29 @@ def test_a_red_check_stops_before_anything_is_staged(
         commit("feat", "adds b")
     assert _git(root, "status", "--porcelain").strip().startswith("??")
     assert _subject_and_body(root)[0] == "chore: seed"
+
+
+def test_a_refused_commit_object_is_a_plain_refusal_with_gits_words(
+    seeds: Seeds, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._git_ops import GitError, GitOps
+
+    root = _rig(seeds, monkeypatch)
+    (root / "packages" / "x" / "a.py").write_text("A = 2\n")
+    real = GitOps._run
+
+    def _refusing(self: GitOps, *args: str) -> str:
+        if args[0] == "commit":
+            raise GitError(
+                "git commit exited 128:\nerror: 1Password: failed to fill whole"
+                " buffer\nfatal: failed to write commit object"
+            )
+        return real(self, *args)
+
+    monkeypatch.setattr(GitOps, "_run", _refusing)
+    with pytest.raises(_FAILURES) as caught:
+        commit("feat", "bumps a", check=False)
+    message = str(caught.value)
+    assert "still staged" in message and "failed to fill whole buffer" in message
+    # The staged change survives the refusal.
+    assert "a.py" in _git(root, "diff", "--cached", "--name-only")
