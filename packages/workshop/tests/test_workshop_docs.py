@@ -1527,14 +1527,18 @@ def test_a_build_leaves_a_seeded_git_tree_clean(tmp_path: Path) -> None:
     """Contract 2: everything a build writes is gitignored."""
     import subprocess
 
-    from livery.workshop._docs import _generate_all
+    from livery.workshop import _docs
 
     root = _workspace(tmp_path)
     (root / "packages/core/CHANGELOG.md").write_text("# Changelog\n\n## [Unreleased]\n")
-    (root / ".gitignore").write_text(
-        "docs/packages/\ndocs/releases/\ndocs/tasks/\ndocs/tools/\n"
-        "packages/*/docs/_generated/\nzensical.toml\n.docs-build/\nsite/\n"
-    )
+    # The rules under test are the project template's own, so a build
+    # output the template forgets fails here instead of dirtying every
+    # checkout; the two header lines with template variables are comments.
+    template = Path(_docs.__file__).parent / "templates/project/.gitignore.jinja"
+    rules = [
+        line for line in template.read_text().splitlines() if not line.startswith("#")
+    ]
+    (root / ".gitignore").write_text("\n".join(rules) + "\n")
     git = [
         "git",
         "-c",
@@ -1547,7 +1551,7 @@ def test_a_build_leaves_a_seeded_git_tree_clean(tmp_path: Path) -> None:
     subprocess.run([*git, "init", "-q"], cwd=root, check=True)
     subprocess.run([*git, "add", "-A"], cwd=root, check=True)
     subprocess.run([*git, "commit", "-qm", "seed"], cwd=root, check=True)
-    _generate_all(root)
+    _docs._generate_all(root)
     status = subprocess.run(
         ["git", "status", "--porcelain"], cwd=root, check=True, capture_output=True
     ).stdout.decode()

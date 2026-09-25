@@ -1,9 +1,9 @@
 # Modular docs: a package's section is the package's, and the site assembles
 
-Status: ruled 2026-09-25 with phase 5 out. Phases 1 and 2 landed
-2026-09-25 (livery#688 PR #693, livery#695 PR #698). Phase 3 in flight
-(livery#699): the section is the package's, the config is the build's.
-Tracks livery#647 and folds in livery#268.
+Status: complete 2026-09-25. Phases 1 to 4 landed 2026-09-25
+(livery#688 PR #693, livery#695 PR #698, livery#699 PR #704, livery#703
+PR #705); phase 5 is ruled out. Tracks livery#647 and folds in
+livery#268.
 
 ## What this is
 
@@ -401,7 +401,14 @@ Acceptance:
 - 2026-09-25, phase 4: the harness takes the pages repo-relative
   (`packages/footman/docs/input.md`), the spelling the gate names a
   change by, so two packages' harnesses in one pytest run each select
-  their own pages. Phase 4 in flight (livery#703).
+  their own pages.
+- 2026-09-25, closing: a root `docs/_generated/` was seen dirtying a
+  tree after a site build. The build on main writes nothing there today
+  (the task pages and nav blocks go to each package's own generated
+  tree), so the project template ignores the root path as a guard, the
+  same as the per-package trees, and the clean-tree test reads the
+  template's rules instead of a list of its own. Phase 5 stays out; the
+  plan is complete.
 
 - 2026-09-25, phase 2: a generator's block keeps any name (`tasks`,
   `tools`); the emitter's own sections, changelog, coverage and api,
