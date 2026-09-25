@@ -269,6 +269,54 @@ def test_pick_asset_for_a_named_host_reads_the_host_not_the_machine(mac_arm):
         _provision._pick_asset(assets, host="macos-x64")
 
 
+def test_pick_asset_universal_serves_both_macos_hosts_and_no_other(mac_arm):
+    assets = [
+        ("cmake-4.4.3-macos-universal.tar.gz", "mac"),
+        ("cmake-4.4.3-macos-universal.dmg", "dmg"),  # an installer, ranked below
+        ("cmake-4.4.3-linux-x86_64.tar.gz", "linux"),
+    ]
+    for host in ("macos-arm", "macos-x64"):
+        assert _provision._pick_asset(assets, host=host)[1] == "mac"
+    with pytest.raises(
+        _provision.ProvisionError, match="no release asset for linux-arm"
+    ):
+        _provision._pick_asset(assets, host="linux-arm")
+
+
+def test_pick_asset_arch_less_is_the_x64_build_or_the_universal_one(mac_arm):
+    """Ninja names no architecture on the builds that predate its arm ones."""
+    assets = [
+        ("ninja-linux.zip", "linux"),
+        ("ninja-linux-aarch64.zip", "linux-arm"),
+        ("ninja-mac.zip", "mac"),
+        ("ninja-win.zip", "win"),
+        ("ninja-winarm64.zip", "win-arm"),
+    ]
+    picks = {
+        host: _provision._pick_asset(assets, host=host)[1]
+        for host in _provision.HOST_TOKENS
+    }
+    assert picks == {
+        "linux-x64": "linux",
+        "linux-arm": "linux-arm",
+        "macos-x64": "mac",
+        "macos-arm": "mac",
+        "windows-x64": "win",
+        "windows-arm": "win-arm",
+    }
+    # An asset naming another architecture never matches through the
+    # arch-less rule: an arm host with no arm build stays without one.
+    only_x64 = [("tool-linux-x86_64.tar.gz", "x"), ("tool-win.zip", "w")]
+    with pytest.raises(
+        _provision.ProvisionError, match="no release asset for linux-arm"
+    ):
+        _provision._pick_asset(only_x64, host="linux-arm")
+    with pytest.raises(
+        _provision.ProvisionError, match="no release asset for windows-arm"
+    ):
+        _provision._pick_asset(only_x64, host="windows-arm")
+
+
 def test_pick_asset_prefers_the_msvc_build_over_the_mingw_one(win_amd64):
     """git-cliff ships both; the shorter MinGW name must not win by length."""
     assets = [

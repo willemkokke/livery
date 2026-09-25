@@ -127,7 +127,7 @@ def test_cutoff_takes_the_far_edge_of_the_publishing_window(monkeypatch):
         "urlopen",
         lambda *a, **k: io.BytesIO(_json.dumps(index).encode()),
     )
-    driver = _drivers.find("ninja")
+    driver = _drivers.find("mypy")  # a PyPI-tier driver: the index shape is PyPI's
     assert driver is not None
     (release,) = _toolfetch.releases(driver)
     # Both edges taken across the files, not off whichever the index listed

@@ -399,6 +399,18 @@ Acceptance:
   quickest. Phase 1 first, then git-cliff: authoring git-cliff by hand
   needs the same layout and six hashes phase 1 produces by code.
 
+- 2026-09-25, phase 4: a macOS app bundle is sealed by its code
+  signature. cmake's first layout excluded `ccmake` and `cmake-gui` from
+  inside `CMake.app`; Gatekeeper judged the bundle damaged, killed
+  `cmake` (exit 137 under conan), and its "Move to Bin" removed the
+  store's view. No quarantine attribute was involved. A layout removes
+  nothing from under a bundle's seal: the macOS layout names every
+  executable in `CMake.app/Contents/bin` as an entry point. A layout
+  change for an installed version leaves the machine store's ref pinned
+  to the old tree, and no verb clears it yet (livery#682). The asset
+  picker learned `universal`, arch-less builds and ninja's `winarm64`;
+  ninja's newest release has all six hosts through it.
+
 ## Open
 
 None. Every question raised at drafting is in the decision record.

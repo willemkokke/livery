@@ -12,7 +12,11 @@
     },
     "cmake": {
       "version": "4.4.2",
-      "hosts": {}
+      "hosts": {
+        "linux-x64": "sha256:47e345a66da2585104d18716274c026dec16167e573e55830df5db2363ffbf89",
+        "macos-arm": "sha256:80598a1728466e4ba8d663cd7f7a60d157eaaf3098fee0e5fd4d0d5a2308b845",
+        "windows-x64": "sha256:7172c01f69c8842b4668daf761a10650576010ef09175ac1bd87698932b46d1c"
+      }
     },
     "coverage": {
       "version": "7.15.4",

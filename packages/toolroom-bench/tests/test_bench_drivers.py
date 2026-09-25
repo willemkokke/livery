@@ -109,14 +109,11 @@ PYTHON_ON_PYPI = (
     "zensical",
 )
 
-#: Not Python, still read from PyPI until each one's move lands
-#: (`notes/20260925-direct-downloads.md`): the C++ tools in phase 4. A name
-#: leaves this tuple in
-#: the change that moves it, never earlier.
-LEAVING_PYPI = (
-    "cmake",
-    "ninja",
-)
+#: Not Python and still read from PyPI: nothing, since every tool with a
+#: release of its own moved to it (`notes/20260925-direct-downloads.md`).
+#: A tool that must pass through PyPI on its way in names its phase here
+#: and leaves in the change that moves it, never earlier.
+LEAVING_PYPI: tuple[str, ...] = ()
 
 
 def test_the_pypi_tier_carries_python_programs_alone():
