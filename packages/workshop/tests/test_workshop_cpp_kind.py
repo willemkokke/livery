@@ -222,7 +222,12 @@ def test_kind_checks_announce_and_dispatch(
             checked.append(f"build {package.name}")
 
         def test(
-            self, package: Package, root: Path, *, selection: tuple[str, ...] = ()
+            self,
+            package: Package,
+            root: Path,
+            *,
+            selection: tuple[str, ...] = (),
+            pages: tuple[str, ...] = (),
         ) -> None:
             checked.append(f"test {package.name} {' '.join(selection)}")
 
@@ -305,7 +310,12 @@ def test_host_tools_are_named_when_missing(restored_registry, tmp_path: Path) ->
             return None
 
         def test(
-            self, package: Package, root: Path, *, selection: tuple[str, ...] = ()
+            self,
+            package: Package,
+            root: Path,
+            *,
+            selection: tuple[str, ...] = (),
+            pages: tuple[str, ...] = (),
         ) -> None:
             return None
 

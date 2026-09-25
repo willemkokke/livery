@@ -39,6 +39,7 @@ def run_kind_checks(
     root: Path,
     *,
     tests: Mapping[str, tuple[str, ...]] | None = None,
+    pages: Mapping[str, tuple[str, ...]] | None = None,
 ) -> None:
     """Run each kind's own per-package gate, in package order.
 
@@ -67,14 +68,16 @@ def run_kind_checks(
             backend.check(package, root)
             continue
         relative = tuple(path[len(package.path) + 1 :] for path in selection)
+        narrowed = (pages or {}).get(package.path, ())
         build = "gate build, then " if record.tests_need_build else ""
         print(
             f"  {package.path} ({record.name}): {build}the tests of"
             f" {', '.join(relative)} run; {', '.join(skipped)} skip"
+            + (f"; the examples of {', '.join(narrowed)} alone" if narrowed else "")
         )
         if record.tests_need_build:
             backend.gate_build(package, root)
-        backend.test(package, root, selection=relative)
+        backend.test(package, root, selection=relative, pages=narrowed)
 
 
 def _refuse_both(fix: bool, safe_fix: bool) -> None:
@@ -438,15 +441,27 @@ def _run_check(full: bool, fix: bool, base: str) -> None:
                         names = ", ".join(package.path for package in subset)
                         print(f"  affected: {names}")
                         for path, files in sorted(scope.tests.items()):
+                            narrowed = scope.pages.get(path, ())
                             print(
                                 f"  {path}: {len(files)} test file(s) changed and"
                                 " nothing else; they run alone"
+                                + (
+                                    f", the examples of {', '.join(narrowed)}"
+                                    if narrowed
+                                    else ""
+                                )
                             )
                         tree = reflex.tree
                         if fix:
                             _python.scoped_rewrite(subset)
                             tree = _rewritten_tree(root_for_ci, run, tree)
-                        _scoped_check(subset, fix=fix, rewritten=fix, tests=scope.tests)
+                        _scoped_check(
+                            subset,
+                            fix=fix,
+                            rewritten=fix,
+                            tests=scope.tests,
+                            pages=scope.pages,
+                        )
                         # The render and provenance checks are the gate
                         # job's in CI, once per run; a local narrowed gate
                         # runs them too, since a new module changes the
@@ -705,6 +720,7 @@ def _scoped_check(
     fix: bool = False,
     rewritten: bool = False,
     tests: Mapping[str, tuple[str, ...]] | None = None,
+    pages: Mapping[str, tuple[str, ...]] | None = None,
 ) -> None:
     """The gate over *subset* only: this routes, the backends compose.
 
@@ -733,10 +749,10 @@ def _scoped_check(
     with parallel() as p:
         p(
             step(_python.scoped_gate, title="python")(
-                subset, root=root, check_style=not fix, tests=tests
+                subset, root=root, check_style=not fix, tests=tests, pages=pages
             )
         )
-        run_kind_checks(members, root, tests=tests)
+        run_kind_checks(members, root, tests=tests, pages=pages)
 
 
 coverage = group("coverage", help="The measured union and its floors")

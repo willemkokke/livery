@@ -313,7 +313,13 @@ def gate_build(package: Package, root: Path) -> None:
     cmake("--build", str(build_dir))
 
 
-def test(package: Package, root: Path, *, selection: tuple[str, ...] = ()) -> None:
+def test(
+    package: Package,
+    root: Path,
+    *,
+    selection: tuple[str, ...] = (),
+    pages: tuple[str, ...] = (),
+) -> None:
     """Run ctest over the gate build: every test, or *selection*'s alone.
 
     A selected test file maps to the ctest named after its stem
@@ -321,7 +327,7 @@ def test(package: Package, root: Path, *, selection: tuple[str, ...] = ()) -> No
     template registers tests; a selection no ctest answers to is a
     refusal naming the rule.
     """
-    del root
+    del root, pages  # no docs examples harness answers to a C++ kind
     build_dir = package.directory / GATE_BUILD_DIR
     if not selection:
         # The Ninja generator's `test` target runs ctest with the

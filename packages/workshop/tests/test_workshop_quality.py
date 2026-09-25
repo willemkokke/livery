@@ -209,3 +209,30 @@ def test_lint_and_format_refuse_both_fix_flags() -> None:
     with pytest.raises((SystemExit, Exception)) as caught:
         _quality.format(fix=True, safe_fix=True)
     assert "Pass one" in str(caught.value)
+
+
+def test_the_pages_reach_pytest_as_docs_page_arguments(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from livery.workshop._backends import _python
+
+    calls: list[tuple[tuple[str, ...], dict[str, object]]] = []
+    monkeypatch.setattr(
+        _python, "run_test", lambda *args, **kwargs: calls.append((args, kwargs))
+    )
+    package = _package(tmp_path)
+    _python.test(
+        package,
+        tmp_path,
+        selection=("tests/test_docs_examples.py",),
+        pages=(f"{package.path}/docs/a.md", f"{package.path}/docs/b.md"),
+    )
+    args, kwargs = calls[0]
+    assert args == (
+        f"--docs-page={package.path}/docs/a.md",
+        f"--docs-page={package.path}/docs/b.md",
+    )
+    assert kwargs["selection"] == {
+        package.path: (f"{package.path}/tests/test_docs_examples.py",)
+    }
+    assert _python.page_arguments(()) == []
