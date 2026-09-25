@@ -74,35 +74,5 @@ nav = [
     ] },
     { "Playground" = "playground.md" },
     # nav:begin tasks
-    { "Tasks" = [
-        { "Overview" = "_generated/tasks/index.md" },
-        { "docs" = [
-            { "Overview" = "_generated/tasks/docs/index.md" },
-            { "cast" = "_generated/tasks/docs/cast.md" },
-            { "config" = "_generated/tasks/docs/config.md" },
-            { "errors" = "_generated/tasks/docs/errors.md" },
-            { "globals" = "_generated/tasks/docs/globals.md" },
-            { "notes" = "_generated/tasks/docs/notes.md" },
-            { "page" = "_generated/tasks/docs/page.md" },
-            { "shots" = "_generated/tasks/docs/shots.md" },
-            { "site" = "_generated/tasks/docs/site.md" },
-        ] },
-        { "janitor" = [
-            { "Overview" = "_generated/tasks/janitor/index.md" },
-            { "default" = "_generated/tasks/janitor/default.md" },
-        ] },
-        { "self" = [
-            { "Overview" = "_generated/tasks/self/index.md" },
-            { "add" = "_generated/tasks/self/add.md" },
-            { "install" = "_generated/tasks/self/install.md" },
-            { "path" = "_generated/tasks/self/path.md" },
-            { "remove" = "_generated/tasks/self/remove.md" },
-            { "uninstall" = "_generated/tasks/self/uninstall.md" },
-        ] },
-        { "footman" = [
-            { "Overview" = "_generated/tasks/footman/index.md" },
-            { "pages" = "_generated/tasks/footman/pages.md" },
-        ] },
-    ] },
     # nav:end tasks
 ]

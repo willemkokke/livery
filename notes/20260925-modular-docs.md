@@ -1,10 +1,9 @@
 # Modular docs: a package's section is the package's, and the site assembles
 
-Status: ruled 2026-09-25 with phase 5 out. Phase 1 landed 2026-09-25
-(livery#688, PR #693): no published path carries `_generated`. Phase 2
-in flight (livery#695): the machine sections are marker blocks. Tracks
-livery#647 and folds in livery#268. The direct downloads plan
-(`notes/20260925-direct-downloads.md`) completed first, as ruled.
+Status: ruled 2026-09-25 with phase 5 out. Phases 1 and 2 landed
+2026-09-25 (livery#688 PR #693, livery#695 PR #698). Phase 3 in flight
+(livery#699): the section is the package's, the config is the build's.
+Tracks livery#647 and folds in livery#268.
 
 ## What this is
 
@@ -387,6 +386,18 @@ Acceptance:
 
 ## Decision record
 
+- 2026-09-25, phase 3: the root config is the build's, not a committed
+  file that shrinks. The draft kept a small rendered `zensical.toml`
+  and assembled a second config elsewhere; assembling the one file at
+  the root, gitignored, needs no re-anchoring of the snippet, override
+  and handler paths and leaves no drift gate over a file nobody edits.
+  The changelog, coverage and API passes stay the workshop's, writing
+  into each package's generated tree before the mount, rather than
+  becoming declared generators: every package has a changelog and the
+  API pages derive from the module tree, so eight declarations would
+  say nothing. The section digest hashes content and skips the
+  coverage report, which coverage.py stamps with its time; the mount
+  refreshes that tree on every run.
 - 2026-09-25, phase 4: the harness takes the pages repo-relative
   (`packages/footman/docs/input.md`), the spelling the gate names a
   change by, so two packages' harnesses in one pytest run each select

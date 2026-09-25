@@ -116,10 +116,14 @@ def _repo(fake: FakeForge):
 
 
 def _submit(fake: FakeForge, git: SubmitGit, **kwargs: object):
+    # The watch polls through git subprocesses, and a loaded runner
+    # (Windows, four workers) spends seconds on a handful of polls.
+    # The deadline only has to outlast the polls a test forces; a test
+    # that wants the deadline passes its own short timeout.
     defaults: dict[str, object] = {
         "gate": False,
         "interval": 0,
-        "timeout": 5,
+        "timeout": 60,
     }
     defaults.update(kwargs)
     return submit_flow(_repo(fake), git, **defaults)  # type: ignore[arg-type]

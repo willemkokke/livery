@@ -244,9 +244,9 @@ def _chain(
         )
         assert "nav:begin tools" in nav_text
         nav_file.write_text(nav_text)
-        # The generator fills its nav block first, the render then
-        # carries the filled block into zensical.toml, and the commit
-        # captures both, so later builds are no-ops on a clean tree.
+        # The generator emits its nav block beside its pages; the build
+        # assembles the config from it, so nothing committed changes and
+        # later builds are no-ops on a clean tree.
         _run([fm, f"{BRAND}.docsgen"], home, _hermetic(env, home / ".venv"))
         _run([fm, "template.apply"], home, _hermetic(env, home / ".venv"))
         _run(["git", "add", "-A"], home, env)
@@ -256,9 +256,7 @@ def _chain(
     # the built site, and a (re)build leaves the tree clean.
     home_build = _run([fm, "docs.build"], home, _hermetic(env, home / ".venv"))
     assert f"{BRAND}.docsgen" in home_build.stdout
-    generated_page = (
-        home / "site" / "_generated" / "packages" / BRAND / "_generated" / "tools"
-    )
+    generated_page = home / "site" / "packages" / BRAND / "tools"
     assert (generated_page / "index.html").is_file()
     clean = _run(["git", "status", "--porcelain"], home, env)
     assert clean.stdout.strip() == ""
@@ -380,10 +378,10 @@ def _chain(
     # The layer at its installed version renders the child's site
     # config and builds the site; no template re-render happens, and
     # the site speaks the child's name, never the base's.
-    child_config = (child / "zensical.toml").read_text()
-    assert 'site_name = "child"' in child_config
     docs_build = _run([str(brand_cli), "docs.build"], child, _hermetic(env, tool))
     assert "site built" in docs_build.stdout
+    child_config = (child / "zensical.toml").read_text()
+    assert 'site_name = "child"' in child_config
     assert (child / "site" / "index.html").is_file()
     assert "child" in (child / "site" / "index.html").read_text()
 

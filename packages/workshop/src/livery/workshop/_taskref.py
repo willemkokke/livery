@@ -8,12 +8,11 @@ cascade, no base), so no workspace composition, shadowing, disabling,
 or ``exclude=`` mount can change what a package's docs say. Hidden
 tasks stay out by the package's own flags. Pages render with
 ``livery.footman.markdown.render_site`` over the isolated tree, into the
-owner's gitignored ``docs/_generated/tasks/`` tree, and the owner's
-``nav.toml`` ``tasks`` marker block is rewritten so the section's
-nav stays committed state and the drift gate stays offline. The gate
-renders the same block in memory and refuses a committed block that
-lags the advertised tree (`stale_task_blocks`), naming the file and
-the verb that rewrites it.
+owner's gitignored ``docs/_generated/tasks/`` tree, and the ``tasks``
+nav block is emitted beside them as ``nav.tasks.toml``; the owner's
+``nav.toml`` places it with a marker pair and commits nothing the
+tree changes. A providing package whose ``nav.toml`` lacks the pair
+refuses, since the section would have no home.
 
 The runner's ``docs_url`` is one URL template, so a generated alias
 tree at the uniform ``tasks/<slug>/`` address redirects
@@ -30,7 +29,7 @@ from pathlib import Path
 from typing import cast
 
 from livery.footman import fail
-from livery.workshop._docs import nav_block_markers, rewrite_nav_block
+from livery.workshop._docs import nav_block_markers, write_nav_block
 from livery.workshop._packages import Package, discover_packages
 
 #: The nav marker block the reference generator owns in a providing
@@ -198,41 +197,12 @@ def _providing(root: Path) -> list[tuple[Package, list[dict[str, object]]]]:
     return found
 
 
-def stale_task_blocks(root: Path) -> list[str]:
-    """The providing packages whose committed ``tasks`` nav block lags its tree.
-
-    One line per package, naming the file and the remedy; empty when
-    every committed block matches the block the reference would
-    write. Rendered in memory: nothing on disk changes. A block
-    without its markers is named too, since the section has no home.
-    """
-    import livery.footman as footman
-
-    prog = footman.prog()
-    stale: list[str] = []
-    for package, trees in _providing(root):
-        nav = package.directory / "docs" / "nav.toml"
-        relative = nav.relative_to(root).as_posix()
-        committed = committed_nav_block(nav, NAV_BLOCK)
-        if committed is None:
-            stale.append(
-                f"{relative}: no {NAV_BLOCK!r} nav block markers; add the pair"
-                f" where the section belongs, then run `{prog} docs.task-reference`"
-            )
-        elif committed != task_nav_block(trees, prog):
-            stale.append(
-                f"{relative}: the {NAV_BLOCK!r} nav block lags the advertised task"
-                f" tree; run `{prog} docs.task-reference` and commit the block"
-            )
-    return stale
-
-
 def generate_task_reference(root: Path) -> list[str]:
     """Render every advertising package's task reference; the packages.
 
     An index per group and a page per task of each provider's
     isolated tree, into the owner's ``docs/_generated/tasks/`` tree;
-    the owner's ``tasks`` nav block rewritten; the site-root alias
+    the ``tasks`` nav block emitted beside them; the site-root alias
     tree refreshed. A providing package whose ``nav.toml`` lacks the
     marker pair refuses naming the file: where the section sits in
     the tree is the author's decision.
@@ -276,11 +246,14 @@ def generate_task_reference(root: Path) -> list[str]:
                     (out / f"{head}.md").write_text(page, encoding="utf-8")
                     index.append(f"- [{head}]({head}.md)")
         (out / "index.md").write_text("\n".join(index) + "\n", encoding="utf-8")
-        rewrite_nav_block(
-            package.directory / "docs" / "nav.toml",
-            NAV_BLOCK,
-            task_nav_block(trees, prog),
-        )
+        nav = package.directory / "docs" / "nav.toml"
+        if committed_nav_block(nav, NAV_BLOCK) is None:
+            begin, end = nav_block_markers(NAV_BLOCK)
+            fail(
+                f"{nav} does not carry the {NAV_BLOCK!r} block markers ({begin!r}"
+                f" then {end!r}, once each): add them where the section belongs"
+            )
+        write_nav_block(out.parent, NAV_BLOCK, task_nav_block(trees, prog))
         for address in sorted(addresses):
             section = "/".join(address.split("."))
             destination = f"../../packages/{owner}/tasks/{section}/"

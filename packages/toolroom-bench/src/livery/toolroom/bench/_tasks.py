@@ -3060,7 +3060,7 @@ def _verbs_of(path: Path) -> list[str]:
 def pages(
     out: Annotated[Path, doc("directory to write the reference pages into")],
     nav: Annotated[
-        Path | None, doc("a config whose Tools nav block to rewrite")
+        Path | None, doc("the generated docs tree to emit the Tools nav block into")
     ] = None,
     stubs: Annotated[
         Path | None, doc("directory to render the pages' stubs into")
@@ -3073,9 +3073,9 @@ def pages(
     hold. The stubs the pages point at are written as the module
     `toolroom_stubs` under *stubs*, `<out>/../stubs/toolroom_stubs` by
     default, a search path the docs build adds for its renderer. Tools
-    are ordered alphabetically. With *nav*, the tool entries of that
-    config's Tools list are regenerated too (between markers), so the
-    sidebar can never fall behind the drivers again.
+    are ordered alphabetically. With *nav*, the Tools nav block is
+    emitted into that generated tree too, so the sidebar can never fall
+    behind the drivers again.
     """
     out.mkdir(parents=True, exist_ok=True)
     module = stubs if stubs is not None else out.parent / "stubs" / STUBS_MODULE
@@ -3105,31 +3105,26 @@ def pages(
     print(f"wrote {len(stubbed)} tool page(s) into {out}")
 
 
-# The tool entries of the docs nav are regenerated between these markers, so a
-# new driver never needs a hand-edit — `nav_keys` reads them back for the test
-# that fails when the sidebar falls behind `DRIVERS`.
-_NAV_BEGIN = "# nav:begin tools"
-_NAV_END = "# nav:end tools"
-_NAV_RE = _re.compile(
-    _re.escape(_NAV_BEGIN) + r".*?" + _re.escape(_NAV_END), _re.DOTALL
-)
+# The tool entries of the docs nav are emitted as the `tools` nav block
+# beside the pages, so a new driver never needs a hand-edit; `nav_keys`
+# reads them back for the test that fails when the sidebar falls behind
+# `DRIVERS`.
 _NAV_ENTRY = _re.compile(r'\{\s*"(?P<key>[^"]+)"\s*=\s*"_generated/tools/')
 
 
-def write_tools_nav(config: Path, keys: list[str]) -> None:
-    """Rewrite a zensical/mkdocs Tools nav's tool entries from *keys*."""
-    entries = [f'    {{ "{k}" = "_generated/tools/{k}.md" }},' for k in keys]
-    block = "\n".join([_NAV_BEGIN, *entries, _NAV_END])
-    config.write_text(
-        _NAV_RE.sub(lambda _m: block, config.read_text(encoding="utf-8")),
-        encoding="utf-8",
-    )
+def write_tools_nav(generated: Path, keys: list[str]) -> Path:
+    """Emit the Tools nav block's entries from *keys* into *generated*; the path."""
+    from livery.workshop._docs import write_nav_block
+
+    entries = [f'{{ "{k}" = "_generated/tools/{k}.md" }},' for k in keys]
+    return write_nav_block(generated, "tools", entries)
 
 
-def nav_keys(config: Path) -> list[str]:
-    """The tool keys the config's generated Tools-nav block lists, in order."""
-    match = _NAV_RE.search(config.read_text(encoding="utf-8"))
-    return [m["key"] for m in _NAV_ENTRY.finditer(match.group())] if match else []
+def nav_keys(block: Path) -> list[str]:
+    """The tool keys the emitted Tools nav block at *block* lists, in order."""
+    if not block.is_file():
+        return []
+    return [m["key"] for m in _NAV_ENTRY.finditer(block.read_text(encoding="utf-8"))]
 
 
 def _row(driver: _drivers.Driver, record: Record, path: Path) -> str:

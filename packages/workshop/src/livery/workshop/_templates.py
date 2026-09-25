@@ -748,30 +748,19 @@ def template_check() -> None:
 
     Part of the gate. A workspace without a ``templates/`` directory
     is an instance, not the template source, and passes the render
-    check vacuously. Every workspace's committed task nav blocks are
-    judged against the advertised task trees
-    (livery.workshop._taskref.stale_task_blocks): a stale block is
-    named with the verb that rewrites it.
+    check vacuously.
     """
-    from livery.workshop._taskref import stale_task_blocks
-
     root = _root()
-    stale = stale_task_blocks(root)
     drift: list[str] = []
     if local_template_dir(root) is not None:
         drift = project_drift(root) + package_drift(root)
-    if not stale and not drift:
+    if not drift:
         return
-    remedy = (
-        f"\n  edit templates/ (never the rendered copy) and run"
-        f" `{footman.prog()} template.apply`"
-        if drift
-        else ""
-    )
     fail(
         "committed files drift from their generation:\n  "
-        + "\n  ".join(stale + drift)
-        + remedy
+        + "\n  ".join(drift)
+        + f"\n  edit templates/ (never the rendered copy) and run"
+        f" `{footman.prog()} template.apply`"
     )
 
 

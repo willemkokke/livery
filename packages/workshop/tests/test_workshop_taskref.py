@@ -18,7 +18,6 @@ from livery.workshop._taskref import (
     committed_nav_block,
     generate_task_reference,
     provider_tree,
-    stale_task_blocks,
 )
 
 
@@ -134,7 +133,7 @@ def test_missing_markers_refuse_naming_the_file(
         generate_task_reference(root)
 
 
-def test_a_missing_marker_pair_is_named_as_stale_with_the_remedy(
+def test_a_missing_marker_pair_refuses_and_writes_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop import _taskref
@@ -146,17 +145,19 @@ def test_a_missing_marker_pair_is_named_as_stale_with_the_remedy(
     nav.write_text('nav = [\n    { "Index" = "index.md" },\n]\n')
     assert committed_nav_block(nav, "tasks") is None
     assert committed_nav_block(root / "nowhere.toml", "tasks") is None
-    (stale,) = stale_task_blocks(root)
-    assert stale.startswith("packages/core/docs/nav.toml: no 'tasks' nav block markers")
-    assert "docs.task-reference" in stale
-    # A refusal reads, never writes: the file is as it was.
+    with pytest.raises(BaseException, match="does not carry the 'tasks' block markers"):
+        generate_task_reference(root)
+    # A refusal reads, never writes: the file is as it was, and no block.
     assert nav.read_text() == 'nav = [\n    { "Index" = "index.md" },\n]\n'
+    assert not (root / "packages/core/docs/_generated/nav.tasks.toml").exists()
 
 
-def test_a_committed_block_that_lags_the_tree_is_stale_until_regenerated(
+def test_the_block_is_emitted_beside_the_pages_and_the_nav_file_stays(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Nothing committed changes when the tree does: the block is generated."""
     from livery.workshop import _taskref
+    from livery.workshop._docs import zensical_config
 
     root = _workspace(tmp_path)
     tree: dict[str, object] = {
@@ -166,25 +167,25 @@ def test_a_committed_block_that_lags_the_tree_is_stale_until_regenerated(
     }
     monkeypatch.setattr(_taskref, "provider_tree", lambda _root, _identity: tree)
     nav = root / "packages/core/docs/nav.toml"
-    # The empty committed block lags; the bare package has no providers
-    # and is never named.
-    (stale,) = stale_task_blocks(root)
-    assert stale.startswith("packages/core/docs/nav.toml: the 'tasks' nav block lags")
-    assert "run `fm docs.task-reference` and commit the block" in stale
     before = nav.read_bytes()
-    assert nav.read_bytes() == before  # judged in memory
     assert generate_task_reference(root) == ["core"]
-    assert stale_task_blocks(root) == []
-    block = committed_nav_block(nav, "tasks")
-    assert block is not None
-    assert block[0] == '{ "Tasks" = [' and block[-1] == "] },"
-    assert '        { "build" = "_generated/tasks/docs/build.md" },' in block
-    # A verb the tree gains lags the committed block again.
+    assert nav.read_bytes() == before
+    block = root / "packages/core/docs/_generated/nav.tasks.toml"
+    assert block.is_file()
+    text = block.read_text()
+    assert text.startswith("# The 'tasks' nav block, emitted by its generator")
+    assert '        { "build" = "_generated/tasks/docs/build.md" },' in text
+    # The emitter renders the emitted block where the authored file places it.
+    config = zensical_config(root)
+    assert '{ "build" = "packages/core/tasks/docs/build.md" }' in config
+    # A verb the tree gains reaches the block on the next generation, and
+    # the authored file still.
     tasks = tree["tasks"]
     assert isinstance(tasks, dict)
     tasks["update"] = _row()
-    (stale,) = stale_task_blocks(root)
-    assert "lags the advertised task tree" in stale
+    generate_task_reference(root)
+    assert '{ "update" = "packages/core/tasks/update.md" }' in zensical_config(root)
+    assert nav.read_bytes() == before
 
 
 def test_the_reference_renders_the_advertised_tree_whole(
@@ -218,7 +219,7 @@ def test_the_reference_renders_the_advertised_tree_whole(
     assert (tasks / "forge" / "dev" / "up.md").is_file()
     assert (tasks / "sync.md").is_file()
     assert (tasks / "index.md").is_file()
-    nav = (root / "packages/core/docs/nav.toml").read_text()
+    nav = (root / "packages/core/docs/_generated/nav.tasks.toml").read_text()
     assert '"dev.up" = "_generated/tasks/forge/dev/up.md"' in nav
     assert '{ "sync" = "_generated/tasks/sync.md" },' in nav
     alias = (root / "docs/tasks/forge-dev-up.md").read_text()

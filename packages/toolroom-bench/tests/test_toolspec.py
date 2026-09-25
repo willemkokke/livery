@@ -1785,34 +1785,30 @@ def test_pages_writes_one_per_tool_plus_an_index(tmp_path):
             assert driver.url in index, "the table links out to the tool itself"
 
 
-def test_pages_regenerates_the_tools_nav_between_markers(tmp_path):
+def test_pages_emits_the_tools_nav_block_beside_the_pages(tmp_path):
     from livery.toolroom.bench import _tasks as tools_tasks
 
-    config = tmp_path / "z.toml"
-    config.write_text(
-        'nav = [{ "Tools" = [\n'
-        "    # nav:begin tools\n"
-        '    { "stale" = "_generated/tools/stale.md" },\n'
-        "    # nav:end tools\n] }]\n"
-    )
-    tools_tasks.pages(tmp_path / "out", nav=config)
-    keys = tools_tasks.nav_keys(config)
-    assert "stale" not in keys  # the old hand-entry is replaced
+    generated = tmp_path / "_generated"
+    tools_tasks.pages(generated / "tools", nav=generated)
+    block = generated / "nav.tools.toml"
+    assert block.is_file()
+    keys = tools_tasks.nav_keys(block)
     assert keys == sorted(keys)  # alphabetical
     assert {"bash", "python", "ruff"} <= set(keys)  # the real drivers, sorted in
+    assert tools_tasks.nav_keys(tmp_path / "nowhere.toml") == []
 
 
-def test_checked_in_tools_nav_lists_every_stubbed_driver():
-    # Fails when a driver is added without `fm toolroom.pages` regenerating
-    # the sidebar — the drift guard the hardcoded nav never had.
-
+def test_the_emitted_tools_nav_lists_every_stubbed_driver(tmp_path):
+    # Fails when a driver is added without the block following: the
+    # generator emits the sidebar from the drivers, never by hand.
     from livery.toolroom.bench import _tasks as tools_tasks
 
-    config = _toolroom_root() / "docs" / "nav.toml"
+    generated = tmp_path / "_generated"
+    tools_tasks.pages(generated / "tools", nav=generated)
     expected = sorted(
         d.key for d in _drivers.DRIVERS if tools_tasks._record_path(d.key).exists()
     )
-    assert tools_tasks.nav_keys(config) == expected
+    assert tools_tasks.nav_keys(generated / "nav.tools.toml") == expected
 
 
 def test_the_index_states_the_version_each_stub_was_read_from(tmp_path):

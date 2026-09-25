@@ -25,6 +25,6 @@ def docs_pages() -> None:
     from livery.toolroom.bench._tasks import STUBS_MODULE, colour_page, pages
 
     out = Path("packages/toolroom/docs/_generated")
-    pages(out / "tools", stubs=out / "stubs" / STUBS_MODULE)
+    pages(out / "tools", nav=out, stubs=out / "stubs" / STUBS_MODULE)
     (out / "colour.md").write_text(colour_page(), encoding="utf-8")
     print(f"  tool pages and the colour table into {out}")

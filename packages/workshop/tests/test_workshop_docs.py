@@ -77,12 +77,15 @@ def test_a_docsless_package_gets_its_stale_wheel_copy_removed(
     assert not target.exists()
 
 
-def test_the_mount_rebuilds_whole(tmp_path: Path) -> None:
+def test_the_mount_rebuilds_whole_when_asked(tmp_path: Path) -> None:
+    """An unchanged section keeps its mount; ``full`` rebuilds it whole."""
     root = _workspace(tmp_path)
     mount_package_docs(root)
     stale = root / "docs/packages/core/gone.md"
     stale.write_text("stale\n")
-    mount_package_docs(root)
+    assert mount_package_docs(root) == []  # the section did not move
+    assert stale.exists()
+    assert mount_package_docs(root, full=True) == ["core"]
     assert not stale.exists()
     assert (root / "docs/packages/core/guide.md").is_file()
 
@@ -118,20 +121,22 @@ def test_the_wheel_side_docs_refresh_whole(tmp_path: Path) -> None:
     assert (target / "guide.md").read_text() == "# edited\n"
 
 
-def test_the_rendered_config_joins_the_generated_set(tmp_path: Path) -> None:
-    # Drift protection comes from membership: whatever generate()
-    # returns is applied and drift-checked by the template machinery,
-    # so the config being in the set is the whole guarantee.
+def test_the_config_is_the_builds_and_never_a_rendered_file(tmp_path: Path) -> None:
+    """The build assembles it; nothing committed enumerates the packages."""
     from livery.workshop._ci_generate import generate
+    from livery.workshop._docs import write_site_config
 
     root = _workspace(tmp_path)
     for kind in ("github", "gitea", "gitlab"):
         (root / "workshop.toml").write_text(
             f'[workspace]\n[forge]\nkind = "{kind}"\nowner = "acme"\n'
         )
-        files = generate(root)
-        assert "zensical.toml" in files
-        assert files["zensical.toml"].startswith("# Generated")
+        assert "zensical.toml" not in generate(root)
+    written = write_site_config(root)
+    assert written == root / "zensical.toml"
+    text = written.read_text()
+    assert text.startswith("# Assembled by the docs build")
+    assert tomllib.loads(text)["project"]["site_name"] == "acme-home"
 
 
 # Phase 2: the API reference. Fallbacks first.
@@ -179,15 +184,16 @@ def test_api_modules_sort_public_first_and_skip_the_machinery(
 
 
 def test_api_pages_rebuild_whole_with_one_directive_each(tmp_path: Path) -> None:
-    from livery.workshop._docs import API_DIR, MOUNT, generate_api_pages
+    from livery.workshop._docs import API_DIR, GENERATED_DIR, generate_api_pages
 
     root = _workspace(tmp_path)
-    stale = root / MOUNT / "core" / API_DIR / "gone.md"
+    generated = root / "packages" / "core" / "docs" / GENERATED_DIR
+    stale = generated / API_DIR / "gone.md"
     stale.parent.mkdir(parents=True)
     stale.write_text("stale\n")
     assert generate_api_pages(root) == ["bare", "core"]
     assert not stale.exists()
-    index = (root / MOUNT / "core" / API_DIR / "index.md").read_text()
+    index = (generated / API_DIR / "index.md").read_text()
     assert "::: acme.core" in index
 
 
@@ -668,9 +674,9 @@ def test_the_preview_tree_rebuilds_whole_and_stays_scoped(tmp_path: Path) -> Non
     )
 
     root = _workspace(tmp_path)
-    mount_package_docs(root)
     generate_changelog_pages(root)
     generate_api_pages(root)
+    mount_package_docs(root)
     core = named_package(root, "core")
     stale = root / ".docs-preview" / "core" / "stale.md"
     stale.parent.mkdir(parents=True)
@@ -1030,7 +1036,7 @@ def test_a_missing_report_states_the_absence_and_stays_green(
         root, "core", 'coverage = [{ label = "Python", path = "htmlcov" }]\n'
     )
     assert generate_coverage_pages(root) == ["core"]
-    page = (root / "docs/packages/core/coverage.md").read_text()
+    page = (root / "packages/core/docs/_generated/coverage.md").read_text()
     assert "was not produced in this build" in page
     assert "iframe" not in page
 
@@ -1094,15 +1100,15 @@ def test_a_checkout_without_the_site_sources_is_refused_before_the_build(
 ) -> None:
     from livery.workshop._docs import require_sources, source_summary
 
-    with pytest.raises(_FAILURES, match=r"docs, zensical\.toml missing"):
+    with pytest.raises(_FAILURES, match=r"docs, workshop\.toml missing"):
         require_sources(tmp_path)
     (tmp_path / "docs").mkdir()
-    with pytest.raises(_FAILURES, match=r"zensical\.toml missing"):
+    with pytest.raises(_FAILURES, match=r"workshop\.toml missing"):
         require_sources(tmp_path)
-    (tmp_path / "zensical.toml").write_text("[project]\n")
+    (tmp_path / "workshop.toml").write_text("[workspace]\n")
     require_sources(tmp_path)
     assert source_summary(tmp_path) == (
-        "  site sources: 0 page(s) under docs/, zensical.toml present"
+        "  site sources: 0 page(s) under docs/, the config assembled"
     )
     (tmp_path / "docs" / "index.md").write_text("# hi\n")
     (tmp_path / "docs" / "deep").mkdir()
@@ -1173,15 +1179,16 @@ def test_a_present_report_copies_whole_and_iframes(tmp_path: Path) -> None:
         report.mkdir(parents=True)
         (report / "index.html").write_text("<h1>report</h1>\n")
         (report / "style.css").write_text("body {}\n")
-    mount_package_docs(root)
     assert generate_coverage_pages(root) == ["core"]
+    mount_package_docs(root)
     mount = root / "docs/packages/core"
     page = (mount / "coverage.md").read_text()
     assert 'src="coverage/python/index.html"' in page
     assert 'src="coverage/native-fixture/index.html"' in page
     assert (mount / "coverage/python/style.css").is_file()
-    # The copy rebuilds whole: a stale file never lingers.
-    stale = mount / "coverage/python/gone.html"
+    # The copy rebuilds whole in the package's tree: a stale file never lingers.
+    generated = root / "packages/core/docs/_generated"
+    stale = generated / "coverage/python/gone.html"
     stale.write_text("stale\n")
     generate_coverage_pages(root)
     assert not stale.exists()
@@ -1422,10 +1429,126 @@ def test_unplaced_blocks_land_in_order_around_the_tasks_block(tmp_path: Path) ->
 
 
 def test_this_workspaces_sidebars_read_changelog_then_tasks_then_api() -> None:
+    """The order holds among the sections a checkout has.
+
+    The tasks block is emitted by its generator, so a fresh checkout
+    may not carry it yet.
+    """
     root = Path(__file__).resolve().parents[3]
     config = zensical_config(root)
     for name in ("footman", "workshop", "forge"):
         labels = _nav_labels(config, name)
-        assert labels.index("Changelog") < labels.index("Tasks"), (name, labels)
-        if "API" in labels:
-            assert labels.index("Tasks") < labels.index("API"), (name, labels)
+        present = [label for label in ("Changelog", "Tasks", "API") if label in labels]
+        assert "Changelog" in present, (name, labels)
+        assert [labels.index(label) for label in present] == sorted(
+            labels.index(label) for label in present
+        ), (name, labels)
+
+
+# Phase 3 of the modular docs plan: the section is the package's, the site assembles.
+
+
+def test_the_mount_keeps_an_unchanged_section_and_full_rebuilds_it(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._docs import BUILD_DIR, MOUNT
+
+    root = _workspace(tmp_path)
+    assert mount_package_docs(root) == ["core"]
+    assert (root / BUILD_DIR / "core.digest").is_file()
+    # Unchanged: nothing copied, the mount stays.
+    assert mount_package_docs(root) == []
+    assert (root / MOUNT / "core" / "guide.md").is_file()
+    # A rewrite with the same bytes moves nothing; new bytes do; --full
+    # copies regardless.
+    page = root / "packages/core/docs/guide.md"
+    page.write_text(page.read_text())
+    assert mount_package_docs(root) == []
+    page.write_text("# guide, moved\n")
+    assert mount_package_docs(root) == ["core"]
+    assert mount_package_docs(root, full=True) == ["core"]
+    # A measured coverage report is stamped with its time: it moves no
+    # digest, and an unchanged mount still gets the fresh copy.
+    report = root / "packages/core/docs/_generated/coverage/python"
+    report.mkdir(parents=True)
+    (report / "index.html").write_text("<h1>run 1</h1>\n")
+    assert mount_package_docs(root) == []  # the report never moves the digest
+    assert (root / MOUNT / "core/coverage/python/index.html").is_file()
+    (report / "index.html").write_text("<h1>run 2</h1>\n")
+    assert mount_package_docs(root) == []
+    assert (
+        root / MOUNT / "core/coverage/python/index.html"
+    ).read_text() == "<h1>run 2</h1>\n"
+    # A package that left the workspace loses its mount.
+    import shutil
+
+    shutil.rmtree(root / "packages/core")
+    assert mount_package_docs(root) == []
+    assert not (root / MOUNT / "core").exists()
+
+
+def test_the_workshops_pages_land_in_the_packages_generated_tree(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._docs import (
+        emit_section_navs,
+        generate_api_pages,
+        generate_changelog_pages,
+    )
+
+    root = _workspace(tmp_path)
+    (root / "packages/core/CHANGELOG.md").write_text("# Changelog\n\n## [Unreleased]\n")
+    assert generate_changelog_pages(root) == ["core"]
+    assert generate_api_pages(root) == ["bare", "core"]
+    generated = root / "packages/core/docs/_generated"
+    assert (generated / "changelog.md").is_file()
+    assert (generated / "api" / "index.md").is_file()
+    assert emit_section_navs(root) == ["bare", "core"]
+    section = (generated / "nav.toml").read_text()
+    assert section.startswith("# This section as the site assembles it")
+    parsed = tomllib.loads(section)["nav"]
+    assert list(parsed[0]) == ["core"]
+    leaves = _nav_leaves_of(parsed)
+    assert "packages/core/changelog.md" in leaves
+    assert "packages/core/api/index.md" in leaves
+    # The mount carries them, and the assembled config points at them.
+    mount_package_docs(root)
+    assert (root / "docs/packages/core/api/index.md").is_file()
+    assert "packages/core/changelog.md" in zensical_config(root)
+
+
+def _nav_leaves_of(entries: list[object]) -> list[str]:
+    from livery.workshop._docs import _nav_leaves
+
+    return _nav_leaves(entries)
+
+
+def test_a_build_leaves_a_seeded_git_tree_clean(tmp_path: Path) -> None:
+    """Contract 2: everything a build writes is gitignored."""
+    import subprocess
+
+    from livery.workshop._docs import _generate_all
+
+    root = _workspace(tmp_path)
+    (root / "packages/core/CHANGELOG.md").write_text("# Changelog\n\n## [Unreleased]\n")
+    (root / ".gitignore").write_text(
+        "docs/packages/\ndocs/releases/\ndocs/tasks/\ndocs/tools/\n"
+        "packages/*/docs/_generated/\nzensical.toml\n.docs-build/\nsite/\n"
+    )
+    git = [
+        "git",
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@t",
+        "-c",
+        "commit.gpgsign=false",
+    ]
+    subprocess.run([*git, "init", "-q"], cwd=root, check=True)
+    subprocess.run([*git, "add", "-A"], cwd=root, check=True)
+    subprocess.run([*git, "commit", "-qm", "seed"], cwd=root, check=True)
+    _generate_all(root)
+    status = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=root, check=True, capture_output=True
+    ).stdout.decode()
+    assert status == "", status

@@ -1,11 +1,13 @@
 """The documentation site: its rendered config, mounts, and verbs.
 
-One rendered site per workspace. The config is emitted the way
-``ci.yml`` is: a generated header, drift-checked, the nav owned
-between markers. Authors write ``packages/<name>/docs/`` and the
-root ``docs/`` tree; every underscore path this module writes is
-machine territory, refreshed by the verbs and never edited by a
-person.
+One rendered site per workspace. The config zensical reads is
+assembled by the build, into a gitignored ``zensical.toml`` at the
+root: the site's identity from the contract, the root pages, and one
+section per package from the nav each package emits into its own
+generated tree. Nothing committed enumerates the packages. Authors
+write ``packages/<name>/docs/`` and the root ``docs/`` tree; every
+underscore path this module writes is machine territory, refreshed by
+the verbs and never edited by a person.
 
 A package owns the shape of its own site section through
 ``docs/nav.toml``: a hand-authored tree the emitter merges under
@@ -45,6 +47,9 @@ NAV_END = "# docs-nav:end"
 #: Where package docs mount inside the site's tree, per package
 #: directory name. Gitignored; rebuilt on every docs verb.
 MOUNT = "docs/packages"
+
+#: The config the build assembles and zensical reads, at the root; gitignored.
+SITE_CONFIG = "zensical.toml"
 
 #: A package's own generated tree, under its ``docs/``: a name on disk,
 #: never a published path. The mount merges it into the package's root
@@ -169,11 +174,10 @@ def generate_coverage_pages(root: Path) -> list[str]:
     """Copy declared coverage trees and write each coverage page.
 
     One page per declaring package, one iframe per report, into the
-    package's mount. A declared tree that is missing renders its
-    section saying so and the build stays green: on a machine that
-    has not measured, or a deploy without the artifacts, the absence
-    is stated rather than failing the site. Runs after the mount
-    rebuild, like the changelog pages.
+    package's generated tree, which the mount merges. A declared tree
+    that is missing renders its section saying so and the build stays
+    green: on a machine that has not measured, or a deploy without the
+    artifacts, the absence is stated rather than failing the site.
     """
     written: list[str] = []
     for package in discover_packages(root):
@@ -181,7 +185,8 @@ def generate_coverage_pages(root: Path) -> list[str]:
         if not reports:
             continue
         name = package.directory.name
-        mount = root / MOUNT / name
+        mount = package.directory / "docs" / GENERATED_DIR
+        mount.mkdir(parents=True, exist_ok=True)
         lines = ["# Coverage", ""]
         for label, path in reports:
             source = package.directory / path
@@ -384,7 +389,8 @@ def authored_nav(
     path = package.directory / "docs" / NAV_TOML
     if not path.is_file():
         return None
-    text, blocks = _lift_blocks(path, path.read_text("utf-8"))
+    generated = package.directory / "docs" / GENERATED_DIR
+    text, blocks = _lift_blocks(path, path.read_text("utf-8"), generated)
     try:
         parsed = tomllib.loads(text)
     except tomllib.TOMLDecodeError as error:
@@ -399,8 +405,38 @@ def authored_nav(
 _MARKER = re.compile(r"^(\s*)# nav:(begin|end) (\S+)\s*$")
 
 
-def _lift_blocks(path: Path, text: str) -> tuple[str, dict[str, list[object]]]:
-    """*text* with each marker pair replaced by its sentinel; the pairs' entries."""
+def nav_block_file(generated: Path, name: str) -> Path:
+    """Where a generator emits the *name* block's entries: `nav.<name>.toml`."""
+    return generated / f"nav.{name}.toml"
+
+
+def write_nav_block(generated: Path, name: str, entries: list[str]) -> Path:
+    """Emit the *name* block's *entries* into the package's generated tree; the path.
+
+    The file carries a `nav` list, the block's entries unindented, the
+    way `rewrite_nav_block` writes them between markers. The emitter
+    renders it where the authored ``nav.toml`` places the block's
+    marker pair, so nothing committed changes when the block does.
+    """
+    generated.mkdir(parents=True, exist_ok=True)
+    path = nav_block_file(generated, name)
+    body = "\n".join(entries)
+    path.write_text(
+        f"# The {name!r} nav block, emitted by its generator; the authored"
+        f" nav.toml places it.\nnav = [\n{body}\n]\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _lift_blocks(
+    path: Path, text: str, generated: Path
+) -> tuple[str, dict[str, list[object]]]:
+    """*text* with each marker pair replaced by its sentinel; the pairs' entries.
+
+    A block's entries come from the file its generator emitted under
+    *generated* when there is one, else from between the markers.
+    """
     lines = text.splitlines()
     found: dict[str, tuple[int, int, str]] = {}
     open_name: str | None = None
@@ -427,11 +463,17 @@ def _lift_blocks(path: Path, text: str) -> tuple[str, dict[str, list[object]]]:
     for name, (begin, end, indent) in sorted(
         found.items(), key=lambda item: -item[1][0]
     ):
-        inner = "\n".join(lines[begin + 1 : end])
+        emitted = nav_block_file(generated, name)
+        source = emitted if emitted.is_file() else path
+        inner = (
+            emitted.read_text("utf-8")
+            if emitted.is_file()
+            else f"nav = [\n{chr(10).join(lines[begin + 1 : end])}\n]"
+        )
         try:
-            parsed = tomllib.loads(f"nav = [\n{inner}\n]")
+            parsed = tomllib.loads(inner)
         except tomllib.TOMLDecodeError as error:
-            fail(f"{path}: the nav block {name!r} is not valid TOML: {error}")
+            fail(f"{source}: the nav block {name!r} is not valid TOML: {error}")
         entries = parsed.get("nav")
         blocks[name] = list(entries) if isinstance(entries, list) else []
         lifted[begin : end + 1] = [
@@ -849,14 +891,14 @@ def overrides_template(root: Path) -> str:
 
 
 def zensical_config(root: Path) -> str:
-    """The rendered ``zensical.toml`` body, generated header excluded.
+    """The assembled ``zensical.toml`` body, header excluded.
 
     Site identity comes from the ``[docs]`` table (title defaults to
-    the root project's name); the nav enumerates the root
-    ``docs/`` pages and every package's ``docs/`` tree at its mount
+    the root project's name); the nav carries the root ``docs/``
+    pages, the release view and every package's section at its mount
     path; the theme, extension set, and asset lists follow. The whole
-    file is the emitter's: hand customisation goes through the
-    contract, and the drift gate refuses an edit here.
+    file is the build's: hand customisation goes through the contract
+    and the packages' ``nav.toml`` files.
     """
     table = docs_table(root)
     title = str(table.get("title", "")) or _project_name(root)
@@ -1038,17 +1080,16 @@ def changelog_page(root: Path, package: Package) -> str | None:
 
 
 def generate_changelog_pages(root: Path) -> list[str]:
-    """Write each package's changelog page into its mount; the names.
+    """Write each package's changelog page into its generated tree; the names.
 
-    Runs after the mount rebuild, so the pages land in the same tree
-    the nav points at.
+    The mount merges the tree, so the page lands where the nav points.
     """
     generated: list[str] = []
     for package in discover_packages(root):
         page = changelog_page(root, package)
         if page is None:
             continue
-        target = root / MOUNT / package.directory.name / "changelog.md"
+        target = package.directory / "docs" / GENERATED_DIR / "changelog.md"
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(page, encoding="utf-8")
         generated.append(package.directory.name)
@@ -1173,11 +1214,45 @@ def generate_release_pages(root: Path) -> list[str]:
     return written
 
 
-def mount_package_docs(root: Path) -> list[str]:
-    """Mount every package's ``docs/`` into the site tree; the names.
+#: The build's own scratch, gitignored: one digest stamp per mounted
+#: package, so an unchanged section is not copied again.
+BUILD_DIR = ".docs-build"
 
-    The mount is rebuilt whole on every call, so a page deleted from
-    a package never lingers in the site. ``nav.toml`` stays behind:
+
+#: The coverage report tree a package's generated docs carry: coverage.py
+#: stamps its creation time into every page, so the tree never digests
+#: the same twice, and the mount refreshes it on every run instead.
+COVERAGE_TREE = f"{GENERATED}coverage/"
+
+
+def section_digest(docs: Path) -> str:
+    """A digest of a package's docs tree: every file's path and bytes.
+
+    Content, never mtimes: a generator rewrites its pages on every
+    run, and an unchanged page must not move the digest. The coverage
+    report tree is left out, since a measured report is stamped with
+    its time and would move the digest on every build.
+    """
+    import hashlib
+
+    digest = hashlib.sha256()
+    for path in sorted(p for p in docs.rglob("*") if p.is_file()):
+        relative = path.relative_to(docs).as_posix()
+        if relative.startswith(COVERAGE_TREE):
+            continue
+        digest.update(relative.encode() + b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\n")
+    return digest.hexdigest()
+
+
+def mount_package_docs(root: Path, *, full: bool = False) -> list[str]:
+    """Mount every package's ``docs/`` into the site tree; the names copied.
+
+    A package's mount is rebuilt whole when its docs tree's digest
+    moved since the last mount, or with *full*; an unchanged section
+    is left in place with its coverage report refreshed, and a package
+    that left the workspace loses its mount. ``nav.toml`` stays behind:
     it configures the nav and is not site content. The package's
     generated tree merges into the mount's root and every link into it
     in a mounted page loses the prefix, so ``_generated`` names a
@@ -1186,13 +1261,36 @@ def mount_package_docs(root: Path) -> list[str]:
     both.
     """
     base = root / MOUNT
-    shutil.rmtree(base, ignore_errors=True)
+    stamps = root / BUILD_DIR
+    stamps.mkdir(exist_ok=True)
+    if full:
+        shutil.rmtree(base, ignore_errors=True)
+    base.mkdir(parents=True, exist_ok=True)
+    present = {package.directory.name for package in discover_packages(root)}
+    for stale in base.iterdir():
+        if stale.name not in present:
+            shutil.rmtree(stale, ignore_errors=True)
+            (stamps / f"{stale.name}.digest").unlink(missing_ok=True)
     mounted: list[str] = []
     for package in discover_packages(root):
         docs = package.directory / "docs"
+        name = package.directory.name
+        target = base / name
+        stamp = stamps / f"{name}.digest"
         if not docs.is_dir():
+            shutil.rmtree(target, ignore_errors=True)
+            stamp.unlink(missing_ok=True)
             continue
-        target = base / package.directory.name
+        digest = section_digest(docs)
+        if (
+            not full
+            and target.is_dir()
+            and stamp.is_file()
+            and stamp.read_text(encoding="utf-8") == digest
+        ):
+            _refresh_coverage(docs, target)
+            continue
+        shutil.rmtree(target, ignore_errors=True)
         shutil.copytree(
             docs,
             target,
@@ -1202,8 +1300,18 @@ def mount_package_docs(root: Path) -> list[str]:
         )
         _merge_generated(docs / GENERATED_DIR, target, package.path)
         _strip_generated_links(target)
-        mounted.append(package.directory.name)
+        stamp.write_text(digest, encoding="utf-8")
+        mounted.append(name)
     return mounted
+
+
+def _refresh_coverage(docs: Path, target: Path) -> None:
+    """Copy the coverage report tree into an unchanged mount; the digest skips it."""
+    source = docs / COVERAGE_TREE.rstrip("/")
+    destination = target / "coverage"
+    if source.is_dir():
+        shutil.rmtree(destination, ignore_errors=True)
+        shutil.copytree(source, destination)
 
 
 def _merge_generated(generated: Path, target: Path, package_path: str) -> None:
@@ -1218,8 +1326,8 @@ def _merge_generated(generated: Path, target: Path, package_path: str) -> None:
     if not generated.is_dir():
         return
     for source in sorted(generated.rglob("*")):
-        if source.is_dir():
-            continue
+        if source.is_dir() or source.suffix == ".toml":
+            continue  # the nav files configure the section; not site content
         relative = source.relative_to(generated).as_posix()
         destination = target / relative
         if destination.exists():
@@ -1395,18 +1503,18 @@ def api_modules(package: Package) -> list[tuple[str, str]]:
 
 
 def generate_api_pages(root: Path) -> list[str]:
-    """Write the API pages into each package's mount; the package names.
+    """Write the API pages into each package's generated tree; the package names.
 
     One page per module, each a single directive: mkdocstrings walks
-    the members. Written into the mount's ``api/`` after the mount is
-    rebuilt, so the pages publish under the package's own path.
+    the members. Written under ``api/`` in the tree the mount merges,
+    so the pages publish under the package's own path.
     """
     generated: list[str] = []
     for package in discover_packages(root):
         modules = api_modules(package)
         if not modules:
             continue
-        base = root / MOUNT / package.directory.name / API_DIR
+        base = package.directory / "docs" / GENERATED_DIR / API_DIR
         shutil.rmtree(base, ignore_errors=True)
         for page, dotted in modules:
             target = base / page
@@ -1633,18 +1741,65 @@ def _root() -> Path:
     return root
 
 
-def _generate_all(root: Path) -> None:
+def emit_section_navs(root: Path) -> list[str]:
+    """Emit each package's complete section nav into its generated tree; the names.
+
+    The section as the assembled config carries it: the authored tree
+    with every block filled, paths as they publish. One file per
+    package, ``docs/_generated/nav.toml``, gitignored, so the section
+    is whole on disk beside its pages.
+    """
+    emitted: list[str] = []
+    for package in discover_packages(root):
+        section, _ = _package_section(package, indent="")
+        if not section:
+            continue
+        generated = package.directory / "docs" / GENERATED_DIR
+        generated.mkdir(parents=True, exist_ok=True)
+        (generated / NAV_TOML).write_text(
+            "# This section as the site assembles it, emitted by the build;"
+            " the authored\n# nav.toml beside it is the source.\nnav = [\n"
+            + "\n".join(section)
+            + "\n]\n",
+            encoding="utf-8",
+        )
+        emitted.append(package.directory.name)
+    return emitted
+
+
+def write_site_config(root: Path) -> Path:
+    """Assemble the config zensical reads and write it to the root; the path.
+
+    Gitignored and rebuilt on every docs verb: the site's identity from
+    the contract, the root pages, one section per package, the theme
+    and the extension set. The header says so, since the file reads
+    like a rendered one.
+    """
+    from livery.workshop._provenance import format_header
+
+    header = format_header(
+        (
+            "Assembled by the docs build from workshop.toml and every package's",
+            "section; gitignored and rewritten on every docs verb, never edited.",
+        ),
+        "#",
+    )
+    path = root / SITE_CONFIG
+    path.write_text(header + zensical_config(root), encoding="utf-8")
+    return path
+
+
+def _generate_all(root: Path, *, full: bool = False) -> None:
     """Run the generation passes, saying what was made.
 
-    Declared package generators run first, so the mount copies what
-    they wrote.
+    Declared package generators run first, then the workshop's own
+    pages and the section nav into each package's generated tree, so
+    the mount copies everything a section holds; then the config the
+    build reads.
     """
     generated = run_generators(root)
     if generated:
         print(f"  generators: {', '.join(generated)}")
-    mounted = mount_package_docs(root)
-    if mounted:
-        print(f"  mounted docs for {', '.join(mounted)}")
     logged = generate_changelog_pages(root)
     if logged:
         print(f"  changelogs for {', '.join(logged)}")
@@ -1654,6 +1809,15 @@ def _generate_all(root: Path) -> None:
     covered = generate_coverage_pages(root)
     if covered:
         print(f"  coverage pages for {', '.join(covered)}")
+    sections = emit_section_navs(root)
+    if sections:
+        print(f"  section navs for {', '.join(sections)}")
+    mounted = mount_package_docs(root, full=full)
+    if mounted:
+        print(f"  mounted docs for {', '.join(mounted)}")
+    else:
+        print("  mounts current: no package's docs moved")
+    print(f"  assembled {write_site_config(root).name}")
 
 
 @docs_group.task(name="build")
@@ -1661,19 +1825,21 @@ def docs_build(
     package: Annotated[
         str, doc("build a scoped preview of this package's section only")
     ] = "",
+    full: Annotated[bool, doc("rebuild every package's mount whole")] = False,
 ) -> None:
-    """Mount every package's docs and build the site, strict.
+    """Mount every package's docs, assemble the config, and build the site, strict.
 
     Strict is the point: a broken link or an orphan page fails here,
     on the machine, before CI says the same thing. ``--package``
     builds a scoped preview of one section instead, into the
     gitignored ``.docs-preview/`` directory; the preview is not
     strict, because chrome pages may link into sections it does not
-    carry, and the workspace build owns strictness.
+    carry, and the workspace build owns strictness. A package whose
+    docs did not move keeps its mount; ``--full`` rebuilds them all.
     """
     root = _root()
     require_sources(root)
-    _generate_all(root)
+    _generate_all(root, full=full)
     if package:
         config = materialise_preview(root, named_package(root, package))
         result = tools.zensical.opts(cwd=config.parent, nofail=True).build(
@@ -1710,26 +1876,26 @@ def require_sources(root: Path) -> None:
 
     The generator has exited 0 in a fraction of its usual time with
     nothing on disk. The first thing to rule out is a checkout
-    without the docs tree or the config, so their absence is named
+    without the docs tree or the contract, so their absence is named
     here, before the generator runs, instead of surfacing as an
     empty site after it.
     """
-    missing = [name for name in ("docs", "zensical.toml") if not (root / name).exists()]
+    missing = [name for name in ("docs", "workshop.toml") if not (root / name).exists()]
     if missing:
         fail(
             f"no site sources at {root}: {', '.join(missing)} missing; the"
-            " build reads the docs tree and zensical.toml from the checkout"
+            " build reads the docs tree and assembles its config from the contract"
         )
 
 
 def source_summary(root: Path) -> str:
-    """One line on what the build reads: the pages under ``docs/`` and the config.
+    """One line on what the build reads: the pages under ``docs/``.
 
     Printed before every workspace build, so a run that produced no
     site says what its checkout held.
     """
     pages = sum(1 for _ in (root / "docs").rglob("*.md"))
-    return f"  site sources: {pages} page(s) under docs/, zensical.toml present"
+    return f"  site sources: {pages} page(s) under docs/, the config assembled"
 
 
 def generator_lines(stdout: str, stderr: str, *, in_ci: bool) -> list[str]:
