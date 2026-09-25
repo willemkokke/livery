@@ -1090,6 +1090,38 @@ def test_the_janitor_trims_a_window_and_ages_rows_and_a_dry_run_only_says(
     ]
 
 
+def test_a_lingering_family_keeps_a_gone_key_for_a_run_in_flight_then_drops_it(
+    repos: tuple[Path, Path],
+) -> None:
+    # The refusal first: a branch's coverage record is read by main's run
+    # for the squash that merged it, after the merge deleted the branch,
+    # so a key the world no longer produces stays for the family's linger
+    # and goes only once it is older than that.
+    _, work = repos
+    family = _state.Keyed(
+        "cov",
+        ("leg", "unit"),
+        window=2,
+        ci_only=False,
+        current=_only_a_x,
+        linger=timedelta(hours=1),
+    )
+    for key in (("a", "x"), ("b", "x")):
+        assert family.series(*key).put(work, {"r": {}}, message="m") == ""
+    gone = family.series("b", "x").ref
+    kept = _state.sweep(work, (family,), remote=True)
+    assert any(
+        line.startswith(f"  {gone}: no current leg and unit produces it; kept ")
+        and "into the 1.0h a run in flight may still need it" in line
+        for line in kept
+    )
+    assert family.listed(work) == [("a", "x"), ("b", "x")]
+    later = datetime.now(UTC) + timedelta(hours=2)
+    done = _state.sweep(work, (family,), remote=True, now=later)
+    assert f"  {gone}: no current leg and unit produces it; dropped" in done
+    assert family.listed(work) == [("a", "x")]
+
+
 def test_the_janitor_drops_a_key_no_current_producer_makes_and_keeps_the_rest(
     repos: tuple[Path, Path],
 ) -> None:

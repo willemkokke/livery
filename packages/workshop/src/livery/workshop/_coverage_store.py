@@ -35,6 +35,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from datetime import timedelta
 from operator import attrgetter
 from pathlib import Path
 from typing import Any
@@ -123,8 +124,18 @@ def current_keys(root: Path) -> set[tuple[str, ...]] | None:
 #: for main and ``coverage/<branch>/<leg>`` for a branch, one row per
 #: unit, replaced in place by every write; a series of a branch gone
 #: from origin, or of a leg the matrix no longer produces, is the
-#: janitor's to drop.
-RECORD = Keyed("coverage", ("base", "leg"), schema=SCHEMA, current=current_keys)
+#: janitor's to drop. A gone branch's record lingers a day first:
+#: main's run for the squash that merged it carries every suite its
+#: legs skipped from that record, and the merge deletes the branch
+#: minutes before that run's union reads, while another main run's
+#: janitor may be sweeping in between.
+RECORD = Keyed(
+    "coverage",
+    ("base", "leg"),
+    schema=SCHEMA,
+    current=current_keys,
+    linger=timedelta(days=1),
+)
 
 
 @dataclass(frozen=True)

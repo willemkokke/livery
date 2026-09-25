@@ -340,6 +340,12 @@ class Keyed:
         current: The keys the world still produces, from the checkout
             root, or ``None`` when it cannot tell; a listed key outside
             them is an orphan the janitor drops. ``None`` drops none.
+        linger: How long a key outside the current ones stays, by its
+            ref's commit time, before the janitor drops it, so a run
+            in flight that relies on it can still read it: a branch's
+            coverage record is read by main's run for the squash that
+            merged it, minutes after the branch is gone. ``None``
+            drops such a key at once.
     """
 
     name: str
@@ -350,6 +356,7 @@ class Keyed:
     local: bool = False
     stale_after: timedelta | None = None
     current: Callable[[Path], set[tuple[str, ...]] | None] | None = None
+    linger: timedelta | None = None
 
     def __post_init__(self) -> None:
         if self.local and self.ci_only:
@@ -1483,6 +1490,17 @@ def _sweep_family(
                 reason = f"{_hours(age)} old, past {_span(family.stale_after)}"
         if not reason and current is not None and key not in current:
             reason = f"no current {' and '.join(family.keys)} produces it"
+            if family.linger is not None:
+                made = _commit_time(root, series.ref)
+                kept: timedelta | None = None if made is None else now - made
+                if kept is not None and kept <= family.linger:
+                    # A run in flight may still read it: main's union
+                    # carries from the record of the branch it merged.
+                    lines.append(
+                        f"  {series.ref}: {reason}; kept {_hours(kept)} into the"
+                        f" {_span(family.linger)} a run in flight may still need it"
+                    )
+                    continue
         if reason:
             why = "" if dry_run else drop(root, series.ref)
             lines.append(f"  {series.ref}: {reason}; {why or verb}")

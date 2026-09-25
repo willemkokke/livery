@@ -325,7 +325,10 @@ every leg that runs a suite runs it. The gate job unions the legs'
 lines with every skipped suite carried from the records before it
 judges, so the union is the same global union a full run produces,
 and writes that union back onto the branch's record; a suite no
-record can supply is red by name, never a smaller union. At the
+record can supply is red by name, never a smaller union. A branch's
+record outlives the branch by a day, because main's run for the
+squash that merged it carries the suites its legs skipped from that
+record, minutes after the merge deleted the branch. At the
 merge main's run finds its tree on the verified record, which names
 the branch, skips the gate, and copies the branch's record into
 main's without measuring; a squash of a stale branch has another
