@@ -143,6 +143,28 @@ def stitch(blocks: list[Block]) -> str:
 PAGES = [p for p in _handwritten_docs() if "```python" in p.read_text(encoding="utf-8")]
 
 
+def selected_pages(chosen: list[str]) -> list[Path]:
+    """The pages to run: *chosen* (`--docs-page`, repo-relative or absolute), else all.
+
+    A path names nothing outside `PAGES`, so a page without a python
+    block, or another package's page, narrows the run to nothing and
+    the collections test still holds.
+    """
+    if not chosen:
+        return PAGES
+    repo = ROOT.parents[1]
+    wanted = {(repo / path).resolve() for path in chosen}
+    return [page for page in PAGES if page.resolve() in wanted]
+
+
+def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
+    """Parametrise every page test over the selected pages."""
+    if "page" in metafunc.fixturenames:
+        chosen = metafunc.config.getoption("--docs-page") or []
+        pages = selected_pages([str(page) for page in chosen])
+        metafunc.parametrize("page", pages, ids=lambda p: p.name)
+
+
 def test_the_example_collections_are_not_empty():
     # Six parametrized cases loop over these collections; empty, every one
     # of them evaporates into silent green (audit, suite pass) — a moved
@@ -153,7 +175,6 @@ def test_the_example_collections_are_not_empty():
     assert len(PAGES) >= 10
 
 
-@pytest.mark.parametrize("page", PAGES, ids=lambda p: p.name)
 def test_page_examples_run(page: Path):
     """Execute the page's blocks in order, one namespace per session."""
     for n, session in enumerate(sessions(page)):
@@ -173,7 +194,6 @@ def test_page_examples_run(page: Path):
             del sys.modules[module.__name__]
 
 
-@pytest.mark.parametrize("page", PAGES, ids=lambda p: p.name)
 def test_run_link_sessions_load(page: Path):
     """Every run-it-there link loads: each cumulative prefix of a session —
     exactly what a link hands the playground — execs under ONE capture, so
@@ -195,13 +215,14 @@ def test_run_link_sessions_load(page: Path):
                 del sys.modules[module.__name__]
 
 
-def test_page_examples_resolve_names(tmp_path: Path):
+def test_page_examples_resolve_names(tmp_path: Path, request: pytest.FixtureRequest):
     """Every name a page's session uses — in bodies too — is defined by the
     page itself. One ruff F821 pass over the stitched sessions."""
     ruff = shutil.which("ruff")
     if ruff is None:  # pragma: no cover - always present under `uv run`
         pytest.skip("ruff not on PATH")
-    for page in PAGES:
+    chosen = request.config.getoption("--docs-page") or []
+    for page in selected_pages([str(page) for page in chosen]):
         for n, session in enumerate(sessions(page)):
             (tmp_path / f"{page.stem}__{n}.py").write_text(
                 stitch(session), encoding="utf-8"
@@ -1141,3 +1162,16 @@ def test_example_markers_are_spent():
             assert _OPEN.match(following), (
                 f"{page.name}:{i + 1}: example marker without a python fence"
             )
+
+
+def test_the_docs_page_option_narrows_to_the_pages_named():
+    """`--docs-page` selects among the pages with examples, repo-relative or absolute."""
+    assert selected_pages([]) == PAGES
+    first = PAGES[0]
+    repo = ROOT.parents[1]
+    relative = first.relative_to(repo).as_posix()
+    assert selected_pages([relative]) == [first]
+    assert selected_pages([str(first)]) == [first]
+    # A page without a python block, or a page of another package, selects nothing.
+    assert selected_pages(["packages/footman/docs/no-such-page.md"]) == []
+    assert selected_pages(["packages/forge/docs/index.md"]) == []

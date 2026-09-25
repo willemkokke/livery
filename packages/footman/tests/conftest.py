@@ -16,6 +16,23 @@ FIXTURE = Path(__file__).parent / "fixtures" / "sample_tasks.py"
 PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """`--docs-page`, repeatable: run the docs examples of these pages alone.
+
+    A path to a page, as the affected gate names it (repo-relative,
+    `packages/footman/docs/input.md`) or absolute. The examples
+    harness narrows its page parametrisation to the pages named;
+    without the option every page runs.
+    """
+    parser.addoption(
+        "--docs-page",
+        action="append",
+        default=[],
+        metavar="PAGE",
+        help="run the docs examples of this page alone (repeatable)",
+    )
+
+
 def pytest_configure(config: pytest.Config) -> None:
     """Measure the children too, but only when the parent is measuring.
 

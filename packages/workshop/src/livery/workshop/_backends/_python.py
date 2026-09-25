@@ -19,7 +19,7 @@ import shutil
 import sys
 import tempfile
 import tomllib
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -1187,15 +1187,30 @@ def gate_build(package: Package, root: Path) -> None:
     del package, root
 
 
-def test(package: Package, root: Path, *, selection: tuple[str, ...] = ()) -> None:
-    """Run *package*'s tests: its suite, or the files in *selection* alone."""
+def test(
+    package: Package,
+    root: Path,
+    *,
+    selection: tuple[str, ...] = (),
+    pages: tuple[str, ...] = (),
+) -> None:
+    """Run *package*'s tests: its suite, or the files in *selection* alone.
+
+    *pages* narrows the docs examples harness among them to those pages.
+    """
     files = tuple(f"{package.path}/{path}" for path in selection)
     run_test(
+        *page_arguments(pages),
         packages=(package,),
         root=root,
         scoped=True,
         selection={package.path: files} if files else None,
     )
+
+
+def page_arguments(pages: Iterable[str]) -> list[str]:
+    """The pytest arguments that narrow a docs examples harness to *pages*."""
+    return [f"--docs-page={page}" for page in pages]
 
 
 def scoped_gate(
@@ -1204,6 +1219,7 @@ def scoped_gate(
     root: Path,
     check_style: bool = True,
     tests: Mapping[str, tuple[str, ...]] | None = None,
+    pages: Mapping[str, tuple[str, ...]] | None = None,
 ) -> None:
     """Run the python kind's checks over *subset*, composed here.
 
@@ -1213,7 +1229,8 @@ def scoped_gate(
     own fan-out inside. ``check_style`` is off when a rewrite pass
     already ran, where re-judging the style it just wrote would
     only spend time agreeing. *tests* names, per package path, the
-    test files that stand for the package's suite in this run.
+    test files that stand for the package's suite in this run, and
+    *pages* the docs pages a package's examples harness narrows to.
 
     The steps are built at call time, so the property tests that
     patch this module's verbs keep gating the composition.
@@ -1236,9 +1253,14 @@ def scoped_gate(
             p(step(run_lint, title="lint")(paths=paths))
         p(step(run_typecheck, title="typecheck")(paths=type_paths))
         p(step(run_typecomplete, title="typecomplete")(complete))
+        narrowed = [page for found in (pages or {}).values() for page in found]
         p(
             step(run_test, title="test")(
-                packages=tested, root=root, scoped=True, selection=tests
+                *page_arguments(narrowed),
+                packages=tested,
+                root=root,
+                scoped=True,
+                selection=tests,
             )
         )
 

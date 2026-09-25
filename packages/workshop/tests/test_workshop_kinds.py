@@ -69,7 +69,12 @@ class _FakeBackend:
         return None
 
     def test(
-        self, package: Package, root: Path, *, selection: tuple[str, ...] = ()
+        self,
+        package: Package,
+        root: Path,
+        *,
+        selection: tuple[str, ...] = (),
+        pages: tuple[str, ...] = (),
     ) -> None:
         return None
 

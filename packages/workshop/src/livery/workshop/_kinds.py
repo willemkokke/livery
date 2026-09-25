@@ -124,9 +124,17 @@ class Backend(Protocol):
         ...
 
     def test(
-        self, package: Package, root: Path, *, selection: tuple[str, ...] = ()
+        self,
+        package: Package,
+        root: Path,
+        *,
+        selection: tuple[str, ...] = (),
+        pages: tuple[str, ...] = (),
     ) -> None:
         """Run the kind's tests of *package*; a refusal is the verdict.
+
+        *pages* narrows a docs examples harness in *selection* to
+        those pages, repo-relative; a kind without one ignores it.
 
         Every test, or with *selection* the tests of the named files
         alone, relative to the package. A selection the kind cannot

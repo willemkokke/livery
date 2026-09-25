@@ -119,10 +119,29 @@ class Scope:
         tests: For a package whose changed files are tests and
             nothing else, those files, repo-relative; a package absent
             here runs its suite.
+        pages: For a package whose changed files are docs pages, those
+            pages, repo-relative: its examples harness in `tests` runs
+            narrowed to them.
     """
 
     packages: tuple[Package, ...]
     tests: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    pages: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+
+
+#: The test module that runs a package's docs pages as sessions. A page
+#: edit reaches it, narrowed to the page, in a package that ships one.
+EXAMPLES_HARNESS = "tests/test_docs_examples.py"
+
+
+def docs_page(packages: tuple[Package, ...], path: str) -> Package | None:
+    """The package whose authored docs page *path* is, or None for any other path."""
+    if not path.endswith(".md") or "/_generated/" in path:
+        return None
+    for package in packages:
+        if path.startswith(package.path + "/docs/"):
+            return package
+    return None
 
 
 def affected_from_paths(
@@ -137,8 +156,10 @@ def affected_from_paths(
     package alone, since nothing imports a test, and that package
     runs those files when they are all that changed in it; source,
     test support, and configuration reach the package's dependents
-    and run the suites. ``None`` means everything, an empty scope
-    nothing a gate reads.
+    and run the suites. A docs page of a package that ships an
+    examples harness reaches that harness alone, narrowed to the
+    page; other prose reaches nothing. ``None`` means everything, an
+    empty scope nothing a gate reads.
     """
     from livery.workshop._backends import _python
     from livery.workshop._coverage_store import WORKSPACE_TESTS, workspace_suite
@@ -146,9 +167,18 @@ def affected_from_paths(
 
     seeds: set[str] = set()
     picked: dict[str, list[str]] = {}
+    pages: dict[str, list[str]] = {}
     tests_changed = False
     unit_suite = False
     for path in paths:
+        owner = docs_page(packages, path)
+        if owner is not None:
+            if (owner.directory / EXAMPLES_HARNESS).is_file():
+                harness = f"{owner.path}/{EXAMPLES_HARNESS}"
+                if harness not in picked.setdefault(owner.path, []):
+                    picked[owner.path].append(harness)
+                pages.setdefault(owner.path, []).append(path)
+            continue
         if is_prose(path) or is_site(path):
             continue
         if path.startswith(WORKSPACE_TESTS + "/"):
@@ -175,20 +205,21 @@ def affected_from_paths(
         for path, files in picked.items()
         if path != WORKSPACE_TESTS and path not in reached
     }
+    narrowed = {path: tuple(found) for path, found in pages.items() if path in tests}
     members = tuple(
         package
         for package in packages
         if package.path in reached or package.path in tests
     )
     if not tests_changed:
-        return Scope(members, tests)
+        return Scope(members, tests, narrowed)
     unit = workspace_suite(root)
     if unit is None:
         print(f"  {WORKSPACE_TESTS}/: changed and gone; everything runs")
         return None
     if not unit_suite and WORKSPACE_TESTS in picked:
         tests[WORKSPACE_TESTS] = tuple(picked[WORKSPACE_TESTS])
-    return Scope((*members, unit), tests)
+    return Scope((*members, unit), tests, narrowed)
 
 
 @graph.task(name="affected")

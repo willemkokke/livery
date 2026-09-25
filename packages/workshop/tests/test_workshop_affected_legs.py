@@ -178,8 +178,8 @@ def test_a_fix_run_records_the_tree_the_rewriters_left(
     judged: list[bool] = []
     monkeypatch.setattr(
         "livery.workshop._quality._scoped_check",
-        lambda subset, *, fix=False, rewritten=False, tests=None: judged.append(
-            rewritten
+        lambda subset, *, fix=False, rewritten=False, tests=None, pages=None: (
+            judged.append(rewritten)
         ),
     )
     monkeypatch.setattr("livery.workshop._quality.template_check", lambda: None)
@@ -229,6 +229,7 @@ def test_a_test_only_delta_runs_its_files_and_not_the_dependents(
         fix: bool = False,
         rewritten: bool = False,
         tests: dict[str, tuple[str, ...]] | None = None,
+        pages: dict[str, tuple[str, ...]] | None = None,
     ) -> None:
         seen.append((tuple(p.path for p in subset), dict(tests or {})))
 
