@@ -533,16 +533,11 @@ def list_(
         for here in (_drivers.installed(driver),)
         if not (show == "missing" and here) and not (show == "installed" and not here)
     ]
-    # Every version is one spawn, and a tool answers in its own time
-    # (up to the 30s the read allows), so the reads run side by side:
-    # the table waits for the slowest tool, not for the sum of them.
-    from concurrent.futures import ThreadPoolExecutor
-
+    # Every version is one spawn, read side by side so the table waits
+    # for the slowest tool and not for the sum of them; a stalled read
+    # is tried again alone, with a longer budget, before it is a fact.
     present = [driver.name for driver, here in shown if here]
-    with ThreadPoolExecutor(max_workers=max(1, len(present))) as pool:
-        versions = dict(
-            zip(present, pool.map(_drivers._read_version, present), strict=True)
-        )
+    versions = _drivers.read_versions(present)
     for driver, here in shown:
         version = why = ""
         if here:
