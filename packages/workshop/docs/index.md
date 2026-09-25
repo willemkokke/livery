@@ -72,7 +72,13 @@ train's receipt is a release's statement. `fm env.emit` carries the
 receipts' paths and variables, and `fm env.check` names each required
 tool's receipt and the drift when the lock's deployment has moved
 under it, a tool with no receipt that still resolves from PATH being
-named and not a problem.
+named and not a problem. `fm` enters the environment for itself as
+well: every invocation applies the same PATH entries and variables to
+its own process before any task runs, so the locked tools resolve from
+any shell, an agent's, a CI step's or a bare terminal's, and an entered
+shell adds only completion. The rendered `.vscode/settings.json` makes
+the editor's integrated terminal an entered shell from its first
+prompt, one profile per platform.
 
 The stubs the four type checkers read are materialised too. `fm
 tools.restub` writes them into `typings/` at the root, pyright's

@@ -493,6 +493,109 @@ def test_env_check_red_prints_the_breakdown_and_the_remedy(
     assert _env_tasks.env_check() == 0
 
 
+def _receipt(
+    root: Path,
+    tool: str,
+    *,
+    paths: tuple[str, ...] = (),
+    env: dict[str, str] | None = None,
+) -> None:
+    import json
+
+    from livery.workshop._tools import Receipt, receipts_dir
+
+    receipts_dir(root).mkdir(parents=True, exist_ok=True)
+    receipt = Receipt(
+        tool,
+        "1.0.0",
+        "linux-x64",
+        "archive",
+        "path",
+        "sha256:" + "0" * 64,
+        str(root / "store" / tool),
+        paths,
+        dict(env or {}),
+        (tool,),
+    )
+    (receipts_dir(root) / f"{tool}.json").write_text(json.dumps(receipt.to_json()))
+
+
+def test_apply_entry_skips_a_broken_receipt_and_still_enters_the_venv(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The refusal first: a file that is not a receipt costs the tools'
+    # half of the entry, said on stderr, and never the command itself.
+    from livery.workshop import _env_tasks
+    from livery.workshop._tools import receipts_dir
+
+    receipts_dir(tmp_path).mkdir(parents=True)
+    (receipts_dir(tmp_path) / "bad.json").write_text("{")
+    monkeypatch.setenv("PATH", "/usr/bin")
+    monkeypatch.delenv("VIRTUAL_ENV", raising=False)
+    monkeypatch.setattr(_env_tasks, "_APPLIED", {})
+    added = _env_tasks.apply_entry(tmp_path)
+    assert added == (str(venv_bin(tmp_path)),)
+    assert "tool receipts skipped" in capsys.readouterr().err
+    assert os.environ["PATH"] == f"{venv_bin(tmp_path)}{os.pathsep}/usr/bin"
+    assert os.environ["VIRTUAL_ENV"] == str(tmp_path / ".venv")
+
+
+def test_apply_entry_prepends_the_missing_tools_in_order_and_is_idempotent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _env_tasks
+
+    ruff = str(tmp_path / "store" / "ruff")
+    tea = str(tmp_path / "store" / "tea")
+    _receipt(tmp_path, "ruff", paths=(ruff,), env={"RUFF_FLAG": "1"})
+    _receipt(tmp_path, "tea", paths=(tea,))
+    # tea is already on PATH, behind /usr/bin: it stays where it is.
+    monkeypatch.setenv("PATH", os.pathsep.join(["/usr/bin", tea]))
+    monkeypatch.setenv("RUFF_FLAG", "shell")
+    monkeypatch.delenv("VIRTUAL_ENV", raising=False)
+    monkeypatch.setattr(_env_tasks, "_APPLIED", {})
+    added = _env_tasks.apply_entry(tmp_path)
+    assert added == (str(venv_bin(tmp_path)), ruff)
+    assert os.environ["PATH"].split(os.pathsep) == [
+        str(venv_bin(tmp_path)),
+        ruff,
+        "/usr/bin",
+        tea,
+    ]
+    assert os.environ["RUFF_FLAG"] == "shell"  # the environment wins
+    assert {"VIRTUAL_ENV": str(tmp_path / ".venv")} == _env_tasks._APPLIED
+    assert _env_tasks.apply_entry(tmp_path) == ()
+    # A receipt variable the environment lacks is applied and remembered.
+    monkeypatch.delenv("RUFF_FLAG")
+    assert _env_tasks.apply_entry(tmp_path) == ()
+    assert os.environ["RUFF_FLAG"] == "1"
+    assert _env_tasks._APPLIED["RUFF_FLAG"] == "1"
+
+
+def test_the_cascade_hook_enters_the_environment_for_the_process(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from typing import cast
+
+    import livery.footman as footman
+    from livery.workshop import _env_tasks
+
+    ruff = str(tmp_path / "store" / "ruff")
+    _receipt(tmp_path, "ruff", paths=(ruff,))
+    monkeypatch.setattr(
+        "livery.workshop._layers.workspace_root", lambda start=None: tmp_path
+    )
+    monkeypatch.setattr("livery.workshop._reconcile.is_cli_process", lambda: False)
+    monkeypatch.setattr(_env_tasks, "_APPLIED", {})
+    monkeypatch.setenv("PATH", "/usr/bin")
+    _env_tasks.apply_cascade(cast(footman.Invocation, None))
+    assert os.environ["PATH"].split(os.pathsep) == [
+        str(venv_bin(tmp_path)),
+        ruff,
+        "/usr/bin",
+    ]
+
+
 def test_apply_cascade_defaults_absent_keys_and_never_overrides(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -504,6 +607,7 @@ def test_apply_cascade_defaults_absent_keys_and_never_overrides(
     )
     monkeypatch.setattr(_env_tasks, "_APPLIED", {})
     monkeypatch.setenv("PRESET", "shell")
+    monkeypatch.setenv("PATH", os.environ.get("PATH", ""))
     monkeypatch.delenv("CASCADE_FLAG", raising=False)
     from typing import cast
 

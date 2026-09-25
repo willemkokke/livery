@@ -56,7 +56,8 @@ def test_a_human_comment_is_never_stripped(tmp_path: Path) -> None:
 
 
 def test_comment_hostile_types_have_no_style() -> None:
-    assert comment_style(Path("settings.json")) == ""
+    assert comment_style(Path("settings.json")) == ""  # plain JSON has no header
+    assert comment_style(Path(".vscode/settings.json")) == "//"  # the editor's JSONC
     assert comment_style(Path("LICENSE")) == ""
     assert comment_style(Path("py.typed")) == ""
     assert comment_style(Path(".gitignore")) == "#"

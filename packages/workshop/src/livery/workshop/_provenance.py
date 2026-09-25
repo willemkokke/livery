@@ -27,7 +27,13 @@ from livery.workshop._layers import layer_names, workspace_root
 #: The project render's managed names, judged by the drift gate. The
 #: template tree is the truth; this list is the offline copy a wheel
 #: instance can answer from, pinned against the tree by test.
-PROJECT_RENDERED = ("pyproject.toml", "tasks.py", ".gitignore", ".gitattributes")
+PROJECT_RENDERED = (
+    "pyproject.toml",
+    "tasks.py",
+    ".gitignore",
+    ".gitattributes",
+    ".vscode/settings.json",
+)
 
 #: Comment leaders by suffix, and by exact name for suffixless files.
 #: A type absent from both tables cannot carry a header and is
@@ -46,7 +52,13 @@ _BY_NAME = {".gitignore": "#", ".gitattributes": "#", "CODEOWNERS": "#"}
 
 
 def comment_style(path: Path) -> str:
-    """The comment leader for *path*: ``#``, ``html``, or empty."""
+    """The comment leader for *path*: ``#``, ``//``, ``html``, or empty.
+
+    The editor's ``.vscode/settings.json`` is JSON with comments, the
+    one JSON the render owns; every other JSON carries no header.
+    """
+    if path.name == "settings.json" and path.parent.name == ".vscode":
+        return "//"
     return _BY_NAME.get(path.name, _BY_SUFFIX.get(path.suffix, ""))
 
 
@@ -64,7 +76,7 @@ def format_header(lines: tuple[str, ...], style: str) -> str:
     if style == "html":
         body = "".join(f"     {line}\n" for line in lines[1:])
         return f"<!-- {lines[0]}\n{body}-->\n"
-    return "".join(f"# {line}\n" for line in lines)
+    return "".join(f"{style} {line}\n" for line in lines)
 
 
 def generated_header(style: str) -> str:
