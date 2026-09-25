@@ -11,8 +11,14 @@ A package owns the shape of its own site section through
 ``docs/nav.toml``: a hand-authored tree the emitter merges under
 that package's section of the rendered root config, checked both
 ways (an entry naming a missing page refuses, and so does an
-authored page absent from the nav). A package without one gets its
-pages enumerated, index first. ``fm docs.build --package <name>``
+authored page absent from the nav). A generator owns a block between
+markers in that tree (``tasks``, ``tools``), and the emitter's own
+sections, Changelog, Coverage and API, are marker blocks too, which
+the author may place; one the author did not place lands in that
+order, the changelog and coverage entries ahead of the tasks block
+and the API after everything. A package without a ``nav.toml`` gets its pages
+enumerated, index first, and the machine sections in the same order.
+``fm docs.build --package <name>``
 builds a scoped preview of one section into the gitignored
 ``.docs-preview/`` directory; the workspace site stays the only
 deploy artifact.
@@ -23,6 +29,7 @@ from __future__ import annotations
 import re
 import shutil
 import tomllib
+from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated
 
@@ -300,6 +307,18 @@ def _label(page: str) -> str:
 NAV_TOML = "nav.toml"
 
 
+#: The sections the emitter itself renders into a package's nav, in the
+#: order they land when the author places none: a placed block fills
+#: where its markers sit. Any other marker pair is a generator's block
+#: (`tasks`, `tools`): its entries are what sits between the markers,
+#: rendered where the author put them.
+EMITTED_BLOCKS = ("changelog", "coverage", "api")
+
+#: How a placed block travels through the parsed tree: a leaf whose
+#: label and path both read `nav:<name>`, never a page.
+SENTINEL = "nav:"
+
+
 def nav_block_markers(name: str) -> tuple[str, str]:
     """The begin and end marker lines for a generated block in ``nav.toml``.
 
@@ -343,21 +362,82 @@ def package_nav(package: Package) -> list[object] | None:
 
     The file's ``nav`` key mirrors the rendered config's shape: a
     list of one-key tables mapping a label to a page path (relative
-    to the package's ``docs/`` tree) or to a nested list. Anything
-    else refuses naming the file and the entry.
+    to the package's ``docs/`` tree) or to a nested list. A placed
+    machine block travels as a sentinel leaf, `nav:<name>`, where its
+    markers sit. Anything else refuses naming the file and the entry.
+    """
+    authored = authored_nav(package)
+    return None if authored is None else authored[0]
+
+
+def authored_nav(
+    package: Package,
+) -> tuple[list[object], dict[str, list[object]]] | None:
+    """The authored tree with its placed blocks as sentinels, and each block's entries.
+
+    A marker pair names an emitted block or a generator's own; a
+    marker without its twin, or a pair out of order, refuses naming
+    the file and the block. The entries between a pair (the tasks
+    block the task reference writes) come back keyed by the block's
+    name, so the emitter renders them in the sentinel's place.
     """
     path = package.directory / "docs" / NAV_TOML
     if not path.is_file():
         return None
+    text, blocks = _lift_blocks(path, path.read_text("utf-8"))
     try:
-        parsed = tomllib.loads(path.read_text("utf-8"))
+        parsed = tomllib.loads(text)
     except tomllib.TOMLDecodeError as error:
         fail(f"{path} is not valid TOML: {error}")
     nav = parsed.get("nav")
     if not isinstance(nav, list):
         fail(f"{path} must carry a top-level `nav` list")
     _check_nav_shape(path, nav)
-    return list(nav)
+    return list(nav), blocks
+
+
+_MARKER = re.compile(r"^(\s*)# nav:(begin|end) (\S+)\s*$")
+
+
+def _lift_blocks(path: Path, text: str) -> tuple[str, dict[str, list[object]]]:
+    """*text* with each marker pair replaced by its sentinel; the pairs' entries."""
+    lines = text.splitlines()
+    found: dict[str, tuple[int, int, str]] = {}
+    open_name: str | None = None
+    open_at = 0
+    for index, line in enumerate(lines):
+        match = _MARKER.match(line)
+        if match is None:
+            continue
+        indent, kind, name = match.groups()
+        if kind == "begin":
+            if open_name is not None or name in found:
+                fail(f"{path}: the nav block {name!r} begins twice")
+            open_name, open_at = name, index
+            found[name] = (index, index, indent)
+            continue
+        if open_name != name:
+            fail(f"{path}: the nav block {name!r} ends without beginning")
+        found[name] = (open_at, index, found[name][2])
+        open_name = None
+    if open_name is not None:
+        fail(f"{path}: the nav block {open_name!r} begins without ending")
+    blocks: dict[str, list[object]] = {}
+    lifted = list(lines)
+    for name, (begin, end, indent) in sorted(
+        found.items(), key=lambda item: -item[1][0]
+    ):
+        inner = "\n".join(lines[begin + 1 : end])
+        try:
+            parsed = tomllib.loads(f"nav = [\n{inner}\n]")
+        except tomllib.TOMLDecodeError as error:
+            fail(f"{path}: the nav block {name!r} is not valid TOML: {error}")
+        entries = parsed.get("nav")
+        blocks[name] = list(entries) if isinstance(entries, list) else []
+        lifted[begin : end + 1] = [
+            f'{indent}{{ "{SENTINEL}{name}" = "{SENTINEL}{name}" }},'
+        ]
+    return "\n".join(lifted) + "\n", blocks
 
 
 def _check_nav_shape(path: Path, entries: list[object]) -> None:
@@ -413,7 +493,7 @@ def check_package_nav(package: Package, entries: list[object]) -> None:
     missing = [
         leaf
         for leaf in leaves
-        if not leaf.startswith("_generated/") and leaf not in authored
+        if not leaf.startswith(("_generated/", SENTINEL)) and leaf not in authored
     ]
     if missing:
         fail(f"{nav_path} names pages that do not exist: " + ", ".join(sorted(missing)))
@@ -426,20 +506,30 @@ def check_package_nav(package: Package, entries: list[object]) -> None:
         )
 
 
-def _authored_nav_lines(entries: list[object], prefix: str, indent: str) -> list[str]:
-    """The rendered nav lines for an authored tree, paths prefixed."""
+def _authored_nav_lines(
+    entries: list[object],
+    prefix: str,
+    indent: str,
+    fill: Callable[[str, str], list[str]] | None = None,
+) -> list[str]:
+    """The rendered nav lines for an authored tree, paths prefixed.
+
+    *fill* renders a sentinel leaf's block at the leaf's indentation;
+    without it a sentinel renders as the leaf it is.
+    """
     lines: list[str] = []
     for entry in entries:
         if not isinstance(entry, dict):
             continue
         for label, value in entry.items():
-            if isinstance(value, str):
-                lines.append(
-                    f'{indent}{{ "{label}" = "{prefix}{_published(value)}" }},'
-                )
+            if isinstance(value, str) and value.startswith(SENTINEL) and fill:
+                lines += fill(value.removeprefix(SENTINEL), indent)
+            elif isinstance(value, str):
+                page = _published(value)
+                lines.append(f'{indent}{{ "{label}" = "{prefix}{page}" }},')
             elif isinstance(value, list):
                 lines.append(f'{indent}{{ "{label}" = [')
-                lines += _authored_nav_lines(value, prefix, indent + "    ")
+                lines += _authored_nav_lines(value, prefix, indent + "    ", fill)
                 lines.append(f"{indent}] }},")
     return lines
 
@@ -448,7 +538,6 @@ def _authored_nav_lines(entries: list[object], prefix: str, indent: str) -> list
 #: instance-owned files, born from the template, overridable by
 #: editing them and removable by deleting them.
 WORKSPACE_CSS = ("assets/palette.css", "assets/type.css")
-
 #: The link-preview card image's committed home; the image tags are
 #: emitted only while it exists.
 CARD_IMAGE = "docs/assets/og-card.png"
@@ -827,28 +916,60 @@ def _package_section(package: Package, indent: str = "    ") -> tuple[list[str],
     pages = [p for p in _pages(docs) if not p.startswith("_generated/")]
     modules = api_modules(package)
     changelog = (package.directory / "CHANGELOG.md").is_file()
-    authored = package_nav(package)
+    authored = authored_nav(package)
     if authored is None and not pages and not modules and not changelog:
         return ([], False)
     name = package.directory.name
     prefix = f"packages/{name}/"
     inner = indent + "    "
+    tree, blocks = authored if authored is not None else ([], {})
+
+    def section(block: str, at: str) -> list[str]:
+        if block == "changelog" and changelog:
+            return [f'{at}{{ "Changelog" = "{prefix}changelog.md" }},']
+        if block == "coverage" and package_coverage_reports(package):
+            return [f'{at}{{ "Coverage" = "{prefix}coverage.md" }},']
+        if block not in EMITTED_BLOCKS and blocks.get(block):
+            return _authored_nav_lines(blocks[block], prefix, at)
+        if block == "api" and modules:
+            api = [f'{at}{{ "API" = [']
+            api += [
+                f'{at}    {{ "{dotted}" = "{prefix}{API_DIR}/{page}" }},'
+                for page, dotted in modules
+            ]
+            api.append(f"{at}] }},")
+            return api
+        return []
+
+    placed = {
+        leaf.removeprefix(SENTINEL)
+        for leaf in _nav_leaves(tree)
+        if leaf.startswith(SENTINEL)
+    }
+    unplaced = [block for block in EMITTED_BLOCKS if block not in placed]
+
+    def fill(block: str, at: str) -> list[str]:
+        # The changelog and coverage entries the author left unplaced
+        # land ahead of the tasks block: a reader parses what follows
+        # the tasks tree as part of it.
+        lead: list[str] = []
+        if block == "tasks":
+            for early in ("changelog", "coverage"):
+                if early in unplaced:
+                    lead += section(early, at)
+        return lead + section(block, at)
+
     lines = [f'{indent}{{ "{name}" = [']
     if authored is not None:
-        check_package_nav(package, authored)
-        lines += _authored_nav_lines(authored, prefix, inner)
+        check_package_nav(package, tree)
+        lines += _authored_nav_lines(tree, prefix, inner, fill)
+        if "tasks" in placed:
+            unplaced = [b for b in unplaced if b not in ("changelog", "coverage")]
     else:
         for page in pages:
             lines.append(f'{inner}{{ "{_label(page)}" = "{prefix}{page}" }},')
-    if changelog:
-        lines.append(f'{inner}{{ "Changelog" = "{prefix}changelog.md" }},')
-    if package_coverage_reports(package):
-        lines.append(f'{inner}{{ "Coverage" = "{prefix}coverage.md" }},')
-    if modules:
-        lines.append(f'{inner}{{ "API" = [')
-        for page, dotted in modules:
-            lines.append(f'{inner}    {{ "{dotted}" = "{prefix}{API_DIR}/{page}" }},')
-        lines.append(f"{inner}] }},")
+    for block in unplaced:
+        lines += section(block, inner)
     lines.append(f"{indent}] }},")
     return (lines, bool(modules))
 

@@ -1,8 +1,9 @@
 # Modular docs: a package's section is the package's, and the site assembles
 
-Status: ruled 2026-09-25 with phase 5 out. Phase 1 in flight (livery#688):
-the site builds strict with no link into `_generated`. Tracks livery#647
-and folds in livery#268. The direct downloads plan
+Status: ruled 2026-09-25 with phase 5 out. Phase 1 landed 2026-09-25
+(livery#688, PR #693): no published path carries `_generated`. Phase 2
+in flight (livery#695): the machine sections are marker blocks. Tracks
+livery#647 and folds in livery#268. The direct downloads plan
 (`notes/20260925-direct-downloads.md`) completed first, as ruled.
 
 ## What this is
@@ -385,6 +386,11 @@ Acceptance:
 | The tasks block in the authored `nav.toml` | phase 3, or kept by open question 3 |
 
 ## Decision record
+
+- 2026-09-25, phase 2: a generator's block keeps any name (`tasks`,
+  `tools`); the emitter's own sections, changelog, coverage and api,
+  are the ones with a fixed order when unplaced. An unknown block name
+  is therefore not a refusal; a marker without its twin is.
 
 - 2026-09-25, phase 1: a generated page links upward with the generated
   directory counted in; merged one level up, a link that climbs out of
