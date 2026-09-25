@@ -247,6 +247,28 @@ def test_pick_asset_matches_aliases_and_prefers_archive(mac_arm):
     assert url == "archive"  # archive beats the bare binary, sidecar excluded
 
 
+def test_pick_asset_refuses_a_host_it_does_not_know(mac_arm):
+    with pytest.raises(_provision.ProvisionError, match="unknown host 'freebsd-x64'"):
+        _provision._pick_asset([("tool_Linux_x86_64.tar.gz", "x")], host="freebsd-x64")
+
+
+def test_pick_asset_for_a_named_host_reads_the_host_not_the_machine(mac_arm):
+    """The assembler picks every host's asset from one machine."""
+    assets = [
+        ("tool_Linux_x86_64.tar.gz", "linux-x64"),
+        ("tool_Linux_arm64.tar.gz", "linux-arm"),
+        ("tool_Windows_arm64.zip", "windows-arm"),
+        ("tool_macOS_arm64.tar.gz", "macos-arm"),
+    ]
+    for host, url in (("windows-arm", "windows-arm"), ("linux-x64", "linux-x64")):
+        assert _provision._pick_asset(assets, host=host)[1] == url
+    assert _provision._pick_asset(assets)[1] == "macos-arm"  # the machine
+    with pytest.raises(
+        _provision.ProvisionError, match="no release asset for macos-x64"
+    ):
+        _provision._pick_asset(assets, host="macos-x64")
+
+
 def test_pick_asset_no_match_raises(mac_arm):
     with pytest.raises(_provision.ProvisionError, match="no release asset"):
         _provision._pick_asset([("tool_Windows_x86_64.zip", "u")])

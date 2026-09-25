@@ -201,6 +201,24 @@ def test_an_archive_without_the_declared_root_is_refused(
     assert not any(home.tools.glob(".build-*"))
 
 
+def test_a_version_root_the_archive_lacks_is_refused_by_its_substituted_name(
+    home: Home, origin: dict[str, bytes]
+) -> None:
+    """The refusal names the directory looked for, never the token."""
+    artifacts, _data = _tool()  # the archive's top is tool-1.0.0
+    spec = _record("tool", artifacts, root="tool-v{version}")
+    _serve(origin, spec, artifacts)
+    with pytest.raises(
+        StoreError, match=r"has no root 'tool-v1\.0\.0'; it holds tool-1\.0\.0"
+    ):
+        Store(home, host=HOST).ensure(spec, spec.versions[-1])
+    # The same token resolving to the real top installs.
+    spec = _record("tool", artifacts, root="tool-{version}")
+    _serve(origin, spec, artifacts)
+    ensured = Store(home, host=HOST).ensure(spec, spec.versions[-1])
+    assert (ensured.tool_dir / "bin").is_dir()
+
+
 def test_a_binary_without_an_exe_and_a_non_archive_are_refused(
     home: Home, origin: dict[str, bytes]
 ) -> None:
