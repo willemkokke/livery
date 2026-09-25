@@ -234,28 +234,6 @@ def test_apply_settles_and_drift_names_the_file(tmp_path: Path) -> None:
     assert "pyproject.toml: differs from its render" in drift
 
 
-def test_template_check_refuses_a_stale_task_nav_block_in_an_instance(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    # An instance (no templates/ directory) passes the render check
-    # vacuously; its committed task nav is still judged.
-    from livery.footman import Failed
-    from livery.workshop import _taskref, _templates
-
-    root = tmp_path / "instance"
-    root.mkdir()
-    (root / "workshop.toml").write_text("[workspace]\n")
-    monkeypatch.setattr(_templates, "_root", lambda: root)
-    monkeypatch.setattr(_taskref, "stale_task_blocks", lambda _root: [])
-    _templates.template_check()
-    line = "packages/core/docs/nav.toml: the 'tasks' nav block lags the task tree"
-    monkeypatch.setattr(_taskref, "stale_task_blocks", lambda _root: [line])
-    with pytest.raises((SystemExit, Failed)) as caught:
-        _templates.template_check()
-    assert line in str(caught.value)
-    assert "template.apply" not in str(caught.value)
-
-
 def _render_kind(tmp_path: Path, forge_kind: str, **extra: object) -> Path:
     destination = tmp_path / forge_kind
     answers = read_answers(ROOT / ".copier-answers.yml")

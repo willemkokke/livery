@@ -384,7 +384,8 @@ def authored_nav(
     path = package.directory / "docs" / NAV_TOML
     if not path.is_file():
         return None
-    text, blocks = _lift_blocks(path, path.read_text("utf-8"))
+    generated = package.directory / "docs" / GENERATED_DIR
+    text, blocks = _lift_blocks(path, path.read_text("utf-8"), generated)
     try:
         parsed = tomllib.loads(text)
     except tomllib.TOMLDecodeError as error:
@@ -399,8 +400,38 @@ def authored_nav(
 _MARKER = re.compile(r"^(\s*)# nav:(begin|end) (\S+)\s*$")
 
 
-def _lift_blocks(path: Path, text: str) -> tuple[str, dict[str, list[object]]]:
-    """*text* with each marker pair replaced by its sentinel; the pairs' entries."""
+def nav_block_file(generated: Path, name: str) -> Path:
+    """Where a generator emits the *name* block's entries: `nav.<name>.toml`."""
+    return generated / f"nav.{name}.toml"
+
+
+def write_nav_block(generated: Path, name: str, entries: list[str]) -> Path:
+    """Emit the *name* block's *entries* into the package's generated tree; the path.
+
+    The file carries a `nav` list, the block's entries unindented, the
+    way `rewrite_nav_block` writes them between markers. The emitter
+    renders it where the authored ``nav.toml`` places the block's
+    marker pair, so nothing committed changes when the block does.
+    """
+    generated.mkdir(parents=True, exist_ok=True)
+    path = nav_block_file(generated, name)
+    body = "\n".join(entries)
+    path.write_text(
+        f"# The {name!r} nav block, emitted by its generator; the authored"
+        f" nav.toml places it.\nnav = [\n{body}\n]\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _lift_blocks(
+    path: Path, text: str, generated: Path
+) -> tuple[str, dict[str, list[object]]]:
+    """*text* with each marker pair replaced by its sentinel; the pairs' entries.
+
+    A block's entries come from the file its generator emitted under
+    *generated* when there is one, else from between the markers.
+    """
     lines = text.splitlines()
     found: dict[str, tuple[int, int, str]] = {}
     open_name: str | None = None
@@ -427,11 +458,17 @@ def _lift_blocks(path: Path, text: str) -> tuple[str, dict[str, list[object]]]:
     for name, (begin, end, indent) in sorted(
         found.items(), key=lambda item: -item[1][0]
     ):
-        inner = "\n".join(lines[begin + 1 : end])
+        emitted = nav_block_file(generated, name)
+        source = emitted if emitted.is_file() else path
+        inner = (
+            emitted.read_text("utf-8")
+            if emitted.is_file()
+            else f"nav = [\n{chr(10).join(lines[begin + 1 : end])}\n]"
+        )
         try:
-            parsed = tomllib.loads(f"nav = [\n{inner}\n]")
+            parsed = tomllib.loads(inner)
         except tomllib.TOMLDecodeError as error:
-            fail(f"{path}: the nav block {name!r} is not valid TOML: {error}")
+            fail(f"{source}: the nav block {name!r} is not valid TOML: {error}")
         entries = parsed.get("nav")
         blocks[name] = list(entries) if isinstance(entries, list) else []
         lifted[begin : end + 1] = [

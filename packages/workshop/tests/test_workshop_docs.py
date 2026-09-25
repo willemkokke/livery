@@ -1422,10 +1422,17 @@ def test_unplaced_blocks_land_in_order_around_the_tasks_block(tmp_path: Path) ->
 
 
 def test_this_workspaces_sidebars_read_changelog_then_tasks_then_api() -> None:
+    """The order holds among the sections a checkout has.
+
+    The tasks block is emitted by its generator, so a fresh checkout
+    may not carry it yet.
+    """
     root = Path(__file__).resolve().parents[3]
     config = zensical_config(root)
     for name in ("footman", "workshop", "forge"):
         labels = _nav_labels(config, name)
-        assert labels.index("Changelog") < labels.index("Tasks"), (name, labels)
-        if "API" in labels:
-            assert labels.index("Tasks") < labels.index("API"), (name, labels)
+        present = [label for label in ("Changelog", "Tasks", "API") if label in labels]
+        assert "Changelog" in present, (name, labels)
+        assert [labels.index(label) for label in present] == sorted(
+            labels.index(label) for label in present
+        ), (name, labels)
