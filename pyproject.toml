@@ -71,15 +71,12 @@ dev = [
     "coverage-enable-subprocess>=1.0",
     # Parallelise the suite across cores (`-n auto`, wired into addopts).
     "pytest-xdist>=3.6",
-    "ruff>=0.6",
     # Stubs for the workshop's own yaml reads, so mypy stays strict.
     "types-pyyaml",
     # The four-checker typing gate, footman's shape: all gating, none
     # advisory. The lockfile pins them, so a new checker release only
     # lands through a deliberate lock bump.
     "mypy>=1.14",
-    "ty",
-    "pyrefly",
 ]
 
 # Ruff and basedpyright configuration cribbed from footman's pyproject:

@@ -124,7 +124,11 @@ def _resolve_prefix(prefix: str | Path) -> Path | None:
     if prefix:
         return Path(prefix).expanduser().resolve()
     home = default_prefix()
-    return home if home.is_dir() else None
+    # Provisioned means a bin directory to read from. The room also holds
+    # the bench's store (`_bench_store`), which every refresh creates, and
+    # a store is not a provisioned set: read as one, every tool the host
+    # has would be "not in the prefix".
+    return home if (home / "bin").is_dir() else None
 
 
 @contextmanager
@@ -1673,7 +1677,9 @@ def _assemble_documents(documents: list[dict[str, Any]]) -> Refreshed:
         record, fresh, touched = _fold_into(record, versions, meta[tool])
         if fresh:
             read[tool] = fresh
-            if _artifacts.forge_of(driver):
+            if _artifacts.forge_of(driver) and not driver.base:
+                # A verb-bound view (`ruff_format`) reads another driver's
+                # binary; that driver's record carries the artifacts.
                 record, lines = _record_artifacts(record, driver, fresh, meta[tool])
                 artifacts[tool] = lines
         if touched:
@@ -2707,6 +2713,11 @@ def tools_artifacts(
     driver = _drivers.find(tool)
     if driver is None:
         fail(f"no driver for {tool}")
+    if driver.base:
+        fail(
+            f"{tool} is a view of {driver.name}'s binary bound to"
+            f" `{' '.join(driver.base)}`; record {driver.name}"
+        )
     chosen = version or (_surfaces.versions(record) or [""])[0]
     if not chosen:
         fail(f"{tool} has no version; read one first")

@@ -20,7 +20,8 @@ from toolroom_bench_readings import (
 def test_releases_break_a_same_day_tie_by_version(monkeypatch):
     """Two releases on one day are common — prek shipped 0.4.7 and 0.4.8
     together. Resolved by dict order the walk skips one and a later prime
-    appends it *below* its own successor, which corrupts the chain.
+    appends it *below* its own successor, which corrupts the chain. Read
+    through a PyPI-tier driver, since the index shape is PyPI's.
     """
     import io
     import json as _json
@@ -40,7 +41,7 @@ def test_releases_break_a_same_day_tie_by_version(monkeypatch):
         "urlopen",
         lambda *a, **k: io.BytesIO(_json.dumps(index).encode()),
     )
-    driver = _drivers.find("prek")
+    driver = _drivers.find("mypy")  # a PyPI-tier driver
     assert driver is not None
     assert [r.version for r in _toolfetch.releases(driver)] == [
         "0.4.9",
@@ -55,7 +56,7 @@ def test_only_listable_tiers_are_primed():
     """
     from livery.toolroom.bench import _drivers, _toolfetch
 
-    uv_tier = _drivers.find("prek")
+    uv_tier = _drivers.find("mypy")
     manual = _drivers.find("bash")
     assert uv_tier and manual
     assert _toolfetch.can_list(uv_tier)
@@ -126,7 +127,7 @@ def test_cutoff_takes_the_far_edge_of_the_publishing_window(monkeypatch):
         "urlopen",
         lambda *a, **k: io.BytesIO(_json.dumps(index).encode()),
     )
-    driver = _drivers.find("ninja")
+    driver = _drivers.find("mypy")  # a PyPI-tier driver: the index shape is PyPI's
     assert driver is not None
     (release,) = _toolfetch.releases(driver)
     # Both edges taken across the files, not off whichever the index listed
@@ -153,10 +154,10 @@ def test_release_date_cutoff_is_spelled_in_utc(monkeypatch, tmp_path):
         return True
 
     monkeypatch.setattr(_toolfetch, "_run", fake_run)
-    driver = _drivers.find("prek")
+    driver = _drivers.find("mypy")  # a PyPI-tier driver
     assert driver is not None
     release = _toolfetch.Release(version="0.4.11", date="2026-07-23")
-    _toolfetch._install_pypi(driver, release, tmp_path / "prek")
+    _toolfetch._install_pypi(driver, release, tmp_path / "mypy")
     install = next(c for c in calls if "pip" in c)
     assert "--exclude-newer" in install
     assert install[install.index("--exclude-newer") + 1] == "2026-07-23T23:59:59Z"
@@ -188,7 +189,7 @@ def test_releases_older_than_the_interpreter_are_not_offered(monkeypatch):
         "urlopen",
         lambda *a, **k: io.BytesIO(_json.dumps(index).encode()),
     )
-    driver = _drivers.find("prek")
+    driver = _drivers.find("mypy")  # a PyPI-tier driver
     assert driver is not None
     assert [r.version for r in _toolfetch.releases(driver)] == ["2.0.0", "1.9.0"]
 
@@ -797,7 +798,7 @@ def test_an_unreadable_index_is_not_an_empty_one(monkeypatch):
         raise _toolfetch.urllib.error.URLError("no network")
 
     monkeypatch.setattr(_toolfetch.urllib.request, "urlopen", boom)
-    driver = _drivers.find("prek")
+    driver = _drivers.find("mypy")  # a PyPI-tier driver
     assert driver is not None
     with pytest.raises(_toolfetch.Unreachable):
         _toolfetch.releases(driver)
@@ -810,7 +811,8 @@ def test_which_tiers_can_be_listed():
     from livery.toolroom.bench import _drivers, _toolfetch
 
     expected = {
-        "prek": True,  # uv
+        "mypy": True,  # uv
+        "prek": True,  # github
         "cspell": True,  # node
         "gh": True,  # github
         "eclint": True,  # gitlab

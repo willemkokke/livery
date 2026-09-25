@@ -241,13 +241,17 @@ class Driver:
 
 DRIVERS: tuple[Driver, ...] = (
     Driver(
-        "ruff", verbs=("check", "format", "clean"), url="https://docs.astral.sh/ruff/"
+        "ruff",
+        verbs=("check", "format", "clean"),
+        url="https://docs.astral.sh/ruff/",
+        provision=Provision(kind="github", repo="astral-sh/ruff"),
     ),
     Driver(
         "ruff",
         attr="ruff_format",
         base=("format",),
         url="https://docs.astral.sh/ruff/formatter/",
+        provision=Provision(kind="github", repo="astral-sh/ruff"),
     ),
     Driver(
         "basedpyright",
@@ -256,7 +260,7 @@ DRIVERS: tuple[Driver, ...] = (
     ),
     Driver(
         "uv",
-        provision=Provision(package="uv"),  # PyPI, `uv tool install uv` — never host
+        provision=Provision(kind="github", repo="astral-sh/uv"),
         url="https://docs.astral.sh/uv/",
         verbs=(
             "sync",
@@ -474,6 +478,7 @@ DRIVERS: tuple[Driver, ...] = (
         "prek",
         verbs=("run", "install", "uninstall", "autoupdate", "clean"),
         url="https://prek.j178.dev/",
+        provision=Provision(kind="github", repo="j178/prek"),
     ),
     Driver(
         "markdownlint-cli2",
@@ -602,8 +607,18 @@ DRIVERS: tuple[Driver, ...] = (
     ),
     Driver("djlint", url="https://www.djlint.com/"),
     Driver("mypy", url="https://mypy.readthedocs.io/"),
-    Driver("ty", verbs=("check",), url="https://docs.astral.sh/ty/"),
-    Driver("pyrefly", verbs=("check",), url="https://pyrefly.org/"),
+    Driver(
+        "ty",
+        verbs=("check",),
+        url="https://docs.astral.sh/ty/",
+        provision=Provision(kind="github", repo="astral-sh/ty"),
+    ),
+    Driver(
+        "pyrefly",
+        verbs=("check",),
+        url="https://pyrefly.org/",
+        provision=Provision(kind="github", repo="facebook/pyrefly"),
+    ),
     Driver("twine", verbs=("upload", "check"), url="https://twine.readthedocs.io/"),
     Driver("git-changelog", url="https://pawamoy.github.io/git-changelog/"),
     Driver(
@@ -617,8 +632,16 @@ DRIVERS: tuple[Driver, ...] = (
         provision=Provision(package="build"),
         url="https://build.pypa.io/",
     ),
-    Driver("cmake", url="https://cmake.org/documentation/"),
-    Driver("ninja", url="https://ninja-build.org/"),
+    Driver(
+        "cmake",
+        url="https://cmake.org/documentation/",
+        provision=Provision(kind="github", repo="Kitware/CMake"),
+    ),
+    Driver(
+        "ninja",
+        url="https://ninja-build.org/",
+        provision=Provision(kind="github", repo="ninja-build/ninja"),
+    ),
     Driver(
         "pytest",
         url="https://docs.pytest.org/",
