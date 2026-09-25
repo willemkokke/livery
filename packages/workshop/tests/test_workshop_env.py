@@ -540,7 +540,28 @@ def test_apply_entry_skips_a_broken_receipt_and_still_enters_the_venv(
     assert os.environ["VIRTUAL_ENV"] == str(tmp_path / ".venv")
 
 
-def test_apply_entry_prepends_the_missing_tools_in_order_and_is_idempotent(
+def test_apply_entry_puts_the_venv_ahead_of_a_tool_already_on_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The regression first: `uv run` already had the venv's bin on PATH,
+    # the hook put the missing tool directories in front of it, and the
+    # store's plain pytest shadowed the venv's. The emission leads in its
+    # own order whatever PATH held, and the venv is first in it.
+    from livery.workshop import _env_tasks
+
+    ruff = str(tmp_path / "store" / "ruff")
+    _receipt(tmp_path, "ruff", paths=(ruff,))
+    monkeypatch.setenv("PATH", os.pathsep.join(["/usr/bin", str(venv_bin(tmp_path))]))
+    monkeypatch.setattr(_env_tasks, "_APPLIED", {})
+    assert _env_tasks.apply_entry(tmp_path) == (ruff,)
+    assert os.environ["PATH"].split(os.pathsep) == [
+        str(venv_bin(tmp_path)),
+        ruff,
+        "/usr/bin",
+    ]
+
+
+def test_apply_entry_leads_with_the_emission_in_order_and_is_idempotent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from livery.workshop import _env_tasks
@@ -549,7 +570,8 @@ def test_apply_entry_prepends_the_missing_tools_in_order_and_is_idempotent(
     tea = str(tmp_path / "store" / "tea")
     _receipt(tmp_path, "ruff", paths=(ruff,), env={"RUFF_FLAG": "1"})
     _receipt(tmp_path, "tea", paths=(tea,))
-    # tea is already on PATH, behind /usr/bin: it stays where it is.
+    # tea is already on PATH, behind /usr/bin: it moves to its place in
+    # the emission, ahead of everything the emission does not name.
     monkeypatch.setenv("PATH", os.pathsep.join(["/usr/bin", tea]))
     monkeypatch.setenv("RUFF_FLAG", "shell")
     monkeypatch.delenv("VIRTUAL_ENV", raising=False)
@@ -559,8 +581,8 @@ def test_apply_entry_prepends_the_missing_tools_in_order_and_is_idempotent(
     assert os.environ["PATH"].split(os.pathsep) == [
         str(venv_bin(tmp_path)),
         ruff,
-        "/usr/bin",
         tea,
+        "/usr/bin",
     ]
     assert os.environ["RUFF_FLAG"] == "shell"  # the environment wins
     assert {"VIRTUAL_ENV": str(tmp_path / ".venv")} == _env_tasks._APPLIED
