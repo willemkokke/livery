@@ -1,12 +1,15 @@
 # Direct downloads: a tool comes from its own release, PyPI only for Python
 
-Status: ruled 2026-09-25 as drafted, with git-cliff on a base kind
-(decision record). Phases 1 to 4 landed 2026-09-25 (livery#674 PR #675,
-livery#676 PR #678, livery#677 PR #681, livery#680 PR #684): every tool
-with a release of its own comes from it, recorded on six hosts, and every
-CI job materialises the lock's tools before the emission. Phase 5 in
-flight (livery#683): basedpyright through bun, the PyPI tier the Python
-tools alone. The six-host point runs after it lands as the proof.
+Status: complete, 2026-09-25. Ruled as drafted the same day, with
+git-cliff on a base kind (decision record). The five phases landed as
+livery#674 (PR #675), livery#676 (PR #678), livery#677 (PR #681),
+livery#680 (PR #684) and livery#683 (PR #685): every tool with a release
+of its own comes from it, recorded on six hosts; the PyPI tier carries
+the Python tools alone; every CI job materialises the lock's tools before
+the emission; and the six-host point run 36093071950 is green on all
+six legs. Open follow-ups: livery#571 (the store's cache on runners,
+woken), livery#682 (a stale ref after a layout change), livery#686 (a
+sync that moves the checkout fails once in-process).
 
 ## The ruling (Willem, 2026-09-24)
 
