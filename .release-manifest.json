@@ -2,9 +2,9 @@
  "schema": 1,
  "members": [
   {
-   "dir": "footman",
-   "name": "livery-footman",
-   "version": "0.54.0"
+   "dir": "cbor",
+   "name": "livery-cbor",
+   "version": "0.0.0"
   }
  ]
 }

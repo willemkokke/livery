@@ -9,11 +9,9 @@ format follows [Keep a Changelog](https://keepachangelog.com/), the
 project adheres to [Semantic Versioning](https://semver.org/), and
 while it is pre-1.0 a minor version may include breaking changes.
 
-## [0.0.0]
+## [0.0.0] - 2026-09-25
 
 ### Added
 
-- Package born from the workshop template.
-- `encode` and `decode`: RFC 8949 core deterministic encoding over the
-  restricted subset, a strict decoder, and the vector file under
-  `spec/vectors/codec.json`.
+- Livery-cbor: the deterministic CBOR codec, its spec page and its vectors by @willemkokke
+
