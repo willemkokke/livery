@@ -32,12 +32,13 @@ _ASSET_NAMES = {
 
 
 def _zip(members: dict[str, bytes]) -> bytes:
-    """A zip whose `bin/` members carry the executable bit."""
+    """A zip whose `tool` binaries carry the executable bit and nothing else does."""
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
         for name, data in members.items():
             info = zipfile.ZipInfo(name)
-            info.external_attr = (0o755 if "/bin/" in name else 0o644) << 16
+            binary = name.rsplit("/", 1)[-1] in ("tool", "tool.exe")
+            info.external_attr = (0o755 if binary else 0o644) << 16
             archive.writestr(info, data)
     return buffer.getvalue()
 
@@ -264,14 +265,18 @@ def test_the_verb_records_saves_and_runs_the_nine_checks(
 def test_the_verb_is_red_on_a_finding_with_the_artifacts_saved(
     tmp_path, monkeypatch, capsys
 ) -> None:
-    """A stray executable in `bin/` is a finding; the artifacts stay for the fix."""
+    """A missing entry point is a finding; the artifacts stay for the fix.
+
+    A missing file is seen on every machine, where a stray executable's
+    mode bit is not: a Windows filesystem carries none for a POSIX tree.
+    """
     from livery.toolroom.bench._toolfetch import Release
 
     records = isolate(tools, monkeypatch, tmp_path)
     save(_record("1.0.0"), records)
     payloads = _payloads("1.0.0")
     payloads[_ASSET_NAMES[LINUX].format(v="1.0.0")] = _zip(
-        {"tool-1.0.0/bin/tool": b"#!/bin/sh\n", "tool-1.0.0/bin/stray": b"#!/bin/sh\n"}
+        {"tool-1.0.0/bin/other": b"#!/bin/sh\n", "tool-1.0.0/LICENSE": b"l"}
     )
     _serve(monkeypatch, payloads)
     monkeypatch.setattr(
@@ -285,7 +290,7 @@ def test_the_verb_is_red_on_a_finding_with_the_artifacts_saved(
     )
     with pytest.raises(Failed, match=r"tool 1\.0\.0: 1 finding"):
         tools.tools_artifacts("tool")
-    assert "stray-executables" in capsys.readouterr().out
+    assert "entry-points" in capsys.readouterr().out
     saved = _surfaces.load(records / "tool.jsonl")
     assert saved is not None and LINUX in saved.hosts_of("1.0.0")
 
