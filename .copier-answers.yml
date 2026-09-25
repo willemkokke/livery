@@ -31,3 +31,6 @@ packages:
 - dir: toolroom-store
   name: livery-toolroom-store
   dev: livery-toolroom-store
+- dir: cbor
+  name: livery-cbor
+  dev: livery-cbor

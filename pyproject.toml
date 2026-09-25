@@ -25,7 +25,7 @@ default-groups = ["dev", "docs"]
 # file is rendered from it, so a glob would only re-derive the same
 # list while letting a stray directory join unnoticed. A non-python
 # member (a cpp-conan package) is no uv project and never appears.
-members = ["packages/forge", "packages/workshop", "packages/toolroom", "packages/footman", "packages/strongroom", "packages/toolroom-bench", "packages/toolroom-store"]
+members = ["packages/forge", "packages/workshop", "packages/toolroom", "packages/footman", "packages/strongroom", "packages/toolroom-bench", "packages/toolroom-store", "packages/cbor"]
 
 [tool.uv.sources]
 livery-forge = { workspace = true }
@@ -35,6 +35,7 @@ livery-footman = { workspace = true }
 livery-strongroom = { workspace = true }
 livery-toolroom-bench = { workspace = true }
 livery-toolroom-store = { workspace = true }
+livery-cbor = { workspace = true }
 
 [dependency-groups]
 # The docs toolchain, workshop-rendered so one layer release moves
@@ -57,6 +58,7 @@ dev = [
     "livery-strongroom",
     "livery-toolroom-bench",
     "livery-toolroom-store",
+    "livery-cbor",
     # Every contract layer that is not already a member above, so a
     # rendered tasks.py can always import its plugins.
     "pytest>=8.0",
@@ -91,7 +93,7 @@ docs_url = "https://docs.willem.net/livery/tasks/{slug}/"
 [tool.ruff]
 line-length = 88
 target-version = "py311"
-src = ["packages/forge/src", "packages/forge/tests", "packages/workshop/src", "packages/workshop/tests", "packages/toolroom/src", "packages/toolroom/tests", "packages/footman/src", "packages/footman/tests", "packages/strongroom/src", "packages/strongroom/tests", "packages/toolroom-bench/src", "packages/toolroom-bench/tests", "packages/toolroom-store/src", "packages/toolroom-store/tests", "tests"]
+src = ["packages/forge/src", "packages/forge/tests", "packages/workshop/src", "packages/workshop/tests", "packages/toolroom/src", "packages/toolroom/tests", "packages/footman/src", "packages/footman/tests", "packages/strongroom/src", "packages/strongroom/tests", "packages/toolroom-bench/src", "packages/toolroom-bench/tests", "packages/toolroom-store/src", "packages/toolroom-store/tests", "packages/cbor/src", "packages/cbor/tests", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF", "D"]
@@ -168,6 +170,8 @@ files = [
     "packages/toolroom-bench/tests",
     "packages/toolroom-store/src",
     "packages/toolroom-store/tests",
+    "packages/cbor/src",
+    "packages/cbor/tests",
     "tests",
     "tasks.py",
 ]
@@ -187,6 +191,8 @@ mypy_path = [
     "packages/toolroom-bench/tests",
     "packages/toolroom-store/src",
     "packages/toolroom-store/tests",
+    "packages/cbor/src",
+    "packages/cbor/tests",
 ]
 # PEP 420 namespace in a src layout: mypy needs both to derive module
 # names without an __init__.py trail.
@@ -225,7 +231,7 @@ warn_unused_ignores = false
 # Third gate. Scope: the packages themselves; the consumer seam in
 # tests is already double-checked by basedpyright and mypy.
 [tool.ty.src]
-include = ["packages/forge/src", "packages/workshop/src", "packages/toolroom/src", "packages/footman/src", "packages/strongroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src"]
+include = ["packages/forge/src", "packages/workshop/src", "packages/toolroom/src", "packages/footman/src", "packages/strongroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/cbor/src"]
 
 [tool.ty.environment]
 # Every platform at once (ty checks the union), 3.11 floor.
@@ -240,7 +246,7 @@ extra-paths = ["typings"]
 # zero-dependency 3.11 library cannot spell it without a
 # typing_extensions runtime dep. Revisit when 3.11 support ends.
 preset = "default"
-project-includes = ["packages/forge/src", "packages/workshop/src", "packages/toolroom/src", "packages/footman/src", "packages/strongroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src"]
+project-includes = ["packages/forge/src", "packages/workshop/src", "packages/toolroom/src", "packages/footman/src", "packages/strongroom/src", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/cbor/src"]
 # Both path heuristics off: a checkout under a dot-directory (a
 # `.claude/worktrees/` worktree) silently skips every include and the
 # gate fails on "no files matched". At the repo root neither setting
@@ -299,7 +305,7 @@ testpaths = ["packages", "tests"]
 # two packages may both have a tests/test_lifecycle.py. That leaves the
 # tests directories off sys.path, so they go on pythonpath for the
 # helper modules, which carry their package's name and so never clash.
-pythonpath = ["packages/forge/tests", "packages/workshop/tests", "packages/toolroom/tests", "packages/footman/tests", "packages/strongroom/tests", "packages/toolroom-bench/tests", "packages/toolroom-store/tests", "tests"]
+pythonpath = ["packages/forge/tests", "packages/workshop/tests", "packages/toolroom/tests", "packages/footman/tests", "packages/strongroom/tests", "packages/toolroom-bench/tests", "packages/toolroom-store/tests", "packages/cbor/tests", "tests"]
 # `-n auto` fans the suite across cores; `worksteal` because durations
 # are uneven (footman measured it; the choice carries until we measure
 # here).
