@@ -9,6 +9,15 @@ nav = [
     # docs-nav:begin (generated; the emitter owns this block)
     { "Home" = "index.md" },
     { "Releases" = "_generated/releases/index.md" },
+    { "cbor" = [
+        { "Index" = "_generated/packages/cbor/index.md" },
+        { "The standard" = "_generated/packages/cbor/standard.md" },
+        { "Changelog" = "_generated/packages/cbor/changelog.md" },
+        { "API" = [
+            { "livery.cbor" = "_generated/api/cbor/index.md" },
+            { "livery.cbor._codec" = "_generated/api/cbor/_codec.md" },
+        ] },
+    ] },
     { "footman" = [
         { "Home" = "_generated/packages/footman/index.md" },
         { "Getting started" = "_generated/packages/footman/getting-started.md" },
@@ -608,6 +617,7 @@ custom_checkbox = true
 [project.markdown_extensions.pymdownx.snippets]
 base_path = [
     ".",
+    "packages/cbor/_generated",
     "packages/footman/_generated",
     "packages/forge/_generated",
     "packages/strongroom/_generated",
@@ -622,7 +632,7 @@ auto_append = [
 ]
 
 [project.plugins.mkdocstrings.handlers.python]
-paths = ["packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom/docs/_generated/stubs", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/workshop/src"]
+paths = ["packages/cbor/src", "packages/forge/src", "packages/strongroom/src", "packages/toolroom/src", "packages/toolroom/docs/_generated/stubs", "packages/toolroom-bench/src", "packages/toolroom-store/src", "packages/workshop/src"]
 inventories = ["https://docs.python.org/3/objects.inv", "https://willemkokke.github.io/footman/objects.inv", "https://willemkokke.github.io/toolroom/objects.inv"]
 
 [project.plugins.mkdocstrings.handlers.python.options]
