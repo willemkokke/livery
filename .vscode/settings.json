@@ -1,0 +1,31 @@
+{
+  // Rendered by the template channel (packages/workshop/src/livery/workshop/templates, project kind);
+  // the gate keeps it matching its render. Edit the source and
+  // run `fm template.apply`; an edit here is drift.
+  //
+  // An editor terminal is an entered shell from its first prompt: the
+  // profile evaluates the workspace's environment, then hands over to
+  // the interactive shell, which inherits it. Per-user terminal
+  // settings belong in the user's own settings, never here.
+  "terminal.integrated.profiles.osx": {
+    "livery": {
+      "path": "zsh",
+      "args": ["-c", "eval \"$(uv run -q fm --quiet env.emit posix)\"; exec zsh -i"]
+    }
+  },
+  "terminal.integrated.defaultProfile.osx": "livery",
+  "terminal.integrated.profiles.linux": {
+    "livery": {
+      "path": "bash",
+      "args": ["-c", "eval \"$(uv run -q fm --quiet env.emit posix)\"; exec bash -i"]
+    }
+  },
+  "terminal.integrated.defaultProfile.linux": "livery",
+  "terminal.integrated.profiles.windows": {
+    "livery": {
+      "path": "pwsh.exe",
+      "args": ["-NoExit", "-Command", "uv run -q fm --quiet env.emit pwsh | Invoke-Expression"]
+    }
+  },
+  "terminal.integrated.defaultProfile.windows": "livery"
+}

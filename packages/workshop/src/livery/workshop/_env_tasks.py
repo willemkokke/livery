@@ -89,6 +89,10 @@ def apply_cascade(inv: footman.Invocation) -> None:
         if not os.environ.get(key):
             os.environ[key] = value
             _APPLIED[key] = value
+    # The tools' half of the entry contract, before the reconcile so a
+    # re-exec after a drift sync inherits it and the sync's own spawns
+    # resolve: whatever launched this process, it runs entered.
+    apply_entry(root)
     _warn_unmounted_layers(root)
     # Belt and braces around the whole self-healing step: this hook
     # is the last thing standing between a surprise in the reconcile
@@ -104,6 +108,46 @@ def apply_cascade(inv: footman.Invocation) -> None:
         import sys
 
         sys.stderr.write(f"environment reconcile skipped ({error})\n")
+
+
+def apply_entry(root: Path) -> tuple[str, ...]:
+    """Enter the environment for this process: the venv and the receipts' tools.
+
+    The same PATH entries and variables `env.emit` hands an entered
+    shell, applied to this process, so every `fm` invocation resolves
+    the locked tools whatever launched it: an agent's shell, a CI
+    step, a bare terminal. An entry already on PATH stays where it
+    is and the missing ones go in front, in emission order; a
+    variable the environment already has wins, as the cascade's do,
+    and what the hook contributes is remembered in `_APPLIED`. A
+    receipts directory holding a file that is not a receipt costs the
+    tools' half alone, said on stderr, never the command. Idempotent.
+
+    Returns:
+        The PATH entries added, in order.
+    """
+    import sys
+
+    try:
+        paths, env = _receipts_emission(root)
+    except ValueError as error:
+        sys.stderr.write(f"tool receipts skipped ({error})\n")
+        paths, env = (), {}
+    current = os.environ.get("PATH", "")
+    present = {os.path.normcase(e) for e in current.split(os.pathsep) if e}
+    added: list[str] = []
+    for entry in (str(venv_bin(root)), *paths):
+        if os.path.normcase(entry) not in present:
+            added.append(entry)
+            present.add(os.path.normcase(entry))
+    if added:
+        os.environ["PATH"] = os.pathsep.join([*added, current] if current else added)
+    values = {"VIRTUAL_ENV": str(root / ".venv"), **env}
+    for key, value in values.items():
+        if not os.environ.get(key):
+            os.environ[key] = value
+            _APPLIED[key] = value
+    return tuple(added)
 
 
 def _warn_unmounted_layers(root: Path) -> None:
