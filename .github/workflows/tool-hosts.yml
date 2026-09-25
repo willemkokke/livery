@@ -27,11 +27,6 @@ jobs:
           enable-cache: false
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
-          path: ${{ runner.temp }}/uv-cache
-          key: uv-${{ matrix.os }}-${{ matrix.python }}-${{ hashFiles('uv.lock') }}
-          restore-keys: uv-${{ matrix.os }}-${{ matrix.python }}-
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
-        with:
           path: ${{ runner.temp }}/footman/toolroom
           key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools.lock') }}
           restore-keys: tools-${{ runner.os }}-${{ runner.arch }}-

@@ -20,13 +20,14 @@ if ! command -v uv >/dev/null 2>&1; then
     fi
 fi
 # On a GitHub job uv's cache and the runner's data directory, the tool
-# store under it, live under the runner's temp, the working drive,
-# where the workflow restores them before this script runs and saves
-# them after the job. On a Windows runner the working drive is not the
-# home directory's: a store on the home drive cannot hardlink its
-# entry points into the checkout and copies instead. Exported before
-# the sync and the materialise so they fill what was restored, and
-# persisted by the emission below for every later step.
+# store under it, live under the runner's temp, the working drive. On
+# a Windows runner the working drive is not the home directory's: a
+# store on the home drive cannot hardlink its entry points into the
+# checkout and copies instead, and so would uv's cache into the venv.
+# The workflow restores the store before this script runs and saves
+# it after the job; uv's cache is placed for the drive alone. Exported
+# before the sync and the materialise, and persisted by the emission
+# below for every later step.
 if [ "${1:-}" = github ] && [ -n "${RUNNER_TEMP:-}" ]; then
     UV_CACHE_DIR="$RUNNER_TEMP/uv-cache"
     FOOTMAN_DATA_DIR="$RUNNER_TEMP/footman"

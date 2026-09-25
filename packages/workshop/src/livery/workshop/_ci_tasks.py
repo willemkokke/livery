@@ -704,30 +704,36 @@ def ci_run(
     try:
         run_point(root, point, job, os_label=os, python=python)
     finally:
-        note = prune_uv_cache()
+        note = sweep_tool_store()
         if note:
             print(f"  {note}")
 
 
-def prune_uv_cache(environ: dict[str, str] | None = None) -> str:
-    """Prune uv's cache on a GitHub job, before the post-job save; the note.
+def sweep_tool_store(environ: dict[str, str] | None = None) -> str:
+    """Sweep the tool store on a GitHub job, before the post-job save; the note.
 
-    Built artifacts are not worth an archive slot: the repository's
-    cache is evicted by recency against a fixed budget. Off a GitHub
-    job, or with no cache placed, nothing runs and the note is empty.
-    A failed prune is named and never decides the job.
+    A tool's archive stays in the store as an object once its tree is
+    extracted and named, and nothing reaches it again: the tree is what
+    a pinned version runs from. The workflow saves the whole store,
+    so those objects would ride in every archive and cost every restore.
+    Off a GitHub job nothing runs and the note is empty. A failed sweep
+    is named and never decides the job.
     """
     import os as _os
 
     found = _os.environ if environ is None else environ
-    if not found.get("GITHUB_ACTIONS") or not found.get("UV_CACHE_DIR"):
+    if not found.get("GITHUB_ACTIONS"):
         return ""
-    from livery.toolroom import tools
+    from livery.strongroom import LockTimeout, StoreError
+    from livery.workshop._tools import _home  # pyright: ignore[reportPrivateUsage]
 
-    done = tools.uv.opts(nofail=True, recorded=False)("cache", "prune", "--ci")
-    if done.code == 0:
-        return "uv cache: pruned before the save"
-    return f"uv cache: prune failed (exit {done.code}); the archive saves unpruned"
+    try:
+        report = _home().open_store().sweep()
+    except (LockTimeout, StoreError, OSError) as error:
+        return f"tool store: sweep failed ({error}); the archive saves unswept"
+    return (
+        f"tool store: {len(report.removed)} unreached object(s) swept before the save"
+    )
 
 
 def _conclusion_words(repo: Repository, run: Run, job: Job) -> str:

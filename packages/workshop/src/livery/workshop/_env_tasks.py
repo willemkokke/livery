@@ -206,11 +206,11 @@ def runner_placements(environ: dict[str, str]) -> dict[str, str]:
 
     The runner's temp is the working drive, where the checkout and the
     venv are; on a Windows runner the home directory is another drive,
-    and a tool store there cannot hardlink into the checkout. The entry
-    script exports the same paths before its sync and materialise,
-    since it runs before any verb can; the workflow's cache steps
-    restore and save these paths. Empty off a runner that names no
-    temp.
+    and a tool store there cannot hardlink into the checkout, nor uv's
+    cache into the venv. The entry script exports the same paths
+    before its sync and materialise, since it runs before any verb
+    can; the workflow's cache step restores and saves the store under
+    the data directory. Empty off a runner that names no temp.
     """
     from livery.footman import _paths  # pyright: ignore[reportPrivateUsage]
 
