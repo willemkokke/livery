@@ -1,7 +1,8 @@
 # Modular docs: a package's section is the package's, and the site assembles
 
-Status: ruled 2026-09-25 with phase 5 out; phase 1 in progress. Tracks
-livery#647 and folds in livery#268. The direct downloads plan
+Status: ruled 2026-09-25 with phase 5 out. Phase 1 in flight (livery#688):
+the site builds strict with no link into `_generated`. Tracks livery#647
+and folds in livery#268. The direct downloads plan
 (`notes/20260925-direct-downloads.md`) completed first, as ruled.
 
 ## What this is
@@ -279,8 +280,10 @@ Deliverables:
 Acceptance:
 
 - `fm docs.build` green, strict.
-- `grep -r _generated site/ --include='*.html' -l` prints nothing;
-  the same over `site/llms.txt` and `site/llms-full.txt`.
+- No built page links into `_generated/`: a grep over `href` and `src`
+  attributes in `site/` prints nothing, and `site/llms.txt` carries no
+  such URL. The name still appears in prose and code listings about
+  the on-disk trees, which is where it lives.
 - `fm --list` prints a task link whose path is `tasks/<slug>/`.
 - A test in `packages/workshop/tests/` pins every row of the scheme
   table against a seeded workspace's build.
@@ -382,6 +385,12 @@ Acceptance:
 | The tasks block in the authored `nav.toml` | phase 3, or kept by open question 3 |
 
 ## Decision record
+
+- 2026-09-25, phase 1: a generated page links upward with the generated
+  directory counted in; merged one level up, a link that climbs out of
+  the tree loses one `../`, and a link inside it keeps its shape. The
+  drift test over authored pages skips the site trees under the root
+  `docs/`, since they are built, never authored.
 
 - 2026-09-25: drafted. The examples-run-on-page-change ask is met by a
   gate rule (phase 4), not by moving tests; the relocation (phase 5)
