@@ -16,8 +16,10 @@ cross-kind dependency; see the decision record. Phase 5 shipped
 2026-09-05 (issue #217, PR #219): publish and the identity guard;
 Open 5 (stamping dispatch) closed with it. Phase 6 built
 2026-09-05 (issue #220): the chain add-back; every phase of this
-plan is now built. Open 6 (the newborn first-derive version,
-issue #218) and Open 7 (compile-time conan consumption) remain.
+plan is now built. Open 6 closed 2026-09-05 with livery#218. Open 7
+(compile-time conan consumption) was sequenced 2026-09-26 as phases 7
+and 8 below, ruled the same day; phase 7's first step, the conan store
+record, is livery#728.
 This is phase 17 of `notes/20260903-workshop-plan.md`, promoted to
 its own plan. Willem's scope ruling (2026-09-04): a CMake C/C++
 library kind on conan 2 and a python binary-extension kind that
@@ -279,11 +281,91 @@ Acceptance:
 - The armed chain (`WORKSHOP_CONFORMANCE_DRIVE=1`) carries the new
   stage and passes twice (fresh and resumed).
 
+### Phase 7: compile-time consumption of the library
+
+The extension calls a symbol from the first-party library and a
+symbol from a third-party conan package, and the build resolves both
+the same way in the local gate, the isolated wheel legs, and the
+cibuildwheel legs on the three wheel platforms, the manylinux
+container included. Conan itself arrives through the tool store
+first (livery#728: an `archive` record from conan's own releases, the
+cpp backend's refusal naming the store).
+
+The shape, mirroring the python kind:
+
+- In the workspace the extension compiles against the library at
+  HEAD through conan's editable mode, conan's own workspace source: the
+  sibling's source tree, no package in the cache. The contract floor
+  stays the drift guard.
+- In the isolated legs the extension builds and tests against the
+  library resolved at the floor the contract declares, pinned exactly
+  (a conan range resolves to the highest available, so the leg pins
+  `name/floor` to starve the way `--resolution=lowest-direct` does).
+  The library is published before the extension's wheel builds, the
+  order the train already imposes.
+- The extension carries a consumer `conanfile.py` with
+  `requires = "<library>/[>=floor]"` and the third-party ranges; the
+  backend's requirement reader and the layering lint apply unchanged,
+  and a requirement naming no member is third-party.
+- The toolchain reaches scikit-build-core through a CMake dependency
+  provider (cmake-conan's `conan_provider.cmake`, a store download):
+  the extension's CMakeLists says `find_package(<name> REQUIRED)` and
+  CMake runs `conan install` with the host's detected profile at
+  configure time, `CMAKE_PROJECT_TOP_LEVEL_INCLUDES` set by the backend
+  for the gate and through `CIBW_ENVIRONMENT` for the legs. The
+  consumer side lives in a shared helper, not the extension's backend,
+  so a later kind (a cargo kind through `PkgConfigDeps`) reuses it.
+- Profiles are `conan profile detect` per host with the leg's settings
+  written over it, `build_type=Release` everywhere CI builds; no
+  profile files in the template.
+- Where the packages come from, per the registry ladder: a declared
+  conan remote wins where a workspace has one. On GitHub, which has no
+  conan registry, the first-party package for each wheel platform is
+  attached to the member's own release by the train's release leg and
+  read back through the store's records, the same path as a tool.
+  Third-party packages come from Conan Center, built once per profile
+  with `--build=missing`, with the conan home cached by the CI lane
+  keyed on the lockfile and profile. Conan Center is on the merge path
+  the way PyPI already is.
+
+Acceptance:
+- The conformance chain's stage that wires both kinds proves the
+  extension imports and calls one first-party and one third-party
+  function, locally and on the three wheel platforms; the
+  pure-python profile is pinned unchanged.
+- `fm check` in the fixture workspace compiles the extension against
+  the library at HEAD: an edit to the library's header is seen by the
+  extension's next configure without a release.
+- The isolated leg fails when the floor names a version whose header
+  lacks the symbol; forced by test.
+- The manylinux leg builds with the store's conan mounted, no wheel
+  install of conan inside the container.
+
+### Phase 8: local development for the native kinds
+
+What a person gets at birth beyond the gate: a `CMakePresets.json`
+(configure, build and test presets, Debug and Release, compile
+commands exported) that conan's generated `CMakeUserPresets.json`
+includes, so VS Code, CLion, Visual Studio and Xcode open the
+package with no verb; the Debug preset in the same tree for
+debugging the ctest binary, and scikit-build-core's editable install
+for debugging the extension in the workspace's Python; `.clang-format`
+and `.clang-tidy` in both templates with format and lint as gate
+checks for the kinds, the two tools taken from the LLVM static
+release the store will carry as a compiler, never as a tool of their
+own.
+
+Acceptance:
+- A fresh fixture of each kind configures from its preset with no
+  further arguments; proven by test.
+- A misformatted source and a tidy finding each turn the gate red,
+  naming the file; forced by test.
+
 ## Temporary, replaced by
 
 | Temporary | Replaced by |
 | --- | --- |
-| No toolroom conan handle; conan runs through a deliberate `footman.run` with stated env | a typed handle when toolroom grows one, or when toolroom migrates into this repository |
+| No toolroom conan handle; conan runs through a deliberate `footman.run` with stated env | the store's conan record (livery#728) and the handle its stub gives |
 | Compilers required on the host, named by `fm doctor` | phase 18's tool cache over the type-derived profile |
 | Validator packages living in conformance fixtures and the chain | real native members when the first production consumer arrives |
 | The armed cibuildwheel leg skips on win32 until MSVC arming on the runner is verified | a verified win32 leg |
@@ -421,6 +503,28 @@ Acceptance:
   renders parent then child with the managed union; the backend
   seam mirrors it; types contribute tool profiles by discovery;
   linkable C/C++ goes company-wide through conan 2.
+- 2026-09-26 (Willem): Open 7 sequenced, after the workflow
+  streamlining issues: the kind hierarchy closes before the
+  extensible gate plan starts. Rulings: conan comes from its own
+  release archives through the store, never a wheel; in the workspace
+  the extension builds against the library at HEAD and in the isolated
+  legs against the released floor, the python kind's own split; CI
+  builds Release only and keeps no debug symbols; a Rust kind later
+  consumes the same conan packages through `PkgConfigDeps`, so the
+  consumer helper is shared; the integration test is the first time a
+  first-party and a third-party symbol link into a python extension.
+- 2026-09-26 (Willem): the merge path may depend on a service reached
+  with a configured token (an index, a registry, a remote); what it
+  may not depend on is a person. The workshop fragment says so from
+  this date. Conan Center and PyPI are both such services. No Gitea or
+  other self-hosted registry for this repository: a declared remote
+  serves a workspace that has one, and the member's own release
+  assets, read through the store, serve first-party packages here.
+  Third-party binaries are cached by the CI lane, never mirrored into
+  release assets.
+- 2026-09-26 (Willem): clang-format and clang-tidy come with the LLVM
+  static release the store will carry as a compiler; no separate tool
+  record for either.
 
 ## Open
 
@@ -452,13 +556,9 @@ All four ruled. Willem's go, 2026-09-04: phase 1 is in build.
    release, hse's own practice (its sdk and devkit both released
    at v0.0.0); the seeds now say 0.0.0 in every version home and
    the born changelog entry, and the rehearsal pins the derive.
-7. Open (2026-09-05): the extension's dependency on the library is
-   declared and lint-agreed, and the release train orders it, but
-   the extension's own CMake does not yet consume the conan
-   package at compile time (toolchain generation into the
-   scikit-build configure, profiles per matrix leg). Its own cut,
-   to be planned when the first extension needs a symbol from the
-   library. Owner: Willem to sequence.
+7. Resolved 2026-09-26 (Willem): sequenced as phases 7 and 8, the
+   conan store record first (livery#728). The rulings are in the
+   decision record under that date.
 
 Phase 2 evidence (2026-09-04): `fm check` exit 0 in a conformance
 workspace carrying one cpp-conan member (rendered from the
