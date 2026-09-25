@@ -269,6 +269,16 @@ def test_pick_asset_for_a_named_host_reads_the_host_not_the_machine(mac_arm):
         _provision._pick_asset(assets, host="macos-x64")
 
 
+def test_pick_asset_prefers_the_msvc_build_over_the_mingw_one(win_amd64):
+    """git-cliff ships both; the shorter MinGW name must not win by length."""
+    assets = [
+        ("tool-1.0-x86_64-pc-windows-gnu.zip", "gnu"),
+        ("tool-1.0-x86_64-pc-windows-msvc.zip", "msvc"),
+    ]
+    assert _provision._pick_asset(assets)[1] == "msvc"
+    assert _provision._pick_asset(assets, host="windows-x64")[1] == "msvc"
+
+
 def test_pick_asset_no_match_raises(mac_arm):
     with pytest.raises(_provision.ProvisionError, match="no release asset"):
         _provision._pick_asset([("tool_Windows_x86_64.zip", "u")])

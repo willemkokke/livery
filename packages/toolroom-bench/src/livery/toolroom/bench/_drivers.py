@@ -617,7 +617,11 @@ DRIVERS: tuple[Driver, ...] = (
     ),
     Driver("twine", verbs=("upload", "check"), url="https://twine.readthedocs.io/"),
     Driver("git-changelog", url="https://pawamoy.github.io/git-changelog/"),
-    Driver("git-cliff", url="https://git-cliff.org/"),
+    Driver(
+        "git-cliff",
+        url="https://git-cliff.org/",
+        provision=Provision(kind="github", repo="orhun/git-cliff"),
+    ),
     Driver(
         "pyproject-build",
         attr="build",
