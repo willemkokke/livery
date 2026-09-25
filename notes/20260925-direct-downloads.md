@@ -1,7 +1,8 @@
 # Direct downloads: a tool comes from its own release, PyPI only for Python
 
 Status: ruled 2026-09-25 as drafted, with git-cliff on a base kind
-(decision record). Phase 1 in progress. Sequenced before the modular docs plan by Willem's word of
+(decision record). Phase 1 in flight (livery#674): gh's newest version
+carries six artifacts and passes the nine checks on six hosts. Sequenced before the modular docs plan by Willem's word of
 2026-09-25. The tool record plan
 (`notes/20260914-the-tool-record-and-its-index.md`) is complete, which
 is the precondition: the record, the store, the lock and the six-host
@@ -212,13 +213,21 @@ Deliverables:
 Acceptance:
 
 - Refusals first: a host without an asset is absent and the refresh
-  continues; a download whose digest differs between the artifact step
-  and the verification refuses naming both; a `{version}` root the
-  archive lacks refuses naming the substituted root; a non-Python
-  driver on the `uv` tier fails the pinned-list test.
-- `fm tools.refresh --only=gh` against the live forge writes six
-  `artifacts` on gh's newest version; `fm tools.verify gh` passes the
-  nine checks on the running host.
+  continues; a release the forge lacks refuses naming every tag
+  spelling tried; a host whose deployment does not resolve whole
+  refuses before anything is written; a `{version}` root the archive
+  lacks refuses naming the substituted root; a non-Python driver on
+  the `uv` tier fails the pinned-list test. The downloaded bytes are
+  landed in the bench's store once, so the verification stages them
+  without a second download and a digest cannot differ between the
+  two; a later download that serves other bytes is the store's own
+  integrity refusal.
+- `fm tools.artifacts gh` against the live forge writes six
+  `artifacts` on gh's newest version and passes the nine checks on
+  all six hosts from this machine. gh's record needed its layout
+  authored first (a root that carries both the version and the host
+  on the unix hosts, none on Windows), which is the one hand edit a
+  move keeps.
 - `fm check --full` green.
 
 ### Phase 2: git-cliff

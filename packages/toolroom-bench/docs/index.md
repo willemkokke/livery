@@ -19,7 +19,13 @@ something, and no executable sits in a path directory without an
 annotation. The paths each host gained and lost are the pull request's
 summary, and the refresh arms its pull request only when every change
 is an addition and every check passed; `fm tools.verify <tool>` runs
-the same checks by hand. The executable checks need a matching host:
+the same checks by hand. A tool read from a forge tier gets its
+artifacts from the same refresh: for each new version, the release's
+asset for each host is downloaded once, hashed, landed in the store
+the checks stage from, and written on the version line; a host the
+release has no asset for is left absent. `fm tools.artifacts <tool>`
+records a version already read, which is how a tool moves from a
+package index to its own release. The executable checks need a matching host:
 the bench declares a point, `tool-hosts`, that runs fortnightly on the
 six runners the host keys map to, and its task, `fm tools.verify-host`,
 installs every downloaded tool at its newest version with a build for

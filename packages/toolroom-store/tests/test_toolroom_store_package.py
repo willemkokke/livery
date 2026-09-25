@@ -20,6 +20,7 @@ def test_the_public_surface_is_pinned() -> None:
         "LAYOUT_KEYS",
         "OPTION_KEYS",
         "PACKAGE_VAR",
+        "VERSION_VAR",
         "PLATFORMS",
         "POINTER",
         "SURFACE_PLATFORMS",
