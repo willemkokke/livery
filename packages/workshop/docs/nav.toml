@@ -5,6 +5,7 @@
 # the emitter.
 nav = [
     { "Index" = "index.md" },
+    { "Development patterns" = "development-patterns.md" },
     { "Releases" = "releases.md" },
     # nav:begin tasks
     # nav:end tasks
