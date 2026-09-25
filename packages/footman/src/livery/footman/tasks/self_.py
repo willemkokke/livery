@@ -151,7 +151,7 @@ def _candidates_in(env: Path) -> tuple[tuple[str, ...], str | None]:
     A provider declares itself a *candidate* by advertising in that group —
     "I am meant to be mounted as a built-in, not merely mountable". Whether
     a candidate is actually mounted stays the machine owner's call, through
-    `builtins.discovery_mode`: a package cannot mount itself just by being
+    `builtins.discovery-mode`: a package cannot mount itself just by being
     installed, which matters because in a project environment every
     dependency shares one metadata space.
 
@@ -205,7 +205,7 @@ def add(
 
     The one-stop call: it installs the runner if it is not there yet, adds
     the packages to its environment, and — under the default
-    `builtins.discovery_mode = "auto"` — records whatever built-in tasks
+    `builtins.discovery-mode = "auto"` — records whatever built-in tasks
     they advertise, so their commands answer straight away.
     """
     if not packages:

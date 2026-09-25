@@ -60,8 +60,9 @@ sequential = false
 ```
 
 The user-level `~/.config/footman/config.toml` uses the standalone form.
-Unknown keys are kept but ignored, so a newer setting never breaks an
-older footman.
+An unknown key is kept, so a newer setting never breaks an older
+footman, and warned about with the closest recognised key named, so a
+typo is seen the moment it is made.
 
 ## Where footman writes
 
@@ -152,7 +153,7 @@ writes can trample a comment you left. `builtins.user` is the opposite: only
 you write it, footman only reads it, and a name in it that is not installed
 is refused rather than skipped.
 
-`builtins.discovery_mode` says which of the three contribute:
+`builtins.discovery-mode` says which of the three contribute:
 
 | mode | the runner's own | discovered | `user` |
 | ---- | ---------------- | ---------- | ------ |
@@ -167,7 +168,7 @@ if you want them back name them:
 
 ```toml
 [builtins]
-discovery_mode = "none"
+discovery-mode = "none"
 user = ["footman.self"]
 ```
 

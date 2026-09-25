@@ -965,3 +965,33 @@ def test_cascade_unknown_config_value_names_the_tokens(
         _app.resolve_task_files({})
     for token in ("none", "repo", "filesystem"):
         assert token in str(exc.value)
+
+
+def test_an_unknown_key_is_kept_and_warned_about_with_the_closest_one(
+    tmp_path: Path,
+) -> None:
+    # The fallback first: nothing close, so the warning names the key
+    # alone and never guesses. Then a typo, an underscore spelling, a
+    # sub-table's member and a free table's, each judged as it should be.
+    warnings: list[str] = []
+    (tmp_path / "pyproject.toml").write_text(
+        "[tool.footman]\n"
+        "zzz = 1\n"
+        'docs_url = "https://d.dev/tasks/{path}/"\n'
+        "[tool.footman.completion]\n"
+        'max_age = "10m"\n'
+        "[tool.footman.notes]\n"
+        '"*" = "error"\n'
+        "[tool.footman.plugins.acme]\n"
+        "anything = true\n",
+        encoding="utf-8",
+    )
+    cfg = _config.load_config(tmp_path, tmp_path, on_warning=warnings.append)
+    assert cfg["zzz"] == 1 and cfg["docs_url"].startswith("https://")  # kept
+    assert [w.split(": unknown key ", 1)[1] for w in warnings] == [
+        "`zzz`; ignoring it",
+        "`docs_url` — did you mean 'docs-url'?; ignoring it",
+        "`completion.max_age` — did you mean 'max-age'?; ignoring it",
+    ]
+    assert all(str(tmp_path / "pyproject.toml") in w for w in warnings)
+    assert _config.unknown_keys({"docs-url": "x", "notes": {"any": 1}}) == []

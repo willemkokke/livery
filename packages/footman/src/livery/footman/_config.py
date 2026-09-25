@@ -10,8 +10,9 @@ default and description, as data. The docs table renders from it, so the
 reference page and the runner cannot disagree; add a key there and it
 documents itself.
 
-Unknown keys are kept but ignored, so newer settings never break an older
-footman.
+An unknown key is kept, so a newer setting never breaks an older footman,
+and warned about with the closest recognised key named, so a typo is seen
+the moment it is made rather than ignored for four releases.
 """
 
 from __future__ import annotations
@@ -37,6 +38,51 @@ PYPROJECT = "pyproject.toml"
 # someone. Stripped from cascade files, with a note under -v; an explicit
 # `--config` file keeps them — the user named that file on purpose.
 USER_LEVEL_KEYS = frozenset({"gc", "cascade", "builtins"})
+
+# Tables whose keys are their owners' and not this list's: a provider's
+# own settings under `plugins`, the notes' levels per kind. Nothing in
+# them is judged against `KEYS`.
+FREE_TABLES = frozenset({"plugins", "notes"})
+
+
+def unknown_keys(table: dict[str, Any]) -> list[tuple[str, str]]:
+    """Each key in *table* that `KEYS` does not recognise, with its suggestion.
+
+    The suggestion is the closest recognised name, the way an unknown
+    task name gets one, or empty when nothing is close. A dotted key
+    in `KEYS` names a sub-table, whose members are judged against the
+    names under that prefix; a free table's members are not judged; a
+    plain key handed a table is the reader's to refuse by type.
+    """
+    from livery.footman._split import _did_you_mean
+
+    names = [name for name, *_ in KEYS]
+    tops = {name.split(".")[0] for name in names} | FREE_TABLES
+    found: list[tuple[str, str]] = []
+    for key, value in table.items():
+        if key not in tops:
+            found.append((key, _did_you_mean(key, sorted(tops))))
+            continue
+        if key in FREE_TABLES or not isinstance(value, dict):
+            continue
+        subs = {name.split(".", 1)[1] for name in names if name.startswith(f"{key}.")}
+        if not subs:
+            continue
+        for sub in value:
+            if sub not in subs:
+                found.append((f"{key}.{sub}", _did_you_mean(sub, sorted(subs))))
+    return found
+
+
+def _warn_unknown(
+    table: dict[str, Any], source: Path, on_warning: Callable[[str], None] | None
+) -> None:
+    """Warn once per unknown key in *table*, naming *source*; keep the key."""
+    if on_warning is None:
+        return
+    for key, hint in unknown_keys(table):
+        on_warning(f"{source}: unknown key `{key}`{hint}; ignoring it")
+
 
 # Every recognised key, as data — the source the docs table renders from, so
 # a reference page cannot describe a key set the runner doesn't have. The
@@ -113,7 +159,7 @@ KEYS: tuple[tuple[str, str, str, str], ...] = (
         "its own PEP 723 dependencies.",
     ),
     (
-        "builtins.discovery_mode",
+        "builtins.discovery-mode",
         "`auto` / `manual` / `internal` / `none`",
         "`auto`",
         "How the built-in set is assembled: `auto` lets `{prog} self.*` keep "
@@ -130,7 +176,7 @@ KEYS: tuple[tuple[str, str, str, str], ...] = (
         "a name that is not installed is refused. **User-level only.**",
     ),
     (
-        "docs_url",
+        "docs-url",
         "URL template",
         "unset",
         "Link task names in `--list`/`--tree`/`--help` to your generated "
@@ -148,7 +194,7 @@ KEYS: tuple[tuple[str, str, str, str], ...] = (
         "See the notes page.",
     ),
     (
-        "completion.max_age",
+        "completion.max-age",
         "duration / `off`",
         "`10m`",
         'Age before a background completion refresh (e.g. `"10m"`; `off` to disable).',
@@ -320,10 +366,13 @@ def _dir_config(
     merged: dict[str, Any] = {}
     for name in (PYPROJECT, _paths.config_basename()):
         try:
-            merged.update(_footman_table(directory / name))
+            table = _footman_table(directory / name)
         except ConfigError as exc:
             if on_warning is not None:
                 on_warning(f"ignoring malformed config: {exc}")
+            continue
+        _warn_unknown(table, directory / name, on_warning)
+        merged.update(table)
     for key in USER_LEVEL_KEYS & merged.keys():
         del merged[key]
         if on_note is not None:
@@ -367,7 +416,7 @@ def _parse_duration(value: object, *, strict: bool = False) -> int | None:
             return seconds if seconds > 0 else None
     if strict:
         raise ConfigError(
-            f"`completion.max_age` expects a duration — seconds, or a number "
+            f"`completion.max-age` expects a duration — seconds, or a number "
             f'with a unit ("30s", "10m", "1h", "1d"), or "off" (got {value!r})'
         )
     return DEFAULT_COMPLETION_MAX_AGE_S
@@ -375,14 +424,14 @@ def _parse_duration(value: object, *, strict: bool = False) -> int | None:
 
 def completion_max_age(cfg: dict[str, Any], *, strict: bool = False) -> int | None:
     """Seconds before the completion cache is considered stale, or `None` if
-    disabled. Reads `[tool.footman] completion.max_age`; default 10 minutes.
+    disabled. Reads `[tool.footman] completion.max-age`; default 10 minutes.
 
     *strict* is the execution path's reading: a run refuses a mistyped
     value by name, the way `sort` and the other keys do. The refresh child
     keeps the quiet default — a background rebuild must never crash, and a
     keystroke is nobody's moment to learn about a config typo."""
     completion = cfg.get("completion")
-    raw = completion.get("max_age") if isinstance(completion, dict) else None
+    raw = completion.get("max-age") if isinstance(completion, dict) else None
     return _parse_duration(raw, strict=strict)
 
 
@@ -450,10 +499,10 @@ def discovery_mode() -> str:
     User-level only, like `cascade`: which packages a runner carries is
     the machine owner's business, not any project's.
     """
-    value = _builtins_table().get("discovery_mode", "auto")
+    value = _builtins_table().get("discovery-mode", "auto")
     if not isinstance(value, str) or value not in DISCOVERY_MODES:
         raise BuiltinError(
-            f"builtins.discovery_mode = {value!r} in "
+            f"builtins.discovery-mode = {value!r} in "
             f"{_paths.footman_config_file()}: one of "
             f"{', '.join(DISCOVERY_MODES)}"
         )
@@ -576,7 +625,7 @@ def installed_entry_points() -> tuple[str, ...]:
 def effective_builtin(brand: tuple[str, ...]) -> tuple[str, ...]:
     """The built-in set this invocation mounts, in mounting order.
 
-    Three sources, and `builtins.discovery_mode` says which contribute:
+    Three sources, and `builtins.discovery-mode` says which contribute:
     the brand's own declarations (the product — first, because everything
     else is an addition to it, never a replacement), then whatever
     discovery found, then the names you wrote yourself. Duplicates are
@@ -611,13 +660,17 @@ def load_config(
         path = Path(cli_path).expanduser()
         if not path.is_file():
             raise ConfigError(f"{path}: no such file")
-        return _footman_table(path, required=True)
+        named = _footman_table(path, required=True)
+        _warn_unknown(named, path, on_warning)
+        return named
 
     merged: dict[str, Any] = {}
     try:
         # The bottom rung: the user-level file. Whole-file footman settings,
         # like footman.toml; every project layer cascades over it.
-        merged.update(_footman_table(_paths.footman_config_file()))
+        user = _footman_table(_paths.footman_config_file())
+        _warn_unknown(user, _paths.footman_config_file(), on_warning)
+        merged.update(user)
     except ConfigError as exc:
         if on_warning is not None:
             on_warning(f"ignoring malformed config: {exc}")

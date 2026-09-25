@@ -3,7 +3,7 @@
 The completion hot path spawns this detached, two ways:
 
 - `_maybe_refresh` → `refresh_cwd` is the stale-while-revalidate path: when a
-  cwd's cached manifest is older than its baked `completion.max_age`, rebuild the
+  cwd's cached manifest is older than its baked `completion.max-age`, rebuild the
   *cwd cascade's* manifest so dynamic completers (git branches, file lists) don't
   go stale for "time since your last real `fm` command here".
 - `_cold_build` → `refresh_source` builds a single `-f <file>`'s (cwd, file)

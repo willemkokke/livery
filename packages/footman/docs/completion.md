@@ -68,12 +68,12 @@ accurately rather than staying blank until that first run. That wait is capped
 at a second, and the build is detached: a tasks file heavy enough to miss the
 cap leaves the first <kbd>Tab</kbd> blank and the next one instant, rather than
 a keystroke that appears to hang. From then on the cache answers instantly; if
-it drifts (you added a task) past `max_age`, footman serves the cached answer and
+it drifts (you added a task) past `max-age`, footman serves the cached answer and
 spawns a **detached** rebuild for next time (stale-while-revalidate), so a warm
 <kbd>Tab</kbd> never waits on it, and concurrent presses spawn at most one rebuild.
 
 The flip side of never waiting: a task you just wrote can stay invisible to
-<kbd>Tab</kbd> for up to `max_age` (10 minutes by default — see below to
+<kbd>Tab</kbd> for up to `max-age` (10 minutes by default — see below to
 tune it). The cache refreshes by age, not by watching your file, and an
 aged press still answers from the old cache while the rebuild lands behind
 it. Any real `fm` run rebuilds the manifest as part of its work, so when
@@ -88,7 +88,7 @@ after its candidates are already on screen — the keystroke waits on
 nothing). So a change there rebuilds behind the *next* press rather than
 waiting out the clock: press once to see the old menu, again to see the
 new one. Creating either file counts as a change, exactly as editing one
-does. `completion.max_age = "off"` still means no background rebuilds at
+does. `completion.max-age = "off"` still means no background rebuilds at
 all — it asks for the clock and the trigger alike to stay quiet.
 
 A tasks file that **fails to import** is an answer too, not a silence:
@@ -135,8 +135,8 @@ Tune it with `[tool.footman]`:
 
 ```toml
 [tool.footman]
-completion.max_age = "10m"   # default; "30s", "1h", a plain int (seconds)
-# completion.max_age = "off" #   or 0, disabling background refresh
+completion.max-age = "10m"   # default; "30s", "1h", a plain int (seconds)
+# completion.max-age = "off" #   or 0, disabling background refresh
 ```
 
 ## Path-style task completion

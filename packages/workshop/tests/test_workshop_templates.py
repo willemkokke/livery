@@ -1135,25 +1135,6 @@ def test_a_declared_registry_renders_into_the_root_pyproject(
     assert "members" in parsed["tool"]["uv"]["workspace"]
 
 
-def test_the_apply_verb_migrates_underscore_keys_before_the_render(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    from livery.workshop._templates import template_apply
-
-    root = _template_instance(tmp_path)
-    contract = root / "workshop.toml"
-    contract.write_text(
-        contract.read_text().replace("required-context", "required_context")
-    )
-    monkeypatch.chdir(root)
-    template_apply()
-    out = capsys.readouterr().out
-    assert "  migrated: workshop.toml: required_context -> required-context" in out
-    assert 'required-context = "gate"' in contract.read_text()
-
-
 def test_the_check_jobs_fetch_history_for_the_merge_base(tmp_path: Path) -> None:
     import yaml
 

@@ -170,9 +170,9 @@ def test_an_unkeyed_legacy_record_is_simply_not_found(tmp_path, monkeypatch):
 
 def test_discovery_mode_defaults_to_auto_and_refuses_a_typo(user_config):
     assert _config.discovery_mode() == "auto"
-    user_config.write_text('[builtins]\ndiscovery_mode = "manual"\n', encoding="utf-8")
+    user_config.write_text('[builtins]\ndiscovery-mode = "manual"\n', encoding="utf-8")
     assert _config.discovery_mode() == "manual"
-    user_config.write_text('[builtins]\ndiscovery_mode = "auto_"\n', encoding="utf-8")
+    user_config.write_text('[builtins]\ndiscovery-mode = "auto_"\n', encoding="utf-8")
     with pytest.raises(_config.BuiltinError, match="one of"):
         _config.discovery_mode()
 
@@ -184,7 +184,7 @@ def test_the_modes_select_which_sources_contribute(user_config, tmp_path, monkey
 
     def mode(name):
         user_config.write_text(
-            f'[builtins]\ndiscovery_mode = "{name}"\nuser = ["mine"]\n',
+            f'[builtins]\ndiscovery-mode = "{name}"\nuser = ["mine"]\n',
             encoding="utf-8",
         )
         return _config.effective_builtin(brand)
@@ -201,7 +201,7 @@ def test_none_leaves_a_way_back_in(user_config, tmp_path, monkeypatch):
     # is what keeps the mode from locking anyone out of `fm self.*`.
     monkeypatch.setenv("FOOTMAN_DATA_DIR", str(tmp_path / "data"))
     user_config.write_text(
-        '[builtins]\ndiscovery_mode = "none"\nuser = ["footman.self"]\n',
+        '[builtins]\ndiscovery-mode = "none"\nuser = ["footman.self"]\n',
         encoding="utf-8",
     )
     assert _config.effective_builtin(("footman.self",)) == ("footman.self",)

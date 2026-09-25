@@ -46,7 +46,7 @@ from livery.footman.app import DEFAULT_BRAND, Brand
 # stream's tty-ness, --no-color, NO_COLOR, and TERM.
 _brand: Brand = DEFAULT_BRAND
 _color_out: bool = False
-_docs_url: str | None = None  # the run's docs_url template, config-set
+_docs_url: str | None = None  # the run's docs-url template, config-set
 
 
 def _builtin() -> tuple[str, ...]:
@@ -459,7 +459,7 @@ def _print_footer() -> None:
 def _styled_name(name: str) -> str:
     """A task address for a listing: dim group prefix, bold leaf — and a
     terminal hyperlink to its docs page when the project configured a
-    `docs_url` template (zero width, so the band math never notices)."""
+    `docs-url` template (zero width, so the band math never notices)."""
     prefix, _, leaf = name.rpartition(".")
     lead = _describe.dim(f"{prefix}.", _color_out) if prefix else ""
     styled = f"{lead}{_describe.bold(leaf, _color_out)}"
@@ -801,7 +801,7 @@ def _print_docs_line(address: str, on: bool) -> None:
     """The help pages' pointer at the task's own docs page — the URL as
     visible text (a terminal without hyperlinks still shows something to
     copy), hyperlinked where the terminal dresses up. Nothing without a
-    configured `docs_url`."""
+    configured `docs-url`."""
     if (url := _task_docs_url(address)) is not None:
         print(f"\n{_describe.dim('docs:', on)} {_describe.link(url, url, on)}")
 
@@ -2278,7 +2278,7 @@ def _execute(
     # pointed nowhere would be worse than none), installed for the run —
     # always, so a previous embedded invocation's template never leaks.
     global _docs_url
-    docs_cfg = cfg.get("docs_url")
+    docs_cfg = cfg.get("docs-url")
     if docs_cfg is not None and (bad := _describe.docs_url_error(docs_cfg)) is not None:
         return _refuse(json_mode, bad)
     _docs_url = docs_cfg if isinstance(docs_cfg, str) else None
@@ -2395,7 +2395,7 @@ def _execute(
             )["tree"]
     except _manifest.ManifestError as exc:  # broken completer, bad markers, …
         return _refuse(json_mode, str(exc))
-    except _config.ConfigError as exc:  # a mistyped completion.max_age
+    except _config.ConfigError as exc:  # a mistyped completion.max-age
         return _refuse(json_mode, str(exc))
 
     # The `root` policy token's target: the project cascade's top, never the

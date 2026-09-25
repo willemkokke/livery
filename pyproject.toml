@@ -88,7 +88,7 @@ dev = [
 # Task names in --list/--tree/--help (and --json rows) link into the
 # published task reference; the alias tree there redirects each task
 # to its page in the owning package's section.
-docs_url = "https://docs.willem.net/livery/tasks/{slug}/"
+docs-url = "https://docs.willem.net/livery/tasks/{slug}/"
 
 [tool.ruff]
 line-length = 88

@@ -11,7 +11,7 @@ in precedence order, and that list is the whole of discovery: a
 package installed by accident never changes a repository.
 Contract keys are kebab-case, at the root and in every package's
 contract: a key spelled with underscores refuses on read, naming its
-spelling, and `fm template.apply` rewrites the keys in place.
+spelling and the file to rename it in.
 
 - `livery.workshop` is the base layer. Importing its plugin registers
   the task surface and then mounts every further layer the contract

@@ -2388,10 +2388,10 @@ def test_completion_max_age_typo_teaches_on_a_run(unsorted_project, capsys):
     # The one config key that used to parse quietly to its default: a run
     # refuses it by name like every other key. The refresh child keeps the
     # quiet fallback — a keystroke is nobody's moment to learn about a typo.
-    unsorted_project('completion.max_age = "tenminutes"')
+    unsorted_project('completion.max-age = "tenminutes"')
     assert _app.run(["--list"]) == EX_USAGE
     err = capsys.readouterr().err
-    assert "completion.max_age" in err
+    assert "completion.max-age" in err
     assert "duration" in err
     assert "tenminutes" in err
 
@@ -2399,12 +2399,12 @@ def test_completion_max_age_typo_teaches_on_a_run(unsorted_project, capsys):
 def test_completion_max_age_child_reading_stays_quiet():
     from livery.footman import _config
 
-    cfg = {"completion": {"max_age": "tenminutes"}}
+    cfg = {"completion": {"max-age": "tenminutes"}}
     assert _config.completion_max_age(cfg) == _config.DEFAULT_COMPLETION_MAX_AGE_S
 
 
 def test_completion_max_age_valid_spellings_survive_strict(unsorted_project, capsys):
-    unsorted_project('completion.max_age = "30s"')
+    unsorted_project('completion.max-age = "30s"')
     assert _app.run(["--list"]) == 0
 
 

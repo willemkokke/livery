@@ -5,25 +5,21 @@ package's contract in its directory. Every reader parses one through
 [livery.workshop._contract.load_contract][], or
 [livery.workshop._contract.parse_contract][] for text already in
 hand, and a key spelled with an underscore refuses at any depth,
-naming the key, its kebab-case spelling, and the verb that rewrites
-it. [livery.workshop._contract.migrate_contracts][] is that rewrite:
-textual, so comments and values stay as written, and idempotent. The
-render verbs run it before anything parses the file.
+naming the key, its kebab-case spelling, and the file to fix. There
+is no rewrite: a wrong spelling is one edit where the refusal points.
 
 A contract read from git history is the one read that cannot be
-rewritten; [livery.workshop._contract.normalise_keys][] reads it as
-if it were migrated instead of refusing.
+edited; [livery.workshop._contract.normalise_keys][] reads it as if
+its keys were spelled right, since the spelling may predate the rule.
 """
 
 from __future__ import annotations
 
 import json
-import re
 import tomllib
 from pathlib import Path
 from typing import Any
 
-import livery.footman as footman
 from livery.footman import fail
 
 
@@ -39,12 +35,6 @@ def toml_string(value: str) -> str:
 
 #: The contract file's name, at the root and in each package directory.
 CONTRACT = "workshop.toml"
-
-#: A ``key = value`` line's key, with the whitespace around it. Table
-#: headers, comments, and the lines inside a multi-line value do not
-#: match: a header has no ``=``, a comment starts with ``#``, and an
-#: inline table's line starts with ``{``.
-_KEY_LINE = re.compile(r"^([ \t]*)([A-Za-z0-9_-]+)([ \t]*=)", re.M)
 
 
 def kebab(key: str) -> str:
@@ -75,9 +65,9 @@ def underscore_keys(table: dict[str, Any], *, prefix: str = "") -> list[str]:
 def normalise_keys(table: dict[str, Any]) -> dict[str, Any]:
     """*table* with every key, at any depth, in kebab-case.
 
-    The lenient read for a contract that cannot be rewritten: one
-    from git history, where a checkout before the migration still
-    spells its keys with underscores.
+    The lenient read for a contract that cannot be edited: one from
+    git history, where a checkout from before the rule may still
+    spell its keys with underscores.
     """
     normalised: dict[str, Any] = {}
     for key, value in table.items():
@@ -111,8 +101,7 @@ def parse_contract(text: str, *, where: str) -> dict[str, Any]:
         )
         fail(
             f"{where}: contract keys are kebab-case; found {listed}."
-            f" Run `{footman.prog()} template.apply` to rewrite the keys of"
-            " every contract in this workspace."
+            f" Rename each key in {where}."
         )
     return data
 
@@ -133,53 +122,3 @@ def contract_paths(root: Path) -> list[Path]:
             if directory.is_dir()
         )
     return [path for path in paths if path.is_file()]
-
-
-def migrate_keys(text: str) -> tuple[str, list[str]]:
-    """Contract *text* with every underscore key in kebab-case; what moved.
-
-    Only the key of a ``key = value`` line changes: comments, values,
-    and table headers stay byte for byte, so a string value with an
-    underscore in it is never touched. A key this rewrite cannot
-    reach (one inside an inline table, or in a table header) is left
-    for the caller's check.
-    """
-    moved: list[str] = []
-
-    def swap(match: re.Match[str]) -> str:
-        key = match.group(2)
-        if "_" not in key:
-            return match.group(0)
-        moved.append(f"{key} -> {kebab(key)}")
-        return f"{match.group(1)}{kebab(key)}{match.group(3)}"
-
-    return _KEY_LINE.sub(swap, text), moved
-
-
-def migrate_contracts(root: Path) -> list[str]:
-    """Rewrite the keys of every contract under *root* to kebab-case; what changed.
-
-    One line per rewritten file, naming each key that moved. A
-    rewrite is verified before it is written: parsed, the new text
-    must equal the old tree with its keys normalised, and a key the
-    textual rewrite cannot reach refuses naming it, so a contract is
-    never half-migrated. Idempotent: a kebab-case contract changes
-    nothing.
-    """
-    notes: list[str] = []
-    for path in contract_paths(root):
-        text = path.read_text("utf-8")
-        rewritten, moved = migrate_keys(text)
-        expected = normalise_keys(tomllib.loads(text))
-        if tomllib.loads(rewritten) != expected:
-            stubborn = ", ".join(underscore_keys(tomllib.loads(rewritten)))
-            fail(
-                f"{path}: {stubborn} cannot be rewritten in place (a key in"
-                " a table header or an inline table); spell it kebab-case"
-                " by hand"
-            )
-        if not moved:
-            continue
-        path.write_text(rewritten, encoding="utf-8")
-        notes.append(f"{path.relative_to(root).as_posix()}: {', '.join(moved)}")
-    return notes
