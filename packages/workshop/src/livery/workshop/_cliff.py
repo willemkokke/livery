@@ -116,9 +116,10 @@ def _run(root: Path, package: Package, *args: str) -> str:
     private repository without its token looks like: git-cliff would
     otherwise stop on the forge's refusal, and an entry without its
     authors beats no entry at all. The failure is git-cliff's own
-    words. A missing binary is named as the dependency it is, because
-    the message a bare ``FileNotFoundError`` carries says nothing a
-    reader can act on.
+    words. The run goes through the tool's handle, so it carries a
+    receipt like every other tool the lock supplies. A missing binary
+    is named as the dependency it is, because the message a bare
+    ``FileNotFoundError`` carries says nothing a reader can act on.
     """
     command = ["--config", str(config_path(package)), *args]
     variable, token = _credential(root)
@@ -129,17 +130,13 @@ def _run(root: Path, package: Package, *args: str) -> str:
     if token:
         child_env[variable] = token
     try:
-        result = footman.run(
-            ["git-cliff", *command],
-            cwd=root,
-            env=child_env,
-            nofail=True,
-            recorded=False,
-        )
+        result = tools.git_cliff.opts(
+            cwd=root, env=child_env, nofail=True, recorded=False
+        )(*command)
     except (FileNotFoundError, tools.ToolError):
         fail(
             "git-cliff is not installed: it writes the changelogs, and the"
-            f" dev group declares it. Run `{footman.prog()} sync`."
+            f" lock supplies it. Run `{footman.prog()} sync`."
         )
     if result.code != 0:
         detail = result.stderr.strip() or result.stdout.strip() or "(no output)"

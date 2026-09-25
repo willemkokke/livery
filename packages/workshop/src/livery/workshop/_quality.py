@@ -48,13 +48,14 @@ def run_kind_checks(
     *tests* runs those files alone, after the kind's gate build when
     its tests run on a build.
     """
-    from livery.workshop._kinds import CiContract, kind_for
+    from livery.workshop._kinds import CiContract, backend_for, kind_for
 
     default_verbs = CiContract().check_verbs
     for package in packages:
         record = kind_for(package.type)
         if not record.ci.kind_verbs:
             continue
+        backend = backend_for(package)
         skipped = [v for v in default_verbs if v not in record.ci.check_verbs]
         selection = (tests or {}).get(package.path)
         if selection is None:
@@ -63,7 +64,7 @@ def run_kind_checks(
                 f" {', '.join(record.ci.kind_verbs)} run;"
                 f" {', '.join(skipped)} skip"
             )
-            record.backend.check(package, root)
+            backend.check(package, root)
             continue
         relative = tuple(path[len(package.path) + 1 :] for path in selection)
         build = "gate build, then " if record.tests_need_build else ""
@@ -72,8 +73,8 @@ def run_kind_checks(
             f" {', '.join(relative)} run; {', '.join(skipped)} skip"
         )
         if record.tests_need_build:
-            record.backend.gate_build(package, root)
-        record.backend.test(package, root, selection=relative)
+            backend.gate_build(package, root)
+        backend.test(package, root, selection=relative)
 
 
 def _refuse_both(fix: bool, safe_fix: bool) -> None:

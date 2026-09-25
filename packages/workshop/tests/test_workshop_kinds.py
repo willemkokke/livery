@@ -105,6 +105,27 @@ def test_an_unknown_kind_refuses_naming_the_vocabulary(tmp_path: Path) -> None:
         kind_for("carrier-pigeon")
 
 
+def test_a_concrete_kind_without_a_backend_refuses(restored_registry) -> None:
+    with pytest.raises(_FAILURES, match="has no backend"):
+        register_kind(KindRecord(name="python-hollow", parent="python"))
+    # An abstract kind is the one shape that carries none.
+    register_kind(KindRecord(name="hollow", abstract=True))
+    assert "hollow" not in kind_names()
+
+
+def test_the_base_kind_is_abstract_and_heads_every_chain(tmp_path: Path) -> None:
+    """Every kind releases, so the changelog engine is declared once, on the base."""
+    from livery.workshop._kinds import managed_files
+
+    assert "base" not in kind_names()
+    for name in ("python", "python-nanobind", "cpp-conan"):
+        assert kind_chain(name)[0].name == "base", name
+        assert "git-cliff" in kind_tools({name}), name
+        assert "cliff.toml" in managed_files(name), name
+    with pytest.raises(_FAILURES, match="abstract kind and builds nothing"):
+        backend_for(_package(tmp_path, "base"))
+
+
 def test_a_child_of_an_unregistered_parent_refuses(restored_registry) -> None:
     with pytest.raises(_FAILURES, match="register the parent first"):
         register_kind(
@@ -145,7 +166,7 @@ def test_a_registered_kind_dispatches_and_chains(
     backend_for(package).build(package, tmp_path)
     assert fake.built == ["acme-thing"]
     chain = kind_chain("python-fake")
-    assert [record.name for record in chain] == ["python", "python-fake"]
+    assert [record.name for record in chain] == ["base", "python", "python-fake"]
 
 
 def test_tools_union_along_the_chain_only_when_present(restored_registry) -> None:
@@ -158,6 +179,7 @@ def test_tools_union_along_the_chain_only_when_present(restored_registry) -> Non
     )
     assert kind_tools({"python"}) == (
         "basedpyright",
+        "git-cliff",  # the base kind's, through the chain
         "mypy",
         "pyrefly",
         "pytest",
@@ -165,6 +187,7 @@ def test_tools_union_along_the_chain_only_when_present(restored_registry) -> Non
         "ty",
         "uv",
     )
+    # A kind registered without the base as its parent gets none of it.
     assert kind_tools({"cpp-fake-child"}) == ("cmake", "conan", "ninja")
 
 
