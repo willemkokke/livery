@@ -461,6 +461,12 @@ def drop_view(store: Store, view_id: str) -> DropReport:
         removed.append(entry.path)
     for directory in [*reversed(record.directories), "."]:
         path = root / directory
+        if not path.is_dir():
+            # Damage the view has met since it was made: a directory
+            # something else removed is gone already, which is what
+            # dropping it wanted.
+            removed.append(directory)
+            continue
         strays = sorted(child.name for child in path.iterdir())
         if strays:
             left.append(f"{directory}: not created by the view: {', '.join(strays)}")

@@ -371,6 +371,20 @@ def test_drop_removes_only_what_the_record_lists(
         store.drop_view(record.id)
 
 
+def test_a_view_with_a_directory_already_gone_still_drops_the_rest(
+    store: Store, sample: Digest, tmp_path: Path
+) -> None:
+    """Damage since the view was made is what a drop clears, never a crash."""
+    record = store.view(sample, tmp_path / "v")
+    assert "src" in record.directories
+    _rungs.remove_tree(tmp_path / "v" / "src")
+    report = store.drop_view(record.id)
+    assert "README.md" in report.removed and "src" in report.removed
+    assert report.left == ()
+    assert not (tmp_path / "v").exists()
+    assert store.view_record(record.id) is None
+
+
 def test_a_view_whose_directory_is_gone_is_retired_not_touched(
     store: Store, sample: Digest, tmp_path: Path
 ) -> None:

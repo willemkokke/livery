@@ -609,8 +609,16 @@ DRIVERS: tuple[Driver, ...] = (
         provision=Provision(package="build"),
         url="https://build.pypa.io/",
     ),
-    Driver("cmake", url="https://cmake.org/documentation/"),
-    Driver("ninja", url="https://ninja-build.org/"),
+    Driver(
+        "cmake",
+        url="https://cmake.org/documentation/",
+        provision=Provision(kind="github", repo="Kitware/CMake"),
+    ),
+    Driver(
+        "ninja",
+        url="https://ninja-build.org/",
+        provision=Provision(kind="github", repo="ninja-build/ninja"),
+    ),
     Driver(
         "pytest",
         url="https://docs.pytest.org/",

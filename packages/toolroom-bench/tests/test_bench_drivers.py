@@ -114,9 +114,7 @@ PYTHON_ON_PYPI = (
 #: tools in phase 3, the C++ tools in phase 4. A name leaves this tuple in
 #: the change that moves it, never earlier.
 LEAVING_PYPI = (
-    "cmake",
     "git_cliff",
-    "ninja",
     "prek",
     "pyrefly",
     "ruff",
