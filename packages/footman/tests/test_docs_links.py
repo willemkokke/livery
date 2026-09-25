@@ -68,7 +68,7 @@ def linked_project(tmp_path):
     )
     (tmp_path / "pyproject.toml").write_text(
         "[project]\nname='x'\n[tool.footman]\n"
-        'docs_url = "https://docs.example.dev/tasks/{path}/"\n'
+        'docs-url = "https://docs.example.dev/tasks/{path}/"\n'
     )
     return tmp_path
 
@@ -120,7 +120,7 @@ def test_json_rows_carry_docs_url(linked_project):
 def test_an_unknown_placeholder_is_refused_by_name(linked_project):
     (linked_project / "pyproject.toml").write_text(
         "[project]\nname='x'\n[tool.footman]\n"
-        'docs_url = "https://docs.example.dev/{page}/"\n'
+        'docs-url = "https://docs.example.dev/{page}/"\n'
     )
     result = Runner().invoke("--list", cwd=linked_project)
     assert not result.ok

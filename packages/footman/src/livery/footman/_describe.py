@@ -121,14 +121,14 @@ _DOCS_PLACEHOLDERS = ("path", "slug")
 
 
 def docs_url_error(template: object) -> str | None:
-    """The refusal a broken `docs_url` template earns, or None for a sound
+    """The refusal a broken `docs-url` template earns, or None for a sound
     one — a link scheme that silently pointed nowhere would be worse than
     no links at all."""
     from livery.footman import _paths
 
     if not isinstance(template, str) or not template.strip():
         return (
-            f"the [tool.{_paths.config_table()}] docs_url key is a URL "
+            f"the [tool.{_paths.config_table()}] docs-url key is a URL "
             "template, e.g. "
             '"https://docs.example.dev/tasks/{path}/" — {path} is the '
             "slash-joined task address, {slug} the dash-joined one"
@@ -138,7 +138,7 @@ def docs_url_error(template: object) -> str | None:
     ]
     if unknown:
         return (
-            f"docs_url: unknown placeholder {{{unknown[0]}}} — use {{path}} "
+            f"docs-url: unknown placeholder {{{unknown[0]}}} — use {{path}} "
             f"(slash-joined address) or {{slug}} (dash-joined)"
         )
     return None

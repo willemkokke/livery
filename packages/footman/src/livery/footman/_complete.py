@@ -741,7 +741,7 @@ def _maybe_refresh(
         # which the clock alone would hide for up to a whole `max_age`, and
         # which is exactly when someone is watching for their change to
         # land. An older manifest (or a broken-tree marker) bakes no stamp:
-        # it simply falls back to the clock. Never overrides `max_age =
+        # it simply falls back to the clock. Never overrides `max-age =
         # off`, which is a request for no background rebuilds at all.
         from livery.footman import _paths
 

@@ -192,7 +192,7 @@ doesn't document itself unless asked).
 
 ## Link the terminal back to the pages
 
-Once the pages are published, close the loop: a `docs_url` template under
+Once the pages are published, close the loop: a `docs-url` template under
 `[tool.footman]` turns every task and group name in `--list`, `--tree` and
 the `--help` pages into a terminal hyperlink to its own docs, and puts a
 `docs_url` field on each task's [`--json`](json.md) row for readers that
@@ -200,8 +200,8 @@ cannot click.
 
 ```toml
 [tool.footman]
-docs_url = "https://docs.example.dev/tasks/{path}/"   # docs.site: page per task
-# docs_url = "https://docs.example.dev/reference/#{slug}"  # docs.page: anchors
+docs-url = "https://docs.example.dev/tasks/{path}/"   # docs.site: page per task
+# docs-url = "https://docs.example.dev/reference/#{slug}"  # docs.page: anchors
 ```
 
 `{path}` is the task's slash-joined address (`docs.build` → `docs/build`),

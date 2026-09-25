@@ -156,7 +156,7 @@ def test_the_other_modes_leave_the_list_alone(tool_env, spawned, monkeypatch):
     config = _paths.footman_config_file()
     config.parent.mkdir(parents=True, exist_ok=True)
     for mode in ("manual", "internal", "none"):
-        config.write_text(f'[builtins]\ndiscovery_mode = "{mode}"\n', encoding="utf-8")
+        config.write_text(f'[builtins]\ndiscovery-mode = "{mode}"\n', encoding="utf-8")
         assert self_._rediscover() is None
         assert _config.discovered_builtin() == ("kept_by_hand",)
 

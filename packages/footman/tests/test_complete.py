@@ -790,7 +790,7 @@ def test_a_manifest_without_a_stamp_falls_back_to_the_clock(tmp_path, monkeypatc
 
 
 def test_off_still_means_no_background_rebuilds(tmp_path, monkeypatch):
-    # `completion.max_age = off` asks for no background rebuilds at all; a
+    # `completion.max-age = off` asks for no background rebuilds at all; a
     # moved stamp is a trigger, not a licence to override that.
     import json
 

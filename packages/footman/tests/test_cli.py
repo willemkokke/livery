@@ -167,20 +167,20 @@ def test_completion_max_age_parsing():
     from livery.footman import _config
 
     assert _config.completion_max_age({}) == 600  # default
-    assert _config.completion_max_age({"completion": {"max_age": "30s"}}) == 30
-    assert _config.completion_max_age({"completion": {"max_age": "5m"}}) == 300
-    assert _config.completion_max_age({"completion": {"max_age": "1h"}}) == 3600
-    assert _config.completion_max_age({"completion": {"max_age": "2d"}}) == 172800
-    assert _config.completion_max_age({"completion": {"max_age": "off"}}) is None
-    assert _config.completion_max_age({"completion": {"max_age": "none"}}) is None
-    assert _config.completion_max_age({"completion": {"max_age": 0}}) is None
-    assert _config.completion_max_age({"completion": {"max_age": -5}}) is None
-    assert _config.completion_max_age({"completion": {"max_age": 120}}) == 120
-    assert _config.completion_max_age({"completion": {"max_age": True}}) == 600
-    assert _config.completion_max_age({"completion": {"max_age": False}}) is None
-    assert _config.completion_max_age({"completion": {"max_age": "garbage"}}) == 600
+    assert _config.completion_max_age({"completion": {"max-age": "30s"}}) == 30
+    assert _config.completion_max_age({"completion": {"max-age": "5m"}}) == 300
+    assert _config.completion_max_age({"completion": {"max-age": "1h"}}) == 3600
+    assert _config.completion_max_age({"completion": {"max-age": "2d"}}) == 172800
+    assert _config.completion_max_age({"completion": {"max-age": "off"}}) is None
+    assert _config.completion_max_age({"completion": {"max-age": "none"}}) is None
+    assert _config.completion_max_age({"completion": {"max-age": 0}}) is None
+    assert _config.completion_max_age({"completion": {"max-age": -5}}) is None
+    assert _config.completion_max_age({"completion": {"max-age": 120}}) == 120
+    assert _config.completion_max_age({"completion": {"max-age": True}}) == 600
+    assert _config.completion_max_age({"completion": {"max-age": False}}) is None
+    assert _config.completion_max_age({"completion": {"max-age": "garbage"}}) == 600
     assert (
-        _config.completion_max_age({"completion": {"max_age": []}}) == 600
+        _config.completion_max_age({"completion": {"max-age": []}}) == 600
     )  # non-scalar
 
 
