@@ -9,11 +9,18 @@ apply, so a verb that does not apply skips saying so and never
 passes vacuously).
 
 Adding a kind means one call: ``register_kind`` with the record.
-The workshop registers ``python`` at import; a layer's plugin
-registers its own kinds at mount, which is how a brand ships a
-kind the way it ships fragments. An unknown declared type refuses
+The workshop registers ``base`` and ``python`` at import; a layer's
+plugin registers its own kinds at mount, which is how a brand ships
+a kind the way it ships fragments. An unknown declared type refuses
 naming the vocabulary: a typo that silently builds the wrong kind
 is worse than a stop.
+
+``base`` is abstract: the record behind the ``package-base`` template
+every package template renders first. It heads every kind's chain
+and carries what every kind needs because every kind releases, the
+changelog engine and the ``cliff.toml`` it reads, so a leaf kind
+never restates them. A package's ``type`` never names it: the
+vocabulary a contract may use is the concrete kinds.
 """
 
 from __future__ import annotations
@@ -184,10 +191,15 @@ class KindRecord:
         tests_need_build: Whether the kind's tests run on a build
             rather than on source, so a test step is preceded by the
             backend's ``gate_build``.
+        abstract: Whether the kind exists for its children alone: it
+            heads their chains with its tools, managed files and
+            template, builds nothing, and is never a package's
+            ``type``. A concrete kind needs a backend; an abstract
+            one has none.
     """
 
     name: str
-    backend: Backend
+    backend: Backend | None = None
     template: str = ""
     parent: str = ""
     tools: tuple[str, ...] = ()
@@ -197,6 +209,7 @@ class KindRecord:
     artifact: str = "python"
     wheel_identity: str = "pure"
     tests_need_build: bool = False
+    abstract: bool = False
 
 
 _KINDS: dict[str, KindRecord] = {}
@@ -214,12 +227,18 @@ def register_kind(record: KindRecord) -> None:
             f"kind {record.name!r} extends {record.parent!r}, which is"
             f" not registered; register the parent first"
         )
+    if record.backend is None and not record.abstract:
+        fail(
+            f"kind {record.name!r} has no backend: a kind a package may declare"
+            " builds through one, and a kind that exists for its children alone"
+            " is registered abstract"
+        )
     _KINDS[record.name] = record
 
 
 def kind_names() -> tuple[str, ...]:
-    """The registered vocabulary, sorted."""
-    return tuple(sorted(_KINDS))
+    """The vocabulary a contract's ``type`` may name, sorted: the concrete kinds."""
+    return tuple(sorted(name for name, record in _KINDS.items() if not record.abstract))
 
 
 def kind_for(type_name: str) -> KindRecord:
@@ -232,8 +251,19 @@ def kind_for(type_name: str) -> KindRecord:
 
 
 def backend_for(package: Package) -> Backend:
-    """The backend that builds *package*, by its declared type."""
-    return kind_for(package.type).backend
+    """The backend that builds *package*, by its declared type.
+
+    An abstract kind refuses naming the vocabulary: it builds nothing,
+    and a contract that names it has the wrong type.
+    """
+    record = kind_for(package.type)
+    if record.backend is None:
+        known = ", ".join(kind_names())
+        fail(
+            f"{package.path}: type {package.type!r} is an abstract kind and builds"
+            f" nothing; a package's type is one of {known}"
+        )
+    return record.backend
 
 
 def gated(packages: tuple[Package, ...], verb: str) -> tuple[Package, ...]:
@@ -286,22 +316,24 @@ def template_chain(template_kind: str) -> tuple[str, ...]:
     Every package template's chain starts at ``package-base``, the
     shared seed carrier (the docs page and its nav), so a package of
     any kind ships a docs section without per-template discipline;
-    the child renders after it and wins. Beyond the base the chain
-    derives from the registry: the record whose template is
-    *template_kind* chains through its parents' templates, and a
-    template the registry does not map (a variant such as
-    ``package-python-layer``) renders over the base alone.
+    the child renders after it and wins. The chain derives from the
+    registry: the record whose template is *template_kind* chains
+    through its parents' templates, and the ``base`` kind heads every
+    chain, so the base template comes first. A template the registry
+    does not map (a variant such as ``package-python-layer``) renders
+    over the base alone.
     """
-    base = (
-        (BASE_TEMPLATE,)
-        if template_kind.startswith("package-") and template_kind != BASE_TEMPLATE
-        else ()
-    )
     by_template = {r.template: r for r in _KINDS.values() if r.template}
     record = by_template.get(template_kind)
     if record is None:
-        return (*base, template_kind)
-    return (*base, *(r.template for r in kind_chain(record.name) if r.template))
+        chain: tuple[str, ...] = (template_kind,)
+    else:
+        chain = tuple(r.template for r in kind_chain(record.name) if r.template)
+    # A kind registered without the base as its parent (a fake, a layer's
+    # own) still renders the base first: the docs seeds live there alone.
+    if template_kind.startswith("package-") and chain[0] != BASE_TEMPLATE:
+        chain = (BASE_TEMPLATE, *chain)
+    return chain
 
 
 def managed_files(type_name: str) -> tuple[str, ...]:
@@ -368,6 +400,23 @@ def record_for_template(template_kind: str) -> KindRecord | None:
 def _register_builtin() -> None:
     from livery.workshop._backends import _cpp_conan, _python, _python_nanobind
 
+    # The base every kind derives from: abstract, the record behind the
+    # package-base template. Every kind releases, so the changelog
+    # engine and the cliff.toml it reads are declared once, here, and
+    # a kind a layer adds gets them by naming its parent. A tool is
+    # named as its record and its handle are (`git_cliff`), which is
+    # how the catalogue lists it.
+    register_kind(
+        KindRecord(
+            name="base",
+            template=BASE_TEMPLATE,
+            tools=("git_cliff",),
+            managed=("cliff.toml",),
+            artifact="",
+            wheel_identity="",
+            abstract=True,
+        )
+    )
     # Two contract kinds exist today. The layer package template
     # (package-python-layer) is a template variant of python, not
     # a contract type of its own: every member declares "python".
@@ -381,8 +430,8 @@ def _register_builtin() -> None:
             name="python",
             backend=_python,
             template="package-python",
+            parent="base",
             tools=("uv", "ruff", "pytest", "basedpyright", "mypy", "ty", "pyrefly"),
-            managed=("cliff.toml",),
         )
     )
     # The binary extension: a python distribution in every checker's
@@ -411,9 +460,9 @@ def _register_builtin() -> None:
             name="cpp-conan",
             backend=_cpp_conan,
             template="package-cpp-conan",
+            parent="base",
             tools=("cmake", "conan", "ninja"),
             host_tools=("cc", "c++"),
-            managed=("cliff.toml",),
             ci=CiContract(
                 check_verbs=("format", "lint"),
                 kind_verbs=("configure", "build", "ctest"),

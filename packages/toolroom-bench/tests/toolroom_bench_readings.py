@@ -251,12 +251,21 @@ def serve(
     Called from worker threads, so mutation is `list.append`-shaped. An
     absent (tool, version) makes the install fail: a hole.
     """
-    from livery.toolroom.bench import _drivers, _toolfetch
+    from livery.toolroom.bench import _artifacts, _drivers, _toolfetch
 
     installed = installed if installed is not None else []
     monkeypatch.setattr(
         _toolfetch, "releases", lambda driver: list(listings[driver.key])
     )
+
+    def no_forge(
+        name: str, forge: str, repo: str, version: str, tag: str
+    ) -> list[tuple[str, str]]:
+        # The fake tiers publish no assets: a forge-tier tool's fresh
+        # version is folded and reported, never fetched from the network.
+        raise _artifacts.ArtifactError(f"{name} {version}: no forge in the fake tiers")
+
+    monkeypatch.setattr(_artifacts, "_assets", no_forge)
 
     def install(driver: Any, release: Any, into: pathlib.Path) -> pathlib.Path | None:
         installed.append((driver.key, release.version))

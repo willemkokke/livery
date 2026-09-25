@@ -70,10 +70,11 @@ class Provision:
 
     kind: str = "uv"
     """`uv` — a PyPI console script, `uv tool install --upgrade`d into an
-    isolated prefix (covers the Rust and C++ tools too: ruff, prek, cmake and
-    ninja all ship binary wheels). `node` — a package `bun install`s. `bun` —
-    bun's own GitHub release, provisioned first because the node tier runs
-    through it. `github` / `gitlab` / `gitea` — a prebuilt release asset.
+    isolated prefix; for programs that are Python alone, where the wheel is
+    the release (a test pins the tier's members). `node` — a package `bun
+    install`s. `bun` — bun's own GitHub release, provisioned first because
+    the node tier runs through it. `github` / `gitlab` / `gitea` — a prebuilt
+    release asset, the tier for every tool with a release of its own.
     `docker` — a static build from docker's own per-platform index, which is
     a directory listing rather than an asset list. `man` — a release's
     manual pages, for a tool read from its manual rather than its `-h`.
@@ -240,18 +241,26 @@ class Driver:
 
 DRIVERS: tuple[Driver, ...] = (
     Driver(
-        "ruff", verbs=("check", "format", "clean"), url="https://docs.astral.sh/ruff/"
+        "ruff",
+        verbs=("check", "format", "clean"),
+        url="https://docs.astral.sh/ruff/",
+        provision=Provision(kind="github", repo="astral-sh/ruff"),
     ),
     Driver(
         "ruff",
         attr="ruff_format",
         base=("format",),
         url="https://docs.astral.sh/ruff/formatter/",
+        provision=Provision(kind="github", repo="astral-sh/ruff"),
     ),
-    Driver("basedpyright", url="https://docs.basedpyright.com/"),
+    Driver(
+        "basedpyright",
+        url="https://docs.basedpyright.com/",
+        provision=Provision(kind="node"),  # a Node program; PyPI wraps it
+    ),
     Driver(
         "uv",
-        provision=Provision(package="uv"),  # PyPI, `uv tool install uv` — never host
+        provision=Provision(kind="github", repo="astral-sh/uv"),
         url="https://docs.astral.sh/uv/",
         verbs=(
             "sync",
@@ -469,6 +478,7 @@ DRIVERS: tuple[Driver, ...] = (
         "prek",
         verbs=("run", "install", "uninstall", "autoupdate", "clean"),
         url="https://prek.j178.dev/",
+        provision=Provision(kind="github", repo="j178/prek"),
     ),
     Driver(
         "markdownlint-cli2",
@@ -597,19 +607,41 @@ DRIVERS: tuple[Driver, ...] = (
     ),
     Driver("djlint", url="https://www.djlint.com/"),
     Driver("mypy", url="https://mypy.readthedocs.io/"),
-    Driver("ty", verbs=("check",), url="https://docs.astral.sh/ty/"),
-    Driver("pyrefly", verbs=("check",), url="https://pyrefly.org/"),
+    Driver(
+        "ty",
+        verbs=("check",),
+        url="https://docs.astral.sh/ty/",
+        provision=Provision(kind="github", repo="astral-sh/ty"),
+    ),
+    Driver(
+        "pyrefly",
+        verbs=("check",),
+        url="https://pyrefly.org/",
+        provision=Provision(kind="github", repo="facebook/pyrefly"),
+    ),
     Driver("twine", verbs=("upload", "check"), url="https://twine.readthedocs.io/"),
     Driver("git-changelog", url="https://pawamoy.github.io/git-changelog/"),
-    Driver("git-cliff", url="https://git-cliff.org/"),
+    Driver(
+        "git-cliff",
+        url="https://git-cliff.org/",
+        provision=Provision(kind="github", repo="orhun/git-cliff"),
+    ),
     Driver(
         "pyproject-build",
         attr="build",
         provision=Provision(package="build"),
         url="https://build.pypa.io/",
     ),
-    Driver("cmake", url="https://cmake.org/documentation/"),
-    Driver("ninja", url="https://ninja-build.org/"),
+    Driver(
+        "cmake",
+        url="https://cmake.org/documentation/",
+        provision=Provision(kind="github", repo="Kitware/CMake"),
+    ),
+    Driver(
+        "ninja",
+        url="https://ninja-build.org/",
+        provision=Provision(kind="github", repo="ninja-build/ninja"),
+    ),
     Driver(
         "pytest",
         url="https://docs.pytest.org/",

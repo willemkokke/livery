@@ -6,15 +6,17 @@ telling an editor what the newest release accepts means having the newest
 release on `PATH` — across five ecosystems (PyPI, npm, bun, Go, C++), none of
 which should be allowed to touch the machine's own environment.
 
-One isolated prefix answers all of it. Almost every curated tool ships an
-installable PyPI wheel — including the Rust ones (ruff, uv, prek, git-cliff)
-and the C++ ones (cmake, ninja) — so `uv tool install --upgrade` into a
-private `UV_TOOL_DIR`/`UV_TOOL_BIN_DIR` covers the majority and cleans up with
-one `rm -rf`. What's left is bun (its own release), the node CLIs it installs,
-and the Go CLIs (a prebuilt release asset):
+One isolated prefix answers all of it. A tool comes from its own release
+when it has one: a forge tier downloads the release asset for the host. PyPI
+is the tier for programs that are Python, where the wheel is the release; a
+wheel around a Rust or C++ binary is a wrapper with a platform gap wherever
+the wheel is missing, so a tool that is not Python never sits on the `uv`
+tier (a test pins the tier's members). What the forge tiers do not cover is
+bun (its own release), the node CLIs it installs, and the Python tools:
 
 * **uv** — `uv tool install --upgrade <pkg>`, tools and launchers under the
-  prefix; nothing lands in `~/.local` or the system site-packages.
+  prefix; nothing lands in `~/.local` or the system site-packages. Python
+  programs only.
 * **bun** — bun's GitHub release, unpacked into the prefix. Provisioned
   *first*, because the node tier runs through it.
 * **node** — `bun add --global` with `BUN_INSTALL` pointed at the prefix.
@@ -447,16 +449,35 @@ def assets_for(host: str, repo: str, tag: str = "") -> list[tuple[str, str]]:
 # The alias sets that fold one platform's many spellings into a match: bun
 # says `darwin`/`aarch64`, goreleaser `Darwin`/`x86_64`, gh `macOS`/`amd64`.
 _OS_ALIASES = {
-    "darwin": ("darwin", "macos", "apple", "osx"),
+    "darwin": ("darwin", "macos", "apple", "osx", "mac"),
     "linux": ("linux",),
     "windows": ("windows", "win"),
 }
+# `universal` is macOS's one build for both architectures (cmake ships
+# `macos-universal`), so it matches either arm64 or x86_64 there.
+# `winarm64` is ninja's spelling, the OS and the CPU in one word, which
+# the word-start match would otherwise never see.
 _ARCH_ALIASES = {
-    "arm64": ("arm64", "aarch64"),
-    "aarch64": ("arm64", "aarch64"),
-    "x86_64": ("x86_64", "amd64", "x64", "x86-64"),
-    "amd64": ("x86_64", "amd64", "x64", "x86-64"),
+    "arm64": ("arm64", "aarch64", "universal", "winarm64"),
+    "aarch64": ("arm64", "aarch64", "universal", "winarm64"),
+    "x86_64": ("x86_64", "amd64", "x64", "x86-64", "universal"),
+    "amd64": ("x86_64", "amd64", "x64", "x86-64", "universal"),
 }
+# Every architecture token a release may spell, aliased above or not: an
+# asset that names none of them names no architecture at all.
+_ARCH_TOKENS = (
+    *{token for aliases in _ARCH_ALIASES.values() for token in aliases},
+    "i386",
+    "i686",
+    "386",
+    "armv6",
+    "armv7",
+    "armv7l",
+    "ppc64le",
+    "s390x",
+    "riscv64",
+    "loongarch64",
+)
 _ARCHIVES = (".tar.gz", ".tgz", ".tar.xz", ".tar.bz2", ".zip")
 # Sidecar files that ride alongside a real asset — never the binary.
 _SIDECARS = (
@@ -470,24 +491,45 @@ _SIDECARS = (
     ".json",  # compose ships provenance, sbom and sigstore beside each build
 )
 # Build variants that sit beside the canonical asset for the same platform:
-# bun's `-profile`/`-baseline`, a `-debug` build, a `musl` libc. Preferred
-# against, never excluded — the canonical build is what a task wants.
-_VARIANTS = ("profile", "baseline", "debug", "musl", "-static")
+# bun's `-profile`/`-baseline`, a `-debug` build, a `musl` libc, a MinGW
+# build beside the MSVC one (git-cliff ships `-pc-windows-gnu` and
+# `-pc-windows-msvc`, and the shorter name would win). Preferred against,
+# never excluded — the canonical build is what a task wants.
+_VARIANTS = ("profile", "baseline", "debug", "musl", "-static", "windows-gnu")
 
 
-def _platform_tokens() -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """This machine's OS and CPU aliases, for matching an asset name."""
-    os_aliases = _OS_ALIASES.get(
-        platform.system().lower(), (platform.system().lower(),)
-    )
-    machine = platform.machine().lower()
-    arch_aliases = _ARCH_ALIASES.get(machine, (machine,))
-    return os_aliases, arch_aliases
+HOST_TOKENS = {
+    "linux-x64": ("linux", "x86_64"),
+    "linux-arm": ("linux", "arm64"),
+    "macos-x64": ("darwin", "x86_64"),
+    "macos-arm": ("darwin", "arm64"),
+    "windows-x64": ("windows", "x86_64"),
+    "windows-arm": ("windows", "arm64"),
+}
+"""Each host key's OS and CPU, in the spellings the alias tables fold."""
 
 
-def _pick_asset(assets: list[tuple[str, str]]) -> tuple[str, str]:
-    """The one asset for this OS and CPU, archives before bare binaries."""
-    os_aliases, arch_aliases = _platform_tokens()
+def _platform_tokens(host: str = "") -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """The OS and CPU aliases for matching an asset name: *host*'s, or this machine's.
+
+    Raises:
+        ProvisionError: for a *host* that is not one of `HOST_TOKENS`.
+    """
+    if host:
+        if host not in HOST_TOKENS:
+            raise ProvisionError(
+                f"unknown host {host!r}; the hosts are {', '.join(HOST_TOKENS)}"
+            )
+        system, machine = HOST_TOKENS[host]
+    else:
+        system = platform.system().lower()
+        machine = platform.machine().lower()
+    return _OS_ALIASES.get(system, (system,)), _ARCH_ALIASES.get(machine, (machine,))
+
+
+def _pick_asset(assets: list[tuple[str, str]], *, host: str = "") -> tuple[str, str]:
+    """The one asset for *host*, or this OS and CPU; archives before bare binaries."""
+    os_aliases, arch_aliases = _platform_tokens(host)
 
     def hit(alias: str, low: str) -> bool:
         # At a word start only: `win` must find `windows` and `win64` but
@@ -505,7 +547,24 @@ def _pick_asset(assets: list[tuple[str, str]]) -> tuple[str, str]:
 
     candidates = [(name, url) for name, url in assets if matches(name)]
     if not candidates:
-        raise ProvisionError("no release asset for this platform")
+        # A release that names the OS and no architecture at all is the
+        # x64 build on linux and Windows, and the universal build on
+        # macOS: the shape a release kept from before its arm builds
+        # (ninja's `ninja-linux.zip` beside `ninja-linux-aarch64.zip`).
+        # An asset naming any other architecture never matches this way.
+        def arch_less(name: str) -> bool:
+            low = name.lower()
+            return (
+                not low.endswith(_SIDECARS)
+                and any(hit(o, low) for o in os_aliases)
+                and not any(hit(a, low) for a in _ARCH_TOKENS)
+            )
+
+        x64 = any(a in ("x86_64", "amd64") for a in arch_aliases)
+        if x64 or "darwin" in os_aliases:
+            candidates = [(name, url) for name, url in assets if arch_less(name)]
+    if not candidates:
+        raise ProvisionError(f"no release asset for {host or 'this platform'}")
 
     def rank(asset: tuple[str, str]) -> tuple[bool, bool, int, str]:
         # Prefer an archive over a bare binary, the canonical build over a

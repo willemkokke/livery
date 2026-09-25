@@ -39,7 +39,7 @@ from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol, cast
 
-from livery.toolroom.bench import _drivers, _index, _surfaces
+from livery.toolroom.bench import _artifacts, _drivers, _index, _surfaces
 from livery.toolroom.store import (
     RECORD_SUFFIX,
     Catalogue,
@@ -124,7 +124,11 @@ def _resolve_prefix(prefix: str | Path) -> Path | None:
     if prefix:
         return Path(prefix).expanduser().resolve()
     home = default_prefix()
-    return home if home.is_dir() else None
+    # Provisioned means a bin directory to read from. The room also holds
+    # the bench's store (`_bench_store`), which every refresh creates, and
+    # a store is not a provisioned set: read as one, every tool the host
+    # has would be "not in the prefix".
+    return home if (home / "bin").is_dir() else None
 
 
 @contextmanager
@@ -1660,6 +1664,7 @@ def _assemble_documents(documents: list[dict[str, Any]]) -> Refreshed:
     skipped = _attributed(who_skipped, len(documents))
     read: dict[str, list[str]] = {}
     events: dict[str, list[str]] = {}
+    artifacts: dict[str, list[str]] = {}
     for tool, versions in sorted(by_release.items()):
         driver = _drivers.find(tool)
         record = _surfaces.load(_record_path(tool))
@@ -1672,6 +1677,11 @@ def _assemble_documents(documents: list[dict[str, Any]]) -> Refreshed:
         record, fresh, touched = _fold_into(record, versions, meta[tool])
         if fresh:
             read[tool] = fresh
+            if _artifacts.forge_of(driver) and not driver.base:
+                # A verb-bound view (`ruff_format`) reads another driver's
+                # binary; that driver's record carries the artifacts.
+                record, lines = _record_artifacts(record, driver, fresh, meta[tool])
+                artifacts[tool] = lines
         if touched:
             # Saved for a widened coverage too, not only a new release: a
             # week where three platforms merely agreed about what they see
@@ -1686,7 +1696,34 @@ def _assemble_documents(documents: list[dict[str, Any]]) -> Refreshed:
         unreachable=unreachable,
         skipped=skipped,
         holes=holes,
+        artifacts=artifacts,
     )
+
+
+def _record_artifacts(
+    record: Record,
+    driver: _drivers.Driver,
+    fresh: list[str],
+    meta: dict[str, dict[str, Any]],
+) -> tuple[Record, list[str]]:
+    """Record every fresh version's artifacts; the record and the report lines.
+
+    A version whose artifacts cannot be recorded is reported and left
+    without them: the reading stands, and the version's hosts arrive
+    with a later run or `tools.artifacts`, the way a hole is filled.
+    """
+    lines: list[str] = []
+    for version in fresh:
+        tag = str(meta.get(version, {}).get("tag", ""))
+        try:
+            record, done = _artifacts.record_version(
+                record, driver, version, tag, store=_bench_store()
+            )
+        except _artifacts.ArtifactError as error:
+            lines.append(f"  {error}")
+            continue
+        lines.extend(done.lines(driver.key))
+    return record, lines
 
 
 def _fold_into(
@@ -1790,6 +1827,10 @@ class Refreshed:
     """Whether every ingest check passed on every host of every event
     version: the other half of the green light. True when nothing had a
     host to check, so a tool read but never downloaded arms as before."""
+    artifacts: dict[str, list[str]] = field(default_factory=dict)
+    """Per tool read from a forge tier, the artifact step's lines: the
+    hosts each fresh version gained, the assets they came from, and any
+    version whose artifacts could not be recorded."""
 
     @property
     def armed(self) -> bool:
@@ -2110,6 +2151,9 @@ def _report_refresh(found: Refreshed) -> None:
     if not found.read:
         print("nothing new")
     print(f"release warranted: {'yes' if found.release else 'no'}")
+    for key in sorted(found.artifacts):
+        for line in found.artifacts[key]:
+            print(line)
     for key in sorted(found.ingest):
         for line in found.ingest[key]:
             print(line)
@@ -2643,6 +2687,60 @@ def tools_verify(
 
 def _record_names() -> list[str]:
     return [path.stem for path in records_in(_records_dir())]
+
+
+@tasks.task(name="artifacts")
+def tools_artifacts(
+    tool: Annotated[str, doc("the curated tool, as its record is named")],
+    version: Annotated[str, doc("the version to record; the newest when empty")] = "",
+) -> None:
+    """Record a version's release artifacts per host, then run the ingest checks.
+
+    For a tool read from a forge tier: the release's asset for each
+    host is downloaded once, hashed and written on the version line,
+    a host the release has no asset for is left absent, and the nine
+    checks then run on every host recorded. The record is saved before
+    the checks, so a finding is red with the artifacts in place for
+    the fix. A version already read from another index, as a tool has
+    before it moves to its own release, is addressed by its version
+    when no forge tag is known for it.
+    """
+    from livery.toolroom.bench import _ingest, _toolfetch
+
+    record = _surfaces.load(_record_path(tool))
+    if record is None:
+        fail(f"no record of {tool}; the records are {', '.join(_record_names())}")
+    driver = _drivers.find(tool)
+    if driver is None:
+        fail(f"no driver for {tool}")
+    if driver.base:
+        fail(
+            f"{tool} is a view of {driver.name}'s binary bound to"
+            f" `{' '.join(driver.base)}`; record {driver.name}"
+        )
+    chosen = version or (_surfaces.versions(record) or [""])[0]
+    if not chosen:
+        fail(f"{tool} has no version; read one first")
+    tag = ""
+    if _artifacts.forge_of(driver):
+        tag = next(
+            (r.tag for r in _toolfetch.releases(driver) if r.version == chosen), ""
+        )
+    store = _bench_store()
+    try:
+        record, done = _artifacts.record_version(
+            record, driver, chosen, tag, store=store
+        )
+    except _artifacts.ArtifactError as error:
+        fail(str(error))
+    _surfaces.save(record, _record_path(tool))
+    for line in done.lines(tool):
+        print(line)
+    report = _ingest.verify(record, chosen, store=store)
+    for line in _ingest.summary(report):
+        print(line)
+    if not report.passed:
+        fail(f"{tool} {chosen}: {len(report.findings)} finding(s)")
 
 
 @tasks.task(name="convert-records")

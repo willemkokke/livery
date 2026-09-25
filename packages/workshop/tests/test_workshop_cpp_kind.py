@@ -241,6 +241,7 @@ def test_kind_checks_announce_and_dispatch(
             name="cpp-conan",
             backend=_Spy(),
             template=record.template,
+            parent=record.parent,
             tools=record.tools,
             host_tools=record.host_tools,
             managed=record.managed,

@@ -90,3 +90,39 @@ def test_wrappers_table_matches_what_the_tools_declare():
             continue
         declared = _drivers.extract(driver).wrappers()
         assert declared == _WRAPPERS.get(driver.name, frozenset()), driver.name
+
+
+#: The PyPI tier carries programs that are Python, where the wheel is the
+#: release. Every other tool comes from its own release; a wheel around a
+#: Rust or C++ binary is a wrapper with a platform gap wherever the wheel
+#: is missing (Willem, 2026-09-24). Adding a tool here is a reviewed edit.
+PYTHON_ON_PYPI = (
+    "build",
+    "coverage",
+    "djlint",
+    "git_changelog",
+    "mkdocs",
+    "mypy",
+    "pytest",
+    "twine",
+    "zensical",
+)
+
+#: Not Python and still read from PyPI: nothing, since every tool with a
+#: release of its own moved to it (`notes/20260925-direct-downloads.md`).
+#: A tool that must pass through PyPI on its way in names its phase here
+#: and leaves in the change that moves it, never earlier.
+LEAVING_PYPI: tuple[str, ...] = ()
+
+
+def test_the_pypi_tier_carries_python_programs_alone():
+    """A tool that is not Python never enters through PyPI unnoticed."""
+    from livery.toolroom.bench import _drivers
+
+    on_pypi = sorted(
+        driver.key
+        for driver in _drivers.DRIVERS
+        if driver.provision.kind == "uv" and driver.source != "manual"
+    )
+    assert on_pypi == sorted(PYTHON_ON_PYPI + LEAVING_PYPI)
+    assert not set(PYTHON_ON_PYPI) & set(LEAVING_PYPI)

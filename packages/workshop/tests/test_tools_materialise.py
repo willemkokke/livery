@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import zipfile
 from pathlib import Path
 
@@ -255,7 +256,97 @@ def test_sync_materialises_the_bundle_from_the_folder_source_with_no_network(
     # A second sync finds everything present.
     assert _sync.materialise_tools(root)[0] == "  tools: 2 receipt(s), all present"
     written = json.loads((_tools.receipts_dir(root) / "tea.json").read_text())
-    assert written["schema"] == 1 and written["entry_points"] == []
+    # The receipt names what reached PATH, in path mode too: a check
+    # resolves the tool by these names, never by its lock name.
+    assert written["schema"] == 1 and written["entry_points"] == ["tea"]
+
+
+def test_the_materialise_verb_supplies_the_bundle_and_writes_the_stubs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """What the entry script runs on a runner: receipts and stubs, nothing else."""
+    root = _workspace(tmp_path, monkeypatch)
+    _tool_tasks.tools_materialise()
+    assert "tools: no tools.lock; `fm tools.lock` writes one" in capsys.readouterr().out
+    _tools.write_lock(root)
+    _tool_tasks.tools_materialise()
+    out = capsys.readouterr().out
+    assert "tools: 2 receipt(s), installed ruff, tea" in out
+    assert "stubs: 1 in typings/" in out
+    assert set(_tools.receipts(root)) == {"ruff", "tea"}
+
+
+def test_a_bun_install_is_supplied_after_bun_through_its_executable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bun is the tool's locked dependency, materialised first, its path handed on."""
+    root = _workspace(tmp_path, monkeypatch)
+    (root / "workshop.toml").write_text(
+        '[workspace]\n\n[tools]\nindex = "records"\nsources = ["mirror", "mirror2"]\n'
+        'requires = ["tea", "ruff", "cspell"]\n'
+    )
+    # Both spellings, since one archive serves the three hosts and the
+    # Windows shim is a copy of bun.exe.
+    payload = _zip({"bun": b"#!/bin/sh\necho bun\n", "bun.exe": b"MZ"})
+    digest = digest_of(payload)
+    Record(
+        "bun",
+        kind="archive",
+        hosts=THREE,
+        layout=Layout(entry_points=("bun",), paths=(".",), shims={"node": "bun"}),
+        deltas=(
+            RecordDelta(
+                1,
+                "1.3.0",
+                "",
+                {
+                    host: Artifact(
+                        f"https://origin.test/bun/{host}.zip", digest.encoded
+                    )
+                    for host in THREE
+                },
+            ),
+        ),
+    ).save(root / "records")
+    Record("cspell", kind="bun-install", deltas=_read("9.0.0")).save(root / "records")
+    ObjectStore.create(root / "mirror2").put(payload)
+    lock = _tools.write_lock(root)
+    # bun joins the lock as cspell's dependency, though no site names it.
+    assert set(lock.tools) == {"tea", "ruff", "cspell", "bun"}
+    calls: list[tuple[list[str], dict[str, str]]] = []
+
+    def installing(argv: list[str], env: dict[str, str]) -> int:
+        calls.append((argv, env))
+        if "BUN_INSTALL" in env:
+            bin_dir = Path(env["BUN_INSTALL"]) / "bin"
+            bin_dir.mkdir(parents=True, exist_ok=True)
+            (bin_dir / "cspell").write_text("#!/usr/bin/env node\n")
+        else:
+            bin_dir = Path(env["UV_TOOL_BIN_DIR"])
+            bin_dir.mkdir(parents=True, exist_ok=True)
+            (bin_dir / "ruff").write_text("launcher")
+        return 0
+
+    monkeypatch.setattr(_engine, "run_installer", installing)
+    _tools.write_stubs(root)
+    done = _tools.materialise(root)
+    names = [m.receipt.tool for m in done if m.receipt is not None]
+    assert names[0] == "bun" and "cspell" in names
+    held = _tools.receipts(root)
+    bun = held["bun"]
+    assert Path(bun.tool_dir, "bun").is_file()
+    assert any(Path(bun.tool_dir, n).exists() for n in ("node", "node.exe"))  # the shim
+    argv, env = next(c for c in calls if "BUN_INSTALL" in c[1])
+    assert argv == [str(Path(bun.tool_dir, "bun")), "add", "--global", "cspell@9.0.0"]
+    assert env["PATH"].split(os.pathsep)[0] == bun.tool_dir
+    assert held["cspell"].kind == "bun-install"
+    assert held["cspell"].entry_points == ("cspell",)
+    # A cspell asked for alone still brings bun, which it is installed through.
+    calls.clear()
+    (Path(held["cspell"].tool_dir) / "bin" / "cspell").unlink()
+    made = [m.receipt.tool for m in _tools.materialise(root, ("cspell",)) if m.receipt]
+    assert made == ["bun", "cspell"]
+    assert calls and calls[0][0][1:] == ["add", "--global", "cspell@9.0.0"]
 
 
 def test_link_mode_fills_the_checkouts_bin_directory_and_the_emission_leads_with_it(
@@ -309,6 +400,49 @@ def test_add_declares_locks_and_writes_a_receipt_with_no_network(
 
 
 # --- drift ------------------------------------------------------------------------
+
+
+def test_env_check_finds_a_tool_by_its_executables_not_its_lock_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`git_cliff` puts `git-cliff` on PATH: the lock name is no binary."""
+    root = _workspace(tmp_path, monkeypatch)
+    (root / "workshop.toml").write_text(
+        '[workspace]\n\n[tools]\nindex = "records"\nsources = ["mirror", "mirror2"]\n'
+        'requires = ["tea", "ruff", "cliff_tool"]\n'
+    )
+    payload = _zip({"cliff-tool": b"#!/bin/sh\necho cliff\n"})
+    digest = digest_of(payload)
+    Record(
+        "cliff_tool",
+        kind="archive",
+        hosts=THREE,
+        layout=Layout(entry_points=("cliff-tool",), paths=(".",)),
+        deltas=(
+            RecordDelta(
+                1,
+                "1.0.0",
+                "",
+                {
+                    host: Artifact(
+                        f"https://origin.test/cliff/{host}.zip", digest.encoded
+                    )
+                    for host in THREE
+                },
+            ),
+        ),
+    ).save(root / "records")
+    ObjectStore.create(root / "mirror2").put(payload)
+    _tools.write_lock(root)
+    _tools.write_stubs(root)
+    _tools.materialise(root)
+    assert _tools.receipts(root)["cliff_tool"].entry_points == ("cliff-tool",)
+    # Nothing on PATH: every tool resolves through its receipt's paths.
+    monkeypatch.setattr("livery.workshop._env_tasks.shutil.which", lambda tool: None)
+    monkeypatch.setattr("livery.workshop._env_tasks._uv_drift", lambda root: "")
+    assert _env_tasks.env_check() == 0
+    out = capsys.readouterr().out
+    assert "cliff_tool: receipt ok" in out and "tea: receipt ok" in out
 
 
 def test_env_check_names_each_receipt_and_the_drift_under_it(

@@ -91,6 +91,16 @@ def default_mode(kind: str) -> str:
 PACKAGE_VAR = "$package"
 """The one substitution a deployment's env values may carry: the install root."""
 
+VERSION_VAR = "{version}"
+"""The one substitution a layout's `root` may carry: the version being resolved.
+
+An archive whose top directory is named after its version
+(`git-cliff-2.14.2/`) declares `root = "git-cliff{version}"` once on
+the tool, instead of a layout override restating the version on every
+version line. [livery.toolroom.store.resolve][] substitutes it, so a
+deployment always carries the concrete directory.
+""".replace("git-cliff{version}", "git-cliff-{version}")
+
 RECORD_SUFFIX = ".jsonl"
 """A record file's suffix: `records/<tool>.jsonl`, named by the tool."""
 
@@ -168,7 +178,9 @@ class Layout:
 
     Attributes:
         root: The directory inside the archive to hoist to the install
-            root; empty keeps the archive's own top.
+            root; empty keeps the archive's own top. May carry
+            `VERSION_VAR`, replaced by the version resolved, for an
+            archive whose top directory is named after its version.
         exe: The executable's name for a `binary` download.
         entry_points: Install-relative paths of the executables the
             deployment puts on PATH, annotated here and never
@@ -1067,7 +1079,7 @@ def resolve(record: Record, version: str, host: str) -> Deployment:
     return Deployment(
         artifact.url,
         artifact.sha256,
-        str(values["root"]),
+        str(values["root"]).replace(VERSION_VAR, version),
         str(values["exe"]),
         tuple(values["entry_points"]),
         tuple(values["paths"]),

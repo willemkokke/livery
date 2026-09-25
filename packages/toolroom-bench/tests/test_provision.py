@@ -247,6 +247,86 @@ def test_pick_asset_matches_aliases_and_prefers_archive(mac_arm):
     assert url == "archive"  # archive beats the bare binary, sidecar excluded
 
 
+def test_pick_asset_refuses_a_host_it_does_not_know(mac_arm):
+    with pytest.raises(_provision.ProvisionError, match="unknown host 'freebsd-x64'"):
+        _provision._pick_asset([("tool_Linux_x86_64.tar.gz", "x")], host="freebsd-x64")
+
+
+def test_pick_asset_for_a_named_host_reads_the_host_not_the_machine(mac_arm):
+    """The assembler picks every host's asset from one machine."""
+    assets = [
+        ("tool_Linux_x86_64.tar.gz", "linux-x64"),
+        ("tool_Linux_arm64.tar.gz", "linux-arm"),
+        ("tool_Windows_arm64.zip", "windows-arm"),
+        ("tool_macOS_arm64.tar.gz", "macos-arm"),
+    ]
+    for host, url in (("windows-arm", "windows-arm"), ("linux-x64", "linux-x64")):
+        assert _provision._pick_asset(assets, host=host)[1] == url
+    assert _provision._pick_asset(assets)[1] == "macos-arm"  # the machine
+    with pytest.raises(
+        _provision.ProvisionError, match="no release asset for macos-x64"
+    ):
+        _provision._pick_asset(assets, host="macos-x64")
+
+
+def test_pick_asset_universal_serves_both_macos_hosts_and_no_other(mac_arm):
+    assets = [
+        ("cmake-4.4.3-macos-universal.tar.gz", "mac"),
+        ("cmake-4.4.3-macos-universal.dmg", "dmg"),  # an installer, ranked below
+        ("cmake-4.4.3-linux-x86_64.tar.gz", "linux"),
+    ]
+    for host in ("macos-arm", "macos-x64"):
+        assert _provision._pick_asset(assets, host=host)[1] == "mac"
+    with pytest.raises(
+        _provision.ProvisionError, match="no release asset for linux-arm"
+    ):
+        _provision._pick_asset(assets, host="linux-arm")
+
+
+def test_pick_asset_arch_less_is_the_x64_build_or_the_universal_one(mac_arm):
+    """Ninja names no architecture on the builds that predate its arm ones."""
+    assets = [
+        ("ninja-linux.zip", "linux"),
+        ("ninja-linux-aarch64.zip", "linux-arm"),
+        ("ninja-mac.zip", "mac"),
+        ("ninja-win.zip", "win"),
+        ("ninja-winarm64.zip", "win-arm"),
+    ]
+    picks = {
+        host: _provision._pick_asset(assets, host=host)[1]
+        for host in _provision.HOST_TOKENS
+    }
+    assert picks == {
+        "linux-x64": "linux",
+        "linux-arm": "linux-arm",
+        "macos-x64": "mac",
+        "macos-arm": "mac",
+        "windows-x64": "win",
+        "windows-arm": "win-arm",
+    }
+    # An asset naming another architecture never matches through the
+    # arch-less rule: an arm host with no arm build stays without one.
+    only_x64 = [("tool-linux-x86_64.tar.gz", "x"), ("tool-win.zip", "w")]
+    with pytest.raises(
+        _provision.ProvisionError, match="no release asset for linux-arm"
+    ):
+        _provision._pick_asset(only_x64, host="linux-arm")
+    with pytest.raises(
+        _provision.ProvisionError, match="no release asset for windows-arm"
+    ):
+        _provision._pick_asset(only_x64, host="windows-arm")
+
+
+def test_pick_asset_prefers_the_msvc_build_over_the_mingw_one(win_amd64):
+    """git-cliff ships both; the shorter MinGW name must not win by length."""
+    assets = [
+        ("tool-1.0-x86_64-pc-windows-gnu.zip", "gnu"),
+        ("tool-1.0-x86_64-pc-windows-msvc.zip", "msvc"),
+    ]
+    assert _provision._pick_asset(assets)[1] == "msvc"
+    assert _provision._pick_asset(assets, host="windows-x64")[1] == "msvc"
+
+
 def test_pick_asset_no_match_raises(mac_arm):
     with pytest.raises(_provision.ProvisionError, match="no release asset"):
         _provision._pick_asset([("tool_Windows_x86_64.zip", "u")])
@@ -651,7 +731,10 @@ def test_empty_prefix_resolves_to_the_default_room_once_provisioned(
 
     monkeypatch.setenv("FOOTMAN_DATA_DIR", str(tmp_path / "data"))
     assert _tasks._resolve_prefix("") is None  # nothing provisioned: host PATH
-    (tmp_path / "data" / "toolroom-bench").mkdir(parents=True)
+    # The bench's store lives in the room too; a store is not a provisioned set.
+    (tmp_path / "data" / "toolroom-bench" / "store").mkdir(parents=True)
+    assert _tasks._resolve_prefix("") is None
+    (tmp_path / "data" / "toolroom-bench" / "bin").mkdir()
     assert _tasks._resolve_prefix("") == tmp_path / "data" / "toolroom-bench"
 
 
@@ -659,6 +742,6 @@ def test_an_explicit_prefix_wins_over_the_default_room(tmp_path, monkeypatch):
     from livery.toolroom.bench import _tasks
 
     monkeypatch.setenv("FOOTMAN_DATA_DIR", str(tmp_path / "data"))
-    (tmp_path / "data" / "toolroom-bench").mkdir(parents=True)
+    (tmp_path / "data" / "toolroom-bench" / "bin").mkdir(parents=True)
     mine = tmp_path / "mine"
     assert _tasks._resolve_prefix(str(mine)) == mine.resolve()
