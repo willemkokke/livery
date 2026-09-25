@@ -284,19 +284,20 @@ def test_a_workspace_that_names_no_index_is_not_asked_for_stubs(
     assert "stubs" not in capsys.readouterr().out
 
 
-def test_the_entry_script_writes_the_stubs_and_survives_their_absence(
+def test_the_entry_script_materialises_the_tools_before_it_emits(
     tmp_path: Path,
 ) -> None:
+    """The receipts must exist before the emission puts their paths on PATH."""
     from livery.workshop._entry import entry_script
 
     root = tmp_path / "ws"
     root.mkdir()
     (root / "uv.lock").write_text('[[package]]\nname = "uv"\nversion = "0.11.0"\n')
     script = entry_script(root)
-    assert "_run tools.restub >&2" in script
-    assert '|| echo "setup: the tool stubs were not written' in script
+    assert "_run tools.materialise >&2" in script
+    assert '|| echo "setup: the tools were not materialised' in script
     assert (
         script.index("uv sync")
-        < script.index("tools.restub")
+        < script.index("tools.materialise")
         < script.index("env.emit")
     )

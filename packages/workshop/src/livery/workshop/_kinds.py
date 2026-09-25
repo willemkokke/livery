@@ -326,9 +326,14 @@ def template_chain(template_kind: str) -> tuple[str, ...]:
     by_template = {r.template: r for r in _KINDS.values() if r.template}
     record = by_template.get(template_kind)
     if record is None:
-        base = (BASE_TEMPLATE,) if template_kind.startswith("package-") else ()
-        return (*base, template_kind)
-    return tuple(r.template for r in kind_chain(record.name) if r.template)
+        chain: tuple[str, ...] = (template_kind,)
+    else:
+        chain = tuple(r.template for r in kind_chain(record.name) if r.template)
+    # A kind registered without the base as its parent (a fake, a layer's
+    # own) still renders the base first: the docs seeds live there alone.
+    if template_kind.startswith("package-") and chain[0] != BASE_TEMPLATE:
+        chain = (BASE_TEMPLATE, *chain)
+    return chain
 
 
 def managed_files(type_name: str) -> tuple[str, ...]:

@@ -402,6 +402,7 @@ nav = [
                 { "Overview" = "_generated/packages/workshop/_generated/tasks/tools/index.md" },
                 { "add" = "_generated/packages/workshop/_generated/tasks/tools/add.md" },
                 { "lock" = "_generated/packages/workshop/_generated/tasks/tools/lock.md" },
+                { "materialise" = "_generated/packages/workshop/_generated/tasks/tools/materialise.md" },
                 { "restub" = "_generated/packages/workshop/_generated/tasks/tools/restub.md" },
                 { "upgrade" = "_generated/packages/workshop/_generated/tasks/tools/upgrade.md" },
             ] },

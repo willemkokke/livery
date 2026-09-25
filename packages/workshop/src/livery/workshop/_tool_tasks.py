@@ -126,6 +126,28 @@ def tools_upgrade(
         print(line)
 
 
+@tools.task(name="materialise")
+def tools_materialise(
+    offline: Annotated[
+        bool, doc("supply from the machine's store and its sources only")
+    ] = False,
+) -> None:
+    """Supply every locked tool through the store, write the receipts and the stubs.
+
+    What `sync` does for the tools alone: the bundle the sites require
+    lands on this machine, a receipt per tool says what reached PATH,
+    and the stubs follow. A tool the store cannot supply is reported
+    and the others are supplied. The entry script runs it on every CI
+    job before it persists the environment, so the receipts' paths are
+    on PATH when the gate runs; a checkout with no `tools.lock` has
+    nothing to materialise and says so.
+    """
+    from livery.workshop._sync import materialise_tools
+
+    for line in materialise_tools(_root(), offline=offline):
+        print(line)
+
+
 @tools.task(name="restub")
 def tools_restub(
     offline: Annotated[

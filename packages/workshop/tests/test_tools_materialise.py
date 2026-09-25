@@ -260,6 +260,21 @@ def test_sync_materialises_the_bundle_from_the_folder_source_with_no_network(
     assert written["schema"] == 1 and written["entry_points"] == ["tea"]
 
 
+def test_the_materialise_verb_supplies_the_bundle_and_writes_the_stubs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """What the entry script runs on a runner: receipts and stubs, nothing else."""
+    root = _workspace(tmp_path, monkeypatch)
+    _tool_tasks.tools_materialise()
+    assert "tools: no tools.lock; `fm tools.lock` writes one" in capsys.readouterr().out
+    _tools.write_lock(root)
+    _tool_tasks.tools_materialise()
+    out = capsys.readouterr().out
+    assert "tools: 2 receipt(s), installed ruff, tea" in out
+    assert "stubs: 1 in typings/" in out
+    assert set(_tools.receipts(root)) == {"ruff", "tea"}
+
+
 def test_link_mode_fills_the_checkouts_bin_directory_and_the_emission_leads_with_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
