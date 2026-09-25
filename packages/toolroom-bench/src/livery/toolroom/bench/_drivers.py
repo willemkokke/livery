@@ -253,7 +253,11 @@ DRIVERS: tuple[Driver, ...] = (
         url="https://docs.astral.sh/ruff/formatter/",
         provision=Provision(kind="github", repo="astral-sh/ruff"),
     ),
-    Driver("basedpyright", url="https://docs.basedpyright.com/"),
+    Driver(
+        "basedpyright",
+        url="https://docs.basedpyright.com/",
+        provision=Provision(kind="node"),  # a Node program; PyPI wraps it
+    ),
     Driver(
         "uv",
         provision=Provision(kind="github", repo="astral-sh/uv"),

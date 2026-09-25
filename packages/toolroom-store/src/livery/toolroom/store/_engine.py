@@ -316,8 +316,12 @@ class Store:
         deployment = resolve(record, version, self.host)
         return self._probe_download(record.name, version, deployment)
 
-    def ensure(self, record: Record, version: str) -> Ensured:
+    def ensure(
+        self, record: Record, version: str, *, bun: Path | None = None
+    ) -> Ensured:
         """Supply the tool at *version* as its record resolves it on this host.
+
+        *bun* is the executable a `bun-install` record installs through.
 
         Raises:
             RecordError: for a version the record does not track, or a
@@ -336,6 +340,7 @@ class Store:
             deployment,
             package=record.package,
             min_version=record.min_version,
+            bun=bun,
         )
 
     def supply(
@@ -347,6 +352,7 @@ class Store:
         *,
         package: str = "",
         min_version: str = "",
+        bun: Path | None = None,
     ) -> Ensured:
         """Supply *name* at *version* from *deployment* or through its installer.
 
@@ -355,16 +361,21 @@ class Store:
         `uv-tool` is installed by uv into its own directory under the
         home, *package* naming what uv installs when it differs from the
         tool's name, and its launchers are the entry points. A
-        `system-check` is the machine's own tool, found on PATH and
-        held to *min_version*. `bun-install` and `uv-python` are not
-        supplied through the store yet and refuse naming the kind.
+        `bun-install` is installed the same way by *bun*, the executable
+        of a bun the caller supplied first; the launchers bun writes
+        start with `#!/usr/bin/env node`, which bun's own `node` shim
+        answers on the caller's PATH. A `system-check` is the machine's
+        own tool, found on PATH and held to *min_version*. `uv-python`
+        is not supplied through the store yet and refuses naming the
+        kind.
 
         Raises:
             StoreError: for a kind the store cannot supply, a downloaded
-                kind with no deployment, a miss while offline, a
-                mismatch at a tier, an archive that will not extract, an
-                installer that failed, a system tool missing or below
-                its floor, or a ref already naming another tree.
+                kind with no deployment, a `bun-install` with no *bun*,
+                a miss while offline, a mismatch at a tier, an archive
+                that will not extract, an installer that failed, a
+                system tool missing or below its floor, or a ref already
+                naming another tree.
         """
         if kind in DOWNLOAD_KINDS:
             if deployment is None:
@@ -374,6 +385,13 @@ class Store:
             return self._supply_download(name, kind, version, deployment)
         if kind == "uv-tool":
             return self._supply_uv_tool(name, version, package or name)
+        if kind == "bun-install":
+            if bun is None:
+                raise StoreError(
+                    f"{name}: a bun-install needs bun; lock bun first, and hand"
+                    " its executable over"
+                )
+            return self._supply_bun_install(name, version, package or name, bun)
         if kind == "system-check":
             return self._supply_system(name, version, min_version)
         raise StoreError(
@@ -478,8 +496,8 @@ class Store:
     # --- the delegated kinds --------------------------------------------------
 
     def _probe_delegated(self, name: str, kind: str, version: str) -> Ensured | None:
-        if kind == "uv-tool":
-            tool_dir = self.home.uv / "tools" / f"{name}@{version}"
+        if kind in ("uv-tool", "bun-install"):
+            tool_dir = self._delegated_dir(name, kind, version)
             launchers = _launchers(tool_dir / "bin")
             if not launchers:
                 return None
@@ -492,6 +510,46 @@ class Store:
                 name, version, False, Path(found).parent, _delegated(()), None
             )
         return None
+
+    def _delegated_dir(self, name: str, kind: str, version: str) -> Path:
+        """Where a delegated kind's install lives: `uv/tools` or `bun/tools`."""
+        home = self.home.uv if kind == "uv-tool" else self.home.bun
+        return home / "tools" / f"{name}@{version}"
+
+    def _supply_bun_install(
+        self, name: str, version: str, package: str, bun: Path
+    ) -> Ensured:
+        """Install *package* at *version* through *bun*, into the tool's own directory.
+
+        `BUN_INSTALL` names the directory, so bun's global install lands
+        there with its launchers in `bin`; bun's own directory heads the
+        child's PATH, so the install finds bun and the `node` shim
+        beside it. The launchers are the entry points.
+        """
+        self._progress(Event(name, version, "probe"))
+        present = self._probe_delegated(name, "bun-install", version)
+        if present is not None:
+            return present
+        tool_dir = self._delegated_dir(name, "bun-install", version)
+        bin_dir = tool_dir / "bin"
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        argv = [str(bun), "add", "--global", f"{package}@{version}"]
+        self._progress(Event(name, version, "install", " ".join(argv)))
+        code = run_installer(
+            argv,
+            {
+                "BUN_INSTALL": str(tool_dir),
+                "PATH": os.pathsep.join([str(bun.parent), os.environ.get("PATH", "")]),
+            },
+        )
+        launchers = _launchers(bin_dir)
+        if code != 0 or not launchers:
+            shutil.rmtree(tool_dir, ignore_errors=True)
+            raise StoreError(
+                f"{name} {version}: `{' '.join(argv)}` exited {code} and left"
+                f" {'no launcher' if code == 0 else 'nothing'} in {bin_dir}"
+            )
+        return Ensured(name, version, True, tool_dir, _delegated(launchers), None)
 
     def _supply_uv_tool(self, name: str, version: str, package: str) -> Ensured:
         """Install *package* at *version* through uv, into the tool's own directory.

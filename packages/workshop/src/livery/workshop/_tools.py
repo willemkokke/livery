@@ -225,10 +225,11 @@ def write_lock(root: Path, *, upgrade: tuple[str, ...] = ()) -> Lock:
     *upgrade* or no longer satisfies; a refusal names the tool, each
     floor with its site, and the host at fault.
     """
+    listing = catalogue(root)
     try:
         lock = resolve_lock(
-            catalogue(root),
-            requirements(root),
+            listing,
+            with_bun(tuple(requirements(root)), listing),
             hosts=locked_hosts(root),
             keep=current_lock(root),
             upgrade=upgrade,
@@ -237,6 +238,29 @@ def write_lock(root: Path, *, upgrade: tuple[str, ...] = ()) -> Lock:
         fail(str(error))
     lock.save(lock_path(root))
     return lock
+
+
+def with_bun(
+    found: tuple[Requirement, ...], listing: Catalogue
+) -> tuple[Requirement, ...]:
+    """*found*, plus bun when a `bun-install` tool is among them and nothing names bun.
+
+    A `bun-install` tool is installed by bun, so bun is its dependency
+    and the lock holds it as such: the site named is the tool that
+    needs it. A requirement the catalogue does not list is left for
+    the resolver to refuse by name.
+    """
+    if any(requirement.name == "bun" for requirement in found):
+        return found
+    for requirement in found:
+        try:
+            kind = listing.listed(requirement.name).kind
+        except CatalogueError:
+            continue
+        if kind == "bun-install":
+            site = f"{requirement.name} (bun-install)"
+            return (*found, Requirement.parse("bun", site=site))
+    return found
 
 
 def declare(root: Path, text: str) -> bool:
@@ -380,6 +404,22 @@ class Receipt:
             raise ValueError(f"{path}: not a receipt ({error})") from None
 
 
+def _bun_first(
+    wanted: tuple[str, ...], lock: Lock, listing: Catalogue
+) -> tuple[str, ...]:
+    """*wanted* with bun ahead of any `bun-install` tool, joined when the lock holds it.
+
+    A `bun-install` tool is installed through bun's executable, so bun
+    is supplied first and its path handed on; a bun the lock holds
+    joins a narrowed *wanted* that names such a tool without it.
+    """
+    needs_bun = any(listing.listed(name).kind == "bun-install" for name in wanted)
+    if not needs_bun:
+        return wanted
+    rest = tuple(name for name in wanted if name != "bun")
+    return ("bun", *rest) if "bun" in lock.tools else rest
+
+
 def receipts_dir(root: Path) -> Path:
     """The checkout's receipts directory."""
     return root / RECEIPTS
@@ -514,6 +554,8 @@ def materialise(
     floors = site_floors(root)
     done: list[Materialised] = []
     linked: list[tuple[Receipt, Ensured]] = []
+    wanted = _bun_first(wanted, lock, listing)
+    bun_exe: Path | None = None
     for name in wanted:
         locked = lock.tools[name]
         listed = listing.listed(name)
@@ -537,6 +579,7 @@ def materialise(
                 deployment,
                 package=listed.package,
                 min_version=floor,
+                bun=bun_exe,
             )
         except StoreError as error:
             reason = str(error)
@@ -546,6 +589,8 @@ def materialise(
                 fail(reason)
             done.append(Materialised(None, False, reason))
             continue
+        if name == "bun" and ensured.deployment.entry_points:
+            bun_exe = ensured.tool_dir / ensured.deployment.entry_points[0]
         mode = mode_of(root, name, listed.kind, listed.mode)
         receipt = Receipt(
             name,
