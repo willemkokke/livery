@@ -771,16 +771,10 @@ def template_apply() -> None:
     The recovery procedure for drift, and the delivery step after a
     template edit. A package's seeds are never rewritten: only the
     files the template keeps owning
-    (livery.workshop._templates.PACKAGE_MANAGED). Contract keys
-    spelled with underscores are rewritten to kebab-case first, the
-    root's and every member's, so the render reads contracts it
-    accepts. Idempotent: a clean tree changes nothing.
+    (livery.workshop._templates.PACKAGE_MANAGED). Idempotent: a clean
+    tree changes nothing.
     """
-    from livery.workshop._contract import migrate_contracts
-
     root = _root()
-    for note in migrate_contracts(root):
-        print(f"  migrated: {note}")
     changed = apply_project(root) + apply_packages(root)
     for name in changed:
         print(f"  rendered: {name}")

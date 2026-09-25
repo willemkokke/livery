@@ -31,7 +31,6 @@ import livery.footman as footman
 from livery.footman import doc, fail
 from livery.forge import Repository
 from livery.toolroom import tools
-from livery.workshop._contract import migrate_contracts
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import discover_packages
 from livery.workshop._update import bump_floors, refresh_rendered
@@ -165,10 +164,7 @@ class UpdateDriver:
         return Submission(title=title, body="\n".join(f"- {n}" for n in notes))
 
     def _work(self) -> list[str]:
-        # The key migration runs before anything parses a contract:
-        # the floors read every member's, and a contract from before
-        # the kebab-case keys would refuse there.
-        notes = [f"contract: {line}" for line in migrate_contracts(self._root)]
+        notes: list[str] = []
         if self.name.endswith("/templates"):
             notes += bump_floors(self._root, self._git)
             notes += [f"render: {line}" for line in refresh_rendered(self._root)]

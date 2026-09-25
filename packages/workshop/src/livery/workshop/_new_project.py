@@ -182,10 +182,6 @@ def new_project(
     contract = root / "workshop.toml"
     if contract.is_file():
         print("  workshop.toml: already seeded")
-        from livery.workshop._contract import migrate_contracts
-
-        for note in migrate_contracts(root):
-            print(f"  migrated: {note}")
     else:
         spelled = ", ".join(f'"{entry}"' for entry in stack)
         lines = [
