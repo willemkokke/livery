@@ -536,3 +536,38 @@ def test_check_title_is_green_off_a_pull_request_and_off_a_release_branch(
         "feat/1-thing is not a release branch: nothing to check"
         in capsys.readouterr().out
     )
+
+
+def test_ci_rerun_names_a_run_still_in_progress(
+    rig: tuple[FakeForge, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake, _root = rig
+    fake.push(OWNER, NAME, "feat/1-thing", outcome="failure")  # queued, unsettled
+    fake.repository(OWNER, NAME).pr.open("feat/1-thing", "main", "feat: t")
+    _ci_tasks.ci_rerun()
+    out = capsys.readouterr().out
+    assert "still in progress" in out and "ci.status --wait" in out
+    assert "nothing failed" not in out
+
+
+def test_ci_logs_names_a_failure_buried_above_the_tail(
+    rig: tuple[FakeForge, Path],
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.workshop._ci_tasks import failure_lines
+
+    assert failure_lines("") == []
+    fake, _root = rig
+    sha = fake.push(OWNER, NAME, "feat/1-thing", outcome="failure")
+    fake.settle(OWNER, NAME, sha)
+    repo = fake.repository(OWNER, NAME)
+    repo.pr.open("feat/1-thing", "main", "feat: t")
+    buried = "FAILED packages/x/tests/test_y.py::test_z - AssertionError"
+    rows = [f"coverage row {i}" for i in range(300)]
+    log = "\n".join([buried, *rows, "fm: check: pytest exited 1"])
+    monkeypatch.setattr(type(repo.checks), "job_log", lambda self, job: log)
+    _ci_tasks.ci_logs()
+    out = capsys.readouterr().out
+    assert "failures named above the tail:" in out and buried in out
+    assert "coverage row 299" in out
