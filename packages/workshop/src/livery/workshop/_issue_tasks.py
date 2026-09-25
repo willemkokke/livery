@@ -276,6 +276,10 @@ _PLAIN_BRANCH_RE = re.compile(rf"^({'|'.join(_KINDS)})/([a-z0-9][a-z0-9-]*)$")
 def start(
     ref: Annotated[Arg[str], ask(), suggest(_open_numbers, strict=False)] = "",
     type: Annotated[str, doc("kind override: feat, fix, chore, docs, refactor")] = "",
+    from_: Annotated[
+        str,
+        doc("start on this pushed, unmerged branch instead of main; submit targets it"),
+    ] = "",
     body: Annotated[str, doc("the issue body when the title form files one")] = "",
     wip: Annotated[
         bool, doc("park the dirty tree as a commit and reuse this checkout")
@@ -302,7 +306,9 @@ def start(
     the issue. An issue's branch is ``<kind>/<number>-<slug>`` and
     ``fm submit`` closes the issue on merge; a plain branch is named
     as given and closes nothing. Every branch starts from a fetched
-    ``origin/main``, so a stale base is impossible. A worktree under
+    ``origin/main``, so a stale base is impossible; ``--from=<branch>``
+    starts on a pushed, unmerged parent instead, records the parent,
+    and ``fm submit`` targets the parent until it has merged. A worktree under
     the runner's home is the default, entered in a shell when a
     person is at the terminal (``--open=code`` opens the editor
     instead, ``--open=none`` prints the path); ``--no-worktree``
@@ -347,6 +353,17 @@ def start(
         briefing = f"Work on issue #{work.number}: {work.title}\n\n{work.body}"
         started = branch
     git.fetch()
+    base = "main"
+    if from_:
+        if from_ == branch:
+            fail(f"--from={from_} names the branch being started")
+        if not git.remote_head(from_):
+            fail(
+                f"origin has no branch {from_!r} to start on: push the parent"
+                f" first (`{footman.prog()} submit` in its worktree), then"
+                " start on it"
+            )
+        base = from_
     from livery.workshop._sync import fetch_store_lines
 
     for line in fetch_store_lines(root):
@@ -364,8 +381,9 @@ def start(
             _open_work(path, open)
             return
         path.parent.mkdir(parents=True, exist_ok=True)
-        git._run("worktree", "add", str(path), "-b", branch, "origin/main")
+        git._run("worktree", "add", str(path), "-b", branch, f"origin/{base}")
         print(f"  worktree {path} on {started}")
+        _record_parent(git, branch, from_)
         provision = tools.uv.opts(cwd=path, nofail=True, recorded=False)(
             "run", footman.prog(), "sync"
         )
@@ -394,8 +412,17 @@ def start(
         git.switch(branch)
         print(f"  already started: back on {branch}")
         return
-    git._run("checkout", "-b", branch, "origin/main")
+    git._run("checkout", "-b", branch, f"origin/{base}")
     print(f"  on {started}")
+    _record_parent(git, branch, from_)
+
+
+def _record_parent(git: GitOps, branch: str, parent: str) -> None:
+    """Record *parent* as the base ``fm submit`` targets for *branch*; none, nothing."""
+    if not parent:
+        return
+    git.config_set(f"branch.{branch}.workshop-parent", parent)
+    print(f"  parent: {parent} (`{footman.prog()} submit` targets it until it merges)")
 
 
 def _issue_for(repo: Repository, ref: str, *, type: str, body: str) -> Issue:
