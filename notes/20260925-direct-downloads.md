@@ -262,8 +262,16 @@ Deliverables:
 - Drivers: `astral-sh/ruff` and `facebook/pyrefly` on the `github`
   tier; `ruff_format` follows ruff's record kind since it is ruff's
   binary.
-- Records: `archive`; ruff's `host_layouts` carry the per-triple root;
-  pyrefly's layout read from its archives in the phase.
+- Records: `archive`. ruff's archives are uv's shape: one root per
+  host triple (`ruff-x86_64-unknown-linux-gnu/ruff`) and a bare
+  `ruff.exe` at the top of the Windows zips, so its `host_layouts`
+  copy uv's. pyrefly's archives are the bare binary on every host
+  (`pyrefly`, `pyrefly.exe`), so its layout is `entry_points` and
+  `paths = ["."]` with no root; its linux assets come in gnu and
+  musl, and the picker prefers gnu.
+- The ty, uv and prek drivers move to the github tier too, so their
+  new versions list from the forge that publishes the artifacts their
+  records already carry.
 - The dev-group entries `ruff`, `ty` and `pyrefly` leave the template;
   ty is an `archive` in the lock already.
 
