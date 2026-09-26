@@ -117,9 +117,22 @@ place the tool exists:
 
 - the callable that runs it, and the fix-mode callable when the
   tool can rewrite;
+- which files it claims, named as classifications rather than as
+  globs. The kind already answers `classify(package, path)` with
+  source, test, test support, or configuration, so a check says
+  which of those it judges and the kind decides what that means
+  for each of its members. Two checks may claim one
+  classification under different rules, which is how ruff judges
+  a cpp-conan package's `conanfile.py` by one set and a python
+  package's sources by another, derived from the claim instead of
+  typed into a `per-file-ignores` table by hand;
 - how it narrows under `--affected`: by explicit paths, by a
   package subset, or not at all (the whole is always checked);
-- the configuration fragment the render manages for it;
+- the configuration fragments the render manages for it, one per
+  rendered file it has something to say in: its table in
+  `pyproject.toml`, its settings in `.vscode/settings.json`, its
+  id in `.vscode/extensions.json`. One owner, several files, and
+  unregistering the check clears every one of them together;
 - the tool it contributes to the derived profile. The tool store
   is machine-wide and shared across projects: each version lives
   in it once, side by side with its siblings, and the entry
@@ -135,6 +148,30 @@ re-registering the role without it. A narrowed gate is always
 visible: every skipped check prints its name and the reason, and
 a layer that narrows a role is named in the gate's output, so a
 lighter gate is a legible brand decision, never a silent one.
+
+A fragment is contributed, never applied afterwards. The render
+composes the base template with each registered check's fragment
+for that file, in check-name order so two machines write the same
+bytes, and the drift gate judges the result. A pass that rewrote
+the rendered file instead would move the truth from the template
+to the template plus the passes, and every rewrite of TOML or of
+JSON with comments either loses the prose or dictates how it may
+be written, which these files carry on purpose.
+
+**The editor answers with the gate's checkers.** A checker
+configured in `pyproject.toml` is the same program in an editor
+as on the command line, so the two agree by construction. A
+checker configured somewhere else does not: Pylance reads
+`[tool.pyright]`, which this render never writes, so beside
+basedpyright it answers on its own defaults and an exclusion the
+gate honours comes back as a finding. Which formatter runs is a
+fact about the project and the check owns it; when to format is
+the person's, and stays in their own settings. Silencing the
+second opinion is neither: no check owns it, because it follows
+from the whole registered set, that the type checker answering in
+the editor is the one whose configuration this workspace writes.
+The render derives that from the set, the way it derives the
+profile.
 
 **Documentation and coverage follow the same split.** Extraction
 belongs to the kind: a Python kind extracts its API through
@@ -310,21 +347,45 @@ are listed as available, activating nothing (contract 3).
 
 ### Phase 4: the check owns its configuration and tool
 
-The record gains the config fragment the render manages and the
-tool-profile contribution, moving both out of their current
-homes. Ruff (format and lint) is the proof: its rendered
-configuration, its version pin, and its profile entry all
-derive from its two check records, so removing the records
-removes every trace. The drift gate judges check-contributed
-fragments through the same managed-union mechanism kinds use.
+The record gains its configuration fragments, its claim, and the
+tool-profile contribution, moving all three out of their current
+homes. A fragment names the rendered file it goes in, so one
+record reaches `pyproject.toml`, `.vscode/settings.json` and
+`.vscode/extensions.json` at once; the render composes the base
+template with the registered fragments in check-name order, and
+the drift gate judges the result through the same managed-union
+mechanism kinds use.
+
+Ruff (format and lint) is the proof: its rendered configuration,
+its editor settings, its recommended extension, its version pin,
+and its profile entry all derive from its two check records, so
+removing the records removes every trace. Its claim is the second
+proof: the rules it applies to a package's configuration files
+differ from the rules it applies to sources, and the rendered
+`per-file-ignores` is generated from the claim rather than
+written by hand.
+
+Two things belong to the set rather than to any check, and the
+render derives them the way it derives the profile: the type
+checker that answers in an editor is the one whose configuration
+this workspace writes, so the second opinion's language server is
+turned off, and the extensions recommended are those of the
+registered checks (livery#779).
 
 **Acceptance**
 
 - Unregistering the ruff checks in a scratch workspace leaves no
-  ruff configuration in the render and no ruff in the derived
-  profile, proven by a test.
+  ruff configuration in the render, no ruff in the rendered
+  editor settings or extension recommendations, and no ruff in
+  the derived profile, proven by a test.
 - The drift gate catches a hand-edited check-owned fragment,
   proven by a forced test.
+- A rendered `.vscode/extensions.json` names only extension ids
+  that resolve, proven by a test reading the ids from the
+  registered checks.
+- Two checks claiming one classification under different rules
+  render one `per-file-ignores` table with both, in a stable
+  order, proven by rendering twice and comparing bytes.
 - `fm check` green, output unchanged.
 
 ### Phase 5: the test role and coverage measurement by kind
@@ -561,6 +622,30 @@ the kit cannot drift from the enforcement.
     Unifies this note's role-gating (phase 2) with per-package
     config; the composition-per-package is the structural change
     phases 4 and 5 build on.
+- 2026-09-27, a check owns its editor settings too, and knows what
+  it claims (Willem: "each tool should know how it should behave
+  for which rules and which classification, and it should be able
+  to adjust its tool configuration or vscode settings"). Phase 4
+  widens rather than gains a phase: a record carries a fragment
+  per rendered file, so `.vscode/settings.json` and
+  `.vscode/extensions.json` join `pyproject.toml` under one owner,
+  and it carries a claim in classifications, so a tool's rules per
+  classification are derived rather than hand-written. Of the two
+  spellings offered, contributed fragments over post-processing
+  the rendered file: the rendered files carry explanatory prose,
+  and a rewriting pass either loses it or dictates it, and the
+  truth would move from the template to the template plus the
+  passes. Two editor facts belong to the registered set rather
+  than to any check and the render derives them: which type
+  checker answers, and which extensions are recommended
+  (livery#779, filed to be fixed by hand and folded in here
+  instead).
+- 2026-09-27, "no consumer in this repository yet" is not a
+  reason to defer (Willem, after the agent argued the editor
+  mismatch "bites downstream before it bites here"): this
+  repository is where the template is written and a born project
+  is the consumer, so an absent local instance is the state before
+  the option ships, never evidence of low demand.
 
 ## Open
 
@@ -589,3 +674,17 @@ the kit cannot drift from the enforcement.
    committed pin home and its update flavor of
    `fm workflow.update` are decided with the store itself.
    Owner: Willem.
+7. A fragment can only add. When a check needs a line the base
+   template already wrote to say something else, the answers are
+   the whole-file override the 2026-09-09 record settles for a
+   layer, or splitting the base template until the line is a slot
+   nobody else owns. Which one applies to a check rather than a
+   layer is undecided, and deciding it late means discovering it
+   as a fragment that cannot be written. Owner: Willem, with
+   phase 4.
+8. Which extensions a registered check names, and what the render
+   does with a check whose tool has none. Every id shipped is a
+   claim about a marketplace entry that this repository cannot
+   verify offline, so the check record either carries a verified
+   id or carries nothing and the editor keeps quiet about that
+   tool. Owner: Willem, with phase 4.
