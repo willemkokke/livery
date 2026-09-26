@@ -699,6 +699,22 @@ def sources(package: Package) -> list[Path]:
     return sorted(found)
 
 
+#: A clang-format violation line: the file, then its line and column,
+#: then the complaint. The path is read up to the line number rather
+#: than to the first colon, which on Windows is the drive letter.
+_VIOLATION = re.compile(
+    r"^(?P<path>.+?):\d+:\d+: (?:error|warning): code should be clang-formatted"
+)
+
+
+def unformatted(output: str) -> list[str]:
+    """The files clang-format would rewrite, named once each, sorted."""
+    found = {
+        match["path"] for line in output.splitlines() if (match := _VIOLATION.match(line))
+    }
+    return sorted(found)
+
+
 def format_check(package: Package, *, fix: bool = False) -> None:
     """Refuse a source clang-format would rewrite; *fix* rewrites it.
 
@@ -719,14 +735,7 @@ def format_check(package: Package, *, fix: bool = False) -> None:
     )(*arguments, *(str(path) for path in files))
     if result.code == 0:
         return
-    unformatted = sorted(
-        {
-            line.split(":", 1)[0].strip()
-            for line in (result.stderr + result.stdout).splitlines()
-            if "code should be clang-formatted" in line
-        }
-    )
-    named = ", ".join(unformatted) or "no file named"
+    named = ", ".join(unformatted(result.stderr + result.stdout)) or "no file named"
     fail(
         f"{package.name}: clang-format would rewrite {named}."
         f" Run `{footman.prog()} check --fix` to apply the package's own"

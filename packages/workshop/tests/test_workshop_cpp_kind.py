@@ -483,3 +483,25 @@ def test_a_tidy_finding_turns_the_gate_red(tmp_path: Path) -> None:
     with pytest.raises(_FAILURES, match="clang-tidy found something") as caught:
         _cpp_conan.lint(package, tmp_path)
     assert "branch" in str(caught.value) or "bugprone" in str(caught.value)
+
+
+def test_the_format_refusal_names_a_windows_path_whole() -> None:
+    """A drive letter is part of the path, not the end of a field.
+
+    clang-format writes `<file>:<line>:<column>: error: …`, and a
+    Windows file name carries a colon of its own two characters in.
+    Reading the path up to the line number keeps it whole, which is
+    how the refusal came to say `D` on a Windows leg.
+    """
+    posix = "src/native.cpp:10:2: error: code should be clang-formatted"
+    windows = (
+        r"D:\a\livery\packages\native\src\native.cpp:10:2:"
+        " error: code should be clang-formatted"
+    )
+    warned = "include/native.hpp:3:1: warning: code should be clang-formatted"
+    assert _cpp_conan.unformatted("\n".join([posix, windows, warned])) == [
+        r"D:\a\livery\packages\native\src\native.cpp",
+        "include/native.hpp",
+        "src/native.cpp",
+    ]
+    assert _cpp_conan.unformatted("nothing to say here") == []
