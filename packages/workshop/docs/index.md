@@ -78,7 +78,10 @@ its own process before any task runs, so the locked tools resolve from
 any shell, an agent's, a CI step's or a bare terminal's, and an entered
 shell adds only completion. The rendered `.vscode/settings.json` makes
 the editor's integrated terminal an entered shell from its first
-prompt, one profile per platform.
+prompt, one profile per platform. A sync whose first act moved the checkout hands the rest to a
+fresh process on the code now on disk, since the modules it loaded
+are the old code; a re-run that cannot start is named and the sync
+continues on the loaded code.
 
 The stubs the four type checkers read are materialised too. `fm
 tools.restub` writes them into `typings/` at the root, pyright's
