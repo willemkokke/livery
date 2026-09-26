@@ -129,14 +129,75 @@ class Verdict:
 
 
 def _failing_job(repo: Repository, head_sha: str) -> str:
-    """The first failing job's name for *head_sha*, or empty."""
+    """The first failing job's name for *head_sha*, or empty.
+
+    A job carries its own conclusion while its run continues, so a red
+    leg is named the moment it ends, not when the last leg does.
+    """
     for run in repo.checks.runs(head_sha=head_sha):
+        for job in repo.checks.jobs(run.id):
+            if job.conclusion in ("failure", "cancelled"):
+                tail = "" if run.conclusion else "; the run continues"
+                return f"{run.workflow}: {job.name} ({job.conclusion}){tail}"
         if run.conclusion in ("failure", "cancelled"):
-            for job in repo.checks.jobs(run.id):
-                if job.conclusion in ("failure", "cancelled"):
-                    return f"{run.workflow}: {job.name} ({job.conclusion})"
             return f"{run.workflow} ({run.conclusion})"
     return ""
+
+
+_GREEN_CONCLUSIONS = ("", "success", "skipped", "neutral")
+
+
+class JobWatch:
+    """The jobs of a head's runs, reported as they move.
+
+    Each report reads every run for the head and the jobs of each,
+    prints one line per job whose status or conclusion changed since
+    the last report, and under a job that just failed the log's
+    failure lines, when the forge already has the log. A report that
+    finds nothing moved prints nothing.
+    """
+
+    def __init__(self) -> None:
+        self.seen: dict[tuple[str, str], str] = {}
+
+    def report(self, repo: Repository, head_sha: str) -> list[str]:
+        """Print and return the lines for what moved since the last report."""
+        lines: list[str] = []
+        if not head_sha:
+            return lines
+        for run in repo.checks.runs(head_sha=head_sha):
+            for job in repo.checks.jobs(run.id):
+                state = job.conclusion or job.status
+                key = (run.workflow, job.name)
+                if self.seen.get(key) == state:
+                    continue
+                self.seen[key] = state
+                word = {"failure": "failed", "in_progress": "running"}.get(state, state)
+                lines.append(
+                    f"  {run.workflow.rsplit('/', 1)[-1]} / {job.name}: {word}"
+                )
+                if job.conclusion not in _GREEN_CONCLUSIONS:
+                    lines += _failure_excerpt(repo, job.id)
+        for line in lines:
+            print(line)
+        return lines
+
+
+def _failure_excerpt(repo: Repository, job_id: int, *, limit: int = 12) -> list[str]:
+    """The failure lines of a job's log, indented; nothing while the log is unstored."""
+    from livery.workshop._ci_tasks import failure_lines
+
+    try:
+        log = repo.checks.job_log(job_id)
+    except ForgeError:
+        return []
+    return [f"    {line}" for line in failure_lines(log, limit=limit)]
+
+
+def _head_of(repo: Repository, branch: str) -> str:
+    """The pull request's head for *branch*, or empty without one."""
+    pr = repo.pr.find_by_head(branch)
+    return pr.head_sha if pr is not None else ""
 
 
 def classify(
@@ -347,7 +408,10 @@ def follow(
 ) -> Verdict:
     """Watch until a terminal verdict, or raise SystemExit with its code.
 
-    Returns the ``merged`` verdict on success. Every terminal blocker
+    Returns the ``merged`` verdict on success. Every job's status
+    change prints as a line of its own as it happens
+    (livery.workshop._verdict.JobWatch), and a job that fails prints
+    its failure lines under its name. Every terminal blocker
     (10-13, 16, 17) raises SystemExit carrying its code, after
     printing the detail; the deadline raises 14. A transport error
     during a poll is a retry: printed once, polled through at the
@@ -360,10 +424,15 @@ def follow(
     green_polls = 0
     confirm_streak = 0
     last_state = ""
+    jobs = JobWatch()
     while True:
         try:
             grace_spent = green_polls >= _MERGE_GRACE_POLLS
             verdict = classify(repo, branch, git, grace_spent=grace_spent)
+            # Every job's move prints as it happens, before the verdict
+            # line it may lead to: a red leg is named while the others
+            # run, with its failure lines, so the fix starts at once.
+            jobs.report(repo, _head_of(repo, branch))
         except ForgeError as exc:
             if transient.note(exc):
                 print(transient.giving_up(_pull_request_words(repo, branch)))
