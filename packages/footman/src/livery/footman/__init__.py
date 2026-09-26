@@ -295,7 +295,7 @@ def main(tasks_file: str | None = None) -> None:
             # portable across checkers, the getattr is.
             reconfigure = getattr(stream, "reconfigure", None)
             if reconfigure is not None:
-                reconfigure(errors="replace")
+                reconfigure(errors="replace", line_buffering=True)
     if tasks_file is not None and not any(
         a.startswith(("-f=", "--tasks-file=")) for a in argv
     ):

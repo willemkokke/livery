@@ -528,6 +528,39 @@ def test_result_separates_in_process_streams():
     assert record.stderr.strip() == "in-err"
 
 
+def test_routing_line_buffers_the_real_streams_and_survives_one_that_will_not(
+    monkeypatch,
+) -> None:
+    """A line a run prints while it works must leave the process at once.
+
+    A stream that is not a terminal is block-buffered, so a follow's
+    lines reached a file only when the run ended. A stream that refuses
+    to be reconfigured is left as it is, since a run must not die over
+    how its output is buffered.
+    """
+    import io
+
+    from livery.footman import context as ctxmod
+
+    class _Stubborn(io.StringIO):
+        def reconfigure(self, **kwargs: object) -> None:
+            raise OSError("this stream will not be reconfigured")
+
+    monkeypatch.setattr(sys, "stdout", _Stubborn())
+    monkeypatch.setattr(sys, "stderr", _Stubborn())
+    with ctxmod.routing() as (out, err):
+        assert out.write("survived\n") == 9 and err is not None
+
+    out_stream = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
+    err_stream = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
+    assert not out_stream.line_buffering
+    monkeypatch.setattr(sys, "stdout", out_stream)
+    monkeypatch.setattr(sys, "stderr", err_stream)
+    with ctxmod.routing():
+        assert out_stream.line_buffering and err_stream.line_buffering
+        assert out_stream.errors == "replace"
+
+
 def test_parallel_in_process_separates_streams_under_routing():
     # The delicate path: run() inside a parallel child still splits the step's
     # streams, even though the child's task-level buffer stays combined for the
