@@ -710,7 +710,9 @@ _VIOLATION = re.compile(
 def unformatted(output: str) -> list[str]:
     """The files clang-format would rewrite, named once each, sorted."""
     found = {
-        match["path"] for line in output.splitlines() if (match := _VIOLATION.match(line))
+        match["path"]
+        for line in output.splitlines()
+        if (match := _VIOLATION.match(line))
     }
     return sorted(found)
 
