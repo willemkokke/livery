@@ -125,11 +125,12 @@ class _Stamper:
 def _conan(
     package_dir: Path, *args: str, env: dict[str, str] | None = None
 ) -> footman.Result:
-    """One conan invocation; the refusal teaches the install."""
+    """One conan invocation; the refusal names the store that supplies conan."""
     if shutil.which("conan") is None:
         fail(
-            "conan is not on PATH: install it (uv tool install conan,"
-            " or pip install conan) and re-run"
+            "conan is not on PATH: it is a tool of the store, so enter the"
+            f" environment (`{footman.prog()} sync`, then the printed"
+            " env.emit line) and re-run"
         )
     run_env = dict(os.environ)
     if env:
@@ -393,8 +394,9 @@ def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
     if shutil.which("conan") is None:
         fail(
             f"{package.name} is a cpp-conan package and conan is not on"
-            " PATH: install it (uv tool install conan, or pip install"
-            " conan) and re-run"
+            " PATH: it is a tool of the store, so enter the environment"
+            f" (`{footman.prog()} sync`, then the printed env.emit line)"
+            " and re-run"
         )
     conan = footman.run(
         ["conan", "profile", "detect", "--exist-ok"],
