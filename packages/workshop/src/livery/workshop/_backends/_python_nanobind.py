@@ -190,9 +190,11 @@ def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
         "tool", "run", "--from", CIBUILDWHEEL, "cibuildwheel", "--output-dir", str(dist)
     )
     if result.code != 0:
+        # A native build's failure sits well above its end: a CMake
+        # configure line, a compiler diagnostic, a linker's reason.
         fail(
             f"cibuildwheel ({package.name}) exited {result.code}:\n"
-            f"{result.stdout[-4000:]}{result.stderr[-2000:]}"
+            f"{result.stdout[-20000:]}{result.stderr[-4000:]}"
         )
     sdist = tools.uv.opts(cwd=package.directory, env=env, nofail=True, recorded=False)(
         "build", "--sdist", "--out-dir", str(dist)
