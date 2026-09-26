@@ -37,6 +37,9 @@ LOCK_FILE = "tools.lock"
 LOCK_SCHEMA = 1
 """The lock's shape. Bumped when a reader must know."""
 
+GRAPHS = "tools.graphs"
+"""The directory beside the lock holding one resolved graph per delegated tool."""
+
 _REQUIREMENT = re.compile(
     r"^\s*(?P<name>[A-Za-z0-9_.\-]+)\s*(?:>=\s*(?P<floor>\S+))?\s*$"
 )
@@ -84,6 +87,53 @@ class Requirement:
 
 
 @dataclass(frozen=True)
+class Graph:
+    """The resolved graph of a delegated tool's version, as the lock names it.
+
+    A delegated kind installs a graph, not a file: the package named
+    is one of many its installer resolves, and the transitive part
+    moves between resolves at one version. The graph pins all of it,
+    in the installer's own format, in a file beside the lock; the
+    lock carries its name and its digest, so the file that installs
+    is the file that was resolved.
+
+    Attributes:
+        file: The file's name under `GRAPHS`, beside the lock.
+        digest: The file's bytes, so a graph edited by hand is caught.
+        by: What resolved it, name and version, for the day an
+            install refuses and someone must know what wrote it.
+    """
+
+    file: str
+    digest: Digest
+    by: str = ""
+
+    def to_json(self) -> dict[str, Any]:
+        """The graph as a JSON object."""
+        return {"file": self.file, "digest": str(self.digest), "by": self.by}
+
+    @classmethod
+    def from_json(cls, value: Any, *, where: str) -> Graph:
+        """The graph in *value*.
+
+        Raises:
+            LockError: when it is not one, naming *where*.
+        """
+        if (
+            not isinstance(value, dict)
+            or not isinstance(value.get("file"), str)
+            or not value["file"]
+            or not isinstance(value.get("digest"), str)
+        ):
+            raise LockError(f"{where}: the graph is not one")
+        try:
+            digest = Digest.parse(value["digest"])
+        except ValueError as error:
+            raise LockError(f"{where}: {error}") from None
+        return cls(value["file"], digest, str(value.get("by", "")))
+
+
+@dataclass(frozen=True)
 class Locked:
     """One tool as the lock holds it.
 
@@ -91,17 +141,24 @@ class Locked:
         version: The version locked.
         hosts: Per locked host the deployment's digest; empty for a
             delegated kind, whose installer resolves the host.
+        graph: The resolved graph of a delegated kind's version, or
+            None for a downloaded kind and for a delegated one locked
+            before a graph was written for it.
     """
 
     version: str
     hosts: dict[str, Digest] = field(default_factory=dict)
+    graph: Graph | None = None
 
     def to_json(self) -> dict[str, Any]:
         """The entry as a JSON object."""
-        return {
+        out: dict[str, Any] = {
             "version": self.version,
             "hosts": {host: str(digest) for host, digest in sorted(self.hosts.items())},
         }
+        if self.graph is not None:
+            out["graph"] = self.graph.to_json()
+        return out
 
 
 @dataclass(frozen=True)
@@ -167,7 +224,11 @@ class Lock:
                 }
             except ValueError as error:
                 raise LockError(f"{path}: {name}: {error}") from None
-            locked[str(name)] = Locked(entry["version"], digests)
+            raw = entry.get("graph")
+            graph = (
+                None if raw is None else Graph.from_json(raw, where=f"{path}: {name}")
+            )
+            locked[str(name)] = Locked(entry["version"], digests, graph)
         return cls(tuple(hosts), locked)
 
 
