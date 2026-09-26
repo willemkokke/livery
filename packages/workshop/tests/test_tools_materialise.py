@@ -22,7 +22,7 @@ from livery.toolroom.store import (
     _engine,
 )
 from livery.workshop import _env_tasks, _sync, _tool_tasks, _tools
-from workshop_hosts import HOSTS
+from workshop_hosts import HOSTS, lock_for_this_host  # noqa: F401
 
 THREE = HOSTS
 

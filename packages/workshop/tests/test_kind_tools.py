@@ -17,7 +17,7 @@ from livery.toolroom.store import (
     Surface,
 )
 from livery.workshop import _tool_tasks, _tools
-from workshop_hosts import HOSTS
+from workshop_hosts import HOSTS, lock_for_this_host  # noqa: F401
 
 SHA = "d8b96221828ad6f97ac7ac0ab7e95872341af763001e8803e8267652c2652620"
 THREE = HOSTS
