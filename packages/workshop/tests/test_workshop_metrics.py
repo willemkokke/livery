@@ -46,7 +46,11 @@ def _in_ci(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _trace(
-    path: Path, *, tasks: dict[str, float], tests: dict[str, float] | None = None
+    path: Path,
+    *,
+    tasks: dict[str, float],
+    tests: dict[str, float] | None = None,
+    steps: list[dict[str, object]] | None = None,
 ) -> Path:
     events: list[dict[str, object]] = [
         {"ph": "M", "name": "process_name", "pid": 1, "args": {"name": "fm"}}
@@ -75,6 +79,8 @@ def _trace(
             "dur": 250_000,
         }
     )
+    for step in steps or []:
+        events.append({"ph": "X", "cat": "step", "pid": 1, **step})
     for nodeid, ms in (tests or {}).items():
         for phase in ("test.setup", "test.call", "test.teardown"):
             events.append(
@@ -162,6 +168,41 @@ def test_the_leg_row_reads_tasks_waits_and_packages(tmp_path: Path) -> None:
 
 
 # --- the collect: refusals first ----------------------------------------------
+
+
+def test_a_step_belongs_to_the_innermost_task_holding_it_on_its_own_track(
+    tmp_path: Path,
+) -> None:
+    """A step carries no task: the trace nests it under the one it ran in.
+
+    So a step outside every task has no address, one on another track
+    is not a task's however their times overlap, and a title a task ran
+    twice is one key and their sum.
+    """
+    trace = _trace(
+        tmp_path / "fm-profile.json",
+        tasks={"check": 4640.0, "check/typecheck/typecheck": 2030.0},
+        steps=[
+            # Inside the inner task, which is inside the outer one.
+            {"name": "basedpyright --warnings", "tid": 1, "ts": 1100.0, "dur": 900_000},
+            {"name": "mypy", "tid": 1, "ts": 2100.0, "dur": 100_000},
+            {"name": "mypy", "tid": 1, "ts": 2300.0, "dur": 50_000},
+            # Inside the outer task alone: it runs after the inner one ends,
+            # every task in this trace starting at the same instant.
+            {"name": "ruff check", "tid": 1, "ts": 3_000_000.0, "dur": 10_000},
+            # Another track, overlapping in time: no task holds it.
+            {"name": "somewhere else", "tid": 9, "ts": 1100.0, "dur": 900_000},
+        ],
+    )
+    row, why = _metrics.leg_row(trace, job=JOB)
+    assert why == "" and row is not None
+    assert row["task_steps"] == {
+        "check/ruff check": 10.0,
+        "check/typecheck/typecheck/basedpyright --warnings": 900.0,
+        "check/typecheck/typecheck/mypy": 150.0,
+    }
+    # The tasks themselves are untouched, so nothing counts twice.
+    assert row["tasks"] == {"check": 4640.0, "check/typecheck/typecheck": 2030.0}
 
 
 def test_the_leg_row_names_the_slowest_tests_by_their_call_phase(

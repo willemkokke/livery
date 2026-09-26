@@ -100,6 +100,51 @@ def _ms(event: dict[str, Any]) -> float:
     return round(float(event.get("dur", 0.0)) / 1000.0, 1)
 
 
+def _track(event: dict[str, Any]) -> int:
+    return int(event.get("tid", 0))
+
+
+def _start(event: dict[str, Any]) -> float:
+    return float(event.get("ts", 0.0))
+
+
+def _end(event: dict[str, Any]) -> float:
+    return _start(event) + float(event.get("dur", 0.0))
+
+
+def _steps_by_task(
+    spans: list[tuple[str, int, float, float]],
+    ran: list[tuple[str, int, float, float, float]],
+) -> dict[str, float]:
+    """What each task's own steps took, by `<task>/<step title>`.
+
+    A step carries no task of its own: the trace nests it under the
+    task it ran in, on that task's track and inside its span, which is
+    how the timeline draws it. So a step belongs to the innermost task
+    containing it on its own track, and a step on another track is not
+    that task's however their times overlap. A title a task ran twice
+    is one key and their sum, since the question a key answers is what
+    the task spent on that command.
+
+    A step no task contains has no address and is left out; the trace
+    writes one only inside a task, so this is a trace that is not the
+    shape it claims.
+    """
+    by_key: dict[str, float] = {}
+    for name, track, start, end, ms in ran:
+        holding = [
+            span
+            for span in spans
+            if span[1] == track and span[2] <= start and end <= span[3]
+        ]
+        if not holding:
+            continue
+        task = min(holding, key=lambda span: span[3] - span[2])[0]
+        key = f"{task}/{name}"
+        by_key[key] = round(by_key.get(key, 0.0) + ms, 1)
+    return by_key
+
+
 def _package_of(nodeid: str) -> str:
     """The workspace package a test node belongs to, or ``""``."""
     parts = nodeid.split("::", 1)[0].split("/")
@@ -126,6 +171,8 @@ def leg_row(trace: Path, *, job: str) -> tuple[dict[str, Any] | None, str]:
     if not isinstance(events, list):
         return None, f"the trace at {trace} carries no event list"
     tasks: dict[str, float] = {}
+    spans: list[tuple[str, int, float, float]] = []
+    ran: list[tuple[str, int, float, float, float]] = []
     waits: dict[str, float] = defaultdict(float)
     packages: dict[str, dict[str, float]] = defaultdict(
         lambda: {"tests_ms": 0.0, "tests": 0}
@@ -143,6 +190,9 @@ def leg_row(trace: Path, *, job: str) -> tuple[dict[str, Any] | None, str]:
             ends.append(float(event.get("ts", 0.0)) + float(event.get("dur", 0.0)))
         if cat == "task":
             tasks[name] = _ms(event)
+            spans.append((name, _track(event), _start(event), _end(event)))
+        elif cat == "step":
+            ran.append((name, _track(event), _start(event), _end(event), _ms(event)))
         elif cat == "lane":
             waits[name.removeprefix("lane: ")] += _ms(event)
         elif cat.startswith("test."):
@@ -156,6 +206,7 @@ def leg_row(trace: Path, *, job: str) -> tuple[dict[str, Any] | None, str]:
                     calls.append((_ms(event), name))
     if not tasks:
         return None, f"the trace at {trace} records no task: nothing to row"
+    steps = _steps_by_task(spans, ran)
     total = round((max(ends) - min(begins)) / 1000.0, 1) if begins else 0.0
     # The slowest tests by their call phase, for the speed judge's
     # warning to name; the per-package sums count every phase.
@@ -164,6 +215,7 @@ def leg_row(trace: Path, *, job: str) -> tuple[dict[str, Any] | None, str]:
         "job": job,
         "total_ms": total,
         "tasks": dict(sorted(tasks.items())),
+        "task_steps": dict(sorted(steps.items())),
         "waits_ms": {name: round(ms, 1) for name, ms in sorted(waits.items())},
         "packages": dict(sorted(packages.items())),
         "slowest": [
@@ -397,6 +449,11 @@ def _metrics(entry: dict[str, Any]) -> dict[str, dict[str, float]]:
         for step in row.get("steps", []):
             if isinstance(step.get("ms"), int | float):
                 metrics[f"step {step['name']}"] = float(step["ms"])
+        # The job's steps above are the workflow's; these are the ones a
+        # task ran, addressed under it, so a checker that moved is named
+        # rather than left inside its task's total.
+        for key, ms in row.get("task_steps", {}).items():
+            metrics[f"step {key}"] = float(ms)
         for package, data in row.get("packages", {}).items():
             metrics[f"tests {package}"] = float(data.get("tests_ms", 0.0))
         out[name] = metrics
