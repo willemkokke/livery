@@ -318,6 +318,19 @@ def test_the_github_release_gains_the_matrix_only_with_a_native_member() -> None
     # The wave decides prebuilt from the collected dist; the shell
     # spells nothing.
     assert "--prebuilt" not in native
+    # The legs that build native packages carry conan's home across
+    # runs: a third-party package builds from source once per key.
+    assert "path: ${{ runner.temp }}/conan" in native
+    assert (
+        "key: conan-${{ runner.os }}-${{ runner.arch }}"
+        "-${{ hashFiles('packages/*/conanfile.py') }}" in native
+    )
+    assert "restore-keys: conan-${{ runner.os }}-${{ runner.arch }}-" in native
+    # One job only: the publish job attaches what the legs built.
+    assert native.count("path: ${{ runner.temp }}/conan") == 1
+    assert "${{ runner.temp }}/conan" not in _actions_workflow(
+        _release_answers(with_native=False), "fm", "release.yml", forge="github"
+    )
 
 
 def test_the_gitea_release_matrix_rides_the_declared_wheel_platforms() -> None:

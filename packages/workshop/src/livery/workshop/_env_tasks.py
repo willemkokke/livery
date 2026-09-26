@@ -210,7 +210,9 @@ def runner_placements(environ: dict[str, str]) -> dict[str, str]:
     cache into the venv. The entry script exports the same paths
     before its sync and materialise, since it runs before any verb
     can; the workflow's cache step restores and saves the store under
-    the data directory. Empty off a runner that names no temp.
+    the data directory. conan's home joins them, on the working drive
+    and at the path the workflow's own cache step restores. Empty off
+    a runner that names no temp.
     """
     from livery.footman import _paths  # pyright: ignore[reportPrivateUsage]
 
@@ -219,6 +221,7 @@ def runner_placements(environ: dict[str, str]) -> dict[str, str]:
         return {}
     return {
         "UV_CACHE_DIR": f"{runner_temp}/uv-cache",
+        "CONAN_HOME": f"{runner_temp}/conan",
         _paths.env_var("DATA_DIR"): f"{runner_temp}/footman",
     }
 

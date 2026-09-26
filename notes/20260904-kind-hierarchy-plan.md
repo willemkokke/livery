@@ -335,6 +335,15 @@ The shape, mirroring the python kind:
   with `--build=missing`, with the conan home cached by the CI lane
   keyed on the lockfile and profile. Conan Center is on the merge path
   the way PyPI already is.
+- The lane keeps conan's home on the runner's working drive, beside
+  uv's cache and the tool store, and a leg that builds native
+  packages restores and saves it: the key is the recipes with the OS
+  and the architecture, the restore key their prefix. A third-party
+  package compiles once per key and downloads afterwards. Profiles
+  are conan's own detection, which writes `build_type=Release`, and
+  the dependency provider derives the host profile from CMake inside
+  whatever environment builds, so the manylinux container's
+  toolchain is the one its packages are built for.
 
 Acceptance:
 - The conformance chain's stage that wires both kinds proves the
@@ -533,6 +542,16 @@ Acceptance:
 - 2026-09-26 (Willem): clang-format and clang-tidy come with the LLVM
   static release the store will carry as a compiler; no separate tool
   record for either.
+- 2026-09-26 (slice 7c shape): the conan home is keyed by
+  `packages/*/conanfile.py` rather than a conan lockfile, because
+  this workspace commits none: the recipes carry the requirements,
+  and a range that resolves to a newer version inside an unchanged
+  recipe reuses the entry and builds that one package. The cache
+  step is GitHub's alone, as the tool store's is; the other lanes
+  have no cache action. No profile is written over conan's
+  detection: detection already answers `build_type=Release`, and
+  cmake-conan derives the host profile from CMake, so a container
+  build is settled by the container's own toolchain.
 - 2026-09-26 (slice 7a shape): CMake reads
   `CMAKE_PROJECT_TOP_LEVEL_INCLUDES` from no environment variable, so
   the provider's record sets `CMAKE_CONAN_PROVIDER` to the file inside
@@ -590,6 +609,16 @@ All four ruled. Willem's go, 2026-09-04: phase 1 is in build.
 7. Resolved 2026-09-26 (Willem): sequenced as phases 7 and 8, the
    conan store record first (livery#728). The rulings are in the
    decision record under that date.
+8. Open (2026-09-26, slice 7c): the lane evidence. This workspace
+   has no member that declares wheel platforms, so no release run
+   here emits a wheels leg, and the conan cache's restore cannot be
+   read from a log of ours. What is proved: the step's path and key
+   by test, the home's placement by test, and the cache action
+   itself by the tool store, which every GitHub job here restores.
+   What is not: a second wheels leg reusing a third-party build.
+   The evidence lands with the first workspace whose release runs a
+   wheels leg on a GitHub lane; whoever reads that log first records
+   it here. Owner: Willem.
 
 Phase 2 evidence (2026-09-04): `fm check` exit 0 in a conformance
 workspace carrying one cpp-conan member (rendered from the

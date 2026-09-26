@@ -104,6 +104,8 @@ class Job:
         profile: Whether the job's trace is kept as an artifact.
         docs_tools: Whether the docs generators' system requirements
             are installed before the call.
+        conan_cache: Whether the job builds native packages, so the
+            lane restores and saves conan's home around it.
         deploy: Whether the job publishes the site through the
             contract's publish seam after the call.
         publishes: The artifact the job uploads, ``""`` for none.
@@ -139,6 +141,7 @@ class Job:
     publishes_index: bool = False
     profile: bool = False
     docs_tools: bool = False
+    conan_cache: bool = False
     deploy: bool = False
     publishes: str = ""
     collects: str = ""
@@ -357,6 +360,7 @@ DECLARED: tuple[Point, ...] = (
                 fetch="full",
                 driver_pin=True,
                 publishes="wheels",
+                conan_cache=True,
                 note=(
                     "Every platform's wheels, built before the wave: the"
                     " matrix feeds the publish job through artifacts, so one"

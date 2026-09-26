@@ -40,6 +40,10 @@ CACHE = "actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0"
 #: its `toolroom`. Literal here because the step runs before any verb
 #: can: the venv it would need is what the entry step makes.
 STORE_HOME = "${{ runner.temp }}/footman/toolroom"
+#: Where a GitHub job keeps conan's home: the working drive, the same
+#: path `livery.workshop._env_tasks.runner_placements` exports, so the
+#: cache step and every conan the verbs run agree on one directory.
+CONAN_HOME = "${{ runner.temp }}/conan"
 UPLOAD = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1"
 DOWNLOAD = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1"
 #: The upload action the gitea lane runs. An act_runner that delivers
@@ -192,6 +196,29 @@ def _store_cache_step() -> str:
         "          key: tools-${{ runner.os }}-${{ runner.arch }}"
         "-${{ hashFiles('tools.lock') }}\n"
         "          restore-keys: tools-${{ runner.os }}-${{ runner.arch }}-\n"
+    )
+
+
+def _conan_cache_step() -> str:
+    """Conan's home restored around a job that builds native packages.
+
+    Keyed by the recipes, the OS and the architecture, with the
+    prefix as the restore key: a third-party package from Conan
+    Center is built from source once per key and downloaded from the
+    cache afterwards. The recipes are the key because they carry the
+    requirements; a range that resolves to a newer version inside an
+    unchanged recipe reuses the entry and builds that one package.
+    The cache is the speed layer and Conan Center the origin, so a
+    miss costs time, never a red leg.
+    """
+    recipes = "packages/*/conanfile.py"
+    return (
+        f"      - uses: {CACHE}\n"
+        "        with:\n"
+        f"          path: {CONAN_HOME}\n"
+        "          key: conan-${{ runner.os }}-${{ runner.arch }}"
+        f"-${{{{ hashFiles('{recipes}') }}}}\n"
+        "          restore-keys: conan-${{ runner.os }}-${{ runner.arch }}-\n"
     )
 
 
@@ -574,6 +601,8 @@ def _actions_job(
         lines.append(_docs_requirements_step(answers))
     if forge == "github":
         lines.append(_store_cache_step())
+        if job.conan_cache:
+            lines.append(_conan_cache_step())
     lines.append(
         _enter_step(matrix_python=job.matrix in ("legs", "pythons", "declared"))
     )
