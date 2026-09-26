@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+import livery.footman as footman
 from livery.footman import _app, _gc, _paths
 
 
@@ -225,6 +226,15 @@ def test_the_collector_child_ignores_the_directory_it_starts_in(tmp_path, monkey
     assert cmd[0][1:3] == ["-P", "-c"]
     assert "_gc.main()" in cmd[0][3]
     assert cmd[0][4:] == [str(tmp_path / "cache"), "stem"]
+
+
+def test_a_run_whose_installation_is_gone_skips_the_collector(tmp_path, monkeypatch):
+    # A submit removes the worktree it ran from, editable install included,
+    # and the exit path cannot import the spawner any more: the collection
+    # is skipped, never a traceback after a merge.
+    monkeypatch.setitem(sys.modules, "livery.footman._complete", None)
+    monkeypatch.delattr(footman, "_complete", raising=False)
+    _app._spawn_gc(tmp_path / "cache", "stem")  # returns, raises nothing
 
 
 def test_trigger_respects_a_young_stamp(tmp_path, monkeypatch):

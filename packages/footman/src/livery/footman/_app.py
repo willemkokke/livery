@@ -1775,8 +1775,17 @@ def _maybe_collect(cfg: dict[str, object], skip_stem: str) -> None:
 def _spawn_gc(cache: Path, skip_stem: str) -> None:
     """Detach the collector child through `_complete.detach` — one copy of
     the background-child dance, where its Windows story is pinned by tests,
-    instead of the drift-prone verbatim twin this used to carry."""
-    from livery.footman import _complete
+    instead of the drift-prone verbatim twin this used to carry.
+
+    A background child never breaks the foreground that spawned it, and
+    that holds for the spawn itself: a run whose own installation is gone
+    by its end, a submit that removed the worktree it ran from, cannot
+    import the spawner and skips the collection, which the next run's
+    stamp schedules again."""
+    try:
+        from livery.footman import _complete
+    except ImportError:
+        return
 
     _complete.detach(
         [
