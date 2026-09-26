@@ -42,4 +42,7 @@ CMAKE_PROJECT_TOP_LEVEL_INCLUDES = { env = "CMAKE_CONAN_PROVIDER" }
 # What conan builds for the provider: a package the cache lacks, and a
 # workspace sibling registered editable, from its source at HEAD. A
 # release leg registers no editable, so there the second is a no-op.
-CONAN_INSTALL_ARGS = "--build=missing;--build=editable"
+# Those builds use Ninja on every host, the store's generator, under
+# the compiler environment conan activates; a Visual Studio generator
+# would let MSBuild pick a platform apart from the compiler conan names.
+CONAN_INSTALL_ARGS = "--build=missing;--build=editable;-c;tools.cmake.cmaketoolchain:generator=Ninja"
