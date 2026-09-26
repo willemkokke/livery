@@ -164,6 +164,21 @@ def test_the_monorepo_is_in_sync() -> None:
 _SHIPPED_SETTINGS = ROOT / "packages/workshop/src/livery/workshop/content/settings.json"
 
 
+def test_the_shipped_settings_are_json_a_strict_reader_accepts() -> None:
+    """The agent runner reads `.claude/settings.json` as JSON, not JSONC.
+
+    A comment there costs every permission rule and hook in the file,
+    and the runner says only that the file did not parse. The editor's
+    own `.vscode/settings.json` is the JSON the render may comment;
+    this one carries no header, which is why `comment_style` exempts
+    it, and the source it is copied from must hold to that too.
+    """
+    import json
+
+    json.loads(_SHIPPED_SETTINGS.read_text(encoding="utf-8"))
+    assert not _SHIPPED_SETTINGS.read_text(encoding="utf-8").startswith("//")
+
+
 def test_settings_json_is_a_copy_even_where_links_work(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     sync_workspace(root)
