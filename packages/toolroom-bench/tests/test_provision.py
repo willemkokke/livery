@@ -196,18 +196,29 @@ def test_nodejs_tier_unpacks_node_whole_and_links_it_into_bin(tmp_path, monkeypa
     """
     from livery.toolroom.bench import _toolfetch
 
+    # The build in this platform's own layout: node.exe with npm's script
+    # under node_modules on Windows, bin/node with it under lib elsewhere.
     payload = io.BytesIO()
-    root = "node-v24.0.0-darwin-arm64"
-    with tarfile.open(fileobj=payload, mode="w:gz") as tar:
-        for name, data in (
+    windows = sys.platform == "win32"
+    root = "node-v24.0.0-win-x64" if windows else "node-v24.0.0-darwin-arm64"
+    members = (
+        (
+            (f"{root}/node.exe", b"MZ"),
+            (f"{root}/node_modules/npm/bin/npm-cli.js", b"// npm\n"),
+        )
+        if windows
+        else (
             (f"{root}/bin/node", b"#!/bin/sh\necho node\n"),
             (f"{root}/lib/node_modules/npm/bin/npm-cli.js", b"// npm\n"),
-        ):
+        )
+    )
+    with tarfile.open(fileobj=payload, mode="w:gz") as tar:
+        for name, data in members:
             info = tarfile.TarInfo(name)
             info.size = len(data)
             info.mode = 0o755
             tar.addfile(info, io.BytesIO(data))
-    archive = tmp_path / "node-v24.0.0-darwin-arm64.tar.gz"
+    archive = tmp_path / f"{root}.tar.gz"
     archive.write_bytes(payload.getvalue())
     monkeypatch.setattr(
         _toolfetch, "releases", lambda driver: [_toolfetch.Release("24.0.0", "v24.0.0")]
@@ -219,7 +230,8 @@ def test_nodejs_tier_unpacks_node_whole_and_links_it_into_bin(tmp_path, monkeypa
     )
     assert out.status == "ok" and out.detail == "24.0.0"
     node = _provision.provisioned_node(tmp_path)
-    assert node is not None and node.parent.parent.name == root
+    assert node is not None
+    assert (node.parent if windows else node.parent.parent).name == root
     assert _provision.npm_cli(node).is_file()
     link = _provision.bin_dir(tmp_path) / (
         "node.cmd" if sys.platform == "win32" else "node"
