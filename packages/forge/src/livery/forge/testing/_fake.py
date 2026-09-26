@@ -395,6 +395,14 @@ class FakeForge:
         state = self._require_repo(owner, name)
         state.tags[tag] = state.branches[state.default_branch]
 
+    def start_runs(self, owner: str, name: str, sha: str) -> None:
+        """Simulate a runner taking every queued run for *sha*; none settles."""
+        state = self._require_repo(owner, name)
+        for run_state in state.runs.values():
+            if run_state.head_sha == sha and run_state.status == "queued":
+                run_state.status = "running"
+                run_state.started_at = _stamp(run_state.id * 60 + 3)
+
     def set_outcome(self, owner: str, name: str, sha: str, outcome: Outcome) -> None:
         """Change what CI will do with every run for *sha* that has not settled.
 

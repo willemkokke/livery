@@ -46,6 +46,7 @@ from livery.workshop._verdict import (
     EXIT_PENDING,
     EXIT_TIMEOUT,
     EXIT_UNREACHABLE,
+    JobWatch,
     Transient,
     classify,
     follow,
@@ -534,6 +535,8 @@ def runs_status_flow(
         nothing = f"no runs yet for {sha[:10]}"
     deadline = time.monotonic() + timeout
     transient = Transient(interval=interval)
+    seen_runs: dict[int, str] = {}
+    jobs = JobWatch()
     while True:
         try:
             if point:
@@ -549,8 +552,14 @@ def runs_status_flow(
             time.sleep(interval)
             continue
         transient.reset()
+        # A line per run when it moves, and a line per job likewise;
+        # a poll that changes nothing prints nothing.
         for run in runs:
-            print(_run_line(run))
+            if seen_runs.get(run.id) != (run.conclusion or run.status):
+                seen_runs[run.id] = run.conclusion or run.status
+                print(_run_line(run))
+        if not point:
+            jobs.report(repo, sha)
         word, code = runs_state(runs)
         if not runs:
             print(f"  {nothing}")
