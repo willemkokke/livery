@@ -94,13 +94,31 @@ def _render_cpp(tmp_path: Path) -> Package:
 def test_build_refuses_without_conan(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """A handle spawns by name, so an undeployed tool is a sentence.
+
+    The spawn raises OSError instead of answering with a failing
+    result, and a traceback names nothing a person can act on.
+    """
     empty = tmp_path / "empty-path"
     empty.mkdir()
     monkeypatch.setenv("PATH", str(empty))
     package = _package(tmp_path / "packages" / "native", "acme-native", "cpp-conan")
     package.directory.mkdir(parents=True)
-    with pytest.raises(_FAILURES, match="conan is not on"):
+    with pytest.raises(_FAILURES, match="conan is not on PATH"):
         _cpp_conan.build(package, tmp_path)
+
+
+def test_a_selected_test_refuses_when_ctest_is_not_deployed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ctest rides the cmake record, and its absence reads the same."""
+    empty = tmp_path / "empty-path"
+    empty.mkdir()
+    monkeypatch.setenv("PATH", str(empty))
+    package = _package(tmp_path / "packages" / "native", "acme-native", "cpp-conan")
+    package.directory.mkdir(parents=True)
+    with pytest.raises(_FAILURES, match="ctest is not on PATH"):
+        _cpp_conan.test(package, tmp_path, selection=("tests/test_native.cpp",))
 
 
 def test_the_cpp_kind_classifies_tests_support_source_and_configuration(
