@@ -42,7 +42,9 @@ index = "records"
 # the gate gains nothing from it; a nightly on it is the case to come back to.
 # What this repository's own tasks run beyond the python kind's tools;
 # a tool locked here has a stub, and one that is not types as `Tool`.
-requires = ["git", "docker", "coverage", "zensical", "cmake"]
+# conan and the cmake-conan provider are here because the workshop's
+# own tests build a native library and an extension against it.
+requires = ["git", "docker", "coverage", "zensical", "cmake", "conan", "cmake_conan"]
 
 # Who reviews the workspace's own governance. These owners guard
 # this contract and the rendered codeowners file, so raising a

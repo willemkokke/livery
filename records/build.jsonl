@@ -1,4 +1,4 @@
-{"name": "build", "description": "", "kind": "uv-tool", "min_version": "", "hosts": []}
+{"name": "build", "description": "", "kind": "pypi", "min_version": "", "hosts": []}
 {"version": "1.2.1", "date": "2024-03-28", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "A simple, correct Python build frontend."}}
 {"verb": "", "help": "A simple, correct Python build frontend.", "wraps": false, "positional": "any", "lead": ""}
 {"verb": "", "option": "config_setting", "flags": ["--config-setting", "-C"], "negation": "", "help": "settings to pass to the backend", "type": "str", "default": null, "choices": []}

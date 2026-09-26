@@ -345,14 +345,19 @@ def sync() -> None:
         print(line)
     for line in sync_workspace(root):
         print(line)
+    # The tools come before `uv sync`: a native member's build under uv
+    # runs cmake, conan and the provider the store supplies, and a
+    # sibling library is consumed at HEAD only once it is registered.
+    for line in materialise_tools(root):
+        print(line)
+    for line in conan_editables(root):
+        print(line)
     run_uv("sync", root=root)
     # The receipt records this sync, so the next command's reconcile
     # compares instead of syncing again.
     from livery.workshop._reconcile import record_receipt
 
     record_receipt(root)
-    for line in materialise_tools(root):
-        print(line)
 
 
 def fetch_store_lines(root: Path) -> list[str]:
@@ -373,6 +378,47 @@ def fetch_store_lines(root: Path) -> list[str]:
             " snapshot stands"
         ]
     return [f"  store: {count} ref(s) of origin's state store fetched"]
+
+
+def conan_editables(root: Path) -> list[str]:
+    """Register every cpp-conan member of the workspace as a conan editable; the lines.
+
+    Conan's editable mode is its workspace source: a consumer's
+    `find_package` resolves the member's reference to the member's
+    source tree, built from HEAD, never to a package in the cache, the
+    same as uv's workspace sources for python members. The contract
+    floor stays the drift guard between the two. A workspace with no
+    such member does nothing; a machine without conan on PATH says
+    so and registers nothing, since the store supplies conan when the
+    environment is entered.
+    """
+    import shutil
+
+    from livery.workshop._packages import discover_packages
+
+    members = [p for p in discover_packages(root) if p.type == "cpp-conan"]
+    if not members:
+        return []
+    conan = shutil.which("conan")
+    if conan is None:
+        return [
+            "  conan editables: conan is not on PATH, so none registered; enter"
+            f" the environment and re-run `{footman.prog()} sync`"
+        ]
+    lines: list[str] = []
+    for member in members:
+        result = footman.run(
+            [conan, "editable", "add", str(member.directory)],
+            nofail=True,
+            recorded=False,
+        )
+        if result.code == 0:
+            lines.append(f"  conan editable: {member.path} at HEAD")
+        else:
+            tail = (result.stdout + result.stderr).strip().splitlines()
+            why = tail[-1] if tail else f"exit {result.code}"
+            lines.append(f"  conan editable: {member.path} refused: {why}")
+    return lines
 
 
 def materialise_tools(root: Path, *, offline: bool = False) -> list[str]:

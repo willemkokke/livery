@@ -49,8 +49,10 @@ moved. An option unchanged since the previous reading has no line.
 A deployment resolves through four layers, most specific winning: the
 tool's layout, the tool's override for the host, the version's layout,
 the version's override for the host. The layout fields are `root`, the
-directory inside the archive hoisted to the install root; `exe`, a
-binary's executable name; `entry_points`, the install-relative paths of
+directory inside the archive hoisted to the install root; `file`, the
+name a bare download (one file, no archive) is saved under; `format`,
+what the artifact is (`zip`, `tar` or `file`) when its URL's suffix
+would sniff wrong; `entry_points`, the install-relative paths of
 the executables the deployment puts on PATH, annotated here and never
 discovered by scanning a directory; `paths`, the install-relative
 directories put on PATH; `env`, with `$package` standing for the
@@ -117,9 +119,11 @@ Loading a record resolves every host of every version and every
 version's surface, and refuses a record that does not resolve whole:
 an artifact without a sha256, a layer naming a host or a version the
 record does not carry, a layer restating the value it inherits, a
-version whose host resolves with no `paths`, a downloaded kind with no
-entry point, a binary with no `exe` or whose `exe` is not among its
-entry points, a version with neither an artifact nor a surface, a
+version whose host resolves with no `paths`, a download that nothing
+reaches (no paths, no entry point, no env value under `$package`), a
+path directory with no entry point or an entry point with no paths, a
+bare download with no `file` or whose entry points are not that file
+alone, a version with neither an artifact nor a surface, a
 surface read on no platform, a surface restating the help or a verb it
 inherits, a withdrawn verb no earlier version has, an absence naming a
 verb or option the version lacks or a platform that did not read it,
@@ -131,8 +135,8 @@ and a delta out of sequence. The schema of both documents is
 `ensure` lands a version's artifact through the sources in order and
 through the origin URL unless the store is offline; a mismatch at any
 tier is refused naming the tier, and an offline miss names
-`<name>@<version>` and the origin. The archive is extracted, its root
-hoisted, the excluded members removed, a binary placed as its `exe`,
+`<name>@<version>` and the origin. An archive is extracted and its root
+hoisted, a bare download saved as its `file`, the excluded members removed,
 the shims made, every declared entry point checked for in the tree,
 which refuses naming the tool, the version, the host and the path when
 one is absent, the directory collected as a tree with the entry points
@@ -154,7 +158,7 @@ elsewhere.
 `supply` is the primitive `ensure` stands on: a tool by name, kind,
 version and deployment, which is what a consumer holds after reading
 the catalogue. The delegated kinds go through their installer rather
-than the objects. A `uv-tool` is installed by uv at the locked version
+than the objects. A `pypi` tool is installed by uv at the locked version
 into a directory of its own under the home, the record's `package`
 naming what uv installs when it differs from the tool's name, and its
 launchers under `bin` are its entry points. An `npm` tool is installed
@@ -168,14 +172,15 @@ is refused naming where it points. A `system-check` tool is the
 machine's own, found on PATH and held to the record's `min_version`
 alone, since its locked version is the newest reading the stubs render
 for and not a version anyone installs, and the store installs nothing
-for it. `uv-python` refuses naming the kind until it is supplied the
+for it. `python` refuses naming the kind until it is supplied the
 same way. A delegated tool has no tree.
 
 A record's `mode` says how a materialised tool reaches PATH: `link`
 puts its entry points in the checkout's bin directory, `path` its own
 directories on PATH, `none` neither, for a tool reached only through a
-typed handle; a binary links and a system tool takes `none` unless the
-record says otherwise, and every other kind takes `path`.
+typed handle; a download with paths takes `path`, one reached through
+its env alone and a system tool take `none`, unless the record says
+otherwise, and every installer's kind takes `path`.
 
 A version or host the record does not carry refuses by name, naming
 what it does carry. The six host keys are `macos-arm`, `macos-x64`,

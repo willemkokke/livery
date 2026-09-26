@@ -1803,3 +1803,64 @@ def test_the_base_is_the_recorded_parent_while_origin_has_it(
     assert resolve_base(git, "main", given=False) == "feat/0-parent"
     # The flag wins over the record.
     assert resolve_base(git, "release", given=True) == "release"
+
+
+def test_the_watch_prints_each_jobs_move_and_names_the_red_one_with_its_lines(
+    rig: tuple[FakeForge, SubmitGit],
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from livery.forge import ForgeError
+    from livery.workshop._verdict import EXIT_CI_FAILED, JobWatch, elapsed_label, follow
+
+    assert [elapsed_label(s) for s in (0, 37, 65, 3725)] == [
+        "0s",
+        "37s",
+        "1m05s",
+        "1h02m",
+    ]
+
+    fake, git = rig
+    git.auto_settle = False
+    git.outcome = "failure"
+    number = _submit(fake, git, armed=False, follow_to_verdict=False)
+    repo = _repo(fake)
+    pr = repo.pr.get(number)
+    assert pr is not None
+    # The clock is read once when the watch starts and once per line.
+    ticks = iter([0.0, 0.0, 12.0, 65.0])
+    watch = JobWatch(clock=lambda: next(ticks))
+    # The first report names the queued job; a report with nothing moved
+    # prints nothing at all.
+    assert watch.report(repo, pr.head_sha) == ["      0s  ci.yml / gate: queued"]
+    assert watch.report(repo, pr.head_sha) == []
+    fake.start_runs(OWNER, NAME, pr.head_sha)
+    assert watch.report(repo, pr.head_sha) == ["     12s  ci.yml / gate: running"]
+    # A log the forge has not stored yet: the red job is named alone.
+    stored = type(repo.checks).job_log
+
+    def not_yet(self: object, job: int) -> str:
+        raise ForgeError("not stored yet", status=404)
+
+    monkeypatch.setattr(type(repo.checks), "job_log", not_yet)
+    fake.settle(OWNER, NAME, pr.head_sha)
+    assert watch.report(repo, pr.head_sha) == ["   1m05s  ci.yml / gate: failed"]
+    # With the log there, the failure lines print under the name.
+    monkeypatch.setattr(type(repo.checks), "job_log", stored)
+    fresh = JobWatch(clock=lambda: 0.0)
+    log = "collecting\nFAILED tests/test_x.py::test_y - boom\n1 failed\n"
+    monkeypatch.setattr(type(repo.checks), "job_log", lambda self, job: log)
+    lines = fresh.report(repo, pr.head_sha)
+    assert lines == [
+        "      0s  ci.yml / gate: failed",
+        "          FAILED tests/test_x.py::test_y - boom",
+    ]
+    # The follow prints the same, then the verdict naming the job.
+    capsys.readouterr()
+    with pytest.raises(SystemExit) as caught:
+        follow(repo, "feat/1-first", git, interval=0, timeout=1)
+    assert caught.value.code == EXIT_CI_FAILED
+    out = capsys.readouterr().out
+    assert out.index("ci.yml / gate: failed") < out.index(
+        "ci-failed: ci.yml: gate (failure)"
+    )

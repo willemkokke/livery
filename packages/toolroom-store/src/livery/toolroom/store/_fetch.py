@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from livery.strongroom import Unreachable, fetch_url
+from livery.toolroom.store._record import ARCHIVE_SUFFIXES
 
 USER_AGENT = "livery-toolroom"
 """What every read says it is; GitHub and GitLab refuse a request without one."""
@@ -34,8 +35,8 @@ TRIES = 3
 BACKOFF = 1.0
 """Seconds between tries, multiplied by the try number."""
 
-ARCHIVES = (".tar.gz", ".tgz", ".tar.xz", ".tar.bz2", ".zip")
-"""The archive suffixes the store unpacks."""
+ARCHIVES = ARCHIVE_SUFFIXES
+"""The archive suffixes the store unpacks; the record module's list."""
 
 _TRANSIENT_STATUSES = frozenset({408, 429})
 
@@ -169,11 +170,12 @@ def fetch_file(url: str, into: Path, *, tries: int = TRIES) -> Path:
     raise FetchError(f"{url}: {last}", status=last.status if last else None)
 
 
-def unpack(archive: Path, into: Path, *, name: str = "") -> None:
+def unpack(archive: Path, into: Path, *, name: str = "", format: str = "") -> None:
     """Extract *archive*, a zip or a tar, whole into *into*.
 
     *name* is the archive's file name when the path does not carry it
-    (an object landed by digest); the suffix decides the format. A
+    (an object landed by digest); its suffix decides the format unless
+    *format* says `zip` or `tar`, for an archive whose name lies. A
     zip member's mode is restored where it is set, and a tar is
     extracted with the data filter, so a member cannot write outside
     *into*.
@@ -185,7 +187,7 @@ def unpack(archive: Path, into: Path, *, name: str = "") -> None:
     label = (name or archive.name).lower()
     into.mkdir(parents=True, exist_ok=True)
     try:
-        if label.endswith(".zip"):
+        if format == "zip" or (not format and label.endswith(".zip")):
             with zipfile.ZipFile(archive) as opened:
                 opened.extractall(into)
                 root = into.resolve()
@@ -197,7 +199,7 @@ def unpack(archive: Path, into: Path, *, name: str = "") -> None:
                     if target.is_relative_to(root) and target.is_file():
                         target.chmod(mode)
             return
-        if not label.endswith(ARCHIVES):
+        if format != "tar" and not label.endswith(ARCHIVES):
             raise UnpackError(
                 f"{name or archive.name} is not an archive the store unpacks"
             )

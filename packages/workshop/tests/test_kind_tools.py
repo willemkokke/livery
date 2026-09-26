@@ -48,7 +48,7 @@ def _bun(*versions: str) -> Record:
     """bun, the archive an npm tool naming it runs on, on the three hosts."""
     return Record(
         "bun",
-        kind="archive",
+        kind="download",
         hosts=THREE,
         layout=Layout(entry_points=("bun",), paths=(".",)),
         deltas=tuple(
@@ -70,7 +70,7 @@ def _node(*versions: str) -> Record:
     """node, the archive an npm tool runs on by default, on the three hosts."""
     return Record(
         "node",
-        kind="archive",
+        kind="download",
         hosts=THREE,
         layout=Layout(entry_points=("bin/node",), paths=("bin",)),
         deltas=tuple(
@@ -96,7 +96,7 @@ def _records(root: Path, *records: Record) -> None:
 def _python_tools(*versions: str) -> list[Record]:
     """A record per tool the python kind requires, at *versions*."""
     return [
-        Record(name, kind="uv-tool", deltas=_read(*versions))
+        Record(name, kind="pypi", deltas=_read(*versions))
         for name in (
             "git_cliff",
             "uv",
@@ -170,9 +170,9 @@ def test_a_version_on_fewer_hosts_than_the_lock_covers_refuses_naming_the_host(
         root,
         Record(
             "tea",
-            kind="binary",
+            kind="download",
             hosts=THREE,
-            layout=Layout(exe="tea", entry_points=("tea",), paths=(".",)),
+            layout=Layout(file="tea", entry_points=("tea",), paths=(".",)),
             deltas=(
                 RecordDelta(
                     1,
@@ -283,7 +283,7 @@ def test_the_three_sites_union_and_each_names_itself(
     )
     _records(
         root,
-        Record("git-cliff", kind="uv-tool", deltas=_read("2.0.0")),
+        Record("git-cliff", kind="pypi", deltas=_read("2.0.0")),
         Record("cspell", kind="npm", runtime="bun", deltas=_read("1.0.0", "2.0.0")),
         _bun("1.3.0"),
     )
@@ -322,7 +322,7 @@ def test_add_declares_at_the_project_site_and_locks_with_no_network(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     root = _workspace(tmp_path, monkeypatch)
-    _records(root, Record("git-cliff", kind="uv-tool", deltas=_read("2.0.0", "2.1.0")))
+    _records(root, Record("git-cliff", kind="pypi", deltas=_read("2.0.0", "2.1.0")))
     import socket
 
     def no_network(*args: object, **kwargs: object) -> None:
@@ -355,7 +355,7 @@ def test_add_declares_at_the_project_site_and_locks_with_no_network(
     _tool_tasks.tools_add("git-cliff>=2.0")
     assert "was declared already" in capsys.readouterr().out
     # A second requirement joins the list on the same line.
-    _records(root, Record("black", kind="uv-tool", deltas=_read("1.0.0")))
+    _records(root, Record("black", kind="pypi", deltas=_read("1.0.0")))
     _tool_tasks.tools_add("black")
     contract = (root / "workshop.toml").read_text(encoding="utf-8")
     assert 'requires = ["git-cliff>=2.0", "black"]' in contract
@@ -391,9 +391,7 @@ def test_upgrade_moves_one_entry_and_every_package_with_it(
     before = Lock.load(root / "tools.lock")
     assert before.tools["ruff"].version == "1.1.0"
     # A newer ruff arrives; the lock stands until asked.
-    _records(
-        root, Record("ruff", kind="uv-tool", deltas=_read("1.0.0", "1.1.0", "1.2.0"))
-    )
+    _records(root, Record("ruff", kind="pypi", deltas=_read("1.0.0", "1.1.0", "1.2.0")))
     _tool_tasks.tools_lock()
     assert Lock.load(root / "tools.lock").tools["ruff"].version == "1.1.0"
     capsys.readouterr()

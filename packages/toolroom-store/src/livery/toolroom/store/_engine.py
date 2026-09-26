@@ -2,7 +2,7 @@
 
 `ensure` lands a version's artifact by the record's digest through the store's
 sources, and through the origin URL unless the store is offline;
-extracts it, hoists the root, places a binary as its exe, applies the
+extracts it, hoists the root, saves a bare file as its `file`, applies the
 shims, collects the directory as a tree, moves `tools/<name>@<version>`
 to it write-once, and views the tree at the home's tool directory. A
 second `ensure` is a probe. `link` fills a checkout's bin directory
@@ -49,6 +49,7 @@ from livery.toolroom.store._record import (
     PACKAGE_VAR,
     Deployment,
     Record,
+    artifact_format,
     host_key,
     resolve,
 )
@@ -268,7 +269,7 @@ def _launchers(bin_dir: Path) -> tuple[str, ...]:
 def _delegated(entry_points: tuple[str, ...]) -> Deployment:
     """The deployment a delegated kind reports: its launchers under `bin`."""
     return Deployment(
-        "", "", "", "", entry_points, ("bin",) if entry_points else (), {}, {}, ()
+        "", "", "", "", "", entry_points, ("bin",) if entry_points else (), {}, {}, ()
     )
 
 
@@ -379,7 +380,7 @@ class Store:
 
         An `archive` or `binary` lands its artifact by the deployment's
         digest, extracts it, collects it as a tree and views it. A
-        `uv-tool` is installed by uv into its own directory under the
+        `pypi` is installed by uv into its own directory under the
         home, *package* naming what uv installs when it differs from the
         tool's name, and its launchers are the entry points. An `npm`
         tool is installed the same way through *runtime_exe*, the
@@ -389,7 +390,7 @@ class Store:
         which the runtime answers on the caller's PATH, bun through the
         `node` shim its record declares. A `system-check` is the
         machine's own tool, found on PATH and held to *min_version*.
-        `uv-python` is not supplied through the store yet and refuses
+        `python` is not supplied through the store yet and refuses
         naming the kind.
 
         Raises:
@@ -408,7 +409,7 @@ class Store:
                     f"{name}: a {kind} needs its deployment to be supplied"
                 )
             return self._supply_download(name, kind, version, deployment)
-        if kind == "uv-tool":
+        if kind == "pypi":
             return self._supply_uv_tool(name, version, package or name)
         if kind == "npm":
             runs_on = runtime or "node"
@@ -498,7 +499,7 @@ class Store:
 
         The artifact comes from the tiers and, unless offline, the
         origin; an archive is extracted and its declared root hoisted,
-        a binary placed as its `exe`, and with *exclude* the
+        a bare file saved as its `file`, and with *exclude* the
         deployment's exclusion patterns are applied. No entry point is
         required, no shim is made, no tree is collected and no ref is
         set: this is the look a check takes at a deployment for any
@@ -524,7 +525,7 @@ class Store:
     # --- the delegated kinds --------------------------------------------------
 
     def _probe_delegated(self, name: str, kind: str, version: str) -> Ensured | None:
-        if kind in ("uv-tool", "npm"):
+        if kind in ("pypi", "npm"):
             tool_dir = self._delegated_dir(name, kind, version)
             launchers = _launchers(tool_dir / "bin")
             if not launchers:
@@ -541,7 +542,7 @@ class Store:
 
     def _delegated_dir(self, name: str, kind: str, version: str) -> Path:
         """Where a delegated kind's install lives: under `uv/` or `npm/`."""
-        home = self.home.uv if kind == "uv-tool" else self.home.npm
+        home = self.home.uv if kind == "pypi" else self.home.npm
         return home / "tools" / f"{name}@{version}"
 
     def _supply_npm(
@@ -613,7 +614,7 @@ class Store:
         points, which uv writes from the package's own console scripts.
         """
         self._progress(Event(name, version, "probe"))
-        present = self._probe_delegated(name, "uv-tool", version)
+        present = self._probe_delegated(name, "pypi", version)
         if present is not None:
             return present
         tool_dir = self.home.uv / "tools" / f"{name}@{version}"
@@ -701,15 +702,17 @@ class Store:
     def _unpack(
         self, name: str, kind: str, deployment: Deployment, artifact: Path, into: Path
     ) -> None:
-        if kind == "binary":
-            placed = into / deployment.exe
+        form = deployment.format or artifact_format(deployment.url)
+        if form == "file":
+            placed = into / deployment.file
             shutil.copyfile(artifact, placed)
-            placed.chmod(
-                placed.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
-            )
+            if deployment.entry_points:  # a bare program, not a bare file
+                placed.chmod(
+                    placed.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+                )
             return
         try:
-            unpack(artifact, into, name=_archive_name(deployment.url))
+            unpack(artifact, into, name=_archive_name(deployment.url), format=form)
         except UnpackError as error:
             raise StoreError(
                 f"{name}: the archive at {deployment.url} will not extract: {error}"

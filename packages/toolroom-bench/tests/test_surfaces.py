@@ -440,11 +440,13 @@ def test_a_version_tracked_but_never_read_takes_its_first_reading():
     sha = "d8b96221828ad6f97ac7ac0ab7e95872341af763001e8803e8267652c2652620"
     record = Record(
         "demo",
-        kind="archive",
+        kind="download",
         hosts=("linux-x64",),
         layout=Layout(entry_points=("demo",), paths=(".",)),
         deltas=(
-            RecordDelta(1, "1.0.0", "", {"linux-x64": Artifact("https://x/1", sha)}),
+            RecordDelta(
+                1, "1.0.0", "", {"linux-x64": Artifact("https://x/1.zip", sha)}
+            ),
         ),
     )
     assert _surfaces.versions(record) == []
@@ -1289,7 +1291,7 @@ def test_the_record_holds_only_absences_that_were_observed():
     with pytest.raises(RecordError, match=r"absent names Linux, which did not read"):
         history("demo", ("1.0.0", "2026-01-01", reading("quiet"), ["macOS"])).__class__(
             "demo",
-            kind="uv-tool",
+            kind="pypi",
             deltas=(
                 _surfaces.RecordDelta(
                     1,

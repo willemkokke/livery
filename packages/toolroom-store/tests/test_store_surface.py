@@ -68,7 +68,7 @@ def _delta(
 
 
 def _record(*deltas: RecordDelta, **over: Any) -> Record:
-    fields: dict[str, Any] = {"name": "tool", "kind": "uv-tool", "deltas": deltas}
+    fields: dict[str, Any] = {"name": "tool", "kind": "pypi", "deltas": deltas}
     fields.update(over)
     return Record(**fields)
 
@@ -280,12 +280,14 @@ def test_a_version_inherits_every_verb_it_does_not_name_and_the_help() -> None:
     # out of the observations, and inherits nothing to version 3.
     record = Record(
         "tool",
-        kind="archive",
+        kind="download",
         hosts=("linux-x64",),
         layout=Layout(entry_points=("tool",), paths=(".",)),
         deltas=(
             _delta(1, "1", _surface()),
-            _delta(2, "2", None, artifacts={"linux-x64": Artifact("https://x/2", SHA)}),
+            _delta(
+                2, "2", None, artifacts={"linux-x64": Artifact("https://x/2.zip", SHA)}
+            ),
             _delta(
                 3,
                 "3",

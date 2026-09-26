@@ -1,4 +1,4 @@
-{"name": "coverage", "description": "", "kind": "uv-tool", "min_version": "", "hosts": []}
+{"name": "coverage", "description": "", "kind": "pypi", "min_version": "", "hosts": []}
 {"version": "7.13.3", "date": "2026-02-03", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Coverage.py, version 7.13.3 with C extension"}}
 {"verb": "", "help": "Coverage.py, version 7.13.3 with C extension", "wraps": false, "positional": "any", "lead": ""}
 {"verb": "annotate", "help": "Make annotated copies of the given files, marking statements that are executed with > and statements that are missed with !.", "wraps": false, "positional": "any", "lead": ""}

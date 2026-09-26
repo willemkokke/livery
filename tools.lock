@@ -13,9 +13,25 @@
     "cmake": {
       "version": "4.4.2",
       "hosts": {
-        "linux-x64": "sha256:47e345a66da2585104d18716274c026dec16167e573e55830df5db2363ffbf89",
-        "macos-arm": "sha256:a94104c2b485a6ee890d1f7746685904e1615251c14d1d5c0b5a635979528e94",
-        "windows-x64": "sha256:7172c01f69c8842b4668daf761a10650576010ef09175ac1bd87698932b46d1c"
+        "linux-x64": "sha256:e5be2c40d2a287b47360026e1ff19b6163f4beb1eafe090724b3416497f30f96",
+        "macos-arm": "sha256:201ec153b6c98c8fe1cfe8a7c41d7dc20c3cc4ddf2798c254238c13777b0f8ff",
+        "windows-x64": "sha256:03d820fd1d4e16bf27e47b2cba51a07d0802bfc3223cc49768492d1998a90c18"
+      }
+    },
+    "cmake_conan": {
+      "version": "0.19.0",
+      "hosts": {
+        "linux-x64": "sha256:a808e1974671638919c06f1875269116187a74dc870e314aaa6eb661c5230201",
+        "macos-arm": "sha256:a808e1974671638919c06f1875269116187a74dc870e314aaa6eb661c5230201",
+        "windows-x64": "sha256:a808e1974671638919c06f1875269116187a74dc870e314aaa6eb661c5230201"
+      }
+    },
+    "conan": {
+      "version": "2.32.0",
+      "hosts": {
+        "linux-x64": "sha256:0ec700e8ebfb4961205ffb46d062fd374c34235d9dc7b6e6f1cd65f4636d0d9d",
+        "macos-arm": "sha256:16e027123cd6817a9704e192b41d2e86d72f696864a57d2e4b2f4cffabed54da",
+        "windows-x64": "sha256:8c92a70f6a79e5d0bc339943421b66b5220b1d633687cd5de2611c34bd4b3c19"
       }
     },
     "coverage": {
@@ -33,9 +49,9 @@
     "git_cliff": {
       "version": "2.13.1",
       "hosts": {
-        "linux-x64": "sha256:ccc7b558a7d5cada67ac6297ab62cd733e8b7d38aab9ac0847e253afe222bd5a",
-        "macos-arm": "sha256:160f96c951da47aff7ecbdd564224cd7a3a7aedb83aa4a576a3687bf484818a2",
-        "windows-x64": "sha256:4861b298bd1dc5d2b711f8f7268dc72faf0c7e921d7e18efa779b314ca251204"
+        "linux-x64": "sha256:4d822a8d5d4323ebdb02e3da705aab5a6008fbad112ffdec3fb7f607f3f8748e",
+        "macos-arm": "sha256:e620fc72205ea654bb4ee32e0d684fd4cf138202c4b0d62f6311a702f994e1e2",
+        "windows-x64": "sha256:5e2ee88145e9a36363585da953566c857829ea56c9eac94617db31acf315ffa4"
       }
     },
     "mypy": {
@@ -45,17 +61,17 @@
     "node": {
       "version": "24.21.0",
       "hosts": {
-        "linux-x64": "sha256:f23e840853312aeb76c00e8923df189c3ff93eff2ad465f996b4a80ef199b48f",
-        "macos-arm": "sha256:ff63e9e03098325fa45adb460b5dea5509b6775c1c73c4ae87e3812ebe53af1c",
-        "windows-x64": "sha256:bcd96060dc03f78ae11b2faf5710087a9fd4256ad5235ab9c65fbd657345957d"
+        "linux-x64": "sha256:2e5093c160d5de499ccf0937e91dfb53a7777338f5735af0700551e80e21bf55",
+        "macos-arm": "sha256:245f5db80d1f8db9363ebdd390b2511bd1125edd3a13d4bdd5f5f0bf3aa184d9",
+        "windows-x64": "sha256:80a206543522eefbaa2829ce66c622e3ee4bed9087578480040e3edfc14457e2"
       }
     },
     "pyrefly": {
       "version": "1.3.1",
       "hosts": {
-        "linux-x64": "sha256:4784e47f9a8f833b41f14331b2c77e145711057c30c087e7a09e28d1defc4d91",
-        "macos-arm": "sha256:210a89243a37286663a7e953d8a2451d9093236340f7fc65e7091b25df4f8832",
-        "windows-x64": "sha256:e4d5cda84dfc10fdfa4eb29f4c5fd6afc3f590b7712685198405ebc327c190ea"
+        "linux-x64": "sha256:9e3ee403389a39a5058b9506fb517472ef71e46af2d72d0df3672bb8098bd3b2",
+        "macos-arm": "sha256:576da6adf7c459f2a5bdb8c64800a07acf384aebdcc7fc658f93f913f318106d",
+        "windows-x64": "sha256:88eb006c5357a89a2a799df112d6295f72d9419dd2d892001d1798977c4f8a0c"
       }
     },
     "pytest": {
@@ -65,25 +81,25 @@
     "ruff": {
       "version": "0.16.4",
       "hosts": {
-        "linux-x64": "sha256:0c1759f3a6a84dc2ea5d474a19fc9c661eae4f2098a6ce457dcf3f5ef1ba816b",
-        "macos-arm": "sha256:98c9771458e4788950bad060e75f6d68178baecbf3c4739ed508907369223d92",
-        "windows-x64": "sha256:9582a7640029cd4b6af34f683349c8712630934d35b6030674a43789554abfc7"
+        "linux-x64": "sha256:74ce02cd58f31ba65f8ae00be00937c9ceddfaf78abda3b7b7744d0547766fe9",
+        "macos-arm": "sha256:57ef1bd8bc9c1ccf0c70b0a9bab4c8b551c3597f52d75a675614f00a127e4cef",
+        "windows-x64": "sha256:37c874ce3923eefa9a73269a616ece8c53170516372974fac02d4d25586fbf5a"
       }
     },
     "ty": {
       "version": "0.0.73",
       "hosts": {
-        "linux-x64": "sha256:ef6bf5dec9696636904ab42679ba18e56848396358a470440e6e3a6c906fa7e8",
-        "macos-arm": "sha256:9875d0704d77a2bfa5ea3f3a976c6517043ae2b2c8879ee13df4e7058ae2275b",
-        "windows-x64": "sha256:4603dde98bbc0b5cd2ad85da4243882688b5f1cc77698382299067919be5c92f"
+        "linux-x64": "sha256:ba9ab3c7adacf55c6c0c2712df179f29c4bc074e7b2fc5ef240a192019c45053",
+        "macos-arm": "sha256:5731a650c27a9d89b0ac23f37b3215b4004c9f87d5e3b04484170cba3530c151",
+        "windows-x64": "sha256:61d148998b64089805167fc4bc24fdf4e03f2884b9be28e6237a5fc877bd2546"
       }
     },
     "uv": {
-      "version": "0.12.5",
+      "version": "0.11.26",
       "hosts": {
-        "linux-x64": "sha256:416c61e4723e4083642b73aa3c20ee5c8431a2d7d30e975ef3659d1328de39d9",
-        "macos-arm": "sha256:9ef332e4cb655f2ce95a5b6a173a658235e2bcd92cae9a7e9acbca5fa7f9cb58",
-        "windows-x64": "sha256:4757b53a46306ed3768888b961eb745476cabb7d57525723a0688ea06d1f927c"
+        "linux-x64": "sha256:710d4b4843c3d8f5aba300a21120db04edaa95035453f840efee033370d30f45",
+        "macos-arm": "sha256:99019c4457c6964a2f68a94aedd253e48a164a86721d55b53a77bcf22d821419",
+        "windows-x64": "sha256:f40453a362f6ef4920e9be820a159db65424811c93dd58285d764810d71b1fb4"
       }
     },
     "zensical": {

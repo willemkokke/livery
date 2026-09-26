@@ -16,13 +16,32 @@ class {{ project_slug | capitalize }}Conan(ConanFile):
     version = "0.0.0"
     package_type = "library"
     settings = "os", "compiler", "build_type", "arch"
-    options: ClassVar = {"shared": [True, False]}
-    default_options: ClassVar = {"shared": False}
+    # fPIC is on by default: a static library that a python extension
+    # links into its shared module must be position-independent, and
+    # a Linux linker refuses one that is not.
+    options: ClassVar = {"shared": [True, False], "fPIC": [True, False]}
+    default_options: ClassVar = {"shared": False, "fPIC": True}
     exports_sources = "CMakeLists.txt", "src/*", "tests/*"
 
+    def config_options(self):
+        """Drop fPIC on Windows, where the option has no meaning."""
+        if self.settings.os == "Windows":
+            del self.options.fPIC
+
+    def configure(self):
+        """A shared library is position-independent by construction."""
+        if self.options.shared:
+            self.options.rm_safe("fPIC")
+
     def layout(self):
-        """Use conan's standard cmake layout under build/."""
+        """Use conan's standard cmake layout under build/; headers live in src/.
+
+        The source include directory is what a consumer sees while
+        this package is registered editable, so it names src/ where
+        the headers are, not conan's default include/.
+        """
         cmake_layout(self)
+        self.cpp.source.includedirs = ["src"]
 
     def generate(self):
         """Write the CMake toolchain file for the active profile."""
@@ -37,3 +56,7 @@ class {{ project_slug | capitalize }}Conan(ConanFile):
     def package(self):
         """Install the built targets into the conan package."""
         CMake(self).install()
+
+    def package_info(self):
+        """Name the built library for consumers; conan collects nothing on its own."""
+        self.cpp_info.libs = ["{{ project_slug }}"]

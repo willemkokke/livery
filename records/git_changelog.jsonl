@@ -1,4 +1,4 @@
-{"name": "git_changelog", "description": "", "kind": "uv-tool", "min_version": "", "hosts": []}
+{"name": "git_changelog", "description": "", "kind": "pypi", "min_version": "", "hosts": []}
 {"version": "2.7.0", "date": "2025-11-21", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Automatic Changelog generator using Jinja2 templates."}}
 {"verb": "", "help": "Automatic Changelog generator using Jinja2 templates.", "wraps": false, "positional": "any", "lead": ""}
 {"verb": "", "option": "bump", "flags": ["--bump", "-B"], "negation": "", "help": "Specify the bump from latest version for the set of unreleased commits", "type": "str", "default": null, "choices": []}

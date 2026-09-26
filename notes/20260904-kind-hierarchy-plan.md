@@ -283,6 +283,14 @@ Acceptance:
 
 ### Phase 7: compile-time consumption of the library
 
+Status: slice 7a landed 2026-09-26 (livery#735, PR #742): conan and the
+cmake-conan provider are store records, the extension template
+consumes fmt at compile time through the provider, `fm sync` registers
+every cpp-conan member editable before `uv sync`, and the fixture's
+extension wheel calls `fmt::format` and the library's `version()`
+from HEAD in its isolated leg. Slices 7b (livery#736), 7c (livery#737)
+and 7d (livery#738) follow.
+
 The extension calls a symbol from the first-party library and a
 symbol from a third-party conan package, and the build resolves both
 the same way in the local gate, the isolated wheel legs, and the
@@ -525,6 +533,29 @@ Acceptance:
 - 2026-09-26 (Willem): clang-format and clang-tidy come with the LLVM
   static release the store will carry as a compiler; no separate tool
   record for either.
+- 2026-09-26 (slice 7a shape): CMake reads
+  `CMAKE_PROJECT_TOP_LEVEL_INCLUDES` from no environment variable, so
+  the provider's record sets `CMAKE_CONAN_PROVIDER` to the file inside
+  its installed tree and each consumer maps it: the extension's
+  `pyproject.toml` defines the CMake variable from the environment
+  through scikit-build-core, the cpp backend and the presets pass it as
+  `-D`. cmake-conan's release lists no asset, so the bench's `Provision`
+  gained `asset`, a URL template recorded for every host from the same
+  file; its record is hand-written (a CMake module has no help to
+  read) and the host point checks a driver with no help flag for
+  presence alone. Recording it collapsed the store's downloaded kinds (Willem):
+  `archive`, `binary` and the `file` kind drafted for the provider
+  are one `download`. The artifact's form is sniffed from its URL's
+  suffix, `format` in the layout overrides a name that lies, a bare
+  download lands under its `file` name, and the layout alone says
+  what reaches the outside: entry points and `paths` for a program,
+  `env` alone for a file that is never run and gets no stub.
+  `fm sync` materialises the tools and registers the editables before
+  `uv sync`, since uv's build of a native member runs cmake, conan and
+  the provider. The conan install arguments `--build=missing` and
+  `--build=editable` live in the template's pyproject, so a sibling is
+  built from HEAD wherever it is registered and nothing happens where
+  it is not.
 
 ## Open
 
