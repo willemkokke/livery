@@ -583,7 +583,12 @@ def _ignore(driver: _drivers.Driver, root: Path | None) -> str:
     record = _surfaces.load(_record_path(driver.key))
     if record is None:
         return ""
-    recorded = _surfaces.versions(record)[0]
+    read = _surfaces.versions(record)
+    if not read:
+        # An authored record whose surface no platform has read yet:
+        # this reading is its first, and nothing is older than it.
+        return ""
+    recorded = read[0]
     found = (
         _toolhelp.man_version(Path(manual), driver.name)
         if manual
@@ -1024,11 +1029,25 @@ def verify_host(
 
 
 def _run_entry(argv: list[str]) -> tuple[int, str]:
-    """Run *argv* with a two-minute limit; the exit and the last line of output."""
+    """Run *argv* with a two-minute limit; the exit and the last line of output.
+
+    The directory and the environment are named rather than left out: a
+    spawn that omits them has the runner fill them from the task's
+    context and note the injection, and a probe of an entry point says
+    where it runs.
+    """
+    import os
     import subprocess
 
     done = subprocess.run(
-        argv, capture_output=True, text=True, timeout=120, check=False, errors="replace"
+        argv,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+        errors="replace",
+        cwd=Path.cwd(),
+        env=dict(os.environ),
     )
     lines = (done.stdout + done.stderr).strip().splitlines()
     return done.returncode, (lines[-1] if lines else "no output")[:200]
@@ -2992,9 +3011,10 @@ def pages(
         record = _surfaces.load(_record_path(driver.key))
         if record is None:
             continue
-        (module / f"{driver.key}.pyi").write_text(
-            _stub_from(driver, record), encoding="utf-8"
-        )
+        if _surfaces.versions(record):
+            (module / f"{driver.key}.pyi").write_text(
+                _stub_from(driver, record), encoding="utf-8"
+            )
         stubbed.append((driver, record))
     for stale in module.glob("*.pyi"):
         if stale.stem != "__init__" and stale.stem not in {d.key for d, _ in stubbed}:
@@ -3039,7 +3059,14 @@ def _row(driver: _drivers.Driver, record: Record, path: Path) -> str:
     listed = ", ".join(f"`{v}`" for v in verbs[:5]) or "the tool itself"
     if len(verbs) > 5:
         listed += f", … ({len(verbs)} in all)"
-    newest = _surfaces.versions(record)[0]
+    read = _surfaces.versions(record)
+    if not read:
+        home = f" ([docs]({driver.url}))" if driver.url else ""
+        return (
+            f"| [`{driver.key}`]({driver.key}.md){home} | not read yet |"
+            " | the tool itself |"
+        )
+    newest = read[0]
     version = f"{newest} ({_and(_surfaces.platforms_of(record, newest))})"
     mode = _mode(driver, _surfaces.union(record, name=driver.name))
     home = f" ([docs]({driver.url}))" if driver.url else ""

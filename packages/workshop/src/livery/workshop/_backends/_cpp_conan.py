@@ -14,6 +14,7 @@ import os
 import platform
 import re
 import shutil
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -607,7 +608,15 @@ def gate_build(package: Package, root: Path) -> None:
     del root
     build_dir = package.directory / GATE_BUILD_DIR
     cmake = tools.cmake.opts(cwd=package.directory)
-    cmake("-S", ".", "-B", str(build_dir), "-G", "Ninja")
+    cmake(
+        "-S",
+        ".",
+        "-B",
+        str(build_dir),
+        "-G",
+        "Ninja",
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+    )
     cmake("--build", str(build_dir))
 
 
@@ -670,10 +679,144 @@ def test(
         )
 
 
+#: Where a package keeps the sources the two clang tools read.
+SOURCE_DIRS = ("src", "include", "tests")
+
+
+def sources(package: Package) -> list[Path]:
+    """Every C and C++ file the package owns, sorted.
+
+    The two clang tools read the same set: what the package wrote,
+    never what a build wrote under `build/`.
+    """
+    found: list[Path] = []
+    for name in SOURCE_DIRS:
+        directory = package.directory / name
+        if not directory.is_dir():
+            continue
+        for suffix in (*TEST_SOURCES, ".hpp", ".h", ".hxx"):
+            found.extend(directory.rglob(f"*{suffix}"))
+    return sorted(found)
+
+
+#: A clang-format violation line: the file, then its line and column,
+#: then the complaint. The path is read up to the line number rather
+#: than to the first colon, which on Windows is the drive letter.
+_VIOLATION = re.compile(
+    r"^(?P<path>.+?):\d+:\d+: (?:error|warning): code should be clang-formatted"
+)
+
+
+def unformatted(output: str) -> list[str]:
+    """The files clang-format would rewrite, named once each, sorted."""
+    found = {
+        match["path"]
+        for line in output.splitlines()
+        if (match := _VIOLATION.match(line))
+    }
+    return sorted(found)
+
+
+def format_check(package: Package, *, fix: bool = False) -> None:
+    """Refuse a source clang-format would rewrite; *fix* rewrites it.
+
+    The style is the package's own `.clang-format`, seeded at birth
+    and edited there. The refusal names each file, because a person
+    fixes files, not a diff.
+
+    Raises:
+        Failed: when a file is not formatted, or clang-format exits
+            non-zero for a reason of its own.
+    """
+    files = sources(package)
+    if not files:
+        return
+    arguments = ["-i"] if fix else ["--dry-run", "--Werror"]
+    result = tools.clang_format.opts(
+        cwd=package.directory, nofail=True, recorded=False
+    )(*arguments, *(str(path) for path in files))
+    if result.code == 0:
+        return
+    named = ", ".join(unformatted(result.stderr + result.stdout)) or "no file named"
+    fail(
+        f"{package.name}: clang-format would rewrite {named}."
+        f" Run `{footman.prog()} check --fix` to apply the package's own"
+        " .clang-format."
+    )
+
+
+def _asked(argv: list[str]) -> str:
+    """The first line *argv* prints, or empty when it will not run."""
+    try:
+        answer = footman.run(argv, nofail=True, recorded=False)
+    except OSError:
+        return ""
+    lines = (answer.stdout or "").strip().splitlines()
+    return lines[0] if answer.code == 0 and lines else ""
+
+
+def _toolchain_arguments() -> tuple[list[str], str]:
+    """What the standalone clang-tidy needs, and why it cannot run.
+
+    The static build is one binary. It carries no resource directory
+    of its own, so the compiler's builtin headers (`stddef.h` and its
+    kin) come from the host's compiler, and on macOS the standard
+    library comes from the SDK xcrun names. Returns the arguments and
+    an empty reason, or no arguments and the reason the lint cannot
+    run, which the caller prints as a skip.
+    """
+    resources = _asked(["clang", "-print-resource-dir"]) or _asked(
+        ["cc", "-print-file-name=include"]
+    )
+    if not resources:
+        return [], "no compiler here answers where its builtin headers are"
+    arguments = [f"--extra-arg=-resource-dir={resources.removesuffix('/include')}"]
+    if sys.platform == "darwin":
+        sdk = _asked(["xcrun", "--show-sdk-path"])
+        if not sdk:
+            return [], "xcrun names no SDK, where this platform keeps its headers"
+        arguments.append(f"--extra-arg=-isysroot{sdk}")
+    return arguments, ""
+
+
+def lint(package: Package, root: Path) -> None:
+    """Run clang-tidy over the package's sources; a finding is a refusal.
+
+    The checks are the package's own `.clang-tidy`. clang-tidy reads
+    the compilation database the gate build exports, so the build
+    runs first and a package that has not configured is configured
+    here.
+
+    Raises:
+        Failed: when clang-tidy finds anything, with its own output.
+    """
+    files = sources(package)
+    database = package.directory / GATE_BUILD_DIR / "compile_commands.json"
+    if not files or not database.is_file():
+        return
+    arguments, reason = _toolchain_arguments()
+    if reason:
+        print(f"  {package.name}: clang-tidy skips, {reason}")
+        return
+    result = tools.clang_tidy.opts(cwd=package.directory, nofail=True, recorded=False)(
+        "-p",
+        GATE_BUILD_DIR,
+        *arguments,
+        *(str(path) for path in files),
+    )
+    if result.code != 0:
+        fail(
+            f"{package.name}: clang-tidy found something:\n"
+            f"{result.stdout[-4000:]}{result.stderr[-2000:]}"
+        )
+
+
 def check(package: Package, root: Path) -> None:
-    """Configure, build, and ctest *package*; a refusal is the verdict."""
+    """Format, configure, build, ctest and lint; a refusal is the verdict."""
+    format_check(package)
     gate_build(package, root)
     test(package, root)
+    lint(package, root)
 
 
 def build(package: Package, root: Path, *, epoch: int = 0) -> Path:

@@ -360,7 +360,13 @@ def test_the_kind_registers_alone_in_the_chain() -> None:
     record = record_for_template("package-cpp-conan")
     assert record is not None and record.name == "cpp-conan"
     assert record_for_template("package-python-layer") is None
-    assert kind_for("cpp-conan").tools == ("cmake", "conan", "ninja")
+    assert kind_for("cpp-conan").tools == (
+        "cmake",
+        "conan",
+        "ninja",
+        "clang_format",
+        "clang_tidy",
+    )
 
 
 def test_the_project_render_wires_only_python_members(tmp_path: Path) -> None:
@@ -436,3 +442,66 @@ def test_the_rendered_package_configures_from_its_preset(tmp_path: Path) -> None
         check=False,
     )
     assert tested.returncode == 0, tested.stdout + tested.stderr
+
+
+@needs_toolchain
+def test_a_misformatted_source_turns_the_gate_red_naming_the_file(
+    tmp_path: Path,
+) -> None:
+    """The format check is the package's own .clang-format, applied."""
+    package = _render_cpp(tmp_path)
+    source = package.directory / "src" / "native.cpp"
+    source.write_text(source.read_text().replace("const char*", "const  char  *"))
+    with pytest.raises(_FAILURES, match="clang-format would rewrite") as caught:
+        _cpp_conan.format_check(package)
+    assert "native.cpp" in str(caught.value)
+    # --fix heals it, and the check is green on the second pass.
+    _cpp_conan.format_check(package, fix=True)
+    _cpp_conan.format_check(package)
+
+
+@needs_toolchain
+def test_a_tidy_finding_turns_the_gate_red(tmp_path: Path) -> None:
+    """The lint check is the package's own .clang-tidy, over the gate build."""
+    package = _render_cpp(tmp_path)
+    source = package.directory / "src" / "native.cpp"
+    source.write_text(
+        source.read_text().replace(
+            "} // namespace native",
+            "int branch(int a) {\n"
+            "    if (a > 0) {\n"
+            "        return 1;\n"
+            "    } else {\n"
+            "        return 1;\n"
+            "    }\n"
+            "}\n"
+            "\n"
+            "} // namespace native",
+        )
+    )
+    _cpp_conan.gate_build(package, tmp_path)
+    with pytest.raises(_FAILURES, match="clang-tidy found something") as caught:
+        _cpp_conan.lint(package, tmp_path)
+    assert "branch" in str(caught.value) or "bugprone" in str(caught.value)
+
+
+def test_the_format_refusal_names_a_windows_path_whole() -> None:
+    """A drive letter is part of the path, not the end of a field.
+
+    clang-format writes `<file>:<line>:<column>: error: …`, and a
+    Windows file name carries a colon of its own two characters in.
+    Reading the path up to the line number keeps it whole, which is
+    how the refusal came to say `D` on a Windows leg.
+    """
+    posix = "src/native.cpp:10:2: error: code should be clang-formatted"
+    windows = (
+        r"D:\a\livery\packages\native\src\native.cpp:10:2:"
+        " error: code should be clang-formatted"
+    )
+    warned = "include/native.hpp:3:1: warning: code should be clang-formatted"
+    assert _cpp_conan.unformatted("\n".join([posix, windows, warned])) == [
+        r"D:\a\livery\packages\native\src\native.cpp",
+        "include/native.hpp",
+        "src/native.cpp",
+    ]
+    assert _cpp_conan.unformatted("nothing to say here") == []
