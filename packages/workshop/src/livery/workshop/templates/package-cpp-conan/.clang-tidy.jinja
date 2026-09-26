@@ -1,0 +1,15 @@
+# Seeded from the template channel at birth; this file is the
+# workspace's own. Edit it directly: the template never rewrites it.
+#
+# The families a gate can hold green from the first commit: the bug
+# and portability checks, and the performance ones. readability-* is
+# left out on purpose, since its opinions collide with clang-format's
+# and with each other. A finding is an error, so the gate's verdict
+# stays its exit code.
+Checks: >
+  bugprone-*,
+  performance-*,
+  portability-*,
+  -bugprone-easily-swappable-parameters
+WarningsAsErrors: "*"
+HeaderFilterRegex: "^$"

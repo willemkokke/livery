@@ -200,6 +200,9 @@ class KindRecord:
         tests_need_build: Whether the kind's tests run on a build
             rather than on source, so a test step is preceded by the
             backend's ``gate_build``.
+        native_sources: Whether the kind's members carry C or C++ the
+            gate formats with clang-format, against the member's own
+            `.clang-format`.
         abstract: Whether the kind exists for its children alone: it
             heads their chains with its tools, managed files and
             template, builds nothing, and is never a package's
@@ -218,6 +221,7 @@ class KindRecord:
     artifact: str = "python"
     wheel_identity: str = "pure"
     tests_need_build: bool = False
+    native_sources: bool = False
     abstract: bool = False
 
 
@@ -455,7 +459,15 @@ def _register_builtin() -> None:
             backend=_python_nanobind,
             template="package-python-nanobind",
             parent="python",
-            tools=("cmake", "ninja", "conan", "cmake_conan"),
+            tools=(
+                "cmake",
+                "ninja",
+                "conan",
+                "cmake_conan",
+                "clang_format",
+                "clang_tidy",
+            ),
+            native_sources=True,
             host_tools=("cc", "c++"),
             wheel_identity="platform",
         )
@@ -471,7 +483,8 @@ def _register_builtin() -> None:
             backend=_cpp_conan,
             template="package-cpp-conan",
             parent="base",
-            tools=("cmake", "conan", "ninja"),
+            tools=("cmake", "conan", "ninja", "clang_format", "clang_tidy"),
+            native_sources=True,
             host_tools=("cc", "c++"),
             ci=CiContract(
                 check_verbs=("format", "lint"),

@@ -409,12 +409,12 @@ nanobind in its dev group, which is what that interpreter answers
 with. A fresh fixture of each kind configures, builds and tests from
 its preset with no further argument, proven by test.
 
-Open: the format and lint half (livery#770). Where clang-format and
-clang-tidy come from is undecided: the ruling names the LLVM static
-release the store will carry as a compiler, the store carries no
-LLVM yet, and one release archive is 0.9 to 1.8 GB per host for two
-binaries of a few megabytes. The issue states both ways to sequence
-it.
+The format and lint half landed 2026-09-26 (livery#770): both
+templates render a `.clang-format` and a `.clang-tidy`, the
+cpp-conan kind's gate formats and lints its sources, and `fm format`
+covers every native member so one verb answers for formatting. The
+two tools are store records of their own, from the third-party
+static builds.
 
 What a person gets at birth beyond the gate: a `CMakePresets.json`
 (configure, build and test presets, Debug and Release, compile
@@ -694,6 +694,26 @@ Acceptance:
   output in its refusal. It said only that the gate was red, and
   the caller is often a script that sees nothing else; finding the
   reason cost a run of the chain each time.
+
+- 2026-09-26 (Willem, correcting the line above): clang-format and
+  clang-tidy are records of their own now, taken from the small
+  third-party static builds rather than from an LLVM release. The
+  sizes are the reason: 4.5 MB and 70 MB per host against 0.9 to 1.8
+  GB for a release archive. They stay in the catalogue when the store
+  carries the full toolchain, because other projects may keep using
+  them; this workspace will stop depending on them then.
+- 2026-09-26 (slice 8 shape): the records are written by hand, as the
+  cmake-conan provider's is. One release of the static builds carries
+  every clang major and several tools under one tag, which the
+  bench's asset picker cannot disambiguate, so the driver's
+  provisioning is parked with that note and the four builds are named
+  in the record. Their surfaces are read like any other tool's. Linux
+  ARM and Windows ARM have no build in that release, so the record
+  carries the four hosts it has.
+- 2026-09-26 (slice 8 shape): clang-tidy is a standalone binary with
+  clang's resource directory and nothing else, so on macOS the lint
+  step passes the SDK path xcrun names. Linux keeps its headers where
+  clang already looks.
 
 ## Open
 

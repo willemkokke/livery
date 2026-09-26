@@ -123,9 +123,28 @@ def format(
     pass through); without, every package.
     """
     _refuse_both(fix, safe_fix)
-    if not paths:
-        _packages()
+    members = () if paths else _packages()
     _python.run_format(check=not fix, safe_fix=safe_fix, paths=paths or _python.SRC)
+    _format_native(members, fix=fix or safe_fix)
+
+
+def _format_native(packages: tuple[Package, ...], *, fix: bool) -> None:
+    """Format every native member's C and C++ sources, or refuse.
+
+    ruff owns the python files; a member whose kind carries C or C++
+    sources is formatted by clang-format against the member's own
+    `.clang-format`, in the same pass, so one verb means one answer
+    about formatting.
+    """
+    from livery.workshop._backends import _cpp_conan
+    from livery.workshop._kinds import kind_for, kind_names
+
+    for package in packages:
+        if package.type not in kind_names():
+            continue
+        if not kind_for(package.type).native_sources:
+            continue
+        _cpp_conan.format_check(package, fix=fix)
 
 
 @task

@@ -665,6 +665,29 @@ DRIVERS: tuple[Driver, ...] = (
         provision=Provision(kind="github", repo="ninja-build/ninja"),
     ),
     Driver(
+        "clang-format",
+        attr="clang_format",
+        url="https://clang.llvm.org/docs/ClangFormat.html",
+        provision=Provision(
+            kind="deferred",
+            # One release of the static builds carries every clang major
+            # and several tools under one tag, so the asset picker has no
+            # way to tell clang-format 20 from clang-format 10 or from
+            # clang-tidy. The record names the four builds by hand until
+            # the store carries LLVM itself, where these two ride along.
+            note="the static builds share one release across majors and tools",
+        ),
+    ),
+    Driver(
+        "clang-tidy",
+        attr="clang_tidy",
+        url="https://clang.llvm.org/extra/clang-tidy/",
+        provision=Provision(
+            kind="deferred",
+            note="the static builds share one release across majors and tools",
+        ),
+    ),
+    Driver(
         "cmake-conan",
         # A CMake module, not a program: nothing runs and nothing is read;
         # the record is hand-written, a download with no entry point.
