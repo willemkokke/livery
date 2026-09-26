@@ -10,6 +10,7 @@ import livery.forge.testing
 
 def test_the_surface_is_declared() -> None:
     assert livery.forge.__all__ == [
+        "Asset",
         "Capability",
         "CheckState",
         "Checks",

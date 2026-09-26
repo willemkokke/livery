@@ -47,6 +47,7 @@ from livery.forge._protocol import (
 )
 from livery.forge._registry import SimpleRegistry
 from livery.forge._types import (
+    Asset,
     Capability,
     CheckState,
     Codeowners,
@@ -77,6 +78,7 @@ from livery.forge._types import (
 __version__ = "0.4.0"
 
 __all__ = [
+    "Asset",
     "Capability",
     "CheckState",
     "Checks",

@@ -358,6 +358,9 @@ class Release:
         body: The release notes, in full.
         prerelease: True when the release is marked as a prerelease.
         url: The release's page, for printing to a person.
+        id: The forge's own number for the release, for the calls that
+            address a release by it (an asset upload); 0 on a forge
+            that addresses releases by tag alone.
     """
 
     tag: str
@@ -365,6 +368,23 @@ class Release:
     body: str
     prerelease: bool = False
     url: str = ""
+    id: int = 0
+
+
+@dataclass(frozen=True)
+class Asset:
+    """One file attached to a release.
+
+    Attributes:
+        name: The file name, unique within the release.
+        url: Where the bytes download from, for a reader with access
+            to the repository.
+        size: The byte count the forge reports; 0 when it reports none.
+    """
+
+    name: str
+    url: str
+    size: int = 0
 
 
 @dataclass(frozen=True)

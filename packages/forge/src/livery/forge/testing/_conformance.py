@@ -742,6 +742,32 @@ def _release_by_tag(driver: ForgeDriver) -> None:
         raise AssertionError("a second release for one tag must be refused")
 
 
+def _release_assets(driver: ForgeDriver) -> None:
+    """Assets attach to a release by tag; a repeated name and no release refuse."""
+    repo = driver.fresh_repo()
+    tag = "packages/forge/v0.0.2"
+    driver.create_tag(repo.owner, repo.name, tag)
+    try:
+        repo.release.upload_asset(tag, "notes.txt", b"early")
+    except ForgeError:
+        pass
+    else:
+        raise AssertionError("an asset on a tag with no release must be refused")
+    repo.release.create(tag, name="livery-forge 0.0.2", body="notes")
+    assert repo.release.assets(tag) == ()
+    asset = repo.release.upload_asset(tag, "notes.txt", b"the notes")
+    assert asset.name == "notes.txt" and asset.url
+    try:
+        repo.release.upload_asset(tag, "notes.txt", b"again")
+    except ForgeError:
+        pass
+    else:
+        raise AssertionError("a second asset of one name must be refused")
+    listed = repo.release.assets(tag)
+    assert [entry.name for entry in listed] == ["notes.txt"]
+    assert listed[0].url and listed[0].size in (0, len(b"the notes"))
+
+
 def _issue_text_both_ways(driver: ForgeDriver) -> None:
     """Create carries title, body, labels, assignee; get returns the body."""
     repo = driver.fresh_repo()
@@ -987,6 +1013,7 @@ SCENARIOS: tuple[Scenario, ...] = (
         "schedules-declined", _schedules_declined, forbids=("pipeline_schedules",)
     ),
     Scenario("release-by-tag", _release_by_tag),
+    Scenario("release-assets", _release_assets),
     Scenario("issue-text-both-ways", _issue_text_both_ways),
     Scenario("issue-update", _issue_update),
     Scenario("issue-list-and-search", _issue_list_and_search),
