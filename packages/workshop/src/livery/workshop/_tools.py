@@ -233,13 +233,18 @@ def current_lock(root: Path) -> Lock | None:
         fail(str(error))
 
 
-def write_lock(root: Path, *, upgrade: tuple[str, ...] = ()) -> Lock:
+def write_lock(
+    root: Path, *, upgrade: tuple[str, ...] = (), relock: tuple[str, ...] = ()
+) -> Lock:
     """Resolve the sites' requirements and write the lock; the lock written.
 
     An entry the lock already holds stands unless it is named in
     *upgrade* or no longer satisfies; a refusal names the tool, each
     floor with its site, and the host at fault. A delegated tool whose
-    version entered the lock has its graph resolved with it.
+    version entered the lock has its graph resolved with it, and one
+    named in *relock* has its graph resolved again though its version
+    stands, which is what an install the graph could not satisfy asks
+    for.
     """
     listing = catalogue(root)
     kept = current_lock(root)
@@ -253,7 +258,7 @@ def write_lock(root: Path, *, upgrade: tuple[str, ...] = ()) -> Lock:
         )
     except LockError as error:
         fail(str(error))
-    lock, notes = with_graphs(root, lock, listing, kept=kept)
+    lock, notes = with_graphs(root, lock, listing, kept=kept, relock=relock)
     lock.save(lock_path(root))
     for note in notes:
         print(f"  {note}")
@@ -427,7 +432,12 @@ def _kept_graph(
 
 
 def with_graphs(
-    root: Path, lock: Lock, listing: Catalogue, *, kept: Lock | None = None
+    root: Path,
+    lock: Lock,
+    listing: Catalogue,
+    *,
+    kept: Lock | None = None,
+    relock: tuple[str, ...] = (),
 ) -> tuple[Lock, list[str]]:
     """*lock* with a graph per delegated tool, and what to say about it.
 
@@ -437,6 +447,11 @@ def with_graphs(
     resolved now, the runtime it needs being absent on a checkout
     that has not materialised yet, leaves the tool as it was: it
     installs the way it did and says so, and the next lock writes it.
+
+    A tool named in *relock* is resolved again though its version
+    stands. Nothing here re-resolves on its own: a resolve is a fresh
+    answer from an index, so it moves the lock, and a lock moves when
+    a person says so, never as a side effect of installing.
     """
     directory = graphs_dir(root)
     tools: dict[str, Locked] = {}
@@ -451,7 +466,7 @@ def with_graphs(
         if kind not in ("pypi", "npm"):
             tools[name] = locked
             continue
-        standing = _kept_graph(root, name, locked, kept)
+        standing = None if name in relock else _kept_graph(root, name, locked, kept)
         if standing is not None:
             wanted.add(standing.file)
             tools[name] = replace(locked, graph=standing)

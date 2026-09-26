@@ -832,8 +832,8 @@ class Store:
                 f"{name} {version}: `{' '.join(argv)}` exited {code} and left"
                 f" {'no launcher' if code == 0 else 'nothing'} in {made}; the graph"
                 f" at {graph} is what this version installs, so a runtime it has"
-                " no build for is the usual reason and `fm tools.lock` resolves"
-                " it again"
+                f" no build for is the usual reason; `fm tools.lock --relock={name}`"
+                " resolves it again"
             )
         bin_dir = tool_dir / "bin"
         wanted = _package_bins(tool_dir, package)
@@ -898,7 +898,7 @@ class Store:
                 f"{name} {version}: `{' '.join(argv)}` exited {code}; the graph"
                 f" at {graph} is what this version installs, so an artifact that"
                 " does not match it, or a runtime it has no build for, is the"
-                " reason and `fm tools.lock` resolves it again"
+                f" reason; `fm tools.lock --relock={name}` resolves it again"
             )
         wanted = _console_scripts(venv, package)
         if not wanted:

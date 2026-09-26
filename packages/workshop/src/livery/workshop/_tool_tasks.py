@@ -42,18 +42,28 @@ def _report(lock: Lock, moved: tuple[str, ...] = ()) -> None:
 
 
 @tools.task(name="lock")
-def tools_lock() -> None:
+def tools_lock(
+    relock: Annotated[
+        list[str] | None, doc("delegated tools whose graph is resolved again")
+    ] = None,
+) -> None:
     """Resolve every site's requirements and write `tools.lock`.
 
     An entry the lock already holds stands while it still satisfies
     every floor and resolves on every locked host; a tool no site
     requires any more leaves the lock. Nothing on a machine changes:
     the lock says what a checkout installs, and `sync` installs it.
+
+    A delegated tool's resolved graph is written when its version
+    enters the lock and kept after. ``--relock`` writes one again
+    though the version stands, which is what an install asks for when
+    it refuses because the runtime has no build for what the graph
+    pins.
     """
     from livery.workshop._tools import stub_lines, write_lock
 
     root = _root()
-    _report(write_lock(root))
+    _report(write_lock(root, relock=tuple(relock or ())))
     for line in stub_lines(root, strict=False):
         print(line)
 

@@ -952,7 +952,12 @@ def test_a_pypi_graph_installs_into_its_own_venv_and_places_its_own_scripts(
     assert calls[0][:2] == ["uv", "venv"]
     assert calls[1][:3] == ["uv", "pip", "install"]
     assert "--require-hashes" in calls[1]
-    assert ensured.deployment.entry_points == (f"bin/ruff{EXE}", f"bin/ruff-lsp{EXE}")
+    # A set: the names sort against each other differently once the
+    # platform gives them an extension.
+    assert set(ensured.deployment.entry_points) == {
+        f"bin/ruff{EXE}",
+        f"bin/ruff-lsp{EXE}",
+    }
     # The dependency's script and the interpreter are not this tool's.
     assert not (tool_dir / "bin" / f"pygmentize{EXE}").exists()
     assert not (tool_dir / "bin" / f"python{EXE}").exists()
