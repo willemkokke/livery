@@ -22,9 +22,11 @@ from livery.toolroom import tools
 from livery.workshop._backends import _python
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from pathlib import Path
 
     from livery.workshop._packages import Package
+    from livery.workshop._tools import Receipt
 
 check = _python.check
 classify = _python.classify
@@ -210,21 +212,25 @@ def conan_environment(root: Path) -> dict[str, str]:
     Linux cibuildwheel
     builds in a container with its own filesystem, so the workspace,
     the store and the conan home are mounted at their host paths and
-    the store's conan joins the container's PATH. The provider and
-    conan are found through the entered environment first, then the
-    store's own home.
+    the store's conan joins the container's PATH. Both are read from
+    the entered environment first, then from this checkout's
+    receipts, which name the versions its lock pins.
 
     Raises:
         Failed: when the provider or conan is in neither place; the
             message names `fm sync`, which supplies both.
     """
-    from livery.workshop._tools import store_home
+    from livery.workshop._tools import receipts, store_home
 
     home = store_home()
-    provider = os.environ.get("CMAKE_CONAN_PROVIDER") or _newest(
-        home.tools, "cmake_conan", "conan_provider.cmake"
+    held = receipts(root)
+    # The provider's path is the cmake-conan record's own env entry,
+    # so nothing here spells the file name: a record that moves it
+    # moves this too.
+    provider = os.environ.get("CMAKE_CONAN_PROVIDER") or _receipted_env(
+        held, "cmake_conan", "CMAKE_CONAN_PROVIDER"
     )
-    conan = shutil.which("conan") or _newest(home.tools, "conan", "bin/conan")
+    conan = _receipted_path(held, "conan")
     if not provider or not conan:
         missing = "the cmake-conan provider" if not provider else "conan"
         fail(
@@ -241,21 +247,29 @@ def conan_environment(root: Path) -> dict[str, str]:
             "CMAKE_CONAN_PROVIDER CONAN_HOME CONAN_INSTALL_ARGS"
         )
         env["CIBW_CONTAINER_ENGINE"] = f"docker; create_args: {mounts}"
-        env["CIBW_ENVIRONMENT_LINUX"] = f'PATH="{Path(conan).parent}:$PATH"'
+        env["CIBW_ENVIRONMENT_LINUX"] = f'PATH="{conan}:$PATH"'
     return env
 
 
-def _newest(tools_dir: Path, name: str, relative: str) -> str:
-    """*relative* under the newest `<name>@<version>` in *tools_dir*, or empty."""
-    from livery.toolroom.store import version_key
+def _receipted_env(held: Mapping[str, Receipt], name: str, variable: str) -> str:
+    """The value *name*'s receipt records for *variable*, or empty.
 
-    found = [
-        path for path in tools_dir.glob(f"{name}@*") if (path / relative).is_file()
-    ]
-    if not found:
-        return ""
-    newest = max(found, key=lambda p: version_key(p.name.split("@", 1)[1]))
-    return str(newest / relative)
+    A tool that sets a variable declares it in its record, so this
+    reads the record's answer through the receipt rather than
+    rebuilding the path from a file name.
+    """
+    receipt = held.get(name)
+    return receipt.env.get(variable, "") if receipt is not None else ""
+
+
+def _receipted_path(held: Mapping[str, Receipt], name: str) -> str:
+    """The directory *name*'s receipt puts on PATH, or empty.
+
+    Empty for a tool this checkout never materialised, and for one
+    materialised in a mode that puts no directory on PATH.
+    """
+    receipt = held.get(name)
+    return receipt.paths[0] if receipt is not None and receipt.paths else ""
 
 
 def build(package: Package, root: Path, *, epoch: int = 0) -> Path:

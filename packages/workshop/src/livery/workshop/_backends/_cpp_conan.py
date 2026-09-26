@@ -1,11 +1,16 @@
 """The C/C++ backend: the build callables for ``type = "cpp-conan"``.
 
 The gate verb configures and builds with cmake and ninja and runs
-the ctest suite through the generated ``test`` target, all through
-the toolroom handles. Packaging goes through conan, which has no
-toolroom handle yet, so ``build`` starts it as a deliberate
-``livery.footman.run`` after probing that the binary resolves; a machine
-without conan gets the install command, never a stack trace.
+the ctest suite through the generated ``test`` target. Packaging,
+the saved caches, and the editable registrations go through conan.
+
+Every tool this module runs is a tool of the store, reached through
+its toolroom handle, so the version is the one this checkout's lock
+pins. A handle spawns its tool by name, so a machine that never
+deployed one raises ``OSError``, and ``_undeployed`` turns that into
+the sync command. The one tool reached without a handle is the host
+compiler in ``_toolchain_arguments``: a ``host_tool`` is by contract
+the machine's own, and the store never installs it.
 """
 
 from __future__ import annotations
@@ -13,10 +18,9 @@ from __future__ import annotations
 import os
 import platform
 import re
-import shutil
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 
 import livery.footman as footman
 from livery.footman import fail
@@ -24,6 +28,7 @@ from livery.toolroom import tools
 
 if TYPE_CHECKING:
     from livery.forge import Repository
+    from livery.toolroom.tools import Result
     from livery.workshop._packages import Package
     from livery.workshop._registries import RegistryTarget
 
@@ -126,26 +131,42 @@ class _Stamper:
         return ["conanfile.py"]
 
 
-def _conan(
-    package_dir: Path, *args: str, env: dict[str, str] | None = None
-) -> footman.Result:
-    """One conan invocation; the refusal names the store that supplies conan."""
-    if shutil.which("conan") is None:
-        fail(
-            "conan is not on PATH: it is a tool of the store, so enter the"
-            f" environment (`{footman.prog()} sync`, then the printed"
-            " env.emit line) and re-run"
-        )
-    run_env = dict(os.environ)
-    if env:
-        run_env.update(env)
-    return footman.run(
-        ["conan", *args],
-        cwd=package_dir,
-        env=run_env,
-        nofail=True,
-        recorded=False,
+def _undeployed(name: str) -> NoReturn:
+    """Refuse: *name* is a tool of the store this machine has not deployed.
+
+    Every handle in this module spawns its tool by name, which the
+    entered environment puts on PATH. A machine that never deployed
+    the tool raises ``OSError`` from the spawn instead, and a
+    traceback names nothing a person can do, so each call turns one
+    into this sentence.
+    """
+    fail(
+        f"{name} is not on PATH: it is a tool of the store, so enter the"
+        f" environment (`{footman.prog()} sync`, then the printed"
+        " env.emit line) and re-run"
     )
+
+
+def _conan(package_dir: Path, *args: str, env: dict[str, str] | None = None) -> Result:
+    """One conan invocation through the store's handle.
+
+    *env* adds to this process's environment rather than replacing
+    it: a handle passes what it is given as the child's whole
+    environment, never a merge over the parent's.
+
+    Raises:
+        Failed: when conan is not deployed on this machine, naming
+            the sync that supplies it.
+    """
+    try:
+        return tools.conan.opts(
+            cwd=package_dir,
+            env={**os.environ, **(env or {})},
+            nofail=True,
+            recorded=False,
+        )(*args)
+    except OSError:
+        _undeployed("conan")
 
 
 #: The remote name the workshop configures on the conan client. One
@@ -653,19 +674,16 @@ def test(
                 f"{result.stdout[-4000:]}{result.stderr[-2000:]}"
             )
         return
-    if shutil.which("ctest") is None:
-        fail(
-            f"{package.name}: ctest is not on PATH beside cmake; the selected"
-            " tests need it, so install cmake's tools and re-run"
-        )
     names = [Path(path).stem for path in selection]
     pattern = "^(" + "|".join(re.escape(name) for name in names) + ")$"
-    ran = footman.run(
-        ["ctest", "--test-dir", str(build_dir), "-R", pattern, "--output-on-failure"],
-        cwd=package.directory,
-        nofail=True,
-        recorded=False,
-    )
+    # ctest is an entry point of the cmake record, so the store
+    # deploys the two together and one handle each reaches them.
+    try:
+        ran = tools.ctest.opts(cwd=package.directory, nofail=True, recorded=False)(
+            "--test-dir", str(build_dir), "-R", pattern, "--output-on-failure"
+        )
+    except OSError:
+        _undeployed("ctest")
     if "No tests were found" in ran.stdout + ran.stderr:
         fail(
             f"{package.name}: no ctest is named {', '.join(names)}; the cpp-conan"
@@ -831,27 +849,10 @@ def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
     kind is a later phase's work.
     """
     del root, epoch
-    if shutil.which("conan") is None:
-        fail(
-            f"{package.name} is a cpp-conan package and conan is not on"
-            " PATH: it is a tool of the store, so enter the environment"
-            f" (`{footman.prog()} sync`, then the printed env.emit line)"
-            " and re-run"
-        )
-    conan = footman.run(
-        ["conan", "profile", "detect", "--exist-ok"],
-        cwd=package.directory,
-        nofail=True,
-        recorded=False,
-    )
+    conan = _conan(package.directory, "profile", "detect", "--exist-ok")
     if conan.code != 0:
         fail(f"conan profile detect exited {conan.code}:\n{conan.stdout}{conan.stderr}")
-    result = footman.run(
-        ["conan", "create", "."],
-        cwd=package.directory,
-        nofail=True,
-        recorded=False,
-    )
+    result = _conan(package.directory, "create", ".")
     if result.code != 0:
         fail(
             f"conan create ({package.name}) exited {result.code}:\n"

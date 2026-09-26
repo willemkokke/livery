@@ -308,11 +308,43 @@ def test_the_editable_step_says_when_conan_is_missing_and_does_nothing_without_a
     (tmp_path / "packages").mkdir()
     _render_chain(tmp_path)
     assert conan_editables(tmp_path) == []
-    # A member, and no conan on PATH: the line names the store's way in.
+    # A member, and no conan deployed: the handle spawns by name, so
+    # an empty PATH raises out of the spawn. The step answers with a
+    # line rather than refusing, because the sync it names is how
+    # conan arrives.
     _render_library(tmp_path)
-    monkeypatch.setattr("shutil.which", lambda _name: None)
+    empty = tmp_path / "empty-path"
+    empty.mkdir()
+    monkeypatch.setenv("PATH", str(empty))
     (line,) = conan_editables(tmp_path)
     assert "conan is not on PATH" in line and "sync" in line
+
+
+def _receipt(root: Path, tool: str, version: str, **fields: object) -> Path:
+    """Write a receipt for *tool* as `fm sync` would; the file."""
+    import json
+
+    from livery.workshop._tools import receipts_dir
+
+    directory = receipts_dir(root)
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{tool}.json"
+    body: dict[str, object] = {
+        "schema": 1,
+        "tool": tool,
+        "version": version,
+        "host": "linux-x64",
+        "kind": "download",
+        "mode": "path",
+        "deployment": "sha256:" + "0" * 64,
+        "tool_dir": "",
+        "paths": [],
+        "env": {},
+        "entry_points": [],
+    }
+    body.update(fields)
+    path.write_text(json.dumps(body), encoding="utf-8")
+    return path
 
 
 def test_the_conan_environment_refuses_without_the_store_and_names_the_provider(
@@ -324,29 +356,51 @@ def test_the_conan_environment_refuses_without_the_store_and_names_the_provider(
     home = Home(tmp_path / "toolroom")
     monkeypatch.setattr(_tools, "store_home", lambda: home)
     monkeypatch.delenv("CMAKE_CONAN_PROVIDER", raising=False)
-    monkeypatch.setattr("shutil.which", lambda _name: None)
+    # No receipts at all: the provider is named first.
     with pytest.raises(_FAILURES, match="cmake-conan provider is not materialised"):
         _python_nanobind.conan_environment(tmp_path)
+    # The provider's path is the record's own env entry, carried by
+    # the receipt; nothing here rebuilds it from a file name.
     provider = home.tools / "cmake_conan@0.19.0" / "conan_provider.cmake"
-    provider.parent.mkdir(parents=True)
-    provider.write_text("# provider\n")
+    _receipt(
+        tmp_path,
+        "cmake_conan",
+        "0.19.0",
+        mode="none",
+        tool_dir=str(provider.parent),
+        env={"CMAKE_CONAN_PROVIDER": str(provider)},
+    )
     with pytest.raises(_FAILURES, match="conan is not materialised"):
         _python_nanobind.conan_environment(tmp_path)
-    conan = home.tools / "conan@2.32.0" / "bin" / "conan"
-    conan.parent.mkdir(parents=True)
-    conan.write_text("#!/bin/sh\n")
-    older = home.tools / "cmake_conan@0.18.1" / "conan_provider.cmake"
-    older.parent.mkdir(parents=True)
-    older.write_text("# old\n")
+    # A receipt in a mode that puts nothing on PATH is no answer either.
+    _receipt(tmp_path, "conan", "2.32.0", mode="none", entry_points=["conan"])
+    with pytest.raises(_FAILURES, match="conan is not materialised"):
+        _python_nanobind.conan_environment(tmp_path)
+    conan_bin = home.tools / "conan@2.32.0" / "bin"
+    _receipt(
+        tmp_path,
+        "conan",
+        "2.32.0",
+        tool_dir=str(conan_bin.parent),
+        paths=[str(conan_bin)],
+        entry_points=["conan"],
+    )
     monkeypatch.setenv("CONAN_HOME", str(tmp_path / "conan-home"))
     env = _python_nanobind.conan_environment(tmp_path)
-    # The newest install wins, and the caller's conan home is kept.
+    # The receipt's version wins over a newer directory in the store:
+    # the lock, not the store's contents, says what this checkout uses.
+    newer = home.tools / "cmake_conan@0.20.0" / "conan_provider.cmake"
+    newer.parent.mkdir(parents=True)
+    newer.write_text("# newer\n")
     assert env["CMAKE_CONAN_PROVIDER"] == str(provider)
+    assert _python_nanobind.conan_environment(tmp_path)["CMAKE_CONAN_PROVIDER"] == str(
+        provider
+    )
     assert env["CONAN_HOME"] == str(tmp_path / "conan-home")
     if sys.platform.startswith("linux"):
         assert f"-v {tmp_path}:{tmp_path}" in env["CIBW_CONTAINER_ENGINE"]
         assert f"-v {home.root}:{home.root}" in env["CIBW_CONTAINER_ENGINE"]
-        assert str(conan.parent) in env["CIBW_ENVIRONMENT_LINUX"]
+        assert str(conan_bin) in env["CIBW_ENVIRONMENT_LINUX"]
     else:
         assert "CIBW_CONTAINER_ENGINE" not in env
     # An entered environment's provider is kept as it is.

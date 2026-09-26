@@ -418,30 +418,30 @@ def conan_editables(root: Path) -> list[str]:
     source tree, built from HEAD, never to a package in the cache, the
     same as uv's workspace sources for python members. The contract
     floor stays the drift guard between the two. A workspace with no
-    such member does nothing; a machine without conan on PATH says
+    such member does nothing; a machine without conan deployed says
     so and registers nothing, since the store supplies conan when the
-    environment is entered.
+    environment is entered. That case is a line, not a refusal: a
+    sync is how conan arrives, so failing on its absence would make
+    the fix unreachable.
     """
-    import shutil
-
+    from livery.toolroom import tools
     from livery.workshop._packages import discover_packages
 
     members = [p for p in discover_packages(root) if p.type == "cpp-conan"]
     if not members:
         return []
-    conan = shutil.which("conan")
-    if conan is None:
-        return [
-            "  conan editables: conan is not on PATH, so none registered; enter"
-            f" the environment and re-run `{footman.prog()} sync`"
-        ]
+    conan = tools.conan.opts(nofail=True, recorded=False)
     lines: list[str] = []
     for member in members:
-        result = footman.run(
-            [conan, "editable", "add", str(member.directory)],
-            nofail=True,
-            recorded=False,
-        )
+        try:
+            result = conan("editable", "add", str(member.directory))
+        except OSError:
+            # The handle spawns by name; an undeployed conan raises
+            # here rather than answering with a failing result.
+            return [
+                "  conan editables: conan is not on PATH, so none registered; enter"
+                f" the environment and re-run `{footman.prog()} sync`"
+            ]
         if result.code == 0:
             lines.append(f"  conan editable: {member.path} at HEAD")
         else:
