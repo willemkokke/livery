@@ -1,6 +1,6 @@
 # The end-to-end CI profile: one timeline from the local command to the last test
 
-Status: ruled 2026-09-26, no phase started. Five phases, each
+Status: ruled 2026-09-26, no phase started. Six phases, each
 gate-green and mergeable alone. The feature is investigative: a leg
 pushes its trace whatever happens, and nobody pays for it until
 someone asks a question.
@@ -82,7 +82,47 @@ step that dispatched it.
    that finds nothing, a trace that will not parse: each is named and
    none decides a job or a command.
 
-## Phase 1: the trace leaves the leg
+## Phase 1: a profiled run infects what it launches
+
+`--profile` opens a drop box and names it in the environment, and a
+child may leave a fragment there, stamped in epoch microseconds, which
+the writer embeds as its own process group. What no child does is
+notice: the plugin arms on `--profile` being mentioned on *this*
+command line, so an `fm` a task spawns writes nothing, and a re-exec
+carries the flag through `sys.argv` but loses everything that happened
+before it, which is exactly the sync a reconcile had just run. The
+drop box leaks on the way out, since an exec runs no exit handler.
+
+This phase stands alone, wants no forge, and is what the later phases
+reuse: a leg's `fm` is a child like any other, one machine further
+away.
+
+Deliverables:
+
+- A child `fm` that finds the drop box in its environment profiles
+  itself into it, as a fragment rather than a standalone file, and a
+  child of that child does the same.
+- A process about to re-exec writes what it has done so far as a
+  fragment into the same drop box and hands the box on, so the work
+  before the exec is in the trace and the directory is consumed
+  rather than leaked.
+- A run that mentions no profile and finds no drop box behaves as it
+  does today, writing nothing and reading nothing.
+
+Acceptance:
+
+- `uv run fm check` exits 0.
+- A test asserts a profiled parent whose task spawns `fm` gets that
+  child's tasks in its own trace, as a process group of its own.
+- A test asserts a re-exec's pre-exec work is in the trace, and that
+  no drop directory survives the handoff.
+- A test asserts an unprofiled child writes nothing and leaves
+  nothing behind.
+- On Windows the reconcile's re-exec waits for its child rather than
+  replacing itself; a test asserts the parent does not write over the
+  child's file.
+
+## Phase 2: the trace leaves the leg
 
 Deliverables:
 
@@ -112,7 +152,7 @@ Acceptance:
 - A test asserts a push that fails is named and the job's verdict is
   unchanged.
 
-## Phase 2: the skeleton and the assembler
+## Phase 3: the skeleton and the assembler
 
 Deliverables:
 
@@ -136,7 +176,7 @@ Acceptance:
 - A test asserts a trace that will not parse is named and the other
   legs still assemble.
 
-## Phase 3: the local command carries it
+## Phase 4: the local command carries it
 
 Deliverables:
 
@@ -157,7 +197,7 @@ Acceptance:
 - A test asserts a run whose traces have aged out of the window
   assembles from the skeleton alone and says so.
 
-## Phase 4: the chain, by recorded fact
+## Phase 5: the chain, by recorded fact
 
 A run triggered by a push or a squash knows nothing of what caused
 it, and the command that caused it has usually exited before the run
@@ -195,7 +235,7 @@ Acceptance:
 - A test asserts a commit nobody recorded a link for is assembled as
   a root, never guessed into a tree.
 
-## Phase 5: the numbers decide the defaults
+## Phase 6: the numbers decide the defaults
 
 Deliverables:
 
@@ -251,6 +291,10 @@ Acceptance:
   wave later still, so a cause writes its link down and the assembler
   walks it afterwards. Three kinds of link: a dispatched id, a
   followed run's id, and a merge's commit, which both ends know.
+
+- 2026-09-27, Willem asked for the infectious half to be parked: a
+  profiled run must carry what it launches, which is phase 1 here.
+  Recorded because it was ruled after the plan first merged.
 
 ## Open
 
