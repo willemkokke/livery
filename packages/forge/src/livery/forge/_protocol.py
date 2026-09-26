@@ -39,6 +39,7 @@ from collections.abc import Mapping
 from typing import Protocol
 
 from livery.forge._types import (
+    Asset,
     Capability,
     Codeowners,
     CodeownersEntry,
@@ -354,6 +355,30 @@ class Releases(Protocol):
         """The release for *tag*, or None when the tag has none.
 
         The probe that makes release creation safe to re-run.
+        """
+        ...
+
+    def upload_asset(
+        self,
+        tag: str,
+        name: str,
+        data: bytes,
+        *,
+        content_type: str = "application/octet-stream",
+    ) -> Asset:
+        """Attach *data* to *tag*'s release as the file *name*; the asset.
+
+        Raises livery.forge.ForgeError when *tag* has no release, or
+        when the release already carries an asset named *name*. A
+        re-run therefore probes with livery.forge.Releases.assets
+        first and skips the upload: that pair is the idempotent whole.
+        """
+        ...
+
+    def assets(self, tag: str) -> tuple[Asset, ...]:
+        """The files attached to *tag*'s release, in the forge's order.
+
+        Raises livery.forge.ForgeError when *tag* has no release.
         """
         ...
 

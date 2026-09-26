@@ -35,6 +35,7 @@ from livery.forge._protocol import (
 )
 from livery.forge._schedules import DeclinedSchedules
 from livery.forge._types import (
+    Asset,
     Capability,
     CheckState,
     Codeowners,
@@ -1026,6 +1027,49 @@ class _GiteaReleases:
         )
         return None if data is None else _as_release(data)
 
+    def upload_asset(
+        self,
+        tag: str,
+        name: str,
+        data: bytes,
+        *,
+        content_type: str = "application/octet-stream",
+    ) -> Asset:
+        """Attach *data* to *tag*'s release; a name already there is refused.
+
+        Gitea takes the file as the ``attachment`` part of a form, on
+        the release addressed by its number; the content type is the
+        form's, so *content_type* is accepted for the protocol and not
+        sent.
+        """
+        del content_type
+        release = self._released(tag)
+        if any(asset.name == name for asset in self.assets(tag)):
+            raise ForgeError(
+                f"release {tag} already has an asset named {name}: probe with"
+                " release.assets before uploading",
+                status=409,
+            )
+        answer = self._client.multipart(
+            f"{self._base}/releases/{release.id}/assets?name={quote(name, safe='')}",
+            "attachment",
+            name,
+            data,
+        )
+        return _as_asset(answer)
+
+    def assets(self, tag: str) -> tuple[Asset, ...]:
+        """The files attached to *tag*'s release."""
+        release = self._released(tag)
+        rows = self._client.request(f"{self._base}/releases/{release.id}/assets")
+        return tuple(_as_asset(row) for row in rows or [])
+
+    def _released(self, tag: str) -> Release:
+        release = self.get(tag)
+        if release is None:
+            raise ForgeError(f"tag {tag} has no release", status=404)
+        return release
+
 
 def _as_release(data: Mapping[str, Any]) -> Release:
     """Gitea's release JSON, normalised."""
@@ -1035,6 +1079,16 @@ def _as_release(data: Mapping[str, Any]) -> Release:
         body=str(data.get("body") or ""),
         prerelease=bool(data.get("prerelease", False)),
         url=str(data.get("html_url", "")),
+        id=int(data.get("id") or 0),
+    )
+
+
+def _as_asset(data: Mapping[str, Any]) -> Asset:
+    """Gitea's release attachment JSON, normalised."""
+    return Asset(
+        name=str(data.get("name", "")),
+        url=str(data.get("browser_download_url", "")),
+        size=int(data.get("size") or 0),
     )
 
 

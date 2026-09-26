@@ -44,6 +44,7 @@ from livery.forge._protocol import (
     Schedules,
 )
 from livery.forge._types import (
+    Asset,
     Capability,
     Codeowners,
     CodeownersEntry,
@@ -521,7 +522,7 @@ class _GitlabRepository:
         self.pr: PullRequests = _GitlabPullRequests(client, self._base)
         self.checks: Checks = _GitlabChecks(client, self._base)
         self.issue: Issues = _GitlabIssues(forge, client, self._base)
-        self.release: Releases = _GitlabReleases(client, self._base)
+        self.release: Releases = _GitlabReleases(client, self._base, forge._web_root)
         self.schedule: Schedules = _GitlabSchedules(client, self._base)
 
     @property
@@ -1442,9 +1443,10 @@ def _as_schedule(data: dict[str, Any]) -> Schedule:
 class _GitlabReleases:
     """The release operations of one GitLab project."""
 
-    def __init__(self, client: JsonClient, base: str) -> None:
+    def __init__(self, client: JsonClient, base: str, web_root: str = "") -> None:
         self._client = client
         self._base = base
+        self._web_root = web_root or client.api_base.removesuffix("/api/v4")
 
     def create(
         self, tag: str, *, name: str, body: str = "", prerelease: bool = False
@@ -1476,6 +1478,61 @@ class _GitlabReleases:
             f"{self._base}/releases/{quote(tag, safe='')}", none_on=(404,)
         )
         return None if data is None else _as_release(data)
+
+    def upload_asset(
+        self,
+        tag: str,
+        name: str,
+        data: bytes,
+        *,
+        content_type: str = "application/octet-stream",
+    ) -> Asset:
+        """Attach *data* to *tag*'s release; a name already there is refused.
+
+        GitLab has no release file store: the bytes are uploaded to
+        the project, and the release gets a link to them named *name*.
+        The content type is the form's, so *content_type* is accepted
+        for the protocol and not sent.
+        """
+        del content_type
+        self._released(tag)
+        if any(asset.name == name for asset in self.assets(tag)):
+            raise ForgeError(
+                f"release {tag} already has an asset named {name}: probe with"
+                " release.assets before uploading",
+                status=409,
+            )
+        uploaded = self._client.multipart(f"{self._base}/uploads", "file", name, data)
+        url = f"{self._web_root}{uploaded.get('full_path', '')}"
+        link = self._client.request(
+            f"{self._base}/releases/{quote(tag, safe='')}/assets/links",
+            method="POST",
+            data={"name": name, "url": url, "link_type": "package"},
+        )
+        return _as_asset(link, size=len(data))
+
+    def assets(self, tag: str) -> tuple[Asset, ...]:
+        """The files linked to *tag*'s release."""
+        self._released(tag)
+        rows = self._client.request(
+            f"{self._base}/releases/{quote(tag, safe='')}/assets/links"
+        )
+        return tuple(_as_asset(row) for row in rows or [])
+
+    def _released(self, tag: str) -> Release:
+        release = self.get(tag)
+        if release is None:
+            raise ForgeError(f"tag {tag} has no release", status=404)
+        return release
+
+
+def _as_asset(data: Mapping[str, Any], *, size: int = 0) -> Asset:
+    """GitLab's release link JSON, normalised; the size is the caller's."""
+    return Asset(
+        name=str(data.get("name", "")),
+        url=str(data.get("direct_asset_url") or data.get("url") or ""),
+        size=size,
+    )
 
 
 def _as_release(data: Mapping[str, Any]) -> Release:

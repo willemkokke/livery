@@ -14,6 +14,7 @@ import http.client
 import json
 import urllib.error
 import urllib.request
+import uuid
 from collections.abc import Callable
 from http.client import HTTPMessage
 from typing import IO, Any, Protocol
@@ -154,6 +155,63 @@ class JsonClient:
         )
         return None if raw is None else raw.decode("utf-8", errors="replace")
 
+    def upload(
+        self,
+        endpoint: str,
+        data: bytes,
+        *,
+        content_type: str = "application/octet-stream",
+        timeout: float | None = None,
+    ) -> Any:
+        """POST *data* as one raw body to *endpoint*; the parsed JSON answer.
+
+        *endpoint* is relative to the API root, or absolute when it
+        starts with ``http``: GitHub takes uploads on a host of its
+        own. Every error raises as `request` does.
+        """
+        raw = self._raw(
+            endpoint,
+            method="POST",
+            data=None,
+            none_on=(),
+            timeout=self._timeout if timeout is None else timeout,
+            raw_body=data,
+            content_type=content_type,
+        )
+        return json.loads(raw, strict=False) if raw else {}
+
+    def multipart(
+        self,
+        endpoint: str,
+        field: str,
+        filename: str,
+        data: bytes,
+        *,
+        timeout: float | None = None,
+    ) -> Any:
+        """POST *data* as the file part *field* of a multipart form; the JSON answer."""
+        boundary = f"----livery-forge-{uuid.uuid4().hex}"
+        body = b"".join(
+            (
+                f"--{boundary}\r\n".encode(),
+                f'Content-Disposition: form-data; name="{field}";'
+                f' filename="{filename}"\r\n'.encode(),
+                b"Content-Type: application/octet-stream\r\n\r\n",
+                data,
+                f"\r\n--{boundary}--\r\n".encode(),
+            )
+        )
+        raw = self._raw(
+            endpoint,
+            method="POST",
+            data=None,
+            none_on=(),
+            timeout=self._timeout if timeout is None else timeout,
+            raw_body=body,
+            content_type=f"multipart/form-data; boundary={boundary}",
+        )
+        return json.loads(raw, strict=False) if raw else {}
+
     def _raw(
         self,
         endpoint: str,
@@ -162,12 +220,16 @@ class JsonClient:
         data: dict[str, Any] | None,
         none_on: tuple[int, ...],
         timeout: float,
+        raw_body: bytes | None = None,
+        content_type: str = "",
     ) -> bytes | None:
-        url = f"{self.api_base}{endpoint}"
-        payload = json.dumps(data).encode() if data is not None else None
+        url = endpoint if endpoint.startswith("http") else f"{self.api_base}{endpoint}"
+        payload = json.dumps(data).encode() if data is not None else raw_body
         headers = dict(self._headers)
-        if payload is not None:
+        if data is not None:
             headers["Content-Type"] = "application/json"
+        elif raw_body is not None:
+            headers["Content-Type"] = content_type or "application/octet-stream"
         request = urllib.request.Request(
             url, data=payload, method=method, headers=headers
         )

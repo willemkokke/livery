@@ -32,6 +32,7 @@ from livery.forge._protocol import (
     Schedules,
 )
 from livery.forge._types import (
+    Asset,
     Capability,
     Codeowners,
     CodeownersEntry,
@@ -195,6 +196,7 @@ class _RepoState:
     armed: dict[int, tuple[str, str]] = field(default_factory=dict)
     issues: dict[int, _IssueState] = field(default_factory=dict)
     releases: dict[str, Release] = field(default_factory=dict)
+    assets: dict[str, dict[str, bytes]] = field(default_factory=dict)
     runs: dict[int, _RunState] = field(default_factory=dict)
     schedules: dict[str, Schedule] = field(default_factory=dict)
     protections: dict[str, Protection] = field(default_factory=dict)
@@ -1296,6 +1298,42 @@ class _FakeReleases:
     def get(self, tag: str) -> Release | None:
         """The release for *tag*, or None."""
         return self._state().releases.get(tag)
+
+    def upload_asset(
+        self,
+        tag: str,
+        name: str,
+        data: bytes,
+        *,
+        content_type: str = "application/octet-stream",
+    ) -> Asset:
+        """Attach *data* to *tag*'s release; a name already there is refused."""
+        del content_type
+        state = self._state()
+        if tag not in state.releases:
+            raise ForgeError(f"tag {tag} has no release", status=404)
+        held = state.assets.setdefault(tag, {})
+        if name in held:
+            raise ForgeError(
+                f"release {tag} already has an asset named {name}: probe with"
+                " release.assets before uploading",
+                status=409,
+            )
+        held[name] = data
+        return Asset(name, self._asset_url(tag, name), len(data))
+
+    def assets(self, tag: str) -> tuple[Asset, ...]:
+        """The files attached to *tag*'s release, in upload order."""
+        state = self._state()
+        if tag not in state.releases:
+            raise ForgeError(f"tag {tag} has no release", status=404)
+        return tuple(
+            Asset(name, self._asset_url(tag, name), len(data))
+            for name, data in state.assets.get(tag, {}).items()
+        )
+
+    def _asset_url(self, tag: str, name: str) -> str:
+        return f"fake://{self._owner}/{self._name}/releases/{tag}/assets/{name}"
 
 
 def _matches(state: Literal["open", "closed"], wanted: StateFilter) -> bool:
