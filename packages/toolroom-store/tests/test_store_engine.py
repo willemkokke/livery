@@ -797,6 +797,10 @@ def test_an_npm_tool_naming_bun_lands_through_bun(
 
     def installing(argv: list[str], env: dict[str, str]) -> int:
         calls.append((argv, env))
+        # The global project is there before bun runs, so its walk up
+        # for a project stops at the tool's directory.
+        project = Path(env["BUN_INSTALL"]) / "install" / "global" / "package.json"
+        assert project.read_text() == "{}\n"
         bin_dir = Path(env["BUN_INSTALL"]) / "bin"
         bin_dir.mkdir(parents=True, exist_ok=True)
         (bin_dir / f"cspell{EXE}").write_text("#!/usr/bin/env node\n")

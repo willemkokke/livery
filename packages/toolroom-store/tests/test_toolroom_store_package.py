@@ -84,6 +84,7 @@ def test_the_public_surface_is_pinned() -> None:
         "resolve",
         "resolve_lock",
         "schema",
+        "bun_global_project",
         "npm_cli",
         "silent",
         "spec_from",

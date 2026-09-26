@@ -236,6 +236,23 @@ def _version_in(text: str) -> str:
     return match[0] if match else ""
 
 
+def bun_global_project(install_root: Path) -> Path:
+    """The global project bun installs into under *install_root*, made empty.
+
+    bun's global install lives at `<BUN_INSTALL>/install/global` and
+    looks for the project to install into by walking up from there,
+    so with no project of its own it installs into the nearest
+    ancestor holding a `package.json`, a home directory's included.
+    An empty project made first is where the walk stops.
+    """
+    project = install_root / "install" / "global"
+    project.mkdir(parents=True, exist_ok=True)
+    manifest = project / "package.json"
+    if not manifest.is_file():
+        manifest.write_text("{}\n", encoding="utf-8")
+    return manifest
+
+
 def npm_cli(node: Path) -> Path:
     """The `npm-cli.js` node ships beside *node*, in either layout node publishes.
 
@@ -557,7 +574,10 @@ class Store:
         package, and on a Windows host, where npm writes the launchers
         into the prefix itself, the prefix is the tool's `bin`. On bun,
         `BUN_INSTALL` names the tool's directory and `bun add --global`
-        lands the launchers in its `bin`. Either way the runtime's own
+        lands the launchers in its `bin`; the global project's
+        `package.json` is made under the tool's directory first, since
+        bun otherwise walks up from there and installs into the nearest
+        project above it, a home directory's included. Either way the runtime's own
         directory heads the child's PATH, and a launcher that resolves
         outside the tool's directory is refused naming where it points,
         since the store runs nothing it did not place.
@@ -584,6 +604,7 @@ class Store:
         else:
             argv = [str(exe), "add", "--global", f"{package}@{version}"]
             env["BUN_INSTALL"] = str(tool_dir)
+            bun_global_project(tool_dir)
         self._progress(Event(name, version, "install", " ".join(argv)))
         code = run_installer(argv, env)
         launchers = _launchers(bin_dir)

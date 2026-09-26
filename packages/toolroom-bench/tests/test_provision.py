@@ -187,6 +187,7 @@ def test_node_tier_installs_through_each_runtime(tmp_path, monkeypatch):
     assert on_bun[0][1:3] == ["add", "--global"]
     assert on_bun[0][3:] == ["cspell", "markdownlint-cli2"]  # sorted, deduped
     assert on_bun[1]["BUN_INSTALL"] == str(tmp_path)
+    assert (tmp_path / "install" / "global" / "package.json").read_text() == "{}\n"
     assert on_bun[1]["PATH"].split(os.pathsep)[0] == str(_provision.bin_dir(tmp_path))
 
 
