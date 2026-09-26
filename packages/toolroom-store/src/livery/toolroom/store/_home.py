@@ -26,7 +26,12 @@ URLS = "urls"
 """The namespace of URL-keyed downloads, the convention strongroom
 publishes; volatile."""
 
-NAMESPACES = (Namespace(TOOLS, "write-once"), Namespace(URLS, "volatile"))
+NAMESPACES = (Namespace(TOOLS, "volatile"), Namespace(URLS, "volatile"))
+"""The store's namespaces. `tools/<name>@<version>` names the tree a
+version runs from and moves by compare-and-swap when the record's
+layout for the version changes; the deployment that produced the tree
+is recorded beside the ref. The artifact never changes under a
+version, since landing verifies its bytes."""
 """The namespaces the home's store is created and opened with."""
 
 

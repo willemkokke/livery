@@ -264,20 +264,60 @@ def test_a_directory_the_store_did_not_make_is_never_removed(
     assert (mine / "precious").read_text() == "mine"
 
 
-def test_a_ref_that_already_names_another_tree_is_refused(
+def test_a_ref_that_recorded_no_deployment_is_supplied_once_more(
     home: Home, origin: dict[str, bytes]
 ) -> None:
+    """A ref made from another tree, or with no deployment beside it, is behind.
+
+    Supplied again, the ref moved from what it named, and the second
+    ensure a probe.
+    """
     artifacts, _data = _tool()
     spec = _record("tool", artifacts)
     _serve(origin, spec, artifacts)
     store = Store(home, host=HOST)
     other = store.objects.put(b"{}")
     store.objects.set_ref("tools", "tool@1.0.0", other, previous=None, by=_engine.BY)
-    with pytest.raises(
-        StoreError,
-        match=r"already names another tree \(sha256:.*\); the artifact changed",
-    ):
-        store.ensure(spec, spec.versions[-1])
+    made = store.ensure(spec, "1.0.0")
+    assert made.installed and store.objects.ref("tools", "tool@1.0.0") == made.tree
+    moved = store.objects.record("tools", "tool@1.0.0")
+    assert moved is not None and moved.previous == other
+    assert moved.meta == {
+        _engine.DEPLOYMENT: str(resolve(spec, "1.0.0", HOST).digest())
+    }
+    assert not store.ensure(spec, "1.0.0").installed
+
+
+def test_a_layout_change_under_a_pinned_version_moves_the_ref_and_the_view(
+    home: Home, origin: dict[str, bytes]
+) -> None:
+    """The artifact stays; the tree follows the record's layout for the version."""
+    artifacts, _data = _tool()
+    first = _record("tool", artifacts)
+    _serve(origin, first, artifacts)
+    store = Store(home, host=HOST)
+    made = store.ensure(first, "1.0.0")
+    tool_dir = home.tool_dir("tool", "1.0.0")
+    assert (tool_dir / "tool-1.0.0" / "bin" / f"tool{EXE}").is_file()
+    assert not store.ensure(first, "1.0.0").installed  # the same layout: a probe
+    # The root hoisted: a new tree from the same artifact.
+    second = _record("tool", artifacts, root="tool-1.0.0")
+    moved = store.ensure(second, "1.0.0")
+    assert moved.installed and moved.tree != made.tree
+    record = store.objects.record("tools", "tool@1.0.0")
+    assert record is not None
+    assert record.digest == moved.tree and record.previous == made.tree
+    assert record.meta == {
+        _engine.DEPLOYMENT: str(resolve(second, "1.0.0", HOST).digest())
+    }
+    assert (tool_dir / "bin" / f"tool{EXE}").is_file()
+    assert not (tool_dir / "tool-1.0.0").exists()
+    assert not store.ensure(second, "1.0.0").installed
+    # The old tree is unreached and goes with a sweep, as does the landed
+    # artifact, which nothing roots; the tree the ref names stays.
+    report = store.objects.sweep()
+    assert made.tree in report.removed
+    assert moved.tree is not None and store.objects.state(moved.tree) == "present"
 
 
 def test_a_launcher_stands_in_where_a_link_is_refused(

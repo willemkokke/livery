@@ -38,6 +38,7 @@ from livery.strongroom import (
     Source,
     Subject,
     Unreachable,
+    Value,
     ViewRecord,
 )
 from livery.strongroom import Store as ObjectStore
@@ -67,6 +68,9 @@ def _by() -> Subject:
 
 
 BY = _by()
+
+DEPLOYMENT = "deployment"
+"""The key beside a `tools/` ref naming the deployment that produced its tree."""
 
 LINKS = ".links.json"
 """The manifest a bin directory keeps of the links the engine made there."""
@@ -432,8 +436,17 @@ class Store:
         self, name: str, version: str, deployment: Deployment
     ) -> Ensured | None:
         tool_dir = self.home.tool_dir(name, version)
-        tree = self._objects.ref(TOOLS, f"{name}@{version}")
+        key = f"{name}@{version}"
+        tree = self._objects.ref(TOOLS, key)
         if tree is None or not self._whole(tool_dir):
+            return None
+        # The tree is present for this deployment alone: a ref made from
+        # another layout of the version, or one that recorded none, is
+        # behind the catalogue and supplied again.
+        made_from = self._objects.record(TOOLS, key)
+        if made_from is None or made_from.meta.get(DEPLOYMENT) != str(
+            deployment.digest()
+        ):
             return None
         return Ensured(name, version, False, tool_dir, deployment, tree)
 
@@ -461,18 +474,24 @@ class Store:
             shutil.rmtree(scratch, ignore_errors=True)
         key = f"{name}@{version}"
         current = self._objects.ref(TOOLS, key)
-        if current is None:
-            self._objects.set_ref(TOOLS, key, tree.digest(), previous=None, by=BY)
-        elif current != tree.digest():
-            raise StoreError(
-                f"{name} {version}: tools/{key} already names another tree"
-                f" ({current}); the artifact changed under a pinned version, which"
-                " a store never accepts"
+        made_from = self._objects.record(TOOLS, key)
+        produced: dict[str, Value] = {DEPLOYMENT: str(deployment.digest())}
+        if (
+            current != tree.digest()
+            or made_from is None
+            or made_from.meta.get(DEPLOYMENT) != produced[DEPLOYMENT]
+        ):
+            # The ref follows the record's layout for the version, by
+            # compare-and-swap from what it named: a changed layout is
+            # a new tree from the same artifact, and the old tree is
+            # unreached once the ref has moved.
+            self._objects.set_ref(
+                TOOLS, key, tree.digest(), previous=current, by=BY, meta=produced
             )
         tool_dir = self.home.tool_dir(name, version)
         stale = self._view_of(tool_dir)
         if stale is not None:
-            # A view the store made and something has since damaged:
+            # A view the store made, of the old tree or since damaged:
             # dropped through its record, which removes only what the
             # store created, then filled again.
             self._objects.drop_view(stale.id)

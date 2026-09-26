@@ -28,7 +28,7 @@ def test_the_home_lays_out_its_directories_and_opens_its_store_twice(
     first = home.open_store()
     assert (home.store / "strongroom.json").is_file()
     assert set(first.namespaces) >= {TOOLS, URLS}
-    assert first.namespaces[TOOLS].mutation == "write-once"
+    assert first.namespaces[TOOLS].mutation == "volatile"
     assert first.namespaces[URLS].mutation == "volatile"
     second = home.open_store()
     assert second.root == first.root
