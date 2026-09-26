@@ -2343,13 +2343,20 @@ def routing() -> Generator[tuple[TextIO, TextIO]]:
     # A tool (or footman's own status line) may emit non-ASCII on a
     # locale-encoded pipe (cp1252 on Windows CI, errors='strict' by default);
     # degrade unencodable glyphs to '?' instead of crashing the run.
+    #
+    # Line buffering with it, and for the same reason the terminal has it:
+    # a line a run prints while it works is what the reader is waiting for.
+    # A stream that is not a terminal is block-buffered by default, so a
+    # verb that follows something — a gate's steps, a watch's per-job
+    # lines — delivered none of them to a file or a pipe until it exited,
+    # and a watcher reading that file saw a working run as a silent one.
     for stream in (real_out, real_err):
         with contextlib.suppress(Exception):
             # getattr, not hasattr-then-call: hasattr narrowing is not
             # portable across checkers, the getattr is.
             reconfigure = getattr(stream, "reconfigure", None)
             if reconfigure is not None:
-                reconfigure(errors="replace")
+                reconfigure(errors="replace", line_buffering=True)
     _router, _err_router = _Router(real_out), _Router(real_err, err=True)
     sys.stdout, sys.stderr = _router, _err_router
     try:

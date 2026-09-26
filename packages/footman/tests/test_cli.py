@@ -412,6 +412,55 @@ def test_a_reader_hanging_up_is_a_calm_cut_not_a_traceback(tmp_path):
     assert "Exception ignored" not in err
 
 
+def test_a_printed_line_reaches_a_file_before_the_run_ends(tmp_path) -> None:
+    """What a follow is for: the line is on its way out when it is printed.
+
+    Redirected output is block-buffered by default, so a run that
+    printed as it worked delivered nothing until it exited, and anything
+    reading the file — an agent, a CI step, a person tailing it — saw a
+    working run as a silent one.
+    """
+    import subprocess
+    import time
+
+    (tmp_path / "tasks.py").write_text(
+        "from livery.footman import task\n\n\n@task\ndef follow():\n"
+        "    import pathlib, time\n"
+        "    print('the first line')\n"
+        "    stop = pathlib.Path('stop')\n"
+        "    for _ in range(600):\n"
+        "        if stop.exists():\n"
+        "            return\n"
+        "        time.sleep(0.05)\n"
+    )
+    env = {
+        **os.environ,
+        "FOOTMAN_NO_UV": "1",
+        "FOOTMAN_CACHE_DIR": str(tmp_path / ".cache"),
+    }
+    env.pop("VIRTUAL_ENV", None)
+    out = tmp_path / "out.txt"
+    with out.open("w", encoding="utf-8") as handle:
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "livery.footman", "follow"],
+            cwd=tmp_path,
+            env=env,
+            stdout=handle,
+            stderr=subprocess.DEVNULL,
+        )
+    try:
+        for _ in range(400):
+            if "the first line" in out.read_text(encoding="utf-8"):
+                break
+            time.sleep(0.05)
+        # The line is there, and the run that printed it is still working.
+        assert "the first line" in out.read_text(encoding="utf-8")
+        assert proc.poll() is None
+    finally:
+        (tmp_path / "stop").touch()
+        assert proc.wait(timeout=60) == 0
+
+
 def _ascii_stdout(monkeypatch) -> io.BytesIO:
     """Stand in for a legacy console: ascii, errors='strict', not a tty."""
     raw = io.BytesIO()
