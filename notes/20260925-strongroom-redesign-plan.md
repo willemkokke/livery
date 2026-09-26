@@ -1,8 +1,9 @@
 # The strongroom redesign plan: livery-cbor, the spec rewritten, the freeze
 
-Status: phase 1 built 2026-09-25 (issue #690), on Willem's go of the
-same day, and awaiting its merge; phases 2 to 11 wait for his go one
-at a time. The plan executes the twelve rulings of
+Status: phase 1 landed 2026-09-25 (issue #690, PR #692) and
+livery-cbor 0.0.0 shipped through the release train the same day;
+phases 2 to 11 wait for Willem's go one at a time. The plan executes
+the twelve rulings of
 [the design record](20260925-strongroom-redesign.md). Phases land one
 at a time, gate-green, each updating this note in the same change.
 The freeze, phase 11, is the milestone after which compatibility
@@ -109,7 +110,7 @@ built by it.
 
 Each phase lands alone, gate-green, with this note updated in the same
 change. Exceptional cases are tested before happy paths in every phase.
-`fm check --affected` is the gate command throughout; `--fix` is the
+`fm check` is the gate command throughout; `--fix` is the
 iteration loop.
 
 ### Phase 1: livery-cbor
@@ -145,7 +146,7 @@ non-canonical spelling of a case vector.
 
 Acceptance:
 
-- `uv run fm check --affected` exits 0.
+- `uv run fm check` exits 0.
 - `uv run fm typecomplete` exits 0 with `livery.cbor` at 100%.
 - `uv run python -m pytest packages/cbor -q` exits 0 and lists one test
   per vector.
@@ -202,7 +203,7 @@ round-trip.
 
 Acceptance:
 
-- `uv run fm check --affected` exits 0.
+- `uv run fm check` exits 0.
 - `git ls-files packages/strongroom/spec | grep -c json` equals the
   count of vector files this phase names.
 - `uv run python -m pytest packages/strongroom/tests/test_strongroom_vectors.py -q`
@@ -249,7 +250,7 @@ removes; a pack whose index is missing, rebuilt from the pack.
 
 Acceptance:
 
-- `uv run fm check --affected` exits 0 on every runner.
+- `uv run fm check` exits 0 on every runner.
 - A test lands 10,000 200-byte objects and proves one pack, one index
   file and one SQLite file exist and every object reads back.
 - A test proves `cp -r` of a store opens and answers every name after
@@ -282,7 +283,7 @@ tampering by guess.
 
 Acceptance:
 
-- `uv run fm check --affected` exits 0.
+- `uv run fm check` exits 0.
 - A two-process test moves refs in one namespace concurrently and
   proves every move landed or conflicted and none was lost.
 - `uv run python -m pytest packages/strongroom/tests/test_conformance.py -q`
@@ -308,7 +309,7 @@ put.
 
 Acceptance:
 
-- `uv run fm check --affected` exits 0.
+- `uv run fm check` exits 0.
 - A test fills a folder from a store holding packs, opens the folder as
   a source, and proves every name answers and no pack was rewritten.
 - A loopback `http.server` test serves the layout and a client fetches
@@ -334,7 +335,7 @@ escaped file collected as a rename.
 
 Acceptance:
 
-- `uv run fm check --affected` exits 0 on every runner.
+- `uv run fm check` exits 0 on every runner.
 - A test views the design note's escape vectors on each platform and
   proves the file names match the vectors byte for byte.
 
@@ -360,7 +361,7 @@ missing at read named, the entry unreadable and reported.
 
 Acceptance:
 
-- `uv run fm check --affected` exits 0.
+- `uv run fm check` exits 0.
 - A test compacts two versions of a text tree and proves the delta
   entries decode to the original bytes and the pack is smaller than the
   two whole trees.
@@ -382,7 +383,7 @@ threshold refused on decode; a node out of order refused.
 
 Acceptance:
 
-- `uv run fm check --affected` exits 0.
+- `uv run fm check` exits 0.
 - A test builds a directory of 100,000 entries, changes one, and
   proves fewer than 20 node objects differ.
 
