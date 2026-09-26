@@ -8,7 +8,12 @@
   "tools": {
     "basedpyright": {
       "version": "1.39.10",
-      "hosts": {}
+      "hosts": {},
+      "graph": {
+        "file": "basedpyright.json",
+        "digest": "sha256:e89ca6aef356cb427c11c4e74cb025940b8a8059f62b4967eb56f95fbc922568",
+        "by": "node 24.21.0"
+      }
     },
     "clang_format": {
       "version": "20.1.0",
@@ -52,7 +57,12 @@
     },
     "coverage": {
       "version": "7.15.4",
-      "hosts": {}
+      "hosts": {},
+      "graph": {
+        "file": "coverage.txt",
+        "digest": "sha256:3b67757256ffee616ba9509a397a842a67dd102186cbcb1925c6f5dc22d3a388",
+        "by": "uv 0.11.26"
+      }
     },
     "docker": {
       "version": "29.7.2",
@@ -72,7 +82,12 @@
     },
     "mypy": {
       "version": "2.3.1",
-      "hosts": {}
+      "hosts": {},
+      "graph": {
+        "file": "mypy.txt",
+        "digest": "sha256:3695c6276bb01fd9ae55d16e0ef19b7ced4a3ab0b25639f4a1ad3bb9a395192e",
+        "by": "uv 0.11.26"
+      }
     },
     "node": {
       "version": "24.21.0",
@@ -92,7 +107,12 @@
     },
     "pytest": {
       "version": "9.1.1",
-      "hosts": {}
+      "hosts": {},
+      "graph": {
+        "file": "pytest.txt",
+        "digest": "sha256:95ac1f59e8c146f02f09eb2231280d11878366c7a216543a147c7fe3530892f0",
+        "by": "uv 0.11.26"
+      }
     },
     "ruff": {
       "version": "0.16.4",
@@ -120,7 +140,12 @@
     },
     "zensical": {
       "version": "0.0.56",
-      "hosts": {}
+      "hosts": {},
+      "graph": {
+        "file": "zensical.txt",
+        "digest": "sha256:cfd4d2120296f45b58e6feb9efa60b315a52a7edb257dcf38c659ea290c2ec79",
+        "by": "uv 0.11.26"
+      }
     }
   }
 }

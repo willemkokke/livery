@@ -10,6 +10,7 @@ import pytest
 from livery.footman.context import Failed
 from livery.toolroom.store import (
     Artifact,
+    Graph,
     Layout,
     Lock,
     Record,
@@ -17,7 +18,11 @@ from livery.toolroom.store import (
     Surface,
 )
 from livery.workshop import _tool_tasks, _tools
-from workshop_hosts import HOSTS, lock_for_this_host  # noqa: F401
+from workshop_hosts import (  # noqa: F401
+    HOSTS,
+    lock_for_this_host,
+    no_graph_resolution,
+)
 
 SHA = "d8b96221828ad6f97ac7ac0ab7e95872341af763001e8803e8267652c2652620"
 THREE = HOSTS
@@ -432,6 +437,75 @@ def test_a_tool_no_site_requires_any_more_leaves_the_lock(
     locked = _tools.write_lock(root).tools
     # bun leaves with the tool it was locked for.
     assert "cspell" not in locked and "bun" not in locked
+
+
+def test_a_graph_is_written_once_and_kept_until_its_version_moves(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A graph is resolved when a version enters the lock, and kept after.
+
+    A lock names artefacts and hashes, so an installer that moved
+    installs the same graph. A file edited or gone since is resolved
+    again, and a tool that leaves takes its graph with it.
+    """
+    from livery.strongroom import digest_of
+
+    root = _workspace(tmp_path, monkeypatch, tools='requires = ["cspell"]\n')
+    _records(
+        root,
+        Record("cspell", kind="npm", deltas=_read("2.0.0", "3.0.0")),
+        _node("24.0.0"),
+    )
+    calls: list[tuple[str, str]] = []
+
+    def resolve(root_: Path, name: str, package: str, version: str, **kwargs: object):
+        calls.append((name, version))
+        written = _tools.graphs_dir(root_) / f"{name}.json"
+        written.parent.mkdir(parents=True, exist_ok=True)
+        written.write_text(f"graph of {name} {version}\n", encoding="utf-8")
+        made = Graph(written.name, digest_of(written.read_bytes()), by="node 24")
+        return made, ""
+
+    monkeypatch.setattr(_tools, "resolve_graph", resolve)
+    locked = _tools.write_lock(root).tools["cspell"]
+    mine = [c for c in calls if c[0] == "cspell"]
+    assert mine == [("cspell", "3.0.0")]
+    assert locked.graph is not None and locked.graph.file == "cspell.json"
+    # A second lock resolves nothing: the version has not moved.
+    assert _tools.write_lock(root).tools["cspell"].graph == locked.graph
+    assert [c for c in calls if c[0] == "cspell"] == mine
+    # A graph edited by hand no longer matches its digest, so it is written again.
+    (_tools.graphs_dir(root) / "cspell.json").write_text("meddled\n", encoding="utf-8")
+    assert _tools.write_lock(root).tools["cspell"].graph == locked.graph
+    assert [c for c in calls if c[0] == "cspell"] == mine * 2
+    # The tool leaves the lock, and its graph file goes with it.
+    (root / "workshop.toml").write_text('[workspace]\n\n[tools]\nindex = "records"\n')
+    assert "cspell" not in _tools.write_lock(root).tools
+    assert not (_tools.graphs_dir(root) / "cspell.json").exists()
+
+
+def test_a_graph_that_cannot_be_resolved_leaves_the_tool_as_it_was(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A runtime that is not here yet costs the graph, never the lock.
+
+    The version locks and the note says the graph waits.
+    """
+    root = _workspace(tmp_path, monkeypatch, tools='requires = ["cspell"]\n')
+    _records(root, Record("cspell", kind="npm", deltas=_read("2.0.0")), _node("24.0.0"))
+    monkeypatch.setattr(
+        _tools,
+        "resolve_graph",
+        lambda *a, **k: (
+            None,
+            "node is not materialised here; the next lock writes it",
+        ),
+    )
+    locked = _tools.write_lock(root).tools["cspell"]
+    assert locked.version == "2.0.0" and locked.graph is None
+    assert (
+        "graphs: cspell 2.0.0: node is not materialised here" in capsys.readouterr().out
+    )
 
 
 def test_each_runtime_is_locked_once_for_the_tools_that_run_on_it(

@@ -44,15 +44,18 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
-from dataclasses import dataclass, field
+import sys
+import tempfile
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
 from livery.footman import fail, prog
-from livery.footman.context import Failed
+from livery.footman.context import Failed, run
 from livery.strongroom import FolderSource, HttpSource, Source, canonical, digest_of
 from livery.toolroom.store import (
     DOWNLOAD_KINDS,
+    GRAPHS,
     LOCK_FILE,
     MODES,
     POINTER,
@@ -61,9 +64,11 @@ from livery.toolroom.store import (
     CatalogueError,
     Deployment,
     Ensured,
+    Graph,
     Home,
     Listed,
     Lock,
+    Locked,
     LockError,
     RecordError,
     Requirement,
@@ -233,21 +238,233 @@ def write_lock(root: Path, *, upgrade: tuple[str, ...] = ()) -> Lock:
 
     An entry the lock already holds stands unless it is named in
     *upgrade* or no longer satisfies; a refusal names the tool, each
-    floor with its site, and the host at fault.
+    floor with its site, and the host at fault. A delegated tool whose
+    version entered the lock has its graph resolved with it.
     """
     listing = catalogue(root)
+    kept = current_lock(root)
     try:
         lock = resolve_lock(
             listing,
             with_runtimes(tuple(requirements(root)), listing),
             hosts=locked_hosts(root),
-            keep=current_lock(root),
+            keep=kept,
             upgrade=upgrade,
         )
     except LockError as error:
         fail(str(error))
+    lock, notes = with_graphs(root, lock, listing, kept=kept)
     lock.save(lock_path(root))
+    for note in notes:
+        print(f"  {note}")
     return lock
+
+
+def resolve_graph(
+    root: Path,
+    name: str,
+    package: str,
+    version: str,
+    *,
+    kind: str,
+    runtime: str,
+) -> tuple[Graph | None, str]:
+    """Resolve *package* at *version* and write its graph; the graph or why not.
+
+    A `pypi` graph is uv's universal hashed requirements, resolved
+    against the workspace's Python floor, so one file covers every
+    interpreter the workspace supports. An `npm` graph is the
+    runtime's own lockfile, resolved without installing anything.
+    Neither runs unless what resolves it is here: a checkout that has
+    not materialised its tools yet locks the version and says the
+    graph waits.
+    """
+    directory = graphs_dir(root)
+    directory.mkdir(parents=True, exist_ok=True)
+    target = directory / _graph_file(name, kind)
+    writer = _pypi_graph if kind == "pypi" else _npm_graph
+    by, why = writer(root, package, version, target, runtime=runtime)
+    if not by:
+        return None, why
+    return Graph(target.name, digest_of(target.read_bytes()), by=by), ""
+
+
+def _pypi_graph(
+    root: Path, package: str, version: str, target: Path, *, runtime: str
+) -> tuple[str, str]:
+    """Uv's universal hashed requirements for *package*; what resolved it."""
+    _ = runtime
+    from livery.toolroom import tools as toolroom
+    from livery.workshop._pythons import python_floor
+
+    with tempfile.TemporaryDirectory() as scratch:
+        wanted = Path(scratch) / "in.txt"
+        wanted.write_text(f"{package}=={version}\n", encoding="utf-8")
+        done = toolroom.uv.opts(nofail=True, recorded=False)(
+            "pip",
+            "compile",
+            "--generate-hashes",
+            "--universal",
+            "--quiet",
+            # The header names the command that wrote it, the output
+            # path included, so two machines resolving one version
+            # would write different bytes and the lock would churn.
+            "--no-header",
+            f"--python-version={python_floor(root)}",
+            f"--output-file={target}",
+            str(wanted),
+        )
+    if done.code != 0:
+        return "", f"uv could not resolve it (exit {done.code})"
+    return f"uv {_tool_version(root, 'uv')}", ""
+
+
+def _npm_graph(
+    root: Path, package: str, version: str, target: Path, *, runtime: str
+) -> tuple[str, str]:
+    """The runtime's own lockfile for *package*, resolved without installing."""
+    if runtime != "node":
+        return "", f"a graph of a {runtime} tool is not written yet"
+    held = receipts(root).get("node")
+    if held is None:
+        return "", "node is not materialised here; the next lock writes it"
+    node = Path(held.tool_dir) / "bin" / exe("node")
+    if not node.is_file():
+        node = Path(held.tool_dir) / exe("node")
+    if not node.is_file():
+        return "", f"the node receipt names no executable under {held.tool_dir}"
+    from livery.toolroom.store import npm_cli
+
+    with tempfile.TemporaryDirectory() as scratch:
+        where = Path(scratch)
+        (where / "package.json").write_text(
+            json.dumps(
+                {
+                    "name": "graph",
+                    "version": "0.0.0",
+                    "dependencies": {package: version},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        done = run(
+            [
+                str(node),
+                str(npm_cli(node)),
+                "install",
+                "--package-lock-only",
+                "--no-audit",
+                "--no-fund",
+            ],
+            cwd=where,
+            nofail=True,
+            recorded=False,
+            capture=True,
+        )
+        written = where / "package-lock.json"
+        if done.code != 0 or not written.is_file():
+            return "", f"npm could not resolve it (exit {done.code})"
+        target.write_bytes(written.read_bytes())
+    return f"node {held.version}", ""
+
+
+def _tool_version(root: Path, name: str) -> str:
+    """The version the lock pins for *name*, or empty when it holds none."""
+    lock = current_lock(root)
+    held = lock.tools.get(name) if lock is not None else None
+    return held.version if held is not None else ""
+
+
+def exe(name: str) -> str:
+    """*name* as this platform spells an executable."""
+    return f"{name}.exe" if sys.platform == "win32" else name
+
+
+def graphs_dir(root: Path) -> Path:
+    """Where the resolved graphs live, beside the lock."""
+    return root / GRAPHS
+
+
+def _graph_file(name: str, kind: str) -> str:
+    """The graph's file name for *name*: the installer's own format."""
+    return f"{name}.txt" if kind == "pypi" else f"{name}.json"
+
+
+def _kept_graph(
+    root: Path, name: str, locked: Locked, kept: Lock | None
+) -> Graph | None:
+    """The graph the lock already had for this version, when it still stands.
+
+    A graph is resolved once, when a version enters the lock, and kept
+    after: a lock names artefacts and their hashes, so an install
+    re-runs no resolution and a newer installer installs the same
+    graph. A version that moved, a graph never written, and a file
+    edited or gone since are each resolved again.
+    """
+    before = kept.tools.get(name) if kept is not None else None
+    if before is None or before.version != locked.version or before.graph is None:
+        return None
+    path = graphs_dir(root) / before.graph.file
+    if not path.is_file() or digest_of(path.read_bytes()) != before.graph.digest:
+        return None
+    return before.graph
+
+
+def with_graphs(
+    root: Path, lock: Lock, listing: Catalogue, *, kept: Lock | None = None
+) -> tuple[Lock, list[str]]:
+    """*lock* with a graph per delegated tool, and what to say about it.
+
+    A `pypi` tool's graph is uv's hashed requirements, a `npm` tool's
+    is its runtime's lockfile, each written under `GRAPHS` beside the
+    lock and named there by its digest. A graph that cannot be
+    resolved now, the runtime it needs being absent on a checkout
+    that has not materialised yet, leaves the tool as it was: it
+    installs the way it did and says so, and the next lock writes it.
+    """
+    directory = graphs_dir(root)
+    tools: dict[str, Locked] = {}
+    notes: list[str] = []
+    wanted: set[str] = set()
+    for name, locked in lock.tools.items():
+        try:
+            kind = listing.listed(name).kind
+        except CatalogueError:
+            tools[name] = locked
+            continue
+        if kind not in ("pypi", "npm"):
+            tools[name] = locked
+            continue
+        standing = _kept_graph(root, name, locked, kept)
+        if standing is not None:
+            wanted.add(standing.file)
+            tools[name] = replace(locked, graph=standing)
+            continue
+        listed = listing.listed(name)
+        graph, why = resolve_graph(
+            root,
+            name,
+            listed.package or name,
+            locked.version,
+            kind=kind,
+            runtime=runtime_of(listed),
+        )
+        if graph is None:
+            notes.append(f"graphs: {name} {locked.version}: {why}")
+            tools[name] = replace(locked, graph=None)
+            continue
+        wanted.add(graph.file)
+        notes.append(f"graphs: {name} {locked.version} resolved by {graph.by}")
+        tools[name] = replace(locked, graph=graph)
+    if directory.is_dir():
+        # A graph the lock no longer names is a file nothing installs
+        # from: it goes with the tool or the version it belonged to.
+        for stale in sorted(directory.iterdir()):
+            if stale.is_file() and stale.name not in wanted:
+                stale.unlink()
+                notes.append(f"graphs: removed {stale.name}")
+    return replace(lock, tools=tools), notes
 
 
 def runtime_of(listed: Listed) -> str:
