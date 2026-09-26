@@ -141,7 +141,13 @@ the shims made, every declared entry point checked for in the tree,
 which refuses naming the tool, the version, the host and the path when
 one is absent, the directory collected as a tree with the entry points
 as its executables and nothing else, `tools/<name>@<version>` moved to
-it write-once, and the tree viewed at the home's tool directory. One
+it with the deployment that produced it recorded beside the ref, and
+the tree viewed at the home's tool directory. A later `ensure` of the
+same version compares the record's deployment with the one beside the
+ref: a changed layout is a new tree from the same artifact, the ref
+moves to it by compare-and-swap, the old view is dropped and the new
+tree viewed, and the old tree is swept as unreached. The artifact
+itself never changes under a version, since landing verifies it. One
 archive lands one tree digest on every platform by construction: the
 annotation decides the executable bit, not the modes the extractor
 happened to produce. A second `ensure` is a probe that answers
