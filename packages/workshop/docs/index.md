@@ -167,7 +167,13 @@ absence.
   from and not the artifacts they were extracted from. uv's cache is
   placed on the same drive, so the sync links wheels into the venv
   instead of copying, and is not cached: the wheels it would hold
-  arrive faster from the index than from an archive. The other lanes
+  arrive faster from the index than from an archive. A leg that
+  builds native packages also restores conan's home from the same
+  drive, keyed by the recipes with the OS and architecture and
+  falling back under its prefix, so a third-party package from Conan
+  Center is compiled once per key and downloaded from the cache
+  afterwards; the cache is the speed layer and Conan Center the
+  origin, so a miss costs time, never a red leg. The other lanes
   cache nothing until they have a cache action.
   Tests are namespaced by their path (pytest's importlib mode, set by
   the project template), so two packages may share a test file's

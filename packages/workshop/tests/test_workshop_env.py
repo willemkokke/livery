@@ -1016,6 +1016,7 @@ def test_the_runner_places_uv_cache_and_data_dir_under_its_temp_only_on_a_runner
     assert placed.values == {
         "PLAIN": "1",
         "UV_CACHE_DIR": "/r/_temp/uv-cache",
+        "CONAN_HOME": "/r/_temp/conan",
         _paths.env_var("DATA_DIR"): "/r/_temp/footman",
     }
     assert placed.paths == delta.paths
