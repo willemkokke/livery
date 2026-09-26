@@ -37,6 +37,7 @@ from livery.toolroom.store._engine import (
     Progress,
     Store,
     StoreError,
+    bun_global_project,
     npm_cli,
     silent,
 )
@@ -161,6 +162,7 @@ __all__ = [
     "api_headers",
     "artifact_format",
     "build_current",
+    "bun_global_project",
     "class_name",
     "default_mode",
     "export_schema",

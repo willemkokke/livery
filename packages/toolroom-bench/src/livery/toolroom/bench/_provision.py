@@ -59,6 +59,7 @@ from livery.toolroom.store import (
     HOSTS,
     FetchError,
     UnpackError,
+    bun_global_project,
     fetch_file,
     fetch_json,
     npm_cli,
@@ -454,7 +455,10 @@ def _node_tier(prefix: Path, drivers: list[Driver]) -> list[Outcome]:
                 for d in on_bun
             ]
         packages = sorted({d.provision.target(d.name) for d in on_bun})
-        # bun's global bin lands in <prefix>/bin.
+        # bun's global bin lands in <prefix>/bin, and its global project is
+        # made under the prefix first, or bun installs into the nearest
+        # project above it.
+        bun_global_project(prefix)
         with_bun = {**env, "BUN_INSTALL": str(prefix)}
         ok = _run([str(bun), "add", "--global", *packages], env=with_bun)
         outcomes += [

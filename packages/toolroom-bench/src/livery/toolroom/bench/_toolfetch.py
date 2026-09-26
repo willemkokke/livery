@@ -893,7 +893,7 @@ def _install_npm(driver: Driver, version: str, into: Path) -> Path | None:
     """
     import shutil
 
-    from livery.toolroom.store import npm_cli
+    from livery.toolroom.store import bun_global_project, npm_cli
 
     package = driver.provision.target(driver.name)
     env = {
@@ -910,6 +910,7 @@ def _install_npm(driver: Driver, version: str, into: Path) -> Path | None:
         if bun is None:
             return None
         env["BUN_INSTALL"] = str(into)
+        bun_global_project(into)
         argv = [bun, "add", "--global", f"{package}@{version}"]
     else:
         node = shutil.which("node")

@@ -1320,6 +1320,8 @@ def test_npm_install_spawns_the_resolved_bun(tmp_path, monkeypatch):
     assert out == tmp_path / "into" / "bin"
     assert calls[0][0] == str(fake)
     assert calls[0][1:] == ["add", "--global", "cspell@9.8.0"]
+    # bun's global project is made under the prefix before it runs.
+    assert (tmp_path / "into" / "install" / "global" / "package.json").is_file()
 
 
 def test_the_nodejs_index_lists_support_lines_newest_first(monkeypatch):
