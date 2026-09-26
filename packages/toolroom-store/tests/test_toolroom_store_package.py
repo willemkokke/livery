@@ -14,6 +14,9 @@ def test_the_version_is_the_installed_distributions() -> None:
 def test_the_public_surface_is_pinned() -> None:
     assert set(package.__all__) == {
         "ARCHES",
+        "ARCHIVE_SUFFIXES",
+        "FORMATS",
+        "artifact_format",
         "DOWNLOAD_KINDS",
         "HOSTS",
         "KINDS",

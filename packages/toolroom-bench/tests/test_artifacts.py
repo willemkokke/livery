@@ -69,7 +69,7 @@ def _record(*versions: str, layout: Layout | None = None) -> Any:
     reads = [
         (v, f"2026-0{n}-01", with_flags(f"--{n}")) for n, v in enumerate(versions, 1)
     ]
-    record = history("tool", *reads, kind="archive")
+    record = history("tool", *reads, kind="download")
     return replace(
         record,
         hosts=(WIN,),
@@ -368,3 +368,39 @@ def test_a_verb_bound_view_of_another_binary_records_nothing(
     assert found.read == {"tool": ["1.1.0"]} and found.artifacts == {}
     moved = _surfaces.load(records / "tool.jsonl")
     assert moved is not None and moved.hosts_of("1.1.0") == ()
+
+
+def test_a_universal_asset_is_recorded_for_every_host_without_a_listing(
+    store: Store, monkeypatch
+) -> None:
+    """A release that lists no asset (cmake-conan's provider is one file at a
+    versioned address) is recorded from the driver's URL template, the same
+    bytes on every host, and no forge listing is asked for.
+    """
+    from livery.toolroom.bench import _provision
+    from livery.toolroom.bench._drivers import Driver, Provision
+    from livery.toolroom.store import HOSTS
+
+    def no_listing(*_a, **_k):
+        raise AssertionError("the forge was asked for a listing")
+
+    monkeypatch.setattr(_provision, "assets_for", no_listing)
+    monkeypatch.setattr(_artifacts, "_fetch", lambda url: f"bytes of {url}".encode())
+    driver = Driver(
+        "cmake-conan",
+        source="manual",
+        provision=Provision(
+            kind="github",
+            repo="conan-io/cmake-conan",
+            asset="https://raw.example/{repo}/{tag}/conan_provider.cmake",
+        ),
+    )
+    file_only = Layout(
+        file="conan_provider.cmake", env={"P": "$package/conan_provider.cmake"}
+    )
+    bare = replace(_record("0.19.0", layout=file_only), hosts=(), host_layouts={})
+    record, done = _artifacts.record_version(bare, driver, "0.19.0", "", store=store)
+    url = "https://raw.example/conan-io/cmake-conan/0.19.0/conan_provider.cmake"
+    assert set(record.delta_for("0.19.0").artifacts) == set(HOSTS)
+    assert all(a.url == url for a in record.delta_for("0.19.0").artifacts.values())
+    assert done.absent == ()

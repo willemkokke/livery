@@ -83,7 +83,7 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     digest = digest_of(payload)
     Record(
         "tea",
-        kind="archive",
+        kind="download",
         hosts=THREE,
         layout=Layout(entry_points=("tea",), paths=(".",)),
         deltas=(
@@ -153,12 +153,12 @@ def test_a_mode_outside_the_three_and_a_receipt_off_its_shape_refuse(
     with pytest.raises(
         Failed, match=r"modes names 'float' for tea; the modes are link, path, none"
     ):
-        _tools.mode_of(root, "tea", "archive")
+        _tools.mode_of(root, "tea", "download", paths=("bin",))
     (root / "workshop.toml").write_text(
         '[workspace]\n\n[tools]\nindex = "records"\nmodes = 1\n'
     )
     with pytest.raises(Failed, match=r"\[tools\] modes is not a table"):
-        _tools.mode_of(root, "tea", "archive")
+        _tools.mode_of(root, "tea", "download", paths=("bin",))
     (root / "workshop.toml").write_text(
         '[workspace]\n\n[tools]\nindex = "records"\nsources = "x"\n'
     )
@@ -245,7 +245,7 @@ def test_sync_materialises_the_bundle_from_the_folder_source_with_no_network(
     held = _tools.receipts(root)
     assert set(held) == {"ruff", "tea"}
     tea = held["tea"]
-    assert (tea.version, tea.kind, tea.mode) == ("1.0.0", "archive", "path")
+    assert (tea.version, tea.kind, tea.mode) == ("1.0.0", "download", "path")
     assert tea.host == _engine._default_host()
     lock = _tools.current_lock(root)
     assert lock is not None and tea.deployment == str(lock.tools["tea"].hosts[tea.host])
@@ -318,7 +318,7 @@ def test_an_npm_install_is_supplied_after_node_through_its_executable(
     digest = digest_of(payload)
     Record(
         "node",
-        kind="archive",
+        kind="download",
         hosts=THREE,
         layout=Layout(entry_points=("bin/node",), paths=("bin",)),
         deltas=(
@@ -399,7 +399,7 @@ def test_a_bun_install_is_supplied_after_bun_through_its_executable(
     digest = digest_of(payload)
     Record(
         "bun",
-        kind="archive",
+        kind="download",
         hosts=THREE,
         layout=Layout(entry_points=("bun",), paths=(".",), shims={"node": "bun"}),
         deltas=(
@@ -525,7 +525,7 @@ def test_env_check_finds_a_tool_by_its_executables_not_its_lock_name(
     digest = digest_of(payload)
     Record(
         "cliff_tool",
-        kind="archive",
+        kind="download",
         hosts=THREE,
         layout=Layout(entry_points=("cliff-tool",), paths=(".",)),
         deltas=(
@@ -585,7 +585,7 @@ def test_env_check_names_each_receipt_and_the_drift_under_it(
     record = Record.load(root / "records" / "tea.jsonl")
     moved = Record(
         "tea",
-        kind="archive",
+        kind="download",
         hosts=THREE,
         layout=Layout(entry_points=("tea",), paths=(".",)),
         deltas=(
@@ -633,7 +633,7 @@ def test_the_receipt_round_trips_and_the_default_modes_follow_the_kind(
         "tea",
         "1.0.0",
         "linux-x64",
-        "archive",
+        "download",
         "path",
         "sha256:" + "0" * 64,
         "/t",
@@ -647,11 +647,11 @@ def test_the_receipt_round_trips_and_the_default_modes_follow_the_kind(
     from livery.toolroom.store import default_mode
 
     assert (
-        default_mode("binary"),
-        default_mode("archive"),
+        default_mode("download"),
+        default_mode("download", ("bin",)),
         default_mode("uv-tool"),
     ) == (
-        "link",
+        "none",
         "path",
         "path",
     )

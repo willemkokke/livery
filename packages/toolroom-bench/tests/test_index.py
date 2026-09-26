@@ -29,7 +29,7 @@ def _installable() -> Record:
     return Record(
         "tool",
         description="A tool.",
-        kind="archive",
+        kind="download",
         hosts=("linux-x64", "windows-x64"),
         layout=Layout(entry_points=("tool",), paths=(".",)),
         host_layouts={"windows-x64": Layout(entry_points=("tool.exe",))},
@@ -38,7 +38,7 @@ def _installable() -> Record:
                 1,
                 "1.0.0",
                 "2026-01-01",
-                {"linux-x64": Artifact("https://x/1/linux", SHA)},
+                {"linux-x64": Artifact("https://x/1/linux.zip", SHA)},
                 surface=read.deltas[0].surface,
             ),
             RecordDelta(
@@ -46,8 +46,8 @@ def _installable() -> Record:
                 "1.1.0",
                 "2026-02-01",
                 {
-                    "linux-x64": Artifact("https://x/1.1/linux", SHA),
-                    "windows-x64": Artifact("https://x/1.1/win", SHA),
+                    "linux-x64": Artifact("https://x/1.1/linux.zip", SHA),
+                    "windows-x64": Artifact("https://x/1.1/win.zip", SHA),
                 },
             ),
         ),

@@ -47,7 +47,7 @@ def _bun(*versions: str) -> Record:
     """bun, the archive an npm tool naming it runs on, on the three hosts."""
     return Record(
         "bun",
-        kind="archive",
+        kind="download",
         hosts=THREE,
         layout=Layout(entry_points=("bun",), paths=(".",)),
         deltas=tuple(
@@ -69,7 +69,7 @@ def _node(*versions: str) -> Record:
     """node, the archive an npm tool runs on by default, on the three hosts."""
     return Record(
         "node",
-        kind="archive",
+        kind="download",
         hosts=THREE,
         layout=Layout(entry_points=("bin/node",), paths=("bin",)),
         deltas=tuple(
@@ -169,9 +169,9 @@ def test_a_version_on_fewer_hosts_than_the_lock_covers_refuses_naming_the_host(
         root,
         Record(
             "tea",
-            kind="binary",
+            kind="download",
             hosts=THREE,
-            layout=Layout(exe="tea", entry_points=("tea",), paths=(".",)),
+            layout=Layout(file="tea", entry_points=("tea",), paths=(".",)),
             deltas=(
                 RecordDelta(
                     1,

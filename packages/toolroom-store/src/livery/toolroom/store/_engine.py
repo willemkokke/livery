@@ -2,7 +2,7 @@
 
 `ensure` lands a version's artifact by the record's digest through the store's
 sources, and through the origin URL unless the store is offline;
-extracts it, hoists the root, places a binary as its exe, applies the
+extracts it, hoists the root, saves a bare file as its `file`, applies the
 shims, collects the directory as a tree, moves `tools/<name>@<version>`
 to it write-once, and views the tree at the home's tool directory. A
 second `ensure` is a probe. `link` fills a checkout's bin directory
@@ -49,6 +49,7 @@ from livery.toolroom.store._record import (
     PACKAGE_VAR,
     Deployment,
     Record,
+    artifact_format,
     host_key,
     resolve,
 )
@@ -268,7 +269,7 @@ def _launchers(bin_dir: Path) -> tuple[str, ...]:
 def _delegated(entry_points: tuple[str, ...]) -> Deployment:
     """The deployment a delegated kind reports: its launchers under `bin`."""
     return Deployment(
-        "", "", "", "", entry_points, ("bin",) if entry_points else (), {}, {}, ()
+        "", "", "", "", "", entry_points, ("bin",) if entry_points else (), {}, {}, ()
     )
 
 
@@ -498,7 +499,7 @@ class Store:
 
         The artifact comes from the tiers and, unless offline, the
         origin; an archive is extracted and its declared root hoisted,
-        a binary placed as its `exe`, and with *exclude* the
+        a bare file saved as its `file`, and with *exclude* the
         deployment's exclusion patterns are applied. No entry point is
         required, no shim is made, no tree is collected and no ref is
         set: this is the look a check takes at a deployment for any
@@ -701,15 +702,17 @@ class Store:
     def _unpack(
         self, name: str, kind: str, deployment: Deployment, artifact: Path, into: Path
     ) -> None:
-        if kind == "binary":
-            placed = into / deployment.exe
+        form = deployment.format or artifact_format(deployment.url)
+        if form == "file":
+            placed = into / deployment.file
             shutil.copyfile(artifact, placed)
-            placed.chmod(
-                placed.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
-            )
+            if deployment.entry_points:  # a bare program, not a bare file
+                placed.chmod(
+                    placed.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+                )
             return
         try:
-            unpack(artifact, into, name=_archive_name(deployment.url))
+            unpack(artifact, into, name=_archive_name(deployment.url), format=form)
         except UnpackError as error:
             raise StoreError(
                 f"{name}: the archive at {deployment.url} will not extract: {error}"

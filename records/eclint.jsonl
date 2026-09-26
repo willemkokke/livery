@@ -1,4 +1,4 @@
-{"name": "eclint", "description": "EditorConfig linter (willemkokke fork)", "kind": "archive", "min_version": "", "hosts": ["macos-arm", "macos-x64", "linux-x64", "linux-arm", "windows-x64"], "layout": {"entry_points": ["eclint"], "paths": ["."]}, "host_layouts": {"windows-x64": {"entry_points": ["eclint.exe"]}}}
+{"name": "eclint", "description": "EditorConfig linter (willemkokke fork)", "kind": "download", "min_version": "", "hosts": ["macos-arm", "macos-x64", "linux-x64", "linux-arm", "windows-x64"], "layout": {"entry_points": ["eclint"], "paths": ["."]}, "host_layouts": {"windows-x64": {"entry_points": ["eclint.exe"]}}}
 {"version": "0.5.2-wk.1", "date": "2026-03-10", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": ""}}
 {"verb": "", "help": "", "wraps": false, "positional": "any", "lead": ""}
 {"verb": "", "option": "color", "flags": ["-color"], "negation": "", "help": "use color when printing; can be \"always\", \"auto\", or \"never\"", "type": "str", "default": "auto", "choices": []}

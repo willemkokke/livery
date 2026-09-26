@@ -20,8 +20,16 @@
         "root": {
           "type": "string"
         },
-        "exe": {
+        "file": {
           "type": "string"
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "zip",
+            "tar",
+            "file"
+          ]
         },
         "entry_points": {
           "type": "array",
@@ -92,14 +100,13 @@
         "kind": {
           "type": "string",
           "enum": [
-            "archive",
-            "binary",
+            "download",
             "uv-tool",
             "uv-python",
             "npm",
             "system-check"
           ],
-          "default": "archive"
+          "default": "download"
         },
         "package": {
           "type": "string",

@@ -32,3 +32,17 @@ Repository = "{{ web_root }}/{{ forge_owner }}/{{ project_name }}"
 minimum-version = "build-system.requires"
 build-dir = "build/{wheel_tag}"
 wheel.packages = ["src/{{ namespace_package.split('.')[0] }}"]
+
+[tool.scikit-build.cmake.define]
+# The CMake dependency provider that resolves find_package through
+# conan: the store names the file in CMAKE_CONAN_PROVIDER when the
+# environment is entered, and CMake reads no environment variable of
+# its own for this.
+CMAKE_PROJECT_TOP_LEVEL_INCLUDES = { env = "CMAKE_CONAN_PROVIDER" }
+# What conan builds for the provider: a package the cache lacks, and a
+# workspace sibling registered editable, from its source at HEAD. A
+# release leg registers no editable, so there the second is a no-op.
+# Those builds use Ninja on every host, the store's generator, under
+# the compiler environment conan activates; a Visual Studio generator
+# would let MSBuild pick a platform apart from the compiler conan names.
+CONAN_INSTALL_ARGS = "--build=missing;--build=editable;-c;tools.cmake.cmaketoolchain:generator=Ninja"

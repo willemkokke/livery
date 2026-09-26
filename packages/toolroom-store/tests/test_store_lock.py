@@ -53,7 +53,7 @@ def _archive(name: str, *versions: tuple[str, tuple[str, ...]]) -> Record:
     """An archive tool whose versions each have the hosts named."""
     return Record(
         name,
-        kind="archive",
+        kind="download",
         hosts=THREE,
         layout=Layout(entry_points=(name,), paths=(".",)),
         deltas=tuple(
@@ -62,7 +62,7 @@ def _archive(name: str, *versions: tuple[str, tuple[str, ...]]) -> Record:
                 version,
                 f"2026-01-{n:02d}",
                 {
-                    host: Artifact(f"https://x/{name}/{version}/{host}", SHA)
+                    host: Artifact(f"https://x/{name}/{version}/{host}.zip", SHA)
                     for host in hosts
                 },
             )
@@ -374,6 +374,7 @@ def test_a_deployment_round_trips_through_json_and_names_itself():
         "https://x",
         SHA,
         "r",
+        "",
         "",
         ("bin/t",),
         ("bin",),

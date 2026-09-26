@@ -444,16 +444,17 @@ def _register_builtin() -> None:
     )
     # The binary extension: a python distribution in every checker's
     # eyes (the chain says so), built through cibuildwheel so the
-    # wheel carries its platform tag. cmake and ninja join the
-    # profile; nanobind and scikit-build-core arrive through the
-    # package's own build-system requires, never the machine.
+    # wheel carries its platform tag. cmake, ninja, conan and the
+    # cmake-conan provider join the profile; nanobind and
+    # scikit-build-core arrive through the package's own build-system
+    # requires, never the machine.
     register_kind(
         KindRecord(
             name="python-nanobind",
             backend=_python_nanobind,
             template="package-python-nanobind",
             parent="python",
-            tools=("cmake", "ninja"),
+            tools=("cmake", "ninja", "conan", "cmake_conan"),
             host_tools=("cc", "c++"),
             wheel_identity="platform",
         )

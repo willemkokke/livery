@@ -111,6 +111,11 @@ class Provision:
     manual: Manual | None = None
     """Where the pages live, for `kind="man"` — required there, unused
     elsewhere."""
+    asset: str = ""
+    """A URL template for a release that lists no asset: the file at a
+    versioned address, the same for every host, with `{repo}` and `{tag}`
+    filled in. cmake-conan's provider is one CMake file at
+    `raw.githubusercontent.com/<repo>/<tag>/conan_provider.cmake`."""
 
     def target(self, name: str) -> str:
         """What to fetch: the explicit `package`/`repo`, else the tool *name*."""
@@ -121,8 +126,8 @@ class Provision:
         """The installer kind a new record of this tool names, from the tier.
 
         A record that exists keeps its own kind; this answers only for a
-        tool read for the first time. A forge release and docker's static
-        build land as archives, the manual tiers verify a system tool, and
+        tool read for the first time. A forge release lands as a download,
+        the manual and docker tiers verify a system tool, and
         the package tiers delegate to their installer.
         """
         return RECORD_KINDS[self.kind]
@@ -132,16 +137,16 @@ RECORD_KINDS = {
     "uv": "uv-tool",
     "python": "uv-python",
     "node": "npm",
-    "nodejs": "archive",
+    "nodejs": "download",
     "man": "system-check",
     # The docker tier fetches a CLI to read; a consumer checks the docker it
     # has, since the daemon is its own install and the CLI belongs with it.
     "docker": "system-check",
-    "bun": "archive",
-    "github": "archive",
-    "gitlab": "archive",
-    "gitea": "archive",
-    "deferred": "archive",
+    "bun": "download",
+    "github": "download",
+    "gitlab": "download",
+    "gitea": "download",
+    "deferred": "download",
 }
 """Each provision tier's installer kind, one of [livery.toolroom.store.KINDS][]."""
 
@@ -658,6 +663,21 @@ DRIVERS: tuple[Driver, ...] = (
         "ninja",
         url="https://ninja-build.org/",
         provision=Provision(kind="github", repo="ninja-build/ninja"),
+    ),
+    Driver(
+        "cmake-conan",
+        # A CMake module, not a program: nothing runs and nothing is read;
+        # the record is hand-written, a download with no entry point.
+        source="manual",
+        url="https://github.com/conan-io/cmake-conan",
+        provision=Provision(
+            kind="github",
+            repo="conan-io/cmake-conan",
+            # 0.19.0 is the first release of the conan 2 dependency provider;
+            # the releases below it are conan 1's conan.cmake.
+            floor="0.19.0",
+            asset="https://raw.githubusercontent.com/{repo}/{tag}/conan_provider.cmake",
+        ),
     ),
     Driver(
         "conan",

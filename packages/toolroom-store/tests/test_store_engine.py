@@ -39,9 +39,10 @@ def _record(
     name: str,
     artifacts: dict[str, bytes],
     *,
-    kind: str = "archive",
+    kind: str = "download",
     root: str = "",
-    exe: str = "",
+    file: str = "",
+    format: str = "",
     paths: tuple[str, ...] = ("bin",),
     env: dict[str, str] | None = None,
     shims: dict[str, str] | None = None,
@@ -55,8 +56,8 @@ def _record(
     the binary's `exe` for a binary.
     """
     if entry_points is None:
-        if exe:
-            entry_points = (exe,)
+        if file:
+            entry_points = (file,)
         elif "bin" in paths and root:
             entry_points = (f"bin/{name}{EXE}",)
         elif "bin" in paths:
@@ -69,7 +70,8 @@ def _record(
     }
     layout = Layout(
         root=root or None,
-        exe=exe or None,
+        file=file or None,
+        format=format or None,
         entry_points=entry_points,
         paths=paths or None,
         env=env or None,
@@ -131,8 +133,8 @@ def test_a_host_no_spec_names_and_a_delegated_kind_are_refused(home: Home) -> No
     with pytest.raises(StoreError, match="kind 'uv-python' is delegated to its tool"):
         store.ensure(delegated, delegated.versions[-1])
     assert store.probe(delegated, delegated.versions[-1]) is None
-    with pytest.raises(StoreError, match=r"tool: a archive needs its deployment"):
-        store.supply("tool", "archive", "1.0.0")
+    with pytest.raises(StoreError, match=r"tool: a download needs its deployment"):
+        store.supply("tool", "download", "1.0.0")
     with pytest.raises(RecordError, match="no host windows-arm"):
         Store(home, host="windows-arm").ensure(_record("tool", artifacts), "1.0.0")
 
@@ -224,12 +226,14 @@ def test_a_binary_without_an_exe_and_a_non_archive_are_refused(
 ) -> None:
     payload = b"#!/bin/sh\necho bin\n"
     # A binary that names no exe is refused by the record itself, at load.
-    with pytest.raises(RecordError, match="a binary names no exe"):
-        _record("bin", {HOST: payload}, kind="binary", paths=(".",))
+    with pytest.raises(RecordError, match="a bare download names no file"):
+        _record("bin", {HOST: payload}, format="file", paths=(".",))
+    # A layout that says zip for bytes that are not one is refused with
+    # the archive named: the format override is trusted, and its lie shows.
     not_an_archive = Record(
         "raw",
         hosts=(HOST,),
-        layout=Layout(entry_points=("raw",), paths=(".",)),
+        layout=Layout(format="zip", entry_points=("raw",), paths=(".",)),
         deltas=(
             RecordDelta(
                 1,
@@ -240,9 +244,7 @@ def test_a_binary_without_an_exe_and_a_non_archive_are_refused(
         ),
     )
     origin["https://origin.test/raw.bin"] = payload
-    with pytest.raises(
-        StoreError, match=r"raw\.bin is not an archive the store unpacks"
-    ):
+    with pytest.raises(StoreError, match=r"raw\.bin will not extract"):
         Store(home, host=HOST).ensure(not_an_archive, not_an_archive.versions[-1])
 
 
@@ -367,12 +369,49 @@ def test_a_tar_archive_and_a_binary_install_too(
     ensured = store.ensure(spec, spec.versions[-1])
     assert (ensured.tool_dir / "tool").read_bytes().endswith(b"echo tar\n")
     payload = b"#!/bin/sh\necho bin\n"
-    binary = _record("bin", {HOST: payload}, kind="binary", exe="bin", paths=(".",))
+    binary = _record("bin", {HOST: payload}, file="bin", format="file", paths=(".",))
     _serve(origin, binary, {HOST: payload})
     placed = store.ensure(binary, binary.versions[-1])
     assert (placed.tool_dir / "bin").read_bytes() == payload
     if sys.platform != "win32":
         assert (placed.tool_dir / "bin").stat().st_mode & stat.S_IXUSR
+    # A file lands as a copy, never executable, never on PATH, and its
+    # env names it in the installed tree.
+    module = b"# a cmake module\n"
+    file_url = "https://origin.test/provider/1.0.0/linux-x64"
+    filed = Record(
+        "provider",
+        hosts=(HOST,),
+        layout=Layout(
+            file="provider.cmake", env={"PROVIDER": "$package/provider.cmake"}
+        ),
+        deltas=(RecordDelta(1, "1.0.0", "", {HOST: Artifact(file_url, sha(module))}),),
+    )
+    origin[file_url] = module
+    landed = store.ensure(filed, filed.versions[-1])
+    assert (landed.tool_dir / "provider.cmake").read_bytes() == module
+    assert landed.paths == () and landed.deployment.entry_points == ()
+    assert landed.env == {"PROVIDER": str(landed.tool_dir / "provider.cmake")}
+    if sys.platform != "win32":
+        assert not (landed.tool_dir / "provider.cmake").stat().st_mode & stat.S_IXUSR
+    # A bundle of files is an archive of the same kind: unpacked whole,
+    # its root hoisted, and still reached through env alone.
+    bundle = make_zip(
+        {"plugin-1.0.0/init.lua": b"-- init", "plugin-1.0.0/lib/a.lua": b"a"}
+    )
+    bundle_url = "https://origin.test/plugin/1.0.0/linux-x64.zip"
+    bundled = Record(
+        "plugin",
+        hosts=(HOST,),
+        layout=Layout(root="plugin-{version}", env={"PLUGIN": "$package/init.lua"}),
+        deltas=(
+            RecordDelta(1, "1.0.0", "", {HOST: Artifact(bundle_url, sha(bundle))}),
+        ),
+    )
+    origin[bundle_url] = bundle
+    viewed = store.ensure(bundled, "1.0.0")
+    assert (viewed.tool_dir / "lib" / "a.lua").read_bytes() == b"a"
+    assert viewed.env == {"PLUGIN": str(viewed.tool_dir / "init.lua")}
 
 
 def test_link_fills_the_bin_directory_and_removes_only_what_it_made(
