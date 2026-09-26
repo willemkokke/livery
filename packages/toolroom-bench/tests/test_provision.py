@@ -47,50 +47,19 @@ def test_only_takes_a_set_of_tools(tmp_path):
     assert [o.key for o in _provision.provision(drivers, tmp_path / "p", only="ruff")]
 
 
-def test_a_dropped_download_is_retried(tmp_path, monkeypatch):
-    """A refresh leg died on `Remote end closed connection without response`
-    part-way through gh's zip. The release was there; the download was not
-    finished. A 404 is an answer and is not retried — a dropped connection
-    says nothing about the asset.
-    """
-    import email.message
-    import urllib.error
+def test_a_spent_fetch_is_a_provision_error_naming_the_url(tmp_path, monkeypatch):
+    """The retry lives in the store; what the bench adds is its own refusal."""
+    from livery.toolroom.store import FetchError
 
-    calls = []
+    def spent(url, *_a, **_kw):
+        raise FetchError(f"{url}: reset", status=None)
 
-    class Fake:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-        def read(self, *a):
-            return b""
-
-    def flaky(request, timeout=0):
-        calls.append(1)
-        if len(calls) < 3:
-            raise urllib.error.URLError("Remote end closed connection")
-        return Fake()
-
-    monkeypatch.setattr(_provision.urllib.request, "urlopen", flaky)
-    monkeypatch.setattr(_provision.time, "sleep", lambda _s: None)
-    placed = _provision._download("http://x/gh.zip", tmp_path)
-    assert placed.exists() and len(calls) == 3
-
-    calls.clear()
-
-    def gone(request, timeout=0):
-        calls.append(1)
-        raise urllib.error.HTTPError(
-            "http://x/gh.zip", 404, "Not Found", email.message.Message(), None
-        )
-
-    monkeypatch.setattr(_provision.urllib.request, "urlopen", gone)
-    with pytest.raises(_provision.ProvisionError, match="404"):
-        _provision._download("http://x/missing.zip", tmp_path)
-    assert len(calls) == 1  # an answer, not a hiccup
+    monkeypatch.setattr(_provision, "fetch_file", spent)
+    with pytest.raises(_provision.ProvisionError, match=r"http://x/gh\.zip: reset"):
+        _provision._download("http://x/gh.zip", tmp_path)
+    monkeypatch.setattr(_provision, "fetch_json", spent)
+    with pytest.raises(_provision.ProvisionError, match="http://x/api: reset"):
+        _provision._get_json("http://x/api")
 
 
 def test_strict_turns_a_failed_tier_into_a_failed_run(tmp_path, monkeypatch):
@@ -365,45 +334,109 @@ def test_pick_asset_goreleaser_spelling_on_windows(win_amd64):
 # --- extraction --------------------------------------------------------------
 
 
-def test_extract_binary_from_tar_gz(tmp_path):
-    archive = tmp_path / "eclint_Darwin_arm64.tar.gz"
-    _tar_gz(archive, "eclint-0.6/eclint", b"ELF-ish")
-    placed = _provision._extract_binary(archive, "eclint", tmp_path / "bin")
+def _run(launcher: Path) -> str:
+    """What the launcher prints, run as a reader would run it."""
+    import subprocess
+
+    return subprocess.run(
+        [str(launcher)], capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+
+def test_place_binary_refuses_a_missing_tool_and_a_broken_archive(tmp_path):
+    archive = tmp_path / "x.tar.gz"
+    _tar_gz(archive, "something-else", b"nope")
+    with pytest.raises(_provision.ProvisionError, match="not found inside"):
+        _provision.place_binary(archive, "gh", tmp_path / "bin")
+    broken = tmp_path / "broken.zip"
+    broken.write_bytes(b"not a zip")
+    with pytest.raises(_provision.ProvisionError, match="will not extract"):
+        _provision.place_binary(broken, "gh", tmp_path / "bin")
+
+
+def test_place_binary_places_a_bare_download_as_it_is(tmp_path):
+    bare = tmp_path / "eclint"
+    bare.write_bytes(b"ELF-ish")
+    placed = _provision.place_binary(bare, "eclint", tmp_path / "bin")
+    assert placed == tmp_path / "bin" / _provision.exe("eclint")
     assert placed.read_bytes() == b"ELF-ish"
     if sys.platform != "win32":
         assert placed.stat().st_mode & 0o111  # +x — Windows has no exec bit
 
 
-def test_extract_binary_places_a_directory_apps_internal_beside_it(tmp_path):
-    """A PyInstaller onedir app (conan's release) needs `_internal/` beside
-    the binary; a plain archive places nothing but the binary.
+def test_place_binary_unpacks_whole_and_the_launcher_runs_the_tool_in_its_tree(
+    tmp_path,
+):
+    """A PyInstaller directory app (conan's release) loads its runtime from
+    beside the binary, so the tree stays whole and the launcher runs the
+    binary where it lies.
     """
-    plain = tmp_path / "plain.tgz"
-    with tarfile.open(plain, "w:gz") as tar:
-        _add(tar, "tool-1.0/bin/tool", b"bin")
-        _add(tar, "tool-1.0/share/readme", b"doc")
-    _provision._extract_binary(plain, "tool", tmp_path / "plain-bin")
-    assert sorted(p.name for p in (tmp_path / "plain-bin").iterdir()) == [
-        _provision.exe("tool")
-    ]
-    app = tmp_path / "app.tgz"
-    with tarfile.open(app, "w:gz") as tar:
-        _add(tar, "bin/tool", b"bin")
-        _add(tar, "bin/_internal/libpython.so", b"so")
-        _add(tar, "bin/_internal/pkg/data.txt", b"data")
-        _add(tar, "other/_internal/no.txt", b"not this one")
-    _provision._extract_binary(app, "tool", tmp_path / "app-bin")
-    internal = tmp_path / "app-bin" / "_internal"
-    assert (internal / "libpython.so").read_bytes() == b"so"
-    assert (internal / "pkg" / "data.txt").read_bytes() == b"data"
-    assert not (internal / "no.txt").exists()
-    zipped = tmp_path / "app.zip"
+    archive = tmp_path / "app-1.0-linux.tgz"
+    script = b'#!/bin/sh\nprintf \'%s\' "$(dirname "$0")"\n'
+    with tarfile.open(archive, "w:gz") as tar:
+        _add(tar, "app-1.0/bin/app", script)
+        _add(tar, "app-1.0/bin/_internal/lib.so", b"so")
+        _add(tar, "app-1.0/share/readme", b"doc")
+    placed = _provision.place_binary(archive, "app", tmp_path / "bin", windows=False)
+    tree = tmp_path / "trees" / "app" / "app-1.0"
+    assert (tree / "bin" / "_internal" / "lib.so").read_bytes() == b"so"
+    assert (tree / "share" / "readme").is_file()
+    assert placed == tmp_path / "bin" / "app"
+    assert f'exec "{tree / "bin" / "app"}"' in placed.read_text()
+    if sys.platform != "win32":
+        # The process is the binary in its tree: it sees its own directory.
+        assert _run(placed) == str(tree / "bin")
+    # A second placing of the same tool replaces the tree, never stacks it.
+    _provision.place_binary(archive, "app", tmp_path / "bin", windows=False)
+    assert sorted(p.name for p in (tmp_path / "trees").iterdir()) == ["app"]
+
+
+def test_place_binary_names_a_cmd_launcher_on_windows(tmp_path):
+    """`cmd` resolves a tool through PATHEXT, so the launcher is a `.cmd`
+    that forwards `%*`. The platform arrives as a parameter (the
+    `_bash_path` idiom): patching `os.name` takes down the xdist worker.
+    """
+    archive = tmp_path / "eclint_Windows_x86_64.zip"
+    _zip(archive, "eclint-0.6/eclint.exe", b"PE-ish")
+    placed = _provision.place_binary(archive, "eclint", tmp_path / "bin", windows=True)
+    assert placed.name == "eclint.cmd"
+    text = placed.read_text()
+    assert "@echo off" in text and "eclint.exe" in text and "%*" in text
+    assert (tmp_path / "trees" / "eclint" / "eclint-0.6" / "eclint.exe").is_file()
+
+
+def test_place_binary_finds_the_file_not_a_directory_of_the_same_name(tmp_path):
+    """Docker's tarball is `docker/docker`: a directory whose name matches
+    the tool, listed before the binary it holds.
+    """
+    archive = tmp_path / "docker-27.5.1.tgz"
+    with tarfile.open(archive, "w:gz") as tar:
+        folder = tarfile.TarInfo("docker/")
+        folder.type = tarfile.DIRTYPE
+        tar.addfile(folder)
+        _add(tar, "docker/docker", b"the-real-binary")
+    placed = _provision.place_binary(archive, "docker", tmp_path / "bin", windows=False)
+    assert (
+        str(tmp_path / "trees" / "docker" / "docker" / "docker") in placed.read_text()
+    )
+    zipped = tmp_path / "docker.zip"
     with zipfile.ZipFile(zipped, "w") as zf:
-        zf.writestr("tool.exe", b"pe")
-        zf.writestr("_internal/", b"")
-        zf.writestr("_internal/python.dll", b"dll")
-    _provision._extract_binary(zipped, "tool", tmp_path / "zip-bin", windows=True)
-    assert (tmp_path / "zip-bin" / "_internal" / "python.dll").read_bytes() == b"dll"
+        zf.writestr("docker/", b"")
+        zf.writestr("docker/docker.exe", b"the-real-binary")
+    placed = _provision.place_binary(zipped, "docker", tmp_path / "bin2", windows=True)
+    assert "docker.exe" in placed.read_text()
+
+
+def test_place_binary_copies_the_real_file_where_a_launcher_will_not_do(tmp_path):
+    """A docker plugin directory must hold the binary itself: docker runs it."""
+    archive = tmp_path / "compose.tgz"
+    with tarfile.open(archive, "w:gz") as tar:
+        _add(tar, "docker-compose", b"compose-binary")
+    placed = _provision.place_binary(
+        archive, "docker-compose", tmp_path / "plugins", windows=False, launcher=False
+    )
+    assert placed == tmp_path / "plugins" / "docker-compose"
+    assert placed.read_bytes() == b"compose-binary"
 
 
 def _add(tar: tarfile.TarFile, name: str, data: bytes) -> None:
@@ -411,75 +444,6 @@ def _add(tar: tarfile.TarFile, name: str, data: bytes) -> None:
     info.size = len(data)
     info.mode = 0o755
     tar.addfile(info, io.BytesIO(data))
-
-
-def test_extract_binary_from_zip(tmp_path):
-    archive = tmp_path / "gh_macOS_arm64.zip"
-    _zip(archive, "gh_2.0_macOS_arm64/bin/gh", b"go-binary")
-    placed = _provision._extract_binary(archive, "gh", tmp_path / "bin")
-    want = "gh.exe" if sys.platform == "win32" else "gh"
-    assert placed.read_bytes() == b"go-binary" and placed.name == want
-
-
-def test_exe_spells_a_binary_for_its_platform():
-    """One spelling for every tier. Each tier that grew its own copy of the
-    conditional was a separate Windows bug — the placed file gained `.exe`
-    while the tier still reached for the bare name (the docker tier did
-    exactly that, and provisioning died on a `docker` that was `docker.exe`).
-    """
-    assert _provision.exe("docker", windows=True) == "docker.exe"
-    assert _provision.exe("docker", windows=False) == "docker"
-    assert _provision.exe("docker") == (
-        "docker.exe" if sys.platform == "win32" else "docker"
-    )
-
-
-def test_extract_binary_names_the_exe_on_windows(tmp_path):
-    """PATHEXT makes an extensionless PE invisible to `shutil.which`, so the
-    placed name carries `.exe` even when the archive member did not. The
-    platform arrives as a parameter (the `_bash_path` idiom) — patching the
-    global `os.name` takes down the whole xdist worker on POSIX 3.11.
-    """
-    archive = tmp_path / "eclint_Windows_x86_64.tar.gz"
-    _tar_gz(archive, "eclint-0.6/eclint", b"PE-ish")
-    placed = _provision._extract_binary(
-        archive, "eclint", tmp_path / "bin", windows=True
-    )
-    assert placed.name == "eclint.exe" and placed.read_bytes() == b"PE-ish"
-
-
-def test_extract_binary_prefers_the_file_over_a_directory_of_the_same_name(tmp_path):
-    """Docker's tarball is `docker/docker` — a directory whose name matches
-    the tool, listed before the binary it holds. Matching on name alone took
-    the directory, and the extraction failed one line later with "not a
-    file"; a zip took it too, and wrote a zero-byte binary instead.
-    """
-    archive = tmp_path / "docker-27.5.1.tgz"
-    with tarfile.open(archive, "w:gz") as tar:
-        folder = tarfile.TarInfo("docker/")
-        folder.type = tarfile.DIRTYPE
-        tar.addfile(folder)
-        info = tarfile.TarInfo("docker/docker")
-        info.size = len(b"the-real-binary")
-        tar.addfile(info, io.BytesIO(b"the-real-binary"))
-    placed = _provision._extract_binary(archive, "docker", tmp_path / "bin")
-    assert placed.read_bytes() == b"the-real-binary"
-
-
-def test_extract_binary_skips_a_zip_directory_entry(tmp_path):
-    archive = tmp_path / "docker.zip"
-    with zipfile.ZipFile(archive, "w") as zf:
-        zf.writestr("docker/", b"")
-        zf.writestr("docker/docker.exe", b"the-real-binary")
-    placed = _provision._extract_binary(archive, "docker", tmp_path / "bin")
-    assert placed.read_bytes() == b"the-real-binary"
-
-
-def test_extract_binary_missing_is_an_error(tmp_path):
-    archive = tmp_path / "x.tar.gz"
-    _tar_gz(archive, "something-else", b"nope")
-    with pytest.raises(_provision.ProvisionError, match="not found inside"):
-        _provision._extract_binary(archive, "gh", tmp_path / "bin")
 
 
 # --- release tier end to end -------------------------------------------------
@@ -509,8 +473,11 @@ def test_release_github_flow(tmp_path, monkeypatch, mac_arm):
     driver = Driver("gh", provision=Provision(kind="github", repo="cli/cli"))
     (out,) = _provision.provision((driver,), tmp_path)
     assert out.status == "ok"
-    want = "gh.exe" if sys.platform == "win32" else "gh"
-    assert (_provision.bin_dir(tmp_path) / want).read_bytes() == b"gh!"
+    want = "gh.cmd" if sys.platform == "win32" else "gh"
+    launcher = _provision.bin_dir(tmp_path) / want
+    binary = tmp_path / "trees" / "gh" / "gh" / "bin" / "gh"
+    assert str(binary) in launcher.read_text()
+    assert binary.read_bytes() == b"gh!"
 
 
 def test_release_gitlab_parses_links(monkeypatch):
@@ -558,39 +525,30 @@ def test_latest_assets_unknown_host_raises():
         _provision._latest_assets("bitbucket", "a/b")
 
 
-# --- the low-level HTTP edges (mocked urlopen) -------------------------------
+# --- the reads, over the store ------------------------------------------------
 
 
-def test_get_json_reads_response(monkeypatch):
-    monkeypatch.setattr(
-        _provision.urllib.request,
-        "urlopen",
-        lambda req, timeout=0: io.BytesIO(b'{"tag_name": "v1"}'),
-    )
+def test_get_json_and_download_go_through_the_stores_reads(tmp_path, monkeypatch):
+    asked: list[object] = []
+
+    def json_read(url, **_kw):
+        asked.append(url)
+        return {"tag_name": "v1"}
+
+    monkeypatch.setattr(_provision, "fetch_json", json_read)
     assert _provision._get_json("http://x")["tag_name"] == "v1"
 
+    def file_read(url, into, **_kw):
+        asked.append((url, into))
+        into.mkdir(parents=True, exist_ok=True)
+        (into / "thing.tar.gz").write_bytes(b"payload")
+        return into / "thing.tar.gz"
 
-def test_get_json_error_is_provision_error(monkeypatch):
-    def boom(req, timeout=0):
-        raise OSError("no net")
-
-    monkeypatch.setattr(_provision.urllib.request, "urlopen", boom)
-    with pytest.raises(_provision.ProvisionError):
-        _provision._get_json("http://x")
-
-
-def test_download_caches_by_name(tmp_path, monkeypatch):
-    hits: list[int] = []
-
-    def fake_urlopen(req, timeout=0):
-        hits.append(1)
-        return io.BytesIO(b"payload")
-
-    monkeypatch.setattr(_provision.urllib.request, "urlopen", fake_urlopen)
-    first = _provision._download("http://x/thing.tar.gz", tmp_path)
-    second = _provision._download("http://x/thing.tar.gz", tmp_path)
-    assert first == second and first.read_bytes() == b"payload"
-    assert len(hits) == 1  # second call served from cache
+    monkeypatch.setattr(_provision, "fetch_file", file_read)
+    got = _provision._download("http://x/thing.tar.gz", tmp_path)
+    assert got.read_bytes() == b"payload"
+    # The prefix's cache directory is where the store keeps the file.
+    assert asked == ["http://x", ("http://x/thing.tar.gz", tmp_path / ".cache")]
 
 
 # --- the task ----------------------------------------------------------------
@@ -667,57 +625,6 @@ def test_task_clean_removes_prefix(tmp_path, monkeypatch):
     monkeypatch.setattr(_provision, "provision", lambda *a, **k: [])
     tools.provision(prefix=prefix, clean=True)
     assert not prefix.exists()
-
-
-def test_a_token_reaches_the_api_and_nothing_else(monkeypatch):
-    """GitHub allows 60 unauthenticated API calls an hour *per IP* and 5,000
-    with a token. Sixty is ample for two forge-hosted tools until the IP is a
-    shared CI runner, where strangers spend the budget.
-
-    Scoped to the API host deliberately: urllib carries headers across
-    redirects, and a release asset redirects to a CDN that has no business
-    seeing a credential.
-    """
-    from livery.toolroom.bench._provision import api_headers
-
-    monkeypatch.setenv("GH_TOKEN", "s3cret")
-    assert api_headers("https://api.github.com/repos/cli/cli/releases") == {
-        "User-Agent": "footman-provision",
-        "Authorization": "Bearer s3cret",
-    }
-    for elsewhere in (
-        "https://github.com/oven-sh/bun/releases/download/bun-v1.3.13/bun.zip",
-        "https://objects.githubusercontent.com/whatever",
-        "https://gitlab.com/api/v4/projects/x/releases",
-        "https://pypi.org/pypi/ruff/json",
-        "https://registry.npmjs.org/cspell",
-    ):
-        assert "Authorization" not in api_headers(elsewhere), elsewhere
-
-
-def test_the_older_github_token_spelling_is_accepted(monkeypatch):
-    """Actions exports `GITHUB_TOKEN`; `gh` exports `GH_TOKEN`. Both, so the
-    workflow and a laptop need not disagree.
-    """
-    from livery.toolroom.bench._provision import api_headers
-
-    monkeypatch.delenv("GH_TOKEN", raising=False)
-    monkeypatch.setenv("GITHUB_TOKEN", "from-actions")
-    url = "https://api.github.com/rate_limit"
-    assert api_headers(url)["Authorization"] == "Bearer from-actions"
-
-
-def test_no_token_still_works_just_on_the_smaller_budget(monkeypatch):
-    """A token is an offer, never a requirement — a fresh clone with no
-    credentials still primes, against 60 calls an hour.
-    """
-    from livery.toolroom.bench._provision import api_headers
-
-    monkeypatch.delenv("GH_TOKEN", raising=False)
-    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-    assert api_headers("https://api.github.com/rate_limit") == {
-        "User-Agent": "footman-provision"
-    }
 
 
 def test_the_interpreter_is_placed_however_the_platform_allows(tmp_path, monkeypatch):

@@ -23,7 +23,6 @@ def test_releases_break_a_same_day_tie_by_version(monkeypatch):
     appends it *below* its own successor, which corrupts the chain. Read
     through a PyPI-tier driver, since the index shape is PyPI's.
     """
-    import io
     import json as _json
 
     from livery.toolroom.bench import _drivers, _toolfetch
@@ -37,9 +36,7 @@ def test_releases_break_a_same_day_tie_by_version(monkeypatch):
         }
     }
     monkeypatch.setattr(
-        _toolfetch.urllib.request,
-        "urlopen",
-        lambda *a, **k: io.BytesIO(_json.dumps(index).encode()),
+        _toolfetch, "fetch_bytes", lambda *a, **k: _json.dumps(index).encode()
     )
     driver = _drivers.find("mypy")  # a PyPI-tier driver
     assert driver is not None
@@ -107,7 +104,6 @@ def test_cutoff_takes_the_far_edge_of_the_publishing_window(monkeypatch):
     Both holes in a 709-release walk were this, on every platform at once,
     which is what makes it look like a platform difference.
     """
-    import io
     import json as _json
 
     from livery.toolroom.bench import _drivers, _toolfetch
@@ -123,9 +119,7 @@ def test_cutoff_takes_the_far_edge_of_the_publishing_window(monkeypatch):
         }
     }
     monkeypatch.setattr(
-        _toolfetch.urllib.request,
-        "urlopen",
-        lambda *a, **k: io.BytesIO(_json.dumps(index).encode()),
+        _toolfetch, "fetch_bytes", lambda *a, **k: _json.dumps(index).encode()
     )
     driver = _drivers.find("mypy")  # a PyPI-tier driver: the index shape is PyPI's
     assert driver is not None
@@ -171,7 +165,6 @@ def test_releases_older_than_the_interpreter_are_not_offered(monkeypatch):
     any interpreter this walk uses. A hole says "this could not be read",
     which would be a shrug recorded about a release nobody needs.
     """
-    import io
     import json as _json
 
     from livery.toolroom.bench import _drivers, _toolfetch
@@ -185,9 +178,7 @@ def test_releases_older_than_the_interpreter_are_not_offered(monkeypatch):
         }
     }
     monkeypatch.setattr(
-        _toolfetch.urllib.request,
-        "urlopen",
-        lambda *a, **k: io.BytesIO(_json.dumps(index).encode()),
+        _toolfetch, "fetch_bytes", lambda *a, **k: _json.dumps(index).encode()
     )
     driver = _drivers.find("mypy")  # a PyPI-tier driver
     assert driver is not None
@@ -219,15 +210,12 @@ def test_walk_caches_nothing_it_will_not_reread(tmp_path):
 
 def _index(monkeypatch, payload):
     """Serve *payload* as the registry's JSON, whatever URL is asked for."""
-    import io
     import json as _json
 
     from livery.toolroom.bench import _toolfetch
 
     monkeypatch.setattr(
-        _toolfetch.urllib.request,
-        "urlopen",
-        lambda *a, **k: io.BytesIO(_json.dumps(payload).encode()),
+        _toolfetch, "fetch_bytes", lambda *a, **k: _json.dumps(payload).encode()
     )
 
 
@@ -293,15 +281,9 @@ def _dirlisting(monkeypatch, html):
     The engine listing that dates those files is stubbed empty, so a test
     about the directory is about the directory; a test about dates says so.
     """
-    import io
-
     from livery.toolroom.bench import _toolfetch
 
-    monkeypatch.setattr(
-        _toolfetch.urllib.request,
-        "urlopen",
-        lambda *a, **k: io.BytesIO(html.encode()),
-    )
+    monkeypatch.setattr(_toolfetch, "fetch_bytes", lambda *a, **k: html.encode())
     monkeypatch.setattr(_toolfetch, "_docker_dates", dict)
 
 
@@ -392,7 +374,7 @@ def _plugin_fetch(monkeypatch, placed):
         _provision, "_download", lambda url, into: _written(into / "docker-compose")
     )
     monkeypatch.setattr(
-        _provision, "_extract_binary", lambda archive, tool, into: into / tool
+        _provision, "place_binary", lambda archive, tool, into, **_kw: into / tool
     )
     return asked
 
@@ -449,60 +431,20 @@ def test_a_plugin_that_cannot_be_fetched_is_unreachable_not_absent(
         _toolfetch.install_plugin(docker.plugins[0], "2025-06-01", tmp_path)
 
 
-def test_a_gateway_timeout_on_an_index_is_retried(monkeypatch):
-    """The gap the retry left. `_download` retries a dropped connection;
-    the listing path did not, so a leg died on
-
-        Unreachable: cannot read .../docker/buildx/releases?…:
-        HTTP Error 504: Gateway Timeout
-
-    and took the whole platform's observations with it — the same failure
-    the download retry exists to prevent, one layer up.
+def test_an_index_the_store_cannot_read_is_unreachable_naming_it(monkeypatch):
+    """The retry lives in the store's read. What the walk adds is the
+    shape: an index that will not answer ends the run as `Unreachable`,
+    never as an empty listing.
     """
-    import email.message
-    import urllib.error
-
     from livery.toolroom.bench import _toolfetch
+    from livery.toolroom.store import FetchError
 
-    calls = []
+    def spent(url, **_kw):
+        raise FetchError(f"{url}: HTTP 504", status=504)
 
-    class Answer:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-        def read(self):
-            return b"[]"
-
-    def flaky(request, timeout=0):
-        calls.append(1)
-        if len(calls) < 3:
-            raise urllib.error.HTTPError(
-                "http://x", 504, "Gateway Timeout", email.message.Message(), None
-            )
-        return Answer()
-
-    monkeypatch.setattr(_toolfetch.urllib.request, "urlopen", flaky)
-    monkeypatch.setattr(_toolfetch.time, "sleep", lambda _s: None)
-    request = _toolfetch.urllib.request.Request("http://x")
-    assert _toolfetch._read_index(request, "http://x") == b"[]"
-    assert len(calls) == 3
-
-    # A 404 is an answer: raised at once, and still as Unreachable.
-    calls.clear()
-
-    def gone(request, timeout=0):
-        calls.append(1)
-        raise urllib.error.HTTPError(
-            "http://x", 404, "Not Found", email.message.Message(), None
-        )
-
-    monkeypatch.setattr(_toolfetch.urllib.request, "urlopen", gone)
-    with pytest.raises(_toolfetch.Unreachable):
-        _toolfetch._read_index(request, "http://x")
-    assert len(calls) == 1
+    monkeypatch.setattr(_toolfetch, "fetch_bytes", spent)
+    with pytest.raises(_toolfetch.Unreachable, match=r"cannot read http://x: .*504"):
+        _toolfetch._read_index("http://x")
 
 
 def test_a_listing_is_read_once_per_process(monkeypatch):
@@ -793,11 +735,12 @@ def test_an_unreadable_index_is_not_an_empty_one(monkeypatch):
     to *choose* to, which is the point of raising.
     """
     from livery.toolroom.bench import _drivers, _toolfetch
+    from livery.toolroom.store import FetchError
 
     def boom(*a, **k):
-        raise _toolfetch.urllib.error.URLError("no network")
+        raise FetchError("no network")
 
-    monkeypatch.setattr(_toolfetch.urllib.request, "urlopen", boom)
+    monkeypatch.setattr(_toolfetch, "fetch_bytes", boom)
     driver = _drivers.find("mypy")  # a PyPI-tier driver
     assert driver is not None
     with pytest.raises(_toolfetch.Unreachable):
