@@ -1519,6 +1519,17 @@ class _GitlabReleases:
         )
         return tuple(_as_asset(row) for row in rows or [])
 
+    def download_asset(self, tag: str, name: str) -> bytes:
+        """The bytes behind the release link *name*.
+
+        The link points at the project's upload store on the same
+        host, which answers the lane's credential.
+        """
+        for asset in self.assets(tag):
+            if asset.name == name:
+                return self._client.download(asset.url)
+        raise ForgeError(f"release {tag} has no asset named {name}", status=404)
+
     def _released(self, tag: str) -> Release:
         release = self.get(tag)
         if release is None:

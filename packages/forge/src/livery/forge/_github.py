@@ -1211,6 +1211,24 @@ class _GithubReleases:
         rows = self._client.request(f"{self._base}/releases/{release.id}/assets")
         return tuple(_as_asset(row) for row in rows or [])
 
+    def download_asset(self, tag: str, name: str) -> bytes:
+        """The bytes of the asset *name*, from the API, redirects followed.
+
+        GitHub serves an asset's bytes from the asset's own API
+        address when the request asks for the octet stream, and
+        answers a redirect to its object store, which the client
+        follows without the token.
+        """
+        release = self._released(tag)
+        rows = self._client.request(f"{self._base}/releases/{release.id}/assets")
+        for row in rows or []:
+            if str(row.get("name", "")) == name:
+                return self._client.download(
+                    f"{self._base}/releases/assets/{int(row.get('id') or 0)}",
+                    accept="application/octet-stream",
+                )
+        raise ForgeError(f"release {tag} has no asset named {name}", status=404)
+
     def _released(self, tag: str) -> Release:
         release = self.get(tag)
         if release is None:
@@ -1231,11 +1249,17 @@ def _as_release(data: Mapping[str, Any]) -> Release:
 
 
 def _as_asset(data: Mapping[str, Any]) -> Asset:
-    """GitHub's release asset JSON, normalised."""
+    """GitHub's release asset JSON, normalised.
+
+    GitHub computes the digest itself and reports it as
+    ``"sha256:<hex>"``; an asset uploaded before it did so reports
+    none, and the field is then empty.
+    """
     return Asset(
         name=str(data.get("name", "")),
         url=str(data.get("browser_download_url", "")),
         size=int(data.get("size") or 0),
+        digest=str(data.get("digest") or ""),
     )
 
 

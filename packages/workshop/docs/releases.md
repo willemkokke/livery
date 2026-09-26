@@ -82,6 +82,28 @@ renders:
   to the registry the contract's `[registries]` table names for the
   kind, else the forge's own package registry.
 
+A conan package resolves the same ladder for its own kind: the
+`[registries.conan]` declaration first, then a conan registry the
+forge hosts, and on a forge that hosts none, the forge's releases.
+On that route each wheel-platform leg creates the package and saves
+its cache as `dist/<name>-<version>-<host>.tgz`, and the wave
+attaches every collected file to the member's own release. The tag
+is pushed before the upload, because a release is addressed by its
+tag, so a tag alone is not a receipt there: the probe reads the
+attached caches, and a re-run after a half-finished upload finishes
+it. A consumer lists the release, checks the bytes against the
+digest the forge reports, and restores the cache into its conan
+home; a forge that reports no digest says so rather than passing
+silently.
+
+Every floor a member declares on a conan member is proved in the
+leg that builds it: the floor's cache is restored from its own
+release, one wheel is built for that machine with a conan profile
+replacing the requirement with the floor, and the package's tests
+run against it. A floor equal to the version the wave is releasing
+is the package the main build already linked, and the leg says so
+instead of building twice.
+
 A member whose kind builds platform wheels (the nanobind kind) names
 the runner labels that build them under `[ci] wheel-platforms` in its
 own `workshop.toml`. The release workflow runs one wheels leg per

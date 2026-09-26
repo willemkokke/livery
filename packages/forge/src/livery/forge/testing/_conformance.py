@@ -24,6 +24,7 @@ livery.forge.Forge.supports or does not look.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal, Protocol, TypeAlias
@@ -766,6 +767,19 @@ def _release_assets(driver: ForgeDriver) -> None:
     listed = repo.release.assets(tag)
     assert [entry.name for entry in listed] == ["notes.txt"]
     assert listed[0].url and listed[0].size in (0, len(b"the notes"))
+    # A digest is optional: a forge that computes one reports it as
+    # "sha256:<hex>" and it matches the bytes that went up.
+    if listed[0].digest:
+        algorithm, _, hexed = listed[0].digest.partition(":")
+        assert algorithm == "sha256"
+        assert hexed == hashlib.sha256(b"the notes").hexdigest()
+    try:
+        repo.release.download_asset(tag, "absent.txt")
+    except ForgeError:
+        pass
+    else:
+        raise AssertionError("downloading an asset that is not there must be refused")
+    assert repo.release.download_asset(tag, "notes.txt") == b"the notes"
 
 
 def _issue_text_both_ways(driver: ForgeDriver) -> None:

@@ -21,6 +21,7 @@ from livery.workshop._kinds import (
 )
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._quality import run_kind_checks
+from livery.workshop._registries import RegistryTarget
 from livery.workshop._templates import read_answers, render
 
 _FAILURES = (BaseException,)
@@ -204,11 +205,10 @@ def test_kind_checks_announce_and_dispatch(
         def publish_artifact(
             self,
             package: Package,
+            root: Path,
             *,
             version: str,
-            publish_url: str,
-            token: str,
-            local: bool,
+            target: RegistryTarget,
         ) -> bool:
             return True
 
@@ -295,11 +295,10 @@ def test_host_tools_are_named_when_missing(restored_registry, tmp_path: Path) ->
         def publish_artifact(
             self,
             package: Package,
+            root: Path,
             *,
             version: str,
-            publish_url: str,
-            token: str,
-            local: bool,
+            target: RegistryTarget,
         ) -> bool:
             return True
 

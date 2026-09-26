@@ -288,8 +288,34 @@ cmake-conan provider are store records, the extension template
 consumes fmt at compile time through the provider, `fm sync` registers
 every cpp-conan member editable before `uv sync`, and the fixture's
 extension wheel calls `fmt::format` and the library's `version()`
-from HEAD in its isolated leg. Slices 7b (livery#736), 7c (livery#737)
-and 7d (livery#738) follow.
+from HEAD in its isolated leg. Slice 7b's first cut landed 2026-09-26
+(livery#736, PR #750): the forge protocol uploads, lists, and reads
+back release assets, on GitHub, Gitea, GitLab and the fake. Its
+second cut (livery#751) carries the route itself, below. Slices 7c
+(livery#737) and 7d (livery#738) follow.
+
+The route, on a forge that hosts no conan registry:
+
+- Each wheel-platform leg creates every conan member into its own
+  cache and saves it as `dist/<name>-<version>-<host>.tgz`, one file
+  per host, collected with the wheels.
+- The ladder's conan rung, where the forge hosts no conan registry,
+  answers the forge's releases. The wave pushes the receipt tag
+  first, because a release is addressed by its tag, then creates the
+  release (body: the member's changelog entry) and attaches every
+  collected cache. A tag alone is no longer a receipt: the probe
+  reads the assets, so a re-run after a half-finished upload
+  finishes it.
+- A consumer reads the release listing, checks the bytes against the
+  digest GitHub reports, and restores the cache into its conan home.
+  A forge that reports no digest says so on the line rather than
+  passing silently.
+- Every declared floor on a conan member is proved in the same leg:
+  the floor's cache is restored from its own release, one wheel is
+  built for this machine with `--require-override=<library>/<floor>`,
+  and the package's tests run against it. A floor equal to the
+  version the wave releases is the package the main build already
+  linked, and that leg says so.
 
 The extension calls a symbol from the first-party library and a
 symbol from a third-party conan package, and the build resolves both
@@ -345,7 +371,9 @@ Acceptance:
   the library at HEAD: an edit to the library's header is seen by the
   extension's next configure without a release.
 - The isolated leg fails when the floor names a version whose header
-  lacks the symbol; forced by test.
+  lacks the symbol; forced by
+  `test_a_floor_whose_header_lacks_the_symbol_fails_the_leg` at the
+  nightly point.
 - The manylinux leg builds with the store's conan mounted, no wheel
   install of conan inside the container.
 
@@ -556,6 +584,27 @@ Acceptance:
   `--build=editable` live in the template's pyproject, so a sibling is
   built from HEAD wherever it is registered and nothing happens where
   it is not.
+- 2026-09-26 (slice 7b shape): on a forge that hosts no conan
+  registry the artifact rides the member's own release, so the
+  receipt tag is pushed before the assets exist. A tag alone is
+  therefore no longer a receipt: the wave's walk-past asks the
+  target as well, and a re-run after a half-finished upload
+  finishes it. The wave hands each backend the resolved
+  `RegistryTarget` whole instead of three loose fields, since the
+  conan route needs the workspace root to reach the forge.
+- 2026-09-26 (slice 7b shape): a consumer reads the bytes back
+  through the forge protocol (`download_asset`) rather than the
+  store's fetch. A private repository's asset needs the lane's
+  credential and each forge addresses the bytes its own way, so the
+  backend that knows the dialect does the read; the fake forge then
+  makes the whole path provable with no server. The digest the
+  forge reports is checked before the restore, and a forge that
+  reports none says so on the line instead of passing silently.
+- 2026-09-26 (slice 7b shape): the floor leg pins the library with a
+  conan profile carrying `[replace_requires]`, added to the profiles
+  the dependency provider already passes. conan 2's `install` has no
+  `--require-override`, and a profile composes with the generated
+  one rather than replacing it.
 
 ## Open
 

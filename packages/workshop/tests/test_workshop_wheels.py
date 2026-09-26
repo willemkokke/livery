@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from livery.workshop import _wheels
-from livery.workshop._packages import discover_packages
+from livery.workshop._packages import Package, discover_packages
 
 
 def _member(root: Path, name: str, contract: str) -> None:
@@ -232,3 +232,97 @@ def test_the_wheels_verb_sets_the_build_set_on_the_task_context(
     assert ctx.env == {"CIBW_BUILD": "cp311-* cp314-*", "CIBW_SKIP": ""}
     assert "CIBW_BUILD" not in os.environ
     assert built and built[0]["epoch"].isdigit()
+
+
+def test_the_leg_creates_the_conan_member_before_the_wheels_and_proves_the_floors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The leg's three steps, in the one order that works.
+
+    The extension resolves the library from this leg's own conan
+    cache, so the library is created first; its cache is saved for
+    the wave to attach; and the floors are proved once the wheels
+    the release ships are built.
+    """
+    import subprocess
+    from types import SimpleNamespace
+
+    from livery.workshop._backends import _cpp_conan, _python_nanobind
+    from livery.workshop._release import release_wheels
+
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nlayers = ["livery.workshop"]\n\n[forge]\nkind = "github"\n'
+    )
+    _member(tmp_path, "geometry", 'type = "cpp-conan"\nname = "geometry"\n')
+    _member(
+        tmp_path,
+        "ext",
+        'type = "python-nanobind"\nname = "ext"\n[ci]\n'
+        'wheel-platforms = ["ubuntu-latest"]\n',
+    )
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.email=t@l",
+            "-c",
+            "user.name=T",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "seed",
+        ],
+        cwd=tmp_path,
+        check=True,
+    )
+    members = {p.name: p for p in discover_packages(tmp_path)}
+    calls: list[str] = []
+
+    class _Backend:
+        def build(self, package: Package, root: Path, *, epoch: int = 0) -> Path:
+            del root, epoch
+            calls.append(f"build {package.name}")
+            dist = package.directory / "dist"
+            dist.mkdir(exist_ok=True)
+            if package.type == "python-nanobind":
+                (dist / "ext-0.1.0-cp314-cp314-manylinux_2_28_x86_64.whl").write_text(
+                    ""
+                )
+            return dist
+
+    def _forget(package: Package) -> None:
+        calls.append(f"forget {package.name}")
+
+    def _save(package: Package, version: str, into: Path) -> Path:
+        calls.append(f"save {package.name} {version}")
+        into.mkdir(parents=True, exist_ok=True)
+        return into / f"{package.name}-{version}-linux-x64.tgz"
+
+    def _floors(
+        package: Package, root: Path, released: dict[str, str], *, epoch: int = 0
+    ) -> None:
+        del root, epoch
+        calls.append(f"floors {package.name} {sorted(released)}")
+
+    monkeypatch.setattr("livery.workshop._backends.backend_for", lambda _p: _Backend())
+    monkeypatch.setattr(_cpp_conan, "forget_editable", _forget)
+    monkeypatch.setattr(_cpp_conan, "save_cache", _save)
+    monkeypatch.setattr(_python_nanobind, "floor_legs", _floors)
+    monkeypatch.setattr(
+        "livery.workshop._publish.discover_release",
+        lambda root, git, ref: (
+            (members["geometry"], "0.1.0"),
+            (members["ext"], "0.2.0"),
+        ),
+    )
+    monkeypatch.chdir(tmp_path)
+    release_wheels(SimpleNamespace(env={}))  # type: ignore[arg-type]  # context stand-in
+    assert calls == [
+        "forget geometry",
+        "build geometry",
+        "save geometry 0.1.0",
+        "build ext",
+        "floors ext ['packages/ext', 'packages/geometry']",
+    ]

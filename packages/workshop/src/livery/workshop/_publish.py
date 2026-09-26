@@ -427,7 +427,11 @@ def publish_release(
     by_path = {p.path: p for p in discover_packages(root)}
     coreleased = frozenset(f"{p.path}/v{manifest[p.name]}" for p in ordered)
     from livery.workshop._kinds import kind_for as _kind_for
+    from livery.workshop._registries import RegistryTarget
 
+    python_target = RegistryTarget(
+        kind="python", url=index_url, publish_url=index_url, token=token
+    )
     conan_target = None
     if any(_kind_for(p.type).artifact == "conan" for p in ordered):
         # Resolved once, before anything uploads: a ladder refusal
@@ -461,8 +465,15 @@ def publish_release(
                             f" {edge.path} failed, so this member never"
                             " started"
                         )
-            if tag in git.tags():
-                print(f"  {package.name} v{version}: already tagged; done")
+            # A version the target already serves is walked past
+            # before any build or upload: a re-run after a died
+            # receipt, from CI or from a machine without a publish
+            # credential, must reach the tag. The duplicate rejection
+            # at the upload stays as the second net for two waves
+            # racing.
+            served = version in registry_for(package).versions(package.name)
+            if tag in git.tags() and served:
+                print(f"  {package.name} v{version}: already tagged and served; done")
                 with lock:
                     receipts[package.path] = Receipt(
                         package, version, tag, published=False
@@ -481,6 +492,19 @@ def publish_release(
                         " no collected wheels; the wheels matrix did"
                         " not feed this wave"
                     )
+            elif prebuilt and record.artifact == "conan":
+                # The matrix created this member once per host and
+                # saved each cache; building again here would cost
+                # minutes and publish nothing the collection lacks.
+                saved = (package.directory / "dist").glob(
+                    f"{package.name}-{version}-*.tgz"
+                )
+                if not list(saved):
+                    fail(
+                        f"{package.name}: --prebuilt, and dist/ holds no"
+                        " saved conan cache; the wheels matrix did not"
+                        " feed this wave"
+                    )
             else:
                 backend_for(package).build(package, root, epoch=epoch)
             assert_wheel_identity(package)
@@ -488,31 +512,28 @@ def publish_release(
             # the resolved target for the kind's artifact.
             if record.artifact == "conan":
                 assert conan_target is not None
-                art_url, art_token, art_local = (
-                    conan_target.url,
-                    conan_target.token,
-                    conan_target.local,
-                )
+                target = conan_target
             else:
-                art_url, art_token, art_local = index_url, token, False
-            # A version the index already serves is walked past before
-            # any upload: a re-run after a died receipt, from CI or
-            # from a machine without a publish credential, must reach
-            # the tag. The duplicate rejection below stays as the
-            # second net for two waves racing.
-            if version in registry_for(package).versions(package.name):
+                target = python_target
+            if served:
                 print(
                     f"  {package.name} v{version}: already served; walking"
                     " past the upload"
                 )
                 published = False
             else:
+                if target.releases and tag not in git.tags():
+                    # A release is addressed by its tag, so the tag
+                    # exists before the assets do. The receipt is
+                    # complete only once the probe sees them, which
+                    # is why a tag alone no longer ends the member:
+                    # a re-run finishes the upload.
+                    cut_tag(git, tag, resolved_ref)
                 published = backend_for(package).publish_artifact(
                     package,
+                    root,
                     version=version,
-                    publish_url=art_url,
-                    token=art_token,
-                    local=art_local,
+                    target=target,
                 )
             probe_until_served(
                 registry_for(package),

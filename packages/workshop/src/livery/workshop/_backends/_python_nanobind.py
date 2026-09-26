@@ -58,6 +58,106 @@ def declared_requirements(package: Package) -> dict[str, str]:
 CIBUILDWHEEL = "cibuildwheel>=3.0,<4"
 
 
+#: What a package passes to conan install when its own pyproject
+#: names nothing: build what the cache lacks, leave the rest alone.
+DEFAULT_INSTALL_ARGS = "--build=missing"
+
+
+def conan_install_args(package: Package) -> str:
+    """What the package's ``pyproject.toml`` passes to conan install.
+
+    Reads ``[tool.scikit-build.cmake.define] CONAN_INSTALL_ARGS``,
+    the package's own declaration, in either spelling: a plain
+    string, or the table whose ``default`` the environment
+    overrides. The floor leg starts from this and adds its pin, so
+    the two builds differ by the pin alone.
+    """
+    import tomllib
+
+    pyproject = package.directory / "pyproject.toml"
+    if not pyproject.is_file():
+        return DEFAULT_INSTALL_ARGS
+    data = tomllib.loads(pyproject.read_text("utf-8"))
+    tool = data.get("tool", {})
+    define = tool.get("scikit-build", {}).get("cmake", {}).get("define", {})
+    declared = define.get("CONAN_INSTALL_ARGS", "")
+    if isinstance(declared, dict):
+        return str(declared.get("default", "")) or DEFAULT_INSTALL_ARGS
+    return str(declared) or DEFAULT_INSTALL_ARGS
+
+
+def floor_legs(
+    package: Package, root: Path, released: dict[str, str], *, epoch: int = 0
+) -> None:
+    """Prove every native floor this extension declares, one leg each.
+
+    A floor is a claim: the extension compiles and its tests pass
+    against that version of the library, so a consumer who resolves
+    the floor gets a working extension. The claim is proved here.
+    Per conan dependency: the floor's saved cache is restored from
+    its own release, one wheel is built for this machine with the
+    requirement replaced by the floor, and the package's tests run
+    against that wheel in a fresh venv. The pin is a conan profile
+    holding a `[replace_requires]` line, added to the ones the
+    dependency provider already passes, so the range the recipe
+    declares resolves to that version alone.
+
+    A floor equal to the version this wave releases is the package
+    the main build already linked, so that leg says so and does
+    nothing. *released* is the wave's manifest, member path to
+    version.
+
+    Raises:
+        Failed: when the floor's cache is not on its release, when
+            the pinned build fails, or when the tests fail against
+            it. A floor whose header lacks a symbol the extension
+            calls fails at the compile.
+    """
+    from livery.workshop._backends import _cpp_conan, _python
+    from livery.workshop._kinds import kind_for
+    from livery.workshop._packages import discover_packages
+
+    by_path = {member.path: member for member in discover_packages(root)}
+    for edge in package.depends:
+        dependency = by_path.get(edge.path)
+        floor = getattr(edge, "floor", "")
+        if dependency is None or not floor:
+            continue
+        if kind_for(dependency.type).artifact != "conan":
+            continue
+        if released.get(edge.path) == floor:
+            print(
+                f"  {package.name}: the floor on {dependency.name} is"
+                f" {floor}, the version this wave releases; the build"
+                " above already linked it"
+            )
+            continue
+        _cpp_conan.restore_from_releases(
+            root, dependency.name, floor, cwd=package.directory
+        )
+        dist = package.directory / "build" / "floor"
+        shutil.rmtree(dist, ignore_errors=True)
+        profile = package.directory / "build" / "floor-profile.txt"
+        profile.parent.mkdir(parents=True, exist_ok=True)
+        profile.write_text(
+            f"[replace_requires]\n{dependency.name}/*: {dependency.name}/{floor}\n",
+            encoding="utf-8",
+        )
+        # A posix path: the string rides a CMake list, where a
+        # Windows separator would read as an escape.
+        pinned = f"{conan_install_args(package)};-pr:h;{profile.as_posix()}"
+        build_wheels(
+            package,
+            root,
+            dist,
+            epoch=epoch,
+            conan_install_args=pinned,
+            one_host_wheel=True,
+        )
+        _python.run_isolated_test(package, root, wheels_dir=dist)
+        print(f"  {package.name}: floor leg green against {dependency.name} {floor}")
+
+
 def assert_platform_tagged(package: Package, dist: Path) -> None:
     """Refuse any pure-tagged wheel in *dist*; the identity guard.
 
@@ -137,7 +237,9 @@ def conan_environment(root: Path) -> dict[str, str]:
         mounts = " ".join(
             f"-v {path}:{path}" for path in (str(root), str(home.root), conan_home)
         )
-        env["CIBW_ENVIRONMENT_PASS_LINUX"] = "CMAKE_CONAN_PROVIDER CONAN_HOME"
+        env["CIBW_ENVIRONMENT_PASS_LINUX"] = (
+            "CMAKE_CONAN_PROVIDER CONAN_HOME CONAN_INSTALL_ARGS"
+        )
         env["CIBW_CONTAINER_ENGINE"] = f"docker; create_args: {mounts}"
         env["CIBW_ENVIRONMENT_LINUX"] = f'PATH="{Path(conan).parent}:$PATH"'
     return env
@@ -166,28 +268,72 @@ def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
     Refuses a pure-tagged result: see
     [livery.workshop._backends._python_nanobind.assert_platform_tagged][].
     """
+    dist = package.directory / "dist"
+    shutil.rmtree(dist, ignore_errors=True)
+    env = build_wheels(package, root, dist, epoch=epoch)
+    sdist = tools.uv.opts(cwd=package.directory, env=env, nofail=True, recorded=False)(
+        "build", "--sdist", "--out-dir", str(dist)
+    )
+    if sdist.code != 0:
+        fail(
+            f"uv build --sdist ({package.name}) exited {sdist.code}:\n"
+            f"{sdist.stdout[-4000:]}{sdist.stderr[-2000:]}"
+        )
+    return dist
+
+
+def build_wheels(
+    package: Package,
+    root: Path,
+    dist: Path,
+    *,
+    epoch: int = 0,
+    conan_install_args: str = "",
+    one_host_wheel: bool = False,
+) -> dict[str, str]:
+    """Build this package's wheels into *dist*; the environment used.
+
+    The wheel half of
+    [livery.workshop._backends._python_nanobind.build][], split out
+    so a leg can build a second set somewhere else without touching
+    the collected ``dist/``. *conan_install_args* replaces what the
+    package's own ``pyproject.toml`` passes to conan, which is how
+    the floor leg adds the profile that pins the library it links.
+    *one_host_wheel* builds
+    one wheel for this machine alone, whatever set the matrix put in
+    the environment: a proof about the library's C++ interface needs
+    one interpreter, not the whole matrix.
+
+    Raises:
+        Failed: when cibuildwheel exits non-zero, or the wheels it
+            wrote carry no platform tag.
+    """
     from livery.workshop._docs import materialise_module_docs
 
     materialise_module_docs(package)
-    dist = package.directory / "dist"
-    shutil.rmtree(dist, ignore_errors=True)
     env = dict(os.environ)
     if epoch:
         env["SOURCE_DATE_EPOCH"] = str(epoch)
-    env.setdefault(
-        "CIBW_BUILD",
-        f"cp{sys.version_info.major}{sys.version_info.minor}-*",
-    )
+    if conan_install_args:
+        env["CONAN_INSTALL_ARGS"] = conan_install_args
     # One wheel for this machine: a linux run builds a manylinux and
     # a musllinux wheel of the same arch, and the host can install
     # only the one for its own libc, so the isolated leg would have
     # two candidates for one venv. The skip follows the host's libc;
-    # the release matrix sets its own build set explicitly.
-    env.setdefault("CIBW_SKIP", "*-manylinux_*" if host_is_musl() else "*-musllinux_*")
-    # And one architecture, the machine's own: Windows would add a
-    # 32-bit wheel beside the 64-bit one, and the isolated leg installs
-    # the wheel it finds first.
-    env.setdefault("CIBW_ARCHS", "native")
+    # the release matrix sets its own build set explicitly. One
+    # architecture too, the machine's own: Windows would add a
+    # 32-bit wheel beside the 64-bit one, and the isolated leg
+    # installs the wheel it finds first.
+    this_interpreter = f"cp{sys.version_info.major}{sys.version_info.minor}-*"
+    this_libc = "*-manylinux_*" if host_is_musl() else "*-musllinux_*"
+    if one_host_wheel:
+        env["CIBW_BUILD"] = this_interpreter
+        env["CIBW_SKIP"] = this_libc
+        env["CIBW_ARCHS"] = "native"
+    else:
+        env.setdefault("CIBW_BUILD", this_interpreter)
+        env.setdefault("CIBW_SKIP", this_libc)
+        env.setdefault("CIBW_ARCHS", "native")
     for key, value in conan_environment(root).items():
         env.setdefault(key, value)
     result = tools.uv.opts(cwd=package.directory, env=env, nofail=True, recorded=False)(
@@ -200,13 +346,5 @@ def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
             f"cibuildwheel ({package.name}) exited {result.code}:\n"
             f"{result.stdout[-20000:]}{result.stderr[-4000:]}"
         )
-    sdist = tools.uv.opts(cwd=package.directory, env=env, nofail=True, recorded=False)(
-        "build", "--sdist", "--out-dir", str(dist)
-    )
-    if sdist.code != 0:
-        fail(
-            f"uv build --sdist ({package.name}) exited {sdist.code}:\n"
-            f"{sdist.stdout[-4000:]}{sdist.stderr[-2000:]}"
-        )
     assert_platform_tagged(package, dist)
-    return dist
+    return env

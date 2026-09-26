@@ -1064,6 +1064,17 @@ class _GiteaReleases:
         rows = self._client.request(f"{self._base}/releases/{release.id}/assets")
         return tuple(_as_asset(row) for row in rows or [])
 
+    def download_asset(self, tag: str, name: str) -> bytes:
+        """The bytes of the attachment *name* on *tag*'s release.
+
+        Gitea serves an attachment from the repository's own host, so
+        the lane's credential rides the whole read.
+        """
+        for asset in self.assets(tag):
+            if asset.name == name:
+                return self._client.download(asset.url)
+        raise ForgeError(f"release {tag} has no asset named {name}", status=404)
+
     def _released(self, tag: str) -> Release:
         release = self.get(tag)
         if release is None:

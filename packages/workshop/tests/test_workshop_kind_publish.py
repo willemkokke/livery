@@ -9,10 +9,12 @@ from pathlib import Path
 import pytest
 
 from livery.footman import Failed
+from livery.workshop import _publish
 from livery.workshop._backends import _cpp_conan
 from livery.workshop._git_ops import GitOps
 from livery.workshop._packages import Package
 from livery.workshop._publish import assert_wheel_identity, publish_release
+from livery.workshop._registries import RegistryTarget
 
 _FAILURES = (SystemExit, Failed)
 
@@ -94,7 +96,9 @@ def test_the_folder_registry_answers_from_saved_archives(tmp_path: Path) -> None
     (target / "acme-lib-0.1.0.tgz").touch()
     (target / "acme-lib-0.2.0.tgz").touch()
     (target / "acme-other-9.9.9.tgz").touch()
-    registry = _cpp_conan.ConanRegistry(str(target), local=True, cwd=tmp_path)
+    registry = _cpp_conan.ConanRegistry(
+        RegistryTarget(kind="conan", url=str(target), local=True), root=tmp_path
+    )
     assert registry.versions("acme-lib") == ("0.1.0", "0.2.0")
     assert registry.versions("acme-ghost") == ()
 
@@ -239,6 +243,107 @@ def test_the_cross_kind_wave_orders_and_dispatches(
     ]
 
 
+def test_a_releases_target_tags_before_it_uploads_and_a_rerun_finishes_it(
+    cross_train, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The route for a forge with no conan registry, failure first.
+
+    The release is addressed by the receipt tag, so the tag is pushed
+    before the assets exist. That leaves a window: an upload that
+    dies leaves a tag with nothing under it, and the re-run has to
+    finish the job rather than read the tag as a receipt.
+    """
+    from livery.forge import ForgeError
+    from livery.forge.testing import FakeForge
+
+    root, git = cross_train
+    registry = _Ledger()
+    fake = FakeForge()
+    fake.create_repo("acme", "ws")
+    repository = fake.repository("acme", "ws")
+    target = RegistryTarget(kind="conan", url="fake://acme/ws", releases=True)
+    monkeypatch.setattr(
+        "livery.workshop._forge_lane.this_repository", lambda _root: repository
+    )
+    monkeypatch.setattr(
+        "livery.workshop._registries.resolve_registry",
+        lambda _root, _kind: target,
+    )
+    real_cut = _publish.cut_tag
+
+    def _cut_and_push_to_the_forge(git_ops: GitOps, tag: str, ref: str) -> None:
+        real_cut(git_ops, tag, ref)
+        if tag not in repository.tags():
+            fake.create_tag("acme", "ws", tag)
+
+    monkeypatch.setattr(_publish, "cut_tag", _cut_and_push_to_the_forge)
+
+    def _fake_build(package: Package, _root: Path, *, epoch: int = 0) -> Path:
+        dist = package.directory / "dist"
+        dist.mkdir(exist_ok=True)
+        if package.type == "python-nanobind":
+            (dist / "acme_ext-0.3.0-cp314-cp314-manylinux_x86_64.whl").touch()
+        else:
+            (dist / _cpp_conan.cache_name(package.name, "0.3.0")).write_bytes(b"cache")
+        return dist
+
+    def _fake_wheels(package: Package, **kwargs: object) -> bool:
+        registry.serve(package.name, "0.3.0")
+        return True
+
+    from livery.workshop._backends import _cpp_conan as cpp
+    from livery.workshop._backends import _python_nanobind as nb
+
+    monkeypatch.setattr(cpp, "build", _fake_build)
+    monkeypatch.setattr(nb, "build", _fake_build)
+    monkeypatch.setattr("livery.workshop._publish.publish_wheels", _fake_wheels)
+    conan_registry = _cpp_conan.ConanRegistry(target, root=root)
+
+    def registry_for(package: Package):
+        return conan_registry if package.type == "cpp-conan" else registry
+
+    # The upload dies after the tag is cut.
+    def _refuse(*_args: object, **_kwargs: object) -> None:
+        raise ForgeError("the upload died", status=500)
+
+    monkeypatch.setattr(type(repository.release), "upload_asset", _refuse)
+    with pytest.raises(_FAILURES, match="the upload died"):
+        publish_release(
+            root,
+            git,
+            registry_for,
+            ref=git.head_sha(),
+            probe_timeout=2,
+            probe_poll=0.01,
+        )
+    tag = "packages/geometry/v0.3.0"
+    assert tag in git.tags()  # the tag went first, as the route needs
+    assert repository.release.assets(tag) == ()
+
+    # The re-run finishes it: the tag is not read as a receipt.
+    monkeypatch.undo()
+    monkeypatch.setattr(
+        "livery.workshop._forge_lane.this_repository", lambda _root: repository
+    )
+    monkeypatch.setattr(
+        "livery.workshop._registries.resolve_registry", lambda _root, _kind: target
+    )
+    monkeypatch.setattr(_publish, "cut_tag", _cut_and_push_to_the_forge)
+    monkeypatch.setattr(cpp, "build", _fake_build)
+    monkeypatch.setattr(nb, "build", _fake_build)
+    monkeypatch.setattr("livery.workshop._publish.publish_wheels", _fake_wheels)
+    monkeypatch.setattr("livery.workshop._publish.PROBE_POLL", 0.01, raising=False)
+    receipts = publish_release(
+        root, git, registry_for, ref=git.head_sha(), probe_timeout=5, probe_poll=0.01
+    )
+    assert [r.tag for r in receipts] == [
+        "packages/geometry/v0.3.0",
+        "packages/ext/v0.3.0",
+    ]
+    attached = [asset.name for asset in repository.release.assets(tag)]
+    assert attached == [_cpp_conan.cache_name("acme-geometry", "0.3.0")]
+
+
 def test_prebuilt_refuses_an_empty_collection(
     cross_train, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -260,6 +365,11 @@ def test_prebuilt_refuses_an_empty_collection(
     def registry_for(package: Package) -> _Ledger:
         return conan_registry if package.type == "cpp-conan" else registry
 
+    # The library's own collection is there, so the wave reaches the
+    # extension, whose wheels the matrix never handed over.
+    saved = root / "packages" / "geometry" / "dist"
+    saved.mkdir(parents=True, exist_ok=True)
+    (saved / _cpp_conan.cache_name("acme-geometry", "0.3.0")).write_bytes(b"cache")
     with pytest.raises(_FAILURES) as caught:
         publish_release(
             root,
@@ -271,6 +381,42 @@ def test_prebuilt_refuses_an_empty_collection(
             prebuilt=True,
         )
     assert "no collected wheels" in str(caught.value)
+    assert "wheels matrix" in str(caught.value)
+
+
+def test_prebuilt_refuses_a_conan_member_with_no_saved_cache(
+    cross_train, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Creating the package again on the wave runner is not the answer.
+
+    The matrix creates each conan member once per host and saves the
+    cache beside the wheels. With --prebuilt and nothing collected,
+    the wave stops instead of building a package only this runner's
+    host could use.
+    """
+    root, git = cross_train
+    registry = _Ledger()
+    conan_registry = _Ledger()
+    from livery.workshop._backends import _cpp_conan as cpp
+
+    monkeypatch.setattr(
+        cpp, "build", lambda p, r, epoch=0: (_ for _ in ()).throw(AssertionError(p))
+    )
+
+    def registry_for(package: Package) -> _Ledger:
+        return conan_registry if package.type == "cpp-conan" else registry
+
+    with pytest.raises(_FAILURES) as caught:
+        publish_release(
+            root,
+            git,
+            registry_for,
+            ref=git.head_sha(),
+            probe_timeout=5,
+            probe_poll=0.01,
+            prebuilt=True,
+        )
+    assert "no saved conan cache" in str(caught.value)
     assert "wheels matrix" in str(caught.value)
 
 
@@ -397,7 +543,9 @@ def test_the_folder_target_round_trips(
     package = _render_library(tmp_path, monkeypatch)
     share = tmp_path / "share"
     assert _cpp_conan.publish(package, str(share), version="0.0.0", local=True)
-    registry = _cpp_conan.ConanRegistry(str(share), local=True, cwd=tmp_path)
+    registry = _cpp_conan.ConanRegistry(
+        RegistryTarget(kind="conan", url=str(share), local=True), root=tmp_path
+    )
     assert registry.versions("acme-geometry") == ("0.0.0",)
     # A clean home restores the package from the saved archive alone.
     monkeypatch.setenv("CONAN_HOME", str(tmp_path / "clean-home"))
@@ -453,7 +601,9 @@ def test_the_rig_conan_registry_round_trips(
         True,
         False,  # a re-run walks past the earlier upload
     )
-    registry = _cpp_conan.ConanRegistry(remote, local=False, cwd=tmp_path)
+    registry = _cpp_conan.ConanRegistry(
+        RegistryTarget(kind="conan", url=remote), root=tmp_path
+    )
     assert "0.0.0" in registry.versions("acme-geometry")
     # The consumer proof: a clean home installs it back from the rig.
     monkeypatch.setenv("CONAN_HOME", str(tmp_path / "clean-home"))
