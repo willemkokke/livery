@@ -22,8 +22,9 @@ from livery.toolroom.store import (
     _engine,
 )
 from livery.workshop import _env_tasks, _sync, _tool_tasks, _tools
+from workshop_hosts import HOSTS
 
-THREE = ("linux-x64", "macos-arm", "windows-x64")
+THREE = HOSTS
 
 
 def _zip(members: dict[str, bytes]) -> bytes:

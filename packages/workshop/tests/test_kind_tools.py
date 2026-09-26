@@ -17,9 +17,10 @@ from livery.toolroom.store import (
     Surface,
 )
 from livery.workshop import _tool_tasks, _tools
+from workshop_hosts import HOSTS
 
 SHA = "d8b96221828ad6f97ac7ac0ab7e95872341af763001e8803e8267652c2652620"
-THREE = ("linux-x64", "macos-arm", "windows-x64")
+THREE = HOSTS
 
 
 def _read(*versions: str) -> tuple[RecordDelta, ...]:
