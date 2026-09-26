@@ -1,4 +1,4 @@
-"""The hosts a test workspace locks for: the gated three, and the host running the test.
+"""What a test workspace locks for, and the graph writer it does not reach.
 
 A lock covers the hosts its contract names, the gated three unless it
 says otherwise, and a materialise on a host the lock lacks refuses
@@ -38,3 +38,20 @@ def lock_for_this_host(monkeypatch: pytest.MonkeyPatch) -> None:
     the host.
     """
     monkeypatch.setattr(_tools, "DEFAULT_HOSTS", HOSTS)
+
+
+@pytest.fixture(autouse=True)
+def no_graph_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A test workspace's packages resolve nowhere, so no graph is written.
+
+    The records a test builds name packages no index has, and a lock
+    writes a graph for every delegated tool, so without this every
+    lock in the suite would spawn a resolver and wait on a network
+    that has nothing to answer with. A test that wants a graph
+    replaces this with its own resolver.
+    """
+    monkeypatch.setattr(
+        _tools,
+        "resolve_graph",
+        lambda *args, **kwargs: (None, "the suite writes no graphs"),
+    )

@@ -14,6 +14,7 @@ from livery.toolroom.store import (
     Catalogue,
     CatalogueError,
     Deployment,
+    Graph,
     Layout,
     Lock,
     Locked,
@@ -276,7 +277,31 @@ def test_a_kept_entry_stands_until_upgraded_and_leaves_when_nothing_requires_it(
     assert raised.tools["ruff"].version == "0.16.4"
 
 
+def test_a_graph_off_its_shape_is_refused_naming_the_tool(tmp_path):
+    # The refusals first: a graph that is not an object, one with no
+    # file, and one whose digest is not a digest.
+    for broken in ({}, {"file": "", "digest": f"sha256:{SHA}"}, "no"):
+        with pytest.raises(LockError, match="the graph is not one"):
+            Graph.from_json(broken, where="tools.lock: mypy")
+    with pytest.raises(LockError, match="not a full lowercase sha256 digest"):
+        Graph.from_json({"file": "mypy.txt", "digest": "sha256:xyz"}, where="w")
+    # And through the file, where the tool is named.
+    path = tmp_path / "tools.lock"
+    path.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "hosts": list(THREE),
+                "tools": {"mypy": {"version": "2.3.1", "hosts": {}, "graph": {}}},
+            }
+        )
+    )
+    with pytest.raises(LockError, match=r"mypy: the graph is not one"):
+        Lock.load(path)
+
+
 def test_the_lock_round_trips_through_its_file(tmp_path):
+    graph = Graph("mypy.txt", Digest.parse(f"sha256:{SHA}"), by="uv 0.11.1")
     lock = Lock(
         THREE,
         {
@@ -284,6 +309,7 @@ def test_the_lock_round_trips_through_its_file(tmp_path):
                 "1.0.0", {host: Digest.parse(f"sha256:{SHA}") for host in THREE}
             ),
             "ruff": Locked("0.16.4"),
+            "mypy": Locked("2.3.1", graph=graph),
         },
     )
     path = tmp_path / "tools.lock"
@@ -291,8 +317,16 @@ def test_the_lock_round_trips_through_its_file(tmp_path):
     assert Lock.load(path) == lock
     written = json.loads(path.read_text())
     assert list(written) == ["schema", "hosts", "tools"]
-    assert list(written["tools"]) == ["ruff", "tea"]  # name order
+    assert list(written["tools"]) == ["mypy", "ruff", "tea"]  # name order
+    # A tool with no graph writes no key: a downloaded kind pins bytes
+    # already, and a delegated one locked before a graph was written
+    # installs as it did and says so.
     assert written["tools"]["ruff"] == {"version": "0.16.4", "hosts": {}}
+    assert written["tools"]["mypy"]["graph"] == {
+        "file": "mypy.txt",
+        "digest": f"sha256:{SHA}",
+        "by": "uv 0.11.1",
+    }
 
 
 # --- the catalogue from the index ----------------------------------------------

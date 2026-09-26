@@ -18,6 +18,8 @@ def test_the_public_surface_is_pinned() -> None:
         "FORMATS",
         "artifact_format",
         "DOWNLOAD_KINDS",
+        "GRAPHS",
+        "Graph",
         "HOSTS",
         "KINDS",
         "RUNTIMES",
