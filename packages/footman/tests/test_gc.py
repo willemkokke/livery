@@ -228,6 +228,28 @@ def test_the_collector_child_ignores_the_directory_it_starts_in(tmp_path, monkey
     assert cmd[0][4:] == [str(tmp_path / "cache"), "stem"]
 
 
+def test_a_run_whose_directory_is_gone_skips_the_collector(tmp_path, monkeypatch):
+    # fm submit merges, removes the worktree it ran from, and reaches
+    # the exit path standing in a directory that no longer exists.
+    # Reading the working directory raises there; the collection is
+    # skipped and the run keeps the verdict it earned.
+    scheduled: list[str] = []
+    monkeypatch.setattr(
+        _app, "_maybe_collect", lambda cfg, stem: scheduled.append(stem)
+    )
+
+    def _gone() -> Path:
+        raise FileNotFoundError(2, "No such file or directory")
+
+    monkeypatch.setattr(_app.Path, "cwd", staticmethod(_gone))
+    _app._collect_after_run({}, global_mode=False)  # returns, raises nothing
+    assert scheduled == []
+    # The global mode names the shared manifest and never reads the
+    # working directory, so it schedules as usual.
+    _app._collect_after_run({}, global_mode=True)
+    assert scheduled == [_paths.global_manifest_path().stem]
+
+
 def test_a_run_whose_installation_is_gone_skips_the_collector(tmp_path, monkeypatch):
     # A submit removes the worktree it ran from, editable install included,
     # and the exit path cannot import the spawner any more: the collection
