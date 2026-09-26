@@ -184,6 +184,10 @@ def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
     # two candidates for one venv. The skip follows the host's libc;
     # the release matrix sets its own build set explicitly.
     env.setdefault("CIBW_SKIP", "*-manylinux_*" if host_is_musl() else "*-musllinux_*")
+    # And one architecture, the machine's own: Windows would add a
+    # 32-bit wheel beside the 64-bit one, and the isolated leg installs
+    # the wheel it finds first.
+    env.setdefault("CIBW_ARCHS", "native")
     for key, value in conan_environment(root).items():
         env.setdefault(key, value)
     result = tools.uv.opts(cwd=package.directory, env=env, nofail=True, recorded=False)(
