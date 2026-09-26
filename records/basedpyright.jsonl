@@ -1,4 +1,4 @@
-{"name": "basedpyright", "description": "", "kind": "bun-install", "min_version": "", "hosts": []}
+{"name": "basedpyright", "description": "", "kind": "npm", "min_version": "", "hosts": []}
 {"version": "1.39.0", "date": "2026-04-01", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": ""}}
 {"verb": "", "help": "", "wraps": false, "positional": "any", "lead": ""}
 {"verb": "", "option": "baselinefile", "flags": ["--baselinefile"], "negation": "", "help": "Path to the baseline file to be used", "type": "str", "default": null, "choices": []}

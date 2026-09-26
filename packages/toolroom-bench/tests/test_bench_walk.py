@@ -761,6 +761,7 @@ def test_which_tiers_can_be_listed():
         "eclint": True,  # gitlab
         "tea": True,  # gitea
         "bun": True,  # bun's own releases
+        "node": True,  # nodejs.org's release index
         "python": True,  # uv carries CPython's own download index
         "docker": True,  # its own static-build index
         "git": True,  # kernel.org's per-release manuals
@@ -786,10 +787,11 @@ def test_installing_an_unlistable_tier_declines(tmp_path):
     assert _toolfetch.install(driver, release, tmp_path / "nope") is None
 
 
-def test_the_npm_tier_needs_bun_and_says_so(tmp_path, monkeypatch):
-    """Bun is how the node tier is provisioned, so priming borrows it. Without
-    it the walk stops — and reports why, because a scheduled job reading '+0'
-    cannot tell that from 'nothing left to read'.
+def test_the_npm_tier_needs_its_runtime_and_says_so(tmp_path, monkeypatch):
+    """A node-tier package installs through its runtime and its launcher runs
+    on node, so priming needs the runtime on PATH. Without it the walk stops
+    and reports why, because a scheduled job reading '+0' cannot tell that
+    from 'nothing left to read'.
     """
     import shutil
 
@@ -800,19 +802,29 @@ def test_the_npm_tier_needs_bun_and_says_so(tmp_path, monkeypatch):
     assert driver is not None
     release = _toolfetch.Release("10.0.0")
     assert _toolfetch.install(driver, release, tmp_path / "cspell") is None
+    basedpyright = _drivers.find("basedpyright")
+    assert basedpyright is not None
+    assert _toolfetch.install(basedpyright, release, tmp_path / "bp") is None
 
     # ...and the walk says so rather than walking into holes. Without this
     # the docstring above was a claim the test never checked: a macOS
-    # gather with no bun reported 23 releases across cspell and
-    # markdownlint as holes — "these could not be had" — when every one of
-    # them reads fine the moment bun is on PATH.
+    # gather with no runtime reported 23 releases across cspell and
+    # markdownlint as holes, "these could not be had", when every one of
+    # them reads fine the moment the runtime is on PATH. Node is named
+    # first, since every launcher runs on it; bun only once node is there.
     from livery.toolroom.bench import _toolfetch as fetch
     from livery.toolroom.bench._tasks import _curated
 
     chosen, skipped = _curated("", fetch)
-    assert "cspell (no bun to install with)" in skipped
-    assert "markdownlint (no bun to install with)" in skipped
+    assert "cspell (no node to install with)" in skipped
+    assert "basedpyright (no node to install with)" in skipped
     assert not any(d.provision.kind == "node" for d in chosen)
+    monkeypatch.setattr(
+        shutil, "which", lambda name: "/usr/bin/node" if name == "node" else None
+    )
+    chosen, skipped = _curated("", fetch)
+    assert "cspell (no bun to install with)" in skipped
+    assert "basedpyright" in {d.key for d in chosen}
 
 
 def _uv_listing(monkeypatch, entries):
@@ -1080,59 +1092,9 @@ def test_a_bare_call_is_refused_with_directions(tmp_path, monkeypatch):
         tools.prime(only="ruff")
 
 
-def test_the_walk_answers_to_node_when_only_bun_is_installed(tmp_path, monkeypatch):
-    """The npm tier installs through bun, but what bun *installs* is a
-    launcher beginning `#!/usr/bin/env node`.
-
-    bun stands in for node when bun itself runs a script; the extractor
-    spawns the launcher as a subprocess, where the shebang is resolved by the
-    OS with bun nowhere in the chain. A Linux box without node therefore read
-    twelve cspell releases and eleven markdownlint releases as
-    `No such file or directory` — and a CI runner has no node either, so the
-    weekly matrix would have lost those tools on every leg, forever.
-    """
-    import os
-    import shutil
-
-    from livery.toolroom.bench import _tasks as tools
-
-    fake_bun = tmp_path / "bun"
-    fake_bun.write_text("#!/bin/sh\nexit 0\n")
-    monkeypatch.setattr(
-        shutil, "which", lambda name: str(fake_bun) if name == "bun" else None
-    )
-
-    with tools._sandboxed(tmp_path / "scratch"):
-        head = os.environ["PATH"].split(os.pathsep)[0]
-        assert head.endswith("shims")
-        written = list((tmp_path / "scratch" / "shims").iterdir())
-        assert [p.name for p in written] == ["node.cmd" if tools._windows() else "node"]
-        assert str(fake_bun) in written[0].read_text(encoding="utf-8")
-        assert "--bun" in written[0].read_text(encoding="utf-8")
-
-    # ...and it goes when the walk does — it lives inside scratch.
-    assert os.environ["PATH"].split(os.pathsep)[0] != head
-
-
-def test_a_machine_with_real_node_is_left_alone(tmp_path, monkeypatch):
-    """A shim is for a gap, not a preference: where node exists, the tools
-    run under the runtime they were published for.
-    """
-    import os
-    import shutil
-
-    from livery.toolroom.bench import _tasks as tools
-
-    monkeypatch.setattr(shutil, "which", lambda name: f"/usr/bin/{name}")
-    before = os.environ["PATH"]
-    with tools._sandboxed(tmp_path / "scratch"):
-        assert os.environ["PATH"] == before
-        assert not (tmp_path / "scratch" / "shims").exists()
-
-
-def test_no_bun_and_no_node_is_no_worse_than_before(tmp_path, monkeypatch):
-    """Nothing to forward to, so nothing is written — the tier reports its
-    holes as it would have anyway.
+def test_the_sandbox_puts_nothing_of_its_own_on_path(tmp_path, monkeypatch):
+    """The walk runs the packages on the node the machine or the prefix has:
+    the sandbox scopes uv's directories and writes no runtime of its own.
     """
     import os
     import shutil
@@ -1143,6 +1105,8 @@ def test_no_bun_and_no_node_is_no_worse_than_before(tmp_path, monkeypatch):
     before = os.environ["PATH"]
     with tools._sandboxed(tmp_path / "scratch"):
         assert os.environ["PATH"] == before
+        assert os.environ["UV_NO_CACHE"] == "1"
+        assert not (tmp_path / "scratch" / "shims").exists()
 
 
 @pytest.mark.parametrize(
@@ -1350,12 +1314,95 @@ def test_npm_install_spawns_the_resolved_bun(tmp_path, monkeypatch):
         return True
 
     monkeypatch.setattr(_toolfetch, "_run", fake_run)
-    driver = _drivers.find("cspell")
+    driver = _drivers.find("cspell")  # runs on bun by its driver
     assert driver is not None
     out = _toolfetch._install_npm(driver, "9.8.0", tmp_path / "into")
     assert out == tmp_path / "into" / "bin"
     assert calls[0][0] == str(fake)
     assert calls[0][1:] == ["add", "--global", "cspell@9.8.0"]
+
+
+def test_the_nodejs_index_lists_support_lines_newest_first(monkeypatch):
+    """Node's own index, not a forge: a row per release with its date and
+    builds. Only the support lines are releases here, so a runtime the
+    tools run on never lands on a current line, and the six builds a
+    version's artifacts come from are named from the version alone.
+    """
+    from livery.toolroom.bench import _drivers, _toolfetch
+
+    rows = [
+        {"version": "v26.10.0", "date": "2026-09-21", "lts": False, "files": ["x"]},
+        {"version": "v24.21.0", "date": "2026-09-07", "lts": "Krypton", "files": ["x"]},
+        {"version": "v22.20.0", "date": "2026-08-01", "lts": "Jod", "files": ["x"]},
+        {"version": "v24.20.0", "date": "2026-08-26", "lts": "Krypton", "files": []},
+    ]
+    monkeypatch.setattr(_toolfetch, "_index", lambda url: rows)
+    driver = _drivers.find("node")
+    assert driver is not None
+    found = _toolfetch.releases(driver)
+    assert [(r.version, r.tag, r.date) for r in found] == [
+        ("24.21.0", "v24.21.0", "2026-09-07"),
+        ("22.20.0", "v22.20.0", "2026-08-01"),
+    ]
+    assets = dict(_toolfetch.nodejs_assets("24.21.0"))
+    assert set(assets) == {
+        "node-v24.21.0-darwin-arm64.tar.gz",
+        "node-v24.21.0-darwin-x64.tar.gz",
+        "node-v24.21.0-linux-x64.tar.gz",
+        "node-v24.21.0-linux-arm64.tar.gz",
+        "node-v24.21.0-win-x64.zip",
+        "node-v24.21.0-win-arm64.zip",
+    }
+    assert assets["node-v24.21.0-win-arm64.zip"] == (
+        "https://nodejs.org/dist/v24.21.0/node-v24.21.0-win-arm64.zip"
+    )
+    # Each host picks its own build the way it picks a forge's asset.
+    from livery.toolroom.bench import _provision
+
+    picked = {
+        host: _provision._pick_asset(list(assets.items()), host=host)[0]
+        for host in _provision.HOST_TOKENS
+    }
+    assert picked == {
+        "linux-x64": "node-v24.21.0-linux-x64.tar.gz",
+        "linux-arm": "node-v24.21.0-linux-arm64.tar.gz",
+        "macos-x64": "node-v24.21.0-darwin-x64.tar.gz",
+        "macos-arm": "node-v24.21.0-darwin-arm64.tar.gz",
+        "windows-x64": "node-v24.21.0-win-x64.zip",
+        "windows-arm": "node-v24.21.0-win-arm64.zip",
+    }
+
+
+def test_npm_install_runs_npm_on_the_resolved_node(tmp_path, monkeypatch):
+    """A package with no runtime named runs on node: npm's script beside the
+    resolved node, the release's prefix to itself.
+    """
+    from livery.toolroom.bench import _drivers, _toolfetch
+
+    node = tmp_path / "node" / "bin" / "node"
+    cli = tmp_path / "node" / "lib" / "node_modules" / "npm" / "bin" / "npm-cli.js"
+    for path in (node, cli):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("")
+    calls: list[list[str]] = []
+
+    def fake_run(argv, env=None):
+        calls.append(argv)
+        return True
+
+    monkeypatch.setattr(
+        "shutil.which", lambda name: str(node) if name == "node" else None
+    )
+    monkeypatch.setattr(_toolfetch, "_run", fake_run)
+    driver = _drivers.find("basedpyright")
+    assert driver is not None
+    out = _toolfetch._install_npm(driver, "1.39.0", tmp_path / "into")
+    assert out == tmp_path / "into" / "bin"
+    assert calls[0][:2] == [str(node), str(cli)]
+    assert (
+        calls[0][2:4] == ["install", "--global"]
+        and calls[0][-1] == "basedpyright@1.39.0"
+    )
 
 
 def test_observe_accepts_a_repack_wheel_version(tmp_path, monkeypatch):

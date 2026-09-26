@@ -552,16 +552,19 @@ def new(
     surface: dict[str, Any],
     platforms: list[str],
     prime: str = "",
+    runtime: str = "",
 ) -> Record:
     """A record of one version read. A record this short is a valid record,
     which is what lets a tool ship before anything has been primed.
     *prime* is the oldest version the history will reach, the driver's
-    provision floor, stamped on the axis when one is declared.
+    provision floor, stamped on the axis when one is declared; *runtime*
+    is what an npm package runs on, stamped the same way.
     """
     return Record(
         name,
         kind=kind,
         prime=prime,
+        runtime=runtime,
         deltas=(
             RecordDelta(
                 1,

@@ -2,7 +2,7 @@
 
 Under the home: `store/`, the strongroom store with the `tools` and
 `urls` namespaces; `tools/<name>@<version>/`, the views of the tools'
-trees a shell runs from; `uv/` and `bun/`, the delegated kinds'
+trees a shell runs from; `uv/` and `npm/`, the delegated kinds'
 directories. Nothing here reads an environment variable: the caller
 passes the home, toolroom's machinery its data directory, hse its own.
 
@@ -57,9 +57,9 @@ class Home:
         return self.root / "uv"
 
     @property
-    def bun(self) -> Path:
-        """The bun installs and cache."""
-        return self.root / "bun"
+    def npm(self) -> Path:
+        """The npm installs, one directory per `<name>@<version>`, by either runtime."""
+        return self.root / "npm"
 
     def tool_dir(self, name: str, version: str) -> Path:
         """The view of *name* at *version*."""

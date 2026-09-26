@@ -58,11 +58,17 @@ HOSTS = (
 )
 """The six host keys, `<platform>-<arch>`. A record carries any subset."""
 
-KINDS = ("archive", "binary", "uv-tool", "uv-python", "bun-install", "system-check")
+KINDS = ("archive", "binary", "uv-tool", "uv-python", "npm", "system-check")
 """The installer kinds: `archive` and `binary` download by URL and land
-in the store; `uv-tool` and `uv-python` delegate to uv; `bun-install`
-to bun; `system-check` verifies a system tool against `min_version`,
-and may carry an artifact for a host that has no system tool."""
+in the store; `uv-tool` and `uv-python` delegate to uv; `npm` installs a
+package from npm through the runtime the record names; `system-check`
+verifies a system tool against `min_version`, and may carry an artifact
+for a host that has no system tool."""
+
+RUNTIMES = ("node", "bun")
+"""What an `npm` record runs on, and installs through: node, unless the
+record names bun. The runtime is a tool of its own, locked beside the
+package and supplied first."""
 
 DOWNLOAD_KINDS = frozenset({"archive", "binary"})
 """The kinds whose every host needs an artifact."""
@@ -126,6 +132,7 @@ _TOOL_KEYS = (
     "description",
     "kind",
     "package",
+    "runtime",
     "mode",
     "min_version",
     "prime",
@@ -588,6 +595,8 @@ class Record:
         kind: One of `KINDS`.
         package: What a delegated kind's installer installs, when it
             differs from the tool's name: the PyPI or npm package.
+        runtime: What an `npm` tool runs on and installs through, one
+            of `RUNTIMES`; empty means node.
         mode: How the tool reaches PATH once materialised, one of
             `MODES`; empty takes the kind's default.
         min_version: The floor a `system-check` tool must reach.
@@ -613,6 +622,7 @@ class Record:
     host_layouts: dict[str, Layout] = field(default_factory=dict)
     deltas: tuple[Delta, ...] = ()
     prime: str = ""
+    runtime: str = ""
 
     def __post_init__(self) -> None:
         validate(self)
@@ -650,6 +660,8 @@ class Record:
         }
         if self.package:
             out["package"] = self.package
+        if self.runtime:
+            out["runtime"] = self.runtime
         if self.mode:
             out["mode"] = self.mode
         out["min_version"] = self.min_version
@@ -693,6 +705,7 @@ class Record:
             },
             deltas,
             _text(data.get("prime", ""), where=f"{where} prime"),
+            runtime=_text(data.get("runtime", ""), where=f"{where} runtime"),
         )
 
     def lines(self) -> list[dict[str, Any]]:
@@ -750,16 +763,14 @@ class Record:
         """The record in the file *path*, `records/<tool>.jsonl`.
 
         Raises:
-            RecordError: naming the file, for a directory (the earlier
-                form, converted by `fm tools.convert-records`), a file
-                that is not a record, a record named other than its
-                file, or one that does not validate.
+            RecordError: naming the file, for a directory, a file that
+                is not a record, a record named other than its file, or
+                one that does not validate.
         """
         if path.is_dir():
             raise RecordError(
                 f"{path}: a directory, not a record file; a record is"
-                f" `<tool>{RECORD_SUFFIX}`, and the directory form converts with"
-                " `fm tools.convert-records`"
+                f" `<tool>{RECORD_SUFFIX}`"
             )
         if not path.is_file():
             raise RecordError(f"{path}: no such record")
@@ -1157,6 +1168,14 @@ def validate(record: Record) -> None:
         raise RecordError(
             f"{where}: mode {record.mode!r} is not one of {', '.join(MODES)}"
         )
+    if record.runtime and record.runtime not in RUNTIMES:
+        raise RecordError(
+            f"{where}: runtime {record.runtime!r} is not one of {', '.join(RUNTIMES)}"
+        )
+    if record.runtime and record.kind != "npm":
+        raise RecordError(
+            f"{where}: a runtime is named by an npm record; this one is {record.kind!r}"
+        )
     for host in record.hosts:
         if host not in HOSTS:
             raise RecordError(
@@ -1412,6 +1431,7 @@ def schema() -> dict[str, Any]:
             "description": {"type": "string", "default": ""},
             "kind": {"type": "string", "enum": list(KINDS), "default": "archive"},
             "package": {"type": "string", "default": ""},
+            "runtime": {"type": "string", "enum": list(RUNTIMES)},
             "mode": {"type": "string", "enum": list(MODES)},
             "min_version": {"type": "string", "default": ""},
             "prime": {"type": "string", "default": ""},

@@ -72,9 +72,11 @@ class Provision:
     kind: str = "uv"
     """`uv` — a PyPI console script, `uv tool install --upgrade`d into an
     isolated prefix; for programs that are Python alone, where the wheel is
-    the release (a test pins the tier's members). `node` — a package `bun
-    install`s. `bun` — bun's own GitHub release, provisioned first because
-    the node tier runs through it. `github` / `gitlab` / `gitea` — a prebuilt
+    the release (a test pins the tier's members). `node` — a package from
+    npm, installed through the runtime `runtime` names and run on it.
+    `nodejs` — node's own build from nodejs.org's release index, the runtime
+    a node-tier package runs on unless its driver names bun. `bun` — bun's
+    own GitHub release, the other runtime. `github` / `gitlab` / `gitea` — a prebuilt
     release asset, the tier for every tool with a release of its own.
     `docker` — a static build from docker's own per-platform index, which is
     a directory listing rather than an asset list. `man` — a release's
@@ -84,6 +86,12 @@ class Provision:
     package: str = ""
     """The PyPI or npm package, when it differs from the driver's binary name
     (`markdownlint-cli2`); otherwise the binary name is used."""
+    runtime: str = ""
+    """What a `node`-tier package runs on and installs through: node, unless
+    this says `bun`. Stamped on the record when it is first written, and
+    read by every install of the package since. Which runtime a package
+    gets is measured: a package moves by a reviewed edit here and on its
+    record, never by default."""
     repo: str = ""
     """`owner/repo` for a `github` / `gitlab` release download."""
     note: str = ""
@@ -123,7 +131,8 @@ class Provision:
 RECORD_KINDS = {
     "uv": "uv-tool",
     "python": "uv-python",
-    "node": "bun-install",
+    "node": "npm",
+    "nodejs": "archive",
     "man": "system-check",
     # The docker tier fetches a CLI to read; a consumer checks the docker it
     # has, since the daemon is its own install and the CLI belongs with it.
@@ -452,6 +461,11 @@ DRIVERS: tuple[Driver, ...] = (
         url="https://bun.sh/docs/cli/install",
     ),
     Driver(
+        "node",
+        provision=Provision(kind="nodejs"),
+        url="https://nodejs.org/docs/latest/api/cli.html",
+    ),
+    Driver(
         "mkdocs",
         verbs=("build", "serve", "new", "gh-deploy"),
         in_process=True,
@@ -471,7 +485,7 @@ DRIVERS: tuple[Driver, ...] = (
     ),
     Driver(
         "cspell",
-        provision=Provision(kind="node"),
+        provision=Provision(kind="node", runtime="bun"),
         verbs=("lint", "trace", "check", "suggest"),
         url="https://cspell.org/",
     ),
@@ -484,7 +498,7 @@ DRIVERS: tuple[Driver, ...] = (
     Driver(
         "markdownlint-cli2",
         attr="markdownlint",
-        provision=Provision(kind="node"),
+        provision=Provision(kind="node", runtime="bun"),
         url="https://github.com/DavidAnson/markdownlint-cli2",
     ),
     Driver(
@@ -495,7 +509,9 @@ DRIVERS: tuple[Driver, ...] = (
         # walk is priced accordingly: `gather` picks up the week's releases
         # above the floor, and `prime` reaches back only as far as it is
         # asked to.
-        provision=Provision(kind="node", package="@anthropic-ai/claude-code"),
+        provision=Provision(
+            kind="node", package="@anthropic-ai/claude-code", runtime="bun"
+        ),
         url="https://docs.claude.com/en/docs/claude-code/cli-reference",
         # The headless surface is the root call — `claude -p "…"` with its
         # model, output-format and permission flags — so the verbs here are

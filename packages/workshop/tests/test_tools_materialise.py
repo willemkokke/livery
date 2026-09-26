@@ -261,6 +261,27 @@ def test_sync_materialises_the_bundle_from_the_folder_source_with_no_network(
     assert written["schema"] == 1 and written["entry_points"] == ["tea"]
 
 
+def test_a_tool_that_left_the_lock_takes_its_receipt_with_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A receipt kept past its tool keeps the tool's paths on PATH.
+
+    A narrowed materialise touches no other tool's receipt.
+    """
+    root = _workspace(tmp_path, monkeypatch)
+    _tools.write_lock(root)
+    _tools.materialise(root)
+    assert set(_tools.receipts(root)) == {"ruff", "tea"}
+    (root / "workshop.toml").write_text(
+        '[workspace]\n\n[tools]\nindex = "records"\nrequires = ["tea"]\n'
+    )
+    _tools.write_lock(root)
+    _tools.materialise(root, ("tea",))
+    assert set(_tools.receipts(root)) == {"ruff", "tea"}  # narrowed: untouched
+    _tools.materialise(root)
+    assert set(_tools.receipts(root)) == {"tea"}
+
+
 def test_the_materialise_verb_supplies_the_bundle_and_writes_the_stubs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -274,6 +295,93 @@ def test_the_materialise_verb_supplies_the_bundle_and_writes_the_stubs(
     assert "tools: 2 receipt(s), installed ruff, tea" in out
     assert "stubs: 1 in typings/" in out
     assert set(_tools.receipts(root)) == {"ruff", "tea"}
+
+
+def test_an_npm_install_is_supplied_after_node_through_its_executable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Node is the tool's locked dependency, materialised first, its path handed on."""
+    root = _workspace(tmp_path, monkeypatch)
+    (root / "workshop.toml").write_text(
+        '[workspace]\n\n[tools]\nindex = "records"\nsources = ["mirror", "mirror2"]\n'
+        'requires = ["tea", "ruff", "basedpyright"]\n'
+    )
+    # One archive serves the three hosts: node under bin with npm's
+    # script beside it, the way node publishes for POSIX.
+    payload = _zip(
+        {
+            "bin/node": b"#!/bin/sh\necho node\n",
+            "bin/node.exe": b"MZ",
+            "lib/node_modules/npm/bin/npm-cli.js": b"// npm\n",
+        }
+    )
+    digest = digest_of(payload)
+    Record(
+        "node",
+        kind="archive",
+        hosts=THREE,
+        layout=Layout(entry_points=("bin/node",), paths=("bin",)),
+        deltas=(
+            RecordDelta(
+                1,
+                "24.0.0",
+                "",
+                {
+                    host: Artifact(
+                        f"https://origin.test/node/{host}.zip", digest.encoded
+                    )
+                    for host in THREE
+                },
+            ),
+        ),
+    ).save(root / "records")
+    Record("basedpyright", kind="npm", deltas=_read("1.39.0")).save(root / "records")
+    ObjectStore.create(root / "mirror2").put(payload)
+    lock = _tools.write_lock(root)
+    # node joins the lock as basedpyright's dependency, though no site names it.
+    assert set(lock.tools) == {"tea", "ruff", "basedpyright", "node"}
+    calls: list[tuple[list[str], dict[str, str]]] = []
+
+    def installing(argv: list[str], env: dict[str, str]) -> int:
+        calls.append((argv, env))
+        if "--global" in argv:
+            prefix = Path(
+                next(a for a in argv if a.startswith("--prefix=")).split("=", 1)[1]
+            )
+            bin_dir = prefix if prefix.name == "bin" else prefix / "bin"
+            bin_dir.mkdir(parents=True, exist_ok=True)
+            (bin_dir / "basedpyright").write_text("#!/usr/bin/env node\n")
+        else:
+            bin_dir = Path(env["UV_TOOL_BIN_DIR"])
+            bin_dir.mkdir(parents=True, exist_ok=True)
+            (bin_dir / "ruff").write_text("launcher")
+        return 0
+
+    monkeypatch.setattr(_engine, "run_installer", installing)
+    _tools.write_stubs(root)
+    done = _tools.materialise(root)
+    names = [m.receipt.tool for m in done if m.receipt is not None]
+    assert names[0] == "node" and "basedpyright" in names
+    held = _tools.receipts(root)
+    node = held["node"]
+    assert Path(node.tool_dir, "bin", "node").is_file()
+    argv, env = next(c for c in calls if "--global" in c[0])
+    assert argv[:2] == [
+        str(Path(node.tool_dir, "bin", "node")),
+        str(Path(node.tool_dir, "lib", "node_modules", "npm", "bin", "npm-cli.js")),
+    ]
+    assert argv[2:4] == ["install", "--global"] and argv[-1] == "basedpyright@1.39.0"
+    assert env["PATH"].split(os.pathsep)[0] == str(Path(node.tool_dir, "bin"))
+    assert held["basedpyright"].kind == "npm"
+    assert held["basedpyright"].entry_points == ("basedpyright",)
+    # A basedpyright asked for alone still brings node, which it runs on.
+    calls.clear()
+    (Path(held["basedpyright"].tool_dir) / "bin" / "basedpyright").unlink()
+    made = [
+        m.receipt.tool for m in _tools.materialise(root, ("basedpyright",)) if m.receipt
+    ]
+    assert made == ["node", "basedpyright"]
+    assert calls and calls[0][0][2:4] == ["install", "--global"]
 
 
 def test_a_bun_install_is_supplied_after_bun_through_its_executable(
@@ -308,7 +416,9 @@ def test_a_bun_install_is_supplied_after_bun_through_its_executable(
             ),
         ),
     ).save(root / "records")
-    Record("cspell", kind="bun-install", deltas=_read("9.0.0")).save(root / "records")
+    Record("cspell", kind="npm", runtime="bun", deltas=_read("9.0.0")).save(
+        root / "records"
+    )
     ObjectStore.create(root / "mirror2").put(payload)
     lock = _tools.write_lock(root)
     # bun joins the lock as cspell's dependency, though no site names it.
@@ -339,7 +449,7 @@ def test_a_bun_install_is_supplied_after_bun_through_its_executable(
     argv, env = next(c for c in calls if "BUN_INSTALL" in c[1])
     assert argv == [str(Path(bun.tool_dir, "bun")), "add", "--global", "cspell@9.0.0"]
     assert env["PATH"].split(os.pathsep)[0] == bun.tool_dir
-    assert held["cspell"].kind == "bun-install"
+    assert held["cspell"].kind == "npm"
     assert held["cspell"].entry_points == ("cspell",)
     # A cspell asked for alone still brings bun, which it is installed through.
     calls.clear()

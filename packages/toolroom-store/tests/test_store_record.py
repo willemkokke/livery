@@ -169,7 +169,20 @@ def test_a_mode_outside_the_three_is_refused_and_the_kinds_default_by_shape(
     assert MODES == ("link", "path", "none")
     assert default_mode("binary") == "link"
     assert default_mode("system-check") == "none"
-    assert {default_mode(k) for k in ("archive", "uv-tool", "bun-install")} == {"path"}
+    assert {default_mode(k) for k in ("archive", "uv-tool", "npm")} == {"path"}
+    # A runtime is an npm record's, one of the two, written after the package.
+    npm: dict[str, object] = {"kind": "npm", "hosts": (), "deltas": ()}
+    with pytest.raises(RecordError, match=r"runtime 'deno' is not one of node, bun"):
+        _record(**npm, runtime="deno")
+    with pytest.raises(RecordError, match=r"a runtime is named by an npm record"):
+        _record(kind="archive", runtime="bun")
+    assert list(_record(**npm, runtime="bun").to_json())[:5] == [
+        "name",
+        "description",
+        "kind",
+        "runtime",
+        "min_version",
+    ]
     # The package and the mode ride the tool axis, written only when set.
     bare = _record()
     assert "package" not in bare.to_json() and "mode" not in bare.to_json()

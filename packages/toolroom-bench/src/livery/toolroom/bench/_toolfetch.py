@@ -139,6 +139,7 @@ def read_python(requires_python: str = "", date: str = "") -> str:
 LISTABLE = (
     "uv",
     "node",
+    "nodejs",
     "github",
     "gitlab",
     "gitea",
@@ -182,6 +183,8 @@ def releases(driver: Driver) -> list[Release]:
         found = _forge(driver, kind if kind in ("gitlab", "gitea") else "github")
     elif kind == "python":
         found = _uv_python()
+    elif kind == "nodejs":
+        found = _nodejs_index()
     elif kind == "docker":
         found = _docker_index()
     elif kind == "man":
@@ -292,6 +295,62 @@ def _index(url: str) -> Any:
         return json.loads(_read_index(url))
     except ValueError as cause:  # answered, but not with JSON
         raise Unreachable(url, cause) from cause
+
+
+_NODEJS_INDEX = "https://nodejs.org/dist/index.json"
+_NODEJS_DIST = "https://nodejs.org/dist/{tag}/{name}"
+NODEJS_FILES = {
+    "darwin-arm64": "tar.gz",
+    "darwin-x64": "tar.gz",
+    "linux-x64": "tar.gz",
+    "linux-arm64": "tar.gz",
+    "win-x64": "zip",
+    "win-arm64": "zip",
+}
+"""The builds node publishes per release that the six hosts map to, by
+node's own platform spelling, with each one's archive suffix."""
+
+
+def _nodejs_index() -> list[Release]:
+    """Every long-term-support release node publishes, from its own index.
+
+    nodejs.org keeps one JSON index of every release with its date, the
+    builds it shipped and whether it is on a long-term-support line: not
+    a forge, and node's GitHub releases carry no binaries, so this is
+    the source. A runtime the tools run on tracks the support lines
+    alone; a current line is left out, so the newest release is always
+    one with a support window. The tag is node's `v`-spelling, which
+    its download paths use.
+    """
+    index = _index(_NODEJS_INDEX)
+    rows = index if isinstance(index, list) else []
+    found = [
+        Release(
+            version=str(row.get("version", "")).removeprefix("v"),
+            tag=str(row.get("version", "")),
+            date=str(row.get("date", ""))[:10],
+        )
+        for row in rows
+        if isinstance(row, dict) and row.get("files") and row.get("lts")
+    ]
+    return _order([r for r in found if r.version and r.date[:1].isdigit()])
+
+
+def nodejs_assets(version: str) -> list[tuple[str, str]]:
+    """`[(asset name, download url)]` for node at *version*, one per build.
+
+    Built from the version rather than listed, since node names every
+    build the same way on every release; the asset matcher then picks
+    each host's the way it picks a forge's.
+    """
+    tag = f"v{version}"
+    return [
+        (
+            f"node-{tag}-{platform_}.{suffix}",
+            _NODEJS_DIST.format(tag=tag, name=f"node-{tag}-{platform_}.{suffix}"),
+        )
+        for platform_, suffix in NODEJS_FILES.items()
+    ]
 
 
 def _npm(driver: Driver) -> list[Release]:
@@ -734,6 +793,8 @@ def install(driver: Driver, release: Release, into: Path) -> Path | None:
         return _install_pypi(driver, release, into)
     if kind == "node":
         return _install_npm(driver, release.version, into)
+    if kind == "nodejs":
+        return _install_nodejs(release, into)
     if kind in ("github", "gitlab", "gitea", "bun"):
         return _install_asset(driver, release, into)
     if kind == "python":
@@ -823,31 +884,71 @@ def _install_pypi(driver: Driver, release: Release, into: Path) -> Path | None:
 
 
 def _install_npm(driver: Driver, version: str, into: Path) -> Path | None:
-    """`bun add --global` at a pinned version, with the prefix to itself.
+    """Install the package at a pinned version through its runtime, into the prefix.
 
-    bun is how the node tier is provisioned, so priming borrows it rather than
-    adding a second package manager. Without bun on PATH there is nothing to
-    install with, and the walk stops.
+    The runtime is the driver's: npm run on node, the way the store
+    installs the package for a workspace, or `bun add --global` where
+    the driver names bun. Without the runtime on PATH there is nothing
+    to install with, and the walk stops.
     """
     import shutil
 
+    from livery.toolroom.store import npm_cli
+
+    package = driver.provision.target(driver.name)
+    env = {
+        **os.environ,
+        "PATH": f"{into / 'bin'}{os.pathsep}{os.environ.get('PATH', '')}",
+    }
     # Spawned by the path `which` resolved, never the bare name: the task
     # router's PATH overlay is visible to in-process lookups but not to
     # Windows CreateProcess, whose executable search reads the real process
     # environment — so `["bun", ...]` found by `which` still failed to
     # spawn, and every npm-tier release on the platform read as a hole.
-    bun = shutil.which("bun")
-    if bun is None:
-        return None
-    package = driver.provision.target(driver.name)
-    env = {
-        **os.environ,
-        "BUN_INSTALL": str(into),
-        "PATH": f"{into / 'bin'}{os.pathsep}{os.environ.get('PATH', '')}",
-    }
-    if not _run([bun, "add", "--global", f"{package}@{version}"], env=env):
+    if driver.provision.runtime == "bun":
+        bun = shutil.which("bun")
+        if bun is None:
+            return None
+        env["BUN_INSTALL"] = str(into)
+        argv = [bun, "add", "--global", f"{package}@{version}"]
+    else:
+        node = shutil.which("node")
+        if node is None:
+            return None
+        prefix = into / "bin" if _windows() else into
+        argv = [
+            node,
+            str(npm_cli(Path(node))),
+            "install",
+            "--global",
+            f"--prefix={prefix}",
+            f"{package}@{version}",
+        ]
+    if not _run(argv, env=env):
         return None
     return into / "bin"
+
+
+def _install_nodejs(release: Release, into: Path) -> Path | None:
+    """Unpack node's build for this platform whole; the `bin` to read.
+
+    The whole tree, not the one binary: npm is the script node ships
+    beside itself, and the node tier's installs need it there.
+    """
+    from livery.toolroom.bench import _provision
+    from livery.toolroom.store import UnpackError, unpack
+
+    tree = into / "node"
+    try:
+        _name, url = _provision._pick_asset(nodejs_assets(release.version))
+        archive = _provision._download(url, into)
+        unpack(archive, tree)
+    except (_provision.ProvisionError, UnpackError, OSError, ValueError):
+        return None
+    roots = [path for path in tree.iterdir() if path.is_dir()]
+    if len(roots) != 1:
+        return None
+    return roots[0] if _windows() else roots[0] / "bin"
 
 
 def _install_asset(driver: Driver, release: Release, into: Path) -> Path | None:

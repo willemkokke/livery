@@ -37,6 +37,7 @@ from livery.toolroom.store._engine import (
     Progress,
     Store,
     StoreError,
+    npm_cli,
     silent,
 )
 from livery.toolroom.store._fetch import (
@@ -69,6 +70,7 @@ from livery.toolroom.store._record import (
     PACKAGE_VAR,
     PLATFORMS,
     RECORD_SUFFIX,
+    RUNTIMES,
     SURFACE_PLATFORMS,
     VERB_KEYS,
     VERSION_VAR,
@@ -115,6 +117,7 @@ __all__ = [
     "PLATFORMS",
     "POINTER",
     "RECORD_SUFFIX",
+    "RUNTIMES",
     "SURFACE_PLATFORMS",
     "TOOLS",
     "URLS",
@@ -159,6 +162,7 @@ __all__ = [
     "fetch_file",
     "fetch_json",
     "host_key",
+    "npm_cli",
     "observations",
     "read_pointer",
     "records_in",

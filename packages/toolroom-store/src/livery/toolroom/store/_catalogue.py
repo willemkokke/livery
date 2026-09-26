@@ -65,6 +65,7 @@ class Listed:
         package: What a delegated kind's installer installs, when it
             differs from the name.
         mode: The record's materialisation mode; empty for the kind's default.
+        runtime: What an `npm` tool runs on; empty for node.
         versions: Every version tracked, oldest first, as the record
             orders them.
         hosts: Per version, the host keys the version has an artifact
@@ -79,6 +80,7 @@ class Listed:
     package: str = ""
     mode: str = ""
     min_version: str = ""
+    runtime: str = ""
 
 
 @dataclass(frozen=True)
@@ -199,6 +201,7 @@ class Catalogue:
                 package=record.package,
                 mode=record.mode,
                 min_version=record.min_version,
+                runtime=record.runtime,
             )
         return cls(tools, deployments, None, records)
 
@@ -437,6 +440,7 @@ def _listed(store: ObjectStore, name: str, tree: Tree, *, where: str) -> Listed:
         package=record.package,
         mode=record.mode,
         min_version=record.min_version,
+        runtime=record.runtime,
     )
 
 
