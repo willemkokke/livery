@@ -19,16 +19,19 @@ from __future__ import annotations
 import datetime
 import os
 import re
-import subprocess
 import tempfile
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import livery.footman as footman
 from livery.footman import doc, fail
 from livery.forge import Forge, ForgeError, Repository
+from livery.toolroom import tools
 from livery.workshop._contract import toml_string
 from livery.workshop._templates import new as new_group
+
+if TYPE_CHECKING:
+    from livery.toolroom.tools import Result
 
 #: The web host each kind means when the contract carries no URL.
 _PUBLIC_HOSTS = {"github": "https://github.com", "gitlab": "https://gitlab.com"}
@@ -36,24 +39,33 @@ _PUBLIC_HOSTS = {"github": "https://github.com", "gitlab": "https://gitlab.com"}
 
 def _git(root: Path, *args: str) -> str:
     """Run git under *root*; stdout, or fail with git's own words."""
-    result = footman.run(["git", *args], cwd=root, nofail=True, recorded=False)
+    result = tools.git.opts(cwd=root, nofail=True, recorded=False)(*args)
     if result.code != 0:
         spelled = " ".join(args)
         fail(f"git {spelled} exited {result.code}:\n{result.stdout}{result.stderr}")
     return result.stdout
 
 
-def _git_config(name: str) -> str:
-    """A global git config value, empty when unset."""
-    result = subprocess.run(
-        ["git", "config", "--global", "--get", name],
-        capture_output=True,
-        text=True,
-        check=False,
+def _git_outside(*args: str) -> Result:
+    """Run git where no repository is implied; the result, never a refusal.
+
+    The birth verb runs above any repository, and several of its
+    questions must not be answered by whatever repository the
+    person happens to stand in. The temporary directory is that
+    nowhere. Every caller reads the exit code itself.
+    """
+    return tools.git.opts(
         cwd=tempfile.gettempdir(),
         env=dict(os.environ),
-    )
-    return result.stdout.strip() if result.returncode == 0 else ""
+        nofail=True,
+        recorded=False,
+    )(*args)
+
+
+def _git_config(name: str) -> str:
+    """A global git config value, empty when unset."""
+    result = _git_outside("config", "--global", "--get", name)
+    return result.stdout.strip() if result.code == 0 else ""
 
 
 def _clone_url(kind: str, url: str, owner: str, name: str) -> str:
@@ -66,15 +78,8 @@ def _clone_url(kind: str, url: str, owner: str, name: str) -> str:
 
 def _remote_is_foreign(clone_url: str) -> bool:
     """Whether the remote already has commits (foreign, never adopted)."""
-    listing = subprocess.run(
-        ["git", "ls-remote", clone_url],
-        capture_output=True,
-        text=True,
-        check=False,
-        cwd=tempfile.gettempdir(),
-        env=dict(os.environ),
-    )
-    return listing.returncode == 0 and bool(listing.stdout.strip())
+    listing = _git_outside("ls-remote", clone_url)
+    return listing.code == 0 and bool(listing.stdout.strip())
 
 
 def _connect(kind: str, url: str) -> tuple[Forge, str]:
@@ -264,15 +269,10 @@ def new_project(
         print("  git: initialised")
     else:
         print("  git: already initialised")
-    heads = subprocess.run(
-        ["git", "rev-parse", "--verify", "-q", "HEAD"],
-        capture_output=True,
-        text=True,
-        check=False,
-        cwd=root,
-        env=dict(os.environ),
+    heads = tools.git.opts(cwd=root, env=dict(os.environ), nofail=True, recorded=False)(
+        "rev-parse", "--verify", "-q", "HEAD"
     )
-    if heads.returncode != 0:
+    if heads.code != 0:
         _git(root, "add", "-A")
         _git(root, "commit", "-q", "-m", "chore: birth")
         print("  git: birth committed")
@@ -327,11 +327,8 @@ def new_project(
         _git(root, "push", "-q", "--force", "-u", push_to, "main")
         print("  pushed: main")
     else:
-        pushed = footman.run(
-            ["git", "push", "-q", "-u", push_to, "main"],
-            cwd=root,
-            nofail=True,
-            recorded=False,
+        pushed = tools.git.opts(cwd=root, nofail=True, recorded=False)(
+            "push", "-q", "-u", push_to, "main"
         )
         if pushed.code == 0:
             print("  pushed: main")
@@ -398,25 +395,12 @@ def _add_layer(root: Path, layer: str) -> None:
 
 def _pushed_by_us(root: Path, clone_url: str) -> bool:
     """Whether the remote's main is this checkout's history (a resume)."""
-    listing = subprocess.run(
-        ["git", "ls-remote", clone_url, "refs/heads/main"],
-        capture_output=True,
-        text=True,
-        check=False,
-        cwd=root,
-        env=dict(os.environ),
-    )
+    git = tools.git.opts(cwd=root, env=dict(os.environ), nofail=True, recorded=False)
+    listing = git("ls-remote", clone_url, "refs/heads/main")
     sha = listing.stdout.split()[0] if listing.stdout.strip() else ""
     if not sha:
         return True  # exists but empty: get-or-create proceeds
-    known = subprocess.run(
-        ["git", "cat-file", "-e", sha],
-        capture_output=True,
-        check=False,
-        cwd=root,
-        env=dict(os.environ),
-    )
-    return known.returncode == 0
+    return git("cat-file", "-e", sha).code == 0
 
 
 #: The setup branch: a trivial change whose PR proves the gate wires

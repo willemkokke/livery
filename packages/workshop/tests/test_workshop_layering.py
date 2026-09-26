@@ -244,3 +244,75 @@ def test_the_task_tree_imports_no_pytest() -> None:
     )
     assert done.returncode == 0, done.stderr
     assert "imported" in done.stdout
+
+
+def _spawned_by_name(source: Path) -> list[str]:
+    """Every `run([...])` under *source* whose program is a literal."""
+    import ast
+
+    offenders = []
+    for path in sorted(source.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not node.args:
+                continue
+            called = node.func
+            name = called.attr if isinstance(called, ast.Attribute) else ""
+            if name != "run" and getattr(called, "id", "") != "run":
+                continue
+            argv = node.args[0]
+            if not isinstance(argv, ast.List) or not argv.elts:
+                continue
+            head = argv.elts[0]
+            if isinstance(head, ast.Constant):
+                offenders.append(
+                    f"{path.relative_to(source)}:{node.lineno}: {head.value!r}"
+                )
+    return offenders
+
+
+def test_a_literal_program_name_is_caught(tmp_path: Path) -> None:
+    """The walk sees a planted spawn, and passes what a handle writes.
+
+    The refusal first: a check that cannot fail proves nothing, and
+    this one only ever runs against a tree that already passes.
+    """
+    (tmp_path / "bad.py").write_text(
+        "import livery.footman as footman\n\n"
+        "def go() -> None:\n"
+        '    footman.run(["git", "status"], nofail=True)\n'
+    )
+    assert _spawned_by_name(tmp_path) == ["bad.py:4: 'git'"]
+    # A handle call, a variable program, and a shell string all pass:
+    # none of them names a program this tree could have resolved.
+    (tmp_path / "bad.py").write_text(
+        "import sys\nimport livery.footman as footman\n"
+        "from livery.toolroom import tools\n\n"
+        "def go() -> None:\n"
+        '    tools.git.opts(nofail=True)("status")\n'
+        '    footman.run([sys.executable, "-c", "pass"])\n'
+        '    footman.run("tar -cf - . | ssh host tar -xf -", shell=True)\n'
+    )
+    assert _spawned_by_name(tmp_path) == []
+
+
+def test_no_tool_is_spawned_under_a_literal_program_name() -> None:
+    """Every tool the workshop runs reaches it through a toolroom handle.
+
+    An argv list whose first element is a string literal names a
+    program on PATH and steps around the store: the version is
+    whatever the machine happens to hold, the run is unrecorded, and
+    the flags check against nothing. A handle answers all three, and
+    `tools.<name>` reaches a tool with no generated stub just as
+    well, so a missing stub is never the reason to spawn by name.
+
+    Two spellings stay and neither is a literal. The runner is
+    `footman.prog()`, since a branded instance is not called `fm`.
+    The interpreter of a venv under test is `sys.executable` or a
+    path, since that interpreter is the subject, not a tool.
+    """
+    source = Path(__file__).resolve().parents[1] / "src" / "livery" / "workshop"
+    offenders = _spawned_by_name(source)
+    assert not offenders, "spawned by name instead of by handle:\n" + "\n".join(
+        offenders
+    )

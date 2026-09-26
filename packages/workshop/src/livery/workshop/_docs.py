@@ -1624,6 +1624,7 @@ def _publish_ssh(root: Path) -> None:
     import os
 
     import livery.footman as footman
+    from livery.toolroom import tools
 
     host = os.environ.get("DOCS_HOST", "")
     user = os.environ.get("DOCS_USER", "")
@@ -1635,14 +1636,15 @@ def _publish_ssh(root: Path) -> None:
 
     target = f"{docs_root}/{remote_repo_name(root)}"
     destination = f"{user}@{host}"
-    prepare = footman.run(
-        ["ssh", destination, f"rm -rf {target} && mkdir -p {target}"],
-        cwd=root,
-        nofail=True,
-        recorded=False,
+    prepare = tools.ssh.opts(cwd=root, nofail=True, recorded=False)(
+        destination, f"rm -rf {target} && mkdir -p {target}"
     )
-    if prepare != 0:
-        fail(f"preparing {destination}:{target} exited {int(prepare)}")
+    if prepare.code != 0:
+        fail(f"preparing {destination}:{target} exited {prepare.code}")
+    # The one spawn here that stays shell: the site rides a pipe into
+    # the far side's tar, and a handle builds one command line, not a
+    # pipeline. Streaming the archive instead would need bytes on
+    # stdin, where a handle's `input` is text.
     shipped = footman.run(
         f'tar -cf - -C site . | ssh {destination} "tar -xf - -C {target}"',
         shell=True,
