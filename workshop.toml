@@ -34,6 +34,12 @@ owner = "willemkokke"
 # consumer names the published index's URL. The locked hosts are the
 # gated three unless `hosts` names others.
 index = "records"
+# The Windows ARM runner is one line here and one in `[ci] runners`:
+# `hosts = [..., "windows-arm"]` and `runners = [..., "windows-11-arm"]`,
+# then `fm tools.lock` and `fm template.apply`. Measured against x64 on
+# one commit: the type checkers finish in half the time, the tests in the
+# same, the archive restores slower, and the job's wall time is longer, so
+# the gate gains nothing from it; a nightly on it is the case to come back to.
 # What this repository's own tasks run beyond the python kind's tools;
 # a tool locked here has a stub, and one that is not types as `Tool`.
 # conan and the cmake-conan provider are here because the workshop's
