@@ -22,7 +22,6 @@ import re
 import subprocess
 import sys
 import threading
-import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -31,6 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from livery.toolroom.bench._drivers import Driver, Plugin, Provision
+from livery.toolroom.store import FetchError, fetch_bytes
 
 PYPI = "https://pypi.org/pypi/{package}/json"
 TIMEOUT = 30
@@ -271,33 +271,16 @@ class Unreachable(Exception):
         self.source = source
 
 
-def _read_index(request: urllib.request.Request, url: str) -> bytes:
-    """Fetch an index, retrying the failures that are about the connection.
+def _read_index(url: str) -> bytes:
+    """Fetch an index through the store's read, which retries a connection failure.
 
-    The same rule `_download` follows, one layer up. A refresh leg died on
-    `HTTP Error 504: Gateway Timeout` reading docker/buildx's release list —
-    a momentary hiccup, and the whole platform's observations went with it,
-    which is exactly what retrying a download was written to prevent.
-
-    `Unreachable` still ends the run when the tries are spent: an index
-    that will not answer must never read as "nothing new".
+    `Unreachable` ends the run when the store's tries are spent: an
+    index that will not answer must never read as "nothing new".
     """
-    from livery.toolroom.bench._provision import _worth_retrying
-
-    for attempt in range(_INDEX_TRIES):
-        try:
-            with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
-                data: bytes = response.read()
-                return data
-        except (urllib.error.URLError, TimeoutError, OSError) as cause:
-            if attempt + 1 == _INDEX_TRIES or not _worth_retrying(cause):
-                raise Unreachable(url, cause) from cause
-            time.sleep(_INDEX_BACKOFF * (attempt + 1))
-    raise Unreachable(url, "unreachable")  # pragma: no cover - the loop returns
-
-
-_INDEX_TRIES = 3
-_INDEX_BACKOFF = 1.0
+    try:
+        return fetch_bytes(url)
+    except FetchError as cause:
+        raise Unreachable(url, cause) from cause
 
 
 def _index(url: str) -> Any:
@@ -305,11 +288,8 @@ def _index(url: str) -> Any:
     forge API a list), so the honest static type is the JSON it is. Raises
     `Unreachable` when it cannot be read.
     """
-    from livery.toolroom.bench._provision import api_headers
-
-    request = urllib.request.Request(url, headers=api_headers(url))
     try:
-        return json.loads(_read_index(request, url))
+        return json.loads(_read_index(url))
     except ValueError as cause:  # answered, but not with JSON
         raise Unreachable(url, cause) from cause
 
@@ -533,9 +513,7 @@ def _docker_index() -> list[Release]:
     """
     os_name, arch, _suffix = _docker_channel()
     url = _DOCKER_INDEX.format(os=os_name, arch=arch)
-    listing = _read_index(
-        urllib.request.Request(url, headers={"User-Agent": "footman-provision"}), url
-    ).decode("utf-8", "replace")
+    listing = _read_index(url).decode("utf-8", "replace")
     shipped = _docker_dates()
     found = {
         match["version"]: Release(
@@ -558,7 +536,7 @@ def _install_docker(driver: Driver, release: Release, into: Path) -> Path | None
     bindir.mkdir(parents=True, exist_ok=True)
     try:
         archive = _provision._download(url, into)
-        _provision._extract_binary(archive, "docker", bindir)
+        _provision.place_binary(archive, "docker", bindir)
     except (_provision.ProvisionError, OSError, ValueError):
         return None
     home = home_beside(bindir)
@@ -620,7 +598,7 @@ def install_plugin(plugin: Plugin, on_or_before: str, home: Path) -> bool:
             assets = _provision.assets_for("github", plugin.repo, tag)
             _name, url = _provision._pick_asset(assets)
             archive = _provision._download(url, home)
-            _provision._extract_binary(archive, plugin.name, into)
+            _provision.place_binary(archive, plugin.name, into, launcher=False)
         except (_provision.ProvisionError, OSError, ValueError):
             continue
         return True
@@ -654,10 +632,7 @@ def _man_index(driver: Driver) -> list[Release]:
     man = driver.provision.manual
     if man is None:
         return []
-    listing = _read_index(
-        urllib.request.Request(man.index, headers={"User-Agent": "footman-provision"}),
-        man.index,
-    ).decode("utf-8", "replace")
+    listing = _read_index(man.index).decode("utf-8", "replace")
     found = {}
     for match in re.finditer(man.listing, listing):
         date = ""
@@ -899,7 +874,7 @@ def _install_asset(driver: Driver, release: Release, into: Path) -> Path | None:
             assets = _provision.assets_for(host, driver.provision.repo, tag)
             _name, url = _provision._pick_asset(assets)
             archive = _provision._download(url, into)
-            _provision._extract_binary(archive, driver.name, bindir)
+            _provision.place_binary(archive, driver.name, bindir)
         except _provision.ProvisionError:
             continue
         except (OSError, ValueError):

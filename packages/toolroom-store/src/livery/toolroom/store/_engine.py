@@ -25,9 +25,7 @@ import shutil
 import stat
 import subprocess
 import sys
-import tarfile
 import uuid
-import zipfile
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from io import BytesIO
@@ -41,9 +39,9 @@ from livery.strongroom import (
     Subject,
     Unreachable,
     ViewRecord,
-    fetch_url,
 )
 from livery.strongroom import Store as ObjectStore
+from livery.toolroom.store._fetch import UnpackError, fetch_bytes, unpack
 from livery.toolroom.store._home import TOOLS, Home
 from livery.toolroom.store._record import (
     DOWNLOAD_KINDS,
@@ -188,9 +186,8 @@ def _default_host() -> str:
 
 
 def _download(url: str) -> bytes:
-    """The origin's bytes; the seam the tests replace."""
-    with fetch_url(url, connect_timeout=10.0, transfer_timeout=600.0) as response:
-        return response.read()
+    """The origin's bytes, retried on a transient failure; the seam tests replace."""
+    return fetch_bytes(url, connect_timeout=10.0, transfer_timeout=600.0)
 
 
 download: Callable[[str], bytes] = _download
@@ -656,8 +653,8 @@ class Store:
             )
             return
         try:
-            _extract(artifact, _archive_name(deployment.url), into)
-        except (tarfile.TarError, zipfile.BadZipFile, OSError) as error:
+            unpack(artifact, into, name=_archive_name(deployment.url))
+        except UnpackError as error:
             raise StoreError(
                 f"{name}: the archive at {deployment.url} will not extract: {error}"
             ) from None
@@ -793,26 +790,6 @@ class Store:
 
 def _archive_name(url: str) -> str:
     return url.rsplit("/", 1)[-1].lower()
-
-
-def _extract(artifact: Path, name: str, into: Path) -> None:
-    """Extract a zip or a tar safely; a zip member's mode is restored."""
-    if name.endswith(".zip"):
-        with zipfile.ZipFile(artifact) as archive:
-            archive.extractall(into)
-            root = into.resolve()
-            for info in archive.infolist():
-                mode = (info.external_attr >> 16) & 0o777
-                if not mode or info.is_dir():
-                    continue
-                target = (into / info.filename).resolve()
-                if target.is_relative_to(root) and target.is_file():
-                    target.chmod(mode)
-        return
-    if not name.endswith(_ARCHIVES):
-        raise StoreError(f"{name} is not an archive the store extracts")
-    with tarfile.open(artifact) as archive:
-        archive.extractall(into, filter="data")
 
 
 def _exclude(deployment: Deployment, into: Path) -> None:
