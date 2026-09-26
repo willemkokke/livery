@@ -12,14 +12,20 @@ is the tier for programs that are Python, where the wheel is the release; a
 wheel around a Rust or C++ binary is a wrapper with a platform gap wherever
 the wheel is missing, so a tool that is not Python never sits on the `uv`
 tier (a test pins the tier's members). What the forge tiers do not cover is
-bun (its own release), the node CLIs it installs, and the Python tools:
+node (its own release index), the npm packages and their runtimes, and the
+Python tools:
 
 * **uv** — `uv tool install --upgrade <pkg>`, tools and launchers under the
   prefix; nothing lands in `~/.local` or the system site-packages. Python
   programs only.
-* **bun** — bun's GitHub release, unpacked into the prefix. Provisioned
-  *first*, because the node tier runs through it.
-* **node** — `bun add --global` with `BUN_INSTALL` pointed at the prefix.
+* **bun** — bun's GitHub release, unpacked into the prefix: the runtime a
+  node-tier package names instead of node.
+* **nodejs** — node's build for this platform from nodejs.org, unpacked
+  whole into the prefix with npm beside it, and `node` linked into the
+  prefix's `bin`. Provisioned before the node tier, which runs on it.
+* **node** — each npm package through its runtime: `npm install --global`
+  on the provisioned node, or `bun add --global` with `BUN_INSTALL` pointed
+  at the prefix where the driver names bun.
 * **github / gitlab** — the latest release asset for this platform, matched
   from the release's own asset list (so `Darwin`/`x86_64` vs `darwin`/`x64`
   naming needn't be transcribed), unpacked whole, a launcher placed in the prefix.
@@ -55,6 +61,7 @@ from livery.toolroom.store import (
     UnpackError,
     fetch_file,
     fetch_json,
+    npm_cli,
     unpack,
 )
 
@@ -92,40 +99,15 @@ def exe(name: str, *, windows: bool | None = None) -> str:
     return f"{name}.exe" if windows else name
 
 
-def write_node_shim(into: Path, bun: Path) -> Path | None:
-    """A `node` that is really bun, written beside the launchers.
-
-    What the npm tier installs is a launcher beginning `#!/usr/bin/env node`.
-    bun stands in for node when bun itself runs a script, but a launcher
-    spawned as a subprocess has its shebang resolved by the operating system,
-    with bun nowhere in the chain. So on a machine without node the tier is
-    unrunnable, and the prefix this writes into is the thing every reader
-    reaches for — `sync`, `audit`, `spec`, and anyone who follows the
-    `export PATH=<prefix>/bin` line provisioning prints.
-
-    Left to the caller to remember, it is forgotten: a `sync` on a node-less
-    machine recorded cspell and markdownlint as version `unknown`, and that
-    reading then sat at the floor of the chain where `prime` could not walk
-    past it — "unknown is not among the listed releases". Re-syncing fixed
-    the base and left the poison underneath, so the cost of the omission
-    outlived its cause. It belongs next to the launchers it exists for.
-
-    Written only where there is no real node, so a machine that has one keeps
-    using it, and one with neither is no worse off than before.
-    """
-    if shutil.which("node") is not None:
-        return None
-    return write_launcher(into, "node", bun, "--bun")
-
-
 def provision(
     drivers: tuple[Driver, ...], prefix: Path, *, only: str = ""
 ) -> list[Outcome]:
     """Materialise the latest of each curated tool under *prefix*.
 
-    Tiers run in the one order that matters: bun before the node CLIs that
-    need it. Each tool's failure is its own line, never the run's — a missing
-    binary should read as one skipped hint, not a broken provision.
+    Tiers run in the one order that matters: the runtimes before the npm
+    packages that run on them. Each tool's failure is its own line, never
+    the run's — a missing binary should read as one skipped hint, not a
+    broken provision.
     """
     prefix = Path(prefix)
     bin_dir(prefix).mkdir(parents=True, exist_ok=True)
@@ -148,8 +130,9 @@ def provision(
         )
     outcomes += _uv_tier(prefix, by_kind.get("uv", []))
     outcomes += _python_tier(prefix, by_kind.get("python", []))
-    for driver in by_kind.get("bun", []):  # before node: node runs through bun
+    for driver in by_kind.get("bun", []):  # a runtime: before the node tier
         outcomes.append(_release(prefix, driver, host="github"))
+    outcomes += _nodejs_tier(prefix, by_kind.get("nodejs", []))
     outcomes += _node_tier(prefix, by_kind.get("node", []))
     forges = ("github", "gitlab", "gitea")
     for driver in [d for kind in forges for d in by_kind.get(kind, [])]:
@@ -375,33 +358,110 @@ def _place_interpreter(bindir: Path, target: Path) -> Path | None:
     return shim
 
 
-# --- node tier (through the provisioned bun) ---------------------------------
+# --- nodejs tier, and the node tier that runs on it -------------------------
+
+
+def _nodejs_tier(prefix: Path, drivers: list[Driver]) -> list[Outcome]:
+    """The newest node, unpacked whole under the prefix and linked into its `bin`.
+
+    Whole, because npm is a script node ships beside itself and the node
+    tier installs through it; the link in `bin` is what puts `node` on
+    the prefix's PATH for the launchers the node tier writes.
+    """
+    from livery.toolroom.bench import _toolfetch
+
+    outcomes: list[Outcome] = []
+    for driver in drivers:
+        try:
+            found = _toolfetch.releases(driver)
+        except _toolfetch.Unreachable as blocked:
+            outcomes.append(Outcome(driver.key, "nodejs", "fail", str(blocked)))
+            continue
+        if not found:
+            outcomes.append(Outcome(driver.key, "nodejs", "fail", "no builds listed"))
+            continue
+        newest = found[0]
+        placed = _toolfetch.install(driver, newest, prefix / ".nodejs")
+        if placed is None:
+            outcomes.append(
+                Outcome(
+                    driver.key, "nodejs", "fail", f"{newest.version} would not install"
+                )
+            )
+            continue
+        _link_node(prefix, placed / exe("node"))
+        outcomes.append(Outcome(driver.key, "nodejs", "ok", newest.version))
+    return outcomes
+
+
+def _link_node(prefix: Path, node: Path) -> Path:
+    """Put *node* on the prefix's PATH by its own name, beside the launchers.
+
+    A launcher that runs node where it lies, the way every release
+    binary reaches the prefix, so npm stays beside the node that runs.
+    """
+    return write_launcher(bin_dir(prefix), "node", node)
+
+
+def provisioned_node(prefix: Path) -> Path | None:
+    """The node the nodejs tier unpacked under *prefix*, or None before it ran."""
+    root = prefix / ".nodejs" / "node"
+    if not root.is_dir():
+        return None
+    for tree in sorted(root.iterdir()):
+        node = tree / exe("node") if os.name == "nt" else tree / "bin" / exe("node")
+        if node.is_file():
+            return node
+    return None
 
 
 def _node_tier(prefix: Path, drivers: list[Driver]) -> list[Outcome]:
-    """`bun add --global` each package, with bun's install dir the prefix."""
+    """Each npm package through its runtime, the prefix's `bin` its launchers' home.
+
+    Every launcher runs on node, so the nodejs tier comes first for all
+    of them; a package whose driver names bun is installed by the
+    provisioned bun as well.
+    """
     if not drivers:
         return []
-    bun = bin_dir(prefix) / exe("bun")
-    if not bun.exists():
+    node = provisioned_node(prefix)
+    if node is None:
         return [
-            Outcome(d.key, "node", "fail", "bun was not provisioned first")
+            Outcome(d.key, "node", "fail", "node was not provisioned first")
             for d in drivers
         ]
-    # Beside the launchers, before they are installed: what `bun add` writes
-    # into this directory cannot be run without it.
-    write_node_shim(bin_dir(prefix), bun)
     env = {
         **os.environ,
-        "BUN_INSTALL": str(prefix),  # global bin lands in <prefix>/bin
         "PATH": f"{bin_dir(prefix)}{os.pathsep}{os.environ.get('PATH', '')}",
     }
-    packages = sorted({d.provision.target(d.name) for d in drivers})
-    ok = _run([str(bun), "add", "--global", *packages], env=env)
-    return [
-        Outcome(d.key, "node", "ok" if ok else "fail", d.provision.target(d.name))
-        for d in drivers
-    ]
+    outcomes: list[Outcome] = []
+    on_node = [d for d in drivers if d.provision.runtime != "bun"]
+    if on_node:
+        prefix_arg = bin_dir(prefix) if os.name == "nt" else prefix
+        packages = sorted({d.provision.target(d.name) for d in on_node})
+        argv = [str(node), str(npm_cli(node)), "install", "--global"]
+        ok = _run([*argv, f"--prefix={prefix_arg}", *packages], env=env)
+        outcomes += [
+            Outcome(d.key, "node", "ok" if ok else "fail", d.provision.target(d.name))
+            for d in on_node
+        ]
+    on_bun = [d for d in drivers if d.provision.runtime == "bun"]
+    if on_bun:
+        bun = bin_dir(prefix) / exe("bun")
+        if not bun.exists():
+            return outcomes + [
+                Outcome(d.key, "node", "fail", "bun was not provisioned first")
+                for d in on_bun
+            ]
+        packages = sorted({d.provision.target(d.name) for d in on_bun})
+        # bun's global bin lands in <prefix>/bin.
+        with_bun = {**env, "BUN_INSTALL": str(prefix)}
+        ok = _run([str(bun), "add", "--global", *packages], env=with_bun)
+        outcomes += [
+            Outcome(d.key, "node", "ok" if ok else "fail", d.provision.target(d.name))
+            for d in on_bun
+        ]
+    return outcomes
 
 
 # --- release tier (github / gitlab, and bun) ---------------------------------

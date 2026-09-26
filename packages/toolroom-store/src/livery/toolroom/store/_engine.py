@@ -236,6 +236,27 @@ def _version_in(text: str) -> str:
     return match[0] if match else ""
 
 
+def npm_cli(node: Path) -> Path:
+    """The `npm-cli.js` node ships beside *node*, in either layout node publishes.
+
+    A POSIX distribution has `bin/node` and `lib/node_modules/npm`; a
+    Windows one has `node.exe` and `node_modules/npm` side by side.
+
+    Raises:
+        StoreError: naming both places when neither holds it.
+    """
+    candidates = (
+        node.parent.parent / "lib" / "node_modules" / "npm" / "bin" / "npm-cli.js",
+        node.parent / "node_modules" / "npm" / "bin" / "npm-cli.js",
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise StoreError(
+        f"{node}: no npm beside it; looked for {candidates[0]} and {candidates[1]}"
+    )
+
+
 def _launchers(bin_dir: Path) -> tuple[str, ...]:
     """The entry points an installer wrote under *bin_dir*, install-relative."""
     if not bin_dir.is_dir():
@@ -315,11 +336,12 @@ class Store:
         return self._probe_download(record.name, version, deployment)
 
     def ensure(
-        self, record: Record, version: str, *, bun: Path | None = None
+        self, record: Record, version: str, *, runtime: Path | None = None
     ) -> Ensured:
         """Supply the tool at *version* as its record resolves it on this host.
 
-        *bun* is the executable a `bun-install` record installs through.
+        *runtime* is the executable of the runtime an `npm` record
+        names, node unless it says bun, supplied by the caller first.
 
         Raises:
             RecordError: for a version the record does not track, or a
@@ -338,7 +360,8 @@ class Store:
             deployment,
             package=record.package,
             min_version=record.min_version,
-            bun=bun,
+            runtime=record.runtime,
+            runtime_exe=runtime,
         )
 
     def supply(
@@ -350,7 +373,8 @@ class Store:
         *,
         package: str = "",
         min_version: str = "",
-        bun: Path | None = None,
+        runtime: str = "",
+        runtime_exe: Path | None = None,
     ) -> Ensured:
         """Supply *name* at *version* from *deployment* or through its installer.
 
@@ -358,22 +382,26 @@ class Store:
         digest, extracts it, collects it as a tree and views it. A
         `uv-tool` is installed by uv into its own directory under the
         home, *package* naming what uv installs when it differs from the
-        tool's name, and its launchers are the entry points. A
-        `bun-install` is installed the same way by *bun*, the executable
-        of a bun the caller supplied first; the launchers bun writes
-        start with `#!/usr/bin/env node`, which bun's own `node` shim
-        answers on the caller's PATH. A `system-check` is the machine's
-        own tool, found on PATH and held to *min_version*. `uv-python`
-        is not supplied through the store yet and refuses naming the
-        kind.
+        tool's name, and its launchers are the entry points. An `npm`
+        tool is installed the same way through *runtime_exe*, the
+        executable of the runtime *runtime* names, node unless it says
+        bun, which the caller supplied first: npm run on node, or bun's
+        own installer. Its launchers start with `#!/usr/bin/env node`,
+        which the runtime answers on the caller's PATH, bun through the
+        `node` shim its record declares. A `system-check` is the
+        machine's own tool, found on PATH and held to *min_version*.
+        `uv-python` is not supplied through the store yet and refuses
+        naming the kind.
 
         Raises:
             StoreError: for a kind the store cannot supply, a downloaded
-                kind with no deployment, a `bun-install` with no *bun*,
-                a miss while offline, a mismatch at a tier, an archive
-                that will not extract, an installer that failed, a
-                system tool missing or below its floor, or a ref already
-                naming another tree.
+                kind with no deployment, an `npm` tool with no runtime
+                handed over or a node with no npm beside it, a miss
+                while offline, a mismatch at a tier, an archive that
+                will not extract, an installer that failed or placed a
+                launcher outside the tool's directory, a system tool
+                missing or below its floor, or a ref already naming
+                another tree.
         """
         if kind in DOWNLOAD_KINDS:
             if deployment is None:
@@ -383,13 +411,16 @@ class Store:
             return self._supply_download(name, kind, version, deployment)
         if kind == "uv-tool":
             return self._supply_uv_tool(name, version, package or name)
-        if kind == "bun-install":
-            if bun is None:
+        if kind == "npm":
+            runs_on = runtime or "node"
+            if runtime_exe is None:
                 raise StoreError(
-                    f"{name}: a bun-install needs bun; lock bun first, and hand"
-                    " its executable over"
+                    f"{name}: an npm tool needs {runs_on}; lock {runs_on} first, and"
+                    " hand its executable over"
                 )
-            return self._supply_bun_install(name, version, package or name, bun)
+            return self._supply_npm(
+                name, version, package or name, runs_on, runtime_exe
+            )
         if kind == "system-check":
             return self._supply_system(name, version, min_version)
         raise StoreError(
@@ -494,7 +525,7 @@ class Store:
     # --- the delegated kinds --------------------------------------------------
 
     def _probe_delegated(self, name: str, kind: str, version: str) -> Ensured | None:
-        if kind in ("uv-tool", "bun-install"):
+        if kind in ("uv-tool", "npm"):
             tool_dir = self._delegated_dir(name, kind, version)
             launchers = _launchers(tool_dir / "bin")
             if not launchers:
@@ -510,36 +541,51 @@ class Store:
         return None
 
     def _delegated_dir(self, name: str, kind: str, version: str) -> Path:
-        """Where a delegated kind's install lives: `uv/tools` or `bun/tools`."""
-        home = self.home.uv if kind == "uv-tool" else self.home.bun
+        """Where a delegated kind's install lives: under `uv/` or `npm/`."""
+        home = self.home.uv if kind == "uv-tool" else self.home.npm
         return home / "tools" / f"{name}@{version}"
 
-    def _supply_bun_install(
-        self, name: str, version: str, package: str, bun: Path
+    def _supply_npm(
+        self, name: str, version: str, package: str, runtime: str, exe: Path
     ) -> Ensured:
-        """Install *package* at *version* through *bun*, into the tool's own directory.
+        """Install *package* at *version* through the *runtime* at *exe*.
 
-        `BUN_INSTALL` names the directory, so bun's global install lands
-        there with its launchers in `bin`; bun's own directory heads the
-        child's PATH, so the install finds bun and the `node` shim
-        beside it. The launchers are the entry points.
+        On node, npm runs as `node npm-cli.js`, the script node ships
+        beside itself, so the install needs no launcher of npm's own to
+        resolve; the prefix is the tool's directory, whose `bin` npm
+        fills with the launchers and whose `lib/node_modules` holds the
+        package, and on a Windows host, where npm writes the launchers
+        into the prefix itself, the prefix is the tool's `bin`. On bun,
+        `BUN_INSTALL` names the tool's directory and `bun add --global`
+        lands the launchers in its `bin`. Either way the runtime's own
+        directory heads the child's PATH, and a launcher that resolves
+        outside the tool's directory is refused naming where it points,
+        since the store runs nothing it did not place.
         """
         self._progress(Event(name, version, "probe"))
-        present = self._probe_delegated(name, "bun-install", version)
+        present = self._probe_delegated(name, "npm", version)
         if present is not None:
             return present
-        tool_dir = self._delegated_dir(name, "bun-install", version)
+        cli = npm_cli(exe) if runtime == "node" else None
+        tool_dir = self._delegated_dir(name, "npm", version)
         bin_dir = tool_dir / "bin"
         bin_dir.mkdir(parents=True, exist_ok=True)
-        argv = [str(bun), "add", "--global", f"{package}@{version}"]
+        env = {"PATH": os.pathsep.join([str(exe.parent), os.environ.get("PATH", "")])}
+        if cli is not None:
+            prefix = bin_dir if self.host.startswith("windows") else tool_dir
+            argv = [
+                str(exe),
+                str(cli),
+                "install",
+                "--global",
+                f"--prefix={prefix}",
+                f"{package}@{version}",
+            ]
+        else:
+            argv = [str(exe), "add", "--global", f"{package}@{version}"]
+            env["BUN_INSTALL"] = str(tool_dir)
         self._progress(Event(name, version, "install", " ".join(argv)))
-        code = run_installer(
-            argv,
-            {
-                "BUN_INSTALL": str(tool_dir),
-                "PATH": os.pathsep.join([str(bun.parent), os.environ.get("PATH", "")]),
-            },
-        )
+        code = run_installer(argv, env)
         launchers = _launchers(bin_dir)
         if code != 0 or not launchers:
             shutil.rmtree(tool_dir, ignore_errors=True)
@@ -547,6 +593,16 @@ class Store:
                 f"{name} {version}: `{' '.join(argv)}` exited {code} and left"
                 f" {'no launcher' if code == 0 else 'nothing'} in {bin_dir}"
             )
+        inside = tool_dir.resolve()
+        for launcher in launchers:
+            target = (tool_dir / launcher).resolve()
+            if inside not in target.parents:
+                shutil.rmtree(tool_dir, ignore_errors=True)
+                raise StoreError(
+                    f"{name} {version}: {runtime} placed {launcher} outside"
+                    f" {tool_dir}, at {target}; the store runs nothing it did not"
+                    " place"
+                )
         return Ensured(name, version, True, tool_dir, _delegated(launchers), None)
 
     def _supply_uv_tool(self, name: str, version: str, package: str) -> Ensured:

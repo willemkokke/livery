@@ -2642,6 +2642,39 @@ def test_a_missing_executable_raises_a_taught_command_not_found():
     assert "@footman.requires_tool" in message
 
 
+def test_a_bare_name_spawns_by_the_path_a_shell_would_find_on_windows(
+    tmp_path, monkeypatch
+):
+    """Windows starts a process by an exact file, so a `.cmd` launcher on
+    PATH is only found the way a shell finds it, through PATHEXT.
+    """
+    from livery.footman import context
+
+    # Nothing resolves: the name stays bare, so the missing-tool error names it.
+    monkeypatch.setattr(context.shutil, "which", lambda name: None)
+    assert context._spawnable(["basedpyright", "-p"], windows=True) == [
+        "basedpyright",
+        "-p",
+    ]
+    # A directory or an extension is exact already; a command line is not a list.
+    launcher = str(tmp_path / "basedpyright.CMD")
+    monkeypatch.setattr(context.shutil, "which", lambda name: launcher)
+    assert context._spawnable([r"bin\basedpyright"], windows=True) == [
+        r"bin\basedpyright"
+    ]
+    assert context._spawnable(["basedpyright.exe"], windows=True) == [
+        "basedpyright.exe"
+    ]
+    assert context._spawnable("basedpyright -p", windows=True) == "basedpyright -p"
+    assert context._spawnable([], windows=True) == []
+    # Off Windows nothing changes; on it the bare name becomes the path found.
+    assert context._spawnable(["basedpyright", "-p"], windows=False) == [
+        "basedpyright",
+        "-p",
+    ]
+    assert context._spawnable(["basedpyright", "-p"], windows=True) == [launcher, "-p"]
+
+
 def test_a_missing_executable_is_not_silenced_by_nofail():
     from livery.footman.context import CommandNotFound, Context, use_context
 

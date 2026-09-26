@@ -660,16 +660,134 @@ def test_an_installer_that_fails_or_writes_no_launcher_leaves_nothing(
     assert store.probe(record, "1.0.0") is None
 
 
-def test_a_bun_install_without_a_bun_refuses_naming_it(home: Home) -> None:
+def _npm(name: str, version: str, runtime: str = "") -> Record:
     from dataclasses import replace
 
-    record = replace(_uv_tool("cspell", "1.0.0"), kind="bun-install", package="")
-    with pytest.raises(StoreError, match=r"cspell: a bun-install needs bun; lock bun"):
-        Store(home, host=HOST).ensure(record, "1.0.0")
-    assert not (home.bun / "tools").exists()
+    return replace(_uv_tool(name, version), kind="npm", package="", runtime=runtime)
 
 
-def test_a_bun_install_lands_through_the_bun_handed_over(
+def test_an_npm_tool_without_its_runtime_or_without_an_npm_refuses_naming_it(
+    home: Home,
+) -> None:
+    store = Store(home, host=HOST)
+    with pytest.raises(StoreError, match=r"basedpyright: an npm tool needs node; lock"):
+        store.ensure(_npm("basedpyright", "1.0.0"), "1.0.0")
+    with pytest.raises(StoreError, match=r"cspell: an npm tool needs bun; lock bun"):
+        store.ensure(_npm("cspell", "1.0.0", "bun"), "1.0.0")
+    # A node with no npm-cli.js in either layout names both places.
+    bare = home.root / "tools" / "node@1.0.0" / "bin" / f"node{EXE}"
+    with pytest.raises(StoreError, match=r"no npm beside it; looked for .*lib.*and "):
+        store.ensure(_npm("basedpyright", "1.0.0"), "1.0.0", runtime=bare)
+    assert not (home.npm / "tools").exists()
+
+
+def _node(home: Home, *, windows: bool = False) -> Path:
+    """A node distribution in the layout of one platform, with npm-cli.js in place."""
+    root = home.root / "tools" / "node@1.0.0"
+    node = root / f"node{EXE}" if windows else root / "bin" / f"node{EXE}"
+    npm = (
+        root / "node_modules" / "npm" / "bin" / "npm-cli.js"
+        if windows
+        else root / "lib" / "node_modules" / "npm" / "bin" / "npm-cli.js"
+    )
+    for path in (node, npm):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("")
+    return node
+
+
+def test_an_npm_install_that_fails_or_strays_leaves_nothing(
+    home: Home, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    node = _node(home)
+    record = _npm("basedpyright", "1.0.0")
+    store = Store(home, host=HOST)
+    monkeypatch.setattr(_engine, "run_installer", lambda argv, env: 4)
+    with pytest.raises(StoreError, match=r"basedpyright 1\.0\.0: `.* install --global"):
+        store.ensure(record, "1.0.0", runtime=node)
+    assert not (home.npm / "tools" / "basedpyright@1.0.0").exists()
+    monkeypatch.setattr(_engine, "run_installer", lambda argv, env: 0)
+    with pytest.raises(StoreError, match=r"exited 0 and left no launcher"):
+        store.ensure(record, "1.0.0", runtime=node)
+    assert store.probe(record, "1.0.0") is None
+    # A launcher the runtime resolves outside the tool's directory is
+    # refused naming where it points, and nothing of the install stays.
+    elsewhere = home.root / "elsewhere" / "index.js"
+    elsewhere.parent.mkdir(parents=True)
+    elsewhere.write_text("#!/usr/bin/env node\n")
+
+    def straying(argv: list[str], env: dict[str, str]) -> int:
+        tool_dir = home.npm / "tools" / "basedpyright@1.0.0"
+        os.symlink(elsewhere, tool_dir / "bin" / "basedpyright")
+        return 0
+
+    monkeypatch.setattr(_engine, "run_installer", straying)
+    with pytest.raises(
+        StoreError, match=r"node placed bin/basedpyright outside .* at "
+    ):
+        store.ensure(record, "1.0.0", runtime=node)
+    assert not (home.npm / "tools" / "basedpyright@1.0.0").exists()
+
+
+def test_an_npm_tool_lands_through_node_by_default(
+    home: Home, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`node npm-cli.js install --global` into the tool's own directory, node heading PATH."""
+    from dataclasses import replace
+
+    calls: list[tuple[list[str], dict[str, str]]] = []
+
+    def installing(argv: list[str], env: dict[str, str]) -> int:
+        calls.append((argv, env))
+        prefix = Path(
+            next(a for a in argv if a.startswith("--prefix=")).split("=", 1)[1]
+        )
+        bin_dir = prefix if prefix.name == "bin" else prefix / "bin"
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        (bin_dir / f"basedpyright{EXE}").write_text("#!/usr/bin/env node\n")
+        return 0
+
+    monkeypatch.setattr(_engine, "run_installer", installing)
+    node = _node(home)
+    record = _npm("basedpyright", "1.0.0")
+    store = Store(home, host=HOST)
+    ensured = store.ensure(record, "1.0.0", runtime=node)
+    assert ensured.installed and ensured.tree is None
+    assert ensured.tool_dir == home.npm / "tools" / "basedpyright@1.0.0"
+    assert ensured.deployment.entry_points == (f"bin/basedpyright{EXE}",)
+    argv, env = calls[0]
+    npm_cli = node.parent.parent / "lib" / "node_modules" / "npm" / "bin" / "npm-cli.js"
+    assert argv == [
+        str(node),
+        str(npm_cli),
+        "install",
+        "--global",
+        f"--prefix={ensured.tool_dir}",
+        "basedpyright@1.0.0",
+    ]
+    assert env["PATH"].split(os.pathsep)[0] == str(node.parent)
+    assert "BUN_INSTALL" not in env
+    # A second ensure is a probe.
+    assert not store.ensure(record, "1.0.0", runtime=node).installed
+    assert len(calls) == 1
+    # On a Windows host npm writes the launchers into the prefix itself,
+    # so the prefix is the tool's bin, and npm-cli.js sits beside node.exe.
+    windows = Store(home, host="windows-x64")
+    node_win = _node(home, windows=True)
+    made = windows.ensure(
+        replace(record, deltas=_uv_tool("basedpyright", "2.0.0").deltas),
+        "2.0.0",
+        runtime=node_win,
+    )
+    argv, _ = calls[1]
+    assert argv[1] == str(
+        node_win.parent / "node_modules" / "npm" / "bin" / "npm-cli.js"
+    )
+    assert f"--prefix={made.tool_dir / 'bin'}" in argv
+    assert made.deployment.entry_points == (f"bin/basedpyright{EXE}",)
+
+
+def test_an_npm_tool_naming_bun_lands_through_bun(
     home: Home, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """`bun add --global` into the tool's own directory, bun's directory heading PATH."""
@@ -686,27 +804,29 @@ def test_a_bun_install_lands_through_the_bun_handed_over(
 
     monkeypatch.setattr(_engine, "run_installer", installing)
     bun = home.root / "tools" / "bun@1.0.0" / f"bun{EXE}"
-    record = replace(_uv_tool("cspell", "1.0.0"), kind="bun-install", package="")
+    record = _npm("cspell", "1.0.0", "bun")
     store = Store(home, host=HOST)
-    ensured = store.ensure(record, "1.0.0", bun=bun)
+    ensured = store.ensure(record, "1.0.0", runtime=bun)
     assert ensured.installed and ensured.tree is None
-    assert ensured.tool_dir == home.bun / "tools" / "cspell@1.0.0"
+    assert ensured.tool_dir == home.npm / "tools" / "cspell@1.0.0"
     assert ensured.deployment.entry_points == (f"bin/cspell{EXE}",)
     argv, env = calls[0]
     assert argv == [str(bun), "add", "--global", "cspell@1.0.0"]
     assert env["BUN_INSTALL"] == str(ensured.tool_dir)
     assert env["PATH"].split(os.pathsep)[0] == str(bun.parent)
     # A second ensure is a probe; a failing bun leaves nothing behind.
-    assert not store.ensure(record, "1.0.0", bun=bun).installed and len(calls) == 1
+    assert not store.ensure(record, "1.0.0", runtime=bun).installed and len(calls) == 1
     monkeypatch.setattr(_engine, "run_installer", lambda argv, env: 7)
     with pytest.raises(
         StoreError,
         match=r"cspell 2\.0\.0: `.*bun.* add --global cspell@2\.0\.0` exited 7",
     ):
         store.ensure(
-            replace(record, deltas=_uv_tool("cspell", "2.0.0").deltas), "2.0.0", bun=bun
+            replace(record, deltas=_uv_tool("cspell", "2.0.0").deltas),
+            "2.0.0",
+            runtime=bun,
         )
-    assert not (home.bun / "tools" / "cspell@2.0.0").exists()
+    assert not (home.npm / "tools" / "cspell@2.0.0").exists()
 
 
 def test_a_uv_tool_is_installed_once_into_its_own_directory(

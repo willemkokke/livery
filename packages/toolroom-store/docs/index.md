@@ -158,15 +158,22 @@ elsewhere.
 `supply` is the primitive `ensure` stands on: a tool by name, kind,
 version and deployment, which is what a consumer holds after reading
 the catalogue. The delegated kinds go through their installer rather
-than the objects: a `uv-tool` is installed by uv at the locked version
+than the objects. A `uv-tool` is installed by uv at the locked version
 into a directory of its own under the home, the record's `package`
 naming what uv installs when it differs from the tool's name, and its
-launchers under `bin` are its entry points; a `system-check` tool is
-the machine's own, found on PATH and held to the record's
-`min_version` alone, since its locked version is the newest reading
-the stubs render for and not a version anyone installs, and the store
-installs nothing for it. `bun-install` and `uv-python` refuse naming the kind until
-they are supplied the same way. A delegated tool has no tree.
+launchers under `bin` are its entry points. An `npm` tool is installed
+the same way through the runtime its record names, node unless it says
+bun, whose executable the caller supplied first: npm run on node, or
+bun's own installer. Its launchers under `bin` are the entry points,
+they start with `#!/usr/bin/env node`, and the runtime's directory
+stays on PATH to answer that, bun through the `node` shim its record
+declares. A launcher the runtime placed outside the tool's directory
+is refused naming where it points. A `system-check` tool is the
+machine's own, found on PATH and held to the record's `min_version`
+alone, since its locked version is the newest reading the stubs render
+for and not a version anyone installs, and the store installs nothing
+for it. `uv-python` refuses naming the kind until it is supplied the
+same way. A delegated tool has no tree.
 
 A record's `mode` says how a materialised tool reaches PATH: `link`
 puts its entry points in the checkout's bin directory, `path` its own

@@ -19,6 +19,7 @@ import inspect
 import io
 import os
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -2862,6 +2863,35 @@ def terminate_live_children(
     threading.Thread(target=_escalate, daemon=True, name="fm-fail-fast-kill").start()
 
 
+def _spawnable(
+    argv: list[str] | str, *, windows: bool | None = None
+) -> list[str] | str:
+    """*argv* with a bare program name resolved the way a shell would, on Windows.
+
+    Windows starts a process by an exact file: a bare name finds only
+    an `.exe` beside it or on PATH, never the `.cmd` a launcher is,
+    while a shell finds the `.cmd` through `PATHEXT`. So a bare name
+    with no directory and no extension is resolved through the same
+    lookup a shell uses, and spawned by the path found. A name that
+    resolves nowhere is left as it is, so the missing-tool error keeps
+    naming it. A string argv is Windows' single-command-line spelling
+    and is left alone.
+    """
+    if windows is None:
+        windows = sys.platform == "win32"
+    if not windows or not isinstance(argv, list) or not argv:
+        return argv
+    import ntpath
+
+    program = argv[0]
+    if ntpath.dirname(program) or ntpath.splitext(program)[1]:
+        return argv
+    found = shutil.which(program)
+    if found is None:
+        return argv
+    return [found, *argv[1:]]
+
+
 def _argv0(argv: list[str] | str) -> str:
     """The executable a spawn would have run — for the taught missing-tool
     error. A string argv is the Windows single-command-line spelling, where
@@ -2935,7 +2965,7 @@ def _run_subprocess(
     try:
         with _globals.internal():
             proc = subprocess.Popen(
-                argv,
+                _spawnable(argv),
                 env=env,
                 cwd=cwd,
                 # A fed child reads a pipe; otherwise stdin is inherited

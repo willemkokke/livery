@@ -1,4 +1,4 @@
-{"name": "cspell", "description": "", "kind": "bun-install", "min_version": "", "hosts": []}
+{"name": "cspell", "description": "", "kind": "npm", "runtime": "bun", "min_version": "", "hosts": []}
 {"version": "9.4.0", "date": "2025-12-01", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Spelling Checker for Code"}}
 {"verb": "", "help": "Spelling Checker for Code", "wraps": false, "positional": "any", "lead": ""}
 {"verb": "check", "help": "Spell check file(s) and display the result. The full file is displayed in color.", "wraps": false, "positional": "any", "lead": ""}
