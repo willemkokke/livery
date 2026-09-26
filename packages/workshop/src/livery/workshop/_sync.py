@@ -250,6 +250,28 @@ def _leave_merged_reserved(root: Path, git: GitOps, branch: str) -> None:
     teardown_branch(repo, git, branch, "main")
 
 
+def continue_on_moved_code(root: Path, before: str, after: str) -> bool:
+    """Hand the command to a fresh process when the checkout moved under it.
+
+    The modules this process imported are the checkout's old code;
+    what follows a move reads the new source, and a mixed process
+    fails on the first changed signature. The handoff re-runs the
+    same command through uv on the code now on disk. Returns False
+    when nothing moved; when the re-run cannot start it is named and
+    the command continues on the loaded code, which returns True.
+    """
+    if after == before:
+        return False
+    from livery.workshop import _reconcile
+
+    print(
+        f"  the checkout moved from {before[:12]} to {after[:12]}; the sync"
+        " continues on that code"
+    )
+    _reconcile._reexec(root)  # pyright: ignore[reportPrivateUsage]
+    return True
+
+
 def bring_current(root: Path, git: GitOps, *, interactive: bool) -> None:
     """Bring the current checkout up to date; the one-stop's first act.
 
@@ -333,6 +355,11 @@ def sync() -> None:
     layer's fragments, skills, and hooks, then ``uv sync`` so the
     environment agrees with ``uv.lock``. Idempotent: re-running it
     is the recovery procedure.
+
+    A checkout the first act moved holds code this process has not
+    loaded, so the rest of the sync is handed to a fresh process on
+    that code; the handoff is named, and a process that cannot be
+    started continues on the loaded code and says so.
     """
     from livery.workshop._git_ops import GitOps
     from livery.workshop._uv import run_uv
@@ -340,7 +367,10 @@ def sync() -> None:
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
-    bring_current(root, GitOps(root), interactive=footman.attended())
+    git = GitOps(root)
+    before = git.head_sha()
+    bring_current(root, git, interactive=footman.attended())
+    continue_on_moved_code(root, before, git.head_sha())
     for line in fetch_store_lines(root):
         print(line)
     for line in sync_workspace(root):

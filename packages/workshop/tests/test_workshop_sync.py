@@ -29,6 +29,36 @@ def test_sync_is_idempotent(tmp_path: Path) -> None:
     assert sync_workspace(root) == []  # the second has nothing
 
 
+def test_a_moved_checkout_hands_the_sync_to_a_fresh_process(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The rest of the sync runs on the code now on disk, or says why it cannot.
+
+    The modules loaded before the move are the old code.
+    """
+    from livery.workshop import _reconcile, _sync
+
+    # Nothing moved: no handoff, no note.
+    real_reexec = _reconcile._reexec
+    ran: list[object] = []
+    monkeypatch.setattr(_reconcile, "_reexec", lambda root: ran.append(root))
+    assert _sync.continue_on_moved_code(tmp_path, "a" * 40, "a" * 40) is False
+    assert ran == [] and capsys.readouterr().out == ""
+    # A re-run that cannot start is the reconcile's own note, and the
+    # sync carries on in this process.
+    monkeypatch.setenv("WORKSHOP_RECONCILE_REEXEC", "1")
+    monkeypatch.setattr(_reconcile, "_reexec", real_reexec)
+    assert _sync.continue_on_moved_code(tmp_path, "a" * 40, "b" * 40) is True
+    captured = capsys.readouterr()
+    assert "the checkout moved from aaaaaaaaaaaa to bbbbbbbbbbbb" in captured.out
+    assert "continuing on the loaded code" in captured.err
+    # A move hands over exactly once, to the re-run on the new code.
+    monkeypatch.delenv("WORKSHOP_RECONCILE_REEXEC")
+    monkeypatch.setattr(_reconcile, "_reexec", lambda root: ran.append(root))
+    assert _sync.continue_on_moved_code(tmp_path, "a" * 40, "b" * 40) is True
+    assert ran == [tmp_path]
+
+
 def test_the_stub_imports_guidance_first_then_the_instance(tmp_path: Path) -> None:
     root = _workspace(tmp_path)
     sync_workspace(root)
