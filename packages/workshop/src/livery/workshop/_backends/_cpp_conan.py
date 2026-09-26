@@ -14,6 +14,7 @@ import os
 import platform
 import re
 import shutil
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -607,7 +608,15 @@ def gate_build(package: Package, root: Path) -> None:
     del root
     build_dir = package.directory / GATE_BUILD_DIR
     cmake = tools.cmake.opts(cwd=package.directory)
-    cmake("-S", ".", "-B", str(build_dir), "-G", "Ninja")
+    cmake(
+        "-S",
+        ".",
+        "-B",
+        str(build_dir),
+        "-G",
+        "Ninja",
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+    )
     cmake("--build", str(build_dir))
 
 
@@ -670,10 +679,111 @@ def test(
         )
 
 
+#: Where a package keeps the sources the two clang tools read.
+SOURCE_DIRS = ("src", "include", "tests")
+
+
+def sources(package: Package) -> list[Path]:
+    """Every C and C++ file the package owns, sorted.
+
+    The two clang tools read the same set: what the package wrote,
+    never what a build wrote under `build/`.
+    """
+    found: list[Path] = []
+    for name in SOURCE_DIRS:
+        directory = package.directory / name
+        if not directory.is_dir():
+            continue
+        for suffix in (*TEST_SOURCES, ".hpp", ".h", ".hxx"):
+            found.extend(directory.rglob(f"*{suffix}"))
+    return sorted(found)
+
+
+def format_check(package: Package, *, fix: bool = False) -> None:
+    """Refuse a source clang-format would rewrite; *fix* rewrites it.
+
+    The style is the package's own `.clang-format`, seeded at birth
+    and edited there. The refusal names each file, because a person
+    fixes files, not a diff.
+
+    Raises:
+        Failed: when a file is not formatted, or clang-format exits
+            non-zero for a reason of its own.
+    """
+    files = sources(package)
+    if not files:
+        return
+    arguments = ["-i"] if fix else ["--dry-run", "--Werror"]
+    result = tools.clang_format.opts(
+        cwd=package.directory, nofail=True, recorded=False
+    )(*arguments, *(str(path) for path in files))
+    if result.code == 0:
+        return
+    unformatted = sorted(
+        {
+            line.split(":", 1)[0].strip()
+            for line in (result.stderr + result.stdout).splitlines()
+            if "code should be clang-formatted" in line
+        }
+    )
+    named = ", ".join(unformatted) or "no file named"
+    fail(
+        f"{package.name}: clang-format would rewrite {named}."
+        f" Run `{footman.prog()} check --fix` to apply the package's own"
+        " .clang-format."
+    )
+
+
+def _sdk_arguments() -> list[str]:
+    """What clang-tidy needs to find this platform's own headers.
+
+    The static build carries clang's own resource directory and
+    nothing else. On macOS the standard library lives inside the SDK,
+    whose path only xcrun knows. Linux keeps its headers where clang
+    already looks, and a Windows shell that has run the compiler's
+    environment carries them in INCLUDE.
+    """
+    if sys.platform != "darwin":
+        return []
+    found = footman.run(["xcrun", "--show-sdk-path"], nofail=True, recorded=False)
+    sdk = (found.stdout or "").strip()
+    return [f"--extra-arg=-isysroot{sdk}"] if found.code == 0 and sdk else []
+
+
+def lint(package: Package, root: Path) -> None:
+    """Run clang-tidy over the package's sources; a finding is a refusal.
+
+    The checks are the package's own `.clang-tidy`. clang-tidy reads
+    the compilation database the gate build exports, so the build
+    runs first and a package that has not configured is configured
+    here.
+
+    Raises:
+        Failed: when clang-tidy finds anything, with its own output.
+    """
+    files = sources(package)
+    database = package.directory / GATE_BUILD_DIR / "compile_commands.json"
+    if not files or not database.is_file():
+        return
+    result = tools.clang_tidy.opts(cwd=package.directory, nofail=True, recorded=False)(
+        "-p",
+        GATE_BUILD_DIR,
+        *_sdk_arguments(),
+        *(str(path) for path in files),
+    )
+    if result.code != 0:
+        fail(
+            f"{package.name}: clang-tidy found something:\n"
+            f"{result.stdout[-4000:]}{result.stderr[-2000:]}"
+        )
+
+
 def check(package: Package, root: Path) -> None:
-    """Configure, build, and ctest *package*; a refusal is the verdict."""
+    """Format, configure, build, ctest and lint; a refusal is the verdict."""
+    format_check(package)
     gate_build(package, root)
     test(package, root)
+    lint(package, root)
 
 
 def build(package: Package, root: Path, *, epoch: int = 0) -> Path:

@@ -10,12 +10,28 @@
       "version": "1.39.10",
       "hosts": {}
     },
+    "clang_format": {
+      "version": "20.1.0",
+      "hosts": {
+        "linux-x64": "sha256:78d7bfdf70e47857df1c019cc60ae776e600b1f7dd4641b34228fc58c41357ec",
+        "macos-arm": "sha256:44772a9414dfa2d8ca5ae824862de700fde9fc6ed21a34a367aba096776b8982",
+        "windows-x64": "sha256:891d9ee7ece8d367da6372cbf3a56d26ece5a3556bd2ce07e828458fad0278b4"
+      }
+    },
+    "clang_tidy": {
+      "version": "20.1.0",
+      "hosts": {
+        "linux-x64": "sha256:4691c0e68d116c67d0a5f1b16f1867597ed389908393d0499786df11c997c739",
+        "macos-arm": "sha256:986f2d9a1809c7fee8e54554284b478ea743b576cec8050df152e4e8c08ea249",
+        "windows-x64": "sha256:54c30a672ff5e495f64518720cb4192ddc587a9841fd065de1a3fb3bd23f52b4"
+      }
+    },
     "cmake": {
       "version": "4.4.2",
       "hosts": {
-        "linux-x64": "sha256:e5be2c40d2a287b47360026e1ff19b6163f4beb1eafe090724b3416497f30f96",
-        "macos-arm": "sha256:201ec153b6c98c8fe1cfe8a7c41d7dc20c3cc4ddf2798c254238c13777b0f8ff",
-        "windows-x64": "sha256:03d820fd1d4e16bf27e47b2cba51a07d0802bfc3223cc49768492d1998a90c18"
+        "linux-x64": "sha256:f16120a32e72f42703d153975e7bf4e716167dfcfccd8a6ec73a0d4754599210",
+        "macos-arm": "sha256:5b9a8e6abc40af11e6d50f00d011b33d5a7c736f6db07b1e0397a4a8d66059aa",
+        "windows-x64": "sha256:e0052c1180d154717e638cd82afc52704c472328ece20045e8d81a63fcee08af"
       }
     },
     "cmake_conan": {
