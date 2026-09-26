@@ -1741,6 +1741,29 @@ _WINDOWS = os.name == "nt"  # decided at import; a constant tests can steer
 GC_INTERVAL_S = 24 * 3600
 
 
+def _collect_after_run(cfg: dict[str, object], *, global_mode: bool) -> None:
+    """Schedule the cache collection for a finished run; never raises.
+
+    The skip stem is this invocation's own manifest, the working
+    directory's or the shared global one. A run that removed the tree
+    it ran from has no working directory left to read: `fm submit`
+    merges, deletes its worktree, and reaches this line standing in a
+    directory that is gone. Housekeeping after the work never changes
+    a finished run's verdict, so an `OSError` here skips the
+    collection, which the next run's stamp schedules again.
+    """
+    try:
+        stem = (
+            _paths.global_manifest_path().stem
+            if global_mode
+            else _paths.manifest_path(Path.cwd()).stem
+        )
+    except OSError:
+        return
+    with contextlib.suppress(OSError):
+        _maybe_collect(cfg, stem)
+
+
 def _maybe_collect(cfg: dict[str, object], skip_stem: str) -> None:
     """At most daily, and never on a fresh cache, spawn the collector.
 
@@ -1775,8 +1798,17 @@ def _maybe_collect(cfg: dict[str, object], skip_stem: str) -> None:
 def _spawn_gc(cache: Path, skip_stem: str) -> None:
     """Detach the collector child through `_complete.detach` — one copy of
     the background-child dance, where its Windows story is pinned by tests,
-    instead of the drift-prone verbatim twin this used to carry."""
-    from livery.footman import _complete
+    instead of the drift-prone verbatim twin this used to carry.
+
+    A background child never breaks the foreground that spawned it, and
+    that holds for the spawn itself: a run whose own installation is gone
+    by its end, a submit that removed the worktree it ran from, cannot
+    import the spawner and skips the collection, which the next run's
+    stamp schedules again."""
+    try:
+        from livery.footman import _complete
+    except ImportError:
+        return
 
     _complete.detach(
         [
@@ -2422,14 +2454,7 @@ def _execute(
     # After the run, so it never adds latency before the user's command —
     # and after the uv handoff by construction (the handoff replaced this
     # process back in _run), so a pinned project's own footman collects.
-    _maybe_collect(
-        cfg,
-        skip_stem=(
-            _paths.global_manifest_path().stem
-            if not found.root and not g.get("tasks_file")
-            else _paths.manifest_path(Path.cwd()).stem
-        ),
-    )
+    _collect_after_run(cfg, global_mode=not found.root and not g.get("tasks_file"))
     return code
 
 
