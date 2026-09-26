@@ -10,19 +10,11 @@
       "version": "1.39.10",
       "hosts": {}
     },
-    "bun": {
-      "version": "1.3.14",
-      "hosts": {
-        "linux-x64": "sha256:660f6f2521d6f3786a7c1a620343fa01434d0e251c7bf8b24e06f3b6c4bcfcdc",
-        "macos-arm": "sha256:e716f6c47b318882c4846b2e1ba8be36e3ef991866c9957d7a4a021a1512d855",
-        "windows-x64": "sha256:ea78f0bb8e0cd51dc97ec8c9ab371442bab10f30ae6b209d81f6e3e08dab21ea"
-      }
-    },
     "cmake": {
       "version": "4.4.2",
       "hosts": {
         "linux-x64": "sha256:47e345a66da2585104d18716274c026dec16167e573e55830df5db2363ffbf89",
-        "macos-arm": "sha256:80598a1728466e4ba8d663cd7f7a60d157eaaf3098fee0e5fd4d0d5a2308b845",
+        "macos-arm": "sha256:a94104c2b485a6ee890d1f7746685904e1615251c14d1d5c0b5a635979528e94",
         "windows-x64": "sha256:7172c01f69c8842b4668daf761a10650576010ef09175ac1bd87698932b46d1c"
       }
     },
@@ -49,6 +41,14 @@
     "mypy": {
       "version": "2.3.1",
       "hosts": {}
+    },
+    "node": {
+      "version": "24.21.0",
+      "hosts": {
+        "linux-x64": "sha256:1ff847019cc9032d6bf926681c20e72d03e4e877f8bad0fd8da429fdc441107d",
+        "macos-arm": "sha256:7409a66e3c45fe753143ce7ad614cd4dcd9386a1d1797f38e6d6129c69d3e740",
+        "windows-x64": "sha256:1089a35a475ad805d644484fea4cbae25b8af7fe3bd5b1933f13653315802b44"
+      }
     },
     "pyrefly": {
       "version": "1.3.1",

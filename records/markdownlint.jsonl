@@ -1,4 +1,4 @@
-{"name": "markdownlint", "description": "", "kind": "bun-install", "min_version": "", "hosts": []}
+{"name": "markdownlint", "description": "", "kind": "npm", "runtime": "bun", "min_version": "", "hosts": []}
 {"version": "0.18.1", "date": "2025-05-15", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": ""}}
 {"verb": "", "help": "", "wraps": false, "positional": "any", "lead": ""}
 {"verb": "", "option": "config", "flags": ["--config"], "negation": "", "help": "specifies the path to a configuration file to define the base configuration", "type": "str", "default": null, "choices": []}

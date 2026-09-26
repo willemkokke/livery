@@ -1,6 +1,7 @@
 """Record a version's release artifacts, one per host, by downloading them.
 
-A tool read from a forge tier has a release with one asset per host.
+A tool read from a forge tier has a release with one asset per host,
+and node publishes one build per host under its own release index.
 The record needs the asset's URL and its sha256 for every host before
 the store can supply the version, and the only honest hash is the hash
 of bytes the bench had: each asset is picked for its host from the
@@ -29,7 +30,11 @@ if TYPE_CHECKING:
     from livery.toolroom.store import Record, Store
 
 FORGE_TIERS = ("github", "gitlab", "gitea", "bun")
-"""The provision tiers whose releases publish per-host assets."""
+"""The provision tiers whose releases publish per-host assets on a forge."""
+
+ASSET_TIERS = (*FORGE_TIERS, "nodejs")
+"""Every tier a version's artifacts can be recorded from: the forges, and
+node's own release index."""
 
 
 class ArtifactError(Exception):
@@ -61,11 +66,16 @@ class Recorded:
 
 
 def forge_of(driver: Driver) -> str:
-    """The release host to list assets from, or empty for a package tier."""
+    """The forge to list assets from, or empty for a tier that is not a forge."""
     kind = driver.provision.kind
     if kind not in FORGE_TIERS:
         return ""
     return kind if kind in ("gitlab", "gitea") else "github"
+
+
+def lists_assets(driver: Driver) -> bool:
+    """Whether the driver's tier publishes per-host assets to record."""
+    return driver.provision.kind in ASSET_TIERS
 
 
 def _fetch(url: str) -> bytes:
@@ -101,15 +111,20 @@ def record_version(
     """
     from livery.toolroom.bench import _provision
 
-    forge = forge_of(driver)
-    if not forge:
+    if not lists_assets(driver):
         raise ArtifactError(
             f"{record.name} is read from the {driver.provision.kind!r} tier, which"
             " has no release assets to record; its installer supplies it"
         )
     if version not in {delta.version for delta in record.deltas}:
         raise ArtifactError(f"{record.name} does not track {version}")
-    assets = _assets(record.name, forge, driver.provision.repo, version, tag)
+    if driver.provision.kind == "nodejs":
+        from livery.toolroom.bench._toolfetch import nodejs_assets
+
+        assets = nodejs_assets(version)
+    else:
+        forge = forge_of(driver)
+        assets = _assets(record.name, forge, driver.provision.repo, version, tag)
     delta = record.delta_for(version)
     artifacts = dict(delta.artifacts)
     found: dict[str, tuple[str, int]] = {}

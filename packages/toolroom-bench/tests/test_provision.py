@@ -8,6 +8,7 @@ unpacking are exercised without installing anything or hitting the network.
 from __future__ import annotations
 
 import io
+import os
 import sys
 import tarfile
 import zipfile
@@ -160,14 +161,36 @@ def test_uv_tier_failure_is_a_fail_outcome(tmp_path, monkeypatch):
     assert out.status == "fail"
 
 
-def test_node_tier_fails_without_bun(tmp_path):
-    drivers = (Driver("cspell", provision=Provision(kind="node")),)
-    (out,) = _provision.provision(drivers, tmp_path)
-    assert out.status == "fail" and "bun" in out.detail
+def _fake_node(prefix: Path) -> Path:
+    """A node the nodejs tier would have unpacked, with npm's script beside it."""
+    root = prefix / ".nodejs" / "node" / "node-v24.0.0-x"
+    node = root / ("node.exe" if sys.platform == "win32" else "bin/node")
+    cli = (
+        root / "node_modules" / "npm" / "bin" / "npm-cli.js"
+        if sys.platform == "win32"
+        else root / "lib" / "node_modules" / "npm" / "bin" / "npm-cli.js"
+    )
+    for path in (node, cli):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("")
+    return node
 
 
-def test_node_tier_installs_through_bun(tmp_path, monkeypatch):
-    _provision.bin_dir(tmp_path).mkdir(parents=True)
+def test_node_tier_fails_without_node_and_names_bun_when_a_driver_needs_it(tmp_path):
+    drivers = (
+        Driver("basedpyright", provision=Provision(kind="node")),
+        Driver("cspell", provision=Provision(kind="node", runtime="bun")),
+    )
+    outcomes = _provision.provision(drivers, tmp_path)
+    assert all(o.status == "fail" and "node" in o.detail for o in outcomes)
+    _fake_node(tmp_path)
+    by_key = {o.key: o for o in _provision.provision(drivers, tmp_path)}
+    assert by_key["cspell"].status == "fail" and "bun" in by_key["cspell"].detail
+
+
+def test_node_tier_installs_through_each_runtime(tmp_path, monkeypatch):
+    node = _fake_node(tmp_path)
+    _provision.bin_dir(tmp_path).mkdir(parents=True, exist_ok=True)
     bun_name = "bun.exe" if sys.platform == "win32" else "bun"
     (_provision.bin_dir(tmp_path) / bun_name).write_text("#!/bin/sh\n")
     calls: list[tuple[list[str], dict[str, str]]] = []
@@ -178,53 +201,63 @@ def test_node_tier_installs_through_bun(tmp_path, monkeypatch):
 
     monkeypatch.setattr(_provision, "_run", fake_run)
     drivers = (
-        Driver("cspell", provision=Provision(kind="node")),
+        Driver("cspell", provision=Provision(kind="node", runtime="bun")),
         Driver(
-            "markdownlint-cli2", attr="markdownlint", provision=Provision(kind="node")
+            "markdownlint-cli2",
+            attr="markdownlint",
+            provision=Provision(kind="node", runtime="bun"),
         ),
+        Driver("basedpyright", provision=Provision(kind="node")),
     )
     outcomes = _provision.provision(drivers, tmp_path)
-    argv, env = calls[0]
-    assert argv[1:3] == ["add", "--global"]
-    assert argv[3:] == ["cspell", "markdownlint-cli2"]  # sorted, deduped
-    assert env["BUN_INSTALL"] == str(tmp_path)
     assert all(o.status == "ok" for o in outcomes)
+    on_node, on_bun = calls
+    assert on_node[0][:2] == [str(node), str(_provision.npm_cli(node))]
+    assert on_node[0][2:4] == ["install", "--global"]
+    assert on_node[0][-1] == "basedpyright"
+    assert on_bun[0][1:3] == ["add", "--global"]
+    assert on_bun[0][3:] == ["cspell", "markdownlint-cli2"]  # sorted, deduped
+    assert on_bun[1]["BUN_INSTALL"] == str(tmp_path)
+    assert on_bun[1]["PATH"].split(os.pathsep)[0] == str(_provision.bin_dir(tmp_path))
 
 
-def test_node_tier_leaves_a_node_beside_the_launchers(tmp_path, monkeypatch):
-    """The prefix has to be runnable by whoever puts it on PATH.
-
-    `bun add --global` writes launchers beginning `#!/usr/bin/env node`, and a
-    launcher spawned as a subprocess has its shebang resolved by the operating
-    system, with bun nowhere in the chain. Everything that reads the prefix
-    pays for that: `sync` on a node-less machine recorded cspell and
-    markdownlint as version `unknown`, and the reading sat at the floor of the
-    chain where `prime` could not walk past it.
+def test_nodejs_tier_unpacks_node_whole_and_links_it_into_bin(tmp_path, monkeypatch):
+    """The whole tree, since npm is a script node ships beside itself, and a
+    `node` beside the launchers for the ones the node tier writes.
     """
-    monkeypatch.setattr(_provision.shutil, "which", lambda _: None)  # no real node
-    _provision.bin_dir(tmp_path).mkdir(parents=True)
-    bun_name = "bun.exe" if sys.platform == "win32" else "bun"
-    bun = _provision.bin_dir(tmp_path) / bun_name
-    bun.write_text("#!/bin/sh\n")
-    monkeypatch.setattr(_provision, "_run", lambda argv, env: True)
-    _provision.provision(
-        (Driver("cspell", provision=Provision(kind="node")),), tmp_path
+    from livery.toolroom.bench import _toolfetch
+
+    payload = io.BytesIO()
+    root = "node-v24.0.0-darwin-arm64"
+    with tarfile.open(fileobj=payload, mode="w:gz") as tar:
+        for name, data in (
+            (f"{root}/bin/node", b"#!/bin/sh\necho node\n"),
+            (f"{root}/lib/node_modules/npm/bin/npm-cli.js", b"// npm\n"),
+        ):
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            info.mode = 0o755
+            tar.addfile(info, io.BytesIO(data))
+    archive = tmp_path / "node-v24.0.0-darwin-arm64.tar.gz"
+    archive.write_bytes(payload.getvalue())
+    monkeypatch.setattr(
+        _toolfetch, "releases", lambda driver: [_toolfetch.Release("24.0.0", "v24.0.0")]
     )
-
-    shim_name = "node.cmd" if sys.platform == "win32" else "node"
-    shim = _provision.bin_dir(tmp_path) / shim_name
-    assert shim.exists(), "a prefix with node tools must carry a node"
-    assert str(bun) in shim.read_text()
-    assert "--bun" in shim.read_text()
-
-
-def test_no_node_shim_where_a_real_node_exists(tmp_path, monkeypatch):
-    """A machine with node keeps using it — the shim is a stand-in, not a
-    preference, and shadowing the real thing would change what is read.
-    """
-    monkeypatch.setattr(_provision.shutil, "which", lambda _: "/usr/bin/node")
-    assert _provision.write_node_shim(tmp_path, Path("/somewhere/bun")) is None
-    assert not (tmp_path / "node").exists()
+    monkeypatch.setattr(_provision, "_pick_asset", lambda assets, host="": assets[0])
+    monkeypatch.setattr(_provision, "_download", lambda url, prefix: archive)
+    (out,) = _provision.provision(
+        (Driver("node", provision=Provision(kind="nodejs")),), tmp_path
+    )
+    assert out.status == "ok" and out.detail == "24.0.0"
+    node = _provision.provisioned_node(tmp_path)
+    assert node is not None and node.parent.parent.name == root
+    assert _provision.npm_cli(node).is_file()
+    link = _provision.bin_dir(tmp_path) / (
+        "node.cmd" if sys.platform == "win32" else "node"
+    )
+    assert link.exists()
+    # The node tier now runs on it.
+    assert _provision.provisioned_node(tmp_path) == node
 
 
 # --- asset selection ---------------------------------------------------------

@@ -55,11 +55,13 @@ from livery.toolroom.store import (
     LOCK_FILE,
     MODES,
     POINTER,
+    RUNTIMES,
     Catalogue,
     CatalogueError,
     Deployment,
     Ensured,
     Home,
+    Listed,
     Lock,
     LockError,
     Requirement,
@@ -229,7 +231,7 @@ def write_lock(root: Path, *, upgrade: tuple[str, ...] = ()) -> Lock:
     try:
         lock = resolve_lock(
             listing,
-            with_bun(tuple(requirements(root)), listing),
+            with_runtimes(tuple(requirements(root)), listing),
             hosts=locked_hosts(root),
             keep=current_lock(root),
             upgrade=upgrade,
@@ -240,27 +242,39 @@ def write_lock(root: Path, *, upgrade: tuple[str, ...] = ()) -> Lock:
     return lock
 
 
-def with_bun(
+def runtime_of(listed: Listed) -> str:
+    """The runtime an `npm` tool runs on: its record's, node unless it says bun.
+
+    Empty for every other kind, which runs on nothing the lock supplies.
+    """
+    if listed.kind != "npm":
+        return ""
+    return listed.runtime or "node"
+
+
+def with_runtimes(
     found: tuple[Requirement, ...], listing: Catalogue
 ) -> tuple[Requirement, ...]:
-    """*found*, plus bun when a `bun-install` tool is among them and nothing names bun.
+    """*found*, plus each runtime a tool among them runs on and nothing names.
 
-    A `bun-install` tool is installed by bun, so bun is its dependency
-    and the lock holds it as such: the site named is the tool that
-    needs it. A requirement the catalogue does not list is left for
-    the resolver to refuse by name.
+    An `npm` tool is installed through its runtime and runs on it, so
+    the runtime is the tool's dependency and the lock holds it as
+    such: the site named is the first tool that needs it. A
+    requirement the catalogue does not list is left for the resolver
+    to refuse by name.
     """
-    if any(requirement.name == "bun" for requirement in found):
-        return found
+    named = {requirement.name for requirement in found}
+    added: list[Requirement] = []
     for requirement in found:
         try:
-            kind = listing.listed(requirement.name).kind
+            runtime = runtime_of(listing.listed(requirement.name))
         except CatalogueError:
             continue
-        if kind == "bun-install":
-            site = f"{requirement.name} (bun-install)"
-            return (*found, Requirement.parse("bun", site=site))
-    return found
+        if not runtime or runtime in named:
+            continue
+        named.add(runtime)
+        added.append(Requirement.parse(runtime, site=f"{requirement.name} (npm)"))
+    return (*found, *added)
 
 
 def declare(root: Path, text: str) -> bool:
@@ -404,20 +418,25 @@ class Receipt:
             raise ValueError(f"{path}: not a receipt ({error})") from None
 
 
-def _bun_first(
+def _runtimes_first(
     wanted: tuple[str, ...], lock: Lock, listing: Catalogue
 ) -> tuple[str, ...]:
-    """*wanted* with bun ahead of any `bun-install` tool, joined when the lock holds it.
+    """*wanted* with each runtime ahead of the tools that run on it.
 
-    A `bun-install` tool is installed through bun's executable, so bun
-    is supplied first and its path handed on; a bun the lock holds
-    joins a narrowed *wanted* that names such a tool without it.
+    An `npm` tool is installed through its runtime's executable, so the
+    runtime is supplied first and its path handed on; a runtime the
+    lock holds joins a narrowed *wanted* that names such a tool without
+    it.
     """
-    needs_bun = any(listing.listed(name).kind == "bun-install" for name in wanted)
-    if not needs_bun:
+    needed: list[str] = []
+    for name in wanted:
+        runtime = runtime_of(listing.listed(name))
+        if runtime and runtime not in needed:
+            needed.append(runtime)
+    if not needed:
         return wanted
-    rest = tuple(name for name in wanted if name != "bun")
-    return ("bun", *rest) if "bun" in lock.tools else rest
+    rest = tuple(name for name in wanted if name not in needed)
+    return (*(runtime for runtime in needed if runtime in lock.tools), *rest)
 
 
 def receipts_dir(root: Path) -> Path:
@@ -529,7 +548,9 @@ def materialise(
     the refusal names the site whose floor it is under. Tools in
     `link` mode are linked into the checkout's bin directory together,
     so a name two tools offer goes to the first. A receipt is written
-    per tool supplied.
+    per tool supplied, and on a materialise of the whole bundle the
+    receipt of a tool the lock no longer holds is removed, so its
+    paths leave the environment with it.
 
     Raises a refusal naming the tool when the lock does not hold it.
     A tool the store cannot supply refuses too, naming the reason,
@@ -554,8 +575,8 @@ def materialise(
     floors = site_floors(root)
     done: list[Materialised] = []
     linked: list[tuple[Receipt, Ensured]] = []
-    wanted = _bun_first(wanted, lock, listing)
-    bun_exe: Path | None = None
+    wanted = _runtimes_first(wanted, lock, listing)
+    runtimes: dict[str, Path] = {}
     for name in wanted:
         locked = lock.tools[name]
         listed = listing.listed(name)
@@ -579,7 +600,8 @@ def materialise(
                 deployment,
                 package=listed.package,
                 min_version=floor,
-                bun=bun_exe,
+                runtime=listed.runtime,
+                runtime_exe=runtimes.get(runtime_of(listed)),
             )
         except StoreError as error:
             reason = str(error)
@@ -589,8 +611,8 @@ def materialise(
                 fail(reason)
             done.append(Materialised(None, False, reason))
             continue
-        if name == "bun" and ensured.deployment.entry_points:
-            bun_exe = ensured.tool_dir / ensured.deployment.entry_points[0]
+        if name in RUNTIMES and ensured.deployment.entry_points:
+            runtimes[name] = ensured.tool_dir / ensured.deployment.entry_points[0]
         mode = mode_of(root, name, listed.kind, listed.mode)
         receipt = Receipt(
             name,
@@ -619,6 +641,13 @@ def materialise(
         path.write_text(
             json.dumps(made.receipt.to_json(), indent=2) + "\n", encoding="utf-8"
         )
+    if not names:
+        # A tool that left the lock leaves the environment: a receipt
+        # kept past its tool would keep the tool's directory on PATH
+        # ahead of whatever replaced it.
+        for stale in receipts_dir(root).glob("*.json"):
+            if stale.stem not in lock.tools:
+                stale.unlink()
     return tuple(done)
 
 

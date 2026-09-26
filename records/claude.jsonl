@@ -1,4 +1,4 @@
-{"name": "claude", "description": "", "kind": "bun-install", "min_version": "", "hosts": []}
+{"name": "claude", "description": "", "kind": "npm", "runtime": "bun", "min_version": "", "hosts": []}
 {"version": "2.1.226", "date": "2026-08-09", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Claude Code - starts an interactive session by default, use -p/--print for"}}
 {"verb": "", "help": "Claude Code - starts an interactive session by default, use -p/--print for", "wraps": false, "positional": "any", "lead": ""}
 {"verb": "", "option": "add_dir", "flags": ["--add-dir"], "negation": "", "help": "Additional directories to allow tool access to", "type": "str", "default": null, "choices": []}

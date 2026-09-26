@@ -44,7 +44,7 @@ def _read(*versions: str) -> tuple[RecordDelta, ...]:
 
 
 def _bun(*versions: str) -> Record:
-    """bun, the archive a bun-install tool is installed through, on the three hosts."""
+    """bun, the archive an npm tool naming it runs on, on the three hosts."""
     return Record(
         "bun",
         kind="archive",
@@ -57,6 +57,28 @@ def _bun(*versions: str) -> Record:
                 "",
                 {
                     host: Artifact(f"https://x/bun/{v}/{host}.zip", SHA)
+                    for host in THREE
+                },
+            )
+            for n, v in enumerate(versions, start=1)
+        ),
+    )
+
+
+def _node(*versions: str) -> Record:
+    """node, the archive an npm tool runs on by default, on the three hosts."""
+    return Record(
+        "node",
+        kind="archive",
+        hosts=THREE,
+        layout=Layout(entry_points=("bin/node",), paths=("bin",)),
+        deltas=tuple(
+            RecordDelta(
+                n,
+                v,
+                "",
+                {
+                    host: Artifact(f"https://x/node/{v}/{host}.tar.gz", SHA)
                     for host in THREE
                 },
             )
@@ -261,7 +283,7 @@ def test_the_three_sites_union_and_each_names_itself(
     _records(
         root,
         Record("git-cliff", kind="uv-tool", deltas=_read("2.0.0")),
-        Record("cspell", kind="bun-install", deltas=_read("1.0.0", "2.0.0")),
+        Record("cspell", kind="npm", runtime="bun", deltas=_read("1.0.0", "2.0.0")),
         _bun("1.3.0"),
     )
     sites = {(r.name, r.site) for r in _tools.requirements(root)}
@@ -401,7 +423,9 @@ def test_a_tool_no_site_requires_any_more_leaves_the_lock(
 ) -> None:
     root = _workspace(tmp_path, monkeypatch, tools='requires = ["cspell"]\n')
     _records(
-        root, Record("cspell", kind="bun-install", deltas=_read("2.0.0")), _bun("1.3.0")
+        root,
+        Record("cspell", kind="npm", runtime="bun", deltas=_read("2.0.0")),
+        _bun("1.3.0"),
     )
     locked = _tools.write_lock(root).tools
     assert "cspell" in locked and "bun" in locked
@@ -409,6 +433,32 @@ def test_a_tool_no_site_requires_any_more_leaves_the_lock(
     locked = _tools.write_lock(root).tools
     # bun leaves with the tool it was locked for.
     assert "cspell" not in locked and "bun" not in locked
+
+
+def test_each_runtime_is_locked_once_for_the_tools_that_run_on_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _workspace(
+        tmp_path, monkeypatch, tools='requires = ["cspell", "basedpyright", "eslint"]\n'
+    )
+    _records(
+        root,
+        Record("cspell", kind="npm", runtime="bun", deltas=_read("2.0.0")),
+        Record("basedpyright", kind="npm", deltas=_read("1.39.0")),
+        Record("eslint", kind="npm", deltas=_read("9.0.0")),
+        _bun("1.3.0"),
+        _node("24.0.0"),
+    )
+    locked = _tools.write_lock(root).tools
+    # Both runtimes, each once: node serves two tools, bun one.
+    assert {"cspell", "basedpyright", "eslint", "bun", "node"} <= set(locked)
+    (root / "workshop.toml").write_text(
+        '[workspace]\n\n[tools]\nindex = "records"\nrequires = ["eslint"]\n'
+    )
+    locked = _tools.write_lock(root).tools
+    # bun leaves with the tool it was locked for; node stays, since the
+    # python kind's basedpyright still runs on it.
+    assert "bun" not in locked and "cspell" not in locked and "node" in locked
 
 
 def test_the_catalogue_reads_an_index_directory_through_the_machines_store(

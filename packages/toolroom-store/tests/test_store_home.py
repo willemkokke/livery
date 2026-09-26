@@ -24,7 +24,7 @@ def test_the_home_lays_out_its_directories_and_opens_its_store_twice(
     home = Home(tmp_path / "home")
     assert home.tools == home.root / "tools"
     assert home.tool_dir("bun", "1.3.14") == home.root / "tools" / "bun@1.3.14"
-    assert home.uv == home.root / "uv" and home.bun == home.root / "bun"
+    assert home.uv == home.root / "uv" and home.npm == home.root / "npm"
     first = home.open_store()
     assert (home.store / "strongroom.json").is_file()
     assert set(first.namespaces) >= {TOOLS, URLS}

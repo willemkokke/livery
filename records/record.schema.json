@@ -96,7 +96,7 @@
             "binary",
             "uv-tool",
             "uv-python",
-            "bun-install",
+            "npm",
             "system-check"
           ],
           "default": "archive"
@@ -104,6 +104,13 @@
         "package": {
           "type": "string",
           "default": ""
+        },
+        "runtime": {
+          "type": "string",
+          "enum": [
+            "node",
+            "bun"
+          ]
         },
         "mode": {
           "type": "string",

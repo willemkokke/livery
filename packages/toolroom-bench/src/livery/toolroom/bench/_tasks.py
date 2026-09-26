@@ -328,50 +328,13 @@ def _sandboxed(scratch: Path) -> Generator[None]:
     on purpose and throttling it to save disk would be paying for the same
     space with wall-clock.
     """
-    shims = _node_shim(scratch)
     values = {
         "UV_CACHE_DIR": str(scratch / "cache"),
         "UV_PYTHON_INSTALL_DIR": str(scratch / "pythons"),
         "UV_NO_CACHE": "1",
     }
-    if shims is not None:
-        import os
-
-        values["PATH"] = f"{shims}{os.pathsep}{os.environ.get('PATH', '')}"
     with _overlay(**values):
         yield
-
-
-def _node_shim(scratch: Path) -> Path | None:
-    """A `node` that is really bun, for the duration of the walk.
-
-    The npm tier installs through bun, and bun runs the packages — but what
-    it *installs* is a launcher beginning `#!/usr/bin/env node`. Nothing in a
-    provisioned prefix answers to that name: bun stands in for node when bun
-    itself runs a script, and the extractor spawns the launcher as a
-    subprocess, where the shebang is resolved by the operating system with
-    bun nowhere in the chain.
-
-    So on a machine without node the whole tier reads as prose — a Linux box
-    observed twelve cspell releases and eleven markdownlint releases as
-    `/usr/bin/env: 'node': No such file or directory`. A CI runner has no
-    node either, which would have cost the weekly matrix those two tools on
-    every leg, on every platform, indefinitely.
-
-    The shim lives in the scratch directory, so it goes when the walk does.
-    `provision` writes the same one into the prefix it builds, which is what
-    covers the readers that never open a scratch directory at all — `sync`
-    among them, where the omission used to cost a poisoned chain.
-    """
-    import shutil
-
-    from livery.toolroom.bench._provision import write_node_shim
-
-    bun = shutil.which("bun")
-    if bun is None:
-        return None
-    shims = scratch / "shims"
-    return shims if write_node_shim(shims, Path(bun)) is not None else None
 
 
 def _windows() -> bool:
@@ -442,6 +405,7 @@ def _observe(driver: _drivers.Driver, spec: ToolSpec) -> Record:
             surface=surface,
             platforms=[_platform()],
             prime=driver.provision.floor,
+            runtime=driver.provision.runtime,
         )
     elif version in record.versions:
         # A reading of a version the record already holds: a re-sync on
@@ -1672,7 +1636,7 @@ def _assemble_documents(documents: list[dict[str, Any]]) -> Refreshed:
         record, fresh, touched = _fold_into(record, versions, meta[tool])
         if fresh:
             read[tool] = fresh
-            if _artifacts.forge_of(driver) and not driver.base:
+            if _artifacts.lists_assets(driver) and not driver.base:
                 # A verb-bound view (`ruff_format`) reads another driver's
                 # binary; that driver's record carries the artifacts.
                 record, lines = _record_artifacts(record, driver, fresh, meta[tool])
@@ -2204,14 +2168,19 @@ def _curated(only: str, fetch: ModuleType) -> tuple[list[_drivers.Driver], list[
                 else f"{driver.key} (hand-written)"
             )
             continue
-        if driver.provision.kind == "node" and shutil.which("bun") is None:
-            # The same distinction, one tier over. bun is how the node tier
-            # installs, so without it *every* release of every node tool
-            # fails to install — and each failure was recorded as a hole,
-            # which says those releases could not be had. A macOS gather
-            # reported 23 of them across cspell and markdownlint; with bun
-            # in a prefix the same walk read all 23 with none missing.
-            skipped.append(f"{driver.key} (no bun to install with)")
+        if driver.provision.kind == "node" and (
+            shutil.which("node") is None
+            or (driver.provision.runtime == "bun" and shutil.which("bun") is None)
+        ):
+            # The same distinction, one tier over. A node-tier package is
+            # installed through its runtime and its launcher runs on node,
+            # so without them *every* release of the tool fails to install,
+            # and each failure was recorded as a hole, which says those
+            # releases could not be had. A macOS gather reported 23 of them
+            # across cspell and markdownlint; with the runtime in a prefix
+            # the same walk read all 23 with none missing.
+            missing = "node" if shutil.which("node") is None else "bun"
+            skipped.append(f"{driver.key} (no {missing} to install with)")
             continue
         if driver.provision.kind == "man" and shutil.which("man") is None:
             # The pages are the reading, and rendering them takes `man`.
@@ -2580,76 +2549,6 @@ def _discard(bindir: Path) -> None:
 index_tasks = tasks.group("index", help="The published index of the tool records")
 
 
-def convert_records(root: Path, *, primes: dict[str, str] | None = None) -> list[str]:
-    """Rewrite every directory record under *root* as its line form; the lines.
-
-    Each directory converts through the bench's own writer, the proof
-    compares every version's surface, absences, date, platforms and
-    extractor before and after, byte for byte through the canonical
-    encoding, and the directory goes only when they agree. *primes*
-    names the `prime` to stamp per tool. A tree with no directory
-    record is left alone, so a second run does nothing.
-
-    Raises:
-        Failed: naming the tool and the version, when a version does
-            not resolve the same after the conversion.
-    """
-    from livery.strongroom import canonical
-    from livery.toolroom.bench import _legacy
-    from livery.toolroom.store import Record, observations
-
-    directories = sorted(p for p in root.iterdir() if _legacy.is_directory_record(p))
-    lines: list[str] = []
-    for directory in directories:
-        name = directory.name
-        _, _, resolved = _legacy.read_directory(directory)
-        record = _legacy.convert(directory, prime=(primes or {}).get(name, ""))
-        record.save(root)
-        after = observations(Record.load(root / f"{name}{RECORD_SUFFIX}"))
-        before = [found for found in resolved if found is not None]
-        if len(before) != len(after):
-            fail(
-                f"{name}: {len(before)} version(s) read before the conversion,"
-                f" {len(after)} after"
-            )
-        for was, now in zip(before, after, strict=True):
-            if was.version != now.version or canonical(
-                {
-                    "date": was.date,
-                    "platforms": list(was.platforms),
-                    "extractor": was.extractor,
-                    "help": was.help,
-                    "verbs": was.verbs,
-                    "absent": {
-                        v: {o: list(w) for o, w in os.items()}
-                        for v, os in was.absent.items()
-                    },
-                }
-            ) != canonical(
-                {
-                    "date": now.date,
-                    "platforms": list(now.platforms),
-                    "extractor": now.extractor,
-                    "help": now.help,
-                    "verbs": now.verbs,
-                    "absent": {
-                        v: {o: list(w) for o, w in os.items()}
-                        for v, os in now.absent.items()
-                    },
-                }
-            ):
-                fail(f"{name} {was.version}: resolves differently after the conversion")
-        shutil.rmtree(directory)
-        lines.append(
-            f"  {name}: {len(after)} version(s) agree, {len(record.deltas)} tracked"
-        )
-    if directories:
-        lines.append(f"  {len(directories)} of {len(directories)} agree")
-    else:
-        lines.append("  nothing to convert: every record is a file")
-    return lines
-
-
 @tasks.task(name="verify")
 def tools_verify(
     tool: Annotated[str, doc("the curated tool, as its record is named")],
@@ -2717,7 +2616,7 @@ def tools_artifacts(
     if not chosen:
         fail(f"{tool} has no version; read one first")
     tag = ""
-    if _artifacts.forge_of(driver):
+    if _artifacts.lists_assets(driver):
         tag = next(
             (r.tag for r in _toolfetch.releases(driver) if r.version == chosen), ""
         )
@@ -2736,28 +2635,6 @@ def tools_artifacts(
         print(line)
     if not report.passed:
         fail(f"{tool} {chosen}: {len(report.findings)} finding(s)")
-
-
-@tasks.task(name="convert-records")
-def tools_convert_records() -> None:
-    """Rewrite each `records/<tool>/` directory as `records/<tool>.jsonl`, once.
-
-    The proof prints per tool: every version resolves to the same
-    surface, absences and date afterwards, or the run is red naming the
-    version. A tree already converted does nothing. `prime` is stamped
-    from the driver's provision floor where one is declared, and the
-    schema beside the records is written afresh either way.
-    """
-    from livery.toolroom.store import export_schema
-
-    primes = {
-        driver.key: driver.provision.floor
-        for driver in _drivers.DRIVERS
-        if driver.provision.floor
-    }
-    for line in convert_records(_records_dir(), primes=primes):
-        print(line)
-    export_schema(_records_dir() / "record.schema.json")
 
 
 @index_tasks.task(name="build")
@@ -2819,18 +2696,33 @@ def golden_path(record: Record, version: str) -> Path:
 def goldens(
     check: Annotated[bool, doc("report what differs instead of writing")] = False,
 ) -> dict[str, list[str]]:
-    """Render the golden records and write the golden stubs beside the store's tests.
+    """Render the golden records, the golden stubs and the records' schema.
 
     A golden is a small record shaped to exercise the renderer, and its
     stub at every version is checked in, rendered as a consumer renders
     the version it locks. The test compares each render with its golden
     byte for byte, so a change to the renderer fails the gate until this
     verb moves the goldens in the same change, which is what keeps a
-    render change deliberate. `--check` names what would move and
+    render change deliberate. `records/record.schema.json` is the same
+    kind of file, exported from the record's shape and compared by a
+    test, so it moves here too. `--check` names what would move and
     writes nothing.
     """
+    from livery.toolroom.store import export_schema
+
     wrote: list[str] = []
     unchanged: list[str] = []
+    schema = _records_dir() / "record.schema.json"
+    scratch = schema.with_name("record.schema.json.new")
+    export_schema(scratch)
+    fresh = scratch.read_text(encoding="utf-8")
+    scratch.unlink()
+    if schema.is_file() and schema.read_text(encoding="utf-8") == fresh:
+        unchanged.append("record schema")
+    else:
+        if not check:
+            schema.write_text(fresh, encoding="utf-8")
+        wrote.append("record schema")
     catalogue = Catalogue.of_records(_GOLDENS / "records")
     for record in golden_records():
         for version in _surfaces.versions(record):
