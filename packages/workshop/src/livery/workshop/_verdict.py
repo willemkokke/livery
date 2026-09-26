@@ -26,6 +26,7 @@ pull request reads as 16 and the message says what to check.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -147,18 +148,36 @@ def _failing_job(repo: Repository, head_sha: str) -> str:
 _GREEN_CONCLUSIONS = ("", "success", "skipped", "neutral")
 
 
+def elapsed_label(seconds: float) -> str:
+    """*seconds* as a person reads a wait: `37s`, `4m12s`, `1h02m`."""
+    whole = int(seconds)
+    if whole < 60:
+        return f"{whole}s"
+    if whole < 3600:
+        return f"{whole // 60}m{whole % 60:02d}s"
+    return f"{whole // 3600}h{whole % 3600 // 60:02d}m"
+
+
 class JobWatch:
-    """The jobs of a head's runs, reported as they move.
+    """The jobs of a head's runs, reported as they move, each line stamped.
 
     Each report reads every run for the head and the jobs of each,
     prints one line per job whose status or conclusion changed since
     the last report, and under a job that just failed the log's
     failure lines, when the forge already has the log. A report that
-    finds nothing moved prints nothing.
+    finds nothing moved prints nothing. Every line opens with the time
+    since the watch began, so a log read later shows where the minutes
+    went; *clock* is the seam a test hands a clock of its own to.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
         self.seen: dict[tuple[str, str], str] = {}
+        self._clock = clock
+        self._started = clock()
+
+    def stamp(self) -> str:
+        """The elapsed time since the watch began, padded for a line's head."""
+        return f"  {elapsed_label(self._clock() - self._started):>6}  "
 
     def report(self, repo: Repository, head_sha: str) -> list[str]:
         """Print and return the lines for what moved since the last report."""
@@ -173,25 +192,26 @@ class JobWatch:
                     continue
                 self.seen[key] = state
                 word = {"failure": "failed", "in_progress": "running"}.get(state, state)
-                lines.append(
-                    f"  {run.workflow.rsplit('/', 1)[-1]} / {job.name}: {word}"
-                )
+                stamp = self.stamp()
+                workflow = run.workflow.rsplit("/", 1)[-1]
+                lines.append(f"{stamp}{workflow} / {job.name}: {word}")
                 if job.conclusion not in _GREEN_CONCLUSIONS:
-                    lines += _failure_excerpt(repo, job.id)
+                    pad = " " * len(stamp)
+                    lines += [pad + line for line in _failure_excerpt(repo, job.id)]
         for line in lines:
             print(line)
         return lines
 
 
 def _failure_excerpt(repo: Repository, job_id: int, *, limit: int = 12) -> list[str]:
-    """The failure lines of a job's log, indented; nothing while the log is unstored."""
+    """The failure lines of a job's log; nothing while the log is unstored."""
     from livery.workshop._ci_tasks import failure_lines
 
     try:
         log = repo.checks.job_log(job_id)
     except ForgeError:
         return []
-    return [f"    {line}" for line in failure_lines(log, limit=limit)]
+    return failure_lines(log, limit=limit)
 
 
 def _head_of(repo: Repository, branch: str) -> str:
@@ -441,7 +461,7 @@ def follow(
             continue
         transient.reset()
         if verdict.state != last_state:
-            print(f"  {verdict.state}: {verdict.detail}")
+            print(f"{jobs.stamp()}{verdict.state}: {verdict.detail}")
             last_state = verdict.state
             confirm_streak = 0
         if verdict.state == "merged":

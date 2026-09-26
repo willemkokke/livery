@@ -557,7 +557,7 @@ def runs_status_flow(
         for run in runs:
             if seen_runs.get(run.id) != (run.conclusion or run.status):
                 seen_runs[run.id] = run.conclusion or run.status
-                print(_run_line(run))
+                print(jobs.stamp() + _run_line(run).lstrip())
         if not point:
             jobs.report(repo, sha)
         word, code = runs_state(runs)
