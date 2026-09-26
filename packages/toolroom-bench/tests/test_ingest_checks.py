@@ -296,7 +296,7 @@ def test_the_verify_verb_prints_the_report_and_is_red_on_a_finding(
     # A tool never downloaded has nothing to stage.
     read = Surface(("Linux",), 1, "Bare.", {"": _root_verb()})
     Record(
-        "bare", kind="uv-tool", deltas=(RecordDelta(1, "1.0.0", "", surface=read),)
+        "bare", kind="pypi", deltas=(RecordDelta(1, "1.0.0", "", surface=read),)
     ).save(records)
     with pytest.raises((Failed, SystemExit), match=r"bare has no version with a host"):
         _tasks.tools_verify("bare")

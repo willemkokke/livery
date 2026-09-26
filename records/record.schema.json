@@ -101,8 +101,8 @@
           "type": "string",
           "enum": [
             "download",
-            "uv-tool",
-            "uv-python",
+            "pypi",
+            "python",
             "npm",
             "system-check"
           ],

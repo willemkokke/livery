@@ -158,7 +158,7 @@ elsewhere.
 `supply` is the primitive `ensure` stands on: a tool by name, kind,
 version and deployment, which is what a consumer holds after reading
 the catalogue. The delegated kinds go through their installer rather
-than the objects. A `uv-tool` is installed by uv at the locked version
+than the objects. A `pypi` tool is installed by uv at the locked version
 into a directory of its own under the home, the record's `package`
 naming what uv installs when it differs from the tool's name, and its
 launchers under `bin` are its entry points. An `npm` tool is installed
@@ -172,7 +172,7 @@ is refused naming where it points. A `system-check` tool is the
 machine's own, found on PATH and held to the record's `min_version`
 alone, since its locked version is the newest reading the stubs render
 for and not a version anyone installs, and the store installs nothing
-for it. `uv-python` refuses naming the kind until it is supplied the
+for it. `python` refuses naming the kind until it is supplied the
 same way. A delegated tool has no tree.
 
 A record's `mode` says how a materialised tool reaches PATH: `link`

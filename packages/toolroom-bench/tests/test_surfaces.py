@@ -1291,7 +1291,7 @@ def test_the_record_holds_only_absences_that_were_observed():
     with pytest.raises(RecordError, match=r"absent names Linux, which did not read"):
         history("demo", ("1.0.0", "2026-01-01", reading("quiet"), ["macOS"])).__class__(
             "demo",
-            kind="uv-tool",
+            kind="pypi",
             deltas=(
                 _surfaces.RecordDelta(
                     1,

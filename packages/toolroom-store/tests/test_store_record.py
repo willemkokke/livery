@@ -167,7 +167,7 @@ def test_a_version_whose_host_resolves_incomplete_is_refused() -> None:
         _record(deltas=(_delta(hosts=()),))
     with pytest.raises(RecordError, match=r"a layout for a version with no host"):
         _record(
-            kind="uv-tool",
+            kind="pypi",
             layout=Layout(),
             deltas=(_delta(hosts=(), layout=Layout(root="r")),),
         )
@@ -186,7 +186,7 @@ def test_a_mode_outside_the_three_is_refused_and_the_kinds_default_by_shape(
     assert default_mode("download", ("bin",)) == "path"
     assert default_mode("download") == "none"
     assert default_mode("system-check") == "none"
-    assert {default_mode(k) for k in ("uv-tool", "npm")} == {"path"}
+    assert {default_mode(k) for k in ("pypi", "npm")} == {"path"}
     # A runtime is an npm record's, one of the two, written after the package.
     npm: dict[str, object] = {"kind": "npm", "hosts": (), "deltas": ()}
     with pytest.raises(RecordError, match=r"runtime 'deno' is not one of node, bun"):
@@ -203,7 +203,7 @@ def test_a_mode_outside_the_three_is_refused_and_the_kinds_default_by_shape(
     # The package and the mode ride the tool axis, written only when set.
     bare = _record()
     assert "package" not in bare.to_json() and "mode" not in bare.to_json()
-    told = _record(kind="uv-tool", package="the-dist", mode="link")
+    told = _record(kind="pypi", package="the-dist", mode="link")
     told.save(tmp_path)
     loaded = Record.load(tmp_path / "tool.jsonl")
     assert (loaded.package, loaded.mode) == ("the-dist", "link")
@@ -284,7 +284,7 @@ def test_every_json_shape_outside_the_model_is_refused_naming_where() -> None:
 
 def test_a_statement_line_off_its_place_or_shape_is_refused_naming_the_line() -> None:
     """The refusals of the line form: place, shape, and a thing stated twice."""
-    axis = {"name": "t", "kind": "uv-tool", "hosts": []}
+    axis = {"name": "t", "kind": "pypi", "hosts": []}
     read = {
         "version": "1",
         "read": {"platforms": ["Linux"], "extractor": 1, "help": "T"},

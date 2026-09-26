@@ -129,8 +129,8 @@ def test_a_host_no_spec_names_and_a_delegated_kind_are_refused(home: Home) -> No
         Store(home, host="plan9-mips")
     store = Store(home, host=HOST)
     artifacts, _ = _tool()
-    delegated = _record("bunx", artifacts, kind="uv-python")
-    with pytest.raises(StoreError, match="kind 'uv-python' is delegated to its tool"):
+    delegated = _record("bunx", artifacts, kind="python")
+    with pytest.raises(StoreError, match="kind 'python' is delegated to its tool"):
         store.ensure(delegated, delegated.versions[-1])
     assert store.probe(delegated, delegated.versions[-1]) is None
     with pytest.raises(StoreError, match=r"tool: a download needs its deployment"):
@@ -604,7 +604,7 @@ def test_fetch_skips_a_delegated_kind_and_a_shim_never_overwrites(
     )
     spec = _record("bun", {HOST: data}, root="t", shims={"node": "bin/bun"})
     _serve(origin, spec, {HOST: data})
-    delegated = _record("uvx", {HOST: b"unused"}, kind="uv-tool")
+    delegated = _record("uvx", {HOST: b"unused"}, kind="pypi")
     store = Store(home, host=HOST)
     ensured = store.ensure(spec, spec.versions[-1])
     # The archive carried a `node` of its own: the shim leaves it alone.
@@ -621,7 +621,7 @@ def _uv_tool(name: str = "ruff", *versions: str) -> Record:
 
     return Record(
         name,
-        kind="uv-tool",
+        kind="pypi",
         package="ruff-package" if name == "ruff" else "",
         deltas=tuple(
             RecordDelta(

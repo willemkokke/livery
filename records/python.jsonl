@@ -1,4 +1,4 @@
-{"name": "python", "description": "", "kind": "uv-python", "min_version": "", "hosts": []}
+{"name": "python", "description": "", "kind": "python", "min_version": "", "hosts": []}
 {"version": "3.13.12", "date": "2026-03-25", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": ""}}
 {"verb": "", "help": "", "wraps": true, "positional": "any", "lead": ""}
 {"verb": "", "option": "B", "flags": ["-B"], "negation": "", "help": "don't write .pyc files on import; also PYTHONDONTWRITEBYTECODE=x", "type": "bool", "default": null, "choices": []}

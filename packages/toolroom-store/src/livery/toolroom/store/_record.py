@@ -58,16 +58,18 @@ HOSTS = (
 )
 """The six host keys, `<platform>-<arch>`. A record carries any subset."""
 
-KINDS = ("download", "uv-tool", "uv-python", "npm", "system-check")
+KINDS = ("download", "pypi", "python", "npm", "system-check")
 """The installer kinds. A `download` is fetched by URL and lands in the
 store: an archive is unpacked and its root hoisted, a bare file is
 saved under its `file` name, and the layout says what reaches the
 outside, entry points and `paths` for a program, `env` alone for a
-file that is never run (a CMake module, a plugin bundle). `uv-tool`
-and `uv-python` delegate to uv; `npm` installs a package from npm
-through the runtime the record names; `system-check` verifies a
-system tool against `min_version`, and may carry an artifact for a
-host that has no system tool."""
+file that is never run (a CMake module, a plugin bundle). `pypi`
+installs a package from the index and `python` an interpreter, both
+through uv today; `npm` installs a package from npm through the
+runtime the record names; `system-check` verifies a system tool
+against `min_version`, and may carry an artifact for a host that has
+no system tool. A kind names where a tool comes from; how it is
+installed or run is a field of its own."""
 
 RUNTIMES = ("node", "bun")
 """What an `npm` record runs on, and installs through: node, unless the

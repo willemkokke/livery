@@ -100,7 +100,7 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
             ),
         ),
     ).save(root / "records")
-    Record("ruff", kind="uv-tool", deltas=_read("0.16.0")).save(root / "records")
+    Record("ruff", kind="pypi", deltas=_read("0.16.0")).save(root / "records")
     mirror = ObjectStore.create(root / "mirror")
     mirror.put(payload)
     monkeypatch.setattr(
@@ -251,7 +251,7 @@ def test_sync_materialises_the_bundle_from_the_folder_source_with_no_network(
     assert lock is not None and tea.deployment == str(lock.tools["tea"].hosts[tea.host])
     assert tea.paths == (tea.tool_dir,) and Path(tea.tool_dir, "tea").is_file()
     ruff = held["ruff"]
-    assert (ruff.kind, ruff.mode, ruff.deployment) == ("uv-tool", "path", "")
+    assert (ruff.kind, ruff.mode, ruff.deployment) == ("pypi", "path", "")
     assert ruff.paths == (str(Path(ruff.tool_dir) / "bin"),)
     # A second sync finds everything present.
     assert _sync.materialise_tools(root)[0] == "  tools: 2 receipt(s), all present"
@@ -618,9 +618,7 @@ def test_env_check_names_each_receipt_and_the_drift_under_it(
     monkeypatch.setattr(
         "livery.workshop._env_tasks.shutil.which", lambda tool: "/x/" + tool
     )
-    Record("ruff", kind="uv-tool", deltas=_read("0.16.0", "0.17.0")).save(
-        root / "records"
-    )
+    Record("ruff", kind="pypi", deltas=_read("0.16.0", "0.17.0")).save(root / "records")
     _tools.materialise(root, ("ruff",))
     _tools.write_lock(root, upgrade=("ruff",))
     assert _tools.drift(root)["ruff"] == "receipt 0.16.0, lock 0.17.0; run `fm sync`"
@@ -649,7 +647,7 @@ def test_the_receipt_round_trips_and_the_default_modes_follow_the_kind(
     assert (
         default_mode("download"),
         default_mode("download", ("bin",)),
-        default_mode("uv-tool"),
+        default_mode("pypi"),
     ) == (
         "none",
         "path",

@@ -1,4 +1,4 @@
-{"name": "ruff_format", "description": "", "kind": "uv-tool", "min_version": "", "hosts": []}
+{"name": "ruff_format", "description": "", "kind": "pypi", "min_version": "", "hosts": []}
 {"version": "0.15.14", "date": "2026-05-21", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Run the Ruff formatter on the given files or directories"}}
 {"verb": "", "help": "Run the Ruff formatter on the given files or directories", "wraps": false, "positional": "any", "lead": ""}
 {"verb": "", "option": "cache_dir", "flags": ["--cache-dir"], "negation": "", "help": "Path to the cache directory", "type": "str", "default": null, "choices": []}

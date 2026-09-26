@@ -1,4 +1,4 @@
-{"name": "twine", "description": "", "kind": "uv-tool", "min_version": "", "hosts": []}
+{"name": "twine", "description": "", "kind": "pypi", "min_version": "", "hosts": []}
 {"version": "4.0.1", "date": "2022-06-01", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": ""}}
 {"verb": "", "help": "", "wraps": false, "positional": "any", "lead": ""}
 {"verb": "", "option": "no_color", "flags": ["--no-color"], "negation": "", "help": "disable colored output", "type": "bool", "default": null, "choices": []}

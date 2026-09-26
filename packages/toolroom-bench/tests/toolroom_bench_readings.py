@@ -78,7 +78,7 @@ def elsewhere() -> str:
     return next(p for p in ("Linux", "Windows", "macOS") if p != platform())
 
 
-def history(name: str, *reads: tuple[Any, ...], kind: str = "uv-tool") -> Record:
+def history(name: str, *reads: tuple[Any, ...], kind: str = "pypi") -> Record:
     """A record built from `(version, date, surface[, platforms])` tuples.
 
     The first tuple opens the record and the rest are placed wherever

@@ -1,4 +1,4 @@
-{"name": "zensical", "description": "", "kind": "uv-tool", "min_version": "", "hosts": []}
+{"name": "zensical", "description": "", "kind": "pypi", "min_version": "", "hosts": []}
 {"version": "0.0.41", "date": "2026-05-09", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Zensical - A modern static site generator."}}
 {"verb": "", "help": "Zensical - A modern static site generator.", "wraps": false, "positional": "any", "lead": ""}
 {"verb": "build", "help": "Build a project.", "wraps": false, "positional": "none", "lead": ""}
