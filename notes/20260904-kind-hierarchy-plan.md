@@ -787,6 +787,17 @@ order_topologically and the driver's member resolution put the
 library first; bump_set_floors moves the conan range beside the
 other two homes and the lint stays green on the result.
 
+Phase 7 evidence (2026-09-26): the armed descendant chain passes
+twice, fresh and resumed, in 2m33s, with the child's own gate
+running the extension's four tests: the compiled module answers
+from fmt, a Conan Center package, and from the sibling library
+built from its source. The six-host tool point stayed green after
+the phase's four merges, run 36253981021. The floor leg is forced
+by test: a floor naming a version whose header lacks the symbol
+fails the pinned build, in
+test_a_floor_whose_header_lacks_the_symbol_fails_the_leg. The lane
+evidence for 7c is the one line still open, and Open 8 says why.
+
 Phase 3 evidence (2026-09-04): the armed suite rendered the chain
 fixture, built it through cibuildwheel (macOS leg), and the wheel
 carried a platform tag with the sdist beside it; the isolated leg
