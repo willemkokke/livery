@@ -1,6 +1,11 @@
 # The kind hierarchy: native kinds through one registry
 
-Status: executing; Willem's go 2026-09-04. Phase 1 shipped
+Status: complete 2026-09-26. Every phase has landed, phase 8 last
+(livery#769 for the presets, livery#770 for the format and lint
+checks). What remains of it is written in the Open list below: the
+lane evidence for the conan cache, which this workspace cannot
+produce, and the two gaps the conformance chain surfaced,
+livery#765 and livery#766. Willem's go 2026-09-04. Phase 1 shipped
 2026-09-04 (issue #202): the registry abstraction with the
 resolution ladder and folder targets, both existing users ported,
 and the kind registry opened to layers with the chain, the managed
