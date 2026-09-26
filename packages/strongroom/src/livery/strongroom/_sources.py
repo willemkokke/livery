@@ -18,7 +18,7 @@ from __future__ import annotations
 import contextlib
 import http.client
 import socket
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
@@ -131,7 +131,19 @@ Source = FolderSource | HttpSource | OriginHint
 
 
 class Unreachable(Exception):
-    """A source did not answer for this object; the fetch skips it and reports."""
+    """A source did not answer for this object; the fetch skips it and reports.
+
+    Attributes:
+        status: The HTTP status the source answered with, when the
+            refusal is an answer (a 404, a 503) rather than a connection
+            that failed or a chain that did not end; None otherwise. A
+            caller deciding whether to try again reads it: a connection
+            failure and a 5xx are worth another try, a 404 is not.
+    """
+
+    def __init__(self, message: str, *, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 REDIRECTS = 5
@@ -142,7 +154,12 @@ _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 
 @contextlib.contextmanager
 def fetch_url(
-    url: str, *, connect_timeout: float, transfer_timeout: float, method: str = "GET"
+    url: str,
+    *,
+    connect_timeout: float,
+    transfer_timeout: float,
+    method: str = "GET",
+    headers: Mapping[str, str] | None = None,
 ) -> Generator[http.client.HTTPResponse]:
     """Open *url* for reading, or raise Unreachable naming why.
 
@@ -151,6 +168,10 @@ def fetch_url(
     establishing the connection; the transfer timeout then bounds
     each wait for bytes, headers included. `method` is `GET`, or
     `HEAD` to learn whether a source holds an object without reading it.
+    *headers* are sent with the request to *url*'s host and port, and
+    to a redirect on that same host and port; a redirect anywhere else
+    gets none of them, so a credential meant for an API never reaches
+    the storage host the API redirects a download to.
 
     A redirect (301, 302, 303, 307, 308) is followed to its `Location`,
     resolved against the URL that answered it, with the same method
@@ -169,6 +190,8 @@ def fetch_url(
             for the fetch is the same thing.
     """
     chain = [url]
+    first = urlsplit(url)
+    first_host = (first.hostname, first.port)
     while True:
         parts = urlsplit(chain[-1])
         connection = _CONNECTIONS[parts.scheme](
@@ -182,7 +205,9 @@ def fetch_url(
             # exists, every later wait is bounded by the transfer timeout.
             connection.connect()
             cast(socket.socket, connection.sock).settimeout(transfer_timeout)
-            connection.request(method, target)
+            same = (parts.hostname, parts.port) == first_host
+            sent = dict(headers or {}) if same else {}
+            connection.request(method, target, headers=sent)
             response = connection.getresponse()
             if response.status in _REDIRECT_STATUSES:
                 location = response.getheader("Location")
@@ -200,7 +225,9 @@ def fetch_url(
                 _check_url(chain[-1])
                 continue
             if response.status != 200:
-                raise Unreachable(f"{chain[-1]}: HTTP {response.status}")
+                raise Unreachable(
+                    f"{chain[-1]}: HTTP {response.status}", status=response.status
+                )
             yield response
             return
         except (OSError, http.client.HTTPException) as error:

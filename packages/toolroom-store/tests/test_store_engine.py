@@ -241,7 +241,7 @@ def test_a_binary_without_an_exe_and_a_non_archive_are_refused(
     )
     origin["https://origin.test/raw.bin"] = payload
     with pytest.raises(
-        StoreError, match=r"raw\.bin is not an archive the store extracts"
+        StoreError, match=r"raw\.bin is not an archive the store unpacks"
     ):
         Store(home, host=HOST).ensure(not_an_archive, not_an_archive.versions[-1])
 
@@ -462,6 +462,8 @@ def test_the_download_reads_the_origin_through_the_fetch_seam(
 
     seen: list[str] = []
 
+    from livery.toolroom.store import _fetch
+
     @contextmanager
     def fake(
         url: str,
@@ -469,11 +471,12 @@ def test_the_download_reads_the_origin_through_the_fetch_seam(
         connect_timeout: float,
         transfer_timeout: float,
         method: str = "GET",
+        headers: dict[str, str] | None = None,
     ) -> Iterator[io.BytesIO]:
         seen.append(url)
         yield io.BytesIO(b"the bytes")
 
-    monkeypatch.setattr(_engine, "fetch_url", fake)
+    monkeypatch.setattr(_fetch, "fetch_url", fake)
     assert _engine._download("https://origin.test/a.zip") == b"the bytes"
     assert seen == ["https://origin.test/a.zip"]
 

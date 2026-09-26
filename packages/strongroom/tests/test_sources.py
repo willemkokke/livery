@@ -501,3 +501,72 @@ def test_sources_describe_themselves(tmp_path: Path) -> None:
         == "origin http://v.example/h"
     )
     assert isinstance(Digest.parse(str(HELLO)), Digest)
+
+
+@contextlib.contextmanager
+def _recording(redirect_to: str) -> Iterator[tuple[str, list[dict[str, str]]]]:
+    """A server recording each request's headers; `/go` redirects to *redirect_to*."""
+    seen: list[dict[str, str]] = []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, format: str, *args: Any) -> None:
+            del format, args
+
+        def do_GET(self) -> None:
+            seen.append({k.lower(): v for k, v in self.headers.items()})
+            if self.path == "/go":
+                self.send_response(302)
+                self.send_header("Location", redirect_to)
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.send_header("Content-Length", "2")
+            self.end_headers()
+            self.wfile.write(b"ok")
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, args=(0.01,), daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}", seen
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_fetch_url_sends_headers_to_the_first_host_alone_and_names_the_status(
+    tmp_path: Path,
+) -> None:
+    # The refusal first: an answered status rides the error, a failed
+    # connection carries none.
+    folder = tmp_path / "f"
+    folder.mkdir()
+    with _serve(folder) as base:
+        with (
+            pytest.raises(Unreachable) as refused,
+            fetch_url(f"{base}/missing", connect_timeout=1, transfer_timeout=1),
+        ):
+            pass
+        assert refused.value.status == 404
+    with (
+        pytest.raises(Unreachable) as failed,
+        fetch_url(
+            f"http://127.0.0.1:{_closed_port()}/", connect_timeout=5, transfer_timeout=1
+        ),
+    ):
+        pass
+    assert failed.value.status is None
+    # The headers reach the first host, and a redirect on that host,
+    # and never another host: an API token stays off the storage host.
+    token = {"Authorization": "Bearer secret", "User-Agent": "t"}
+    with (
+        _recording("") as (other, other_seen),
+        _recording(f"{other}/asset") as (api, api_seen),
+        fetch_url(
+            f"{api}/go", connect_timeout=1, transfer_timeout=1, headers=token
+        ) as got,
+    ):
+        assert got.read() == b"ok"
+    assert api_seen[0]["authorization"] == "Bearer secret"
+    assert api_seen[0]["user-agent"] == "t"
+    assert not {"authorization", "user-agent"} & set(other_seen[0])

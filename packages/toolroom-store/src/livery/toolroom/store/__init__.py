@@ -40,6 +40,15 @@ from livery.toolroom.store._engine import (
     npm_cli,
     silent,
 )
+from livery.toolroom.store._fetch import (
+    FetchError,
+    UnpackError,
+    api_headers,
+    fetch_bytes,
+    fetch_file,
+    fetch_json,
+    unpack,
+)
 from livery.toolroom.store._fingerprint import tree_fingerprint
 from livery.toolroom.store._home import TOOLS, URLS, Home
 from livery.toolroom.store._lock import (
@@ -121,6 +130,7 @@ __all__ = [
     "Deployment",
     "Ensured",
     "Event",
+    "FetchError",
     "Fetched",
     "Home",
     "Layout",
@@ -140,12 +150,17 @@ __all__ = [
     "StoreError",
     "Surface",
     "ToolSpec",
+    "UnpackError",
     "Verb",
     "__version__",
+    "api_headers",
     "build_current",
     "class_name",
     "default_mode",
     "export_schema",
+    "fetch_bytes",
+    "fetch_file",
+    "fetch_json",
     "host_key",
     "npm_cli",
     "observations",
@@ -160,6 +175,7 @@ __all__ = [
     "spec_from",
     "surface_at",
     "tree_fingerprint",
+    "unpack",
     "validate",
     "version_key",
 ]

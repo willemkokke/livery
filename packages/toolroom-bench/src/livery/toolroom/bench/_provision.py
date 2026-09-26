@@ -28,7 +28,7 @@ Python tools:
   at the prefix where the driver names bun.
 * **github / gitlab** — the latest release asset for this platform, matched
   from the release's own asset list (so `Darwin`/`x86_64` vs `darwin`/`x64`
-  naming needn't be transcribed), unpacked, binary placed in the prefix.
+  naming needn't be transcribed), unpacked whole, a launcher placed in the prefix.
 * **system** — git, docker, the uv running this: already on `PATH`, left be.
 * **deferred** — parked, with a reason (tea, until it stops hanging on
   `--help`).
@@ -41,24 +41,29 @@ completion hot path.
 
 from __future__ import annotations
 
-import json
 import os
 import platform
 import re
 import shutil
 import subprocess
-import tarfile
-import time
 import urllib.error
 import urllib.parse
 import urllib.request
-import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from livery.toolroom.bench._drivers import Driver
-from livery.toolroom.store import npm_cli
+from livery.toolroom.store import (
+    HOSTS,
+    FetchError,
+    UnpackError,
+    fetch_file,
+    fetch_json,
+    npm_cli,
+    unpack,
+)
+from livery.toolroom.store._fetch import ARCHIVES
 
 
 class ProvisionError(Exception):
@@ -201,10 +206,24 @@ def _docker_tier(prefix: Path, drivers: list[Driver]) -> list[Outcome]:
                 )
             )
             continue
-        binary = exe(driver.name)
-        target = bin_dir(prefix) / binary
+        launcher = next(
+            (
+                p
+                for p in sorted(placed.iterdir())
+                if p.is_file() and p.stem == driver.name
+            ),
+            None,
+        )
+        if launcher is None:
+            outcomes.append(
+                Outcome(
+                    driver.key, "docker", "fail", f"{newest.version} placed nothing"
+                )
+            )
+            continue
+        target = bin_dir(prefix) / launcher.name
         target.unlink(missing_ok=True)
-        shutil.copy2(placed / binary, target)
+        shutil.copy2(launcher, target)
         # The plugins came down beside the staged binary; a reader finds
         # them from the binary it resolves to, which here is the prefix's.
         home = _toolfetch.home_beside(placed)
@@ -378,20 +397,10 @@ def _nodejs_tier(prefix: Path, drivers: list[Driver]) -> list[Outcome]:
 def _link_node(prefix: Path, node: Path) -> Path:
     """Put *node* on the prefix's PATH by its own name, beside the launchers.
 
-    A link on POSIX, so the runtime's own directory stays what `node`
-    resolves to and npm is found beside it; a forwarding `.cmd` on
-    Windows, where cmd resolves `node` through PATHEXT.
+    A launcher that runs node where it lies, the way every release
+    binary reaches the prefix, so npm stays beside the node that runs.
     """
-    into = bin_dir(prefix)
-    into.mkdir(parents=True, exist_ok=True)
-    if os.name == "nt":
-        link = into / "node.cmd"
-        link.write_text(f'@echo off\r\n"{node}" %*\r\n', encoding="utf-8")
-    else:
-        link = into / "node"
-        link.unlink(missing_ok=True)
-        link.symlink_to(node)
-    return link
+    return write_launcher(bin_dir(prefix), "node", node)
 
 
 def provisioned_node(prefix: Path) -> Path | None:
@@ -465,7 +474,7 @@ def _release(prefix: Path, driver: Driver, *, host: str) -> Outcome:
         assets = _latest_assets(host, driver.provision.repo)
         name, url = _pick_asset(assets)
         archive = _download(url, prefix)
-        placed = _extract_binary(archive, driver.name, bin_dir(prefix))
+        placed = place_binary(archive, driver.name, bin_dir(prefix))
     except ProvisionError as exc:
         return Outcome(driver.key, kind, "fail", str(exc))
     return Outcome(driver.key, kind, "ok", f"{placed.name} ({name})")
@@ -536,7 +545,6 @@ _ARCH_TOKENS = (
     "riscv64",
     "loongarch64",
 )
-_ARCHIVES = (".tar.gz", ".tgz", ".tar.xz", ".tar.bz2", ".zip")
 # Sidecar files that ride alongside a real asset — never the binary.
 _SIDECARS = (
     ".sha256",
@@ -556,15 +564,13 @@ _SIDECARS = (
 _VARIANTS = ("profile", "baseline", "debug", "musl", "-static", "windows-gnu")
 
 
+_SYSTEMS = {"macos": "darwin", "linux": "linux", "windows": "windows"}
+_MACHINES = {"x64": "x86_64", "arm": "arm64"}
 HOST_TOKENS = {
-    "linux-x64": ("linux", "x86_64"),
-    "linux-arm": ("linux", "arm64"),
-    "macos-x64": ("darwin", "x86_64"),
-    "macos-arm": ("darwin", "arm64"),
-    "windows-x64": ("windows", "x86_64"),
-    "windows-arm": ("windows", "arm64"),
+    host: (_SYSTEMS[host.split("-")[0]], _MACHINES[host.split("-")[1]])
+    for host in HOSTS
 }
-"""Each host key's OS and CPU, in the spellings the alias tables fold."""
+"""Each store host key as an OS and a CPU, in the spellings the alias tables fold."""
 
 
 def _platform_tokens(host: str = "") -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -630,7 +636,7 @@ def _pick_asset(assets: list[tuple[str, str]], *, host: str = "") -> tuple[str, 
         # then the shortest name — a qualifier only ever lengthens it.
         low = asset[0].lower()
         variant = any(marker in low for marker in _VARIANTS)
-        return (not low.endswith(_ARCHIVES), variant, len(asset[0]), asset[0])
+        return (not low.endswith(ARCHIVES), variant, len(asset[0]), asset[0])
 
     candidates.sort(key=rank)
     return candidates[0]
@@ -639,221 +645,115 @@ def _pick_asset(assets: list[tuple[str, str]], *, host: str = "") -> tuple[str, 
 # --- download + unpack -------------------------------------------------------
 
 
-def api_headers(url: str) -> dict[str, str]:
-    """What to send an index — a User-Agent, and a token when one is offered.
-
-    GitHub allows 60 unauthenticated API calls an hour *per IP* and 5,000 with
-    a token. Sixty sounds ample for a set with two forge-hosted tools until
-    the IP is a shared CI runner, where the budget is spent by whoever else is
-    on it; a prime that walks ten releases each is then throttled by strangers.
-
-    Read from the environment rather than fetched from `gh`, so nothing here
-    depends on a CLI being installed: `GH_TOKEN=$(gh auth token)` locally, and
-    `secrets.GITHUB_TOKEN` in Actions. Absent, everything still works — just
-    against the smaller budget.
-
-    Sent to GitHub's **API host only**. urllib carries headers across
-    redirects, and a release asset redirects to a CDN that has no business
-    seeing a credential.
-    """
-    import os
-
-    headers = {"User-Agent": "footman-provision"}
-    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
-    if token and url.startswith("https://api.github.com/"):
-        headers["Authorization"] = f"Bearer {token}"
-    return headers
-
-
 def _get_json(url: str) -> Any:
-    """A JSON API response (shape is the endpoint's business) — GitHub and
-    GitLab both want a User-Agent.
+    """A JSON API response (shape is the endpoint's business), through the store's read.
+
+    Raises:
+        ProvisionError: when the URL cannot be read or answers no JSON.
     """
-    request = urllib.request.Request(url, headers=api_headers(url))
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except (urllib.error.URLError, ValueError, OSError) as exc:
-        raise ProvisionError(f"{url}: {exc}") from exc
+        return fetch_json(url)
+    except FetchError as exc:
+        raise ProvisionError(str(exc)) from exc
 
 
 def _download(url: str, prefix: Path) -> Path:
-    """Fetch *url* into the prefix's cache, reusing a prior download by name."""
-    cache = prefix / ".cache"
-    cache.mkdir(parents=True, exist_ok=True)
-    dest = cache / url.rsplit("/", 1)[-1]
-    if dest.exists() and dest.stat().st_size:
-        return dest
-    request = urllib.request.Request(url, headers={"User-Agent": "footman-provision"})
-    # Three tries, because a dropped connection says nothing about the asset.
-    # A refresh leg died on `Remote end closed connection without response`
-    # part-way through gh's zip: the release was there, the download was not
-    # finished. Retrying costs a second; not retrying cost a platform's
-    # observations.
-    for attempt in range(_TRIES):
-        try:
-            with (
-                urllib.request.urlopen(request, timeout=120) as response,
-                open(dest, "wb") as out,
-            ):
-                shutil.copyfileobj(response, out)
-            return dest
-        except (urllib.error.URLError, OSError) as exc:
-            dest.unlink(missing_ok=True)  # a part-written file is not a cache hit
-            if attempt + 1 == _TRIES or not _worth_retrying(exc):
-                raise ProvisionError(f"{url}: {exc}") from exc
-            time.sleep(_BACKOFF * (attempt + 1))
-    raise ProvisionError(f"{url}: unreachable")  # pragma: no cover - loop returns
+    """Fetch *url* into the prefix's cache through the store's read; the file.
 
-
-_TRIES = 3
-_BACKOFF = 1.0
-
-
-def _worth_retrying(exc: BaseException) -> bool:
-    """Whether this failure is about the connection rather than the asset.
-
-    A 404 is an answer — the asset is not there and asking again will not
-    change that. A dropped connection, a timeout, a 5xx or a 429 are the
-    network having a moment.
+    Raises:
+        ProvisionError: when the URL cannot be read after the store's tries.
     """
-    if isinstance(exc, urllib.error.HTTPError):
-        return exc.code in (408, 429) or 500 <= exc.code < 600
-    return True
+    try:
+        return fetch_file(url, prefix / ".cache")
+    except FetchError as exc:
+        raise ProvisionError(str(exc)) from exc
 
 
-def _extract_binary(
-    archive: Path, tool: str, into: Path, *, windows: bool | None = None
+def place_binary(
+    archive: Path,
+    tool: str,
+    into: Path,
+    *,
+    windows: bool | None = None,
+    launcher: bool = True,
 ) -> Path:
-    """Unpack *archive* and place its `tool` binary in *into*, executable.
+    """Unpack *archive* whole and put its `tool` in *into*; the file placed there.
 
-    Release archives nest the binary under a versioned directory, so the
-    whole tree is searched for a file named `tool` (or `tool.exe`); a bare
-    downloaded binary is taken as-is. Only file members are eligible: an
-    archive that nests the binary under a directory of the same name
-    (docker ships `docker/docker`) would otherwise match the directory and
-    write nothing. On Windows the placed file is named
-    `tool.exe` whatever the archive called it — `shutil.which` resolves
-    through `PATHEXT`, and an extensionless PE is invisible to it.
+    An archive is unpacked as it is, into a `trees/<tool>` directory
+    beside *into*, and the binary runs where it lies, so an app that
+    loads its runtime from beside itself (a PyInstaller directory app,
+    conan's release) finds it. What lands in *into* is a launcher that
+    runs the binary in its tree: a shell script, or a `.cmd` on Windows
+    where `shutil.which` finds it through `PATHEXT`. With *launcher*
+    off the binary itself is copied into *into*, for a place that must
+    hold the real file (a docker plugin directory). A downloaded bare
+    binary is placed as it is either way. The binary is the first file
+    member named `tool` or `tool.exe`, so a directory of the same name
+    (docker's `docker/docker`) never matches.
 
-    A directory app (PyInstaller's onedir layout, conan's release) loads
-    its runtime from an `_internal/` directory beside the binary and
-    refuses to start without it, so that directory is placed beside the
-    binary too when the archive has one; every other sibling stays in
-    the archive.
+    Raises:
+        ProvisionError: when the archive will not unpack or holds no
+            such file.
     """
     if windows is None:
         windows = os.name == "nt"
-    wanted = {tool, f"{tool}.exe"}
     into.mkdir(parents=True, exist_ok=True)
-    dest = into / exe(tool, windows=windows)
-    if archive.name.lower().endswith((".tar.gz", ".tgz", ".tar.xz", ".tar.bz2")):
-        with tarfile.open(archive) as tar:
-            member = next(
-                (
-                    m
-                    for m in tar.getmembers()
-                    if m.isfile() and Path(m.name).name in wanted
-                ),
-                None,
-            )
-            if member is None:
-                raise ProvisionError(f"{tool} not found inside {archive.name}")
-            source = tar.extractfile(member)
-            if source is None:
-                raise ProvisionError(f"{tool} is not a file inside {archive.name}")
-            dest.write_bytes(source.read())
-            _place_internal_tar(tar, member.name, into)
-    elif archive.name.lower().endswith(".zip"):
-        with zipfile.ZipFile(archive) as zf:
-            name = next(
-                (
-                    n
-                    for n in zf.namelist()
-                    if not n.endswith("/") and Path(n).name in wanted
-                ),
-                None,
-            )
-            if name is None:
-                raise ProvisionError(f"{tool} not found inside {archive.name}")
-            dest.write_bytes(zf.read(name))
-            _place_internal_zip(zf, name, into)
-    else:  # a bare binary, downloaded directly
+    if not archive.name.lower().endswith(
+        ARCHIVES
+    ):  # a bare binary, downloaded directly
+        dest = into / exe(tool, windows=windows)
         dest.write_bytes(archive.read_bytes())
-    dest.chmod(0o755)
-    return dest
+        dest.chmod(0o755)
+        return dest
+    tree = into.parent / "trees" / tool
+    shutil.rmtree(tree, ignore_errors=True)
+    try:
+        unpack(archive, tree)
+    except UnpackError as exc:
+        raise ProvisionError(str(exc)) from exc
+    found = _find_binary(tree, tool)
+    if found is None:
+        raise ProvisionError(f"{tool} not found inside {archive.name}")
+    found.chmod(found.stat().st_mode | 0o755)
+    if not launcher:
+        dest = into / exe(tool, windows=windows)
+        shutil.copy2(found, dest)
+        return dest
+    return write_launcher(into, tool, found, windows=windows)
 
 
-def _extract_tree(archive: Path, into: Path) -> Path:
-    """Unpack *archive* whole under *into*; the one directory it is rooted at.
+def _find_binary(tree: Path, tool: str) -> Path | None:
+    """The first file under *tree* named *tool* or `tool.exe`, in path order."""
+    wanted = {tool, f"{tool}.exe"}
+    for path in sorted(tree.rglob("*")):
+        if path.is_file() and path.name in wanted:
+            return path
+    return None
 
-    For a release that is a tree rather than a binary, node's among
-    them, where what runs beside the executable is the point.
 
-    Raises:
-        ProvisionError: for an archive of another shape, or one with no
-            single root directory.
+def write_launcher(
+    into: Path, name: str, target: Path, *args: str, windows: bool | None = None
+) -> Path:
+    """A launcher in *into* that runs *target* with *args* first; its path.
+
+    A shell script that `exec`s the target, so the process is the target
+    itself and finds what sits beside it; on Windows a `.cmd`, which
+    `cmd` resolves through `PATHEXT` and forwards `%*` to whole.
     """
+    import stat
+
+    if windows is None:
+        windows = os.name == "nt"
     into.mkdir(parents=True, exist_ok=True)
-    if archive.name.lower().endswith((".tar.gz", ".tgz", ".tar.xz", ".tar.bz2")):
-        with tarfile.open(archive) as tar:
-            tar.extractall(into, filter="data")
-    elif archive.name.lower().endswith(".zip"):
-        with zipfile.ZipFile(archive) as zf:
-            zf.extractall(into)
-    else:
-        raise ProvisionError(f"{archive.name} is not an archive to unpack whole")
-    roots = [p for p in into.iterdir() if p.is_dir()]
-    if len(roots) != 1:
-        raise ProvisionError(
-            f"{archive.name} unpacks to {len(roots)} directories under {into}, not one"
-        )
-    return roots[0]
-
-
-#: PyInstaller's onedir runtime directory, beside the binary.
-_INTERNAL = "_internal"
-
-
-def _internal_prefix(binary_name: str) -> str:
-    """The archive path prefix of the `_internal/` beside *binary_name*."""
-    parent = Path(binary_name).parent.as_posix()
-    return f"{_INTERNAL}/" if parent == "." else f"{parent}/{_INTERNAL}/"
-
-
-def _place_internal_tar(tar: tarfile.TarFile, binary_name: str, into: Path) -> None:
-    """Place the `_internal/` beside *binary_name* under *into*, if the tar has one."""
-    prefix = _internal_prefix(binary_name)
-    for member in tar.getmembers():
-        if not member.name.startswith(prefix):
-            continue
-        dest = into / _INTERNAL / member.name[len(prefix) :]
-        if member.isdir():
-            dest.mkdir(parents=True, exist_ok=True)
-        elif member.issym():
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.unlink(missing_ok=True)
-            dest.symlink_to(member.linkname)
-        elif member.isfile():
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            source = tar.extractfile(member)
-            if source is not None:
-                dest.write_bytes(source.read())
-                dest.chmod(member.mode | 0o600)
-
-
-def _place_internal_zip(zf: zipfile.ZipFile, binary_name: str, into: Path) -> None:
-    """Place the `_internal/` beside *binary_name* under *into*, if the zip has one."""
-    prefix = _internal_prefix(binary_name)
-    for name in zf.namelist():
-        if not name.startswith(prefix):
-            continue
-        dest = into / _INTERNAL / name[len(prefix) :]
-        if name.endswith("/"):
-            dest.mkdir(parents=True, exist_ok=True)
-        else:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_bytes(zf.read(name))
+    lead = "".join(f" {arg}" for arg in args)
+    if windows:
+        shim = into / f"{name}.cmd"
+        shim.write_text(f'@echo off\r\n"{target}"{lead} %*\r\n', encoding="utf-8")
+        return shim
+    shim = into / name
+    shim.write_text(f'#!/bin/sh\nexec "{target}"{lead} "$@"\n', encoding="utf-8")
+    shim.chmod(shim.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    return shim
 
 
 # --- subprocess --------------------------------------------------------------
