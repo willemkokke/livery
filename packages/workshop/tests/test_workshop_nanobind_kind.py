@@ -187,10 +187,6 @@ def test_the_drift_loop_renders_the_chain(tmp_path: Path) -> None:
 # isolated leg imports the compiled module.
 
 
-# The build is the suite's largest cost by far (77 s on a linux leg);
-# the nightly point pays it, a pull request's legs do not.
-@pytest.mark.only_at("nightly")
-@needs_build_rig
 def _render_library(tmp_path: Path) -> Package:
     """A rendered cpp-conan library beside the extension, named acme-geometry."""
     destination = tmp_path / "packages" / "geometry"
@@ -262,6 +258,10 @@ def _consume_the_library(package: Package) -> None:
     )
 
 
+# The build is the suite's largest cost by far (77 s on a linux leg);
+# the nightly point pays it, a pull request's legs do not.
+@pytest.mark.only_at("nightly")
+@needs_build_rig
 def test_the_wheel_is_platform_tagged_and_imports(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -347,3 +347,205 @@ def test_the_conan_environment_refuses_without_the_store_and_names_the_provider(
         _python_nanobind.conan_environment(tmp_path)["CMAKE_CONAN_PROVIDER"]
         == "/entered/conan_provider.cmake"
     )
+
+
+# The floor legs: a declared floor is a claim, and the leg proves it.
+
+
+def _floor_workspace(tmp_path: Path) -> tuple[Path, Package]:
+    """A workspace whose extension floors the library beside it at 0.1.0."""
+    root = tmp_path / "ws"
+    (root / "packages" / "geometry").mkdir(parents=True)
+    (root / "workshop.toml").write_text("[workspace]\n")
+    (root / "packages" / "geometry" / "workshop.toml").write_text(
+        'type = "cpp-conan"\nname = "acme-geometry"\n'
+    )
+    extension = root / "packages" / "ext"
+    extension.mkdir(parents=True)
+    (extension / "workshop.toml").write_text(
+        'type = "python-nanobind"\nname = "acme-ext"\n'
+        "[[depends]]\n"
+        'path = "packages/geometry"\nkind = "build"\nfloor = "0.1.0"\n'
+    )
+    (extension / "pyproject.toml").write_text(
+        '[project]\nname = "acme-ext"\nversion = "0.2.0"\n\n'
+        "[tool.scikit-build.cmake.define]\n"
+        'CONAN_INSTALL_ARGS = { env = "CONAN_INSTALL_ARGS",'
+        ' default = "--build=missing;--build=editable" }\n'
+    )
+    from livery.workshop._packages import Edge
+
+    package = Package(
+        directory=extension,
+        path="packages/ext",
+        name="acme-ext",
+        type="python-nanobind",
+        depends=(Edge(path="packages/geometry", kind="build", floor="0.1.0"),),
+    )
+    return root, package
+
+
+def test_the_declared_conan_arguments_are_read_in_both_spellings(
+    tmp_path: Path,
+) -> None:
+    _root, package = _floor_workspace(tmp_path)
+    assert _python_nanobind.conan_install_args(package) == (
+        "--build=missing;--build=editable"
+    )
+    (package.directory / "pyproject.toml").write_text(
+        '[project]\nname = "acme-ext"\n\n'
+        "[tool.scikit-build.cmake.define]\n"
+        'CONAN_INSTALL_ARGS = "--build=missing"\n'
+    )
+    assert _python_nanobind.conan_install_args(package) == "--build=missing"
+    (package.directory / "pyproject.toml").write_text('[project]\nname = "acme-ext"\n')
+    assert _python_nanobind.conan_install_args(package) == (
+        _python_nanobind.DEFAULT_INSTALL_ARGS
+    )
+
+
+def test_a_floor_the_wave_itself_releases_is_the_build_that_already_ran(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root, package = _floor_workspace(tmp_path)
+
+    def _never(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("the leg must not build for a co-released floor")
+
+    monkeypatch.setattr(_python_nanobind, "build_wheels", _never)
+    _python_nanobind.floor_legs(package, root, {"packages/geometry": "0.1.0"})
+    printed = capsys.readouterr().out
+    assert "the floor on acme-geometry is 0.1.0" in printed
+    assert "already linked it" in printed
+
+
+def test_the_floor_leg_pins_conan_to_the_floor_and_tests_that_wheel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root, package = _floor_workspace(tmp_path)
+    restored: list[tuple[str, str]] = []
+    built: list[tuple[Path, str, bool]] = []
+    tested: list[Path] = []
+
+    def _fake_restore(_root: Path, name: str, version: str, *, cwd: Path) -> None:
+        del cwd
+        restored.append((name, version))
+
+    def _fake_build(
+        _package: Package,
+        _root: Path,
+        dist: Path,
+        *,
+        epoch: int = 0,
+        conan_install_args: str = "",
+        one_host_wheel: bool = False,
+    ) -> dict[str, str]:
+        del epoch
+        built.append((dist, conan_install_args, one_host_wheel))
+        return {}
+
+    def _fake_test(
+        _package: Package, _root: Path, *, wheels_dir: Path | None = None, **_kw: object
+    ) -> dict[str, str]:
+        assert wheels_dir is not None
+        tested.append(wheels_dir)
+        return {}
+
+    from livery.workshop._backends import _cpp_conan
+
+    monkeypatch.setattr(_cpp_conan, "restore_from_releases", _fake_restore)
+    monkeypatch.setattr(_python_nanobind, "build_wheels", _fake_build)
+    monkeypatch.setattr(_python, "run_isolated_test", _fake_test)
+    _python_nanobind.floor_legs(package, root, {"packages/geometry": "0.2.0"})
+    assert restored == [("acme-geometry", "0.1.0")]
+    dist, args, one_host = built[0]
+    assert dist == package.directory / "build" / "floor"
+    profile = package.directory / "build" / "floor-profile.txt"
+    assert args == f"--build=missing;--build=editable;-pr:h;{profile.as_posix()}"
+    assert profile.read_text() == (
+        "[replace_requires]\nacme-geometry/*: acme-geometry/0.1.0\n"
+    )
+    assert one_host
+    assert tested == [dist]
+    assert "floor leg green against acme-geometry 0.1.0" in capsys.readouterr().out
+
+
+# The build is a second cibuildwheel run and two conan creates; the
+# nightly point pays it, a pull request's legs do not.
+@pytest.mark.only_at("nightly")
+@needs_build_rig
+def test_a_floor_whose_header_lacks_the_symbol_fails_the_leg(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The whole route, end to end, on the version that must fail.
+
+    The library is released twice: 0.1.0, whose header has no
+    ``area``, and 0.2.0, which adds it. The extension calls ``area``
+    and floors the library at 0.1.0, which is a lie. The leg
+    restores 0.1.0 from its release, pins conan to it, and the
+    compile says what is missing.
+    """
+    from livery.forge.testing import FakeForge
+    from livery.workshop._backends import _cpp_conan
+    from livery.workshop._packages import Edge
+
+    monkeypatch.setenv("CONAN_HOME", str(tmp_path / "conan-home"))
+    library = _render_library(tmp_path)
+    _cpp_conan.stamp_version(library).stamp("0.1.0")
+    _cpp_conan.build(library, tmp_path)
+    saved = _cpp_conan.save_cache(library, "0.1.0", library.directory / "dist")
+    # 0.2.0 adds the symbol the extension calls.
+    header = library.directory / "src" / "geometry.hpp"
+    header.write_text(
+        header.read_text().replace(
+            "const char* version();",
+            "const char* version();\n\ndouble area(double width, double height);",
+        )
+    )
+    source = library.directory / "src" / "geometry.cpp"
+    source.write_text(
+        source.read_text().replace(
+            'const char* version() { return "0.0.0"; }',
+            'const char* version() { return "0.0.0"; }\n\n'
+            "double area(double width, double height) { return width * height; }",
+        )
+    )
+    _cpp_conan.stamp_version(library).stamp("0.2.0")
+    _cpp_conan.build(library, tmp_path)
+    # The floor's package leaves this machine's cache, so the leg has
+    # to fetch it back from the release to build at all.
+    _cpp_conan._conan(library.directory, "remove", "acme-geometry/0.1.0", "-c")
+
+    extension = _render_chain(tmp_path)
+    _consume_the_library(extension)
+    native = extension.directory / "src" / "acme" / "ext" / "_native.cpp"
+    native.write_text(
+        native.read_text().replace(
+            "NB_MODULE(_native, m) {",
+            "NB_MODULE(_native, m) {\n"
+            '    m.def("area", []() { return geometry::area(2.0, 3.0); });',
+        )
+    )
+    package = Package(
+        directory=extension.directory,
+        path="packages/ext",
+        name="acme-ext",
+        type="python-nanobind",
+        depends=(Edge(path="packages/geometry", kind="build", floor="0.1.0"),),
+    )
+
+    fake = FakeForge()
+    fake.create_repo("acme", "ws")
+    repository = fake.repository("acme", "ws")
+    tag = "packages/geometry/v0.1.0"
+    fake.create_tag("acme", "ws", tag)
+    repository.release.create(tag, name="acme-geometry 0.1.0")
+    repository.release.upload_asset(tag, saved.name, saved.read_bytes())
+    monkeypatch.setattr(
+        "livery.workshop._forge_lane.this_repository", lambda _root: repository
+    )
+
+    with pytest.raises(_FAILURES) as caught:
+        _python_nanobind.floor_legs(package, tmp_path, {"packages/geometry": "0.2.0"})
+    message = str(caught.value)
+    assert "area" in message, message

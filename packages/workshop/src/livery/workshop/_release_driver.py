@@ -1122,7 +1122,7 @@ def workflow_release_check_title(
 def workflow_release_publish(
     ref: Annotated[str, doc("the release squash; empty means HEAD")] = "",
     prebuilt: Annotated[
-        bool, doc("trust the collected dist/ for platform-wheel members")
+        bool, doc("trust the collected dist/ for the members the matrix builds")
     ] = False,
 ) -> None:
     """Publish the squash at --ref: the wave, receipts cut per member.
@@ -1136,6 +1136,9 @@ def workflow_release_publish(
     ``--prebuilt`` is the wheels matrix handing over: a
     platform-wheel member's dist/ was collected by the per-OS jobs,
     and the wave publishes it instead of rebuilding one platform's.
+    A conan member's saved caches arrive the same way, one per host,
+    and the wave attaches them instead of creating the package
+    again.
     Inside CI the wave decides that for itself: a platform-wheel
     member whose dist/ already holds wheels was fed by the matrix,
     since a runner's checkout starts with none.
@@ -1185,7 +1188,7 @@ def workflow_release_publish(
 
             assert root is not None  # narrowed before the closure
             conan = resolve_registry(root, "conan")
-            cached = _cpp_conan.ConanRegistry(conan.url, local=conan.local, cwd=root)
+            cached = _cpp_conan.ConanRegistry(conan, root=root)
             registries[artifact] = cached
         return cached
 

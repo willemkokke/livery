@@ -137,6 +137,9 @@ the waiting caller.
 | --- | --- |
 | `create(tag, *, name, body, prerelease)` | refuses a tag that already has a release |
 | `get(tag)` | the probe that makes release creation re-runnable |
+| `upload_asset(tag, name, data, *, content_type)` | attaches a file; refuses a name the release already carries |
+| `assets(tag)` | the files attached, each with its size and, where the forge computes one, its digest |
+| `download_asset(tag, name)` | the bytes back, read the way that forge serves them |
 
 ### `issue`: text in both directions
 

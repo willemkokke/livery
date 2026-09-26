@@ -43,6 +43,7 @@ from livery.workshop._state import RunContext, slug
 if TYPE_CHECKING:
     from livery.workshop._coverage_store import Record
     from livery.workshop._git_ops import GitOps
+    from livery.workshop._registries import RegistryTarget
 
 #: The whole repo, as CI lints it.
 SRC = (".",)
@@ -1485,18 +1486,19 @@ def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
 
 
 def publish_artifact(
-    package: Package, *, version: str, publish_url: str, token: str, local: bool
+    package: Package, root: Path, *, version: str, target: RegistryTarget
 ) -> bool:
     """Upload ``dist/*`` to the python index; the kind's publish seam.
 
-    ``uv publish``, through the wave's own uploader: *version* and
-    *local* are other kinds' fields, since the wheels in ``dist/``
-    already carry their versions and a python index is never a
-    folder.
+    ``uv publish``, to the target's upload endpoint with its
+    credential. *version* and *root* are other kinds' fields: the
+    wheels in ``dist/`` already carry their versions, and the index
+    needs nothing from the workspace.
     """
     from livery.workshop._publish import publish_wheels
 
-    return publish_wheels(package, index_url=publish_url, token=token)
+    del root, version
+    return publish_wheels(package, index_url=target.publish_url, token=target.token)
 
 
 def _index_args(root: Path) -> tuple[str, ...]:
@@ -1700,6 +1702,7 @@ def run_isolated_test(
     *,
     release_dirs: tuple[Path, ...] = (),
     resolution: str = "highest",
+    wheels_dir: Path | None = None,
 ) -> dict[str, str]:
     """Install the built wheel into a fresh venv and test the installed copy.
 
@@ -1724,6 +1727,10 @@ def run_isolated_test(
     toolchain pin that overlaps a floored dependency would silently
     undo the starvation. Movement is a taught refusal.
 
+    *wheels_dir* names where the wheel to install is, for a leg that
+    built one outside the collected ``dist/``; the package's own
+    ``dist/`` otherwise.
+
     Returns the resolved version per distribution, the report's raw
     material ("floor leg: livery-forge 0.1.0").
     """
@@ -1733,9 +1740,10 @@ def run_isolated_test(
     # Sorted for determinism: with several wheels in dist a glob's
     # filesystem order once handed the leg a musllinux wheel the
     # venv could not install.
-    wheels = sorted((package.directory / "dist").glob("*.whl"))
+    built = wheels_dir if wheels_dir is not None else package.directory / "dist"
+    wheels = sorted(built.glob("*.whl"))
     if not wheels:
-        fail(f"{package.name}: no wheel in dist/ to validate; build first")
+        fail(f"{package.name}: no wheel in {built} to validate; build first")
     with tempfile.TemporaryDirectory() as scratch:
         from livery.workshop._pythons import venv_python
 

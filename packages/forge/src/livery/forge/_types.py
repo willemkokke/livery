@@ -380,11 +380,16 @@ class Asset:
         url: Where the bytes download from, for a reader with access
             to the repository.
         size: The byte count the forge reports; 0 when it reports none.
+        digest: The content digest the forge reports, `"<algorithm>:<hex>"`;
+            empty when it reports none. A consumer that stages the
+            bytes elsewhere verifies against it, and treats an empty
+            digest as a forge that cannot prove the content.
     """
 
     name: str
     url: str
     size: int = 0
+    digest: str = ""
 
 
 @dataclass(frozen=True)

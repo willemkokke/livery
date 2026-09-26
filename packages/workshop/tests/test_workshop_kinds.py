@@ -17,6 +17,7 @@ from livery.workshop._kinds import (
     register_kind,
 )
 from livery.workshop._packages import Package
+from livery.workshop._registries import RegistryTarget
 
 _FAILURES = (BaseException,)
 
@@ -51,11 +52,10 @@ class _FakeBackend:
     def publish_artifact(
         self,
         package: Package,
+        root: Path,
         *,
         version: str,
-        publish_url: str,
-        token: str,
-        local: bool,
+        target: RegistryTarget,
     ) -> bool:
         return True
 

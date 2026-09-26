@@ -13,6 +13,7 @@ from __future__ import annotations
 import http.client
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from collections.abc import Callable
@@ -28,6 +29,11 @@ PAGE_SIZE = 50
 #: Pages any one listing walks before the completeness rule raises: the
 #: listing is not complete, so "not found" would be a guess.
 PAGE_CAP = 40
+
+#: Redirects one asset download follows before it raises. A forge sends
+#: at most two hops (the API, then the signed store URL); more is a
+#: loop, not a route.
+REDIRECT_HOPS = 5
 
 
 class Opener(Protocol):
@@ -211,6 +217,64 @@ class JsonClient:
             content_type=f"multipart/form-data; boundary={boundary}",
         )
         return json.loads(raw, strict=False) if raw else {}
+
+    def download(self, endpoint: str, *, accept: str = "") -> bytes:
+        """GET *endpoint* and return its bytes, redirects followed.
+
+        The one read that must follow a redirect: a forge hands the
+        bytes of a release asset to a signed URL on a store of its
+        own. The credential rides the first hop alone. A hop to
+        another host drops it, because the signed URL carries its own
+        authorisation and a second one is rejected by the store.
+
+        *accept* sets the Accept header, which is how GitHub is asked
+        for the bytes of an asset rather than its JSON.
+
+        Raises:
+            ForgeError: for any HTTP error, an unreachable server, or
+                a redirect chain longer than
+                `livery.forge._http.REDIRECT_HOPS`.
+        """
+        url = endpoint if endpoint.startswith("http") else f"{self.api_base}{endpoint}"
+        headers = dict(self._headers)
+        if accept:
+            headers["Accept"] = accept
+        for _hop in range(REDIRECT_HOPS):
+            request = urllib.request.Request(url, method="GET", headers=headers)
+            try:
+                response = self._opener.open(request, timeout=self._timeout)
+            except urllib.error.HTTPError as exc:
+                location = exc.headers.get("Location", "") if exc.headers else ""
+                if 300 <= exc.code < 400 and location:
+                    target = urllib.parse.urljoin(url, location)
+                    if (
+                        urllib.parse.urlsplit(target).netloc
+                        != urllib.parse.urlsplit(url).netloc
+                    ):
+                        headers = {"Accept": accept} if accept else {}
+                    url = target
+                    continue
+                detail = exc.read().decode(errors="replace")
+                raise ForgeError(
+                    f"HTTP {exc.code} on GET {endpoint}: {detail}",
+                    status=exc.code,
+                    method="GET",
+                    endpoint=endpoint,
+                    detail=detail,
+                ) from exc
+            except (urllib.error.URLError, OSError, http.client.HTTPException) as exc:
+                raise ForgeError(
+                    f"server unreachable on GET {endpoint}: {exc}",
+                    method="GET",
+                    endpoint=endpoint,
+                ) from exc
+            read: bytes = response.read()
+            return read
+        raise ForgeError(
+            f"GET {endpoint} redirected more than {REDIRECT_HOPS} times",
+            method="GET",
+            endpoint=endpoint,
+        )
 
     def _raw(
         self,

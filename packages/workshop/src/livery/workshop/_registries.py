@@ -65,6 +65,11 @@ class RegistryTarget:
             trusted publishing on pypi.org). Unused by other kinds.
         local: True when the target is a folder or share rather
             than a server.
+        releases: True when the artifacts ride the forge's own
+            releases, attached to each member's receipt tag. The
+            route a conan package takes on a forge that hosts no
+            conan registry; `url` is then the repository's page, for
+            printing.
         token: The registry credential, for reads and uploads alike:
             the kind's credential variable when set, else the forge
             lane's token when the forge rung answered. Empty reads
@@ -77,6 +82,7 @@ class RegistryTarget:
     publish_url: str = ""
     local: bool = False
     token: str = ""
+    releases: bool = False
 
 
 def _is_local(value: str) -> bool:
@@ -137,6 +143,12 @@ def resolve_registry(root: Path, kind: str) -> RegistryTarget:
             token=token,
         )
     resolved = _forge_registry(root, kind)
+    if resolved is None and kind == "conan":
+        # A forge with no conan registry still has releases, and a
+        # conan package is a file: each member's caches ride its own
+        # receipt tag. The consumer reads them back through the same
+        # forge, so nothing outside the repository is involved.
+        return _forge_releases(root)
     if resolved is not None:
         forge_url, lane_token = resolved
         if kind == "python":
@@ -158,6 +170,39 @@ def resolve_registry(root: Path, kind: str) -> RegistryTarget:
         f"no {kind} registry resolves: nothing declared (env or the"
         " [registries] table), this forge hosts none, and the kind has"
         " no ecosystem default. Declare one, a local folder included."
+    )
+
+
+def _forge_releases(root: Path) -> RegistryTarget:
+    """The conan target on a forge whose releases carry the caches.
+
+    The address is the repository itself: the publisher attaches each
+    host's saved cache to the member's release, and the probe reads
+    the same listing. The refusal names what to declare when this
+    workspace has no forge either.
+    """
+    from livery.workshop._forge_lane import this_repository
+    from livery.workshop._tokens import forge_token
+
+    contract = load_contract(root / "workshop.toml")
+    forge_table = contract.get("forge") or {}
+    try:
+        repository = this_repository(root)
+    except BaseException as error:
+        fail(
+            f"no conan registry resolves: nothing declared (env or the"
+            f" [registries] table), and this forge's releases did not"
+            f" answer either ({error}). Declare [registries.conan] in"
+            " workshop.toml, a local folder included."
+        )
+    token, _ = forge_token(
+        str(forge_table.get("kind", "")), str(forge_table.get("url", ""))
+    )
+    return RegistryTarget(
+        kind="conan",
+        url=repository.web_url(),
+        releases=True,
+        token=token,
     )
 
 

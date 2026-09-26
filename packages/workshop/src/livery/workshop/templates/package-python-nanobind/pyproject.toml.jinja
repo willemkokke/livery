@@ -45,4 +45,8 @@ CMAKE_PROJECT_TOP_LEVEL_INCLUDES = { env = "CMAKE_CONAN_PROVIDER" }
 # Those builds use Ninja on every host, the store's generator, under
 # the compiler environment conan activates; a Visual Studio generator
 # would let MSBuild pick a platform apart from the compiler conan names.
-CONAN_INSTALL_ARGS = "--build=missing;--build=editable;-c;tools.cmake.cmaketoolchain:generator=Ninja"
+# The environment wins where it is set: the floor leg builds the same
+# package against the version the contract floors a sibling at, by
+# passing these arguments and a profile that replaces the sibling's
+# requirement with that version.
+CONAN_INSTALL_ARGS = { env = "CONAN_INSTALL_ARGS", default = "--build=missing;--build=editable;-c;tools.cmake.cmaketoolchain:generator=Ninja" }

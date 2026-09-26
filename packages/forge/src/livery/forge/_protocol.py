@@ -382,6 +382,18 @@ class Releases(Protocol):
         """
         ...
 
+    def download_asset(self, tag: str, name: str) -> bytes:
+        """The bytes of the asset *name* on *tag*'s release.
+
+        The forge reads its own store: a private repository needs the
+        lane's credential, and each forge addresses the bytes its own
+        way, so a caller never builds the download URL itself.
+
+        Raises livery.forge.ForgeError when *tag* has no release or
+        the release carries no asset named *name*.
+        """
+        ...
+
 
 class Issues(Protocol):
     """One repository's issues: text in both directions.

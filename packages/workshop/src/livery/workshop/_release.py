@@ -409,18 +409,23 @@ def release_wheels(
     ctx: Context,
     ref: Annotated[str, doc("the release squash; empty means HEAD")] = "",
 ) -> None:
-    """Build this platform's wheels for the squash's native members.
+    """Build this platform's native artifacts for the squash's members.
 
-    One per-platform matrix job runs this before the wave: cibuildwheel
+    One per-platform matrix job runs this before the wave, in three
+    steps. Each conan member is created into this leg's cache and
+    saved beside its wheels, one file per host, which is how a forge
+    with no conan registry carries the package. Then cibuildwheel
     builds every interpreter of the workspace's python matrix for
-    this platform (CIBW_BUILD widened past the local one-interpreter
-    narrowing, both linux libc flavours kept), the artifact upload
-    collects each ``dist/``, and the wave publishes the union with
-    ``--prebuilt``. A squash with no platform-wheel member prints so
-    and builds nothing, so the matrix job stays green on a pure
-    release.
+    this platform (CIBW_BUILD widened past the local
+    one-interpreter narrowing, both linux libc flavours kept),
+    resolving each conan member from the cache the first step
+    filled. Then every declared floor on a conan member is proved
+    with its own build. The artifact upload collects each
+    ``dist/``, and the wave publishes the union with ``--prebuilt``.
+    A squash with no native member prints so and builds nothing, so
+    the matrix job stays green on a pure release.
     """
-    from livery.workshop._backends import backend_for
+    from livery.workshop._backends import _cpp_conan, _python_nanobind, backend_for
     from livery.workshop._kinds import kind_for
     from livery.workshop._publish import discover_release
     from livery.workshop._pythons import python_matrix
@@ -430,14 +435,30 @@ def release_wheels(
     git = GitOps(root)
     resolved_ref = ref or git.head_sha()
     epoch = int(git._run("log", "-1", "--format=%ct", resolved_ref).strip() or "0")
+    members = discover_release(root, git, resolved_ref)
+    released = {package.path: version for package, version in members}
+    conan_members = [
+        (package, version)
+        for package, version in members
+        if kind_for(package.type).artifact == "conan"
+    ]
     native = [
         package
-        for package, _version in discover_release(root, git, resolved_ref)
+        for package, _version in members
         if kind_for(package.type).wheel_identity == "platform"
     ]
-    if not native:
-        print("  no platform-wheel members in this release; nothing to build")
+    if not native and not conan_members:
+        print("  no native members in this release; nothing to build")
         return
+    for package, version in conan_members:
+        # The workspace registers each conan member editable, which
+        # points a consumer at the source tree. A release leg builds
+        # the package the release ships, so the registration goes
+        # first and the extension resolves the created package.
+        _cpp_conan.forget_editable(package)
+        backend_for(package).build(package, root, epoch=epoch)
+        archive = _cpp_conan.save_cache(package, version, package.directory / "dist")
+        print(f"  {package.name}: {archive.name}")
     # The full set for this platform: the python matrix's interpreters,
     # and both libc flavours kept (an empty CIBW_SKIP reads as no skip,
     # and its presence stops the local narrowing's setdefault). Set on
@@ -450,6 +471,8 @@ def release_wheels(
         dist = backend_for(package).build(package, root, epoch=epoch)
         wheels = ", ".join(sorted(w.name for w in dist.glob("*.whl")))
         print(f"  {package.name}: {wheels}")
+    for package in native:
+        _python_nanobind.floor_legs(package, root, released, epoch=epoch)
 
 
 @release.task(name="driver", hidden=True)

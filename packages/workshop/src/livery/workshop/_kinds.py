@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from livery.workshop._packages import Package
+    from livery.workshop._registries import RegistryTarget
 
 
 class Stamper(Protocol):
@@ -67,17 +68,17 @@ class Backend(Protocol):
     def publish_artifact(
         self,
         package: Package,
+        root: Path,
         *,
         version: str,
-        publish_url: str,
-        token: str,
-        local: bool,
+        target: RegistryTarget,
     ) -> bool:
-        """Upload the built artifacts to the kind's target.
+        """Upload the built artifacts to *target*, the resolved registry.
 
         False when everything was already there: a re-run walks past
-        what an earlier attempt landed. Each kind reads the fields
-        it needs and ignores the rest.
+        what an earlier attempt landed. The wave resolves the target
+        for the kind's artifact and hands it whole; each kind reads
+        the fields its own publisher needs.
         """
         ...
 

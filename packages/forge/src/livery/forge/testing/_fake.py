@@ -17,6 +17,7 @@ without it.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -1320,7 +1321,7 @@ class _FakeReleases:
                 status=409,
             )
         held[name] = data
-        return Asset(name, self._asset_url(tag, name), len(data))
+        return self._asset(tag, name, data)
 
     def assets(self, tag: str) -> tuple[Asset, ...]:
         """The files attached to *tag*'s release, in upload order."""
@@ -1328,8 +1329,27 @@ class _FakeReleases:
         if tag not in state.releases:
             raise ForgeError(f"tag {tag} has no release", status=404)
         return tuple(
-            Asset(name, self._asset_url(tag, name), len(data))
+            self._asset(tag, name, data)
             for name, data in state.assets.get(tag, {}).items()
+        )
+
+    def download_asset(self, tag: str, name: str) -> bytes:
+        """The bytes attached under *name*; the same bytes that went up."""
+        state = self._state()
+        if tag not in state.releases:
+            raise ForgeError(f"tag {tag} has no release", status=404)
+        held = state.assets.get(tag, {})
+        if name not in held:
+            raise ForgeError(f"release {tag} has no asset named {name}", status=404)
+        return held[name]
+
+    def _asset(self, tag: str, name: str, data: bytes) -> Asset:
+        """One asset row, digest included: the fake computes what a forge reports."""
+        return Asset(
+            name,
+            self._asset_url(tag, name),
+            len(data),
+            digest=f"sha256:{hashlib.sha256(data).hexdigest()}",
         )
 
     def _asset_url(self, tag: str, name: str) -> str:

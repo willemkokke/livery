@@ -498,3 +498,77 @@ def test_a_locked_merge_request_is_still_open() -> None:
     assert merged is not None and merged.state == "closed" and merged.merged
     closed = pulls.get(5)
     assert closed is not None and closed.state == "closed" and not closed.merged
+
+
+class _AssetStore:
+    """An opener that redirects an asset read to a store of its own.
+
+    Records every request it is given, so a test can read which
+    headers rode which hop.
+    """
+
+    def __init__(self, *, hops: int = 1, same_host: bool = False) -> None:
+        self.seen: list[urllib.request.Request] = []
+        self._hops = hops
+        self._same_host = same_host
+
+    def open(self, request: urllib.request.Request, /, *, timeout: float = 30.0) -> Any:
+        import email.message
+
+        del timeout
+        self.seen.append(request)
+        if len(self.seen) <= self._hops:
+            headers = email.message.Message()
+            host = "https://api.example" if self._same_host else "https://store.example"
+            headers["Location"] = f"{host}/signed/{len(self.seen)}"
+            raise urllib.error.HTTPError(request.full_url, 302, "Found", headers, None)
+
+        class _Response:
+            def read(self) -> bytes:
+                return b"the asset bytes"
+
+        return _Response()
+
+
+def test_an_asset_download_follows_the_redirect_without_the_credential() -> None:
+    # A signed store URL carries its own authorisation and rejects a
+    # second one, so the token rides the first hop alone.
+    opener = _AssetStore()
+    client = JsonClient(
+        "https://api.example", headers={"Authorization": "Bearer t"}, opener=opener
+    )
+    assert client.download("/releases/assets/7", accept="application/octet-stream") == (
+        b"the asset bytes"
+    )
+    first, second = opener.seen
+    assert first.get_header("Authorization") == "Bearer t"
+    assert first.get_header("Accept") == "application/octet-stream"
+    assert second.get_header("Authorization") is None
+    assert second.get_header("Accept") == "application/octet-stream"
+    assert second.full_url == "https://store.example/signed/1"
+
+
+def test_a_redirect_on_the_same_host_keeps_the_credential() -> None:
+    opener = _AssetStore(same_host=True)
+    client = JsonClient(
+        "https://api.example", headers={"Authorization": "Bearer t"}, opener=opener
+    )
+    assert client.download("/attachments/7") == b"the asset bytes"
+    assert opener.seen[1].get_header("Authorization") == "Bearer t"
+
+
+def test_a_redirect_that_never_lands_raises_naming_the_read() -> None:
+    from livery.forge._http import REDIRECT_HOPS
+
+    opener = _AssetStore(hops=REDIRECT_HOPS + 1, same_host=True)
+    client = JsonClient("https://api.example", headers={}, opener=opener)
+    with pytest.raises(ForgeError) as refusal:
+        client.download("/attachments/7")
+    assert "redirected more than" in str(refusal.value)
+
+
+def test_a_download_of_something_that_is_not_there_raises_with_the_status() -> None:
+    client = JsonClient("https://x.invalid/api", headers={}, opener=_Unreachable())
+    with pytest.raises(ForgeError) as refusal:
+        client.download("/attachments/7")
+    assert refusal.value.status is None and "unreachable" in str(refusal.value)
