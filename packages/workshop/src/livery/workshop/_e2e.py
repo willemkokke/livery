@@ -505,7 +505,9 @@ def _publish_dev_wheels(kind: str) -> dict[str, str]:
         )
     if changed:
         run(
-            ["fm", "--yes", "workflow.release", *changed],
+            # The runner under its own name: a branded instance is not
+            # called `fm`, and a literal would spawn nothing there.
+            [footman.prog(), "--yes", "workflow.release", *changed],
             cwd=root,
             # The whole environment, extended: env= replaces, and a bare
             # pair would strip PATH from under the child fm.

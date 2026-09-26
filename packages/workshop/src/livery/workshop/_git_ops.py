@@ -1,10 +1,10 @@
 """The local git seam the forge-lane verbs stand on.
 
-One class, plain subprocess, no state: every method runs git in the
-repository at ``root`` and returns strings or raises with git's own
-words. The forge-lane flows take a livery.workshop._git_ops.GitOps so
-tests drive a temporary repository through the same seam the tasks
-use.
+One class, no state: every method runs git through the store's own
+handle in the repository at ``root``, and returns strings or raises
+with git's own words. The forge-lane flows take a
+livery.workshop._git_ops.GitOps so tests drive a temporary
+repository through the same seam the tasks use.
 """
 
 from __future__ import annotations

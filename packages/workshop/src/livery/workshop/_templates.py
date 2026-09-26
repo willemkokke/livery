@@ -22,7 +22,6 @@ import hashlib
 import json
 import re
 import shutil
-import subprocess
 import tempfile
 from pathlib import Path
 from typing import Annotated, Any
@@ -395,17 +394,17 @@ def _probe_ref(source: str, ref: str) -> None:
     """
     # copier spells an explicit git source with a `git+` prefix; git
     # itself does not understand it.
-    listing = subprocess.run(
-        ["git", "ls-remote", source.removeprefix("git+"), f"refs/tags/{ref}"],
-        capture_output=True,
-        text=True,
-        check=False,
+    from livery.toolroom import tools
+
+    listing = tools.git.opts(
         # ls-remote never reads the working directory; the explicit
         # value satisfies the deliberate-spawn rule and always exists.
         cwd=tempfile.gettempdir(),
-    )
+        nofail=True,
+        recorded=False,
+    )("ls-remote", source.removeprefix("git+"), f"refs/tags/{ref}")
     shown = redacted_source(source)
-    if listing.returncode != 0:
+    if listing.code != 0:
         fail(
             f"cannot reach the template source {shown} (wanted {ref}):"
             " check the network, or point [workspace] templates at a"

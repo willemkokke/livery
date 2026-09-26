@@ -15,7 +15,6 @@ the provenance lint, whose ``--fix`` writes the computed text.
 from __future__ import annotations
 
 import os
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
@@ -351,13 +350,9 @@ def _tracked_paths() -> list[str]:
     root = workspace_root()
     if root is None:
         return []
-    listing = subprocess.run(
-        ["git", "ls-files"],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    from livery.toolroom import tools
+
+    listing = tools.git.opts(cwd=root, nofail=True, recorded=False)("ls-files")
     return listing.stdout.splitlines()
 
 
