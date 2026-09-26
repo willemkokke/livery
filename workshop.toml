@@ -34,7 +34,12 @@ owner = "willemkokke"
 # consumer names the published index's URL. The locked hosts are the
 # gated three unless `hosts` names others.
 index = "records"
-hosts = ["linux-x64", "macos-arm", "windows-x64", "windows-arm"]
+# The Windows ARM runner is one line here and one in `[ci] runners`:
+# `hosts = [..., "windows-arm"]` and `runners = [..., "windows-11-arm"]`,
+# then `fm tools.lock` and `fm template.apply`. Measured against x64 on
+# one commit: the type checkers finish in half the time, the tests in the
+# same, the archive restores slower, and the job's wall time is longer, so
+# the gate gains nothing from it; a nightly on it is the case to come back to.
 # What this repository's own tasks run beyond the python kind's tools;
 # a tool locked here has a stub, and one that is not types as `Tool`.
 requires = ["git", "docker", "coverage", "zensical", "cmake"]
@@ -53,7 +58,7 @@ approvals = 0
 # slowest; `[ci] windows-temp` keeps its files on the runner's
 # working drive (the gate measured at 486 s there against 576 s on
 # the system temp), and the timing plan carries the rest.
-runners = ["ubuntu-latest", "macos-latest", "windows-latest", "windows-11-arm"]
+runners = ["ubuntu-latest", "macos-latest", "windows-latest"]
 # A pull request's check legs run the scoped gate against its base:
 # the packages the change can influence run, the others' suites are
 # reused from the coverage store; a push run and a change outside
