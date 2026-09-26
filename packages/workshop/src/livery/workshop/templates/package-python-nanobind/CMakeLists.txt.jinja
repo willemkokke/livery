@@ -12,6 +12,11 @@ execute_process(
   COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
   OUTPUT_VARIABLE nanobind_ROOT OUTPUT_STRIP_TRAILING_WHITESPACE)
 find_package(nanobind CONFIG REQUIRED)
+# Resolved by conan through the CMake dependency provider that
+# pyproject.toml wires in from the environment's CMAKE_CONAN_PROVIDER;
+# conanfile.py is the recipe it installs.
+find_package(fmt REQUIRED)
 
 nanobind_add_module(_native src/{{ source_path }}/_native.cpp)
+target_link_libraries(_native PRIVATE fmt::fmt)
 install(TARGETS _native LIBRARY DESTINATION {{ source_path }})

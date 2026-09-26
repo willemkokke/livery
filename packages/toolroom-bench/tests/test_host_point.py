@@ -50,10 +50,9 @@ def _records(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *hosts: str) -> Pa
     root = tmp_path / "records"
     Record(
         "tea",
-        kind="binary",
         hosts=(HOST, "windows-x64"),
-        layout=Layout(exe="tea", entry_points=("tea",), paths=(".",)),
-        host_layouts={"windows-x64": Layout(exe="tea.exe", entry_points=("tea.exe",))},
+        layout=Layout(file="tea", entry_points=("tea",), paths=(".",)),
+        host_layouts={"windows-x64": Layout(file="tea.exe", entry_points=("tea.exe",))},
         deltas=(
             RecordDelta(
                 1,
@@ -209,3 +208,31 @@ def test_the_bench_declares_the_six_host_point_fortnightly():
         "windows-latest",
         "windows-11-arm",
     ]
+
+
+def test_a_file_that_is_not_a_program_is_checked_for_presence_alone(
+    tmp_path, monkeypatch
+):
+    """cmake-conan's provider is a CMake module: nothing runs, nothing is
+    read; missing from the tree it fails, present it passes.
+    """
+    from livery.toolroom.bench import _drivers
+
+    root = tmp_path / "records"
+    Record(
+        "tea",
+        hosts=(HOST,),
+        layout=Layout(file="tea", env={"TEA_FILE": "$package/tea"}),
+        deltas=(
+            RecordDelta(1, "0.16.0", "", {HOST: Artifact("https://x/0.16/tea", SHA)}),
+        ),
+    ).save(root)
+    monkeypatch.setattr(_tasks, "_RECORDS", root)
+    monkeypatch.setattr(_drivers, "DRIVERS", (_drivers.Driver("tea", source="manual"),))
+    (tmp_path / "tool").mkdir()
+    store = _FakeStore(tmp_path / "tool")
+    (check,) = _tasks.verify_host(store=store, only="tea")
+    assert check.outcome == "failed" and "not in the installed tree" in check.detail
+    (tmp_path / "tool" / "tea").write_text("# a file")
+    (check,) = _tasks.verify_host(store=store, only="tea")
+    assert check.outcome == "ok" and "a file and not a program" in check.detail

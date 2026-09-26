@@ -109,7 +109,17 @@ def record_version(
         )
     if version not in {delta.version for delta in record.deltas}:
         raise ArtifactError(f"{record.name} does not track {version}")
-    assets = _assets(record.name, forge, driver.provision.repo, version, tag)
+    universal = ""
+    if driver.provision.asset:
+        # One file for every host, at a versioned address the release
+        # lists no asset for: no listing is asked for and no host is
+        # absent.
+        universal = driver.provision.asset.format(
+            repo=driver.provision.repo, tag=tag or version
+        )
+        assets = [(universal.rsplit("/", 1)[-1], universal)]
+    else:
+        assets = _assets(record.name, forge, driver.provision.repo, version, tag)
     delta = record.delta_for(version)
     artifacts = dict(delta.artifacts)
     found: dict[str, tuple[str, int]] = {}
@@ -118,7 +128,9 @@ def record_version(
         if host in artifacts:
             continue
         try:
-            asset, url = _provision._pick_asset(assets, host=host)
+            asset, url = (
+                assets[0] if universal else _provision._pick_asset(assets, host=host)
+            )
         except _provision.ProvisionError:
             absent.append(host)
             continue

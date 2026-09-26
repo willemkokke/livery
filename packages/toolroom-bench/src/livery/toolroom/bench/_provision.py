@@ -49,6 +49,7 @@ from typing import Any
 
 from livery.toolroom.bench._drivers import Driver
 from livery.toolroom.store import (
+    ARCHIVE_SUFFIXES,
     HOSTS,
     FetchError,
     UnpackError,
@@ -56,7 +57,6 @@ from livery.toolroom.store import (
     fetch_json,
     unpack,
 )
-from livery.toolroom.store._fetch import ARCHIVES
 
 
 class ProvisionError(Exception):
@@ -576,7 +576,7 @@ def _pick_asset(assets: list[tuple[str, str]], *, host: str = "") -> tuple[str, 
         # then the shortest name — a qualifier only ever lengthens it.
         low = asset[0].lower()
         variant = any(marker in low for marker in _VARIANTS)
-        return (not low.endswith(ARCHIVES), variant, len(asset[0]), asset[0])
+        return (not low.endswith(ARCHIVE_SUFFIXES), variant, len(asset[0]), asset[0])
 
     candidates.sort(key=rank)
     return candidates[0]
@@ -639,7 +639,7 @@ def place_binary(
         windows = os.name == "nt"
     into.mkdir(parents=True, exist_ok=True)
     if not archive.name.lower().endswith(
-        ARCHIVES
+        ARCHIVE_SUFFIXES
     ):  # a bare binary, downloaded directly
         dest = into / exe(tool, windows=windows)
         dest.write_bytes(archive.read_bytes())

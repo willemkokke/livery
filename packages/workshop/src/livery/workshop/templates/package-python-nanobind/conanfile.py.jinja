@@ -1,0 +1,22 @@
+# Seeded from the template channel (package-python-nanobind kind) at
+# birth; this file is the workspace's own. Edit it directly:
+# the template never rewrites it.
+"""What {{ package_name }} consumes at compile time; conan resolves it for CMake."""
+
+from conan import ConanFile
+
+
+class {{ project_slug | capitalize }}Conan(ConanFile):
+    """The extension's compile-time requirements.
+
+    The CMake dependency provider pyproject.toml wires in runs `conan
+    install` on this recipe at configure time, so `find_package` in
+    CMakeLists.txt resolves each requirement here. A third-party
+    package comes from Conan Center; a workspace sibling is named at
+    the contract's floor ("acme-geometry/[>=0.1.0]") and resolves to
+    its source tree while the sibling is registered editable.
+    """
+
+    settings = "os", "compiler", "build_type", "arch"
+    generators = "CMakeDeps"
+    requires = ("fmt/[>=11.0]",)

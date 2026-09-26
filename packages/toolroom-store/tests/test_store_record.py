@@ -56,7 +56,7 @@ def _lines(path: Path) -> list[str]:
 def _record(**overrides: object) -> Record:
     fields: dict[str, object] = {
         "name": "tool",
-        "kind": "archive",
+        "kind": "download",
         "hosts": ("macos-arm", "linux-x64"),
         "layout": Layout(entry_points=("bin/tool",), paths=("bin",)),
         "deltas": (_delta(),),
@@ -133,19 +133,33 @@ def test_an_override_restating_what_it_inherits_is_refused() -> None:
 
 
 def test_a_version_whose_host_resolves_incomplete_is_refused() -> None:
-    with pytest.raises(RecordError, match=r"resolves incomplete, paths is empty"):
+    with pytest.raises(RecordError, match=r"an entry point is declared with no paths"):
         _record(layout=Layout(entry_points=("tool",)))
-    with pytest.raises(RecordError, match=r"a binary names no exe"):
-        _record(kind="binary")
-    # What goes on PATH is declared, never discovered: a downloaded
-    # kind with no entry point, and a binary whose exe is not among
-    # them, are incomplete.
+    # What goes on PATH is declared, never discovered: a path directory
+    # comes with its entry points, an entry point with a directory.
     with pytest.raises(RecordError, match=r"no entry point is declared"):
         _record(layout=Layout(paths=("bin",)))
-    with pytest.raises(RecordError, match=r"exe 'tool' is not among its entry points"):
+    # A download nothing reaches is refused; env under $package reaches it.
+    with pytest.raises(RecordError, match=r"nothing reaches it"):
+        _record(layout=Layout(file="f", format="file"))
+    _record(layout=Layout(file="f", format="file", env={"F": "$package/f"}))
+    # A bare download names the file it lands as, and a bare program's
+    # file is among its entry points.
+    with pytest.raises(RecordError, match=r"a bare download names no file"):
+        _record(layout=Layout(format="file", entry_points=("tool",), paths=(".",)))
+    with pytest.raises(RecordError, match=r"format 'iso' is not one of"):
+        _record(layout=Layout(file="f", format="iso", env={"F": "$package/f"}))
+    with pytest.raises(RecordError, match=r"entry points are its file 'tool' alone"):
         _record(
-            kind="binary",
-            layout=Layout(exe="tool", entry_points=("other",), paths=(".",)),
+            layout=Layout(
+                file="tool", format="file", entry_points=("other",), paths=(".",)
+            ),
+        )
+    with pytest.raises(RecordError, match=r"alone, not tool, tool2"):
+        _record(
+            layout=Layout(
+                file="tool", format="file", entry_points=("tool", "tool2"), paths=(".",)
+            ),
         )
     with pytest.raises(
         RecordError, match=r"a version with neither an artifact nor a surface"
@@ -167,9 +181,12 @@ def test_a_mode_outside_the_three_is_refused_and_the_kinds_default_by_shape(
     with pytest.raises(RecordError, match=r"tool: mode 'float' is not one of link"):
         _record(mode="float")
     assert MODES == ("link", "path", "none")
-    assert default_mode("binary") == "link"
+    # A download with paths goes on PATH; one reached through env alone
+    # takes none; a system tool is on PATH already.
+    assert default_mode("download", ("bin",)) == "path"
+    assert default_mode("download") == "none"
     assert default_mode("system-check") == "none"
-    assert {default_mode(k) for k in ("archive", "uv-tool", "bun-install")} == {"path"}
+    assert {default_mode(k) for k in ("uv-tool", "bun-install")} == {"path"}
     # The package and the mode ride the tool axis, written only when set.
     bare = _record()
     assert "package" not in bare.to_json() and "mode" not in bare.to_json()
@@ -359,8 +376,8 @@ def test_a_statement_line_off_its_place_or_shape_is_refused_naming_the_line() ->
 def test_a_record_with_no_version_yet_is_validated_on_its_own(tmp_path: Path) -> None:
     # Nothing reads its layout yet, so only a restatement of the
     # built-in default is a refusal; a clean one saves and loads whole.
-    with pytest.raises(RecordError, match=r"the tool's layout restates exe"):
-        Record("young", hosts=("macos-arm",), layout=Layout(exe=""))
+    with pytest.raises(RecordError, match=r"the tool's layout restates file"):
+        Record("young", hosts=("macos-arm",), layout=Layout(file=""))
     young = Record("young", hosts=("macos-arm",))
     young.save(tmp_path)
     assert Record.load(tmp_path / "young.jsonl") == young
@@ -440,6 +457,7 @@ def test_the_four_layers_resolve_most_specific_winning() -> None:
     assert resolve(record, "1", "macos-arm") == Deployment(
         "https://x/1/macos-arm.zip",
         SHA,
+        "",
         "",
         "",
         ("bin/tool",),
@@ -523,7 +541,8 @@ def test_the_schema_names_the_three_lines_and_exports(tmp_path: Path) -> None:
     )
     assert set(shape["$defs"]["Layout"]["properties"]) == {
         "root",
-        "exe",
+        "file",
+        "format",
         "entry_points",
         "paths",
         "env",
@@ -553,12 +572,14 @@ def test_every_host_of_every_version_of_every_record_resolves_whole() -> None:
             for host in record.hosts_of(version):
                 deployment = resolve(record, version, host)
                 assert deployment.url and deployment.sha256, (name, version, host)
+                if record.kind == "download" and not deployment.entry_points:
+                    # Reached through env alone: nothing on PATH, nothing run.
+                    assert deployment.env and not deployment.paths, (name, version)
+                    continue
                 assert deployment.paths, (name, version, host)
-                if record.kind == "binary":
-                    assert deployment.exe in deployment.entry_points, (
+                if deployment.file:
+                    assert deployment.file in deployment.entry_points, (
                         name,
                         version,
                         host,
                     )
-                if record.kind in ("archive", "binary"):
-                    assert deployment.entry_points, (name, version, host)

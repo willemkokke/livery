@@ -161,12 +161,16 @@ def test_the_event_versions_with_a_host_are_verified_and_a_finding_holds(monkeyp
     sha = "d8b96221828ad6f97ac7ac0ab7e95872341af763001e8803e8267652c2652620"
     hosted = Record(
         "tool",
-        kind="archive",
+        kind="download",
         hosts=("linux-x64",),
         layout=Layout(entry_points=("tool",), paths=(".",)),
         deltas=(
-            RecordDelta(1, "1.0.0", "", {"linux-x64": Artifact("https://x/1", sha)}),
-            RecordDelta(2, "1.1.0", "", {"linux-x64": Artifact("https://x/2", sha)}),
+            RecordDelta(
+                1, "1.0.0", "", {"linux-x64": Artifact("https://x/1.zip", sha)}
+            ),
+            RecordDelta(
+                2, "1.1.0", "", {"linux-x64": Artifact("https://x/2.zip", sha)}
+            ),
         ),
     )
     records = {"tool": hosted}

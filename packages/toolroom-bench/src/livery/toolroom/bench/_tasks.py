@@ -948,7 +948,9 @@ def verify_host(
     version with a build for this host is supplied through *store*,
     its first entry point is run with the driver's help flag, and its
     surface is extracted from the installed tree and must describe the
-    tool. A tool with no build for this host is skipped and says so.
+    tool. A download with no entry point is not a program, and the
+    presence of the files its env names is the whole check. A tool with
+    no build for this host is skipped and says so.
     *store*, *run* and *extract* are the seams the tests drive; the
     defaults are the bench's store, a subprocess with a two-minute
     limit, and the bench's own extractor.
@@ -982,6 +984,23 @@ def verify_host(
             ensured = engine.ensure(record, version)
         except StoreError as error:
             checks.append(HostCheck(driver.key, version, "failed", f"install: {error}"))
+            continue
+        if not ensured.deployment.entry_points:
+            # A download with nothing on PATH (cmake-conan's provider)
+            # is reached through its env: the files it names present in
+            # the installed tree is the whole check, nothing runs.
+            named = [Path(value) for value in ensured.env.values()]
+            missing = [path.name for path in named if not path.exists()]
+            checks.append(
+                HostCheck(
+                    driver.key,
+                    version,
+                    "failed" if missing else "ok",
+                    f"{', '.join(missing)} not in the installed tree"
+                    if missing
+                    else f"{len(named)} file(s) present, a file and not a program",
+                )
+            )
             continue
         entry = ensured.tool_dir / ensured.deployment.entry_points[0]
         try:

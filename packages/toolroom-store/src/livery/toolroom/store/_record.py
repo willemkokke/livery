@@ -58,14 +58,22 @@ HOSTS = (
 )
 """The six host keys, `<platform>-<arch>`. A record carries any subset."""
 
-KINDS = ("archive", "binary", "uv-tool", "uv-python", "bun-install", "system-check")
-"""The installer kinds: `archive` and `binary` download by URL and land
-in the store; `uv-tool` and `uv-python` delegate to uv; `bun-install`
-to bun; `system-check` verifies a system tool against `min_version`,
-and may carry an artifact for a host that has no system tool."""
+KINDS = ("download", "uv-tool", "uv-python", "bun-install", "system-check")
+"""The installer kinds. A `download` is fetched by URL and lands in the
+store: an archive is unpacked and its root hoisted, a bare file is
+saved under its `file` name, and the layout says what reaches the
+outside, entry points and `paths` for a program, `env` alone for a
+file that is never run (a CMake module, a plugin bundle). `uv-tool`
+and `uv-python` delegate to uv; `bun-install` to bun; `system-check`
+verifies a system tool against `min_version`, and may carry an
+artifact for a host that has no system tool."""
 
-DOWNLOAD_KINDS = frozenset({"archive", "binary"})
+DOWNLOAD_KINDS = frozenset({"download"})
 """The kinds whose every host needs an artifact."""
+
+FORMATS = ("zip", "tar", "file")
+"""What a downloaded artifact is: sniffed from its URL's suffix unless
+the layout's `format` says, for an artifact whose name lies."""
 
 MODES = ("link", "path", "none")
 """How a materialised tool reaches PATH: its entry points linked into the
@@ -73,16 +81,16 @@ checkout's bin directory, its own directories on PATH, or not at all,
 for a tool reached only through a typed handle."""
 
 
-def default_mode(kind: str) -> str:
+def default_mode(kind: str, paths: tuple[str, ...] = ()) -> str:
     """The materialisation mode a kind takes unless the record or the project says.
 
-    A binary links, since it resolves nothing beside itself; a bundle
-    puts its directories on PATH, since an archive's or an installer's
-    tool finds its own data by its real path; a system tool is on PATH
-    already.
+    A download with *paths* puts them on PATH, since a tool finds its
+    own data by its real path; one with none is reached through its
+    env alone and takes `none`; a system tool is on PATH already; an
+    installer's tool puts its directories on PATH.
     """
-    if kind == "binary":
-        return "link"
+    if kind == "download":
+        return "path" if paths else "none"
     if kind == "system-check":
         return "none"
     return "path"
@@ -109,7 +117,16 @@ _VERB_FIELDS = ("help", "wraps", "positional", "lead")
 
 _SHA256 = re.compile(r"^[a-f0-9]{64}$")
 
-LAYOUT_KEYS = ("root", "exe", "entry_points", "paths", "env", "shims", "exclude")
+LAYOUT_KEYS = (
+    "root",
+    "file",
+    "format",
+    "entry_points",
+    "paths",
+    "env",
+    "shims",
+    "exclude",
+)
 """The layout fields an override may set, in the record's key order."""
 
 SURFACE_PLATFORMS = ("Linux", "macOS", "Windows")
@@ -181,7 +198,10 @@ class Layout:
             root; empty keeps the archive's own top. May carry
             `VERSION_VAR`, replaced by the version resolved, for an
             archive whose top directory is named after its version.
-        exe: The executable's name for a `binary` download.
+        file: The name a bare download (one file, no archive) is saved
+            under, since the artifact carries none of its own.
+        format: What the artifact is, one of `FORMATS`, for an artifact
+            whose URL suffix would sniff wrong; empty sniffs.
         entry_points: Install-relative paths of the executables the
             deployment puts on PATH, annotated here and never
             discovered: they are what a bin directory links and what
@@ -196,7 +216,8 @@ class Layout:
     """
 
     root: str | None = None
-    exe: str | None = None
+    file: str | None = None
+    format: str | None = None
     entry_points: tuple[str, ...] | None = None
     paths: tuple[str, ...] | None = None
     env: Mapping[str, str] | None = None
@@ -227,7 +248,10 @@ class Layout:
         data = _object(value, LAYOUT_KEYS, where=where)
         return cls(
             _text(data["root"], where=f"{where} root") if "root" in data else None,
-            _text(data["exe"], where=f"{where} exe") if "exe" in data else None,
+            _text(data["file"], where=f"{where} file") if "file" in data else None,
+            _text(data["format"], where=f"{where} format")
+            if "format" in data
+            else None,
             _texts(data["entry_points"], where=f"{where} entry_points")
             if "entry_points" in data
             else None,
@@ -302,10 +326,12 @@ class Deployment:
         url: Where the artifact downloads from.
         sha256: The artifact's sha256.
         root: See [livery.toolroom.store.Layout][].
-        exe: See [livery.toolroom.store.Layout][].
-        entry_points: See [livery.toolroom.store.Layout][]; never empty
-            for a kind the store downloads.
-        paths: See [livery.toolroom.store.Layout][]; never empty.
+        file: See [livery.toolroom.store.Layout][].
+        format: See [livery.toolroom.store.Layout][]; empty when the URL
+            suffix decides.
+        entry_points: See [livery.toolroom.store.Layout][]; empty for a
+            download reached through its env alone.
+        paths: See [livery.toolroom.store.Layout][]; empty likewise.
         env: See [livery.toolroom.store.Layout][].
         shims: See [livery.toolroom.store.Layout][].
         exclude: See [livery.toolroom.store.Layout][].
@@ -314,7 +340,8 @@ class Deployment:
     url: str
     sha256: str
     root: str
-    exe: str
+    file: str
+    format: str
     entry_points: tuple[str, ...]
     paths: tuple[str, ...]
     env: dict[str, str]
@@ -331,7 +358,8 @@ class Deployment:
             "url": self.url,
             "sha256": self.sha256,
             "root": self.root,
-            "exe": self.exe,
+            "file": self.file,
+            "format": self.format,
             "entry_points": list(self.entry_points),
             "paths": list(self.paths),
             "env": dict(self.env),
@@ -354,7 +382,8 @@ class Deployment:
             _text(data["url"], where=f"{where} url"),
             _text(data["sha256"], where=f"{where} sha256"),
             _text(data["root"], where=f"{where} root"),
-            _text(data["exe"], where=f"{where} exe"),
+            _text(data["file"], where=f"{where} file"),
+            _text(data["format"], where=f"{where} format"),
             _texts(data["entry_points"], where=f"{where} entry_points"),
             _texts(data["paths"], where=f"{where} paths"),
             _mapping(data["env"], where=f"{where} env"),
@@ -371,7 +400,8 @@ _DEPLOYMENT_KEYS = (
     "url",
     "sha256",
     "root",
-    "exe",
+    "file",
+    "format",
     "entry_points",
     "paths",
     "env",
@@ -383,7 +413,8 @@ _DEPLOYMENT_KEYS = (
 #: What a field resolves to when no layer sets it.
 _BUILTIN: dict[str, Any] = {
     "root": "",
-    "exe": "",
+    "file": "",
+    "format": "",
     "entry_points": (),
     "paths": (),
     "env": {},
@@ -604,7 +635,7 @@ class Record:
 
     name: str
     description: str = ""
-    kind: str = "archive"
+    kind: str = "download"
     package: str = ""
     mode: str = ""
     min_version: str = ""
@@ -681,7 +712,7 @@ class Record:
         return cls(
             _text(data["name"], where=f"{where} name"),
             _text(data.get("description", ""), where=f"{where} description"),
-            _text(data.get("kind", "archive"), where=f"{where} kind"),
+            _text(data.get("kind", "download"), where=f"{where} kind"),
             _text(data.get("package", ""), where=f"{where} package"),
             _text(data.get("mode", ""), where=f"{where} mode"),
             _text(data.get("min_version", ""), where=f"{where} min_version"),
@@ -1080,7 +1111,8 @@ def resolve(record: Record, version: str, host: str) -> Deployment:
         artifact.url,
         artifact.sha256,
         str(values["root"]).replace(VERSION_VAR, version),
-        str(values["exe"]),
+        str(values["file"]),
+        str(values["format"]),
         tuple(values["entry_points"]),
         tuple(values["paths"]),
         dict(values["env"]),
@@ -1203,7 +1235,7 @@ def validate(record: Record) -> None:
             values, restated = _resolve_fields(record, delta, host)
             if restated:
                 raise RecordError(f"{at} {host}: {restated[0]}")
-            missing = _incomplete(record, values)
+            missing = _incomplete(record, values, delta.artifacts[host].url)
             if missing:
                 raise RecordError(
                     f"{at} {host}: resolves incomplete, {missing}; every host of"
@@ -1310,16 +1342,59 @@ def _validate_surface(
     return surface.help if surface.help is not None else str(help_)
 
 
-def _incomplete(record: Record, values: Mapping[str, Any]) -> str:
-    """What a resolved layout still lacks, or empty when it is whole."""
-    if not values["paths"]:
-        return "paths is empty"
-    if record.kind == "binary" and not values["exe"]:
-        return "a binary names no exe"
-    if record.kind in DOWNLOAD_KINDS and not values["entry_points"]:
+def artifact_format(url: str) -> str:
+    """What the artifact at *url* is by its suffix: `zip`, `tar`, or `file`."""
+    name = url.rsplit("/", 1)[-1].lower()
+    if name.endswith(".zip"):
+        return "zip"
+    if name.endswith(TAR_SUFFIXES):
+        return "tar"
+    return "file"
+
+
+TAR_SUFFIXES = (".tar.gz", ".tgz", ".tar.xz", ".tar.bz2")
+"""The suffixes of the tar archives the store unpacks."""
+
+ARCHIVE_SUFFIXES = (*TAR_SUFFIXES, ".zip")
+"""The suffixes of every archive the store unpacks."""
+
+
+def _incomplete(record: Record, values: Mapping[str, Any], url: str = "") -> str:
+    """What a resolved layout still lacks, or empty when it is whole.
+
+    *url* is the host's artifact, which decides whether a download
+    lands an archive or one bare file when the layout's `format` does
+    not say.
+    """
+    if record.kind != "download":
+        return "" if values["paths"] else "paths is empty"
+    form = str(values["format"] or artifact_format(url))
+    if form not in FORMATS:
+        return f"format {form!r} is not one of {', '.join(FORMATS)}"
+    exposes = bool(values["paths"] or values["entry_points"])
+    named = any(PACKAGE_VAR in value for value in values["env"].values())
+    if not exposes and not named:
+        return (
+            "nothing reaches it: no paths, no entry point, and no env value"
+            f" under {PACKAGE_VAR}"
+        )
+    # What goes on PATH is declared, never discovered: a path directory
+    # comes with the entry points in it, and an entry point with a
+    # directory to be found in.
+    if values["paths"] and not values["entry_points"]:
         return "no entry point is declared"
-    if record.kind == "binary" and values["exe"] not in values["entry_points"]:
-        return f"the binary's exe {values['exe']!r} is not among its entry points"
+    if values["entry_points"] and not values["paths"]:
+        return "an entry point is declared with no paths to find it on"
+    if form == "file":
+        if not values["file"]:
+            return "a bare download names no file"
+        # One file lands, so at most one entry point exists: that file.
+        entries = tuple(values["entry_points"])
+        if entries and entries != (values["file"],):
+            return (
+                f"a bare download's entry points are its file {values['file']!r}"
+                f" alone, not {', '.join(entries)}"
+            )
     return ""
 
 
@@ -1381,7 +1456,8 @@ def schema() -> dict[str, Any]:
         "additionalProperties": False,
         "properties": {
             "root": {"type": "string"},
-            "exe": {"type": "string"},
+            "file": {"type": "string"},
+            "format": {"type": "string", "enum": list(FORMATS)},
             "entry_points": {"type": "array", "items": {"type": "string"}},
             "paths": {"type": "array", "items": {"type": "string"}},
             "env": {"type": "object", "additionalProperties": {"type": "string"}},
@@ -1410,7 +1486,7 @@ def schema() -> dict[str, Any]:
         "properties": {
             "name": {"type": "string", "minLength": 1},
             "description": {"type": "string", "default": ""},
-            "kind": {"type": "string", "enum": list(KINDS), "default": "archive"},
+            "kind": {"type": "string", "enum": list(KINDS), "default": "download"},
             "package": {"type": "string", "default": ""},
             "mode": {"type": "string", "enum": list(MODES)},
             "min_version": {"type": "string", "default": ""},

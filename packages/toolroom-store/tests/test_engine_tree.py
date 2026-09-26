@@ -96,8 +96,10 @@ def test_a_declared_entry_point_the_tree_lacks_is_refused_naming_it_whole(
 def _modeless(extract: object) -> object:
     """The extractor as Windows runs it: every member lands without a mode."""
 
-    def stripped(artifact: Path, into: Path, *, name: str = "") -> None:
-        extract(artifact, into, name=name)  # type: ignore[operator]
+    def stripped(
+        artifact: Path, into: Path, *, name: str = "", format: str = ""
+    ) -> None:
+        extract(artifact, into, name=name, format=format)  # type: ignore[operator]
         for path in into.rglob("*"):
             if path.is_file() and not path.is_symlink():
                 path.chmod(path.stat().st_mode & ~0o111)

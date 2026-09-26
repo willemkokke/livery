@@ -105,7 +105,7 @@ class _Rig:
         }
         return Record(
             "tool",
-            kind="archive",
+            kind="download",
             hosts=(LINUX, WINDOWS),
             layout=layout
             or Layout(root="tool-1", entry_points=("bin/tool",), paths=("bin",)),

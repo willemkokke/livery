@@ -21,8 +21,14 @@ class {{ project_slug | capitalize }}Conan(ConanFile):
     exports_sources = "CMakeLists.txt", "src/*", "tests/*"
 
     def layout(self):
-        """Use conan's standard cmake layout under build/."""
+        """Use conan's standard cmake layout under build/; headers live in src/.
+
+        The source include directory is what a consumer sees while
+        this package is registered editable, so it names src/ where
+        the headers are, not conan's default include/.
+        """
         cmake_layout(self)
+        self.cpp.source.includedirs = ["src"]
 
     def generate(self):
         """Write the CMake toolchain file for the active profile."""
@@ -37,3 +43,7 @@ class {{ project_slug | capitalize }}Conan(ConanFile):
     def package(self):
         """Install the built targets into the conan package."""
         CMake(self).install()
+
+    def package_info(self):
+        """Name the built library for consumers; conan collects nothing on its own."""
+        self.cpp_info.libs = ["{{ project_slug }}"]

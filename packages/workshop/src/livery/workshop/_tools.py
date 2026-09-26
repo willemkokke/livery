@@ -52,6 +52,7 @@ from livery.footman import fail, prog
 from livery.footman.context import Failed
 from livery.strongroom import FolderSource, HttpSource, Source, canonical, digest_of
 from livery.toolroom.store import (
+    DOWNLOAD_KINDS,
     LOCK_FILE,
     MODES,
     POINTER,
@@ -62,11 +63,13 @@ from livery.toolroom.store import (
     Home,
     Lock,
     LockError,
+    RecordError,
     Requirement,
     Store,
     StoreError,
     class_name,
     default_mode,
+    host_key,
     read_pointer,
     records_in,
     resolve_lock,
@@ -197,6 +200,11 @@ def _read_catalogue(source: str, *, offline: bool) -> Catalogue:
 
 
 def _home() -> Home:
+    return store_home()
+
+
+def store_home() -> Home:
+    """The store's home on this machine: `toolroom` in the runner's data directory."""
     from livery.footman.context import data_dir
 
     return Home(data_dir() / "toolroom")
@@ -447,15 +455,18 @@ def receipts(root: Path) -> dict[str, Receipt]:
     return found
 
 
-def mode_of(root: Path, name: str, kind: str, declared: str = "") -> str:
+def mode_of(
+    root: Path, name: str, kind: str, declared: str = "", *, paths: tuple[str, ...] = ()
+) -> str:
     """The mode *name* materialises in: the project's say, the record's, the kind's.
 
+    *paths* are the deployment's, which decide a download's default.
     Raises a refusal naming the override when it is not one of `MODES`.
     """
     overrides = tools_table(root / "workshop.toml").get("modes", {})
     if not isinstance(overrides, dict):
         fail("workshop.toml: [tools] modes is not a table")
-    chosen = overrides.get(name, declared) or default_mode(kind)
+    chosen = overrides.get(name, declared) or default_mode(kind, paths)
     if chosen not in MODES:
         fail(
             f"workshop.toml: [tools] modes names {chosen!r} for {name}; the modes"
@@ -566,7 +577,7 @@ def materialise(
         ):
             floor, site = asked
         deployment: Deployment | None = None
-        if listed.kind in ("archive", "binary"):
+        if listed.kind in DOWNLOAD_KINDS:
             try:
                 deployment = listing.deployment(name, locked.version, host)
             except CatalogueError as error:
@@ -591,7 +602,13 @@ def materialise(
             continue
         if name == "bun" and ensured.deployment.entry_points:
             bun_exe = ensured.tool_dir / ensured.deployment.entry_points[0]
-        mode = mode_of(root, name, listed.kind, listed.mode)
+        mode = mode_of(
+            root,
+            name,
+            listed.kind,
+            listed.mode,
+            paths=deployment.paths if deployment is not None else (),
+        )
         receipt = Receipt(
             name,
             locked.version,
@@ -655,6 +672,21 @@ class Stubbed:
     removed: tuple[str, ...]
 
 
+def _no_command(listing: Catalogue, name: str, version: str) -> bool:
+    """Whether *name* is a download with no entry point: no command, so no stub."""
+    import platform
+
+    if listing.listed(name).kind != "download":
+        return False
+    try:
+        deployment = listing.deployment(
+            name, version, host_key(platform.system(), platform.machine())
+        )
+    except (CatalogueError, RecordError):
+        return False
+    return not deployment.entry_points
+
+
 def write_stubs(root: Path, *, offline: bool = False) -> Stubbed:
     """Write the stubs of the locked tools into the typings directory.
 
@@ -702,8 +734,10 @@ def write_stubs(root: Path, *, offline: bool = False) -> Stubbed:
     declared: list[str] = []
     for name in sorted(locked):
         version = locked[name].version
+        assert listing is not None
+        if _no_command(listing, name, version):
+            continue
         try:
-            assert listing is not None
             text = listing.stub(name, version)
         except CatalogueError as error:
             skipped[name] = str(error)

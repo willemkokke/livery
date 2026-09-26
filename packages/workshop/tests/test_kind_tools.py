@@ -47,7 +47,7 @@ def _bun(*versions: str) -> Record:
     """bun, the archive a bun-install tool is installed through, on the three hosts."""
     return Record(
         "bun",
-        kind="archive",
+        kind="download",
         hosts=THREE,
         layout=Layout(entry_points=("bun",), paths=(".",)),
         deltas=tuple(
@@ -147,9 +147,9 @@ def test_a_version_on_fewer_hosts_than_the_lock_covers_refuses_naming_the_host(
         root,
         Record(
             "tea",
-            kind="binary",
+            kind="download",
             hosts=THREE,
-            layout=Layout(exe="tea", entry_points=("tea",), paths=(".",)),
+            layout=Layout(file="tea", entry_points=("tea",), paths=(".",)),
             deltas=(
                 RecordDelta(
                     1,

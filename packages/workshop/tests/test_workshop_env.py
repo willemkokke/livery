@@ -511,7 +511,7 @@ def _receipt(
         tool,
         "1.0.0",
         "linux-x64",
-        "archive",
+        "download",
         "path",
         "sha256:" + "0" * 64,
         str(root / "store" / tool),

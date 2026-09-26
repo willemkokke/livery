@@ -1,11 +1,15 @@
 // Seeded from the template channel (package-python-nanobind kind) at
 // birth; this file is the workspace's own. Edit it directly:
 // the template never rewrites it.
+#include <fmt/format.h>
 #include <nanobind/nanobind.h>
+#include <nanobind/stl/string.h>
 
 namespace nb = nanobind;
 
 NB_MODULE(_native, m) {
+    // The greeting is formatted by fmt: the first third-party symbol
+    // the extension links, resolved by conan at configure time.
     m.def("native_hello",
-          []() { return "native hello from {{ package_name }}"; });
+          []() { return fmt::format("native hello from {}", "{{ package_name }}"); });
 }

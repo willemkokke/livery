@@ -16,6 +16,7 @@ import sysconfig
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import livery.footman as footman
 from livery.footman import fail
 from livery.toolroom import tools
 from livery.workshop._backends import _python
@@ -97,6 +98,64 @@ def _musl_loader_present() -> bool:
     return any(Path("/lib").glob("ld-musl-*.so.1"))
 
 
+def conan_environment(root: Path) -> dict[str, str]:
+    """The variables a native build takes from the store; a caller's own win.
+
+    `CMAKE_CONAN_PROVIDER` names the store's cmake-conan provider file;
+    the extension's `pyproject.toml` maps it to CMake's
+    `CMAKE_PROJECT_TOP_LEVEL_INCLUDES`, which CMake reads from no
+    environment variable of its own, so every configure resolves
+    `find_package` through conan. `CONAN_HOME` is made explicit so a
+    container build shares this machine's cache and its editables. On
+    Linux cibuildwheel
+    builds in a container with its own filesystem, so the workspace,
+    the store and the conan home are mounted at their host paths and
+    the store's conan joins the container's PATH. The provider and
+    conan are found through the entered environment first, then the
+    store's own home.
+
+    Raises:
+        Failed: when the provider or conan is in neither place; the
+            message names `fm sync`, which supplies both.
+    """
+    from livery.workshop._tools import store_home
+
+    home = store_home()
+    provider = os.environ.get("CMAKE_CONAN_PROVIDER") or _newest(
+        home.tools, "cmake_conan", "conan_provider.cmake"
+    )
+    conan = shutil.which("conan") or _newest(home.tools, "conan", "bin/conan")
+    if not provider or not conan:
+        missing = "the cmake-conan provider" if not provider else "conan"
+        fail(
+            f"{missing} is not materialised: the native kinds take both from"
+            f" the store; `{footman.prog()} sync` supplies them"
+        )
+    conan_home = os.environ.get("CONAN_HOME") or str(Path.home() / ".conan2")
+    env = {"CMAKE_CONAN_PROVIDER": provider, "CONAN_HOME": conan_home}
+    if sys.platform.startswith("linux"):
+        mounts = " ".join(
+            f"-v {path}:{path}" for path in (str(root), str(home.root), conan_home)
+        )
+        env["CIBW_ENVIRONMENT_PASS_LINUX"] = "CMAKE_CONAN_PROVIDER CONAN_HOME"
+        env["CIBW_CONTAINER_ENGINE"] = f"docker; create_args: {mounts}"
+        env["CIBW_ENVIRONMENT_LINUX"] = f'PATH="{Path(conan).parent}:$PATH"'
+    return env
+
+
+def _newest(tools_dir: Path, name: str, relative: str) -> str:
+    """*relative* under the newest `<name>@<version>` in *tools_dir*, or empty."""
+    from livery.toolroom.store import version_key
+
+    found = [
+        path for path in tools_dir.glob(f"{name}@*") if (path / relative).is_file()
+    ]
+    if not found:
+        return ""
+    newest = max(found, key=lambda p: version_key(p.name.split("@", 1)[1]))
+    return str(newest / relative)
+
+
 def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
     """Build the platform wheel through cibuildwheel, and the sdist.
 
@@ -125,6 +184,8 @@ def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
     # two candidates for one venv. The skip follows the host's libc;
     # the release matrix sets its own build set explicitly.
     env.setdefault("CIBW_SKIP", "*-manylinux_*" if host_is_musl() else "*-musllinux_*")
+    for key, value in conan_environment(root).items():
+        env.setdefault(key, value)
     result = tools.uv.opts(cwd=package.directory, env=env, nofail=True, recorded=False)(
         "tool", "run", "--from", CIBUILDWHEEL, "cibuildwheel", "--output-dir", str(dist)
     )
