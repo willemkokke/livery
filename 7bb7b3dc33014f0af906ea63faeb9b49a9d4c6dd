@@ -1,0 +1,1 @@
+{"branch": "workflow/release/cbor", "forge": "github", "legs": ["check (macos-latest, 3.14)", "check (ubuntu-latest, 3.14)", "check (windows-latest, 3.14)"], "run": "36162718194", "schema": 1, "scope": "full", "sha": "b175d896c682f34b666e16c5a3f52944b92f25b3", "tree": "7bb7b3dc33014f0af906ea63faeb9b49a9d4c6dd", "when": "2026-09-25T17:02:43.718443+00:00"}

@@ -1,0 +1,1 @@
+{"branch": "fix/ds-store-ignored", "forge": "github", "legs": ["check (macos-latest, 3.14)", "check (ubuntu-latest, 3.14)", "check (windows-latest, 3.14)"], "run": "36167725976", "schema": 1, "scope": "full", "sha": "26de5a643c38ade39301b1b7daa2a3f3cc255564", "tree": "2b902878fa8b0440f62098ba36e009049d3d06bc", "when": "2026-09-25T17:47:16.267710+00:00"}

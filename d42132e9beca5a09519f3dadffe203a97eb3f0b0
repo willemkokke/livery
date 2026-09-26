@@ -1,0 +1,1 @@
+{"branch": "chore/modular-docs-close", "forge": "github", "legs": ["check (macos-latest, 3.14)", "check (ubuntu-latest, 3.14)", "check (windows-latest, 3.14)"], "run": "36180896903", "schema": 1, "scope": "full", "sha": "88578e339536e89538f5cc3f6f4e424adecd0308", "tree": "d42132e9beca5a09519f3dadffe203a97eb3f0b0", "when": "2026-09-25T19:55:53.370900+00:00"}

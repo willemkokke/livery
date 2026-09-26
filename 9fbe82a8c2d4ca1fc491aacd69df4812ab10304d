@@ -1,0 +1,1 @@
+{"branch": "feat/620-the-tool-record-and-total-resolution", "forge": "github", "legs": ["check (macos-latest, 3.14)", "check (ubuntu-latest, 3.14)", "check (windows-latest, 3.14)"], "run": "35094223456", "schema": 1, "scope": "full", "sha": "470e062deb4d81cd03e7dcc7025b3bcf089f8199", "tree": "9fbe82a8c2d4ca1fc491aacd69df4812ab10304d", "when": "2026-09-16T12:20:23.315433+00:00"}
