@@ -232,12 +232,95 @@ def test_landing_survives_a_replace_refused_by_a_reader(
     assert list(store.root.rglob("*.part")) == []
 
 
+def test_a_landing_waits_for_its_twin_to_finish_placing_the_bytes(
+    store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The refusal comes while the twin is mid-place: the destination is
+    # unreadable for a few looks, then holds the bytes. The wait is a
+    # stub, so the test costs nothing.
+    waits: list[float] = []
+    monkeypatch.setattr(_store, "_sleep", waits.append)
+    digest = digest_of(b"twin")
+    destination = store.object_path(digest)
+    looks = {"count": 0}
+    real_hash = _store.Store._hash_file
+
+    def refuse(source: Path, target: Path) -> None:
+        # The twin has the destination open and empty so far.
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"")
+        raise PermissionError("the twin is placing it")
+
+    def hash_after_three(self: Store, path: Path) -> object:
+        looks["count"] += 1
+        if looks["count"] < 3:
+            raise PermissionError("still being placed")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"twin")
+        return real_hash(self, path)
+
+    monkeypatch.setattr(_store, "_replace", refuse)
+    monkeypatch.setattr(_store.Store, "_hash_file", hash_after_three)
+    landed = store.land(b"twin")
+    assert landed == _store.Landed(digest, 4, written=False)
+    assert looks["count"] == 3 and len(waits) == 2
+    assert list(store.root.rglob("*.part")) == []
+
+
+def test_a_mark_write_refused_by_the_twin_settles_on_the_same_content(
+    store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The refusals first. A mark that never appears keeps the refusal,
+    # and so does one the twin wrote with other content; one that holds
+    # the same content is the twin's success and this writer's too.
+    waits: list[float] = []
+    monkeypatch.setattr(_store, "_sleep", waits.append)
+    mark = store.root / "index" / "verified" / "sha256" / "ab" / "cd"
+    mark.parent.mkdir(parents=True)
+
+    def refuse(source: Path, target: Path) -> None:
+        raise PermissionError("the twin is writing it")
+
+    monkeypatch.setattr(_store, "_replace_mark", refuse)
+    with pytest.raises(PermissionError, match="the twin is writing it"):
+        _store._write_atomically(mark, b"300")
+    assert len(waits) == _store._SETTLE_TRIES - 1
+    assert list(store.root.rglob("*.part")) == []
+    mark.write_bytes(b"299")
+    with pytest.raises(PermissionError, match="the twin is writing it"):
+        _store._write_atomically(mark, b"300")
+    mark.write_bytes(b"300")
+    _store._write_atomically(mark, b"300")
+    assert mark.read_bytes() == b"300"
+    # The twin's content arriving mid-wait is the same success.
+    mark.unlink()
+    looks = {"count": 0}
+
+    def appear_late(source: Path, target: Path) -> None:
+        looks["count"] += 1
+        raise PermissionError("the twin is writing it")
+
+    monkeypatch.setattr(_store, "_replace_mark", appear_late)
+    real_sleep = waits.append
+
+    def sleep_then_write(seconds: float) -> None:
+        real_sleep(seconds)
+        if len(waits) == 3:
+            mark.write_bytes(b"300")
+
+    monkeypatch.setattr(_store, "_sleep", sleep_then_write)
+    waits.clear()
+    _store._write_atomically(mark, b"300")
+    assert len(waits) == 3
+
+
 def test_a_refused_replace_without_the_bytes_in_place_is_an_error(
     store: Store, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def refuse_missing(source: Path, target: Path) -> None:
         raise PermissionError("no destination")
 
+    monkeypatch.setattr(_store, "_sleep", lambda seconds: None)
     monkeypatch.setattr(_store, "_replace", refuse_missing)
     with pytest.raises(PermissionError, match="no destination"):
         store.land(b"nowhere")

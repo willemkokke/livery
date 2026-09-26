@@ -121,9 +121,42 @@ def silent(message: str) -> None:
 
 def _replace(source: Path, destination: Path) -> None:
     # The one seam the Windows case needs: a replace over a destination
-    # a reader holds open fails there, and landing treats it as success
-    # when the destination verifies. Tests fake this function.
+    # another process holds open, or is itself placing, fails there,
+    # and a landing treats it as success once the destination
+    # verifies. Tests fake this function.
     os.replace(source, destination)
+
+
+def _replace_mark(source: Path, destination: Path) -> None:
+    # The mark's own seam for the same Windows case: a test that fakes
+    # an object's replace leaves the mark's alone.
+    os.replace(source, destination)
+
+
+_SETTLE_TRIES = 40
+_SETTLE_STEP = 0.05
+_sleep = time.sleep
+"""The wait between looks at a file another process is placing; a test stubs it."""
+
+
+def _settled(check: Callable[[], bool]) -> bool:
+    """Whether *check* comes true within the settle window.
+
+    A refusal or an absence inside the window is the other writer
+    still at work, not an answer: on Windows a file being placed or
+    read refuses every open until it is done. About two seconds in
+    all, in short steps, so a landing waits for its twin and never
+    for a stranger.
+    """
+    for attempt in range(_SETTLE_TRIES):
+        try:
+            if check():
+                return True
+        except (PermissionError, FileNotFoundError):
+            pass
+        if attempt + 1 < _SETTLE_TRIES:
+            _sleep(_SETTLE_STEP)
+    return False
 
 
 def _pid_alive_posix(pid: int) -> bool:
@@ -557,11 +590,16 @@ class Store:
         try:
             _replace(scratch, destination)
         except PermissionError:
-            # A reader holds the destination open (Windows). The bytes
-            # are the same by name, so the landing succeeded if the
-            # destination verifies.
+            # Another process holds the destination (Windows): a reader,
+            # or the twin landing the same bytes, still placing them.
+            # The bytes are the same by name, so the landing succeeded
+            # once the destination verifies; the wait is for the twin
+            # to finish, and a destination that never verifies keeps
+            # the refusal.
             scratch.unlink()
-            if not destination.exists() or self._hash_file(destination) != digest:
+            if not _settled(
+                lambda: destination.exists() and self._hash_file(destination) == digest
+            ):
                 raise
             self._write_mark(digest, size)
             return Landed(digest, size, written=False)
@@ -1566,6 +1604,18 @@ _SCRATCH_COUNT = [0]
 
 
 def _write_atomically(path: Path, data: bytes) -> None:
+    """Write *data* to *path* through a scratch file and one replace.
+
+    A replace refused by another process (Windows) is that process
+    writing the same file: two landings of one digest both write its
+    mark, with the same content. The write succeeds once *path* holds
+    *data*; a path that never does keeps the refusal.
+    """
     scratch = _scratch_beside(path)
     scratch.write_bytes(data)
-    os.replace(scratch, path)
+    try:
+        _replace_mark(scratch, path)
+    except PermissionError:
+        scratch.unlink(missing_ok=True)
+        if not _settled(lambda: path.read_bytes() == data):
+            raise
