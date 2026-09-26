@@ -220,10 +220,12 @@ def _spawn(command: list[str], root: Path, env: dict[str, str]) -> int:
 def run_gate(root: Path) -> None:
     """Run the gate with ``--fix`` over the update's changes; red stops.
 
-    The gate's output streams to the terminal and its exit code is
-    the verdict. A red gate leaves the changes uncommitted on the
-    workflow branch: fix the tree there and run the same update verb
-    again, it resumes from that state.
+    A red gate leaves the changes uncommitted on the workflow branch:
+    fix the tree there and run the same update verb again, it
+    resumes from that state. The gate's own output carries in the
+    refusal, because the caller is often a script that sees only
+    this message and would otherwise be told a gate is red with no
+    word about which step.
     """
     result = tools.uv.opts(cwd=root, nofail=True, recorded=False)(
         "run", "fm", "check", "--fix"
@@ -231,9 +233,10 @@ def run_gate(root: Path) -> None:
     if result.code != 0:
         fail(
             f"the gate is red on the update's changes (exit"
-            f" {result.code}). The changes are uncommitted on this"
-            " branch: fix the tree, then run the same update verb again"
-            " to resume."
+            f" {result.code}):\n{result.stdout[-6000:]}"
+            f"{result.stderr[-3000:]}\n"
+            "  The changes are uncommitted on this branch: fix the"
+            " tree, then run the same update verb again to resume."
         )
 
 

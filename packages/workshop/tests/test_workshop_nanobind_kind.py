@@ -258,9 +258,12 @@ def _consume_the_library(package: Package) -> None:
     )
 
 
-# The build is the suite's largest cost by far (77 s on a linux leg);
-# the nightly point pays it, a pull request's legs do not.
-@pytest.mark.only_at("nightly")
+# The build is the suite's largest cost by far (77 s on a linux leg),
+# and it is the only proof that the native kinds build on every
+# platform: the merge point's legs pay it on all three after a merge,
+# the nightly point once more on the first, and a pull request's legs
+# not at all.
+@pytest.mark.only_at("merge", "nightly")
 @needs_build_rig
 def test_the_wheel_is_platform_tagged_and_imports(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -471,8 +474,9 @@ def test_the_floor_leg_pins_conan_to_the_floor_and_tests_that_wheel(
 
 
 # The build is a second cibuildwheel run and two conan creates; the
-# nightly point pays it, a pull request's legs do not.
-@pytest.mark.only_at("nightly")
+# merge point's legs and the nightly point pay it, a pull request's
+# legs do not.
+@pytest.mark.only_at("merge", "nightly")
 @needs_build_rig
 def test_a_floor_whose_header_lacks_the_symbol_fails_the_leg(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

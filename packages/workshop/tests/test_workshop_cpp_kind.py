@@ -375,7 +375,10 @@ def test_the_project_render_wires_only_python_members(tmp_path: Path) -> None:
     assert '"packages/alpha"' in pyproject
     assert 'members = ["packages/alpha"]' in pyproject
     assert "acme-native" not in pyproject
-    assert 'exclude = ["packages/native"]' in pyproject
+    # The cpp member is skipped whole, and every member's conan
+    # recipe with it: the checker that reads the tree cannot resolve
+    # the conan import, which lives in conan's own interpreter.
+    assert 'exclude = ["packages/native", "packages/*/conanfile.py"]' in pyproject
     assert '"packages/native/src"' not in pyproject
 
 

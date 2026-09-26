@@ -27,7 +27,7 @@ floor = "0.4.0"
 [[depends]]
 path = "packages/toolroom-store"
 kind = "runtime"
-floor = "0.1.0"
+floor = "0.0.0"
 
 [docs]
 extra-css = ["assets/workshop.css"]

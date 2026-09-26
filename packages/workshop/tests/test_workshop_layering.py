@@ -211,3 +211,36 @@ def test_a_clean_tree_passes(tmp_path: Path) -> None:
     )
     packages = verify_workspace(tmp_path)
     assert [p.name for p in packages] == ["livery-forge", "livery-tool"]
+
+
+def test_the_task_tree_imports_no_pytest() -> None:
+    """A CLI built from this layer runs where pytest is not installed.
+
+    A brand's tool venv carries the layer and its runtime dependencies,
+    never the test toolchain. One import of a pytest plugin module on
+    the path a verb takes turns every command on that CLI into a
+    ModuleNotFoundError, which is how it was found: the descendant
+    chain's brand tool refused `new.project` on a pre-task that
+    reached the points module.
+    """
+    import subprocess
+    import sys
+
+    probe = (
+        "import sys\n"
+        "class Refuse:\n"
+        "    def find_spec(self, name, path=None, target=None):\n"
+        "        if name == 'pytest' or name.startswith('pytest.'):\n"
+        "            raise ImportError('a brand tool has no pytest')\n"
+        "        return None\n"
+        "sys.meta_path.insert(0, Refuse())\n"
+        "import livery.workshop._tasks\n"
+        "import livery.workshop._points\n"
+        "import livery.workshop._ci_tasks\n"
+        "print('imported')\n"
+    )
+    done = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, check=False
+    )
+    assert done.returncode == 0, done.stderr
+    assert "imported" in done.stdout

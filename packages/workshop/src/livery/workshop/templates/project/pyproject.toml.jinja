@@ -114,8 +114,12 @@ convention = "google"
 
 [tool.basedpyright]
 include = [{% if packages %}"packages", {% endif %}"tests", "tasks.py"]
-{% if native %}exclude = [{% for package in native %}"packages/{{ package.dir }}"{% if not loop.last %}, {% endif %}{% endfor %}]
-{% endif %}# The IDE and the CLI resolve the same environment: the workspace
+# A conan recipe is conan's input, read by conan's own interpreter
+# where the conan package lives; the workspace venv never has it, so
+# the checker that reads the whole tree skips the recipes. The cpp
+# members are skipped whole: their kind type-checks nothing.
+exclude = [{% if native %}{% for package in native %}"packages/{{ package.dir }}", {% endfor %}{% endif %}"packages/*/conanfile.py"]
+# The IDE and the CLI resolve the same environment: the workspace
 # members are editable installs in .venv, so basedpyright must look
 # there whatever interpreter the editor has selected.
 venvPath = "."
