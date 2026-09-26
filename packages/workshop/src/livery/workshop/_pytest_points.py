@@ -20,9 +20,9 @@ import os
 
 import pytest
 
-#: The variable the job runner sets for every entry it spawns, naming
-#: the point the job runs at.
-POINT_VARIABLE = "WORKSHOP_POINT"
+from livery.workshop._state import POINT_VARIABLE
+
+__all__ = ["POINT_VARIABLE"]
 
 #: The points a test runs at when it names none.
 DEFAULT_POINTS = frozenset({"gate", "merge"})

@@ -120,6 +120,12 @@ ATTEMPTS = 3
 #: rows and stamps.
 LEG_VARIABLE = "WORKSHOP_LEG"
 
+#: The variable the job runner sets for every entry it spawns, naming
+#: the point the job runs at. Its home is here rather than beside the
+#: pytest plugin that selects on it, because the verbs read it too and
+#: a CLI that never tests must not import pytest to learn its name.
+POINT_VARIABLE = "WORKSHOP_POINT"
+
 #: How a window ranks the files it keeps: a key from a file's name
 #: and text, the newest sorting last.
 Order = Callable[[str, str], tuple[str, str]]

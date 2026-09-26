@@ -43,8 +43,7 @@ from pathlib import Path
 import livery.footman as footman
 from livery.footman import Tasks, fail
 from livery.workshop._contract import load_contract
-from livery.workshop._pytest_points import POINT_VARIABLE
-from livery.workshop._state import LEG_VARIABLE, run_context
+from livery.workshop._state import LEG_VARIABLE, POINT_VARIABLE, run_context
 
 #: The events a point may run on, in the forges' words.
 EVENT_NAMES = ("pull_request", "push", "schedule", "workflow_dispatch")
@@ -992,7 +991,7 @@ def run_point(
     left at `TRACE`. Every child's environment names the leg in
     `livery.workshop._state.LEG_VARIABLE`, the key of the leg's rows
     and stamps, and the resolved point in
-    `livery.workshop._pytest_points.POINT_VARIABLE`, which selects the
+    `livery.workshop._state.POINT_VARIABLE`, which selects the
     tests a point runs. *spawn* runs one entry's command in that
     environment and returns its exit code; the default is the runner's
     own child.

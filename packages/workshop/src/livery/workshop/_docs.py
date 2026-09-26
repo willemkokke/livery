@@ -1964,8 +1964,7 @@ def _stored_legs(root: Path) -> tuple[list[Path], list[str]]:
 
     from livery.workshop._backends import _python
     from livery.workshop._points import check_legs
-    from livery.workshop._pytest_points import POINT_VARIABLE
-    from livery.workshop._state import LEG_VARIABLE, run_context
+    from livery.workshop._state import LEG_VARIABLE, POINT_VARIABLE, run_context
 
     deploying = (
         os.environ.get(POINT_VARIABLE) == "merge"

@@ -28,7 +28,7 @@ classifiers = [
 dependencies = [
     "livery-footman>=0.53.0",
     "livery-toolroom>=0.7.0",
-    "livery-toolroom-store>=0.1.0",
+    "livery-toolroom-store>=0.0.0",
 ]
 
 [project.optional-dependencies]

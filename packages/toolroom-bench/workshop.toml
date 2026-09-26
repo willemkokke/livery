@@ -20,7 +20,7 @@ floor = "0.53.0"
 [[depends]]
 path = "packages/toolroom-store"
 kind = "runtime"
-floor = "0.1.0"
+floor = "0.0.0"
 
 [docs]
 # The index of the tool records, built into docs/_generated/index and

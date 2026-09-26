@@ -116,6 +116,11 @@ convention = "google"
 
 [tool.basedpyright]
 include = ["packages", "tests", "tasks.py"]
+# A conan recipe is conan's input, read by conan's own interpreter
+# where the conan package lives; the workspace venv never has it, so
+# the checker that reads the whole tree skips the recipes. The cpp
+# members are skipped whole: their kind type-checks nothing.
+exclude = ["packages/*/conanfile.py"]
 # The IDE and the CLI resolve the same environment: the workspace
 # members are editable installs in .venv, so basedpyright must look
 # there whatever interpreter the editor has selected.

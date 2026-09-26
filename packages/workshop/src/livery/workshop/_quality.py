@@ -557,7 +557,7 @@ def _current_point() -> str:
     """The point this process runs at, as the job runner named it; gate outside CI."""
     import os
 
-    from livery.workshop._pytest_points import POINT_VARIABLE
+    from livery.workshop._state import POINT_VARIABLE
 
     return os.environ.get(POINT_VARIABLE, "gate")
 

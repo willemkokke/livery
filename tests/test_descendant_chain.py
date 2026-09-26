@@ -63,6 +63,81 @@ def _api(
     return json.loads(raw) if raw else None
 
 
+def _link_the_library(extension: Path, library: Path) -> None:
+    """Make the rendered extension call the library beside it.
+
+    The template's own module already calls one Conan Center symbol
+    (fmt). This adds the sibling: a find_package, the link, the
+    header, and a binding that answers from the library's own
+    source, so one compiled module carries both sides of the graph.
+    The names are read from what the render produced, never spelled
+    twice.
+    """
+    package = _conan_name(library)
+    header = next(library.glob("src/*.hpp"))
+    namespace = header.stem
+    recipe = extension / "conanfile.py"
+    text = recipe.read_text()
+    assert 'requires = ("fmt/[>=11.0]",)' in text, text
+    recipe.write_text(
+        text.replace(
+            'requires = ("fmt/[>=11.0]",)',
+            f'requires = ("fmt/[>=11.0]", "{package}/[>=0.0.0]")',
+        )
+    )
+    cmake = extension / "CMakeLists.txt"
+    cmake.write_text(
+        cmake.read_text()
+        .replace(
+            "find_package(fmt REQUIRED)",
+            f"find_package(fmt REQUIRED)\nfind_package({package} REQUIRED)",
+        )
+        .replace(
+            "target_link_libraries(_native PRIVATE fmt::fmt)",
+            f"target_link_libraries(_native PRIVATE fmt::fmt {package}::{package})",
+        )
+    )
+    native = next(extension.glob("src/**/_native.cpp"))
+    native.write_text(
+        native.read_text()
+        .replace(
+            "#include <fmt/format.h>",
+            f"#include <fmt/format.h>\n#include <{header.name}>",
+        )
+        .replace(
+            "NB_MODULE(_native, m) {",
+            "NB_MODULE(_native, m) {\n"
+            '    m.def("library_version",'
+            f" []() {{ return std::string({namespace}::version()); }});",
+        )
+    )
+    stub = next(extension.glob("src/**/_native.pyi"))
+    stub.write_text(
+        stub.read_text().rstrip("\n") + "\n\ndef library_version() -> str: ...\n"
+    )
+    # The proof is the member's own test, which the child's gate runs:
+    # one call into the Conan Center package the template already
+    # links, one into the sibling built from its source.
+    suite = next(extension.glob("tests/test_*_package.py"))
+    suite.write_text(
+        suite.read_text()
+        + "\n\ndef test_both_sides_of_the_graph_are_linked() -> None:\n"
+        "    from kid.ext._native import library_version, native_hello\n\n"
+        '    assert native_hello() == "native hello from kid-ext"\n'
+        '    assert library_version() == "0.0.0"\n'
+    )
+
+
+def _conan_name(library: Path) -> str:
+    """The conan package name the rendered recipe declares."""
+    import re
+
+    text = (library / "conanfile.py").read_text()
+    match = re.search(r'^\s*name = "([^"]+)"$', text, re.M)
+    assert match, f"{library}/conanfile.py declares no name"
+    return match.group(1)
+
+
 def _destroy(token: str, name: str) -> None:
     with contextlib.suppress(OSError):
         _api(token, "DELETE", f"/repos/{OWNER}/{name}")
@@ -95,20 +170,86 @@ def _hermetic(base: dict[str, str], venv: Path) -> dict[str, str]:
     }
 
 
+def _name_the_tool_index(workspace: Path, index: Path) -> None:
+    """Point *workspace* at *index* for its tools, once.
+
+    A workspace locks and materialises the tools its kinds need
+    against an index it names. A newborn names none (livery#765), so
+    the chain names one for it, the way a consumer names the
+    published index: here the source's own records directory, so the
+    child locks against what this branch carries.
+    """
+    contract = workspace / "workshop.toml"
+    text = contract.read_text()
+    if "[tools]" in text:
+        return
+    contract.write_text(f'{text}\n[tools]\nindex = "{index}"\n')
+
+
+def _entered(fm: Path, workspace: Path, env: dict[str, str]) -> dict[str, str]:
+    """*env* with *workspace*'s own tool environment applied.
+
+    `fm env.emit posix` prints what a shell would evaluate before
+    running a tool by hand. A child process that runs uv or conan
+    directly needs those variables, since only the verbs enter on
+    their own.
+    """
+    emitted = _run([str(fm), "env.emit", "posix"], workspace, env).stdout
+    applied = dict(env)
+    for line in emitted.splitlines():
+        if not line.startswith("export "):
+            continue
+        key, _, value = line[len("export ") :].partition("=")
+        value = value.replace('"$PATH"', applied.get("PATH", "")).replace("'", "")
+        applied[key] = value
+    return applied
+
+
 def _build_wheels(source_root: Path, wheelhouse: Path, env: dict[str, str]) -> None:
+    """Build every member of this workspace into *wheelhouse*.
+
+    The whole stack, discovered rather than listed: the home resolves
+    the workshop's dependency graph from these wheels, and one member
+    missing from the set sends the resolution to the index for an
+    older release that still fits, which then fails on an import the
+    current source made.
+    """
     wheelhouse.mkdir(exist_ok=True)
-    members = (
-        "packages/workshop",
-        "packages/forge",
-        "packages/toolroom",
-        "packages/footman",
+    members = sorted(
+        path.parent for path in (source_root / "packages").glob("*/pyproject.toml")
     )
+    assert members, f"no members under {source_root}/packages"
     for member in members:
         _run(
-            ["uv", "build", "--wheel", "-o", str(wheelhouse), member],
+            ["uv", "build", "--wheel", "-o", str(wheelhouse), str(member)],
             source_root,
             env,
         )
+
+
+def _pin_the_wheelhouse(wheelhouse: Path) -> Path:
+    """Pin every built member to its own build; the override file.
+
+    A member's declared floor may name a version the release train
+    has not published yet, which a member still at its newborn
+    version cannot satisfy. The resolution would then reach past the
+    wheelhouse for an older release that fits, and the chain would
+    test that release instead of this source. Every wheel built here
+    wins outright.
+    """
+    newest: dict[str, tuple[tuple[int, ...], str]] = {}
+    for wheel in sorted(wheelhouse.glob("*.whl")):
+        dist, version = wheel.name.split("-")[:2]
+        name = dist.replace("_", "-")
+        key = tuple(int(part) for part in version.split(".") if part.isdigit())
+        if name not in newest or key > newest[name][0]:
+            newest[name] = (key, version)
+    path = wheelhouse / "overrides.txt"
+    path.write_text(
+        "\n".join(f"{name}=={version}" for name, (_key, version) in newest.items())
+        + "\n"
+    )
+    return path
 
 
 @pytest.mark.skipif(
@@ -124,6 +265,20 @@ def test_the_chain_creates_customises_and_inherits(tmp_path: Path) -> None:
         "FORGE_ADMIN_TOKEN": token,
         "VIRTUAL_ENV": "",
     }
+    # The chain plays a person at a workstation. The suite's own rig
+    # marks this session as a CI run, and a verb that behaves
+    # differently there would be exercised in the wrong mode: the
+    # gate refuses `--fix` inside CI, which is right there and wrong
+    # here, where the update verb asks for exactly that.
+    for marker in ("CI", "GITHUB_ACTIONS", "GITHUB_RUN_ID", "GITEA_ACTIONS"):
+        base_env.pop(marker, None)
+    # Nor does it inherit this suite's own instrumentation. The
+    # workspaces it builds run their own gates, and a child that
+    # starts coverage under the outer configuration writes rows for
+    # files that exist only in its temporary tree, which the outer
+    # report then cannot resolve.
+    for measured in [name for name in base_env if name.startswith("COVERAGE_")]:
+        base_env.pop(measured, None)
     fm = str(ROOT / ".venv" / "bin" / "fm")
     for name in ("dummy", "child", f"{BRAND}-templates"):
         _destroy(token, name)
@@ -143,18 +298,38 @@ def _chain(
     wheelhouse = tmp_path / "wheelhouse"
     if not resumed:
         _build_wheels(ROOT, wheelhouse, base_env)
-    env = {**base_env, "UV_FIND_LINKS": str(wheelhouse)}
+    # The tool store is a content-addressed cache every checkout on
+    # this machine shares, and the workspaces the chain builds reach
+    # for the pinned checkers like any other. The suite's isolation
+    # points the data directory at a scratch home, where a chain run
+    # would download every tool again, so the children are given the
+    # machine's own: what a second workspace here actually uses.
+    from livery.footman import _paths  # pyright: ignore[reportPrivateUsage]
+
+    env = {
+        **base_env,
+        "UV_FIND_LINKS": str(wheelhouse),
+        "UV_OVERRIDE": str(_pin_the_wheelhouse(wheelhouse)),
+        "FOOTMAN_DATA_DIR": str(_paths.data_home() / "footman"),
+    }
 
     # Above any project stock fm mounts only footman's own builtins
     # (the footman#536 gap), so the chain bridges through a scratch
     # config dir: the documented user-rung tasks file, scoped to
-    # these invocations, never the machine's real config.
+    # these invocations, never the machine's real config. The
+    # config-dir variable names it, not XDG_CONFIG_HOME: the suite's
+    # isolation plugin already points that variable at a scratch home
+    # of its own, and the variable beats XDG.
     bridge = tmp_path / "bridge-config"
     (bridge / "footman").mkdir(parents=True, exist_ok=True)
     (bridge / "footman" / "tasks.py").write_text(
         'from livery.footman import plugin\n\nplugin("livery.workshop")\n'
     )
-    bridged = {**env, "XDG_CONFIG_HOME": str(bridge)}
+    bridged = {
+        **env,
+        "XDG_CONFIG_HOME": str(bridge),
+        "FOOTMAN_CONFIG_DIR": str(bridge / "footman"),
+    }
 
     # -- 1. the home is born, self-hosting its brand ----------------
     work = tmp_path / "work"
@@ -276,6 +451,7 @@ def _chain(
         home,
         env,
     )
+    _pin_the_wheelhouse(wheelhouse)
     release = _run(
         [
             fm,
@@ -335,7 +511,7 @@ def _chain(
     child_contract = (child / "workshop.toml").read_text()
     assert 'layers = ["livery.workshop", "dummy.brandx"]' in child_contract
     gate = (child / ".gitea" / "workflows" / "ci.yml").read_text()
-    assert f"{BRAND} check" in gate
+    assert f"{BRAND} ci.run --point=gate --job=check" in gate
     # The brand's overlay reached the child's managed render.
     assert "brandx-build/" in (child / ".gitignore").read_text()
     # The brand's content arrived through sync.
@@ -389,14 +565,19 @@ def _chain(
     # The child creates a C/C++ library and an extension depending
     # on it with the brand's own verbs: no template re-render, the
     # honest skips in the gate, and the tool profile grown only
-    # here. The dependency is declared (the edge and the agreeing
-    # conan requirement); compile-time consumption of the conan
-    # package from the extension's build is its own future cut.
+    # here. The extension links both sides of the dependency graph,
+    # the sibling library at HEAD and a package from Conan Center,
+    # and the compiled module answers from each.
     # ty refuses an empty-but-set VIRTUAL_ENV, so the child's gate
     # runs with the variable naming the child's own venv.
     child_env = {
         **_hermetic(env, child / ".venv"),
         "VIRTUAL_ENV": str(child / ".venv"),
+        # The child registers its library editable and builds packages
+        # into a conan home: the chain's own, never the machine's,
+        # which would keep an editable pointing at a temporary tree
+        # long after the run.
+        "CONAN_HOME": str(tmp_path / "conan-home"),
     }
     if not resumed:
         for member_name, kind in (
@@ -414,12 +595,11 @@ def _chain(
                 "\n[[depends]]\n"
                 'path = "packages/geometry"\n'
                 'kind = "build"\n'
-                'floor = "0.0.1"\n'
+                # A newborn's first version, which is what the library
+                # beside it carries until its own first release.
+                'floor = "0.0.0"\n'
             )
-        (child / "packages" / "ext" / "conanfile.py").write_text(
-            '"""The extension\'s conan requirements."""\n\n'
-            'requires = "kid-geometry/[>=0.0.1]"\n'
-        )
+        _link_the_library(child / "packages" / "ext", child / "packages" / "geometry")
         _run(["git", "add", "-A"], child, env)
         _run(
             ["git", "commit", "-qm", "feat: the native library and the extension"],
@@ -437,12 +617,38 @@ def _chain(
         )
         assert "already exists" in (again.stdout + again.stderr)
     child_fm = child / ".venv" / "bin" / "fm"
+    _name_the_tool_index(child, ROOT / "records")
+    # The lock is the newborn's first: the sync materialises what a
+    # lock names, and a workspace that has never locked has nothing
+    # to materialise (livery#765).
+    _run([str(child_fm), "tools.lock"], child, child_env)
+    # The sync materialises the native tools the two members grew into
+    # the profile, registers the library editable, and builds the
+    # extension against it: conan resolves fmt from Conan Center and
+    # the sibling from its source tree at HEAD.
+    _run([str(child_fm), "sync"], child, child_env)
+    # The module compiled when the member was born does not rebuild
+    # when its sources change (livery#766), so the extension is
+    # reinstalled once the wiring is in place. It runs in the
+    # workspace's own environment, where conan and the CMake provider
+    # are: only the verbs enter on their own.
+    _run(
+        ["uv", "sync", "--reinstall-package", "kid-ext"],
+        child,
+        _entered(child_fm, child, child_env),
+    )
     child_gate = _run([str(child_fm), "check"], child, child_env)
     assert (
         "packages/geometry (cpp-conan): configure, build, ctest run"
         in child_gate.stdout
     )
     assert "typecomplete: packages/geometry skips (cpp-conan kind)" in child_gate.stdout
+    # One compiled module, both sides of the graph: the member's own
+    # test calls fmt through the greeting and the sibling library
+    # through its version, and the gate above ran it. Four tests,
+    # the template's three and this one.
+    assert "speed packages/ext: " in child_gate.stdout
+    assert "over 4 tests" in child_gate.stdout
     # The profile grows by discovery, and only here: the home stays
     # pure python.
     probe = (
@@ -483,11 +689,22 @@ def _chain(
         / "CLAUDE.workshop.md"
     ).open("a") as handle:
         handle.write("\nThe gate's verdict is its exit code.\n")
+    # The bump is computed from what the member carries: a spelled
+    # version here goes stale the day the base is released again, and
+    # a build that lands on the same version is no upgrade at all, so
+    # the improvement would never travel.
+    import re as _re
+
     pyproject = improved / "pyproject.toml"
+    text = pyproject.read_text()
+    found = _re.search(r'^version = "(\d+)\.(\d+)\.(\d+)"$', text, _re.M)
+    assert found, "the base declares no version to bump"
+    major, minor, patch = (int(part) for part in found.groups())
     pyproject.write_text(
-        pyproject.read_text().replace('version = "0.1.0"', 'version = "0.1.1"')
+        text.replace(found.group(0), f'version = "{major}.{minor}.{patch + 1}"', 1)
     )
     _run(["uv", "build", "--wheel", "-o", str(wheelhouse)], improved, env)
+    _pin_the_wheelhouse(wheelhouse)
 
     # The home takes the base bump the real way: the lock moves to the
     # new wheel, sync refreshes the environment (the bumped member's
@@ -510,6 +727,7 @@ def _chain(
         home,
         env,
     )
+    _pin_the_wheelhouse(wheelhouse)
     rerelease = _run(
         [
             str(home_fm),
@@ -553,23 +771,38 @@ def _chain(
         env,
         check=False,
     )
-    child_env = _hermetic({**env, "GIT_TERMINAL_PROMPT": "0"}, child / ".venv")
+    # The update runs the child's gate over its own changes, so the
+    # environment is the one that gate needs: the venv named (ty
+    # refuses an empty-but-set VIRTUAL_ENV) and the conan home the
+    # chain owns.
+    child_env = _hermetic(
+        {
+            **env,
+            "GIT_TERMINAL_PROMPT": "0",
+            "VIRTUAL_ENV": str(child / ".venv"),
+            "CONAN_HOME": str(tmp_path / "conan-home"),
+        },
+        child / ".venv",
+    )
     updated = _run(
         [str(child_fm), "workflow.update.templates"],
         child,
         child_env,
         check=False,
     )
-    branch = _run(["git", "branch", "--list", "workflow/update/templates"], child, env)
+    # The update leaves its branch on origin under a pull request and
+    # returns the checkout to main, so the branch is read from there.
+    _run(["git", "fetch", "origin", "workflow/update/templates"], child, env)
+    branch = _run(
+        ["git", "ls-remote", "--heads", "origin", "workflow/update/templates"],
+        child,
+        env,
+    )
     assert "workflow/update/templates" in branch.stdout, updated.stdout + updated.stderr
-    files = _run(
-        ["git", "show", "workflow/update/templates:tasks.py"], child, env
-    ).stdout
+    files = _run(["git", "show", "FETCH_HEAD:tasks.py"], child, env).stdout
     # The core improvement reached the grandchild through the gradient.
     assert "run the gate before every commit" in files, updated.stdout + updated.stderr
-    ignored = _run(
-        ["git", "show", "workflow/update/templates:.gitignore"], child, env
-    ).stdout
+    ignored = _run(["git", "show", "FETCH_HEAD:.gitignore"], child, env).stdout
     # The overlay-replaced file did not move: the named forfeit is the
     # brand's declared replace, and the base's new line stays out.
     assert "brandx-build/" in ignored

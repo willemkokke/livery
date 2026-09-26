@@ -317,6 +317,18 @@ The route, on a forge that hosts no conan registry:
   version the wave releases is the package the main build already
   linked, and that leg says so.
 
+Slice 7d landed 2026-09-26 (livery#738): the descendant chain's
+native stage links the sibling library and a Conan Center package
+into the child's extension, and the child's own gate calls both from
+the one compiled module. The chain runs again: it had been unable to
+start since 2026-09-10, when the suite's isolation plugin took the
+config-dir variable its bridge relies on, and twelve stale points
+stood between that and a green pass. They are in the decision
+record. Two gaps it surfaced are filed rather than patched over: a
+newborn seeds no tool index or lock (livery#765), and a native
+member's compiled module goes stale when its sources change
+(livery#766).
+
 The extension calls a symbol from the first-party library and a
 symbol from a third-party conan package, and the build resolves both
 the same way in the local gate, the isolated wheel legs, and the
@@ -605,6 +617,48 @@ Acceptance:
   the dependency provider already passes. conan 2's `install` has no
   `--require-override`, and a profile composes with the generated
   one rather than replacing it.
+
+- 2026-09-26 (slice 7d shape): the chain's bridge names the
+  config-dir variable, not `XDG_CONFIG_HOME`: the suite's isolation
+  plugin points that variable at a scratch home and it beats XDG, so
+  the bridged tasks file was invisible and every child `fm` mounted
+  builtins alone. Its wheelhouse builds every member and pins each to
+  its own build, because one member missing, or a floor naming a
+  version nobody has published, sends the resolution back to the
+  index for an older release that fits and then fails on an import
+  the current source made. The workspaces it builds share this
+  machine's tool store, which is a cache every checkout here shares.
+- 2026-09-26 (slice 7d shape): `POINT_VARIABLE` lives in the state
+  module, not beside the pytest plugin that selects on it. A brand's
+  tool venv carries the layer and its runtime dependencies, never the
+  test toolchain, and one import of a plugin module on a verb's path
+  turned every command on that CLI into a ModuleNotFoundError. A test
+  pins it: the task tree imports with pytest refused.
+- 2026-09-26 (slice 7d shape): the floor on `livery-toolroom-store`
+  reads 0.0.0, the version the member carries, in both contracts and
+  manifests that name it. It read 0.1.0, a version no release has
+  ever served, which made livery-workshop uninstallable anywhere but
+  this workspace. The train raises the floor at the store's first
+  release.
+- 2026-09-26 (slice 7d shape): the armed native tests run at the
+  merge point as well as the nightly one. Their marks sat on the
+  helper above them, where a mark does nothing, so they ran at every
+  point; the nightly point alone would have narrowed the native
+  build's proof to one runner, and the merge point's legs are the
+  three platforms.
+
+- 2026-09-26 (slice 7d shape): the chain keeps the suite's own
+  markers out of the workspaces it builds. It plays a person at a
+  workstation, so a child that inherits `CI` behaves as a runner
+  (the gate refuses `--fix` there, which the update verb asks for),
+  and a child that inherits the coverage configuration writes rows
+  for files that live only in its temporary tree. It reads the
+  update's branch from origin, where the verb now leaves it under a
+  pull request.
+- 2026-09-26: `workflow.update.templates` carries the gate's own
+  output in its refusal. It said only that the gate was red, and
+  the caller is often a script that sees nothing else; finding the
+  reason cost a run of the chain each time.
 
 ## Open
 
