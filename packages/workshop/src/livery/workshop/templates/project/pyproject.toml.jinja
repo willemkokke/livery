@@ -59,7 +59,11 @@ dev = [
 {% endfor %}    # Every contract layer that is not already a member above, so a
     # rendered tasks.py can always import its plugins.
 {% for requirement in layer_requirements %}    "{{ requirement }}",
-{% endfor %}    "pytest>=8.0",
+{% endfor %}{% if packages | selectattr('kind', 'defined') | selectattr('kind', 'equalto', 'python-nanobind') | list %}    # An extension member's editor configure asks this interpreter
+    # where nanobind's cmake directory is, so the venv carries it
+    # beside the build's own isolated copy.
+    "nanobind>=2.7",
+{% endif %}    "pytest>=8.0",
     # Coverage feeds the per-package floors the gate enforces;
     # `patch = ["subprocess"]` needs coverage 7.10 or newer.
     "pytest-cov>=5",

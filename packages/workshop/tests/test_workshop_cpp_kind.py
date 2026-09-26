@@ -393,3 +393,46 @@ def test_the_rendered_package_builds_and_its_ctest_passes(tmp_path: Path) -> Non
     assert (package.directory / "src" / "native.cpp").is_file()
     _cpp_conan.check(package, tmp_path)
     assert (package.directory / _cpp_conan.GATE_BUILD_DIR).is_dir()
+
+
+@needs_toolchain
+def test_the_rendered_package_configures_from_its_preset(tmp_path: Path) -> None:
+    """A person opens the package in an editor and it configures.
+
+    The preset carries the generator, the build directory, the build
+    type and the compile commands, so `cmake --preset release` needs
+    no argument of its own; an editor that reads CMakePresets.json
+    gets the same configuration the gate uses.
+    """
+    import subprocess
+
+    package = _render_cpp(tmp_path)
+    presets = package.directory / "CMakePresets.json"
+    assert presets.is_file()
+    for name in ("release", "debug"):
+        done = subprocess.run(
+            ["cmake", "--preset", name],
+            cwd=package.directory,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert done.returncode == 0, done.stdout + done.stderr
+        build = package.directory / "build" / name
+        assert (build / "compile_commands.json").is_file()
+    built = subprocess.run(
+        ["cmake", "--build", "--preset", "release"],
+        cwd=package.directory,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert built.returncode == 0, built.stdout + built.stderr
+    tested = subprocess.run(
+        ["ctest", "--preset", "release"],
+        cwd=package.directory,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert tested.returncode == 0, tested.stdout + tested.stderr

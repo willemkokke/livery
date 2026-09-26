@@ -400,6 +400,22 @@ Acceptance:
 
 ### Phase 8: local development for the native kinds
 
+Status: the presets landed 2026-09-26 (livery#769). Both native
+templates render a `CMakePresets.json` with Debug and Release
+presets over Ninja, compile commands exported, the conan provider
+read from the environment and, for the extension, the venv its
+interpreter comes from; a workspace with an extension member carries
+nanobind in its dev group, which is what that interpreter answers
+with. A fresh fixture of each kind configures, builds and tests from
+its preset with no further argument, proven by test.
+
+Open: the format and lint half (livery#770). Where clang-format and
+clang-tidy come from is undecided: the ruling names the LLVM static
+release the store will carry as a compiler, the store carries no
+LLVM yet, and one release archive is 0.9 to 1.8 GB per host for two
+binaries of a few megabytes. The issue states both ways to sequence
+it.
+
 What a person gets at birth beyond the gate: a `CMakePresets.json`
 (configure, build and test presets, Debug and Release, compile
 commands exported) that conan's generated `CMakeUserPresets.json`

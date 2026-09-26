@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 from pathlib import Path
 
 import pytest
 
+from livery.toolroom import tools
 from livery.workshop._backends import _python, _python_nanobind
 from livery.workshop._kinds import (
     is_python_kind,
@@ -553,3 +555,46 @@ def test_a_floor_whose_header_lacks_the_symbol_fails_the_leg(
         _python_nanobind.floor_legs(package, tmp_path, {"packages/geometry": "0.2.0"})
     message = str(caught.value)
     assert "area" in message, message
+
+
+@pytest.mark.only_at("merge", "nightly")
+@needs_build_rig
+def test_the_rendered_extension_configures_from_its_preset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The extension opens in an editor and configures, conan included.
+
+    The preset names the generator, the build directory, the build
+    type, the compile commands, the dependency provider and the venv
+    the interpreter comes from, so `cmake --preset release` resolves
+    the third-party requirement and configures with no argument of
+    its own.
+    """
+    import subprocess
+
+    monkeypatch.setenv("CONAN_HOME", str(tmp_path / "conan-home"))
+    package = _render_chain(tmp_path)
+    assert (package.directory / "CMakePresets.json").is_file()
+    # A rendered workspace with an extension member carries nanobind in
+    # its dev group, which is what the preset's interpreter answers
+    # with; the fixture builds that venv for itself.
+    venv = tmp_path / "venv"
+    tools.uv("venv", str(venv))
+    tools.uv.opts(env={**os.environ, "VIRTUAL_ENV": str(venv)})(
+        "pip", "install", "nanobind>=2.7"
+    )
+    env = {
+        **os.environ,
+        **_python_nanobind.conan_environment(tmp_path),
+        "VIRTUAL_ENV": str(venv),
+    }
+    done = subprocess.run(
+        ["cmake", "--preset", "release"],
+        cwd=package.directory,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+    assert done.returncode == 0, done.stdout[-4000:] + done.stderr[-2000:]
+    assert (package.directory / "build" / "release" / "compile_commands.json").is_file()
