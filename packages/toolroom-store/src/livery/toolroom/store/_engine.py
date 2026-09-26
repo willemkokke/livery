@@ -380,7 +380,7 @@ class Store:
 
         An `archive` or `binary` lands its artifact by the deployment's
         digest, extracts it, collects it as a tree and views it. A
-        `uv-tool` is installed by uv into its own directory under the
+        `pypi` is installed by uv into its own directory under the
         home, *package* naming what uv installs when it differs from the
         tool's name, and its launchers are the entry points. An `npm`
         tool is installed the same way through *runtime_exe*, the
@@ -390,7 +390,7 @@ class Store:
         which the runtime answers on the caller's PATH, bun through the
         `node` shim its record declares. A `system-check` is the
         machine's own tool, found on PATH and held to *min_version*.
-        `uv-python` is not supplied through the store yet and refuses
+        `python` is not supplied through the store yet and refuses
         naming the kind.
 
         Raises:
@@ -409,7 +409,7 @@ class Store:
                     f"{name}: a {kind} needs its deployment to be supplied"
                 )
             return self._supply_download(name, kind, version, deployment)
-        if kind == "uv-tool":
+        if kind == "pypi":
             return self._supply_uv_tool(name, version, package or name)
         if kind == "npm":
             runs_on = runtime or "node"
@@ -525,7 +525,7 @@ class Store:
     # --- the delegated kinds --------------------------------------------------
 
     def _probe_delegated(self, name: str, kind: str, version: str) -> Ensured | None:
-        if kind in ("uv-tool", "npm"):
+        if kind in ("pypi", "npm"):
             tool_dir = self._delegated_dir(name, kind, version)
             launchers = _launchers(tool_dir / "bin")
             if not launchers:
@@ -542,7 +542,7 @@ class Store:
 
     def _delegated_dir(self, name: str, kind: str, version: str) -> Path:
         """Where a delegated kind's install lives: under `uv/` or `npm/`."""
-        home = self.home.uv if kind == "uv-tool" else self.home.npm
+        home = self.home.uv if kind == "pypi" else self.home.npm
         return home / "tools" / f"{name}@{version}"
 
     def _supply_npm(
@@ -614,7 +614,7 @@ class Store:
         points, which uv writes from the package's own console scripts.
         """
         self._progress(Event(name, version, "probe"))
-        present = self._probe_delegated(name, "uv-tool", version)
+        present = self._probe_delegated(name, "pypi", version)
         if present is not None:
             return present
         tool_dir = self.home.uv / "tools" / f"{name}@{version}"

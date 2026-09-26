@@ -52,7 +52,7 @@ def _index(
         return Entry(name, "blob", store.put(data), len(data))
 
     for name, versions in tools.items():
-        record = Record(name, kind="uv-tool", deltas=_read(*versions))
+        record = Record(name, kind="pypi", deltas=_read(*versions))
         entries = [blob("tool", record.to_json()), blob("versions", list(versions))]
         for version in versions:
             parts: list[Entry] = []
@@ -132,7 +132,7 @@ def test_a_records_source_renders_and_a_version_never_read_is_named(
         monkeypatch,
         '[workspace]\n\n[tools]\nindex = "records"\nrequires = ["ruff"]\n',
     )
-    Record("ruff", kind="uv-tool", deltas=_read("1.0.0")).save(root / "records")
+    Record("ruff", kind="pypi", deltas=_read("1.0.0")).save(root / "records")
     _tools.write_lock(root)
     made = _tools.write_stubs(root)
     assert made.written == ("ruff",) and made.skipped == {}

@@ -1,4 +1,4 @@
-{"name": "djlint", "description": "", "kind": "uv-tool", "min_version": "", "hosts": []}
+{"name": "djlint", "description": "", "kind": "pypi", "min_version": "", "hosts": []}
 {"version": "1.40.8", "date": "2026-07-17", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "djLint · HTML template linter and formatter."}}
 {"verb": "", "help": "djLint · HTML template linter and formatter.", "wraps": false, "positional": "required", "lead": "src"}
 {"verb": "", "option": "blank_line_after_tag", "flags": ["--blank-line-after-tag"], "negation": "", "help": "Add an additional blank line after {% <tag> ..", "type": "str", "default": null, "choices": []}

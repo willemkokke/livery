@@ -987,7 +987,7 @@ def _behind(stubs, key: str) -> None:
     shutil.rmtree(stubs / "records" / key, ignore_errors=True)
     record = _surfaces.new(
         key,
-        kind="uv-tool",
+        kind="pypi",
         version="0.0.1",
         date="2020-01-01",
         surface={

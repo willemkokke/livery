@@ -134,8 +134,8 @@ class Provision:
 
 
 RECORD_KINDS = {
-    "uv": "uv-tool",
-    "python": "uv-python",
+    "uv": "pypi",
+    "python": "python",
     "node": "npm",
     "nodejs": "download",
     "man": "system-check",

@@ -1,4 +1,4 @@
-{"name": "demo", "description": "", "kind": "uv-tool", "min_version": "", "hosts": []}
+{"name": "demo", "description": "", "kind": "pypi", "min_version": "", "hosts": []}
 {"version": "1.0.0", "date": "2026-01-01", "artifacts": {}, "read": {"platforms": ["Linux", "macOS"], "extractor": 4, "help": "A demo tool."}}
 {"verb": "", "help": "A demo tool.", "wraps": false, "positional": "any", "lead": ""}
 {"verb": "", "option": "color", "flags": ["--color"], "negation": "", "help": "When to colour.", "type": "choice", "default": null, "choices": ["auto", "always", "never"]}

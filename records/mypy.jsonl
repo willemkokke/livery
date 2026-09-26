@@ -1,4 +1,4 @@
-{"name": "mypy", "description": "", "kind": "uv-tool", "min_version": "", "hosts": []}
+{"name": "mypy", "description": "", "kind": "pypi", "min_version": "", "hosts": []}
 {"version": "1.18.2", "date": "2025-09-19", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "Mypy is a program that will type check your Python code."}}
 {"verb": "", "help": "Mypy is a program that will type check your Python code.", "wraps": false, "positional": "any", "lead": ""}
 {"verb": "", "option": "allow_redefinition", "flags": ["--allow-redefinition"], "negation": "", "help": "Allow restricted, unconditional variable redefinition with a new type (inverse: --disallow-redefinition)", "type": "bool", "default": null, "choices": []}

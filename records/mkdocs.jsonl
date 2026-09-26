@@ -1,4 +1,4 @@
-{"name": "mkdocs", "description": "", "kind": "uv-tool", "min_version": "", "hosts": []}
+{"name": "mkdocs", "description": "", "kind": "pypi", "min_version": "", "hosts": []}
 {"version": "1.4.0", "date": "2022-09-27", "artifacts": {}, "read": {"platforms": ["Linux", "Windows", "macOS"], "extractor": 3, "help": "MkDocs - Project documentation with Markdown."}}
 {"verb": "", "help": "MkDocs - Project documentation with Markdown.", "wraps": false, "positional": "any", "lead": ""}
 {"verb": "", "option": "quiet", "flags": ["--quiet", "-q"], "negation": "", "help": "Silence warnings", "type": "bool", "default": null, "choices": []}

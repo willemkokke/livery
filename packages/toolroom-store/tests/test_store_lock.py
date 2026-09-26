@@ -72,10 +72,10 @@ def _archive(name: str, *versions: tuple[str, tuple[str, ...]]) -> Record:
 
 
 def _delegated(name: str, *versions: str) -> Record:
-    """A uv-tool whose versions were read, never downloaded."""
+    """A pypi tool whose versions were read, never downloaded."""
     return Record(
         name,
-        kind="uv-tool",
+        kind="pypi",
         deltas=tuple(
             RecordDelta(
                 n, version, "", surface=_surface() if n == 1 else Surface(("Linux",), 1)
@@ -351,7 +351,7 @@ def test_the_catalogue_reads_the_same_deployments_from_the_records_and_the_index
     assert set(from_index.tools) == {"ruff", "tea"}
     assert from_index.tools["tea"].versions == ("1.0.0", "1.1.0")
     assert from_index.tools["tea"].hosts == from_records.tools["tea"].hosts
-    assert from_index.tools["ruff"].kind == "uv-tool" and from_index.tools[
+    assert from_index.tools["ruff"].kind == "pypi" and from_index.tools[
         "ruff"
     ].hosts == {"0.16.4": {}}
     fetched = from_index.deployment("tea", "1.0.0", "windows-x64")
@@ -670,7 +670,7 @@ def test_a_stub_is_rendered_from_the_index_and_refused_for_a_version_never_read(
     records = tmp_path / "records"
     record = Record(
         "ruff",
-        kind="uv-tool",
+        kind="pypi",
         deltas=(
             RecordDelta(
                 1,

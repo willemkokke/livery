@@ -283,7 +283,7 @@ Acceptance:
 
 ### Phase 7: compile-time consumption of the library
 
-Status: slice 7a built 2026-09-26 (livery#735): conan and the
+Status: slice 7a landed 2026-09-26 (livery#735, PR #742): conan and the
 cmake-conan provider are store records, the extension template
 consumes fmt at compile time through the provider, `fm sync` registers
 every cpp-conan member editable before `uv sync`, and the fixture's

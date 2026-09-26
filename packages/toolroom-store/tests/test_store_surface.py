@@ -68,7 +68,7 @@ def _delta(
 
 
 def _record(*deltas: RecordDelta, **over: Any) -> Record:
-    fields: dict[str, Any] = {"name": "tool", "kind": "uv-tool", "deltas": deltas}
+    fields: dict[str, Any] = {"name": "tool", "kind": "pypi", "deltas": deltas}
     fields.update(over)
     return Record(**fields)
 

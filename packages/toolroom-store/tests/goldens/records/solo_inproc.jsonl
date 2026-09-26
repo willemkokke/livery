@@ -1,4 +1,4 @@
-{"name": "solo_inproc", "description": "", "kind": "uv-tool", "min_version": "", "hosts": []}
+{"name": "solo_inproc", "description": "", "kind": "pypi", "min_version": "", "hosts": []}
 {"version": "0.1.0", "date": "2026-01-01", "artifacts": {}, "read": {"platforms": ["macOS"], "extractor": 4, "help": "Runs in process."}}
 {"verb": "", "help": "Runs in process.", "wraps": false, "positional": "any", "lead": ""}
 {"verb": "", "option": "fast", "flags": ["--fast"], "negation": "", "help": "Go fast.", "type": "bool", "default": null, "choices": []}
