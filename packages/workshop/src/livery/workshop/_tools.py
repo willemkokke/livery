@@ -381,6 +381,21 @@ def exe(name: str) -> str:
     return f"{name}.exe" if sys.platform == "win32" else name
 
 
+def _graph_path(root: Path, locked: Locked) -> Path | None:
+    """The graph file the lock names for this version, when it is here and whole.
+
+    A graph named but missing, or whose bytes are not the ones the
+    lock recorded, is not installed from: the tool installs the way
+    it did, and the next lock writes the graph again.
+    """
+    if locked.graph is None:
+        return None
+    path = graphs_dir(root) / locked.graph.file
+    if not path.is_file() or digest_of(path.read_bytes()) != locked.graph.digest:
+        return None
+    return path
+
+
 def graphs_dir(root: Path) -> Path:
     """Where the resolved graphs live, beside the lock."""
     return root / GRAPHS
@@ -830,6 +845,7 @@ def materialise(
                 min_version=floor,
                 runtime=listed.runtime,
                 runtime_exe=runtimes.get(runtime_of(listed)),
+                graph=_graph_path(root, locked),
             )
         except StoreError as error:
             reason = str(error)

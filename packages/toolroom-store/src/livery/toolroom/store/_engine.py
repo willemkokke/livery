@@ -200,6 +200,17 @@ download: Callable[[str], bytes] = _download
 without a network."""
 
 
+def _run_installer_in(argv: list[str], env: dict[str, str], where: Path) -> int:
+    """Run an installer in *where*, for one that reads the directory it is in."""
+    completed = subprocess.run(argv, env={**os.environ, **env}, cwd=where, check=False)
+    return completed.returncode
+
+
+run_installer_in: Callable[[list[str], dict[str, str], Path], int] = _run_installer_in
+"""Runs an installer inside a directory. A variable, so a test supplies the
+install without node."""
+
+
 def _run_installer(argv: list[str], env: dict[str, str]) -> int:
     """Run a delegated kind's installer with *env* over the process's; its exit code."""
     completed = subprocess.run(
@@ -278,13 +289,73 @@ def npm_cli(node: Path) -> Path:
     )
 
 
+def _venv_bin(venv: Path) -> Path:
+    """The virtual environment's script directory, as this platform names it."""
+    return venv / ("Scripts" if sys.platform == "win32" else "bin")
+
+
+def _venv_python(venv: Path) -> Path:
+    """The virtual environment's interpreter."""
+    return _venv_bin(venv) / ("python.exe" if sys.platform == "win32" else "python")
+
+
+def _console_scripts(venv: Path, package: str) -> tuple[str, ...]:
+    """The console scripts *package* declares, asked of the install itself.
+
+    Read through the environment's own interpreter rather than by
+    finding a metadata directory: a distribution's name on disk is
+    normalised, and what a package calls itself is what the metadata
+    answers to.
+    """
+    printed = read_version(
+        [
+            str(_venv_python(venv)),
+            "-c",
+            "import importlib.metadata as m, json;"
+            f" print(json.dumps(sorted(e.name for e in m.distribution({package!r})"
+            ".entry_points if e.group == 'console_scripts')))",
+        ]
+    )
+    for line in reversed(printed.splitlines()):
+        try:
+            found = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(found, list):
+            return tuple(str(name) for name in found)
+    return ()
+
+
 def _launchers(bin_dir: Path) -> tuple[str, ...]:
     """The entry points an installer wrote under *bin_dir*, install-relative."""
     if not bin_dir.is_dir():
         return ()
     return tuple(
-        f"bin/{path.name}" for path in sorted(bin_dir.iterdir()) if path.is_file()
+        f"bin/{path.name}"
+        for path in sorted(bin_dir.iterdir())
+        if path.is_file() or path.is_symlink()
     )
+
+
+def _package_bins(tool_dir: Path, package: str) -> list[str]:
+    """The commands *package* declares in its own manifest, in name order.
+
+    npm fills `node_modules/.bin` with every installed package's
+    commands, a dependency's among them; what belongs on PATH is the
+    tool's own, which its manifest names. An unreadable manifest
+    answers with nothing and the caller falls back to what was
+    written.
+    """
+    manifest = tool_dir / "node_modules" / package / "package.json"
+    try:
+        declared = json.loads(manifest.read_text(encoding="utf-8")).get("bin")
+    except (OSError, ValueError):
+        return []
+    if isinstance(declared, str):
+        return [package.rsplit("/", 1)[-1]]
+    if isinstance(declared, dict):
+        return sorted(str(one) for one in declared)
+    return []
 
 
 def _delegated(entry_points: tuple[str, ...]) -> Deployment:
@@ -357,12 +428,19 @@ class Store:
         return self._probe_download(record.name, version, deployment)
 
     def ensure(
-        self, record: Record, version: str, *, runtime: Path | None = None
+        self,
+        record: Record,
+        version: str,
+        *,
+        runtime: Path | None = None,
+        graph: Path | None = None,
     ) -> Ensured:
         """Supply the tool at *version* as its record resolves it on this host.
 
         *runtime* is the executable of the runtime an `npm` record
         names, node unless it says bun, supplied by the caller first.
+        *graph* is the resolved set the lock pins for this version,
+        which a delegated kind installs instead of resolving.
 
         Raises:
             RecordError: for a version the record does not track, or a
@@ -383,6 +461,7 @@ class Store:
             min_version=record.min_version,
             runtime=record.runtime,
             runtime_exe=runtime,
+            graph=graph,
         )
 
     def supply(
@@ -396,6 +475,7 @@ class Store:
         min_version: str = "",
         runtime: str = "",
         runtime_exe: Path | None = None,
+        graph: Path | None = None,
     ) -> Ensured:
         """Supply *name* at *version* from *deployment* or through its installer.
 
@@ -431,7 +511,7 @@ class Store:
                 )
             return self._supply_download(name, kind, version, deployment)
         if kind == "pypi":
-            return self._supply_uv_tool(name, version, package or name)
+            return self._supply_uv_tool(name, version, package or name, graph)
         if kind == "npm":
             runs_on = runtime or "node"
             if runtime_exe is None:
@@ -440,7 +520,7 @@ class Store:
                     " hand its executable over"
                 )
             return self._supply_npm(
-                name, version, package or name, runs_on, runtime_exe
+                name, version, package or name, runs_on, runtime_exe, graph
             )
         if kind == "system-check":
             return self._supply_system(name, version, min_version)
@@ -582,9 +662,18 @@ class Store:
         return home / "tools" / f"{name}@{version}"
 
     def _supply_npm(
-        self, name: str, version: str, package: str, runtime: str, exe: Path
+        self,
+        name: str,
+        version: str,
+        package: str,
+        runtime: str,
+        exe: Path,
+        graph: Path | None = None,
     ) -> Ensured:
         """Install *package* at *version* through the *runtime* at *exe*.
+
+        With a *graph*, `npm ci` installs the recorded lockfile and
+        resolves nothing; without one the runtime resolves as it did.
 
         On node, npm runs as `node npm-cli.js`, the script node ships
         beside itself, so the install needs no launcher of npm's own to
@@ -610,6 +699,10 @@ class Store:
         bin_dir = tool_dir / "bin"
         bin_dir.mkdir(parents=True, exist_ok=True)
         env = {"PATH": os.pathsep.join([str(exe.parent), os.environ.get("PATH", "")])}
+        if graph is not None and cli is not None:
+            return self._supply_npm_graph(
+                name, version, package, graph, tool_dir, exe, cli, env
+            )
         if cli is not None:
             prefix = bin_dir if self.host.startswith("windows") else tool_dir
             argv = [
@@ -645,13 +738,22 @@ class Store:
                 )
         return Ensured(name, version, True, tool_dir, _delegated(launchers), None)
 
-    def _supply_uv_tool(self, name: str, version: str, package: str) -> Ensured:
+    def _supply_uv_tool(
+        self, name: str, version: str, package: str, graph: Path | None = None
+    ) -> Ensured:
         """Install *package* at *version* through uv, into the tool's own directory.
 
-        uv keeps one install per tool name in its tool directory, so
-        each version gets a tool directory of its own, with its
-        launchers in `bin` beside it; the launchers are the entry
-        points, which uv writes from the package's own console scripts.
+        With a *graph*, the resolved set is the answer and no
+        resolution happens here: uv installs it into a virtual
+        environment of the tool's own with every artifact checked
+        against the graph, and the package's own console scripts,
+        read from its metadata, are placed in `bin` beside it. A
+        dependency's scripts stay where they are, so a tool's
+        directory offers the tool and nothing else.
+
+        Without one, uv resolves and installs as it did, which is what
+        a tool locked before a graph was written for it gets, and its
+        launchers are uv's own.
         """
         self._progress(Event(name, version, "probe"))
         present = self._probe_delegated(name, "pypi", version)
@@ -660,6 +762,8 @@ class Store:
         tool_dir = self.home.uv / "tools" / f"{name}@{version}"
         bin_dir = tool_dir / "bin"
         bin_dir.mkdir(parents=True, exist_ok=True)
+        if graph is not None:
+            return self._supply_uv_graph(name, version, package, graph, tool_dir)
         argv = ["uv", "tool", "install", f"{package}=={version}"]
         if self.offline:
             argv.append("--offline")
@@ -678,6 +782,141 @@ class Store:
                 f"{name} {version}: `{' '.join(argv)}` exited {code} and left"
                 f" {'no launcher' if code == 0 else 'nothing'} in {bin_dir}"
             )
+        return Ensured(name, version, True, tool_dir, _delegated(launchers), None)
+
+    def _supply_npm_graph(
+        self,
+        name: str,
+        version: str,
+        package: str,
+        graph: Path,
+        tool_dir: Path,
+        node: Path,
+        cli: Path,
+        env: dict[str, str],
+    ) -> Ensured:
+        """Install the recorded lockfile with `npm ci`; the tool.
+
+        `npm ci` installs a lockfile and resolves nothing: it refuses
+        one that disagrees with the manifest beside it, and checks
+        every package against the integrity the lockfile records. The
+        launchers it writes are under `node_modules/.bin`, and the
+        tool's own are copied to `bin`, which is what reaches PATH.
+
+        Raises:
+            StoreError: when the install refuses, a graph the runtime
+                has no build for being the usual reason, naming the
+                graph and what resolves it again.
+        """
+        (tool_dir / "package.json").write_text(
+            json.dumps(
+                {
+                    "name": f"{name}-tool",
+                    "version": "0.0.0",
+                    "private": True,
+                    "dependencies": {package: version},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (tool_dir / "package-lock.json").write_bytes(graph.read_bytes())
+        argv = [str(node), str(cli), "ci", "--no-audit", "--no-fund"]
+        self._progress(Event(name, version, "install", " ".join(argv)))
+        code = run_installer_in(argv, env, tool_dir)
+        made = tool_dir / "node_modules" / ".bin"
+        found = _launchers(made)
+        if code != 0 or not found:
+            shutil.rmtree(tool_dir, ignore_errors=True)
+            raise StoreError(
+                f"{name} {version}: `{' '.join(argv)}` exited {code} and left"
+                f" {'no launcher' if code == 0 else 'nothing'} in {made}; the graph"
+                f" at {graph} is what this version installs, so a runtime it has"
+                " no build for is the usual reason and `fm tools.lock` resolves"
+                " it again"
+            )
+        bin_dir = tool_dir / "bin"
+        wanted = _package_bins(tool_dir, package)
+        for script in wanted or [Path(one).name for one in found]:
+            source = made / script
+            if not source.exists():
+                shutil.rmtree(tool_dir, ignore_errors=True)
+                raise StoreError(
+                    f"{name} {version}: {package} declares {script}, which the"
+                    f" install did not write to {made}"
+                )
+            # A link, never a copy: npm writes `.bin` as links into the
+            # package, and a copy of one lands the script away from the
+            # module it resolves against, so it runs nowhere.
+            _make_link(source, bin_dir / script)
+        return Ensured(
+            name, version, True, tool_dir, _delegated(_launchers(bin_dir)), None
+        )
+
+    def _supply_uv_graph(
+        self, name: str, version: str, package: str, graph: Path, tool_dir: Path
+    ) -> Ensured:
+        """Install the resolved graph into a venv of the tool's own; the tool.
+
+        Every artifact is checked against the graph as it lands, and
+        `--require-hashes` refuses an entry that carries no hash, so a
+        partial graph cannot pass unnoticed. What reaches `bin` is the
+        package's own console scripts and nothing else: the venv's bin
+        also holds a dependency's scripts and the interpreter itself,
+        which have no business on anyone's PATH.
+
+        Raises:
+            StoreError: when the venv cannot be made, when an artifact
+                does not match the graph, or when the package declares
+                no console script, each naming what to do about it.
+        """
+        venv = tool_dir / "venv"
+        bin_dir = tool_dir / "bin"
+        self._progress(Event(name, version, "install", str(graph)))
+        made = ["uv", "venv", "--quiet", str(venv)]
+        if run_installer(made, {}) != 0:
+            shutil.rmtree(tool_dir, ignore_errors=True)
+            raise StoreError(
+                f"{name} {version}: `{' '.join(made)}` made no environment"
+            )
+        argv = [
+            "uv",
+            "pip",
+            "install",
+            "--quiet",
+            f"--python={_venv_python(venv)}",
+            "--require-hashes",
+            "--requirements",
+            str(graph),
+        ]
+        if self.offline:
+            argv.append("--offline")
+        code = run_installer(argv, {})
+        if code != 0:
+            shutil.rmtree(tool_dir, ignore_errors=True)
+            raise StoreError(
+                f"{name} {version}: `{' '.join(argv)}` exited {code}; the graph"
+                f" at {graph} is what this version installs, so an artifact that"
+                " does not match it, or a runtime it has no build for, is the"
+                " reason and `fm tools.lock` resolves it again"
+            )
+        wanted = _console_scripts(venv, package)
+        if not wanted:
+            shutil.rmtree(tool_dir, ignore_errors=True)
+            raise StoreError(
+                f"{name} {version}: {package} declares no console script, so the"
+                " install offers nothing to run"
+            )
+        for script in wanted:
+            source = _venv_bin(venv) / script
+            if not source.is_file():
+                shutil.rmtree(tool_dir, ignore_errors=True)
+                raise StoreError(
+                    f"{name} {version}: {package} declares {script}, which its"
+                    f" install did not write to {_venv_bin(venv)}"
+                )
+            shutil.copy2(source, bin_dir / script)
+        launchers = _launchers(bin_dir)
         return Ensured(name, version, True, tool_dir, _delegated(launchers), None)
 
     def _supply_system(self, name: str, version: str, min_version: str) -> Ensured:

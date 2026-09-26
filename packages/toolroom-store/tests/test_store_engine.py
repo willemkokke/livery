@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import stat
 import sys
@@ -656,6 +657,11 @@ def test_fetch_skips_a_delegated_kind_and_a_shim_never_overwrites(
 # --- the delegated kinds ---------------------------------------------------------
 
 
+def store_of(home: Home) -> Store:
+    """A store on *home* for this host."""
+    return Store(home, host=HOST)
+
+
 def _uv_tool(name: str = "ruff", *versions: str) -> Record:
     from livery.toolroom.store import Surface
 
@@ -871,6 +877,125 @@ def test_an_npm_tool_naming_bun_lands_through_bun(
             runtime=bun,
         )
     assert not (home.npm / "tools" / "cspell@2.0.0").exists()
+
+
+def test_a_pypi_graph_refuses_an_artifact_that_does_not_match_it(
+    home: Home, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The refusals first, each leaving nothing behind.
+
+    An environment that will not be made, an install the graph turns
+    back, and a package with no console script; each names what
+    resolves it again.
+    """
+    graph = tmp_path / "ruff.txt"
+    graph.write_text("ruff==1.0.0 --hash=sha256:00\n", encoding="utf-8")
+    record = _uv_tool("ruff", "1.0.0")
+    store = Store(home, host=HOST)
+    tool_dir = home.uv / "tools" / "ruff@1.0.0"
+
+    monkeypatch.setattr(_engine, "run_installer", lambda argv, env: 1)
+    with pytest.raises(StoreError, match="made no environment"):
+        store.ensure(record, "1.0.0", graph=graph)
+    assert not tool_dir.exists()
+
+    calls: list[list[str]] = []
+
+    def refuse_install(argv: list[str], env: dict[str, str]) -> int:
+        calls.append(argv)
+        return 0 if argv[1] == "venv" else 2
+
+    monkeypatch.setattr(_engine, "run_installer", refuse_install)
+    with pytest.raises(StoreError, match=r"the graph at .*ruff.txt is what this"):
+        store.ensure(record, "1.0.0", graph=graph)
+    assert "--require-hashes" in calls[1] and str(graph) in calls[1]
+    assert not tool_dir.exists()
+
+    # An install that works and declares nothing to run is no tool.
+    monkeypatch.setattr(_engine, "run_installer", lambda argv, env: 0)
+    monkeypatch.setattr(_engine, "read_version", lambda argv: "[]")
+    with pytest.raises(StoreError, match="declares no console script"):
+        store.ensure(record, "1.0.0", graph=graph)
+    assert not tool_dir.exists()
+
+
+def test_a_pypi_graph_installs_into_its_own_venv_and_places_its_own_scripts(
+    home: Home, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The graph is the answer, so nothing is resolved here.
+
+    What reaches PATH is the package's own scripts: a dependency's
+    script and the venv's interpreter stay where they are.
+    """
+    graph = tmp_path / "ruff.txt"
+    graph.write_text("ruff==1.0.0 --hash=sha256:00\n", encoding="utf-8")
+    record = _uv_tool("ruff", "1.0.0")
+    tool_dir = home.uv / "tools" / "ruff@1.0.0"
+    calls: list[list[str]] = []
+
+    def installing(argv: list[str], env: dict[str, str]) -> int:
+        calls.append(argv)
+        if argv[1] == "venv":
+            made = _engine._venv_bin(Path(argv[-1]))
+            made.mkdir(parents=True, exist_ok=True)
+            for script in ("ruff", "ruff-lsp", "pygmentize", "python"):
+                (made / f"{script}{EXE}").write_text("#!/bin/sh\n")
+        return 0
+
+    monkeypatch.setattr(_engine, "run_installer", installing)
+    monkeypatch.setattr(
+        _engine, "read_version", lambda argv: f'["ruff{EXE}", "ruff-lsp{EXE}"]'
+    )
+    ensured = store_of(home).ensure(record, "1.0.0", graph=graph)
+    assert ensured.installed and ensured.tree is None
+    assert ensured.tool_dir == tool_dir
+    assert calls[0][:2] == ["uv", "venv"]
+    assert calls[1][:3] == ["uv", "pip", "install"]
+    assert "--require-hashes" in calls[1]
+    assert ensured.deployment.entry_points == (f"bin/ruff{EXE}", f"bin/ruff-lsp{EXE}")
+    # The dependency's script and the interpreter are not this tool's.
+    assert not (tool_dir / "bin" / f"pygmentize{EXE}").exists()
+    assert not (tool_dir / "bin" / f"python{EXE}").exists()
+    # A second ensure is a probe.
+    assert not store_of(home).ensure(record, "1.0.0", graph=graph).installed
+
+
+def test_an_npm_graph_installs_the_lockfile_and_resolves_nothing(
+    home: Home, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`npm ci` installs a lockfile and resolves nothing.
+
+    A refusal names the graph and what resolves it again.
+    """
+    graph = tmp_path / "basedpyright.json"
+    graph.write_text('{"lockfileVersion": 3}\n', encoding="utf-8")
+    node = _node(home)
+    record = _npm("basedpyright", "1.0.0")
+    tool_dir = home.npm / "tools" / "basedpyright@1.0.0"
+    calls: list[tuple[list[str], Path]] = []
+
+    def installing(argv: list[str], env: dict[str, str], where: Path) -> int:
+        calls.append((argv, where))
+        made = where / "node_modules" / ".bin"
+        made.mkdir(parents=True, exist_ok=True)
+        (made / f"basedpyright{EXE}").write_text("#!/usr/bin/env node\n")
+        return 0
+
+    monkeypatch.setattr(_engine, "run_installer_in", installing)
+    ensured = store_of(home).ensure(record, "1.0.0", runtime=node, graph=graph)
+    argv, where = calls[0]
+    assert argv[2:] == ["ci", "--no-audit", "--no-fund"] and where == tool_dir
+    # The manifest beside the lockfile is what npm ci judges it against.
+    manifest = json.loads((tool_dir / "package.json").read_text())
+    assert manifest["dependencies"] == {"basedpyright": "1.0.0"}
+    assert (tool_dir / "package-lock.json").read_bytes() == graph.read_bytes()
+    assert ensured.deployment.entry_points == (f"bin/basedpyright{EXE}",)
+
+    monkeypatch.setattr(_engine, "run_installer_in", lambda argv, env, where: 1)
+    other = _npm("cspell", "1.0.0")
+    with pytest.raises(StoreError, match=r"the graph at .* is what this version"):
+        store_of(home).ensure(other, "1.0.0", runtime=node, graph=graph)
+    assert not (home.npm / "tools" / "cspell@1.0.0").exists()
 
 
 def test_a_uv_tool_is_installed_once_into_its_own_directory(
