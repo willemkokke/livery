@@ -26,10 +26,14 @@ class Edge:
     Attributes:
         path: The dependency's identity: its directory path from the
             workspace root, as the tags spell it.
-        kind: ``runtime``, ``build``, ``test``, or ``tool``. A
-            ``runtime`` or ``build`` edge must appear in the native
-            manifest with a constraint carrying its floor; ``build``
-            edges also order publishing.
+        kind: ``runtime``, ``build``, ``test``, or ``tool``. It
+            decides one thing: a ``runtime`` or ``build`` edge must
+            appear in the native manifest with a constraint carrying
+            its floor, and the other two have no native home. Every
+            edge counts everywhere else, whatever its kind: the
+            acyclicity check, the dependents' closure the gate
+            narrows by, the order the release wave publishes in, and
+            the floor bump.
         floor: The released version the native manifest must require.
     """
 
