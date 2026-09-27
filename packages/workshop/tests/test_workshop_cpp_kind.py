@@ -19,7 +19,7 @@ from livery.workshop._kinds import (
     register_kind,
     template_chain,
 )
-from livery.workshop._packages import Package, discover_packages
+from livery.workshop._packages import Neighbours, Package, discover_packages
 from livery.workshop._quality import run_kind_checks
 from livery.workshop._registries import RegistryTarget
 from livery.workshop._templates import read_answers, render
@@ -220,6 +220,14 @@ def test_kind_checks_announce_and_dispatch(
         def build(self, package: Package, root: Path, *, epoch: int = 0) -> Path:
             return package.directory
 
+        def module_roots(self, package: Package) -> tuple[str, ...]:
+            return ()
+
+        def referenced_siblings(
+            self, package: Package, around: Neighbours
+        ) -> dict[str, str]:
+            return {}
+
         def publish_artifact(
             self,
             package: Package,
@@ -309,6 +317,14 @@ def test_host_tools_are_named_when_missing(restored_registry, tmp_path: Path) ->
     class _Idle:
         def build(self, package: Package, root: Path, *, epoch: int = 0) -> Path:
             return package.directory
+
+        def module_roots(self, package: Package) -> tuple[str, ...]:
+            return ()
+
+        def referenced_siblings(
+            self, package: Package, around: Neighbours
+        ) -> dict[str, str]:
+            return {}
 
         def publish_artifact(
             self,

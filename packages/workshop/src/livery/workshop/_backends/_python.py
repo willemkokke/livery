@@ -12,6 +12,7 @@ platform matrix.
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
@@ -37,7 +38,7 @@ from livery.toolroom.tools import (
     ty,
 )
 from livery.workshop._contract import load_contract
-from livery.workshop._packages import Package
+from livery.workshop._packages import Neighbours, Package
 from livery.workshop._state import RunContext, slug
 
 if TYPE_CHECKING:
@@ -1416,6 +1417,162 @@ def speed_lines(root: Path, sums: Path, *, leg: str = "") -> list[str]:
             )
         lines.append(f"  speed {package}: {seconds:.1f}s over {tests} tests ({beside})")
     return lines
+
+
+def module_roots(package: Package) -> tuple[str, ...]:
+    """The import prefixes *package* owns, read from its src tree.
+
+    A prefix is the topmost directory under ``src`` holding an
+    ``__init__.py`` on its branch. Read from the tree rather than
+    derived from the distribution name: three distributions share the
+    ``livery.toolroom`` namespace, so a transformed name would
+    attribute two of them to the third. A package with no python
+    source owns nothing.
+    """
+    src = package.directory / "src"
+    if not src.is_dir():
+        return ()
+    roots: list[str] = []
+    for init in sorted(src.rglob("__init__.py")):
+        dotted = ".".join(init.relative_to(src).parts[:-1])
+        if not dotted:
+            continue
+        if any(dotted == root or dotted.startswith(root + ".") for root in roots):
+            continue
+        roots.append(dotted)
+    return tuple(roots)
+
+
+def _plugin_modules(package: Package) -> tuple[str, ...]:
+    """The modules *package* declares as footman task entry points.
+
+    A module the runner loads as a plugin has the runner present by
+    construction, and whatever the layer stack mounts with it, so its
+    imports of either are not dependencies of the distribution. The
+    fact lives in the package's own metadata; nothing here needs to
+    be told a second time.
+    """
+    pyproject = package.directory / "pyproject.toml"
+    if not pyproject.is_file():
+        return ()
+    data = tomllib.loads(pyproject.read_text("utf-8"))
+    groups = data.get("project", {}).get("entry-points", {})
+    modules = []
+    for group in ("footman.tasks", "footman.builtin"):
+        for target in (groups.get(group) or {}).values():
+            modules.append(str(target).partition(":")[0])
+    return tuple(modules)
+
+
+def _extra_distributions(package: Package) -> frozenset[str]:
+    """The distribution names *package* declares in its optional extras.
+
+    An extra is a declaration: the integration needs that package,
+    and nothing installs it by default. A reference it covers is
+    accounted for, and no ``[[depends]]`` edge follows, since the
+    reverse check reads ``[project.dependencies]`` alone.
+    """
+    pyproject = package.directory / "pyproject.toml"
+    if not pyproject.is_file():
+        return frozenset()
+    data = tomllib.loads(pyproject.read_text("utf-8"))
+    found = set()
+    for requirements in (
+        data.get("project", {}).get("optional-dependencies") or {}
+    ).values():
+        for requirement in requirements:
+            name = str(requirement)
+            for cut in "[>=<!~; ":
+                name = name.partition(cut)[0]
+            found.add(name)
+    return frozenset(found)
+
+
+def _guarded_imports(tree: ast.AST) -> set[int]:
+    """The ids of import nodes under a ``try`` that catches an absent module.
+
+    An import written that way says the code runs without what it
+    imports, which is a declaration of its own and needs no other.
+    """
+    guarded: set[int] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Try):
+            continue
+        catches = any(
+            handler.type is None
+            or (
+                isinstance(handler.type, ast.Name)
+                and handler.type.id in ("ImportError", "ModuleNotFoundError")
+            )
+            for handler in node.handlers
+        )
+        if not catches:
+            continue
+        for statement in node.body:
+            for inner in ast.walk(statement):
+                if isinstance(inner, (ast.Import, ast.ImportFrom)):
+                    guarded.add(id(inner))
+    return guarded
+
+
+def _references_in(source: Path) -> list[str]:
+    """The dotted names *source* imports, guarded ones left out."""
+    try:
+        tree = ast.parse(source.read_text("utf-8"), filename=str(source))
+    except SyntaxError:
+        return []  # the syntax gate names it; this reads what parses
+    guarded = _guarded_imports(tree)
+    names: list[str] = []
+    for node in ast.walk(tree):
+        if id(node) in guarded:
+            continue
+        if isinstance(node, ast.Import):
+            names += [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            # The imported name too: under a PEP 420 namespace the
+            # module alone can be the namespace, and the package that
+            # owns the code is one segment further down.
+            names.append(node.module)
+            names += [f"{node.module}.{alias.name}" for alias in node.names]
+    return names
+
+
+def referenced_siblings(package: Package, around: Neighbours) -> dict[str, str]:
+    """Which siblings *package* uses and has not accounted for, by area.
+
+    The area is ``src`` or ``tests``, which is what decides a runtime
+    edge from a test one: the import site answers the kind, so nothing
+    has to guess it. Three of this kind's own conventions account for
+    a reference without an edge, and it is left out here: an import
+    inside a module the package declares as a footman task entry
+    point, a sibling named in one of its optional extras, and an
+    import guarded by ``try``/``except ImportError``.
+    """
+    exempt_dists = _extra_distributions(package)
+    plugins = _plugin_modules(package)
+    found: dict[str, str] = {}
+    for area in ("tests", "src"):
+        base = package.directory / area
+        if not base.is_dir():
+            continue
+        for source in sorted(base.rglob("*.py")):
+            inside_plugin = False
+            if area == "src":
+                dotted = ".".join(source.relative_to(base).parts)
+                dotted = dotted.removesuffix(".py").removesuffix(".__init__")
+                inside_plugin = any(
+                    dotted == module or dotted.startswith(module + ".")
+                    for module in plugins
+                )
+            for reference in _references_in(source):
+                owner = around.owner_of(reference)
+                if not owner or owner == package.path:
+                    continue
+                if inside_plugin or around.by_path[owner].name in exempt_dists:
+                    continue
+                found[owner] = area
+    found.pop(package.path, None)
+    return found
 
 
 def declared_requirements(package: Package) -> dict[str, str]:

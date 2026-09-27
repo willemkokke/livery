@@ -33,7 +33,7 @@ from livery.footman import fail
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from livery.workshop._packages import Package
+    from livery.workshop._packages import Neighbours, Package
     from livery.workshop._registries import RegistryTarget
 
 
@@ -92,6 +92,22 @@ class Backend(Protocol):
 
     def declared_requirements(self, package: Package) -> dict[str, str]:
         """What the package declares natively, name to constraint."""
+        ...
+
+    def module_roots(self, package: Package) -> tuple[str, ...]:
+        """The names other packages reference this one's code by."""
+        ...
+
+    def referenced_siblings(
+        self, package: Package, around: Neighbours
+    ) -> dict[str, str]:
+        """Which siblings the package's sources use, by area, unaccounted for.
+
+        The area is ``src`` or ``tests``, which decides a runtime edge
+        from a test one. A reference the kind's own conventions
+        already account for is left out, so the caller judges only
+        what nothing explains.
+        """
         ...
 
     def check(self, package: Package, root: Path) -> None:

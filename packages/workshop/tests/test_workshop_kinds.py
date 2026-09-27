@@ -16,7 +16,7 @@ from livery.workshop._kinds import (
     kind_tools,
     register_kind,
 )
-from livery.workshop._packages import Package
+from livery.workshop._packages import Neighbours, Package
 from livery.workshop._registries import RegistryTarget
 
 _FAILURES = (BaseException,)
@@ -48,6 +48,14 @@ class _FakeBackend:
     def build(self, package: Package, root: Path, *, epoch: int = 0) -> Path:
         self.built.append(package.name)
         return package.directory / "dist"
+
+    def module_roots(self, package: Package) -> tuple[str, ...]:
+        return ()
+
+    def referenced_siblings(
+        self, package: Package, around: Neighbours
+    ) -> dict[str, str]:
+        return {}
 
     def publish_artifact(
         self,

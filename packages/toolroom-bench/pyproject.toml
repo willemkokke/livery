@@ -38,6 +38,8 @@ test = [
     # meets whatever the machine carries, which the suite's python
     # cannot introspect.
     "mkdocs>=1.6",
+    # The suite drives the store's records, which strongroom names.
+    "livery-strongroom>=0.1.0",
 ]
 
 [project.entry-points."footman.tasks"]

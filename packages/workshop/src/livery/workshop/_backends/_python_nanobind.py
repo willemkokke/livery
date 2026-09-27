@@ -35,6 +35,11 @@ test = _python.test
 current_version = _python.current_version
 stamp_version = _python.stamp_version
 publish_artifact = _python.publish_artifact
+# The python half is read exactly as a pure package's is; the
+# native half references its conan dependency through the recipe,
+# which the conan kind answers for.
+module_roots = _python.module_roots
+referenced_siblings = _python.referenced_siblings
 
 
 def declared_requirements(package: Package) -> dict[str, str]:

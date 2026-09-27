@@ -33,6 +33,11 @@ dependencies = [
     # The tool records, the catalogue and the lock: what `fm tools.*`
     # resolves against.
     "livery-toolroom-store>=0.0.0",
+    # The digest grammar and the registry of algorithms that may name
+    # bytes. Already installed through the tool store's own edge; the
+    # floor is the one that edge carries, since raising one is a
+    # decision and the release's lowest-direct leg proves it.
+    "livery-strongroom>=0.1.0",
     # The template engine behind `fm template.check` and `fm
     # new.package`; pyyaml reads the adopted answers files. The
     # pyyaml floor is the oldest release whose wheels cover every

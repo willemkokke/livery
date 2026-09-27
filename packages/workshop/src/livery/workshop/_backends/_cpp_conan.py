@@ -29,7 +29,7 @@ from livery.toolroom import tools
 if TYPE_CHECKING:
     from livery.forge import Repository
     from livery.toolroom.tools import Result
-    from livery.workshop._packages import Package
+    from livery.workshop._packages import Neighbours, Package
     from livery.workshop._registries import RegistryTarget
 
 #: Where the gate's cmake configure lands, under the package.
@@ -75,6 +75,28 @@ def conan_requirements(conanfile: Path) -> dict[str, str]:
         if name and version:
             entries[name] = version
     return entries
+
+
+def module_roots(package: Package) -> tuple[str, ...]:
+    """Nothing: a conan package is referenced by recipe name, not import.
+
+    The name a consumer writes is the recipe's, which the conanfile
+    already declares and ``declared_requirements`` already reads.
+    """
+    del package
+    return ()
+
+
+def referenced_siblings(package: Package, around: Neighbours) -> dict[str, str]:
+    """Nothing: reading a recipe's own sources for references is unwritten.
+
+    The answer this kind owes is an ``#include`` of a header belonging
+    to another workspace package with no matching ``requires`` in the
+    conanfile. Until it is written the lint finds nothing here, which
+    is silence rather than a pass.
+    """
+    del package, around
+    return {}
 
 
 def declared_requirements(package: Package) -> dict[str, str]:

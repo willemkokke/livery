@@ -343,3 +343,207 @@ def test_no_tool_is_spawned_under_a_literal_program_name() -> None:
     assert not offenders, "spawned by name instead of by handle:\n" + "\n".join(
         offenders
     )
+
+
+# --- references the sources make, and what accounts for each ----------------
+
+
+def _sourced(root: Path, package: str, relative: str, body: str) -> None:
+    """Write *body* at *relative* under a package's src, tree and all."""
+    path = root / "packages" / package / "src" / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body, encoding="utf-8")
+
+
+def _tested(root: Path, package: str, relative: str, body: str) -> None:
+    """Write *body* at *relative* under a package's tests."""
+    path = root / "packages" / package / "tests" / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body, encoding="utf-8")
+
+
+def _edge(path: str, kind: str, floor: str) -> str:
+    return f'[[depends]]\npath = "{path}"\nkind = "{kind}"\nfloor = "{floor}"\n'
+
+
+def test_a_reference_nothing_reaches_is_refused(tmp_path: Path) -> None:
+    _forge_stub(tmp_path)
+    _package(tmp_path, "low")
+    _sourced(tmp_path, "low", "livery/low/__init__.py", "")
+    _package(tmp_path, "high")
+    _sourced(tmp_path, "high", "livery/high/__init__.py", "import livery.low\n")
+    with pytest.raises(ValueError, match="this one is a new dependency"):
+        verify_workspace(tmp_path)
+
+
+def test_a_reference_the_graph_reaches_names_the_edge_and_the_floor(
+    tmp_path: Path,
+) -> None:
+    _forge_stub(tmp_path)
+    _package(tmp_path, "low")
+    _sourced(tmp_path, "low", "livery/low/__init__.py", "")
+    _package(
+        tmp_path,
+        "mid",
+        contract_extra=_edge("packages/low", "runtime", "1.2.0"),
+        dependencies=("livery-low>=1.2.0",),
+    )
+    _sourced(tmp_path, "mid", "livery/mid/__init__.py", "")
+    _package(
+        tmp_path,
+        "high",
+        contract_extra=_edge("packages/mid", "runtime", "0.1.0"),
+        dependencies=("livery-mid>=0.1.0",),
+    )
+    _sourced(tmp_path, "high", "livery/high/__init__.py", "import livery.low\n")
+    with pytest.raises(
+        ValueError, match=re.escape("Declare the runtime edge at floor 1.2.0")
+    ):
+        verify_workspace(tmp_path)
+
+
+def test_the_inherited_floor_is_the_highest_the_reachable_set_carries(
+    tmp_path: Path,
+) -> None:
+    _forge_stub(tmp_path)
+    _package(tmp_path, "low")
+    _sourced(tmp_path, "low", "livery/low/__init__.py", "")
+    for name, floor in (("mid", "1.2.0"), ("other", "2.5.1")):
+        _package(
+            tmp_path,
+            name,
+            contract_extra=_edge("packages/low", "runtime", floor),
+            dependencies=(f"livery-low>={floor}",),
+        )
+        _sourced(tmp_path, name, f"livery/{name}/__init__.py", "")
+    _package(
+        tmp_path,
+        "high",
+        contract_extra=(
+            _edge("packages/mid", "runtime", "0.1.0")
+            + _edge("packages/other", "runtime", "0.1.0")
+        ),
+        dependencies=("livery-mid>=0.1.0", "livery-other>=0.1.0"),
+    )
+    _sourced(tmp_path, "high", "livery/high/__init__.py", "import livery.low\n")
+    with pytest.raises(ValueError, match=re.escape("at floor 2.5.1")):
+        verify_workspace(tmp_path)
+
+
+def test_a_reference_from_the_tests_alone_asks_for_a_test_edge(
+    tmp_path: Path,
+) -> None:
+    _forge_stub(tmp_path)
+    _package(tmp_path, "low")
+    _sourced(tmp_path, "low", "livery/low/__init__.py", "")
+    _package(
+        tmp_path,
+        "mid",
+        contract_extra=_edge("packages/low", "runtime", "1.2.0"),
+        dependencies=("livery-low>=1.2.0",),
+    )
+    _sourced(tmp_path, "mid", "livery/mid/__init__.py", "")
+    _package(
+        tmp_path,
+        "high",
+        contract_extra=_edge("packages/mid", "runtime", "0.1.0"),
+        dependencies=("livery-mid>=0.1.0",),
+    )
+    _sourced(tmp_path, "high", "livery/high/__init__.py", "")
+    _tested(tmp_path, "high", "test_it.py", "import livery.low\n")
+    with pytest.raises(ValueError, match=re.escape("Declare the test edge")):
+        verify_workspace(tmp_path)
+
+
+def test_a_reference_inside_a_declared_plugin_module_is_accounted_for(
+    tmp_path: Path,
+) -> None:
+    _forge_stub(tmp_path)
+    _package(tmp_path, "low")
+    _sourced(tmp_path, "low", "livery/low/__init__.py", "")
+    _package(tmp_path, "high")
+    (tmp_path / "packages" / "high" / "pyproject.toml").write_text(
+        '[project]\nname = "livery-high"\ndependencies = []\n\n'
+        '[project.entry-points."footman.tasks"]\n'
+        '"livery.high" = "livery.high._dev"\n'
+    )
+    _sourced(tmp_path, "high", "livery/high/__init__.py", "")
+    _sourced(tmp_path, "high", "livery/high/_dev.py", "import livery.low\n")
+    verify_workspace(tmp_path)
+
+
+def test_a_sibling_named_in_an_optional_extra_is_accounted_for(
+    tmp_path: Path,
+) -> None:
+    _forge_stub(tmp_path)
+    _package(tmp_path, "low")
+    _sourced(tmp_path, "low", "livery/low/__init__.py", "")
+    _package(tmp_path, "high")
+    (tmp_path / "packages" / "high" / "pyproject.toml").write_text(
+        '[project]\nname = "livery-high"\ndependencies = []\n\n'
+        "[project.optional-dependencies]\n"
+        'test = ["livery-low>=1.0"]\n'
+    )
+    _sourced(tmp_path, "high", "livery/high/__init__.py", "import livery.low\n")
+    verify_workspace(tmp_path)
+
+
+def test_a_reference_guarded_by_try_except_is_accounted_for(
+    tmp_path: Path,
+) -> None:
+    _forge_stub(tmp_path)
+    _package(tmp_path, "low")
+    _sourced(tmp_path, "low", "livery/low/__init__.py", "")
+    _package(tmp_path, "high")
+    _sourced(
+        tmp_path,
+        "high",
+        "livery/high/__init__.py",
+        "try:\n    import livery.low\nexcept ImportError:\n    pass\n",
+    )
+    verify_workspace(tmp_path)
+
+
+def test_the_longest_prefix_decides_which_package_owns_a_module(
+    tmp_path: Path,
+) -> None:
+    _forge_stub(tmp_path)
+    _package(tmp_path, "space")
+    _sourced(tmp_path, "space", "livery/space/__init__.py", "")
+    _package(tmp_path, "inner")
+    # A PEP 420 namespace: this distribution owns livery.space.inner,
+    # and the shorter prefix belongs to its neighbour.
+    _sourced(tmp_path, "inner", "livery/space/inner/__init__.py", "")
+    _package(tmp_path, "high")
+    _sourced(tmp_path, "high", "livery/high/__init__.py", "import livery.space.inner\n")
+    with pytest.raises(ValueError, match="livery-inner"):
+        verify_workspace(tmp_path)
+
+
+def test_a_runtime_edges_floor_must_match_its_requirement(tmp_path: Path) -> None:
+    _forge_stub(tmp_path)
+    _package(tmp_path, "low")
+    _package(
+        tmp_path,
+        "high",
+        contract_extra=_edge("packages/low", "runtime", "1.0.0"),
+        dependencies=("livery-low>=2.0.0",),
+    )
+    with pytest.raises(ValueError, match=re.escape("floors at 1.0.0")):
+        verify_workspace(tmp_path)
+
+
+def test_a_kind_that_reads_no_sources_contributes_no_reference() -> None:
+    from livery.workshop._backends import _cpp_conan
+    from livery.workshop._packages import Neighbours, Package
+
+    package = Package(
+        directory=Path("/nowhere"),
+        path="packages/native",
+        name="native",
+        type="cpp-conan",
+        depends=(),
+    )
+    around = Neighbours(owners={}, by_path={})
+    assert _cpp_conan.module_roots(package) == ()
+    assert _cpp_conan.referenced_siblings(package, around) == {}

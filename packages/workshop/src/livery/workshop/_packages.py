@@ -13,6 +13,7 @@ from __future__ import annotations
 import ast
 import sys
 from dataclasses import dataclass
+from itertools import takewhile
 from pathlib import Path
 
 from livery.workshop._contract import load_contract
@@ -25,9 +26,10 @@ class Edge:
     Attributes:
         path: The dependency's identity: its directory path from the
             workspace root, as the tags spell it.
-        kind: ``build``, ``test``, or ``tool``; only ``build`` edges
-            order publishing, and only they must appear in the native
-            manifest.
+        kind: ``runtime``, ``build``, ``test``, or ``tool``. A
+            ``runtime`` or ``build`` edge must appear in the native
+            manifest with a constraint carrying its floor; ``build``
+            edges also order publishing.
         floor: The released version the native manifest must require.
     """
 
@@ -167,7 +169,7 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
                     " which is not a package here"
                 )
                 continue
-            if edge.kind != "build":
+            if edge.kind not in ("build", "runtime"):
                 continue  # test and tool edges have no native home yet
             dep = by_path[edge.path]
             home = (
@@ -197,6 +199,21 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
                         f" [[depends]] edge on {dep_path}"
                     )
 
+    writable, refused = undeclared_references(packages)
+    for package, dependency, kind, floor in writable:
+        problems.append(
+            f"{package.path}: uses {dependency.name} through a sibling that"
+            f" brings it in, with no [[depends]] edge on {dependency.path}."
+            f" Declare the {kind} edge at floor {floor}, the one the graph"
+            " already carries, and the matching requirement"
+        )
+    for package, dependency in refused:
+        problems.append(
+            f"{package.path}: uses {dependency.name}, and nothing it"
+            f" depends on brings that in. Declare the edge on"
+            f" {dependency.path} and its requirement deliberately: this"
+            " one is a new dependency, not a fact the graph already has"
+        )
     problems.extend(_cycles(packages))
     problems.extend(_forge_is_stdlib_only(root))
     problems.extend(_terminal_is_asked_through_the_runner(root, packages))
@@ -205,6 +222,135 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
             "the workspace breaks its layering:\n  " + "\n  ".join(problems)
         )
     return packages
+
+
+@dataclass(frozen=True)
+class Neighbours:
+    """What a kind needs to judge one package's references to its siblings.
+
+    Attributes:
+        owners: Each package's own import prefixes, mapped to its
+            path. The kinds answer these; the core collects them, so
+            a reference is resolved the same way whoever made it.
+        by_path: Every package by its identity path.
+    """
+
+    owners: dict[str, str]
+    by_path: dict[str, Package]
+
+    def owner_of(self, reference: str) -> str:
+        """The package path owning *reference*, longest prefix winning.
+
+        Empty when no package owns it: a third-party name, or the
+        standard library. Longest prefix, because three distributions
+        share the ``livery.toolroom`` namespace and the shortest match
+        would attribute two of them to the third.
+        """
+        best = ""
+        for prefix in self.owners:
+            matches = reference == prefix or reference.startswith(prefix + ".")
+            if matches and len(prefix) > len(best):
+                best = prefix
+        return self.owners[best] if best else ""
+
+
+def neighbours(packages: tuple[Package, ...]) -> Neighbours:
+    """The reference map for *packages*, each kind answering for its own."""
+    from livery.workshop._kinds import kind_for, kind_names
+
+    owners: dict[str, str] = {}
+    for package in packages:
+        if package.type not in kind_names():
+            continue
+        roots = getattr(kind_for(package.type).backend, "module_roots", None)
+        if roots is None:
+            continue
+        for prefix in roots(package):
+            owners[prefix] = package.path
+    return Neighbours(owners=owners, by_path={p.path: p for p in packages})
+
+
+def _reachable(by_path: dict[str, Package], start: str) -> set[str]:
+    """Every package path *start* reaches through declared edges."""
+    seen: set[str] = set()
+    queue = [edge.path for edge in by_path[start].depends]
+    while queue:
+        path = queue.pop()
+        if path in seen or path not in by_path:
+            continue
+        seen.add(path)
+        queue += [edge.path for edge in by_path[path].depends]
+    return seen
+
+
+def inherited_floor(by_path: dict[str, Package], reach: set[str], dep: str) -> str:
+    """The floor *dep* already carries within *reach*; the highest declared.
+
+    Every declaration inside the reachable set is installed, so the
+    highest of them is what resolution already guarantees. That floor
+    claims nothing new: raising one is a decision, and the release's
+    lowest-direct leg is what proves a floor is high enough.
+    """
+    floors = [
+        edge.floor
+        for path in reach
+        for edge in by_path[path].depends
+        if edge.path == dep and edge.floor
+    ]
+    if not floors:
+        return "0.0.0"
+    return max(floors, key=_version_key)
+
+
+def _version_key(version: str) -> tuple[int, ...]:
+    """*version* as comparable integers; a non-numeric part sorts as zero."""
+    parts = []
+    for piece in version.split("."):
+        digits = "".join(takewhile(str.isdigit, piece))
+        parts.append(int(digits) if digits else 0)
+    return tuple(parts)
+
+
+def undeclared_references(
+    packages: tuple[Package, ...],
+) -> tuple[list[tuple[Package, Package, str, str]], list[tuple[Package, Package]]]:
+    """Sibling references no edge declares, split by what the graph reaches.
+
+    Each kind answers which siblings a package's sources reference and
+    which of those its own conventions already explain; this walks the
+    graph over the answers. A reference the declared graph already
+    reaches can be declared without changing what the graph reaches,
+    so it can introduce neither a cycle nor an upward edge, and it is
+    returned as (package, dependency, edge kind, floor). Anything else
+    is a new dependency for a person to decide, returned as
+    (package, dependency).
+    """
+    from livery.workshop._kinds import kind_for, kind_names
+
+    around = neighbours(packages)
+    writable: list[tuple[Package, Package, str, str]] = []
+    refused: list[tuple[Package, Package]] = []
+    for package in packages:
+        if package.type not in kind_names():
+            continue
+        referenced = getattr(
+            kind_for(package.type).backend, "referenced_siblings", None
+        )
+        if referenced is None:
+            continue
+        declared = {edge.path for edge in package.depends}
+        reach = _reachable(around.by_path, package.path)
+        for dep_path, area in sorted(referenced(package, around).items()):
+            if dep_path in declared or dep_path not in around.by_path:
+                continue
+            dependency = around.by_path[dep_path]
+            if dep_path in reach:
+                kind = "test" if area == "tests" else "runtime"
+                floor = inherited_floor(around.by_path, reach, dep_path)
+                writable.append((package, dependency, kind, floor))
+            else:
+                refused.append((package, dependency))
+    return writable, refused
 
 
 def _cycles(packages: tuple[Package, ...]) -> list[str]:

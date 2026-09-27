@@ -12,7 +12,7 @@ build = "uv build --package livery-workshop"
 [[depends]]
 path = "packages/toolroom"
 kind = "runtime"
-floor = "0.6.2"
+floor = "0.7.0"
 
 [[depends]]
 path = "packages/footman"
@@ -28,6 +28,11 @@ floor = "0.4.0"
 path = "packages/toolroom-store"
 kind = "runtime"
 floor = "0.0.0"
+
+[[depends]]
+path = "packages/strongroom"
+kind = "runtime"
+floor = "0.1.0"
 
 [docs]
 extra-css = ["assets/workshop.css"]
