@@ -254,17 +254,24 @@ History is "model v2 follows model v1", and `parents` already has it.
 Derivation is "model v2 was produced from these inputs", which git has
 no equivalent of and Nix does.
 
-### Three designs
+### Four designs
 
-1. **Overload `parents`.** Free, and it destroys the first relation.
-2. **A lineage blob in `attachments`.** Works with no format change,
+1. **No new format.** Keep a ref per cited object as a retention root,
+   since refs are already collection roots, and hold the lineage in a
+   consumer blob. It works today and costs strongroom nothing. Its
+   weakness is that the retention invariant then holds by convention:
+   nothing stops someone deleting a ref whose purpose is recorded
+   nowhere a machine can read, and the loss is silent and late. It
+   stays on the table as the cheapest option.
+2. **Overload `parents`.** Free, and it destroys the first relation.
+3. **A lineage blob in `attachments`.** Works with no format change,
    and the spec blesses the slot for "a tool spec, a dataset card". The
    problem is reachability: an input named only inside an opaque
    attachment is not reachable, so collection can delete the dataset
    version a model's lineage cites, and the lineage silently becomes a
    dangling claim. No vectors either, so every consumer invents its own
    shape.
-3. **A first-class lineage format.** A specified record whose digest is
+4. **A first-class lineage format.** A specified record whose digest is
    the digest of its own bytes, naming its inputs as name-to-digest
    pairs, with a producer, a receipt and its parameters. Inputs named by
    it are reachable, so the store can hold the invariant that a model's
@@ -272,11 +279,18 @@ no equivalent of and Nix does.
    gets golden vectors and conformance scenarios like every other
    format.
 
-The third is ruled (2026-09-27): the lineage relation is a first-class
-strongroom format. Reachability is the argument that decides it: a
-lineage claim whose referent can be collected is worse than no claim,
-because the loss is silent until it is needed. The format itself is
-open, and deliberately so; nothing below fixes a field list.
+The fourth is ruled (2026-09-27): the lineage relation is a
+first-class strongroom format. Reachability is the argument that
+decides it: a lineage claim whose referent can be collected is worse
+than no claim, because the loss is silent until it is needed. The
+format itself is open, and deliberately so; nothing below fixes a
+field list.
+
+The relation is not a new axis. `Version` already carries `producer`
+and `receipt`: it records what produced a version, and points at the
+call without describing it. What it does not record is what went into
+it. The inputs axis is the missing half of provenance that the version
+already half-carries.
 
 The layering stays honest if the format is domain-neutral the way
 `Tree` is. Inputs are name-to-digest pairs whose names mean nothing to
@@ -287,12 +301,66 @@ Strongroom specifies the relation; the plugin owns the words
 Naming collision to settle: the fabric already uses "derivation" for a
 call key. The data-lineage record needs a different word.
 
-**Timing.** Phase 11 of
+**Timing, and why the direction decides it.** Phase 11 of
 [the redesign plan](20260925-strongroom-redesign-plan.md) is the
-freeze, and phases 2 to 11 are still waiting. Before the freeze a
-ruling costs an edit and a vector; after it, adding a hashed format
-costs compatibility. If a lineage format is wanted at all, it should be
-ruled before phase 11, not after.
+freeze, and phases 2 to 11 are still waiting. The formats refuse
+unknown keys: `version.md` and `tree.md` both say "exactly those keys".
+That cuts both ways, and it sets the price of the freeze.
+
+A lineage record that **names its outputs**, pointing backward, leaves
+`Version` untouched and is a standalone object. An implementation never
+meets it unless a referrer points at it, so it is a pure addition and
+can land after the freeze. Finding a model's lineage then needs an
+index, and an index is a backend property, never in the name, exactly
+as the layout ruling has it; the store already keeps local marks under
+`index/`.
+
+A record that **points forward** makes the version grow a key, which is
+a break, and it must land before phase 11.
+
+So the direction removes or creates the deadline. Backward-pointing
+lineage is why "first class" and "the format is not settled" stop being
+in tension.
+
+### Fit with strongroom's goals
+
+Strongroom is meant to stay clean, generic, multipurpose, easy to
+implement in any language, and fast. Both additions are judged against
+that, and the price is stated rather than waved away.
+
+**Spec surface is the real cost.** `packages/strongroom/spec/` has ten
+pages. Two more is a fifth more to read and to implement, and that
+bears on "easy to implement" more than anything else here does.
+
+**Two guards keep them from growing.** For annotations: the store never
+interprets a value. It checks that keys resolve and that a namespace's
+required keys are present, and nothing else, which leaves the store's
+contribution thin and correct. For lineage: strongroom points at the
+call and does not describe it, the way `Version.receipt` already does.
+Named inputs, a producer, a receipt, and stop. Parameters, environment
+and command lines belong to the fabric, which owns calls. Without that
+line the store grows into a build system.
+
+**Multipurpose is provable, not asserted.** Lineage has consumers with
+no machine learning in them: the redesign already frames IoStore
+containers as a derivation from the store, a tool view is derived from
+an archive, the tool record's replay-to-identical-digest property is a
+derivation with reproducibility asserted, and a rendered docs site is
+derived from its sources. Annotations likewise: classification and
+retention class on any corpus, attribution text on any vendored tree.
+A format with only the ML case behind it would be the signal to keep it
+out.
+
+**Performance is not where the risk is.** Both records are small
+objects, sized by rules and by edges rather than by files, and
+collection already traverses trees and versions. The performance risk
+in this area is dataset-scale manifests, chunking and the pack layout,
+which is the redesign's own measurement work. The two worries are
+separate and should stay separate.
+
+**One subtlety for the annotation page**: prefix matching is on stored
+names, never on materialised ones, or an escaped name on a platform
+that cannot hold the original would fall out of its own claim.
 
 ### Travelling with the artifact
 
@@ -536,6 +604,20 @@ refuse the build while it is missing.
 - **PEP 740** for index attestations and **PEP 770** for SBOMs inside
   wheels.
 
+## Ordering
+
+Build the plugin's evidence generation first, against the formats that
+exist today, with consumer-owned records and refs as roots. It produces
+the documents the audience needs, and it produces the measurements the
+formats should be ruled on: how many rules a real corpus needs, whether
+per-key resolution earns its complexity, how large the manifests get,
+which lineage edges are actually walked. Then rule the two formats with
+that in hand and land them as additions.
+
+The point of that order is that the audit's calendar never sets the
+store's format, which is the only mechanism by which this work could
+make strongroom worse.
+
 ## Decision record
 
 - 2026-09-27, the driver (Willem). The work repositories become one
@@ -559,6 +641,16 @@ refuse the build while it is missing.
   namespace policy for instructions to an implementation, and a
   mutable index keyed by digest for facts about the world that move
   while the bytes do not. The four-question test is above.
+- 2026-09-27, the freeze costs only what touches a version (found
+  while reviewing the strict-key discipline): a backward-pointing
+  lineage record is a pure addition and carries no deadline; a
+  forward-pointing one grows a key on the version and must land before
+  phase 11. The index that a backward record needs is a backend
+  property, not a format.
+- 2026-09-27, the plugin's schedule does not set the store's format
+  (proposed, awaiting Willem): evidence generation ships against
+  today's formats, and the two new formats are ruled once real corpora
+  have been measured.
 - 2026-09-27, the runtime routes (Willem): Unreal NNE with the ORT
   backend and an onnxruntime Python wheel today, CoreML reached
   directly from Swift, and a linked runtime not ruled out. Models are
@@ -583,9 +675,11 @@ refuse the build while it is missing.
    must be ruled before the redesign's phase 11 freeze, because after
    the freeze a new hashed format costs compatibility.
 7. **Which direction the lineage record points**: a version naming its
-   lineage record, or the record naming its outputs. Forward references
-   break the immutability of the earlier object; backward references
-   need an index to answer "what is this model's lineage".
+   lineage record, or the record naming its outputs. Backward is the
+   candidate, because it leaves the version untouched, makes the format
+   a pure addition after the freeze, and needs only a local index,
+   which is a backend property. Forward references break the
+   immutability of the earlier object and create a deadline.
 8. **What the record is called**, since the fabric already uses
    "derivation" for a call key.
 9. **Manifest cost at dataset scale**, measured with the redesign's
