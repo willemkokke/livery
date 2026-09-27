@@ -243,3 +243,59 @@ def test_a_settings_link_is_replaced_by_a_copy(tmp_path: Path) -> None:
     assert any("in place of a link" in line for line in lines)
     target = claude / "settings.json"
     assert target.is_file() and not target.is_symlink()
+
+
+def test_a_file_the_delivery_never_wrote_survives_the_sweep(tmp_path: Path) -> None:
+    """The refusal first: `.workshop/` is not the sweep's to empty.
+
+    The directory holds layer fragments and this checkout's own
+    state side by side. Sweeping everything no layer ships deleted
+    the stub receipt, which the same sync reads a few steps later,
+    so the fast path it exists for had never once fired.
+    """
+    root = _workspace(tmp_path)
+    sync_workspace(root)
+    receipt = root / ".workshop" / "stubs.json"
+    receipt.write_text('{"schema": 1}\n')
+    lines = sync_workspace(root)
+    assert receipt.is_file(), "the sweep deleted a file it never wrote"
+    assert not any("stubs.json" in line for line in lines)
+
+
+def test_a_fragment_a_layer_stopped_shipping_is_removed(tmp_path: Path) -> None:
+    """The sweep still does its job, for the files that are its own."""
+    root = _workspace(tmp_path)
+    sync_workspace(root)
+    workshop = root / ".workshop"
+    withdrawn = workshop / "old-guidance.md"
+    withdrawn.write_text("shipped once\n")
+    record = workshop / ".workshop-fragments"
+    record.write_text(record.read_text(encoding="utf-8") + "old-guidance.md\n")
+    lines = sync_workspace(root)
+    assert not withdrawn.exists()
+    assert any("removed old-guidance.md" in line for line in lines)
+
+
+def test_a_directory_with_no_record_is_adopted_and_swept_of_nothing(
+    tmp_path: Path,
+) -> None:
+    """No record means unknown history, never an empty inventory.
+
+    Claiming the directory on a first run would delete exactly the
+    files this fix protects. A fragment withdrawn before the record
+    existed stays until someone removes it, which is the honest cost.
+    """
+    root = _workspace(tmp_path)
+    workshop = root / ".workshop"
+    workshop.mkdir()
+    stranger = workshop / "from-before.md"
+    stranger.write_text("older than the record\n")
+    lines = sync_workspace(root)
+    assert stranger.is_file()
+    assert not any("removed" in line for line in lines)
+    # Adopted for survival, not as a fragment: the next sync leaves it
+    # alone too, rather than claiming and then deleting it.
+    record = (workshop / ".workshop-fragments").read_text(encoding="utf-8")
+    assert "from-before.md" not in record
+    sync_workspace(root)
+    assert stranger.is_file()
