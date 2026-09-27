@@ -605,7 +605,16 @@ def test_the_rendered_tasks_mount_the_profiler(tmp_path: Path) -> None:
     mount = tasks.index("mount_layers()")
     assert layer < profiler < mount
     # One trace per entry, so the rule is a pattern.
-    assert "fm-profile*.json" in (rendered / ".gitignore").read_text()
+    ignored = (rendered / ".gitignore").read_text()
+    assert "fm-profile*.json" in ignored
+    # The assembled traces land in a directory of their own, and the
+    # ignore list follows the constant that names it rather than a
+    # copy of it: a run that leaves an untracked directory behind
+    # makes every working tree dirty.
+    from livery.workshop._traces import INTO_DEFAULT
+
+    root = INTO_DEFAULT.split("/", 1)[0]
+    assert f"{root}/" in ignored.splitlines()
 
 
 def test_the_rendered_notes_merge_by_union(tmp_path: Path) -> None:
