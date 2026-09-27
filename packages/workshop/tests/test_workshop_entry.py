@@ -462,6 +462,40 @@ def test_the_rerun_hands_the_guard_on_and_writes_none_of_it_here(
     assert "WORKSHOP_RECONCILE_REEXEC" not in os.environ
 
 
+def test_a_profiled_rerun_hands_its_trace_on_with_the_guard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The steps this process ran go to its replacement, not to the bin.
+
+    An exec runs no exit handler, so a profiled run's trace dies with the
+    process unless the replacement is told where to find what came before
+    it. Both arms build one environment, so pinning the exec's is pinning
+    the wait's too.
+    """
+    import contextlib
+
+    from livery.footman import profile
+    from livery.workshop import _reconcile
+
+    if sys.platform == "win32":
+        pytest.skip("posix exec shape; the windows arm waits and forwards")
+    monkeypatch.delenv("WORKSHOP_RECONCILE_REEXEC", raising=False)
+    monkeypatch.setattr(shutil, "which", lambda name: "/stub/uv")
+    monkeypatch.setattr(sys, "argv", ["fm", "sync"])
+
+    def _handing_off() -> contextlib.AbstractContextManager[dict[str, str]]:
+        return contextlib.nullcontext({"FM_PROFILE_HANDOFF": str(tmp_path / "box")})
+
+    monkeypatch.setattr(profile, "handing_off", _handing_off)
+    seen: list[dict[str, str]] = []
+    monkeypatch.setattr(os, "execve", lambda path, argv, env: seen.append(dict(env)))
+    _reconcile._reexec(tmp_path)
+    (handed_on,) = seen
+    assert handed_on["FM_PROFILE_HANDOFF"] == str(tmp_path / "box")
+    assert handed_on["WORKSHOP_RECONCILE_REEXEC"] == "1"
+    assert "FM_PROFILE_HANDOFF" not in os.environ
+
+
 def test_the_windows_arm_hands_the_guard_on_and_forwards_the_code(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

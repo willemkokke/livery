@@ -3,7 +3,7 @@
 The cache is derived state top to bottom (completion manifests rebuild on
 any execution-path run; timing history regrows), which is what makes
 collecting it casually safe: the worst possible outcome of any deletion is
-a rebuild. Two rules, in order:
+a rebuild. Four rules, in order:
 
 1. **The directory is gone.** Manifests bake in the ``cwd`` they describe;
    if that path no longer exists, the pair (manifest + timing history) is
@@ -26,6 +26,11 @@ a rebuild. Two rules, in order:
    remaining clock: a killed process's leftover ages out on `PART_DAYS`,
    while a live download keeps its own mtime fresh by writing. The old
    ``<key>.bin`` + ``.meta.json`` pairs age exactly as they always did.
+4. **A profile box belongs to one run.** ``profiles/<box>/`` is where a
+   profiled run's children drop trace fragments, and that run's own writer
+   removes it at the end. One still there after `BOX_DAYS` outlived the
+   process that opened it, and an exec or a kill leaves no exit handler to
+   notice that.
 
 The invoking directory's own pair is never touched, and every failure is
 silent — a concurrently-reading completion child on Windows may hold a file
@@ -42,6 +47,7 @@ from pathlib import Path
 
 IDLE_DAYS = 90
 PART_DAYS = 1
+BOX_DAYS = 1
 STAMP = "gc.stamp"
 
 
@@ -134,6 +140,20 @@ def collect(cache_dir: Path, skip_stem: str = "") -> int:
     for part in fetch_room.glob("*.part"):
         if _idle(now, part, days=PART_DAYS):
             unlink(part)
+
+    # Rule 4, the profile boxes. One directory per profiled run, where its
+    # children drop trace fragments; the writer consumes it at the end of
+    # the run. A run that was killed, or replaced by an exec that then
+    # failed, leaves one behind, and no exit handler runs to take it away.
+    # The directory is the clock: a child dropping a fragment in keeps it
+    # fresh, so a day of silence means the run it belonged to is gone.
+    for box in (cache_dir / "profiles").glob("*"):
+        if not box.is_dir() or not _idle(now, box, days=BOX_DAYS):
+            continue
+        for fragment in box.glob("*"):
+            unlink(fragment)
+        with contextlib.suppress(OSError):
+            box.rmdir()
 
     return removed
 
