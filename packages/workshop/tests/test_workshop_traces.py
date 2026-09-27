@@ -12,7 +12,9 @@ the transport's own words.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -539,3 +541,46 @@ def test_a_ref_the_channel_cannot_read_names_the_job_it_belonged_to(
     repo = cast(Repository, cast(Any, _forge(jobs)))
     _events, lines = _traces.assemble(work, repo, "77")
     assert "check: the remote hung up" in lines
+
+
+def test_a_forge_stamp_without_an_offset_is_read_as_utc(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A forge means UTC by a bare stamp, whatever zone the reader sits in.
+
+    The standard library reads a naive stamp as local time, which would put a
+    leg's trace as far from its job as the reader's own offset, silently. The
+    zone is forced here so a machine anywhere reads the same instant.
+    """
+    from typing import Any, cast
+
+    from livery.forge import Repository
+
+    if not hasattr(time, "tzset"):
+        pytest.skip("no tzset: the zone cannot be moved from inside the process")
+    aware = (
+        _job("check", started="2026-09-27T10:00:00Z", completed="2026-09-27T10:00:01Z"),
+    )
+    naive = (
+        _job("check", started="2026-09-27T10:00:00", completed="2026-09-27T10:00:01"),
+    )
+    had = os.environ.get("TZ")
+    os.environ["TZ"] = "Europe/Amsterdam"  # where the drift would be two hours
+    time.tzset()
+    try:
+        spans: list[float] = []
+        for jobs in (aware, naive):
+            repo = cast(
+                Repository, cast(Any, _forge(jobs, created="2026-09-27T09:59:50Z"))
+            )
+            events, _lines = _traces.assemble(work, repo, "77", head_sha="abc123")
+            spans.append(next(e for e in events if e.get("cat") == "job")["ts"])
+    finally:
+        # The zone is process state, and tzset has to follow the variable
+        # back or every later test in this worker reads Amsterdam.
+        if had is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = had
+        time.tzset()
+    assert spans[0] == spans[1] == 10_000_000.0

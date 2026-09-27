@@ -275,13 +275,23 @@ def assemble(
 
 
 def _epoch_us(stamp: str) -> float | None:
-    """*stamp* as wall-clock microseconds, or ``None`` when it says nothing."""
+    """*stamp* as wall-clock microseconds, or ``None`` when it says nothing.
+
+    A stamp with no offset is read as UTC, because that is what a forge
+    means by one. Read as local time instead, which is what the standard
+    library does with a naive stamp, a leg's trace would land as far from
+    its job as the reader's own offset: an hour in London, two in
+    Amsterdam, and silently.
+    """
     if not stamp:
         return None
     try:
-        return datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp() * 1e6
+        read = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
     except ValueError:
         return None
+    if read.tzinfo is None:
+        read = read.replace(tzinfo=UTC)
+    return read.timestamp() * 1e6
 
 
 def _job_order(job: Job) -> tuple[float, str]:
