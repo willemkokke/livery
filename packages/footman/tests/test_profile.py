@@ -777,3 +777,72 @@ def test_a_grandchild_stays_a_group_of_its_own_on_the_way_up(tmp_path, monkeypat
     # carried through as it was.
     assert _groups(handed) == {os.getpid(): "fm (child)"}
     assert {e["pid"] for e in handed if e.get("cat") == "child"} == {4242}
+
+
+def test_a_box_gathers_what_children_leave_and_takes_itself_away(tmp_path):
+    """The pair a runner of children needs, without a profile of its own.
+
+    A CI job spawns verbs and wants one timeline of them. It opens a box,
+    names it in the environment it hands them, and sweeps it when the work
+    is done. Nothing about it touches this process's own environment, which
+    from inside a task would be an ambient write footman notes.
+    """
+    from livery.footman import profile
+
+    with profile.box() as drop:
+        assert drop.is_dir()
+        assert "FM_PROFILE_DIR" not in os.environ  # named by the caller, not here
+        (drop / "one.json").write_text(
+            json.dumps(
+                {
+                    "traceEvents": [
+                        {
+                            "ph": "X",
+                            "name": "late",
+                            "pid": 2,
+                            "tid": 1,
+                            "ts": 2_000_000.0,
+                            "dur": 5.0,
+                        },
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        (drop / "two.json").write_text(
+            json.dumps(
+                [
+                    {
+                        "ph": "X",
+                        "name": "early",
+                        "pid": 3,
+                        "tid": 1,
+                        "ts": 1_000_000.0,
+                        "dur": 5.0,
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        (drop / "broken.json").write_text("not json", encoding="utf-8")
+        events, origin = profile.swept(drop)
+        # Measured from the earliest stamp, so a file starts at zero rather
+        # than at fifty thousand years.
+        assert origin == 1_000_000.0
+        assert {e["name"]: e["ts"] for e in events} == {
+            "early": 0.0,
+            "late": 1_000_000.0,
+        }
+        # And on a clock the caller names, for a reader that has one.
+        given, where = profile.swept(drop, zero=0.0)
+        assert where == 0.0
+        assert {e["name"]: e["ts"] for e in given}["early"] == 1_000_000.0
+    assert not drop.exists()
+
+
+def test_a_box_with_nothing_in_it_answers_nothing(tmp_path):
+    """A job whose entries wrote no fragment is not an error."""
+    from livery.footman import profile
+
+    with profile.box() as drop:
+        assert profile.swept(drop) == ([], 0.0)

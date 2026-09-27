@@ -798,8 +798,8 @@ coverage = group("coverage", help="The measured union and its floors")
 def coverage_leg(
     *,
     job: Annotated[str, doc("the job's name as the forge lists it")] = "",
-    trace: Annotated[Path, doc("the trace the profiled gate wrote")] = Path(
-        "fm-profile.json"
+    trace: Annotated[Path, doc("the trace the gate wrote")] = Path(
+        "fm-profile-check.json"
     ),
 ) -> None:
     """Put this leg's measured suites and its timing row on its per-run ref, once.

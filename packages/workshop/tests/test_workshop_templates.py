@@ -604,7 +604,8 @@ def test_the_rendered_tasks_mount_the_profiler(tmp_path: Path) -> None:
     profiler = tasks.index('plugin("footman.profile")')
     mount = tasks.index("mount_layers()")
     assert layer < profiler < mount
-    assert "fm-profile.json" in (rendered / ".gitignore").read_text()
+    # One trace per entry, so the rule is a pattern.
+    assert "fm-profile*.json" in (rendered / ".gitignore").read_text()
 
 
 def test_the_rendered_notes_merge_by_union(tmp_path: Path) -> None:

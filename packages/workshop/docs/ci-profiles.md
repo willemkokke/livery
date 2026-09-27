@@ -91,8 +91,8 @@ git objects rather than compressed one by one.
 
 ```toml
 [ci]
-# Whether a leg pushes its trace at all.
-profile-legs = true
+# Whether CI keeps a trace of what it did at all.
+profile = true
 # How many runs of traces are kept.
 profile-window = 20
 # Where an assembled file lands.
@@ -101,3 +101,9 @@ profile-into = ".fm/profiles"
 
 A key of the wrong type is named on the leg that read it, and its default
 stands: whether a timeline is kept is not worth failing a run over.
+
+`profile = false` means zero cost rather than less: no job runs anything
+profiled, nothing is written on a runner, and nothing is pushed. A run from
+a period when it was off still assembles at the job level, because that
+shape comes from the forge rather than from us. So an installation large
+enough to care can leave it off and turn it on while investigating.

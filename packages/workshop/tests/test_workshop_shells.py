@@ -380,7 +380,7 @@ def test_ci_run_spawns_the_jobs_entries(
 
     monkeypatch.setattr(footman, "run", green)
     _ci_tasks.ci_run(point="gate", job="docs")
-    assert seen == [["fm", "docs.build"]]
+    assert seen == [["fm", "--profile=fm-profile-docs-build.json", "docs.build"]]
     assert "gate/docs: docs.build (builtin)" in capsys.readouterr().out
     with pytest.raises(_FAILURES, match="has no job 'nope'"):
         _ci_tasks.ci_run(point="gate", job="nope")

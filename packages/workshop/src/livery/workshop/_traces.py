@@ -6,9 +6,9 @@ asked for, and the gate reads none of them. The file is a Chrome trace of
 that leg: every task, step and test it ran, and the wall-clock origin of its
 own clock, so one leg's timeline can be laid beside another's.
 
-The workspace contract decides, under ``[ci]``: ``profile-legs`` whether a
-leg pushes at all, ``profile-window`` how many runs are kept, and
-``profile-into`` where an assembled file lands.
+The workspace contract decides, under ``[ci]``: ``profile`` whether CI
+keeps a trace of itself at all, ``profile-window`` how many runs are kept,
+and ``profile-into`` where an assembled file lands.
 
 The push is observational. A contract that says no, a trace that is not
 there, and a push origin refuses are each one printed line, and none of them
@@ -59,14 +59,14 @@ TRACE_FILE = "trace.json"
 JOB_FILE = "job.json"
 
 #: The contract's keys, under ``[ci]``.
-LEGS_KEY = "profile-legs"
+PROFILE_KEY = "profile"
 WINDOW_KEY = "profile-window"
 INTO_KEY = "profile-into"
 
 #: What the contract answers when it says nothing. Twenty runs is a
 #: guess made before any run had pushed one; the window is measured
 #: and tuned once real runs have.
-LEGS_DEFAULT = True
+PROFILE_DEFAULT = True
 WINDOW_DEFAULT = 20
 INTO_DEFAULT = ".fm/profiles"
 
@@ -76,7 +76,11 @@ class Policy:
     """What the contract says about the legs' traces.
 
     Attributes:
-        legs: Whether a leg pushes its trace.
+        legs: Whether CI keeps a trace of what it did at all. Off means
+            zero cost: no entry runs profiled, nothing is written on a
+            runner, nothing is pushed, nothing recorded. A run from a
+            period when it was off still assembles at the job level,
+            because that shape comes from the forge.
         window: How many runs' traces are kept.
         into: Where an assembled file lands, relative to the
             workspace root unless it is absolute.
@@ -98,7 +102,7 @@ def policy(root: Path) -> tuple[Policy, str]:
 
     contract = load_contract(root / "workshop.toml")
     found: dict[str, Any] = contract.get("ci") or {}
-    legs, why_legs = _flag(found, LEGS_KEY, LEGS_DEFAULT)
+    legs, why_legs = _flag(found, PROFILE_KEY, PROFILE_DEFAULT)
     window, why_window = _count(found, WINDOW_KEY, WINDOW_DEFAULT)
     into, why_into = _text(found, INTO_KEY, INTO_DEFAULT)
     return Policy(legs, window, into), "; ".join(

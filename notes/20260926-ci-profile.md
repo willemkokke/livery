@@ -290,8 +290,8 @@ The walk is one function over those three:
 
 ```python
 def chain(commit, depth):
-    for run in runs_about(commit):   # the forge's answer, plus what recorded itself
-        assemble(run)                # every job, its steps, every entry's timeline
+    for run in runs_about(commit):  # the forge's answer, plus what recorded itself
+        assemble(run)  # every job, its steps, every entry's timeline
     merged = merge_commit_of(commit)  # the pull request this commit headed
     if merged and depth:
         chain(merged, depth - 1)
@@ -349,12 +349,14 @@ Deliverables:
   the local gate's own proof, a scoped leg whose affected set is empty,
   a tree proved green already, and a change of prose alone. Four sites,
   one helper, so the line and the mark cannot drift.
-- `[ci] profile` replaces `[ci] profile-legs`, defaulted on, read in
-  one place and honoured by every writer.
-- The point runner profiles every entry it spawns and pushes each
-  trace. `Entry.profiled` and the scheduled push entries go: a flag on
-  two entries of twenty-three is a curated subset, and one nobody sets
-  is a gap.
+- **Landed.** `[ci] profile` replaces `[ci] profile-legs`, defaulted on,
+  read in one place. The point runner opens a box for the job, spawns
+  every entry under its own trace, and pushes the one trace that box
+  becomes, whatever the entries did: a red job's timeline is the one
+  most worth having. `Entry.profiled` and the scheduled push entries
+  are gone, because a flag on two entries of twenty-three was a
+  curated subset and one nobody sets is a gap. Off opens no box, passes
+  no flag, pushes nothing, and never imports the plugin.
 - Each job's residue, the span the forge reports less the entries'
   own timelines, drawn as the runner's setup and teardown.
 - `PullRequest.merged_sha`, filled on all three lanes, with a cassette
