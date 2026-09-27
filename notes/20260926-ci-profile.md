@@ -1,9 +1,10 @@
 # The end-to-end CI profile: one timeline from the local command to the last test
 
-Status: ruled 2026-09-26, no phase started. Six phases, each
-gate-green and mergeable alone. The feature is investigative: a leg
-pushes its trace whatever happens, and nobody pays for it until
-someone asks a question.
+Status: phase 1 landed 2026-09-27 (issue #782): a profiled run
+carries what it launches, within one machine. Phases 2 to 6 wait
+their turn, each gate-green and mergeable alone. The feature is
+investigative: a leg pushes its trace whatever happens, and nobody
+pays for it until someone asks a question.
 
 ## The prompt (Willem)
 
@@ -109,18 +110,37 @@ Deliverables:
 - A run that mentions no profile and finds no drop box behaves as it
   does today, writing nothing and reading nothing.
 
-Acceptance:
+Acceptance, and what proves each. The tests live in
+`packages/footman/tests/test_profile.py` unless another file is
+named; a test's name stays on one line, wrap or no wrap, so `grep`
+finds it.
 
 - `uv run fm check` exits 0.
-- A test asserts a profiled parent whose task spawns `fm` gets that
-  child's tasks in its own trace, as a process group of its own.
-- A test asserts a re-exec's pre-exec work is in the trace, and that
-  no drop directory survives the handoff.
-- A test asserts an unprofiled child writes nothing and leaves
-  nothing behind.
-- On Windows the reconcile's re-exec waits for its child rather than
-  replacing itself; a test asserts the parent does not write over the
-  child's file.
+- A profiled parent whose task spawns `fm` gets that child's tasks as
+  a process group of its own, and a child of that child the same:
+  `test_a_profiled_parent_gets_the_inside_of_the_fm_it_spawned`
+  spawns three real runs and pins each one's slice inside the step
+  that spawned it.
+- The work before a re-exec is in the trace and the box goes to the
+  successor: `test_the_handoff_hands_the_box_on_and_writes_no_file`
+  and `test_the_successor_adopts_the_box_it_was_handed`, which also
+  pins the slide that keeps every stamp positive.
+- A replacement that could not start costs nothing:
+  `test_a_handoff_taken_back_writes_the_file_after_all`.
+- An unprofiled child writes nothing and reads nothing:
+  `test_without_the_flag_nothing_is_written` and
+  `test_a_child_whose_box_has_gone_writes_nothing`.
+- Windows, where the handoff waits instead of becoming its
+  replacement, writes no file of its own: the same handoff test,
+  which holds on every platform because standing the writer down is
+  what the handoff does.
+  `test_workshop_entry.py::test_a_profiled_rerun_hands_its_trace_on_with_the_guard`
+  pins the environment the reconcile builds, which both its arms
+  share.
+- No box outlives its run:
+  `test_the_exit_sweep_removes_every_box_not_only_the_newest`, and, for
+  the box no exit handler could reach,
+  `test_gc.py::test_collect_sweeps_a_profile_box_its_run_never_took_away`.
 
 ## Phase 2: the trace leaves the leg
 
@@ -255,8 +275,8 @@ Acceptance:
 
 | Scaffolding | Replaced by |
 | --- | --- |
-| The defaults of phase 1, chosen before any run had pushed | Phase 5's measured window |
-| The artifact upload step in every emitted workflow | Phase 1's push from the verb |
+| The defaults of phase 2, chosen before any run had pushed | Phase 6's measured window |
+| The artifact upload step in every emitted workflow | Phase 2's push from the verb |
 
 ## Decision record
 
@@ -295,6 +315,24 @@ Acceptance:
 - 2026-09-27, Willem asked for the infectious half to be parked: a
   profiled run must carry what it launches, which is phase 1 here.
   Recorded because it was ruled after the plan first merged.
+- 2026-09-27, the handoff is a block, `profile.handing_off()`, which
+  takes itself back when the process was not replaced after all. An
+  exec that fails leaves the run going, and it must not have paid for
+  the attempt with its own trace. A plain call would have had to be
+  undone by a second call that a caller can forget.
+- 2026-09-27, Willem: a box belongs in footman's cache, not the
+  system's temporary directory. So the collector gets a rule for one
+  that outlived its run, which is the only backstop an exec or a kill
+  leaves. Found on the way: every armed run that never reached the
+  writer leaked its box, because the exit sweep asked whether a box
+  was the newest rather than whether it was still open. 107 empty
+  directories had gathered on this desk since 2026-09-24.
+- 2026-09-27, what the pre-exec fragment carries: this process's own
+  span and the running task's `run()` steps. Tasks that finished
+  earlier in the same process are not reachable from a task body, and
+  reaching them would mean a live ledger the scheduler does not keep.
+  The reconcile re-execs inside the first task of a sync, so the
+  fragment holds what that sync had done.
 
 ## Open
 

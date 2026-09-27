@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import textwrap
+import time
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 from livery.footman.testing import Runner
 
@@ -218,8 +224,6 @@ FRAGMENT_TASKS = textwrap.dedent(
 
 
 def test_a_child_fragment_is_embedded_on_the_run_clock(tmp_path, monkeypatch):
-    import os
-
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "tasks.py"
     src.write_text(FRAGMENT_TASKS)
@@ -270,3 +274,367 @@ def test_partial_overlap_is_classified_async_containment_is_not():
     nested, overflow = _nests([a, straddles, contained])
     assert [s["name"] for s in nested] == ["a", "contained"]
     assert [s["name"] for s in overflow] == ["straddles"]
+
+
+CHILD_TASKS = textwrap.dedent(
+    """
+    import sys
+
+    import livery.footman as footman
+    from livery.footman import task
+    from livery.footman.compose import plugin
+
+    plugin("footman.profile")
+
+    @task
+    def deepest():
+        with footman.section("deep thinking"):
+            pass
+
+    @task
+    def inner():
+        footman.run([sys.executable, "-m", "livery.footman", "deepest"])
+
+    @task
+    def outer():
+        footman.run([sys.executable, "-m", "livery.footman", "inner"])
+    """
+)
+
+HANDOFF_TASKS = textwrap.dedent(
+    """
+    import json
+    import os
+    import sys
+    from pathlib import Path
+
+    import livery.footman as footman
+    from livery.footman import task
+    from livery.footman.compose import plugin
+    from livery.footman import profile
+
+    plugin("footman.profile")
+
+    @task
+    def replaced():
+        \"\"\"The reconcile's shape: work, then a block that does not return.\"\"\"
+        footman.run([sys.executable, "-c", "pass"])
+        with profile.handing_off() as traced:
+            Path("handed.json").write_text(json.dumps(traced), encoding="utf-8")
+            footman.fail("replaced by the successor")
+
+    @task
+    def stayed():
+        \"\"\"The same, where replacing the process did not work.\"\"\"
+        footman.run([sys.executable, "-c", "pass"])
+        with profile.handing_off() as traced:
+            Path("handed.json").write_text(json.dumps(traced), encoding="utf-8")
+
+    @task
+    def unwatched():
+        r'''The same again, in a run nobody asked for a trace of.'''
+        with profile.handing_off() as traced:
+            Path("handed.json").write_text(json.dumps(traced), encoding="utf-8")
+
+    @task
+    def loses_the_box():
+        r'''A box that goes while the run it belongs to is still going.'''
+        import shutil
+
+        shutil.rmtree(os.environ["FM_PROFILE_DIR"])
+    """
+)
+
+
+@pytest.fixture(autouse=True)
+def _own_cache_and_unarmed_after(tmp_path_factory, monkeypatch) -> Iterator[None]:
+    """A cache of this file's own, and the plugin stood down afterwards.
+
+    A box is made under `profiles/` in footman's cache, so without an
+    override these tests would leave boxes in the developer's real one. And
+    the module holds the mode and the box between the two hooks, so a test
+    that arms one in this process would otherwise hand it to the next test.
+    """
+    monkeypatch.setenv("FOOTMAN_CACHE_DIR", str(tmp_path_factory.mktemp("cache")))
+    yield
+    import livery.footman as footman
+    from livery.footman import profile
+
+    os.environ.pop(profile.DROP, None)
+    os.environ.pop(profile.HANDOFF, None)
+    profile.arm(footman.Invocation())
+
+
+def _fragments(box: Path) -> list[dict[str, Any]]:
+    """Every event in *box*'s fragments, in file order."""
+    events: list[dict[str, Any]] = []
+    for fragment in sorted(box.glob("*.json")):
+        payload: dict[str, Any] = json.loads(fragment.read_text(encoding="utf-8"))
+        events += payload["traceEvents"]
+    return events
+
+
+def _groups(events: list[dict[str, Any]]) -> dict[int, str]:
+    """The process groups a trace names, by process id."""
+    return {
+        e["pid"]: e["args"]["name"]
+        for e in events
+        if e["ph"] == "M" and e["name"] == "process_name"
+    }
+
+
+def test_a_child_whose_box_has_gone_writes_nothing(tmp_path, monkeypatch):
+    """A box named by a run that has already ended is not written into.
+
+    The name outlives the directory: a parent removes its box at the end,
+    and a stale name in the environment is all a late child sees.
+    """
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("FM_PROFILE_DIR", str(tmp_path / "gone"))
+    result = Runner().invoke("fast", tasks=_tasks(tmp_path))
+    assert result.ok, result.stderr
+    assert list(tmp_path.glob("*.json")) == []
+
+
+def test_the_exit_sweep_removes_every_box_not_only_the_newest(monkeypatch):
+    """Two armed runs in one process leave two boxes, and both are swept.
+
+    A run that mentions `--profile` and never reaches the writer — a refusal,
+    an interrupt — leaves its box for the exit handler. The handler asks
+    whether *this* box is still open, because asking whether it is the newest
+    left one directory behind per run in every process that armed more than
+    once: a test session, or a runner embedding several invocations.
+    """
+    import livery.footman as footman
+    from livery.footman import profile
+
+    boxes: list[Path] = []
+    for _ in range(2):
+        profile.arm(footman.Invocation(cli={"profile": Path("fm-profile.json")}))
+        boxes.append(Path(os.environ["FM_PROFILE_DIR"]))
+    first, second = boxes
+    assert first != second
+    assert first.is_dir() and second.is_dir()
+    # Footman's own cache, where the collector can reach a box that outlives
+    # the process which opened it.
+    assert first.parent == Path(os.environ["FOOTMAN_CACHE_DIR"]) / "profiles"
+    for box in boxes:  # what atexit calls, in the order it registered them
+        profile._sweep_orphan(str(box))
+    assert not first.exists()
+    assert not second.exists()
+
+
+def test_a_child_run_drops_itself_in_the_box(tmp_path, monkeypatch):
+    """No file of its own: the whole run goes in the box, for its owner."""
+    monkeypatch.chdir(tmp_path)
+    box = tmp_path / "box"
+    box.mkdir()
+    monkeypatch.setenv("FM_PROFILE_DIR", str(box))
+    result = Runner().invoke("fast", tasks=_tasks(tmp_path))
+    assert result.ok, result.stderr
+    assert list(tmp_path.glob("*.json")) == []  # the parent owns the file
+    assert os.environ["FM_PROFILE_DIR"] == str(box)  # left for a grandchild
+    events = _fragments(box)
+    assert _groups(events) == {os.getpid(): "fm (child)"}
+    task_ = next(e for e in events if e.get("cat") == "task")
+    assert task_["name"] == "fast"
+    assert task_["ts"] > 1.7e15  # epoch microseconds, the box's convention
+
+
+def test_a_handoff_taken_back_writes_the_file_after_all(tmp_path, monkeypatch):
+    """Returning from the block means nothing replaced this process.
+
+    The trace is this run's after all, so the fragment goes and the file is
+    written — a replacement that could not start must not cost the trace of
+    the run that tried.
+    """
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "tasks.py"
+    src.write_text(HANDOFF_TASKS)
+    result = Runner().invoke("--profile stayed", tasks=src)
+    assert result.ok, result.stderr
+    events = _trace(tmp_path / "fm-profile.json")
+    assert "fm (before re-exec)" not in _groups(events).values()
+    box = Path(json.loads((tmp_path / "handed.json").read_text())["FM_PROFILE_HANDOFF"])
+    assert not box.exists()  # swept by the writer, as an unhanded box is
+
+
+def test_the_handoff_hands_the_box_on_and_writes_no_file(tmp_path, monkeypatch):
+    """The work before a re-exec lands in the box, and the file does not.
+
+    On Windows the handoff waits for its replacement instead of becoming it,
+    so the process is still here at `post_tasks` with the replacement's own
+    file already written. It must not write over it.
+    """
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "tasks.py"
+    src.write_text(HANDOFF_TASKS)
+    result = Runner().invoke("--profile replaced", tasks=src)
+    assert not result.ok  # the task failed where the exec would have landed
+    assert not (tmp_path / "fm-profile.json").exists()
+    box = Path(json.loads((tmp_path / "handed.json").read_text())["FM_PROFILE_HANDOFF"])
+    assert box.is_dir()  # the successor's to sweep
+    events = _fragments(box)
+    assert _groups(events) == {os.getpid(): "fm (before re-exec)"}
+    spans = [e for e in events if e["ph"] == "X"]
+    (step,) = [e for e in spans if e["cat"] == "step"]
+    (lived,) = [e for e in spans if e["cat"] == "task"]
+    assert lived["name"] == "replaced"
+    assert lived["ts"] <= step["ts"]  # the step ran inside the span
+    assert step["ts"] + step["dur"] <= lived["ts"] + lived["dur"]
+    shutil.rmtree(box)
+
+
+def test_the_successor_adopts_the_box_it_was_handed(tmp_path, monkeypatch):
+    """The replacement owns the box, embeds its predecessor, and consumes it.
+
+    A fragment from before the exec predates the run that reads it, so the
+    whole trace slides: the earliest thing in the file is zero, and no stamp
+    is negative.
+    """
+    monkeypatch.chdir(tmp_path)
+    box = tmp_path / "handed"
+    box.mkdir()
+    before = (time.time() - 30) * 1e6
+    (box / "fm-1-2.json").write_text(
+        json.dumps(
+            {
+                "traceEvents": [
+                    {
+                        "ph": "M",
+                        "name": "process_name",
+                        "pid": 4243,
+                        "args": {"name": "fm (before re-exec)"},
+                    },
+                    {
+                        "ph": "X",
+                        "cat": "task",
+                        "name": "sync",
+                        "pid": 4243,
+                        "tid": 1,
+                        "ts": before,
+                        "dur": 1000.0,
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("FM_PROFILE_HANDOFF", str(box))
+    result = Runner().invoke("--profile fast", tasks=_tasks(tmp_path))
+    assert result.ok, result.stderr
+    events = _trace(tmp_path / "fm-profile.json")
+    assert _groups(events)[4243] == "fm (before re-exec)"
+    assert not box.exists()  # adopted, swept, removed
+    assert "FM_PROFILE_HANDOFF" not in os.environ  # never inherited further
+    stamps = [e["ts"] for e in events if "ts" in e]
+    assert min(stamps) == 0.0
+    predecessor = next(e for e in events if e.get("name") == "sync")
+    own = next(e for e in events if e.get("name") == "fast")
+    assert predecessor["ts"] == 0.0 < own["ts"]
+
+
+def test_a_profiled_parent_gets_the_inside_of_the_fm_it_spawned(tmp_path, monkeypatch):
+    """The point of the phase: a verb that spawns a verb shows both."""
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "tasks.py"
+    src.write_text(CHILD_TASKS)
+    result = Runner().invoke("--profile outer", tasks=src)
+    assert result.ok, result.stderr
+    events = _trace(tmp_path / "fm-profile.json")
+    groups = _groups(events)
+    assert groups[1] == "fm"
+    # Two spawned runs, two groups of their own: the box stays in the
+    # environment, so a child of a child finds it the same way.
+    assert sorted(groups.values()) == ["fm", "fm (child)", "fm (child)"]
+    tasks = {e["name"]: e for e in events if e.get("cat") == "task"}
+    assert tasks["outer"]["pid"] == 1
+    assert len({tasks["inner"]["pid"], tasks["deepest"]["pid"], 1}) == 3
+    for outer, inner in (
+        (tasks["outer"], tasks["inner"]),
+        (tasks["inner"], tasks["deepest"]),
+    ):
+        assert outer["ts"] <= inner["ts"]  # inside the step that spawned it
+        assert inner["ts"] + inner["dur"] <= outer["ts"] + outer["dur"]
+    deep = tasks["deepest"]["pid"]
+    assert any(e.get("cat") == "section" and e["pid"] == deep for e in events)
+
+
+def test_a_re_exec_in_an_unwatched_run_hands_nothing_on(tmp_path, monkeypatch):
+    """The common case: a verb that re-execs in a run nobody profiled.
+
+    The block still wraps the exec, so it has to cost nothing and say nothing
+    when there is no trace to hand over.
+    """
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "tasks.py"
+    src.write_text(HANDOFF_TASKS)
+    result = Runner().invoke("unwatched", tasks=src)
+    assert result.ok, result.stderr
+    assert json.loads((tmp_path / "handed.json").read_text(encoding="utf-8")) == {}
+    assert list(tmp_path.glob("*profile*.json")) == []
+
+
+def test_a_box_that_goes_mid_run_is_not_written_into(tmp_path, monkeypatch):
+    """The owner of a box can die while a child of it is still running.
+
+    So the box is checked where the fragment is written, not only where the
+    run armed: the name in the environment outlives the directory.
+    """
+    monkeypatch.chdir(tmp_path)
+    box = tmp_path / "box"
+    box.mkdir()
+    monkeypatch.setenv("FM_PROFILE_DIR", str(box))
+    src = tmp_path / "tasks.py"
+    src.write_text(HANDOFF_TASKS)
+    result = Runner().invoke("loses-the-box", tasks=src)
+    assert result.ok, result.stderr
+    assert not box.exists()
+    assert list(tmp_path.glob("*.json")) == []
+
+
+def test_a_fragment_that_cannot_be_written_is_said_and_never_fatal(tmp_path, capsys):
+    """A drop is an extra, and an extra never takes the run down with it."""
+    from livery.footman import profile
+
+    assert profile._drop(str(tmp_path / "not-a-directory"), []) is None
+    assert "fragment not written" in capsys.readouterr().err
+
+
+def test_the_exit_sweep_leaves_a_box_it_does_not_own(tmp_path):
+    """A box this process does not hold is not a box to remove.
+
+    The handler asks whether the box is still open here, so a directory a
+    healthy run already swept, or one another process owns, is left alone.
+    """
+    from livery.footman import profile
+
+    stranger = tmp_path / "someone-elses"
+    stranger.mkdir()
+    profile._sweep_orphan(str(stranger))
+    assert stranger.is_dir()
+
+
+def test_a_child_hands_on_a_box_that_was_never_its_own(tmp_path, monkeypatch):
+    """A child re-execs too, and the box it hands on belongs to an ancestor.
+
+    The successor is told where the box is, exactly as a run that opened one
+    would tell it, and the sweeping is still left to whoever opened it. This
+    is the shape a CI leg takes: the leg's own `fm` is a child, and it may
+    replace itself before it is done.
+    """
+    monkeypatch.chdir(tmp_path)
+    box = tmp_path / "box"
+    box.mkdir()
+    monkeypatch.setenv("FM_PROFILE_DIR", str(box))
+    src = tmp_path / "tasks.py"
+    src.write_text(HANDOFF_TASKS)
+    result = Runner().invoke("replaced", tasks=src)
+    assert not result.ok  # the task failed where the exec would have landed
+    handed = json.loads((tmp_path / "handed.json").read_text(encoding="utf-8"))
+    assert handed == {"FM_PROFILE_HANDOFF": str(box)}
+    assert box.is_dir()
+    # One fragment, the work before the replacement. The run wrote no second
+    # one of its own: it stood down when it handed the box over.
+    assert len(list(box.glob("*.json"))) == 1
+    assert _groups(_fragments(box)) == {os.getpid(): "fm (before re-exec)"}
