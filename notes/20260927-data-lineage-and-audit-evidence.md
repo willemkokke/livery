@@ -1,0 +1,600 @@
+# Data lineage and audit evidence: the investigation
+
+Status: an investigation, opened 2026-09-27 at Willem's request. It is
+not a plan and it rules nothing on its own. Its purpose is to hold the
+territory, the pain points, and the design forks while the questions in
+Open are answered, and then to serve as the research base for the plan
+that follows. The rulings Willem has already made are in the decision
+record.
+
+## What this is
+
+The work repositories are being converted into one monorepo managed by
+the workshop, and that monorepo is what gets audited. livery is the
+tool, not the subject. The question is what functionality the workshop
+and toolroom can provide, and enforce, so that supply-chain and lineage
+evidence is a property of the render rather than a document somebody
+assembles under time pressure.
+
+The delivery vehicle is a plugin: the seam and the generic kinds ship
+in livery, and the employer's specifics ship in a private layer, which
+the kind registry already supports.
+
+## The ground
+
+What the monorepo will contain, as ruled on 2026-09-27:
+
+- **Python, a large part of it machine learning.** PyTorch, first-party
+  models trained on first-party data, and some models built on public
+  checkpoints such as wav2vec.
+- **Native C and C++ packaged with conan**, which the existing
+  `cpp-conan` kind already covers.
+- **Unreal plugins and example projects exercising them.** Stock engine
+  only, under the revenue threshold. The plugins link `cpp-conan`
+  packages.
+- **Shipped model weights.** Weights are distributed inside the
+  products, not only served.
+
+The consequence of shipping plugins and weights to third parties is
+that the products are placed on the market and the company is the
+upstream supplier in its customers' bills of materials. Customers who
+sell into the EU are bound by the CRA, whose reporting obligations
+started on 2026-09-11, with full compliance due 2027-12-11, and the way
+they satisfy "know your components" is by asking their suppliers. So
+the evidence is a deliverable that ships with the product on request,
+per version, not an artifact produced once under duress. That is the
+better thing to design for: a document handed to customers routinely
+cannot be stale, cannot be quietly incomplete, and has an owner by
+construction.
+
+If the product is an AI system on the EU market, the AI Act is a second
+axis above the CRA, with heavier technical documentation. Which of the
+two governs is an open question.
+
+## What the audience requires
+
+### The loops
+
+Each of these is an ongoing loop, not an artifact. The third column is
+where a verb has leverage.
+
+- **Intake of a new third-party thing.** A dependency, a model, an
+  Unreal plugin, a dataset, a purchased asset. Fails because it arrives
+  in a pull request at the end of a day and nobody reads the licence.
+  Highest leverage in the whole map: if introduction and declaration are
+  the same act, every later document is a read of the record instead of
+  a reconstruction. A gate that refuses an undeclared component is most
+  of the programme.
+- **Inventory maintenance.** Fails by being generated once and stale a
+  week later. A generator plus a drift gate fixes it, which is the
+  pattern the render already runs.
+- **Per-artifact release documentation.** Fails as one document per
+  repository when the audience wants one per artifact, per version, per
+  variant: per wheel, per platform wheel, per CUDA variant, per engine
+  version, per configuration. Retention keyed to the receipt tag is the
+  fix.
+- **Vulnerability monitoring and triage.** Fails at "which shipped
+  versions are affected", because nothing retained the closure of
+  version 3.2. Also fails on ownership and on the clock: the CRA wants
+  an actively exploited vulnerability reported within 24 hours. A verb
+  over retained documents answers the mapping; a scheduled point and an
+  auto-filed issue give it an owner and a timestamp. Poisoned weights
+  and jailbreaks have no CVE feed, so that half stays human.
+- **Licence obligation fulfilment.** The most commonly skipped loop.
+  Knowing a licence is not discharging it: attribution and NOTICE files
+  in the shipped product, source offers for LGPL and MPL components,
+  naming obligations on some model families, Epic's attribution
+  requirement. Fails as a shipped installer with no notices while the
+  spreadsheet says the licences are fine. High leverage and rarely
+  automated.
+- **Build integrity and reproducibility.** "Rebuild 3.2 with the
+  toolchain that built it." Fails because the toolchain moved and the
+  machine is gone. Already answered here by the tool record.
+- **First-party code provenance.** Employment and contractor IP
+  assignment, AI-assisted code, copied snippets, vendored files of
+  unknown origin. Mostly human. A verb can detect vendored files by
+  digest and refuse unattributed content directories.
+- **Access and change control evidence.** Fails on start date more than
+  on substance. Largely already rendered from the contracts.
+- **Data and model governance.** Lineage from dataset to weights to
+  release, lawful basis, PII, retention, evaluation records, model
+  cards. Fails as an unrecorded chain, so nobody can say which data
+  produced the weights in production. This is the subject of the
+  strongroom section below.
+- **Secrets hygiene.** An import is when old credentials surface.
+  Scanning at import is cheap; history rewriting afterwards is not.
+- **Third-party service register.** SaaS, APIs, model providers, their
+  data processing terms and subprocessors. Every security review asks
+  and no bill of materials covers it. Declaration with no discovery.
+- **Seat and entitlement compliance.** Engine seats, per-seat assets,
+  commercial model licences. Declaration only, and where acquisition
+  findings with a price attached tend to live.
+- **End-of-life tracking.** Shipping something unmaintained. Records
+  can carry EOL dates and the gate can warn before a customer does.
+- **Disclosure process.** A published policy, a contact, a coordinated
+  disclosure record, a path to issue advisories. The CRA requires it.
+
+### The failure modes that cut across them
+
+- Declaration after the fact, so every register is archaeology.
+- The generator sees only what the package manager sees. Checked-in
+  static and shared libraries, blobs downloaded during a build, engine
+  third-party trees, model weights pulled by name. The under-report is
+  silent, which is the dangerous property.
+- No owner, so it rots. Reminders do not work; exit codes do.
+- No retention, so historical questions are unanswerable.
+- Obligation known, never performed.
+- Evidence whose start date is the month before the audit.
+- Hand-written documents that do not validate against the schema they
+  claim.
+- Human-only facts stranded in a spreadsheet that is not linked to the
+  code, so they are absent from what gets handed over.
+- Duplicate and divergent copies of one component across members. A
+  monorepo surfaces this for the first time, and it looks worse before
+  it looks better.
+- Gate friction on large binaries, so people bypass the gate, which
+  destroys the chain.
+- Machine learning specifics: the same weights under two names, a
+  quantised or merged derivative whose parent is unrecorded, and an
+  evaluation set that leaked into training.
+
+## Where the workshop already stands
+
+- Every dependency is pinned by digest on both axes: `uv.lock` for
+  Python, `tools.lock` with `tools.graphs/` and `records/` for the
+  toolchain, per host. The build-environment inventory answers "which
+  compiler produced this binary", which is otherwise unanswerable.
+- Change control is rendered from the contracts, not assembled:
+  CODEOWNERS and approvals from `[owners]`, one required status
+  context, repository settings asserted by `configure`, immutable
+  receipt tags, release squashes recognised by their `Mined-At` line.
+- One gate command that CI and the desk both run, so "tested before
+  merge" is an exit code.
+- The store already lands artifacts by digest with lazy invalidation,
+  and strongroom is a content-addressed store with trees and versions.
+
+What is absent: no bill of materials is produced anywhere, nothing is
+placed in a wheel, and the `uv publish` call in the workshop's
+`_publish.py` generates no PEP 740 attestation. The workshop
+plan's 2026-08-31 entry already records attestation and signing as
+uncovered.
+
+## Component enumeration belongs to the kind
+
+The seam is already open. `Backend` in
+`packages/workshop/src/livery/workshop/_kinds.py` carries build,
+isolated test, publish, classify and stamp. One more callable,
+"enumerate my components", and each kind answers for its own world:
+
+- `python` from the lock, one document per variant.
+- `python-nanobind` adding the conan graph it linked and whatever was
+  bundled into the wheel, with PEP 770 placement in `.dist-info/sboms/`
+  in the same step.
+- `cpp-conan` from the conan 2 graph, the only source that knows the
+  native closure with its options, settings and profile.
+- A machine-learning kind adding models and datasets as components.
+- An `unreal-plugin` kind, structurally the same as `python-nanobind`:
+  an artifact in a foreign ecosystem whose native half links a
+  `cpp-conan` member, built by that ecosystem's own tool. UBT's
+  `JsonExport` and `QueryTargets` modes give it a machine-readable
+  module and target graph.
+
+Above the kinds, the workspace assembles the members' documents, stamps
+the toolchain from `tools.lock` as the build environment, and the
+release wave attaches the result to the receipt.
+
+Two properties decide whether this works, and both are rulings:
+
+1. **A kind can require a declaration and refuse without it.**
+   Discovery alone silently under-reports exactly where the findings
+   are. A component with no declared licence fails the gate.
+2. **The generated document validates against its schema in the gate**,
+   so the output is machine-checked rather than asserted.
+
+Format: CycloneDX 1.6, which has ML-BOM for models and datasets as
+first-class components, satisfies the BSI TR-03183-2 baseline the CRA
+gets read against, and covers the CISA 2025 minimum elements including
+component hash, licence, tool name and generation context. SPDX 3.0.1
+with its AI and Dataset profiles is the alternative.
+
+### What stock-engine-under-threshold deletes
+
+No engine source in the repository, no patch series against an engine
+commit, no repository-access constraint from engine source, no royalty
+or seat exposure, and none of the engine's third-party trees to
+disclose, because the engine is not redistributed. The installed 5.6
+tree has 133 directories under `Engine/Source/ThirdParty` and 1134
+licence files; those are Epic's to disclose, not ours.
+
+The engine becomes a build-environment fact, and the tool record
+already has the kind for it: `system-check`, alongside the platform
+SDKs UBT enforces. Two facts need recording with a review trigger
+rather than assuming: the revenue threshold and the usage class. Both
+are true-until-dated.
+
+### What it sharpens
+
+- The shipped plugin's components are the conan graph, fully
+  enumerable.
+- Packaging mode decides both the document and the obligation. A static
+  library absorbed into the plugin binary, a shared library shipped
+  beside it, and a header-only dependency are three different answers
+  to "what did I redistribute". Static linking is where copyleft stops
+  being theoretical. The record needs the link mode per dependency, not
+  only the dependency.
+- One document per plugin version, per engine version, per platform,
+  per configuration. Same shape as the CUDA variant problem, so it
+  wants one solution rather than two.
+- `KindRecord.artifact` currently means `python` or `conan`. A plugin
+  ships through neither.
+
+### Example projects
+
+Building an example project against the plugin against the engine is
+the only real integration test, which makes the examples valuable to
+the gate and nearly irrelevant to the audit. One rule keeps them that
+way: example content is first-party or CC0 only, no marketplace assets.
+That deletes the asset-provenance register, per-seat entitlement
+tracking and the transferability problem, and it has to be set before
+someone drags in a purchased asset pack.
+
+## Strongroom and lineage
+
+### Two relations, not one
+
+`packages/strongroom/spec/version.md` defines `parents` as "the
+versions this one continues", and then leans on it: parents make
+history, diff and common ancestry ordinary tree walks. A trained model
+does not continue the dataset it was trained on. Putting a dataset
+version or a base checkpoint in `parents` makes diff-against-parent and
+common ancestry meaningless, and loses the role of each input, so
+nothing distinguishes training data from evaluation data.
+
+History is "model v2 follows model v1", and `parents` already has it.
+Derivation is "model v2 was produced from these inputs", which git has
+no equivalent of and Nix does.
+
+### Three designs
+
+1. **Overload `parents`.** Free, and it destroys the first relation.
+2. **A lineage blob in `attachments`.** Works with no format change,
+   and the spec blesses the slot for "a tool spec, a dataset card". The
+   problem is reachability: an input named only inside an opaque
+   attachment is not reachable, so collection can delete the dataset
+   version a model's lineage cites, and the lineage silently becomes a
+   dangling claim. No vectors either, so every consumer invents its own
+   shape.
+3. **A first-class lineage format.** A specified record whose digest is
+   the digest of its own bytes, naming its inputs as name-to-digest
+   pairs, with a producer, a receipt and its parameters. Inputs named by
+   it are reachable, so the store can hold the invariant that a model's
+   cited inputs cannot be collected while the model is retained. It
+   gets golden vectors and conformance scenarios like every other
+   format.
+
+The third is ruled (2026-09-27): the lineage relation is a first-class
+strongroom format. Reachability is the argument that decides it: a
+lineage claim whose referent can be collected is worse than no claim,
+because the loss is silent until it is needed. The format itself is
+open, and deliberately so; nothing below fixes a field list.
+
+The layering stays honest if the format is domain-neutral the way
+`Tree` is. Inputs are name-to-digest pairs whose names mean nothing to
+the store, exactly as a tree entry's name means nothing to it.
+Strongroom specifies the relation; the plugin owns the words
+"training-data", "base-checkpoint" and "eval-set".
+
+Naming collision to settle: the fabric already uses "derivation" for a
+call key. The data-lineage record needs a different word.
+
+**Timing.** Phase 11 of
+[the redesign plan](20260925-strongroom-redesign-plan.md) is the
+freeze, and phases 2 to 11 are still waiting. Before the freeze a
+ruling costs an edit and a vector; after it, adding a hashed format
+costs compatibility. If a lineage format is wanted at all, it should be
+ruled before phase 11, not after.
+
+### Travelling with the artifact
+
+Two senses, and both are needed.
+
+Inside the store, lineage is a walk from a model version through its
+lineage records to every input.
+
+When the artifact leaves, it is a closure export: the transitive graph,
+flattened, carrying each input's digest and descriptor but not its
+bytes, signed, and projectable into a CycloneDX ML-BOM for a customer
+who wants the standard format. The in-toto and SLSA shapes are the
+same, so no wire format needs inventing.
+
+The property that makes this better than a register: **content
+addressing discloses without disclosing.** A customer receives "trained
+on proprietary corpus, digest X, with this descriptor", and no data
+leaves. If the claim is challenged, the bytes are produced and they
+rehash to X. A spreadsheet's claim about training data is
+unfalsifiable; a digest's claim is provable on demand and withholdable
+until then. For proprietary data that must nonetheless be accounted
+for, nothing else has both properties.
+
+### What the graph buys
+
+- **The NOTICE file becomes computed.** Walk a shipped model's graph,
+  union the licence and obligation fields of the inputs, emit the
+  attribution document. That automates the obligation loop, and it only
+  automates if lineage is machine-readable.
+- **Train and evaluation contamination is a set intersection over
+  digests.** Exact, cheap, and currently unanswerable anywhere.
+- **Erasure impact becomes a query.** Weights cannot be unlearned. The
+  answerable question is "which shipped models derive from a dataset
+  version containing this subject", which is what a regulator asks, and
+  the tombstone records the erasure itself.
+- **"Are these the weights we shipped in 3.2"** is a digest
+  comparison.
+
+A property the format must not claim: training does not replay to an
+identical digest, unlike the tool graph. A lineage record is an
+attestation of inputs, never a build recipe, and the gate can check
+completeness but never reproduction. That belongs in the format's prose
+so no later reader takes it for a promise it cannot keep.
+
+### Dataset-scale trees and prefix claims
+
+The question was whether a claim can be scoped to a path: everything
+under this prefix comes from source X under licence Y. Yes, and it is
+the right shape, but two things are being separated.
+
+**Per-file digests stay. Per-file metadata goes.** The digests are
+needed for contamination checks, for erasure queries and for proving
+what was used, and the tree is already a Merkle tree over directories,
+so an appended dataset version shares every unchanged subtree and no
+single object is huge. What does not scale, and would be wrong even if
+it did, is a licence field per file: it is unmaintainable and it will
+be inaccurate.
+
+The claim is a prefix rule: prefix to source, licence, basis, acquisition
+date, and an evidence digest. Design points, each needing a ruling:
+
+- **Coverage is checked, not assumed.** Every entry in the tree must
+  match some prefix or the record refuses. Storage is the size of the
+  claim set; verification is one walk of the tree at ingest. This is
+  the property that prevents silent under-reporting.
+- **Longest prefix wins**, like a routing table, so exceptions are
+  expressible: all of X under one licence except one subdirectory. The
+  alternative is requiring non-overlapping claims, which is easier to
+  read and cannot express the exception.
+- **The claim set binds to a tree digest.** A prefix claim over a
+  mutable directory is worthless, because a file from another source
+  lands under a covered prefix and is silently covered. Bound to an
+  immutable snapshot, adding files makes a new tree that must be
+  re-checked. That turns a standing assumption into a statement about
+  one snapshot.
+- **Per-file exceptions must exist** for takedowns, opt-outs and
+  misattribution, with the set expected to stay small.
+- **Evidence by digest**: licence text, terms as of a date, a purchase
+  receipt, a consent record, a download manifest. The claim is then an
+  assertion with an artifact attached, which is what makes an audit
+  short.
+- **Layout is a design decision.** Choose the corpus layout so the axes
+  that must be queried are prefixes. Speech corpora laid out by speaker
+  make erasure a prefix query; any other layout makes it an index.
+
+The redesign's large-data measurement row already names this workload:
+public dataset families with revisions, Parquet shards from a versioned
+dataset, successive fine-tunes of one checkpoint family. The manifest
+cost as a fraction of corpus bytes is a measurement, not a guess, and
+it belongs with those runs.
+
+### The general mechanism: path-scoped annotations
+
+The prefix claim above should not be a licence format. The general
+shape is a **path-scoped annotation** record: a set of rules, each a
+prefix and a map of name to value, bound to the tree digest it was
+verified against. The vocabulary belongs to the consumer, as a tree
+entry's name does. Licence claims, source, acquisition basis, dataset
+cards, classification labels and per-path attribution become one format
+with different keys, and a licence-specific format would have violated
+"knows no tool, no call and no dataset" in its first line.
+
+The completeness check generalises through a pattern the redesign
+already ruled for tree names: everything the format used to enforce
+became "a named profile a namespace declares". Required annotation keys
+are the same shape. A namespace declares that every path under it must
+resolve `source` and `licence`; the store enforces resolution without
+knowing what a licence is. The domain requirement is declared by the
+consumer and the enforcement stays generic.
+
+Annotations are a separate object from the tree. The decisive reason is
+deduplication: annotations inside the tree would make the same bytes
+under a different licence a different tree digest, so identical content
+would stop sharing. Separation also lets an annotation arrive after the
+content without rewriting it.
+
+Open fork: **per-key merge or per-rule replacement.** Nearest ancestor
+wins for the whole map is predictable, and forces a subdirectory that
+changes only the licence to restate the source. Per-key resolution is
+ergonomic and less obvious to a reader. The candidate is per-key, with
+a flattened resolved view as the printed and exported form, so storage
+stays compact while the evidence a reviewer reads is unambiguous.
+
+### What belongs in an annotation, and what does not
+
+Four questions decide it. A fact belongs in an inherited annotation
+inside hashed content when all four hold:
+
+1. It is a statement about the bytes, true for as long as those bytes
+   are those bytes.
+2. It does not change faster than the content does.
+3. It is the same answer in every store that holds the object.
+4. Nothing has to enforce it for it to be true.
+
+Passing, and each earning its place: licence, source, acquisition basis
+and date, evidence digests, classification, retention class, PII and
+special-category flags, consent basis, the attribution text a component
+requires, export-control classification, model and dataset card fields.
+
+Failing on 2 and 4 are **policy**: chunker, compression, encryption,
+materialiser hints, line-ending and text-versus-binary handling, name
+profiles. Every gitattributes-shaped fact lands here. They are
+instructions to an implementation, they change while the content does
+not, and the namespace already holds them.
+
+Failing on 1 is the category worth naming before it leaks into the
+format: **time-varying facts about the world that reference the
+bytes.** A known vulnerability, an end-of-life date, a revoked
+checkpoint, a source later found to be misattributed. The bytes are
+unchanged and the fact moved. These belong in a mutable index keyed by
+digest, joined at query time. Baking a scan result into a hashed object
+freezes it where it can never be updated.
+
+Three destinations, then: annotations in content, policy on the
+namespace, and a mutable index keyed by digest. Authorisation is an
+example of the second kind and not the first: it must be revocable, its
+principals are local to a deployment, and it is worthless unless
+something enforces it, so it lives beside the name where revocation is
+a compare-and-swap. Confidentiality in a content-addressed store comes
+from encryption, which the redesign already carries as ciphers with
+rotation at compaction.
+
+One edge the separation already handles: a licence can gain a later
+grant, through dual licensing or a relicense applied to an existing
+release. Because annotations are separate objects bound to a tree
+digest, a second record over the same tree states the new grant without
+touching content.
+
+## Runtimes, conversion, and why the graph covers both
+
+The inference runtime arrives by three routes, and they differ in who
+redistributes what (2026-09-27):
+
+- **Unreal's NNE with the ORT backend.** The runtime is the engine's,
+  pinned by engine version, and nothing is redistributed by us. The
+  engine's ORT version sets the opset ceiling. Their component to
+  disclose, our model to disclose.
+- **The onnxruntime Python wheel.** Permissive and enumerable from the
+  lock; the execution providers are the part carrying vendor terms.
+- **A linked build through conan**, not ruled out. Then we redistribute
+  the runtime and its providers, and the CUDA, TensorRT, DirectML and
+  CoreML provider terms attach. Link mode decides the obligation, as it
+  does for any static library.
+
+CoreML is reached directly from Swift today, which adds a toolchain
+surface: `Package.resolved` is a lock with revision pins, Xcode and SDK
+versions are `system-check` facts, and Apple system frameworks are
+linked but not redistributed.
+
+The consequence for lineage is larger than the licence question.
+**CoreML conversion and quantisation are derivations.** The weights
+that ship are not the weights that were trained: a `.mlpackage`
+produced from a PyTorch checkpoint by a converter at a version is a
+derived artifact, and without a conversion edge recorded, "which
+training run produced this shipped file" cannot be answered. That is
+the audit question itself. So one record shape must cover training,
+conversion, quantisation and packaging, which is a further argument for
+role-named inputs over anything training-specific.
+
+## On models built on public checkpoints
+
+The licence attaches to the checkpoint, not to the family or the
+architecture. The wav2vec 2.0 base and XLSR checkpoints are permissive,
+which means attribution and a NOTICE entry. Neighbouring checkpoints
+from the same producer are not: some are non-commercial, which in a
+shipped plugin is product-blocking rather than untidy. So the gate that
+matters is that a base checkpoint recorded without an exact upstream
+revision and a licence refuses. Pinning by repository revision with
+per-file digests also removes the `from_pretrained` drift problem in
+the same stroke.
+
+Two more model-side facts worth recording as first-class, because no
+licence file states them: terms of service that forbid training a
+competing model on a provider's outputs, and the lawful basis for
+first-party training data.
+
+## What no plugin can do
+
+Licence compatibility judgments, asset transferability on a change of
+control, whether a contractor assigned their IP, whether training data
+was lawfully obtained, and whether a use restriction covers a given
+use. The plugin's job is narrower and still worth building: force the
+human answer to exist, attach it to the component, timestamp it, and
+refuse the build while it is missing.
+
+## Standards worth reading rather than rediscovering
+
+- **NIST SP 800-218 (SSDF)**, and its AI companion: the practice
+  checklist US federal buyers ask against.
+- **OpenChain, ISO/IEC 5230**: an ISO standard for a licence
+  compliance programme, which is the intake, inventory and obligation
+  loops above. **ISO/IEC 18974** is its security assurance sibling.
+- **CISA 2025 Minimum Elements for an SBOM** for contents, and **BSI
+  TR-03183-2** for the format baseline.
+- **CycloneDX 1.6 including ML-BOM**, or **SPDX 3.0.1** with its AI and
+  Dataset profiles.
+- **SLSA v1.0** for build integrity as graded levels, and **in-toto**
+  for the attestation shape.
+- **ISO/IEC 29147 and 30111** for disclosure and incident handling,
+  which the CRA duty maps onto.
+- **PEP 740** for index attestations and **PEP 770** for SBOMs inside
+  wheels.
+
+## Decision record
+
+- 2026-09-27, the driver (Willem). The work repositories become one
+  workshop-managed monorepo, and that monorepo is what gets audited.
+  livery is the tool, not the subject. The functionality ships as a
+  toolroom and workshop plugin that both provides and enforces this.
+- 2026-09-27, Unreal scope (Willem). Stock engine only, under the
+  revenue threshold. The products are Unreal plugins and example
+  projects exercising them. The plugins link `cpp-conan` packages. No
+  engine modifications, so no patch series to track.
+- 2026-09-27, models ship (Willem). Weights are distributed inside the
+  products. Mostly first-party, trained on first-party data; some are
+  built on public checkpoints such as wav2vec.
+- 2026-09-27, this is an investigation, not musings, and it leads to a
+  plan.
+- 2026-09-27, the lineage relation is first class (Willem): a
+  strongroom format, not a consumer format above it. The format itself
+  is not settled and nothing here fixes a field list.
+- 2026-09-27, three destinations for a fact (proposed, awaiting
+  Willem): annotations in content for statements about the bytes,
+  namespace policy for instructions to an implementation, and a
+  mutable index keyed by digest for facts about the world that move
+  while the bytes do not. The four-question test is above.
+- 2026-09-27, the runtime routes (Willem): Unreal NNE with the ORT
+  backend and an onnxruntime Python wheel today, CoreML reached
+  directly from Swift, and a linked runtime not ruled out. Models are
+  members of the graph on every platform, so open question 3 is
+  closed.
+
+## Open
+
+1. **Which audit comes first**: acquirer diligence, a customer security
+   review, or a certification. It changes the order of the work, not
+   its content.
+2. **Whether the CRA or the AI Act governs** the products, which
+   decides how heavy the documentation must be.
+3. **The annotation format**, in full: the rule shape, the binding to a
+   tree digest, and whether required keys are a namespace profile.
+   Nothing here fixes a field list.
+4. **Per-key merge or per-rule replacement** when annotation rules
+   nest, and whether the exported form is always the flattened view.
+5. **Whether the three destinations hold** as proposed above, and where
+   the mutable index keyed by digest lives.
+6. **The lineage format**, likewise open. It is first class, and it
+   must be ruled before the redesign's phase 11 freeze, because after
+   the freeze a new hashed format costs compatibility.
+7. **Which direction the lineage record points**: a version naming its
+   lineage record, or the record naming its outputs. Forward references
+   break the immutability of the earlier object; backward references
+   need an index to answer "what is this model's lineage".
+8. **What the record is called**, since the fabric already uses
+   "derivation" for a call key.
+9. **Manifest cost at dataset scale**, measured with the redesign's
+   large-data runs: manifest bytes as a fraction of corpus bytes, and
+   whether a corpus wants a different grouping.
+10. **Corpus layout ruling**: lay corpora out so the axes that must be
+    queried are prefixes.
+11. **The `artifact` vocabulary** for a kind that ships through neither
+    a Python nor a conan registry, and whether Swift becomes a kind of
+    its own.
+12. **Retention period** for release documents, which follows the
+    support lifetime the products promise.
