@@ -484,6 +484,42 @@ def test_a_graph_is_written_once_and_kept_until_its_version_moves(
     assert not (_tools.graphs_dir(root) / "cspell.json").exists()
 
 
+def test_relock_writes_a_graph_again_though_its_version_stands(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What an install asks for when the runtime cannot satisfy the graph.
+
+    A resolve is a fresh answer from an index, so it moves the lock,
+    and a lock moves when a person says so: naming the tool is that
+    saying, and the tools beside it keep the graphs they had.
+    """
+    from livery.strongroom import digest_of
+
+    root = _workspace(tmp_path, monkeypatch, tools='requires = ["cspell", "eslint"]\n')
+    _records(
+        root,
+        Record("cspell", kind="npm", deltas=_read("2.0.0")),
+        Record("eslint", kind="npm", deltas=_read("9.0.0")),
+        _node("24.0.0"),
+    )
+    calls: list[str] = []
+
+    def resolve(root_: Path, name: str, package: str, version: str, **kwargs: object):
+        calls.append(name)
+        written = _tools.graphs_dir(root_) / f"{name}.json"
+        written.parent.mkdir(parents=True, exist_ok=True)
+        written.write_text(f"{name} {len(calls)}\n", encoding="utf-8")
+        return Graph(written.name, digest_of(written.read_bytes()), by="node 24"), ""
+
+    monkeypatch.setattr(_tools, "resolve_graph", resolve)
+    first = _tools.write_lock(root).tools
+    calls.clear()
+    moved = _tools.write_lock(root, relock=("cspell",)).tools
+    assert calls == ["cspell"]  # the one named, and no other
+    assert moved["cspell"].graph != first["cspell"].graph
+    assert moved["eslint"].graph == first["eslint"].graph
+
+
 def test_a_graph_that_cannot_be_resolved_leaves_the_tool_as_it_was(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
