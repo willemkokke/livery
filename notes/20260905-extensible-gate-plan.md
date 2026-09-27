@@ -717,6 +717,22 @@ the kit cannot drift from the enforcement.
   Promotion to the single registry stays mechanical, a dictionary
   key, and earns its keep when a third axis is real rather than
   imagined.
+- 2026-09-27, the site build's condition belongs to this plan
+  (Willem: fix it as part of the extensible gate plan, and take it
+  into account in the classification first). A pull request that
+  changes only a note pays a full site build: measured across 299
+  runs in the CI metrics store, the `Docs` step has a median of 162s,
+  a minimum of 79s and a maximum of 182s, and on one notes-only pull
+  request the docs job was 190s while the three check legs finished
+  in 25s to 57s and `gate` sat queued 199s waiting for it. The
+  unconditional run is not an oversight: `is_site` and `is_prose`
+  both justify their files reaching no format, lint, type or test
+  gate by the site build running on every run, so narrowing the
+  suites is safe because the site build is not narrowed. The gap is
+  that `notes/` is the one class of markdown the site does not read,
+  so a notes-only change is judged by nothing and still pays the
+  build. Filed as livery#839; the classification design accounts for
+  it before the skip is written.
 - 2026-09-27, the axes are named **part** and **channel**
   (from the discussion). `channel` was already the field
   `fm explain` prints, so it needs no new word. `part` is new and
@@ -793,6 +809,23 @@ the kit cannot drift from the enforcement.
      channel, and whether it names the layer that supplied each.
    - **When the single registry earns its keep.** A third axis is
      the trigger; "is this a documented surface" from the docs
-     phase is the nearest candidate. Naming the trigger now keeps
-     the promotion a decision rather than a drift.
+     phase is the nearest candidate, and "does the site read it",
+     below, is a second. Naming the trigger now keeps the promotion
+     a decision rather than a drift.
+   - **Which axis answers "does the site read it"**, which the
+     docs job's condition needs (livery#839). Four things constrain
+     it. The predicate is paths under `notes/` alone, strictly
+     narrower than `is_prose`, which is "under `notes/`, or a
+     markdown file anywhere" and so also covers `README.md` and
+     every package's `docs/` markdown: those are published and the
+     site build is their only gate, so skipping on `is_prose` would
+     delete it. The paths it must answer for include workspace-root
+     ones (`notes/`, `zensical.toml`, the root `docs/`) as well as
+     package ones (`packages/*/docs/*.md`), while a part is defined
+     as a pure function of a path inside a package, so this case
+     tests that boundary rather than fitting inside it. `gate` is
+     the one required context and depends on `docs`, so a skipped
+     docs job must leave the context reportable. And the answer is
+     not an opinion, so it is not layer code by default: whether
+     the site reads a path is a fact about the render.
    Owner: Willem. Blocks the claim in phase 4.
