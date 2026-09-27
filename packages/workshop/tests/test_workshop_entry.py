@@ -410,7 +410,7 @@ def test_the_rerun_guard_refuses_a_second_lap(
     from livery.workshop import _reconcile
 
     monkeypatch.setenv("WORKSHOP_RECONCILE_REEXEC", "1")
-    monkeypatch.setattr(os, "execv", lambda *a: pytest.fail("execv despite the guard"))
+    monkeypatch.setattr(os, "execve", lambda *a: pytest.fail("exec despite the guard"))
     _reconcile._reexec(tmp_path)
     assert "changed again" in capsys.readouterr().err
 
@@ -423,31 +423,75 @@ def test_a_missing_uv_degrades_the_rerun_to_a_note(
     monkeypatch.delenv("WORKSHOP_RECONCILE_REEXEC", raising=False)
     monkeypatch.setattr(shutil, "which", lambda name: None)
     monkeypatch.setattr(
-        os, "execv", lambda *a: pytest.fail("execv without a uv to run")
+        os, "execve", lambda *a: pytest.fail("exec without a uv to run")
     )
     _reconcile._reexec(tmp_path)
     assert "continuing on the loaded code" in capsys.readouterr().err
 
 
-def test_the_rerun_goes_through_uv_with_the_original_arguments(
+def test_the_rerun_hands_the_guard_on_and_writes_none_of_it_here(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """The replacement gets the guard in its environment, not this process.
+
+    An ambient environment write is a footman note, and the note is
+    judged at the task's boundary, which an exec never reaches. So
+    the wall that catches this everywhere else cannot catch it here,
+    and the shape has to be right rather than caught.
+    """
     from livery.workshop import _reconcile
 
     monkeypatch.delenv("WORKSHOP_RECONCILE_REEXEC", raising=False)
     monkeypatch.setattr(shutil, "which", lambda name: "/stub/uv")
     monkeypatch.setattr(sys, "argv", ["/somewhere/.venv/bin/fm", "check", "--affected"])
-    seen: list[tuple[str, list[str]]] = []
-    monkeypatch.setattr(os, "execv", lambda path, argv: seen.append((path, list(argv))))
+    seen: list[tuple[str, list[str], dict[str, str]]] = []
+    monkeypatch.setattr(
+        os,
+        "execve",
+        lambda path, argv, env: seen.append((path, list(argv), dict(env))),
+    )
     if sys.platform == "win32":
         pytest.skip("posix exec shape; the windows arm waits and forwards")
     _reconcile._reexec(tmp_path)
-    ((path, argv),) = seen
+    ((path, argv, handed_on),) = seen
     assert path == "/stub/uv"
     assert argv[:5] == ["/stub/uv", "run", "--project", str(tmp_path), "--no-sync"]
     assert argv[-2:] == ["check", "--affected"]
-    assert os.environ.get("WORKSHOP_RECONCILE_REEXEC") == "1"
-    os.environ.pop("WORKSHOP_RECONCILE_REEXEC", None)
+    assert handed_on["WORKSHOP_RECONCILE_REEXEC"] == "1"
+    assert handed_on["PATH"] == os.environ["PATH"]  # extended, not replaced
+    assert "WORKSHOP_RECONCILE_REEXEC" not in os.environ
+
+
+def test_the_windows_arm_hands_the_guard_on_and_forwards_the_code(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Windows has no exec, so it waits; the guard rides the same way."""
+    import subprocess
+
+    from livery.workshop import _reconcile
+
+    monkeypatch.delenv("WORKSHOP_RECONCILE_REEXEC", raising=False)
+    monkeypatch.setattr(shutil, "which", lambda name: "/stub/uv")
+    monkeypatch.setattr(sys, "argv", ["fm", "check"])
+    monkeypatch.setattr(sys, "platform", "win32")
+    seen: list[dict[str, str]] = []
+
+    # The signature is the call's own, so a change to either side of
+    # the handoff is a type error rather than a stub quietly agreeing.
+    def _waited(
+        cmd: list[str], *, check: bool, env: dict[str, str]
+    ) -> subprocess.CompletedProcess[bytes]:
+        assert not check  # the caller reads the code itself
+        seen.append(dict(env))
+        return subprocess.CompletedProcess(cmd, 3)
+
+    monkeypatch.setattr(subprocess, "run", _waited)
+    with pytest.raises(SystemExit) as exited:
+        _reconcile._reexec(tmp_path)
+    assert exited.value.code == 3
+    (handed_on,) = seen
+    assert handed_on["WORKSHOP_RECONCILE_REEXEC"] == "1"
+    assert "WORKSHOP_RECONCILE_REEXEC" not in os.environ
 
 
 def test_only_the_runner_process_reconciles(
