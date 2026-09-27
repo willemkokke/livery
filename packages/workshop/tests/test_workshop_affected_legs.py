@@ -210,6 +210,10 @@ def test_a_test_only_delta_runs_its_files_and_not_the_dependents(
     monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: root)
     monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
     paths = ["packages/x/tests/test_a.py"]
+    # The files are there: a changed test file that is gone runs its
+    # package's suite instead of being handed to pytest.
+    for named in ("packages/x/tests/test_a.py", "packages/y/tests/test_b.py"):
+        (root / named).write_text("def test_it() -> None:\n    pass\n")
 
     def _plan(root: Path, git: object, *, base: str = "main") -> _gate_record.Plan:
         return _gate_record.Plan(
