@@ -919,6 +919,67 @@ def test_a_pypi_graph_refuses_an_artifact_that_does_not_match_it(
     assert not tool_dir.exists()
 
 
+def test_what_a_graph_install_reads_of_a_package_and_what_it_refuses(
+    home: Home, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The two readings, and the script an install promised and did not write.
+
+    A console script list is read from the environment's own
+    interpreter, so prose around it is ignored and prose alone answers
+    nothing; a package's npm commands come from its manifest, whose
+    `bin` is a name or a table, and an unreadable one answers nothing
+    so the caller falls back to what was written.
+    """
+    # The reading of console scripts: the last line that parses wins.
+    monkeypatch.setattr(_engine, "read_version", lambda argv: 'noise\n["a", "b"]\n')
+    assert _engine._console_scripts(tmp_path, "ruff") == ("a", "b")
+    monkeypatch.setattr(_engine, "read_version", lambda argv: "not json at all")
+    assert _engine._console_scripts(tmp_path, "ruff") == ()
+    monkeypatch.setattr(_engine, "read_version", lambda argv: '"a string"')
+    assert _engine._console_scripts(tmp_path, "ruff") == ()
+
+    # The npm manifest: a name, a table, something else, and none at all.
+    where = tmp_path / "npmtool"
+    manifest = where / "node_modules" / "@acme" / "cli" / "package.json"
+    manifest.parent.mkdir(parents=True)
+    assert _engine._package_bins(where, "@acme/cli") == []
+    manifest.write_text('{"bin": "index.js"}', encoding="utf-8")
+    assert _engine._package_bins(where, "@acme/cli") == ["cli"]
+    manifest.write_text('{"bin": {"two": "b.js", "one": "a.js"}}', encoding="utf-8")
+    assert _engine._package_bins(where, "@acme/cli") == ["one", "two"]
+    manifest.write_text('{"bin": 7}', encoding="utf-8")
+    assert _engine._package_bins(where, "@acme/cli") == []
+
+    # A pypi install that writes none of the scripts it declared.
+    graph = tmp_path / "ruff.txt"
+    graph.write_text("ruff==1.0.0 --hash=sha256:00\n", encoding="utf-8")
+    monkeypatch.setattr(_engine, "run_installer", lambda argv, env: 0)
+    monkeypatch.setattr(_engine, "read_version", lambda argv: '["ruff"]')
+    with pytest.raises(StoreError, match=r"declares ruff, which its install did"):
+        store_of(home).ensure(_uv_tool("ruff", "1.0.0"), "1.0.0", graph=graph)
+    assert not (home.uv / "tools" / "ruff@1.0.0").exists()
+
+    # And an npm install whose manifest promises a command it did not write.
+    lock = tmp_path / "cspell.json"
+    lock.write_text("{}\n", encoding="utf-8")
+
+    def installing(argv: list[str], env: dict[str, str], place: Path) -> int:
+        made = place / "node_modules" / ".bin"
+        made.mkdir(parents=True, exist_ok=True)
+        (made / f"other{EXE}").write_text("#!/usr/bin/env node\n")
+        promise = place / "node_modules" / "cspell" / "package.json"
+        promise.parent.mkdir(parents=True, exist_ok=True)
+        promise.write_text('{"bin": {"cspell": "x.js"}}', encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(_engine, "run_installer_in", installing)
+    with pytest.raises(StoreError, match=r"declares cspell, which the install did"):
+        store_of(home).ensure(
+            _npm("cspell", "1.0.0"), "1.0.0", runtime=_node(home), graph=lock
+        )
+    assert not (home.npm / "tools" / "cspell@1.0.0").exists()
+
+
 def test_a_pypi_graph_installs_into_its_own_venv_and_places_its_own_scripts(
     home: Home, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1101,6 +1162,42 @@ def test_a_delegated_install_runs_its_installer_with_the_environment_handed_over
         [sys.executable, str(script), str(out)], {"UV_TOOL_DIR": "here"}
     )
     assert code == 0 and out.read_text() == "here"
+
+
+def test_an_install_that_reads_its_directory_is_run_inside_it(tmp_path: Path) -> None:
+    # `npm ci` reads the manifest and the lockfile beside it, so its
+    # seam takes the directory to run in rather than the caller's.
+    script = tmp_path / "here.py"
+    script.write_text("import os, sys; open(sys.argv[1], 'w').write(os.getcwd())")
+    where = tmp_path / "inside"
+    where.mkdir()
+    out = tmp_path / "out"
+    code = _engine._run_installer_in([sys.executable, str(script), str(out)], {}, where)
+    assert code == 0 and Path(out.read_text()).resolve() == where.resolve()
+
+
+def test_an_offline_store_tells_the_graph_install_so(
+    home: Home, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Offline is the store's, so the install asks no index: the graph
+    # names everything it needs and the cache either has it or it does not.
+    graph = tmp_path / "ruff.txt"
+    graph.write_text("ruff==1.0.0 --hash=sha256:00\n", encoding="utf-8")
+    calls: list[list[str]] = []
+
+    def installing(argv: list[str], env: dict[str, str]) -> int:
+        calls.append(argv)
+        if argv[1] == "venv":
+            made = _engine._venv_bin(Path(argv[-1]))
+            made.mkdir(parents=True, exist_ok=True)
+            (made / f"ruff{EXE}").write_text("#!/bin/sh\n")
+        return 0
+
+    monkeypatch.setattr(_engine, "run_installer", installing)
+    monkeypatch.setattr(_engine, "read_version", lambda argv: f'["ruff{EXE}"]')
+    store = Store(home, host=HOST, offline=True)
+    assert store.ensure(_uv_tool("ruff", "1.0.0"), "1.0.0", graph=graph).installed
+    assert "--offline" in calls[1]
 
 
 def test_an_origin_that_does_not_answer_is_a_store_refusal_naming_the_url(
