@@ -357,10 +357,14 @@ Deliverables:
   are gone, because a flag on two entries of twenty-three was a
   curated subset and one nobody sets is a gap. Off opens no box, passes
   no flag, pushes nothing, and never imports the plugin.
-- Each job's residue, the span the forge reports less the entries'
-  own timelines, drawn as the runner's setup and teardown.
-- `PullRequest.merged_sha`, filled on all three lanes, with a cassette
-  each.
+- **Landed.** Each job's residue, the span the forge reports less the
+  entries' own timelines, on a track under the job as `setup` and
+  `teardown`. Drawn only where the arithmetic holds: two clocks that
+  disagree about a job are said, because a negative span would read as
+  work that happened.
+- **Landed.** `PullRequest.merged_sha`, filled on all three lanes, the
+  one conformance scenario asserting it from each lane's committed
+  cassette, and the fake minting a squash that moves the base.
 - A dispatched run records the commit its inputs name.
 - `chain`, the one walk, from a commit; `fm ci.profile --from=<commit>`
   and the release command's own call at the end of its work.
