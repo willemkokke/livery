@@ -34,11 +34,13 @@ from typing import Annotated, ParamSpec
 
 import livery.footman as footman
 from livery.footman import Arg, doc, fail, group
+from livery.footman.profile import keeping
 from livery.forge import ForgeError, PullRequest, Repository, Unsupported
 from livery.workshop._contract import load_contract, normalise_keys
 from livery.workshop._conventional import TITLE_RE, TYPES
 from livery.workshop._git_ops import GitError, GitOps
 from livery.workshop._layers import workspace_root
+from livery.workshop._traces import drop_run
 from livery.workshop._verdict import (
     EXIT_BEHIND,
     EXIT_CONFLICTS,
@@ -875,6 +877,14 @@ def submit_flow(
                 )
                 continue
             raise
+        # Before the tidy moves this checkout off the branch: the run that
+        # was just followed belongs in this command's own trace, when one is
+        # being kept. Asked first, because nothing is in the ordinary case
+        # and neither git nor the forge should be troubled for it.
+        if keeping():
+            traced = drop_run(git.root, repo, head_sha=git.head_sha())
+            if traced:
+                print(f"  {traced}")
         _tidy_after_merge(repo, git, plan.branch, plan.base, number)
         return number
 

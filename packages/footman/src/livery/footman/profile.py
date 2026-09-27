@@ -70,14 +70,15 @@ PROFILE = GlobalOption(
 
 _PID = 1
 
-DROP = context.PROFILE_DIR
+DROP = "FM_PROFILE_DIR"
 """The drop box, named in every task's environment so that every child
 inherits it. A child may leave Chrome-trace fragments there. One directory
 per profiled run, under `profiles/` in footman's cache.
 
-The name itself is [livery.footman.PROFILE_DIR][], which anything may read
-without importing this plugin: that is how a caller asks whether a trace is
-being kept before reaching for the machinery that keeps one."""
+The name is the same for every runner built on footman, brand and all,
+because it is a convention foreign tools speak: a test runner, a build, a
+converter for another program's timings. None of them can know a brand's
+prefix."""
 
 ORIGIN = "originEpochUs"
 """The key a trace records its own zero under, in wall-clock microseconds.
@@ -494,15 +495,7 @@ def write(inv: footman.Invocation) -> None:
             "dur": round((time.perf_counter() - begin) * 1e6, 1),
         }
     )
-    payload = {
-        "traceEvents": events,
-        "displayTimeUnit": "ms",
-        # Where this trace's zero is on the wall clock, so a reader on
-        # another machine can lay this timeline beside another one: the leg
-        # inside the run that ran it.
-        ORIGIN: round(_epoch_origin(zero), 1),
-    }
-    path.write_text(json.dumps(payload), encoding="utf-8")
+    path.write_text(as_trace(events, origin=_epoch_origin(zero)), encoding="utf-8")
     print(f"profile: {path}", file=sys.stderr)
     # A run with a file of its own can still be somebody's child. Its whole
     # trace, the fragments it embedded included, goes up into the box that
@@ -510,6 +503,26 @@ def write(inv: footman.Invocation) -> None:
     # inside and not just the step that spawned it.
     if _parent_box is not None and Path(_parent_box).is_dir():
         _drop(_parent_box, _stamped(_as_child(events), zero))
+
+
+def as_trace(events: list[dict[str, Any]], *, origin: float) -> str:
+    """*events* as the text of a trace file, for a reader to open.
+
+    One place builds the shape: the events, the unit a reader shows by
+    default, and where this trace's zero sits on the wall clock, so another
+    timeline can be laid on it.
+
+    Args:
+        events: Chrome-trace events, stamped relative to *origin*.
+        origin: That zero, in wall-clock microseconds. Zero when the stamps
+            are already the wall clock's.
+
+    Returns:
+        The file's text.
+    """
+    return json.dumps(
+        {"traceEvents": events, "displayTimeUnit": "ms", ORIGIN: round(origin, 1)}
+    )
 
 
 def laid_on(
@@ -570,6 +583,17 @@ def laid_on(
             moved["args"] = {"name": f"{label}: {was}"}
         placed.append(moved)
     return placed, ""
+
+
+def keeping() -> bool:
+    """Whether this run keeps a trace, so a caller can skip building one.
+
+    The cheap question, for a caller whose timeline costs something to
+    assemble: a run's worth of jobs read from a forge, a tool's report
+    parsed. One environment read, and no answer here is ever a reason to
+    fail: nothing is profiling in the ordinary case.
+    """
+    return _box() is not None
 
 
 def dropped(events: list[dict[str, Any]]) -> Path | None:

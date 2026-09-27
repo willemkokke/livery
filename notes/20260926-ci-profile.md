@@ -1,12 +1,13 @@
 # The end-to-end CI profile: one timeline from the local command to the last test
 
-Status: phases 1, 2 and 3 landed 2026-09-27 (issues #782, #795,
-#798): a profiled run carries what it launches, a leg's trace leaves
-the runner for a channel no sync mirrors, and one run assembles into
-one timeline. Phases 4 to 6 wait their turn, each gate-green and
-mergeable alone. The feature is investigative: a leg pushes its trace
-whatever happens, and nobody pays for it until someone asks a
-question.
+Status: phases 1 to 4 landed 2026-09-27 (issues #782, #795, #798,
+#802): a profiled run carries what it launches, a leg's trace leaves
+the runner for a channel no sync mirrors, one run assembles into one
+timeline, and the local command that caused a run carries it. The
+prompt this plan opens with is answered. Phases 5 and 6 wait their
+turn, each gate-green and mergeable alone. The feature is
+investigative: a leg pushes its trace whatever happens, and nobody
+pays for it until someone asks a question.
 
 ## The prompt (Willem)
 
@@ -233,15 +234,30 @@ Deliverables:
 - `fm ci.profile [--run=<id>] [--into=<dir>]` assembles the same file
   for a run that has already ended, for investigating afterwards.
 
-Acceptance:
+Acceptance, and what proves each. The tests live in
+`packages/workshop/tests/test_workshop_traces.py` unless another file
+is named.
 
 - `uv run fm check` exits 0.
-- `uv run fm --profile=<path> submit …` on a branch produces one file
-  whose tasks include the local verb's own and every leg's.
-- `uv run fm ci.profile --run=<id>` writes a file naming every job of
-  that run.
-- A test asserts a run whose traces have aged out of the window
-  assembles from the skeleton alone and says so.
+- A profiled submit carries the run it followed:
+  `test_workshop_submit.py::test_a_profiled_submit_puts_the_run_it_followed_in_its_own_trace`
+  drives the real submit flow to a merge against the fake forge and
+  reads the fragment back, and
+  `test_the_run_a_command_followed_joins_its_own_trace` pins the wall
+  clock stamps a box takes.
+- An unprofiled submit asks the forge for no run at all:
+  `test_a_command_keeping_no_trace_drops_nothing` and
+  `test_workshop_submit.py::test_an_unprofiled_submit_asks_the_forge_for_no_run_at_all`.
+- A file a person can open:
+  `test_a_run_is_written_where_a_person_can_open_it`, which pins the
+  contract's directory, the recorded origin, and stamps starting at
+  zero.
+- A run whose traces have aged out assembles from the skeleton alone:
+  `test_a_run_whose_traces_have_aged_out_writes_the_skeleton_alone`.
+  What ages out is the detail, never the shape of the run, which is
+  what makes a short window safe.
+- A run nobody can name refuses rather than writing an empty file:
+  `test_a_run_nobody_can_name_refuses_to_write_a_file`.
 
 ## Phase 5: the chain, by recorded fact
 
@@ -296,6 +312,10 @@ Acceptance:
 - `uv run fm check` exits 0.
 - The note's decision record carries the measured cost per run.
 - `uv run fm docs.build` renders the page.
+
+The verb is `fm ci.profile.write`, not `fm ci.profile` as this plan
+first spelled it: `ci.profile` is the group the leg's push already
+lives in, and footman has no way for a group to be a task as well.
 
 ## Temporary, replaced by
 
@@ -352,6 +372,27 @@ Acceptance:
   writer leaked its box, because the exit sweep asked whether a box
   was the newest rather than whether it was still open. 107 empty
   directories had gathered on this desk since 2026-09-24.
+- 2026-09-27, Willem: a re-exec is footman's moment, not a plugin's
+  caller's. So footman grew a hook kind, `pre_reexec`, whose
+  subscriber is a context manager yielding environment entries for the
+  successor, and `footman.handing_off()` enters every one the run
+  mounted. The workshop's reconcile now knows nothing about traces,
+  and nothing mounted hands nothing on. The block's shape carries the
+  semantics: returning normally means the replacement did not happen,
+  so each subscriber takes its state back, while an exception means it
+  did and what they wrote stands.
+- 2026-09-27, Willem asked why footman's core should know the drop
+  box's variable name, and it should not. The name is the plugin's,
+  spelled once there and once in the pytest plugin, which speaks the
+  convention as any foreign tool would. A caller that wants to know
+  whether building a timeline is worth it asks the plugin:
+  `profile.keeping()`, one environment read, so a submit that nobody
+  profiled asks the forge for nothing at all.
+- 2026-09-27, the assembler answers with a value rather than a tuple:
+  the events, the wall-clock moment they are measured from, and the
+  lines. The local command wants the events on the wall clock and the
+  file writer wants them from the run's own start with that moment
+  recorded, and both read one object.
 - 2026-09-27, Willem asked where this code belongs. The trace
   format's own work is the plugin's: laying one trace on another's
   clock, which is the shift by two recorded origins, the renumbering

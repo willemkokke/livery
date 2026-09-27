@@ -101,9 +101,9 @@ def pytest_configure(config: pytest.Config) -> None:
     that is not a profiled run's child — this is one dict read."""
     import os
 
-    from livery.footman.context import PROFILE_DIR
-
-    sink = os.environ.get(PROFILE_DIR)
+    # The convention's own name, spelled as a foreign tool would spell it:
+    # this reads one variable and imports nothing of the plugin.
+    sink = os.environ.get("FM_PROFILE_DIR")
     if sink and not hasattr(config, "workerinput"):
         # `workerinput` marks an xdist worker process — there the recorder
         # stays unregistered, because the controller replays every worker's

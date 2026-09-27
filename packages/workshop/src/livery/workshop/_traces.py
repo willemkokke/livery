@@ -187,6 +187,22 @@ def push(root: Path, trace: Path, *, run: RunContext | None = None) -> str:
     return f"profile: {size // 1024} KiB pushed to {series.ref}"
 
 
+@dataclass(frozen=True)
+class Assembled:
+    """One run as a timeline, and where that timeline's zero sits.
+
+    Attributes:
+        events: The trace's events, every stamp relative to ``origin``.
+        origin: That zero, in wall-clock microseconds, which is what lets
+            another timeline be laid on this one.
+        lines: A line per thing worth saying about the assembling.
+    """
+
+    events: list[dict[str, Any]]
+    origin: float
+    lines: list[str]
+
+
 #: The assembled trace's own process: the run, whose tracks are its
 #: jobs. A leg's own trace keeps process groups of its own, numbered
 #: from `LEG_PIDS` upward so two legs of one run never share one.
@@ -202,7 +218,7 @@ def assemble(
     head_sha: str = "",
     clock: float | None = None,
     now: datetime | None = None,
-) -> tuple[list[dict[str, Any]], list[str]]:
+) -> Assembled:
     """One trace of a whole run: its jobs, their steps, and the legs' traces.
 
     The forge answers the skeleton: every job with its status, its
@@ -235,18 +251,19 @@ def assemble(
             default.
 
     Returns:
-        The trace's events, and a line per thing worth saying. No
-        events at all means the forge listed no job for the run.
+        The events, the wall-clock moment they are measured from, and a line
+        per thing worth saying. No events at all means the forge listed no
+        job for the run.
     """
     moment = now or datetime.now(UTC)
     lines: list[str] = []
     jobs = repo.checks.jobs(int(run_id)) if run_id.isdigit() else ()
     if not run_id.isdigit():
         lines.append(f"run {run_id}: not a number, so the forge cannot be asked")
-        return [], lines
+        return Assembled([], 0.0, lines)
     if not jobs:
         lines.append(f"run {run_id}: the forge lists no job for it")
-        return [], lines
+        return Assembled([], 0.0, lines)
     created = _run_created(repo, run_id, head_sha, lines) if head_sha else None
     zero = _zero_of(jobs, created, moment) if clock is None else clock
     events: list[dict[str, Any]] = [
@@ -276,7 +293,7 @@ def assemble(
             continue
         events += found
         lines.append(f"{job.name}: {len(found)} event(s) of its own")
-    return events, lines
+    return Assembled(events, zero, lines)
 
 
 def _epoch_us(stamp: str) -> float | None:
@@ -427,31 +444,76 @@ def _leg_events(
     return placed, f"{job}: {refused}" if refused else ""
 
 
-def drop_run(root: Path, repo: Repository, run_id: str, *, head_sha: str = "") -> str:
-    """Put a run's assembled trace in this command's own drop box; the line.
+def newest_run(repo: Repository, head_sha: str) -> str:
+    """The forge's newest run for *head_sha*, or empty when it lists none."""
+    runs = repo.checks.runs(head_sha=head_sha)
+    return str(runs[0].id) if runs else ""
 
-    For a verb that followed a run to its end. With a profile armed, the run
-    it watched goes into the same box its own children drop into, so one
-    file holds the local command, the run it caused, every job of that run
+
+def drop_run(root: Path, repo: Repository, *, head_sha: str, run_id: str = "") -> str:
+    """Put the run of *head_sha* in this command's own drop box; the line.
+
+    For a verb that followed a run to its end. With a trace being kept, the
+    run it watched goes into the same box its own children drop into, so one
+    file holds the local command, the run it caused, every job of that run,
     and every leg's tasks and tests underneath. The stamps are the wall
-    clock's, which is what a box takes, and the writer lays the whole thing
-    on this run's clock.
+    clock's, which is what a box takes, and this run's writer lays the whole
+    thing on its own clock.
 
-    Empty when nothing is profiling, which is the ordinary case: a verb
-    calls this whatever the line asked for, and pays a dictionary read for
-    it.
+    Empty when no trace is being kept, which is the ordinary case: a verb
+    calls this whatever the line asked for and pays one environment read.
     """
-    from livery.footman import PROFILE_DIR
+    from livery.footman.profile import dropped, keeping
 
-    if not os.environ.get(PROFILE_DIR):
+    # Assembling a run costs forge calls, so the cheap question comes first.
+    if not keeping():
         return ""
-    from livery.footman.profile import dropped
+    found = run_id or newest_run(repo, head_sha)
+    if not found:
+        return f"profile: the forge lists no run for {head_sha[:12]}"
+    # On the wall clock, which is what a box takes: this run's own writer
+    # lays the fragment on its clock like any other.
+    made = assemble(root, repo, found, head_sha=head_sha, clock=0.0)
+    if not made.events:
+        why = made.lines[0] if made.lines else f"run {found} assembled to nothing"
+        return f"profile: {why}"
+    if dropped(made.events) is None:
+        return ""
+    jobs = len({e["tid"] for e in made.events if e.get("cat") == "job"})
+    return f"profile: run {found} joins this trace, {jobs} job(s)"
 
-    events, lines = assemble(root, repo, run_id, head_sha=head_sha, clock=0.0)
-    if not events:
-        return f"profile: {lines[0] if lines else f'run {run_id} assembled to nothing'}"
-    left = dropped(events)
-    if left is None:
-        return ""
-    jobs = len({e["tid"] for e in events if e.get("cat") == "job"})
-    return f"profile: run {run_id} joins this trace, {jobs} job(s)"
+
+def write_run(
+    root: Path,
+    repo: Repository,
+    *,
+    run_id: str = "",
+    head_sha: str = "",
+    into: Path | None = None,
+) -> tuple[Path | None, list[str]]:
+    """Write a run's assembled trace where a person can open it; and the lines.
+
+    For investigating a run that has already ended, which is what the traces
+    are kept for. Without a *run_id* the forge's newest run for *head_sha* is
+    the one. The directory is the contract's ``[ci] profile-into`` unless the
+    caller names another.
+    """
+    from livery.footman.profile import as_trace
+
+    kept, why = policy(root)
+    if why:
+        return None, [f"profile: {why}"]
+    found = run_id or (newest_run(repo, head_sha) if head_sha else "")
+    if not found:
+        return None, [f"profile: the forge lists no run for {head_sha[:12]}"]
+    made = assemble(root, repo, found, head_sha=head_sha)
+    if not made.events:
+        return None, made.lines
+    where = into or Path(kept.into)
+    at = where if where.is_absolute() else root / where
+    at.mkdir(parents=True, exist_ok=True)
+    path = at / f"run-{found}.json"
+    # The stamps are relative to the run's own first moment, so the file says
+    # where that sits: another timeline can be laid on this one.
+    path.write_text(as_trace(made.events, origin=made.origin), encoding="utf-8")
+    return path, made.lines

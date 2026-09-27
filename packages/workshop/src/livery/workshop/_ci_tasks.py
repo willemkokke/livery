@@ -925,6 +925,42 @@ def ci_profile_push(
     profile_push_flow(root, Path(trace))
 
 
+@profile.task(name="write")
+def ci_profile_write(
+    *,
+    run: Annotated[str, doc("the run's id; the newest for HEAD by default")] = "",
+    into: Annotated[Path, doc("where the file lands; the contract says by default")] = (
+        Path("")
+    ),
+) -> None:
+    """Write one CI run as one timeline, to open at ui.perfetto.dev.
+
+    Every job of the run is a track at the forge's own times, its steps
+    inside it, and each leg that kept a trace brings its own tasks, steps
+    and tests, laid on the run's clock by the origin each side recorded.
+    This is what the legs' traces are kept for, and what the window bounds.
+
+    Refuses when no file could be written, naming why: a person asked for
+    one. A run whose traces have aged out of the window still assembles from
+    the forge's skeleton alone, and says which legs brought nothing.
+    """
+    from livery.workshop._traces import write_run
+
+    repo, git = _resolved()
+    path, lines = write_run(
+        git.root,
+        repo,
+        run_id=run,
+        head_sha="" if run else git.head_sha(),
+        into=into if str(into) else None,
+    )
+    for line in lines:
+        print(f"  {line}")
+    if path is None:
+        fail(lines[0] if lines else "no run to assemble")
+    print(f"  profile: {path}")
+
+
 def timings_flow(root: Path, *, since: int, base: int) -> None:
     """Print the rendered timings, then the speed marks beside the newest run."""
     from livery.workshop._metrics import render

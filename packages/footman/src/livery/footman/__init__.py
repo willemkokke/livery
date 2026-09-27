@@ -36,7 +36,6 @@ if TYPE_CHECKING:
     from livery.footman.app import Brand as Brand
     from livery.footman.compose import include as include
     from livery.footman.compose import plugin as plugin
-    from livery.footman.context import PROFILE_DIR as PROFILE_DIR
     from livery.footman.context import Argv as Argv
     from livery.footman.context import AuditEntry as AuditEntry
     from livery.footman.context import Context as Context
