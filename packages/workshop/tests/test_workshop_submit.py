@@ -1802,6 +1802,18 @@ def test_the_base_is_the_recorded_parent_while_origin_has_it(
     _git(git.root, "branch", "feat/0-parent", "origin/main")
     _git(git.root, "push", "-u", "origin", "feat/0-parent")
     assert resolve_base(git, "main", given=False) == "feat/0-parent"
+    # The parent merged and the forge deleted its branch, which is the
+    # state a stacked child submits in. A plain fetch does not prune, so
+    # the tracking ref is still here and answers as if the branch were
+    # too; origin itself is the only honest answer.
+    head = git.remote_head("feat/0-parent")
+    _git(git.root, "push", "origin", "--delete", "feat/0-parent")
+    # The forge deletes the branch, not this checkout, so the tracking
+    # ref stays until something prunes it. Put it back to be that state.
+    _git(git.root, "update-ref", "refs/remotes/origin/feat/0-parent", head)
+    assert git.remote_head("feat/0-parent") == head
+    assert resolve_base(git, "main", given=False) == "main"
+    assert "gone from origin" in capsys.readouterr().out
     # The flag wins over the record.
     assert resolve_base(git, "release", given=True) == "release"
 

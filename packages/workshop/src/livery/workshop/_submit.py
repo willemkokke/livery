@@ -395,15 +395,19 @@ def resolve_base(git: GitOps, base: str, *, given: bool) -> str:
     and *base* once it is gone: a merged parent's branch is deleted,
     and the forge retargets the child's pull request to the parent's
     own base at that moment.
+
+    Origin is asked for the branch, never the remote-tracking ref: a
+    plain fetch does not prune, so the tracking ref of a branch the
+    forge deleted at the merge survives, and a pull request against a
+    branch that is gone is refused with a validation error rather than
+    a sentence.
     """
     if given:
         return base
     parent = git.config_get(f"branch.{git.current_branch()}.workshop-parent")
     if not parent:
         return base
-    with contextlib.suppress(GitError):
-        git.fetch()
-    if git.remote_head(parent):
+    if parent in git.remote_branches(parent):
         print(f"  base: {parent}, the parent `{footman.prog()} start --from` recorded")
         return parent
     print(f"  base: {base}; the recorded parent {parent} is gone from origin (merged)")
