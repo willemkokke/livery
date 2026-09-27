@@ -144,6 +144,31 @@ def test_a_leg_the_runner_never_named_is_not_pushed(
     assert "WORKSHOP_LEG names no leg" in _traces.push(work, _trace_file(work))
 
 
+def test_the_leg_can_be_named_by_the_caller_that_spawned_it(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A job runner pushes from its own process, which carries no label.
+
+    It gives the label to the entries it spawns, so it is the one place
+    that knows it without asking an environment. Reading the
+    environment here pushed nothing at all for as long as it was the
+    only source.
+    """
+    _in_ci(monkeypatch, run="12", leg="")
+    monkeypatch.delenv(_state.LEG_VARIABLE, raising=False)
+    line = _traces.push(work, _trace_file(work), job="check (ubuntu-latest, 3.14)")
+    assert (
+        line == f"profile: {_state.LEG_VARIABLE} names no leg; the trace is not pushed"
+    )
+    named = _traces.push(
+        work,
+        _trace_file(work),
+        job="check (ubuntu-latest, 3.14)",
+        leg="check-ubuntu-latest-3-14",
+    )
+    assert "pushed to refs/workshop-trace/run/12/check-ubuntu-latest-3-14" in named
+
+
 def test_a_trace_that_was_never_written_is_named(
     work: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -175,7 +200,7 @@ def test_a_push_origin_refuses_is_named_and_decides_nothing(
         ),
         encoding="utf-8",
     )
-    _push_job(work, drop, job="check")
+    _push_job(work, drop, job="check", leg="check")
     printed = capsys.readouterr().out
     assert "the trace was not pushed" in printed
 

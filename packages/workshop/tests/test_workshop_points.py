@@ -639,7 +639,18 @@ def test_a_job_keeps_one_trace_of_every_entry_it_ran(
         )
         return 0
 
-    def fake_push(root: Path, trace: Path, *, job: str = "", run: object = None) -> str:
+    def fake_push(
+        root: Path,
+        trace: Path,
+        *,
+        job: str = "",
+        leg: str = "",
+        run: object = None,
+    ) -> str:
+        # The label is an argument, not an environment read: this
+        # process spawned the entries that carry it and is not one of
+        # them, so its own environment never had it.
+        assert leg == "gate"
         pushed.append((job, trace.read_text(encoding="utf-8")))
         return f"profile: {trace.stat().st_size} bytes pushed"
 
@@ -696,7 +707,14 @@ def test_a_job_that_went_red_still_keeps_its_trace(
         )
         return 1
 
-    def kept(root: Path, trace: Path, *, job: str = "", run: object = None) -> str:
+    def kept(
+        root: Path,
+        trace: Path,
+        *,
+        job: str = "",
+        leg: str = "",
+        run: object = None,
+    ) -> str:
         pushed.append(job)
         return "profile: kept"
 

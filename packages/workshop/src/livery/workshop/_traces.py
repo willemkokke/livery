@@ -179,7 +179,12 @@ def this_leg() -> str:
 
 
 def push(
-    root: Path, trace: Path, *, job: str = "", run: RunContext | None = None
+    root: Path,
+    trace: Path,
+    *,
+    job: str = "",
+    leg: str = "",
+    run: RunContext | None = None,
 ) -> str:
     """Put *trace* on this leg's ref of the run; the line to print.
 
@@ -187,10 +192,16 @@ def push(
     the trace: it is what an assembler joins the leg to its job by, and
     a matrix job's forge name cannot be derived from the leg's label.
 
+    *leg* is that label. The job runner gives it to the entries it
+    spawns and pushes from its own process, which never had it in its
+    environment, so the caller that knows the label says it;
+    `livery.workshop._traces.this_leg` answers for a caller running
+    inside a leg, where the environment is the only source.
+
     Empty when the contract asks for no traces, so a workspace that
     wants none neither pushes nor says anything. Every other answer is
-    a line: a trace that was never written, a leg the runner did not
-    name, a run this is not, or origin's own refusal.
+    a line: a trace that was never written, a leg nothing named, a run
+    this is not, or origin's own refusal.
     """
     kept, why = policy(root)
     if not kept.legs:
@@ -200,12 +211,12 @@ def push(
     found = run or run_context()
     if found is None:
         return "profile: not a CI run; the trace stays on this machine"
-    leg = this_leg()
-    if not leg:
+    named = leg or this_leg()
+    if not named:
         return f"profile: {LEG_VARIABLE} names no leg; the trace is not pushed"
     if not trace.is_file():
         return f"profile: no trace at {trace}; nothing to push"
-    series = TRACES.series(found.run_id, leg)
+    series = TRACES.series(found.run_id, named)
     files = {TRACE_FILE: trace.read_text(encoding="utf-8")}
     if job:
         files[JOB_FILE] = json.dumps({"job": job}, sort_keys=True)
@@ -213,7 +224,7 @@ def push(
         root,
         series.ref,
         files,
-        message=f"trace: {leg} of run {found.run_id}",
+        message=f"trace: {named} of run {found.run_id}",
         ci_only=True,
     )
     if refused:
