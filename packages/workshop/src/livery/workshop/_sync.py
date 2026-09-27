@@ -64,11 +64,48 @@ def _layer_content(layer: str) -> Path | None:
     return content if content.is_dir() else None
 
 
+#: What the last delivery wrote into ``.workshop/``, one name a line.
+#: The sweep removes a fragment a layer stopped shipping, and it must
+#: know which files were ever its own: the directory also holds state
+#: this checkout wrote for itself, and a sweep over everything deleted
+#: the stub receipt that the same sync reads a few steps later.
+_DELIVERED = ".workshop-fragments"
+
+
+def _delivered_before(workshop_dir: Path) -> set[str]:
+    """The names the previous delivery wrote, empty when there is none.
+
+    Empty means unknown rather than nothing, so the first sync after
+    this record exists adopts the directory and sweeps none of it. A
+    fragment a layer stopped shipping before then stays until someone
+    removes it; inventing ownership would delete files this never
+    wrote, which is the fault being fixed.
+    """
+    try:
+        text = (workshop_dir / _DELIVERED).read_text(encoding="utf-8")
+    except OSError:
+        return set()
+    return {line.strip() for line in text.splitlines() if line.strip()}
+
+
+def _record_delivered(workshop_dir: Path, names: set[str]) -> None:
+    """Write what this delivery wrote, so the next one can sweep it."""
+    body = "".join(f"{name}\n" for name in sorted(names))
+    path = workshop_dir / _DELIVERED
+    if not path.is_file() or path.read_text(encoding="utf-8") != body:
+        write_lf(path, body)
+
+
 def sync_workspace(root: Path) -> list[str]:
     """Deliver every layer's content into *root*; the summary lines.
 
     The engine behind ``fm sync``, separated so tests drive it against
     temporary trees.
+
+    The sweep removes only what an earlier delivery wrote: ``.workshop/``
+    also holds this checkout's own state, and deleting a file no layer
+    ships is right for a withdrawn fragment and wrong for everything
+    else.
     """
     lines: list[str] = []
     layers = layer_names(root)
@@ -95,10 +132,12 @@ def sync_workspace(root: Path) -> list[str]:
         if not target.is_file() or target.read_bytes() != body:
             target.write_bytes(body)
             written += 1
-    for stale in sorted(workshop_dir.iterdir()):
-        if stale.is_file() and stale.name not in fragments:
-            stale.unlink()
-            lines.append(f"  .workshop: removed {stale.name} (no layer ships it)")
+    for stale in sorted(_delivered_before(workshop_dir) - set(fragments)):
+        path = workshop_dir / stale
+        if path.is_file():
+            path.unlink()
+            lines.append(f"  .workshop: removed {stale} (no layer ships it)")
+    _record_delivered(workshop_dir, set(fragments))
     if written:
         lines.append(f"  .workshop: {written} fragment(s) refreshed")
 
