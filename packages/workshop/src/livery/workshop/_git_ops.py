@@ -277,6 +277,24 @@ class GitOps:
         """Set *key* to *value* in the repository's git config."""
         self._run("config", key, value)
 
+    def commit_naming(self, base: str, text: str, *, within: int = 500) -> str:
+        """The newest commit of *base* whose subject contains *text*; ``""`` if none.
+
+        A squash merge carries the pull request's number in its subject,
+        which the forge writes itself. So a command that merged one finds
+        the commit the merge point then ran on, long after the fact and
+        without asking which commit happened to be the tip at the time.
+
+        *within* bounds the walk: a number nobody merged is not worth
+        reading a whole history for.
+        """
+        out = self._run("log", f"-n{within}", "--format=%H%x00%s", base)
+        for line in out.splitlines():
+            sha, _, subject = line.partition("\0")
+            if text in subject:
+                return sha
+        return ""
+
     def merge_base(self, base: str) -> str:
         """The merge base of HEAD and ``origin/<base>``; raises GitError without one.
 

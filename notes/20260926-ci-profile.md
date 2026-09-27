@@ -259,43 +259,126 @@ is named.
 - A run nobody can name refuses rather than writing an empty file:
   `test_a_run_nobody_can_name_refuses_to_write_a_file`.
 
-## Phase 5: the chain, by recorded fact
+## Phase 5: one account of what CI did, live or afterwards
 
-A run triggered by a push or a squash knows nothing of what caused
-it, and the command that caused it has usually exited before the run
-it caused exists. So a cause records what it caused, as it learns it,
-and the assembler walks those links forward. Three kinds, each a fact
-one side already holds:
+The goal is a complete and accurate account of what CI did, or is
+doing, the same on every forge: reachable from the local command that
+caused a run while it happens, and from a commit long afterwards, by
+the same code.
 
-- **A dispatch.** The forge hands back the run id. Today that is the
-  merge point's wave dispatch and `fm workflow.release.dispatch`.
-- **A follow.** A verb that pushes a branch follows the run for that
-  head, so it holds that run's id, which is how it prints a line per
-  job.
-- **A merge.** A submit learns the squash commit when the merge
-  lands, and the run the merge point starts carries the same commit,
-  so the two ends join on a commit both knew independently.
+Three facts carry it and nothing else does.
+
+**What ran about a commit** is `repo.checks.runs(head_sha=…)`. The
+forge answers push runs, pull request runs and dispatched runs
+together: a dispatched run is filed under the commit it ran on, which
+run 36253981021 shows, its commit listing that run beside the push run
+of the same commit.
+
+**What a merge produced** is the pull request's own merge commit, which
+every forge holds and the protocol drops: `merge_commit_sha` on GitHub
+and GitLab, `merged_commit_id` on Gitea. One normalised field, empty
+until merged, and the only hop between two commits.
+
+**What a dispatched run is about** is the commit its inputs name, which
+the run records itself. This covers the one case the first fact misses:
+another merge landing between a release squash and the wave's dispatch
+moves the wave's head past the commit it belongs to. Written by the
+dispatched run, so a dispatch from a job and one from a desk record
+alike.
+
+The walk is one function over those three:
+
+```python
+def chain(commit, depth):
+    for run in runs_about(commit):   # the forge's answer, plus what recorded itself
+        assemble(run)                # every job, its steps, every entry's timeline
+    merged = merge_commit_of(commit)  # the pull request this commit headed
+    if merged and depth:
+        chain(merged, depth - 1)
+```
+
+A release is two nodes and one hop: the branch commit carries the pull
+request's run, and the squash carries main's own run and the wave.
+Every edge is something a forge or a run wrote down, so live and
+afterwards are the same code and cannot drift: the command that caused
+a run calls this walk at the end of its own work and drops the result
+into its trace, and a person calls `fm ci.profile --from=<commit>`
+weeks later and gets the same tree.
+
+### Every second of a job is accounted for
+
+A job's wall clock is the forge's own span. Under it sit the timelines
+of the entries that job ran, and the difference between the two is the
+runner's setup and teardown: the checkout, the caches, the store, the
+post-job save. That difference is drawn, not left as empty space, so a
+reader adds up a job and finds nothing unexplained.
+
+This is also what makes the account the same on every forge rather than
+GitHub-shaped. GitHub and Gitea report per-step times, so their setup is
+itemised. GitLab runs a job as one script and reports no steps at all.
+If completeness came from the forge's granularity, GitLab would be
+second class for ever; coming from the entries' own traces plus a named
+residue, the arithmetic is identical on all three and only the
+itemisation of the setup differs.
+
+What stays outside: anything the YAML does that is neither a step the
+forge reports nor a verb we ran. On GitHub and Gitea that is nothing.
+On GitLab it is the setup portion of the script, which appears as
+residue with no breakdown until GitLab reports steps.
+
+### One switch
+
+`[ci] profile`, defaulted on, governs the whole feature. Off means zero
+cost and not less cost: no entry runs profiled, nothing is written on
+the runner, nothing is pushed, nothing is recorded. A large, mature
+installation turns it off and turns it on when investigating, and a run
+from a period when it was off still assembles at the job level, because
+the account's shape comes from the forge. The switch changes how much
+detail a run keeps, never whether it can be accounted for.
+
+`profile-window` bounds the channel and `profile-into` says where an
+assembled file lands, as before.
+
+The phase lands in slices, each gate-green and mergeable alone. The
+skips are in; the rest follows in the order below.
 
 Deliverables:
 
-- Each cause writes its link where the assembler can read it, with
-  the child's run id or the commit it will be found by.
-- The assembler walks forward from a starting point through those
-  links and nests each child under the step that caused it,
-  recursively: a local command, its pull request's run, the merge's
-  run on main, the wave that run dispatched, the publish at the end.
-- `fm ci.profile` takes a starting point as well as a run: a local
-  command's own trace, or a commit.
+- **Landed.** Wherever the workshop leaves work undone because a tree is
+  already proved, it marks the timeline as well as printing the line:
+  the local gate's own proof, a scoped leg whose affected set is empty,
+  a tree proved green already, and a change of prose alone. Four sites,
+  one helper, so the line and the mark cannot drift.
+- `[ci] profile` replaces `[ci] profile-legs`, defaulted on, read in
+  one place and honoured by every writer.
+- The point runner profiles every entry it spawns and pushes each
+  trace. `Entry.profiled` and the scheduled push entries go: a flag on
+  two entries of twenty-three is a curated subset, and one nobody sets
+  is a gap.
+- Each job's residue, the span the forge reports less the entries'
+  own timelines, drawn as the runner's setup and teardown.
+- `PullRequest.merged_sha`, filled on all three lanes, with a cassette
+  each.
+- A dispatched run records the commit its inputs name.
+- `chain`, the one walk, from a commit; `fm ci.profile --from=<commit>`
+  and the release command's own call at the end of its work.
 
 Acceptance:
 
 - `uv run fm check` exits 0.
-- A test asserts a parent recording a dispatched id produces a trace
-  whose child jobs sit under the dispatching step.
-- A test asserts a merge's link joins a local command to the run the
-  merge point started, by the commit and never by time.
-- A test asserts a commit nobody recorded a link for is assembled as
-  a root, never guessed into a tree.
+- A test walks a release: a branch commit to its pull request's run, the
+  merge commit to main's run and the wave beside it, and asserts the
+  wave is found through the commit and not through a time.
+- A test asserts a dispatched run whose head moved past the commit it
+  is about is found through its own record, and that the line says so.
+- A test asserts the same chain assembled live and afterwards is the
+  same tree, which is the property the design exists for.
+- A test asserts a job's entries and its residue add up to the span the
+  forge reported.
+- A test asserts `[ci] profile = false` writes nothing anywhere, and
+  that a run with no traces still assembles every job from the forge.
+- A test asserts a commit nobody can walk from is a root, never guessed
+  into a tree, and that a depth bound stops a cycle.
 
 ## Phase 6: the numbers decide the defaults
 
