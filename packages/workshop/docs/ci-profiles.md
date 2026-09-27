@@ -33,6 +33,42 @@ $ fm --profile=submit.json submit
 That file holds the submit's own work, the run its push started, every job of
 that run, and every leg's tasks and tests underneath.
 
+## A chain, not one run
+
+A release is more than one run. The branch's pull request run proves the
+branch, the merge puts a commit on the base and the base runs its own checks,
+and the merge point dispatches the wave that publishes. `--from` writes all of
+it as one file:
+
+```console
+$ fm ci.profile --from=HEAD
+  run 36331515850: check (ubuntu-latest, 3.14): 15701 event(s) of its own, setup 41.0s, teardown 3.0s
+  4f2a91c8e1b0: run 36331515850 (pull_request)
+  4f2a91c8e1b0 merged as 9ab3c7d15e22 by #817
+  9ab3c7d15e22: run 36332008144 (push), run 36332114907 (workflow_dispatch, recorded)
+  profile: .fm/profiles/chain-4f2a91c8e1b0.json
+```
+
+Three recorded facts make the walk, and nothing else does:
+
+- what the forge lists for a commit, which is every run it filed under it:
+  push, pull request and dispatched alike;
+- the commit a pull request's merge produced, which every forge publishes;
+- the commit a dispatched run ran on, which the run writes down itself.
+
+The third covers one case. A run dispatched on a branch is filed under that
+branch's tip, and a merge landing between the dispatch and the run moves that
+tip past the commit the dispatch named. The run knows what it checked out, so
+it records that, and a walk from the commit finds the run through the commit
+rather than through a time. `(recorded)` on a line means the run was found that
+way.
+
+Every edge is something a forge or a run wrote down, so a chain followed while
+it happens and one walked from the same commit weeks later are the same tree.
+`fm workflow.release --armed` makes this walk at the end of its own work, so
+the file it leaves holds the release command, its pull request's run, the
+base's run and the wave.
+
 ## What the file holds
 
 - One track per job, named as the forge names it. Jobs that ran at the same
@@ -79,7 +115,8 @@ forge and is always there.
 ## Where the traces live
 
 A leg pushes its trace to refs under `refs/workshop-trace/`, one ref per leg
-of a run. The one refspec a sync mirrors is the state store's own namespace,
+of a run, and a dispatched run records the commit it ran on beside them, one
+ref per commit. The one refspec a sync mirrors is the state store's own namespace,
 so no sync brings a trace, no gate reads one, and a checkout pays nothing for
 them until someone assembles a run. The janitor keeps the newest runs and
 drops the rest.

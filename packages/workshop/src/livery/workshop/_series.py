@@ -32,5 +32,6 @@ DECLARED: tuple[Series | Keyed, ...] = (
     _gate_record.SERIES,
     _diagnostics.SERIES,
     _traces.TRACES,
+    _traces.ABOUT,
     FETCHED,
 )

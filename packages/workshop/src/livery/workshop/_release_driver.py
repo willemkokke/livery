@@ -615,8 +615,31 @@ class ReleaseDriver:
         from livery.workshop._ci_tasks import follow_run
 
         code = follow_run(self._repo, "release", run, timeout=self._wave_timeout)
+        self._trace_the_chain()
         if code:
             raise SystemExit(code)
+
+    def _trace_the_chain(self) -> None:
+        """Fold everything this release caused into the command's own trace.
+
+        A release is two commits and one hop. The branch commit carries
+        the pull request's run, and the commit its merge made carries
+        the base's own run and the wave dispatched at it. One walk from
+        the branch holds the whole story, and a red wave's is the one
+        most worth having, so this runs before the exit code does.
+
+        The branch is already gone from a checkout that recovered a
+        release it did not prepare, and then the release squash on the
+        base is where the walk starts instead.
+        """
+        from livery.workshop._traces import drop_chain
+
+        git = self._git
+        at = git.sha_of(self.branch)
+        if not at:
+            at, _subject = newest_release_squash(git, self.base)
+        if line := drop_chain(self._repo, git, commit=at):
+            print(f"  {line}")
 
 
 def local_release(root: Path, members: tuple[Package, ...]) -> None:

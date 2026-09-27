@@ -1,13 +1,16 @@
 # The end-to-end CI profile: one timeline from the local command to the last test
 
-Status: phases 1 to 4 landed 2026-09-27 (issues #782, #795, #798,
-#802): a profiled run carries what it launches, a leg's trace leaves
-the runner for a channel no sync mirrors, one run assembles into one
-timeline, and the local command that caused a run carries it. The
-prompt this plan opens with is answered. Phases 5 and 6 wait their
-turn, each gate-green and mergeable alone. The feature is
-investigative: a leg pushes its trace whatever happens, and nobody
-pays for it until someone asks a question.
+Status: every phase landed 2026-09-27 (issues #782, #795, #798, #802,
+#805, #806). A profiled run carries what it launches, a leg's trace
+leaves the runner for a channel no sync mirrors, one run assembles into
+one timeline, the local command that caused a run carries it, and one
+walk follows a commit through everything it caused, live or weeks
+later. The prompt this plan opens with is answered end to end. One open
+line remains: the window's depth is measured and the number is
+Willem's, so twenty stands until he rules. The feature is
+investigative: a job pushes its trace whatever happens, nobody pays for
+it until someone asks a question, and `[ci] profile = false` costs
+nothing at all.
 
 ## The prompt (Willem)
 
@@ -357,6 +360,17 @@ Deliverables:
   are gone, because a flag on two entries of twenty-three was a
   curated subset and one nobody sets is a gap. Off opens no box, passes
   no flag, pushes nothing, and never imports the plugin.
+- **Landed.** A dispatched run records the commit it checked out, on
+  `refs/workshop-trace/about/<commit>`, and only where the forge files
+  it under another commit: a push run and a pull request run need no
+  record. Read beside the forge's listing, never instead of it.
+- **Landed.** `chain`, the one walk, from a commit;
+  `fm ci.profile --from=<commit>` writes it and
+  `fm workflow.release --armed` drops it into its own trace after the
+  wave's verdict, red or green. Every run of a walk is its own process
+  group, named for the commit it is about. A commit with no run and no
+  merge is a root, and a merge answer leading back to a commit already
+  walked ends there.
 - **Landed.** Each job's residue, the span the forge reports less the
   entries' own timelines, on a track under the job as `setup` and
   `teardown`. Drawn only where the arithmetic holds: two clocks that
@@ -365,9 +379,6 @@ Deliverables:
 - **Landed.** `PullRequest.merged_sha`, filled on all three lanes, the
   one conformance scenario asserting it from each lane's committed
   cassette, and the fake minting a squash that moves the base.
-- A dispatched run records the commit its inputs name.
-- `chain`, the one walk, from a commit; `fm ci.profile --from=<commit>`
-  and the release command's own call at the end of its work.
 
 Acceptance:
 
@@ -578,11 +589,20 @@ Acceptance, and what proves each:
   The reconcile re-execs inside the first task of a sync, so the
   fragment holds what that sync had done.
 
+- 2026-09-27, Willem: a curated subset is a gap waiting to happen, so
+  every entry of every job runs profiled, governed by one switch
+  defaulted on, which a large installation turns off and turns on while
+  investigating. "Getting a 100% accurate insight on what CI did or
+  does, in a cross forge way is the goal."
+- 2026-09-27, Willem: a release follows the whole chain; a submit does
+  not, and a gate skipped because the tree is already proved shows on
+  the timeline.
+
 ## Open
 
 1. **The window's depth.** Measured: 837 KiB a run once packed, so
    twenty runs is about 16 MB on origin and fifty about 42 MB. The
    number is Willem's. Twenty stands in the contract and on the page
    until he says otherwise, and both say the same number.
-2. **Whether a leg of a nightly or a release run pushes too**, or the
-   gate alone. Owner: Willem, once phase 1 has run a few days.
+2. ~~Whether a leg of a nightly or a release run pushes too.~~ Decided:
+   every job of every point does, under the one switch.
