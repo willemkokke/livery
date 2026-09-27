@@ -51,7 +51,7 @@ import sys
 import tempfile
 import threading
 import time
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -73,6 +73,12 @@ DROP = "FM_PROFILE_DIR"
 """The drop box, named in every task's environment so that every child
 inherits it. A child may leave Chrome-trace fragments there. One directory
 per profiled run, under `profiles/` in footman's cache."""
+
+ORIGIN = "originEpochUs"
+"""The key a trace records its own zero under, in wall-clock microseconds.
+
+Every stamp in a file is relative to that moment, so this is what lets one
+trace be laid on another's clock, on one machine or two."""
 
 HANDOFF = "FM_PROFILE_HANDOFF"
 """The box a process hands to the one replacing it, so the successor owns
@@ -486,10 +492,10 @@ def write(inv: footman.Invocation) -> None:
     payload = {
         "traceEvents": events,
         "displayTimeUnit": "ms",
-        # Where this trace's zero is on the wall clock. Every stamp in the
-        # file is relative to it, so a reader on another machine can lay this
-        # timeline beside another one: the leg inside the run that ran it.
-        "originEpochUs": round(_epoch_origin(zero), 1),
+        # Where this trace's zero is on the wall clock, so a reader on
+        # another machine can lay this timeline beside another one: the leg
+        # inside the run that ran it.
+        ORIGIN: round(_epoch_origin(zero), 1),
     }
     path.write_text(json.dumps(payload), encoding="utf-8")
     print(f"profile: {path}", file=sys.stderr)
@@ -499,6 +505,66 @@ def write(inv: footman.Invocation) -> None:
     # inside and not just the step that spawned it.
     if _parent_box is not None and Path(_parent_box).is_dir():
         _drop(_parent_box, _stamped(_as_child(events), zero))
+
+
+def laid_on(
+    text: str, *, zero: float, pids: Iterator[int], label: str = ""
+) -> tuple[list[dict[str, Any]], str]:
+    """One trace's events laid on another clock; the events, or why not.
+
+    A trace records the wall-clock moment its own zero sits at, and every
+    stamp in it is relative to that. So two traces written anywhere, by
+    anything, can be read on one timeline: each one's stamps shift by its own
+    origin against the reading clock's. The alignment comes from what each
+    side wrote down, never from the order anything arrived in.
+
+    The process groups are renumbered from *pids*, because every run's own
+    group carries the same number and two traces would otherwise read as one
+    process. A group's name keeps *label* in front of it, so a reader can
+    tell which trace a group came from.
+
+    Args:
+        text: The trace, as its writer wrote it.
+        zero: Where the reading clock's zero sits on the wall clock, in
+            microseconds, as this module records it under `ORIGIN`.
+        pids: Process ids to claim, one per group the trace holds.
+        label: What to put in front of each group's name.
+
+    Returns:
+        The events on the reading clock, and a reason when there are none:
+        a trace that does not parse, or one that records no origin and so
+        cannot be placed at all.
+    """
+    try:
+        payload: Any = json.loads(text)
+    except ValueError as exc:
+        return [], f"the trace does not parse ({exc})"
+    if not isinstance(payload, dict):
+        return [], "the trace is not a trace object"
+    origin = payload.get(ORIGIN)
+    if not isinstance(origin, (int, float)) or isinstance(origin, bool):
+        return [], f"the trace records no {ORIGIN}, so it cannot be placed"
+    found = payload.get("traceEvents")
+    if not isinstance(found, list):
+        return [], "the trace carries no events"
+    shift = float(origin) - zero
+    mapped: dict[Any, int] = {}
+    placed: list[dict[str, Any]] = []
+    for event in found:
+        if not isinstance(event, dict):
+            continue
+        own: Any = event.get("pid")
+        if own not in mapped:
+            mapped[own] = next(pids)
+        moved: dict[str, Any] = {**event, "pid": mapped[own]}
+        if isinstance(ts := event.get("ts"), (int, float)):
+            moved["ts"] = round(ts + shift, 1)
+        if label and moved.get("ph") == "M" and moved.get("name") == "process_name":
+            args = moved.get("args")
+            was = args.get("name", "fm") if isinstance(args, dict) else "fm"
+            moved["args"] = {"name": f"{label}: {was}"}
+        placed.append(moved)
+    return placed, ""
 
 
 def _write_fragment(inv: footman.Invocation) -> None:

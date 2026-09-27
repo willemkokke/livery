@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -229,3 +230,312 @@ def test_a_good_into_is_read_and_a_wrong_key_stops_the_push(
     line = _traces.push(work, _trace_file(work))
     assert line == "profile: [ci] profile-window is -4; it is a whole number of runs"
     assert _state.list_refs(work, _traces.TRACES.prefix) == {}
+
+
+# --- the assembler: one trace of a whole run ----------------------------------
+
+
+def _forge(jobs: tuple[object, ...], *, created: str = "") -> object:
+    """A repository answering one run's jobs, and the run itself when asked."""
+    from livery.forge import Run
+
+    run = Run(
+        77,
+        "ci.yml",
+        "abc123",
+        "push",
+        "completed",
+        "success",
+        created_at=created,
+        started_at=created,
+    )
+
+    class _Checks:
+        def runs(self, *, head_sha: str = "", event: str = "") -> tuple[object, ...]:
+            return (run,) if created else ()
+
+        def jobs(self, run: int) -> tuple[object, ...]:
+            return jobs
+
+    class _Repo:
+        checks = _Checks()
+
+    return _Repo()
+
+
+def _job(
+    name: str,
+    *,
+    started: str = "",
+    completed: str = "",
+    status: str = "completed",
+    conclusion: str = "success",
+    steps: tuple[object, ...] = (),
+) -> object:
+    from livery.forge import Job
+
+    return Job(1, name, status, conclusion, started, completed, steps)  # type: ignore[arg-type]
+
+
+def _pushed(
+    work: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    leg: str,
+    origin: float,
+    tasks: dict[str, float],
+) -> None:
+    """Push a trace for *leg* whose zero sits at *origin*, with named tasks."""
+    trace = work / f"{leg}.json"
+    trace.write_text(
+        json.dumps(
+            {
+                "originEpochUs": origin,
+                "traceEvents": [
+                    {
+                        "ph": "M",
+                        "name": "process_name",
+                        "pid": 1,
+                        "args": {"name": "fm"},
+                    },
+                    *(
+                        {
+                            "ph": "X",
+                            "cat": "task",
+                            "name": name,
+                            "pid": 1,
+                            "tid": 1,
+                            "ts": 0.0,
+                            "dur": dur,
+                        }
+                        for name, dur in tasks.items()
+                    ),
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    _in_ci(monkeypatch, run="77", leg=leg)
+    assert "pushed" in _traces.push(work, trace)
+
+
+def _epoch(stamp: str) -> float:
+    from datetime import datetime
+
+    return datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp() * 1e6
+
+
+def test_a_run_the_forge_cannot_be_asked_about_assembles_nothing(work: Path) -> None:
+    from typing import Any, cast
+
+    from livery.forge import Repository
+
+    repo = cast(Repository, cast(Any, _forge(())))
+    events, lines = _traces.assemble(work, repo, "not-a-number")
+    assert events == [] and "not a number" in lines[0]
+    events, lines = _traces.assemble(work, repo, "77")
+    assert events == [] and "lists no job for it" in lines[0]
+
+
+def test_a_leg_whose_trace_will_not_parse_is_named_and_the_others_assemble(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from typing import Any, cast
+
+    from livery.forge import Repository
+
+    began = "2026-09-27T10:00:00Z"
+    _pushed(
+        work, monkeypatch, leg="check", origin=_epoch(began), tasks={"check": 1000.0}
+    )
+    broken = work / "broken.json"
+    broken.write_text("{ not json", encoding="utf-8")
+    _in_ci(monkeypatch, run="77", leg="docs")
+    assert "pushed" in _traces.push(work, broken)
+    jobs = (
+        _job("check", started=began, completed="2026-09-27T10:00:01Z"),
+        _job("docs", started=began, completed="2026-09-27T10:00:02Z"),
+    )
+    repo = cast(Repository, cast(Any, _forge(jobs)))
+    events, lines = _traces.assemble(work, repo, "77")
+    assert any("docs: the trace does not parse" in line for line in lines)
+    assert any("check: " in line and "event(s) of its own" in line for line in lines)
+    # Both jobs are still drawn, and only the readable leg brought its own.
+    drawn = {e["name"] for e in events if e.get("cat") == "job"}
+    assert drawn == {"check", "docs"}
+    assert any(e.get("cat") == "task" and e["name"] == "check" for e in events)
+
+
+def test_the_run_is_its_jobs_their_steps_and_every_leg_that_left_a_trace(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The legs land inside their own jobs, by the epochs and not by order.
+
+    The traces are pushed in one order and their origins say another, so a
+    leg that lands in the right place can only have been placed by its
+    recorded origin.
+    """
+    from typing import Any, cast
+
+    from livery.forge import Repository, Step
+
+    created = "2026-09-27T10:00:00Z"
+    late, early = "2026-09-27T10:00:30Z", "2026-09-27T10:00:05Z"
+    # Pushed newest first, so order and time disagree.
+    _pushed(
+        work, monkeypatch, leg="check-b", origin=_epoch(late), tasks={"b": 2_000_000.0}
+    )
+    _pushed(
+        work, monkeypatch, leg="check-a", origin=_epoch(early), tasks={"a": 3_000_000.0}
+    )
+    jobs = (
+        _job(
+            "check-a",
+            started=early,
+            completed="2026-09-27T10:00:09Z",
+            steps=(Step("Set up job", "success", early, "2026-09-27T10:00:06Z"),),
+        ),
+        _job("check-b", started=late, completed="2026-09-27T10:00:35Z"),
+        # A skipped job: the forge times it not at all.
+        _job("govern", status="completed", conclusion="skipped"),
+        # And one still running when the reading was taken.
+        _job(
+            "gate", started="2026-09-27T10:00:40Z", status="in_progress", conclusion=""
+        ),
+    )
+    repo = cast(Repository, cast(Any, _forge(jobs, created=created)))
+    now = datetime.fromisoformat("2026-09-27T10:00:50+00:00")
+    events, lines = _traces.assemble(work, repo, "77", head_sha="abc123", now=now)
+    by_name = {e["name"]: e for e in events if e.get("cat") == "job"}
+    # The run's zero is the run's own acceptance, so a job's slice sits at
+    # its wait's length.
+    assert by_name["check-a"]["ts"] == 5_000_000.0
+    assert by_name["check-a"]["dur"] == 4_000_000.0
+    assert by_name["check-b"]["ts"] == 30_000_000.0
+    # The skip is an event, never a span of no length.
+    skipped = next(e for e in events if e["name"] == "govern")
+    assert skipped["ph"] == "i" and "dur" not in skipped
+    assert skipped["args"]["conclusion"] == "skipped"
+    # A running job is drawn up to the reading, and says so.
+    running = by_name["gate"]
+    assert running["args"]["running"] is True
+    assert running["ts"] + running["dur"] == 50_000_000.0
+    # The wait before a job is its own span, and the steps are inside the job.
+    waits = {e["name"]: e for e in events if e.get("cat") == "queue"}
+    assert waits["check-a: queued"]["dur"] == 5_000_000.0
+    step = next(e for e in events if e.get("cat") == "step")
+    assert step["ts"] == by_name["check-a"]["ts"]
+    # Each leg's own trace is inside its job's span, and in groups of its own.
+    tasks = {e["name"]: e for e in events if e.get("cat") == "task"}
+    for leg, task in (("check-a", "a"), ("check-b", "b")):
+        job, own = by_name[leg], tasks[task]
+        assert job["ts"] <= own["ts"]
+        assert own["ts"] + own["dur"] <= job["ts"] + job["dur"]
+    assert tasks["a"]["pid"] != tasks["b"]["pid"]
+    groups = {
+        e["args"]["name"]
+        for e in events
+        if e["ph"] == "M" and e["name"] == "process_name"
+    }
+    assert groups == {"run 77", "check-a: fm", "check-b: fm"}
+    assert not [line for line in lines if "could not" in line]
+
+
+def test_a_channel_that_cannot_be_listed_still_assembles_the_skeleton(
+    work: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Origin unreachable: the forge's own times are the whole answer."""
+    from typing import Any, cast
+
+    from livery.forge import Repository
+
+    began = "2026-09-27T10:00:00Z"
+    jobs = (_job("check", started=began, completed="2026-09-27T10:00:01Z"),)
+    _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
+    repo = cast(Repository, cast(Any, _forge(jobs)))
+    events, lines = _traces.assemble(work, repo, "77")
+    assert any("could not be listed" in line for line in lines)
+    assert [e["name"] for e in events if e.get("cat") == "job"] == ["check"]
+
+
+def test_a_stamp_the_forge_spells_wrongly_is_not_a_moment(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A job whose times do not parse is drawn as one that has none."""
+    from typing import Any, cast
+
+    from livery.forge import Repository, Step
+
+    jobs = (
+        _job("check", started="yesterday", completed="today"),
+        # A job with real times whose step has none: the job is drawn and
+        # the step is not, rather than a span from nowhere to nowhere.
+        _job(
+            "docs",
+            started="2026-09-27T10:00:00Z",
+            completed="2026-09-27T10:00:01Z",
+            steps=(Step("Set up job", "success", "whenever", ""),),
+        ),
+    )
+    repo = cast(Repository, cast(Any, _forge(jobs)))
+    events, _lines = _traces.assemble(work, repo, "77")
+    drawn = {e["name"]: e for e in events if e.get("cat") == "job"}
+    assert drawn["check"]["ph"] == "i"  # no start the forge could be read on
+    assert drawn["docs"]["ph"] == "X"
+    assert not [e for e in events if e.get("cat") == "step"]
+
+
+def test_a_run_the_forge_does_not_list_draws_no_waits(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The wait before a job needs the run's own acceptance; without it, none."""
+    from typing import Any, cast
+
+    from livery.forge import Repository
+
+    began = "2026-09-27T10:00:00Z"
+    jobs = (_job("check", started=began, completed="2026-09-27T10:00:01Z"),)
+    # A repository whose runs() answers nothing for the head.
+    repo = cast(Repository, cast(Any, _forge(jobs)))
+    events, lines = _traces.assemble(work, repo, "77", head_sha="abc123")
+    assert any("not among the forge's runs for abc123" in line for line in lines)
+    assert not [e for e in events if e.get("cat") == "queue"]
+
+
+def test_a_legs_ref_without_a_trace_on_it_is_named(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A ref the channel holds that carries no trace is said, not assumed."""
+    from typing import Any, cast
+
+    from livery.forge import Repository
+
+    _in_ci(monkeypatch, run="77", leg="check")
+    ref = _traces.TRACES.series("77", "check").ref
+    assert _state.put(work, ref, {"something-else.json": "{}"}, message="odd") == ""
+    began = "2026-09-27T10:00:00Z"
+    jobs = (_job("check", started=began, completed="2026-09-27T10:00:01Z"),)
+    repo = cast(Repository, cast(Any, _forge(jobs)))
+    _events, lines = _traces.assemble(work, repo, "77")
+    assert any(f"carries no {_traces.TRACE_FILE}" in line for line in lines)
+
+
+def test_a_ref_the_channel_cannot_read_names_the_job_it_belonged_to(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Whatever the store refuses, the line says which job it was about."""
+    from typing import Any, cast
+
+    from livery.forge import Repository
+
+    _pushed(work, monkeypatch, leg="check", origin=1.0, tasks={"check": 1.0})
+    monkeypatch.setattr(
+        _state.Series,
+        "file",
+        lambda self, root, name: (None, "the remote hung up"),
+    )
+    began = "2026-09-27T10:00:00Z"
+    jobs = (_job("check", started=began, completed="2026-09-27T10:00:01Z"),)
+    repo = cast(Repository, cast(Any, _forge(jobs)))
+    _events, lines = _traces.assemble(work, repo, "77")
+    assert "check: the remote hung up" in lines

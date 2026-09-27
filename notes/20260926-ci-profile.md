@@ -1,11 +1,12 @@
 # The end-to-end CI profile: one timeline from the local command to the last test
 
-Status: phases 1 and 2 landed 2026-09-27 (issues #782, #795): a
-profiled run carries what it launches, and a leg's trace leaves the
-runner for a channel no sync mirrors. Phases 3 to 6 wait their turn,
-each gate-green and mergeable alone. The feature is investigative: a
-leg pushes its trace whatever happens, and nobody pays for it until
-someone asks a question.
+Status: phases 1, 2 and 3 landed 2026-09-27 (issues #782, #795,
+#798): a profiled run carries what it launches, a leg's trace leaves
+the runner for a channel no sync mirrors, and one run assembles into
+one timeline. Phases 4 to 6 wait their turn, each gate-green and
+mergeable alone. The feature is investigative: a leg pushes its trace
+whatever happens, and nobody pays for it until someone asks a
+question.
 
 ## The prompt (Willem)
 
@@ -199,16 +200,27 @@ Deliverables:
   args say why, from the job's own conclusion.
 - The assembler is one function both consumers call.
 
-Acceptance:
+Acceptance, and what proves each. The tests live in
+`packages/workshop/tests/test_workshop_traces.py` unless another file
+is named.
 
 - `uv run fm check` exits 0.
-- A test builds a run of three jobs, two with traces and one
-  cancelled, and asserts the cancelled leg is a slice of the right
-  length with its conclusion and no children.
-- A test asserts a leg's tasks land inside that leg's span, by the
-  epoch re-basing and not by order.
-- A test asserts a trace that will not parse is named and the other
-  legs still assemble.
+- A run of four jobs assembles:
+  `test_the_run_is_its_jobs_their_steps_and_every_leg_that_left_a_trace`
+  pins a skipped job as an instant carrying its conclusion, a running
+  job as a slice up to the reading, the wait before a job as its own
+  span, and the steps inside their job.
+- A leg lands inside its own job by the epochs and not by order: the
+  same test pushes the two legs newest first, so their order and their
+  origins disagree, and each still lands in its job's span.
+- A trace that will not parse is named and the rest assemble:
+  `test_a_leg_whose_trace_will_not_parse_is_named_and_the_others_assemble`.
+- The refusals: a channel that cannot be listed, a run the forge does
+  not list, a stamp the forge spells wrongly, a ref carrying no trace,
+  and a read the store refuses, one test each.
+- The laying on is the plugin's, and proved there:
+  `packages/footman/tests/test_profile.py::test_a_trace_is_laid_on_another_clock_by_the_origins_alone`
+  and its refusals beside it.
 
 ## Phase 4: the local command carries it
 
@@ -340,6 +352,31 @@ Acceptance:
   writer leaked its box, because the exit sweep asked whether a box
   was the newest rather than whether it was still open. 107 empty
   directories had gathered on this desk since 2026-09-24.
+- 2026-09-27, Willem asked where this code belongs. The trace
+  format's own work is the plugin's: laying one trace on another's
+  clock, which is the shift by two recorded origins, the renumbering
+  of process groups so two traces never read as one process, and the
+  refusals that go with reading a trace. The forge's skeleton cannot
+  go there, because footman declares no dependency on `livery.forge`
+  and forge is stdlib-only, so a slice per job, an instant for a job
+  the forge never timed, the wait before a job and its steps stay in
+  the workshop. The channel stays there too: refs, contract, window.
+- 2026-09-27, a job is a track of the run's own process, so jobs that
+  ran at once read as the parallel work they were, and a leg's own
+  trace keeps process groups of its own, renumbered per leg. Chrome's
+  format has no way to nest one process inside another's slice, and
+  the alignment in time is what makes it read as nesting, which is
+  what phase 1 already proved on a real run.
+- 2026-09-27, the wait before a job is drawn only when the caller
+  knows the head: the run's acceptance time comes from the run's own
+  row, and a run id alone cannot ask the forge for it. Without a head
+  the jobs' own times are the whole skeleton, and the line says so.
+- 2026-09-27, measured from run 36287488870, for phase 6's window:
+  three check legs pushed 3,061,718, 3,060,393 and 3,065,870 bytes,
+  9.19 MB together, which repack to 837 KiB in an empty clone, 11.2x.
+  Better than the 10.2x one trace measured alone, because the three
+  platforms' traces delta against each other. Twenty runs at that
+  rate is around 16 MB on origin.
 - 2026-09-27, a leg's trace is the profiled entry's own file, pushed
   by a later entry of the same job (`fm ci.profile.push`), and not a
   trace of the whole leg. The leg's timing row is built by an entry

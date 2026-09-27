@@ -296,6 +296,18 @@ class Series:
             return None, f"{name}: {why}"
         return Row(name, data), ""
 
+    def file(self, root: Path, name: str) -> tuple[str | None, str]:
+        """The text of the file *name* on the ref, or why it could not be read.
+
+        For a series whose files are not rows: a leg's trace, kept as
+        its writer wrote it. ``(None, "")`` is absence, of the ref or
+        of the file.
+        """
+        found = read(root, self.ref)
+        if found.files is None:
+            return None, self._unreadable(found)
+        return found.files.get(name), ""
+
     def put(
         self,
         root: Path,
