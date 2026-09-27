@@ -200,6 +200,7 @@ def assemble(
     run_id: str,
     *,
     head_sha: str = "",
+    clock: float | None = None,
     now: datetime | None = None,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """One trace of a whole run: its jobs, their steps, and the legs' traces.
@@ -226,6 +227,10 @@ def assemble(
             it. With it the run's own row is read too, so the wait
             before each job can be drawn; without it the jobs' own
             times are the whole skeleton.
+        clock: The wall-clock moment, in microseconds, every stamp is
+            measured from. The run's own first moment by default, which
+            is a file that starts at zero; ``0.0`` leaves the stamps on
+            the wall clock itself, which is what a drop box takes.
         now: The moment a running job's slice ends; the present by
             default.
 
@@ -243,7 +248,7 @@ def assemble(
         lines.append(f"run {run_id}: the forge lists no job for it")
         return [], lines
     created = _run_created(repo, run_id, head_sha, lines) if head_sha else None
-    zero = _zero_of(jobs, created, moment)
+    zero = _zero_of(jobs, created, moment) if clock is None else clock
     events: list[dict[str, Any]] = [
         {
             "ph": "M",
@@ -420,3 +425,33 @@ def _leg_events(
         return [], f"{job}: {series.ref} carries no {TRACE_FILE}"
     placed, refused = laid_on(found, zero=zero, pids=pids, label=job)
     return placed, f"{job}: {refused}" if refused else ""
+
+
+def drop_run(root: Path, repo: Repository, run_id: str, *, head_sha: str = "") -> str:
+    """Put a run's assembled trace in this command's own drop box; the line.
+
+    For a verb that followed a run to its end. With a profile armed, the run
+    it watched goes into the same box its own children drop into, so one
+    file holds the local command, the run it caused, every job of that run
+    and every leg's tasks and tests underneath. The stamps are the wall
+    clock's, which is what a box takes, and the writer lays the whole thing
+    on this run's clock.
+
+    Empty when nothing is profiling, which is the ordinary case: a verb
+    calls this whatever the line asked for, and pays a dictionary read for
+    it.
+    """
+    from livery.footman import PROFILE_DIR
+
+    if not os.environ.get(PROFILE_DIR):
+        return ""
+    from livery.footman.profile import dropped
+
+    events, lines = assemble(root, repo, run_id, head_sha=head_sha, clock=0.0)
+    if not events:
+        return f"profile: {lines[0] if lines else f'run {run_id} assembled to nothing'}"
+    left = dropped(events)
+    if left is None:
+        return ""
+    jobs = len({e["tid"] for e in events if e.get("cat") == "job"})
+    return f"profile: run {run_id} joins this trace, {jobs} job(s)"

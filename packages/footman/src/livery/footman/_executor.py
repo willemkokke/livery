@@ -21,6 +21,7 @@ import inspect
 import io
 import json
 import os
+import sys
 import threading
 import time
 import types as _types
@@ -1824,6 +1825,7 @@ class _Lifecycle:
     inv: Any  # the frozen Invocation
     plugins: tuple[_HookPlugin, ...]
     finish: tuple[Task, ...] = ()  # post_tasks hooks, cascade order
+    handoffs: tuple[Task, ...] = ()  # pre_reexec blocks, cascade order
 
 
 # The run's per-task hooks, installed by the app layer for the duration of one
@@ -1847,6 +1849,7 @@ def install_lifecycle(inv: Any, contributions: Mapping[str, Sequence[Task]]) -> 
             owner = getattr(hook, "__module__", None) or "<unknown>"
             grouped.setdefault(owner, ([], [], []))[slot].append(hook)
     finish = tuple(contributions.get("post_tasks", ()))
+    handoffs = tuple(contributions.get("pre_reexec", ()))
     _lifecycle = (
         _Lifecycle(
             inv,
@@ -1855,10 +1858,51 @@ def install_lifecycle(inv: Any, contributions: Mapping[str, Sequence[Task]]) -> 
                 for name, (bind_pre, pre, post) in grouped.items()
             ),
             finish,
+            handoffs,
         )
-        if grouped or finish
+        if grouped or finish or handoffs
         else None
     )
+
+
+@contextlib.contextmanager
+def handing_off() -> Generator[dict[str, str]]:
+    """Hand this run's state to the process about to replace it.
+
+    A verb that re-runs its own command line in a new process wraps the
+    replacing in this, and hands what it yields to `execve` or to
+    `subprocess.run(env=…)` where there is no exec:
+
+        with footman.handing_off() as handed:
+            os.execve(exe, cmd, {**os.environ, **handed})
+
+    Every `pre_reexec` hook the run mounted is entered, and what they yield
+    is merged into one mapping of environment entries for the successor.
+    Nothing mounted, or nothing with state to carry, yields an empty mapping
+    and costs one attribute read.
+
+    The block ends by not returning, so returning normally means the
+    replacement did not happen: every hook is then closed the ordinary way
+    and takes its own state back. An exception means the replacement
+    happened — a handoff that waits for its child exits with its code — and
+    the hooks see it, so what they wrote down stands.
+
+    A hook that raises on the way in is named on stderr and skipped. A
+    plugin's bookkeeping never stops a repair that was already under way.
+    """
+    life = _lifecycle
+    handed: dict[str, str] = {}
+    with contextlib.ExitStack() as stack:
+        for hook in life.handoffs if life is not None else ():
+            try:
+                entered = stack.enter_context(hook())
+            except Exception as exc:
+                named = getattr(hook, "__module__", None) or "<unknown>"
+                print(f"{named}: its re-exec handoff failed ({exc})", file=sys.stderr)
+                continue
+            if isinstance(entered, Mapping):
+                handed.update({str(key): str(value) for key, value in entered.items()})
+        yield handed
 
 
 def clear_lifecycle() -> None:

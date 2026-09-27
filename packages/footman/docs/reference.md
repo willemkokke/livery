@@ -108,6 +108,12 @@ def digest(inv): ...  # inv.results / inv.skipped / inv.total_ms
 @wrap_task  # the pair as one generator
 def span(inv, task):
     result = yield  # (wrap_bind: two yields, enters at bind)
+
+
+@pre_reexec  # this process is about to replace itself
+@contextlib.contextmanager
+def carry():
+    yield {"STATE": "for the successor's environment"}
 ```
 
 ## Runtime helpers

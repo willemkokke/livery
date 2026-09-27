@@ -66,6 +66,7 @@ CONTRIBUTION_KINDS: tuple[str, ...] = (
     "pre_task",
     "post_task",
     "post_tasks",
+    "pre_reexec",
     "globals",
 )
 
@@ -1452,7 +1453,7 @@ class Group:
         self.tasks: dict[str, Task] = {}
         self.groups: dict[str, Group] = {}
         # Lifecycle contributions, one bucket per hook kind (root registry
-        # only). `pre_tasks` hooks are the only kind today.
+        # only), every kind in `CONTRIBUTION_KINDS`.
         # Hook kinds hold callables; the `globals` kind holds
         # `GlobalOption` singletons — one generic carriage, typed loosely.
         self.contributions: dict[str, list[Any]] = {
@@ -1872,6 +1873,38 @@ class Group:
         _note_contribution(fn, "post_tasks", fn)
         return fn
 
+    def pre_reexec(self, fn: _F) -> _F:
+        """Register a block for the moment this process replaces itself.
+
+        A verb that re-runs its own command line in a new process — a sync
+        that installed the code the process is running, a handoff into
+        another environment — loses everything the process held. A plugin
+        with state worth keeping across that gets it here:
+
+            @footman.pre_reexec
+            @contextlib.contextmanager
+            def carry_the_trace():
+                fragment = write_what_we_have()
+                yield {"MY_PLUGIN_STATE": str(fragment)}
+                fragment.unlink()  # still here, so nothing was replaced
+
+        The hook is a context manager taking nothing and yielding a mapping
+        of environment entries for the successor, which the caller hands to
+        `execve` or `subprocess.run(env=…)`. What it yields is merged with
+        every other subscriber's, and the caller's own entries win.
+
+        The block it wraps ends by not returning: an exec that works never
+        comes back, and a handoff that waits for its replacement exits with
+        its code. So a *normal* return means the replacement did not happen
+        and whatever was written down should be taken back; an exception
+        means it did, and the state stands. `livery.footman.handing_off` is
+        the composer a re-execing verb calls.
+        """
+        _check_hook_arity("pre_reexec", fn, 0)
+        self.contributions["pre_reexec"].append(fn)
+        _note_contribution(fn, "pre_reexec", fn)
+        return fn
+
     def wrap_task(self, fn: _F) -> _F:
         """Register a one-yield wrapper around the body: sugar over the pair.
 
@@ -2249,6 +2282,7 @@ task: Final[TaskDecorator] = root.task
 group: Final[GroupFactory] = root.group
 pre_tasks: Final[HookRegistrar] = root.pre_tasks
 post_tasks: Final[HookRegistrar] = root.post_tasks
+pre_reexec: Final[HookRegistrar] = root.pre_reexec
 pre_bind: Final[HookRegistrar] = root.pre_bind
 pre_task: Final[HookRegistrar] = root.pre_task
 post_task: Final[HookRegistrar] = root.post_task

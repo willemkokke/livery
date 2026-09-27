@@ -169,20 +169,25 @@ switch, and a child that finds no box writes nothing and reads nothing.
 ### A process that replaces itself
 
 An exec runs no exit handler. Everything a process recorded before replacing
-itself would die with it, and its box would be left behind. So a process
-about to do that hands its trace on:
+itself would die with it, and its box would be left behind. So a verb that
+replaces its own process wraps the replacing in footman's own handoff:
 
 <!-- example: fragment -->
 
 ```python
-from livery.footman import profile
+import livery.footman as footman
 
-with profile.handing_off() as traced:
-    os.execve(uv, cmd, {**os.environ, **traced})
+with footman.handing_off() as handed:
+    os.execve(uv, cmd, {**os.environ, **handed})
 ```
 
-`handing_off()` drops what the running task has recorded as a fragment, and
-yields the environment entries that give the box to the successor. The
+That verb knows nothing about traces. `handing_off` enters every `pre_reexec`
+block the run mounted and merges what they yield into the environment entries
+the successor needs, so a plugin with state worth keeping across a re-exec
+subscribes and the verbs stay out of it.
+
+This plugin's block drops what the running task has recorded as a fragment,
+and yields the entry that gives the box to the successor. The
 successor adopts that box instead of opening a second one, embeds the
 fragment, and removes the directory at the end, so the work before the exec
 sits in one file with the work after it. A fragment older than the run that

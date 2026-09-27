@@ -786,6 +786,18 @@ def current() -> Context:
     return ctx if ctx is not None else Context()
 
 
+PROFILE_DIR = "FM_PROFILE_DIR"
+"""The variable a profiled run names its trace-fragment drop box in.
+
+Anything may read it: a test runner, a build tool, a converter for another
+program's timings, a verb deciding whether a trace is worth assembling. The
+name is the same for every runner built on footman, brand and all, because a
+tool that speaks the convention cannot know a brand's prefix. Where the
+fragments go and what they look like is
+[livery.footman.profile][]'s to say; what this is for is asking whether there
+is a box at all, which costs one dictionary read and no import.
+"""
+
 _WALL_ANCHOR: tuple[float, float] = (time.time(), time.perf_counter())
 """One sampling of both clocks, taken together, so a wall-clock moment maps
 onto the run clock every record in this module keeps: a retroactive

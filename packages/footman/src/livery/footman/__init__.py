@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     # on a bare `import footman` (the completion hot path).
     from livery.footman import docstrings as docstrings
     from livery.footman import markdown as markdown
+    from livery.footman._executor import handing_off as handing_off
     from livery.footman._fetch import FetchError as FetchError
     from livery.footman._fetch import fetch as fetch
     from livery.footman._globals import Lane as Lane
@@ -35,6 +36,7 @@ if TYPE_CHECKING:
     from livery.footman.app import Brand as Brand
     from livery.footman.compose import include as include
     from livery.footman.compose import plugin as plugin
+    from livery.footman.context import PROFILE_DIR as PROFILE_DIR
     from livery.footman.context import Argv as Argv
     from livery.footman.context import AuditEntry as AuditEntry
     from livery.footman.context import Context as Context
@@ -113,6 +115,7 @@ if TYPE_CHECKING:
     from livery.footman.registry import post_tasks as post_tasks
     from livery.footman.registry import pre_bind as pre_bind
     from livery.footman.registry import pre_record as pre_record
+    from livery.footman.registry import pre_reexec as pre_reexec
     from livery.footman.registry import pre_task as pre_task
     from livery.footman.registry import pre_tasks as pre_tasks
     from livery.footman.registry import requires as requires
@@ -196,6 +199,7 @@ __all__ = [
     "forward",
     "given",
     "group",
+    "handing_off",
     "hidden",
     "include",
     "inherited",
@@ -214,6 +218,7 @@ __all__ = [
     "post_tasks",
     "pre_bind",
     "pre_record",
+    "pre_reexec",
     "pre_task",
     "pre_tasks",
     "prog",
@@ -337,6 +342,7 @@ def __getattr__(name: str) -> object:
         "pre_task",
         "post_task",
         "post_tasks",
+        "pre_reexec",
         "wrap_task",
         "wrap_bind",
         "Tasks",
@@ -350,6 +356,10 @@ def __getattr__(name: str) -> object:
         from livery.footman import registry
 
         return getattr(registry, name)
+    if name == "handing_off":
+        from livery.footman import _executor
+
+        return _executor.handing_off
     if name == "step":
         from livery.footman import _step
 

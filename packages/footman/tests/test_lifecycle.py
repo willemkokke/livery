@@ -2182,3 +2182,119 @@ def test_wrap_task_sugar_on_the_handle_spans_one_execution():
     result = Runner().invoke("build", tasks=reg)
     assert result.ok, result.stderr
     assert spans == ["open", ("close", True)]
+
+
+# --- pre_reexec: the moment a process replaces itself -------------------------
+
+
+def _handoff_run(*hooks: Any) -> None:
+    """Arm *hooks* as this run's `pre_reexec` blocks."""
+    reg = Group("root")
+    for hook in hooks:
+        reg.pre_reexec(hook)
+    _executor.install_lifecycle(object(), reg.contributions)
+
+
+def test_nothing_subscribed_hands_nothing_on():
+    """The ordinary case: a verb re-execs and no plugin wants anything kept."""
+    import livery.footman as footman
+
+    _executor.clear_lifecycle()
+    with footman.handing_off() as handed:
+        assert handed == {}
+
+
+def test_a_hook_that_fails_on_the_way_in_is_named_and_skipped(capsys):
+    """A plugin's bookkeeping never stops a repair already under way.
+
+    The re-exec is how a sync recovers from having replaced the code under a
+    running process. A subscriber that raises would otherwise turn that
+    repair into an outage.
+    """
+    import contextlib
+
+    import livery.footman as footman
+
+    @contextlib.contextmanager
+    def broken() -> Any:
+        raise RuntimeError("no room on the disk")
+        yield {}  # pragma: no cover - unreachable, and says what it would give
+
+    @contextlib.contextmanager
+    def sound() -> Any:
+        yield {"KEPT": "1"}
+
+    _handoff_run(broken, sound)
+    try:
+        with footman.handing_off() as handed:
+            assert handed == {"KEPT": "1"}
+        assert "no room on the disk" in capsys.readouterr().err
+    finally:
+        _executor.clear_lifecycle()
+
+
+def test_what_every_subscriber_yields_is_merged_and_taken_back_on_return():
+    """Returning from the block means the replacement never happened.
+
+    An exec that works never comes back, so a normal return is the signal
+    that whatever was written down should be undone: each hook closes the
+    ordinary way and sees it.
+    """
+    import contextlib
+
+    import livery.footman as footman
+
+    undone: list[str] = []
+
+    @contextlib.contextmanager
+    def first() -> Any:
+        yield {"A": "1"}
+        undone.append("first")
+
+    @contextlib.contextmanager
+    def second() -> Any:
+        yield {"B": "2"}
+        undone.append("second")
+
+    _handoff_run(first, second)
+    try:
+        with footman.handing_off() as handed:
+            assert handed == {"A": "1", "B": "2"}
+        assert undone == ["second", "first"]  # unwound in reverse
+    finally:
+        _executor.clear_lifecycle()
+
+
+def test_a_replacement_that_happened_leaves_every_hook_holding_its_state():
+    """An exception in the block is the replacement working.
+
+    The Windows arm raises `SystemExit` with the replacement's code, and a
+    hook must keep what it handed on rather than delete it behind a process
+    that is already using it.
+    """
+    import contextlib
+
+    import livery.footman as footman
+
+    undone: list[str] = []
+
+    @contextlib.contextmanager
+    def keeper() -> Any:
+        yield {"A": "1"}
+        undone.append("keeper")  # pragma: no cover - the point is it is skipped
+
+    _handoff_run(keeper)
+    try:
+        with pytest.raises(SystemExit), footman.handing_off():
+            raise SystemExit(3)
+        assert undone == []
+    finally:
+        _executor.clear_lifecycle()
+
+
+def test_a_hook_of_the_wrong_arity_is_refused_where_it_is_written():
+    reg = Group("root")
+    with pytest.raises(RegistrationError):
+
+        @reg.pre_reexec
+        def wants_something(inv): ...
