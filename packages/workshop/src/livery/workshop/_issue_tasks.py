@@ -269,6 +269,33 @@ def issue_update(
     print(f"  #{number}: {changed} updated")
 
 
+@issue.task(name="comment")
+def issue_comment(
+    number: Arg[int] = 0,
+    body: Annotated[str, doc("what to add to the issue's thread")] = "",
+) -> None:
+    """Add to an issue's thread, leaving its body alone.
+
+    The body is the work order and the thread its continuation, so a
+    ruling, a measurement or a change of direction goes here rather
+    than into a rewrite of the body, which would replace the
+    specification a reader opens the issue for. The issue is read
+    first, so a wrong number refuses by name instead of writing
+    nowhere.
+    """
+    if not number:
+        fail(f"name the issue: `{footman.prog()} issue.comment 123 --body=...`")
+    if not body:
+        fail("nothing to say: pass --body with the text for the thread")
+    root = _workspace()
+    repo = _repo(root)
+    found = repo.issue.get(number)
+    if found is None:
+        fail(f"issue #{number} does not exist in this repository")
+    repo.issue.comment(number, body)
+    print(f"  #{number}: added to the thread")
+
+
 _PLAIN_BRANCH_RE = re.compile(rf"^({'|'.join(_KINDS)})/([a-z0-9][a-z0-9-]*)$")
 
 

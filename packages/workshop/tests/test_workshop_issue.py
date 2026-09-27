@@ -552,6 +552,30 @@ def test_update_rewrites_only_the_provided_fields(
     assert "body updated" in capsys.readouterr().out
 
 
+def test_comment_adds_to_the_thread_and_leaves_the_body(
+    rig: tuple[Path, FakeForge, GitOps],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from livery.workshop._issue_tasks import issue_comment
+
+    fake = rig[1]
+    repo = fake.repository("willemkokke", "livery")
+    issue = repo.issue.create("original", body="the work order")
+    # The refusals first: no number, no text, then a missing issue.
+    with pytest.raises(_FAILURES, match="name the issue"):
+        issue_comment(0, body="nowhere")
+    with pytest.raises(_FAILURES, match="nothing to say"):
+        issue_comment(issue.number)
+    with pytest.raises(_FAILURES, match="does not exist"):
+        issue_comment(issue.number + 999, body="nowhere")
+    issue_comment(issue.number, body="the ruling, dated")
+    got = repo.issue.get(issue.number)
+    assert got is not None
+    assert got.body == "the work order"
+    assert [c.body for c in repo.issue.comments(issue.number)] == ["the ruling, dated"]
+    assert "added to the thread" in capsys.readouterr().out
+
+
 def test_create_falls_back_when_the_label_is_refused(
     rig: tuple[Path, FakeForge, GitOps],
     capsys: pytest.CaptureFixture[str],
