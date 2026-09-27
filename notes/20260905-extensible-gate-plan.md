@@ -118,14 +118,14 @@ place the tool exists:
 - the callable that runs it, and the fix-mode callable when the
   tool can rewrite;
 - which files it claims, named as classifications rather than as
-  globs. The kind already answers `classify(package, path)` with
-  source, test, test support, or configuration, so a check says
-  which of those it judges and the kind decides what that means
-  for each of its members. Two checks may claim one
-  classification under different rules, which is how ruff judges
-  a cpp-conan package's `conanfile.py` by one set and a python
-  package's sources by another, derived from the claim instead of
-  typed into a `per-file-ignores` table by hand;
+  globs: a check says which kinds of file it judges and the kind
+  decides what that means for each of its members. Two checks may
+  claim one classification under different rules, which is how
+  ruff judges a cpp-conan package's `conanfile.py` by one set and
+  a python package's sources by another, derived from the claim
+  instead of typed into a `per-file-ignores` table by hand. The
+  classification comes from the shared path registry below, not
+  from a table of the check's own;
 - how it narrows under `--affected`: by explicit paths, by a
   package subset, or not at all (the whole is always checked);
 - the configuration fragments the render manages for it, one per
@@ -157,6 +157,31 @@ the rendered file instead would move the truth from the template
 to the template plus the passes, and every rewrite of TOML or of
 JSON with comments either loses the prose or dictates how it may
 be written, which these files carry on purpose.
+
+**What a file is, answered in one place.** The workshop asks more
+than one question about a path. What is this to the build: source,
+a test, test support, configuration? Who owns it, and where do I
+edit it: a layer's fragment, a rendered file, an emitted one, or
+yours? Those are separate questions and one file has an answer to
+each, so they are separate *axes*, never one merged vocabulary.
+
+They are the same mechanism, though: an ordered set of rules from
+a path to an answer, with a fallback, and the most specific rule
+winning. So there is one registry of path rules, carrying several
+axes, and a kind or a layer registers into it exactly as it
+registers a kind or a check. Today each axis is instead a closed
+ladder in one module, which is why a layer can teach the workshop
+a new package kind but not what a file of that kind *is*, and why
+`fm explain` answered "layer fragment" for a tool receipt until
+the directory it lived in was split.
+
+Registered, not configured. The layout a kind expects is a fact
+about the kind, so it is layer code like everything else here. One
+package's local exception is a fact about that package, and the
+contract carries it in the same narrow shape it carries a coverage
+floor: these paths are not what the kind would assume. Anything
+wider than that exception is a policy toggle, and the boundary
+above refuses it.
 
 **The editor answers with the gate's checkers.** A checker
 configured in `pyproject.toml` is the same program in an editor
@@ -346,6 +371,13 @@ are listed as available, activating nothing (contract 3).
   with the version named.
 
 ### Phase 4: the check owns its configuration and tool
+
+A check's claim reads the shared path registry, so the phase that
+builds that registry comes first and this one is renumbered behind
+it. Its design is not settled (open item 9), and building the claim
+on today's per-kind `classify` instead would be the second shape
+this plan then replaces, which is the argument that retired
+`kindcheck` inside phase 2.
 
 The record gains its configuration fragments, its claim, and the
 tool-profile contribution, moving all three out of their current
@@ -646,6 +678,22 @@ the kit cannot drift from the enforcement.
   repository is where the template is written and a born project
   is the consumer, so an absent local instance is the state before
   the option ships, never evidence of low demand.
+- 2026-09-27, path classification is one shared, extensible
+  mechanism (Willem: "the classification of fm.explain and for the
+  tools should be shared, and configurable", and on the sketch
+  below, "that is the goal, but I think it needs refinement
+  still"). The direction is ruled and the design is not: what is
+  settled is that the axes stay separate (a file is both
+  `configuration` to its kind and `rendered` to the channel, and
+  merging the vocabularies would lose one of those), that the
+  mechanism behind them is one registry a kind or a layer
+  registers into, and that the layout a kind expects is layer code
+  with only a narrow per-package exception in the contract. What
+  is not settled is open item 9. The phase lands before the
+  present phase 4, which is where the first new consumer is; the
+  numbering is left alone until the design settles, because a
+  third of this note's phase references are dated decision-record
+  lines that must keep meaning what they meant.
 
 ## Open
 
@@ -688,3 +736,31 @@ the kit cannot drift from the enforcement.
    verify offline, so the check record either carries a verified
    id or carries nothing and the editor keeps quiet about that
    tool. Owner: Willem, with phase 4.
+9. The shared path registry's design, which the decision record
+   rules the direction of and leaves the shape of. Six questions,
+   and the first two decide the rest:
+   - **What a rule is.** The two axes are not alike today. A kind's
+     `classify` is a pure function of a package-relative string. A
+     provenance answer reads state: the materialise manifest, the
+     emitters' path set, the rendered names, the template source.
+     One mechanism must admit both, which makes it a registry of
+     callables rather than a table of patterns, and gives up
+     declaring rules as data.
+   - **What an answer is.** One axis answers a label
+     (`source`), the other a record of three fields (channel,
+     source, edit path). Generic over the answer buys extensibility
+     and costs the registry any ability to check the answers
+     themselves.
+   - **How rules from two layers order.** Most specific wins is
+     easy to say and needs defining over callables. Whatever it
+     is, two checkouts of one commit must order alike.
+   - **How far the per-package exception reaches**, in the shape a
+     coverage floor already has. A vendored tree that is not
+     source is the motivating case; "these paths are not what the
+     kind would assume" is the bound to hold it to.
+   - **Whether the existing two axes migrate, or only the new
+     claim uses the registry first.** Migrating both proves the
+     mechanism; migrating neither leaves three ladders.
+   - **What `fm explain` prints** once a path has an answer on
+     more than one axis.
+   Owner: Willem. Blocks the claim in phase 4.
