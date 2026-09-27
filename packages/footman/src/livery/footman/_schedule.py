@@ -660,6 +660,27 @@ def _in_request_order(
     return ordered
 
 
+def finished_rows() -> list[_executor.TaskResult]:
+    """Every task this run has concluded, in the order the work was asked for.
+
+    Readable while the run is still going, which is the point: a task that
+    reports on the run, or a process about to replace itself with another,
+    can speak for work it did not do itself. A body reaches its own steps
+    through the context and the rows of its own body calls through
+    `livery.footman._futures.collected`, and neither covers a task that
+    finished earlier in the same process.
+
+    A row appears once its task concludes, so the task calling this is never
+    in the answer, and neither is anything still running beside it. Empty
+    outside a run.
+
+    The rows are the run's own, not copies: a caller reads them and writes
+    nothing. What a `post_tasks` hook receives at the end is these same rows
+    behind a read-only view.
+    """
+    return _in_request_order(_futures.rows())
+
+
 def confirm_gate(
     fn: Task, seg: Segment, ctx: context.Context
 ) -> _executor.TaskResult | None:
@@ -1150,6 +1171,9 @@ def _run_parallel(
             n.result.seq = n.seq
         else:  # a shared row keeps its above-the-record floor
             n.result.seq = max(n.result.seq, n.seq)
+        # The run's live view: published after the numbering, because a
+        # reader orders by it.
+        _futures.seal(n.result)
         if not capture and ctx.sink is not None:
             # Flush this task's buffered output as one block — queued while a
             # wizard owns the terminal, so it never splats over a prompt.
