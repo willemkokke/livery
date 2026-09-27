@@ -27,11 +27,12 @@ here has seen.
 - **Value with zero declaration.** A workspace that does nothing still
   gets a document generated from the locks it already has. If the first
   step is filling in a register, most consumers never take it.
-- **Enforcement opt-in, with a level.** A gate that refused undeclared
-  components would break every existing workspace on upgrade. It takes
-  the shape the contract already uses for an optional capability, where
-  off costs nothing and a workspace turns it up when it wants it: off,
-  report, enforce.
+- **Enforcement opt-in by mounting, not by a switch.** A gate that
+  refused undeclared components would break every existing workspace on
+  upgrade. The mechanism already exists and needs no new vocabulary:
+  the layers list is the only activation record, an installed but
+  unlisted layer does nothing and `fm doctor` names it as available.
+  Mounting the layer is the opt-in.
 - **Honest per kind.** A kind with no enumerator says so, the way the
   gate already skips a verb that does not apply rather than passing
   vacuously. Other people's workspaces will carry kinds nobody has
@@ -612,6 +613,80 @@ refuse the build while it is missing.
 - **PEP 740** for index attestations and **PEP 770** for SBOMs inside
   wheels.
 
+## How it is built, and which seams exist
+
+### A layer, activated by being listed
+
+The extensible gate plan already rules the shape: "Layers activate by
+being listed. The `[workspace]` table's `layers` list is the only
+activation record. Installing a wheel never activates anything: an
+installed but unlisted layer is visible to `fm doctor`, which names it
+as available, and it does nothing else."
+
+That is the opt-in, and it is better than a level key because an
+unlisted layer cannot change any verdict. The same plan rules the
+boundary that decides what goes where: facts live in the contract,
+opinions live in layers, and a decision is replaced by code in a layer,
+never by a settings switch. So what a workspace ships, its support
+lifetime and its retention period are facts and belong in
+`workshop.toml`. Strictness is an opinion and is the layer's; a
+consumer who wants it stricter layers over it.
+
+One line inside that: a verb that only prints belongs in the workshop
+core, beside `fm explain` and `fm doctor`, because that is how a
+workspace gets value with zero declaration. Anything that refuses, adds
+a gate leg, or attaches a release asset belongs in the mounted layer.
+
+### Seams that exist today
+
+- **Layer mounting and verbs.** A layer's footman plugin grafts at
+  mount, in precedence order; discovery is the list and nothing else.
+- **Kinds from a layer.** `register_kind` at mount, so the per-kind
+  enumerators can ship from a layer rather than from core.
+- **Contract extension is free.** `_contract.py` refuses only a key
+  spelled with an underscore, not an unknown table, so a layer reads
+  its own tables with no registration seam.
+- **Templates and guidance fragments** from a layer.
+- **Scheduled points.** `[[ci.schedule]]` with a point and a task,
+  where the periodic vulnerability mapping goes.
+- **Forge abstraction** for release assets, already exercised by the
+  conan cache tarballs the wave attaches.
+- **Retention**, for a consumer that has strongroom: every ref is a
+  root, and `pins/` exists for explicit ones.
+
+### Designed, not built
+
+**The check registry.** `_quality.py` hard-codes the verb list and
+`_backends/_python.py` hard-codes the tools inside each verb. Phase 2
+of [the extensible gate plan](20260905-extensible-gate-plan.md) is
+`CheckRecord` and `register_check` beside the kind registry; phase 3 is
+layers registering checks with doctor discovering them. Phase 0 landed;
+phases 1 to 7 await review. Until they land, a layer cannot add a gate
+leg without patching the workshop, so the enforcing half of this
+capability is blocked on a plan already in the queue rather than on
+anything new.
+
+### Missing entirely
+
+- **A release-wave seam.** Nothing in the workshop's publish or release
+  driver lets a layer contribute a step or attach a file to a release.
+  Per-artifact documents land there, so it needs designing, and it is
+  small: the wave already attaches collected files on the conan route.
+- **The enumerator on `Backend`.** A new protocol member touches every
+  kind, so it is core work and not a layer's.
+
+### What the seams do to the order
+
+The ordering below survives, and its first four items are nearly
+unblocked. The report reads contracts, the tool lock with its per-host
+digests, the gate record and the receipts, and prints, so it needs no
+seam at all. The dependency document and the attribution artifact
+generate today as verbs, and only their attachment to a release waits
+on the wave seam. The attestation is a small change inside the
+workshop's own publish. Items five to seven are the ones that wait: the
+enumerators on the `Backend` member, the enforcing gate on the check
+registry, and retention on the wave seam.
+
 ## Ordering
 
 By value to an arbitrary consumer per unit of work. The first four need
@@ -663,6 +738,10 @@ worse.
   built on public checkpoints such as wav2vec.
 - 2026-09-27, this is an investigation, not musings, and it leads to a
   plan.
+- 2026-09-27, mounting is the opt-in (from the extensible gate plan's
+  rulings, not a new decision). An unlisted layer changes no verdict,
+  so the capability needs no level key. Facts stay in the contract,
+  strictness is the layer's, and a print-only verb may sit in core.
 - 2026-09-27, the subject is the capability, not one audit (Willem).
   The concern is that a workspace managed by the workshop gets as much
   automatic help in passing an audit as can be provided. One consumer's
@@ -702,9 +781,10 @@ worse.
 
 ## Open
 
-1. **The level vocabulary** a workspace declares, off, report and
-   enforce as the candidate, and the default for a workspace that
-   declares nothing.
+1. **Which facts the contract carries** for this capability, given
+   that strictness is the layer's and mounting is the switch: what a
+   workspace ships, its support lifetime, its retention period, and
+   whether anything else qualifies as a fact rather than an opinion.
 2. **The annotation format**, in full: the rule shape, the binding to a
    tree digest, and whether required keys are a namespace profile.
    Nothing here fixes a field list.
