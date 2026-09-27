@@ -894,6 +894,9 @@ profile = ci.group("profile", help="A run as one timeline")
 def ci_profile(
     *,
     run: Annotated[str, doc("the run's id; the newest for HEAD by default")] = "",
+    from_: Annotated[
+        str, doc("walk every run about this commit, and what its merge caused")
+    ] = "",
     into: Annotated[str, doc("where the file lands; the contract's own by default")] = (
         ""
     ),
@@ -905,19 +908,37 @@ def ci_profile(
     and tests, laid on the run's clock by the origin each side recorded.
     This is what the legs' traces are kept for, and what the window bounds.
 
+    ``--from=<commit>`` writes the chain instead: every run about that
+    commit, and the runs of the commit its merge produced. A release is
+    two commits and one hop, so the pull request's run, the base's own
+    run and the wave land in one file. Any commit-ish a checkout can
+    resolve names it, ``HEAD`` included.
+
     Refuses when no file could be written, naming why: a person asked for
     one. A run whose traces have aged out of the window still assembles from
     the forge's skeleton alone, and says which legs brought nothing.
     """
-    from livery.workshop._traces import write_run
+    from livery.workshop._traces import write_chain, write_run
 
     repo, git = _resolved()
+    where = Path(into) if into else None
+    if from_:
+        commit = git.sha_of(from_)
+        if not commit:
+            fail(f"--from={from_} names no commit this checkout can resolve")
+        path, lines = write_chain(git.root, repo, commit, into=where)
+        for line in lines:
+            print(f"  {line}")
+        if path is None:
+            fail(lines[0] if lines else f"nothing about {commit[:12]}")
+        print(f"  profile: {path}")
+        return
     path, lines = write_run(
         git.root,
         repo,
         run_id=run,
         head_sha="" if run else git.head_sha(),
-        into=Path(into) if into else None,
+        into=where,
     )
     for line in lines:
         print(f"  {line}")

@@ -26,7 +26,7 @@ import itertools
 import json
 import os
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -159,6 +159,20 @@ TRACES = Keyed(
 )
 
 
+#: What a run ran on, when the forge files it under another commit: one
+#: ref per commit, a row per run. A run dispatched on a branch is filed
+#: under that branch's tip, which a merge landing first moves past the
+#: commit the dispatch named, so the run writes down the commit it
+#: actually checked out. Read beside the forge's own listing, never
+#: instead of it, and kept by age because a sha ranks by nothing.
+ABOUT = Keyed(
+    "about",
+    ("commit",),
+    namespace=TRACE_NAMESPACE,
+    stale_after=timedelta(days=90),
+)
+
+
 def this_leg() -> str:
     """The leg this process belongs to, as the job runner named it."""
     return os.environ.get(LEG_VARIABLE, "")
@@ -206,6 +220,224 @@ def push(
         return f"profile: the trace was not pushed ({refused})"
     size = trace.stat().st_size
     return f"profile: {size // 1024} KiB pushed to {series.ref}"
+
+
+def about(root: Path, git: GitOps, *, run: RunContext | None = None) -> str:
+    """Record the commit this run ran on when the forge files it elsewhere; the line.
+
+    A push run and a pull request run are filed under the commit they
+    ran on, so nothing needs writing down. A dispatched run is filed
+    under the tip of the ref it was dispatched on, and another merge
+    landing between the dispatch and the run moves that tip past the
+    commit the dispatch named. Then the forge's listing for the commit
+    the run is about does not hold it, and only the run itself knows.
+
+    Empty when the contract asks for no traces, outside a run, and on
+    every run whose own head is the commit it checked out, which is
+    most of them. Every other answer is a line.
+    """
+    # A key of the wrong type is named by the trace push of the same
+    # job, so this reads the switch and says nothing about the contract.
+    kept, _why = policy(root)
+    if not kept.legs:
+        return ""
+    found = run or run_context()
+    if found is None:
+        return ""
+    head = git.head_sha()
+    if not head or head == found.head_sha:
+        return ""  # the forge already files it here
+    refused = ABOUT.series(head).put(
+        root,
+        {found.run_id: {"run": found.run_id, "event": found.event, "ref": found.ref}},
+        message=f"about: run {found.run_id} ran on {head[:12]}",
+    )
+    if refused:
+        return f"profile: what this run ran on was not recorded ({refused})"
+    return f"profile: run {found.run_id} recorded as the run of {head[:12]}"
+
+
+@dataclass(frozen=True)
+class Caused:
+    """One run about a commit.
+
+    Attributes:
+        run_id: The forge's own id for the run.
+        event: What started it, as the forge or the run's own record
+            spells it.
+        recorded: Whether the run said so itself, because the forge
+            files it under another commit.
+    """
+
+    run_id: str
+    event: str
+    recorded: bool = False
+
+
+def runs_about(
+    root: Path, repo: Repository, commit: str
+) -> tuple[tuple[Caused, ...], list[str]]:
+    """Every run about *commit*, and a line per thing worth saying.
+
+    Two sources in one answer. The forge's listing for the commit holds
+    the push run, the pull request runs and every dispatched run it
+    filed under it. Beside that, the runs that recorded themselves,
+    because the forge filed them under a commit that had moved on. A run
+    both sources name appears once, from the forge.
+    """
+    found = [
+        Caused(str(run.id), run.event) for run in repo.checks.runs(head_sha=commit)
+    ]
+    known = {caused.run_id for caused in found}
+    rows = ABOUT.series(commit).rows(root)
+    lines = [f"{commit[:12]}: {rows.reason}"] if rows.reason else []
+    for row in rows.rows:
+        run_id = str(row.data.get("run") or "")
+        if run_id and run_id not in known:
+            found.append(Caused(run_id, str(row.data.get("event") or ""), True))
+            known.add(run_id)
+    return tuple(found), lines
+
+
+@dataclass(frozen=True)
+class Node:
+    """One commit of a chain, and the runs about it.
+
+    Attributes:
+        commit: The commit.
+        runs: Every run about it that assembled to something, in the
+            order they were walked.
+    """
+
+    commit: str
+    runs: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class Walked:
+    """A chain of runs as one timeline.
+
+    Attributes:
+        events: Every run's events on one clock, in epoch microseconds,
+            which is what a drop box takes and what a file records its
+            zero against.
+        nodes: The commits walked, in order.
+        lines: A line per thing worth saying about the walking.
+    """
+
+    events: list[dict[str, Any]]
+    nodes: tuple[Node, ...]
+    lines: list[str]
+
+
+def chain(
+    root: Path,
+    repo: Repository,
+    commit: str,
+    *,
+    depth: int = 2,
+    now: datetime | None = None,
+) -> Walked:
+    """Every run about *commit*, and the runs of what its merge produced.
+
+    Three recorded facts and no guesses: what the forge lists for a
+    commit, what a run wrote down about the commit it ran on, and the
+    merge commit a pull request names. So a chain followed while it
+    happens and one walked from the same commit weeks later are the same
+    tree, which is the property this exists for.
+
+    A release is two commits and one hop. The branch commit carries the
+    pull request's run; the merge commit carries the base's own run and
+    the wave dispatched at it, which is filed under the base's tip and
+    found through the commit it recorded rather than through a time.
+
+    Args:
+        root: The workspace root, whose channel the traces are read from.
+        repo: The repository the runs belong to.
+        commit: Where the walk starts.
+        depth: How many merges to follow. Zero walks the one commit.
+        now: The moment a job still running is measured to.
+
+    Returns:
+        The events, the commits walked with the runs about each, and a
+        line per thing worth saying. A commit with no run and no merge
+        is a node with nothing under it, never a guess.
+    """
+    moment = now or datetime.now(UTC)
+    events: list[dict[str, Any]] = []
+    lines: list[str] = []
+    nodes: list[Node] = []
+    walked: set[str] = set()
+    taken: set[str] = set()
+    ceiling = 0
+    ahead = [(commit, depth)]
+    while ahead:
+        at, left = ahead.pop(0)
+        if not at or at in walked:
+            continue
+        walked.add(at)
+        caused, why = runs_about(root, repo, at)
+        lines += why
+        kept: list[str] = []
+        said: list[str] = []
+        for run in caused:
+            if run.run_id in taken:
+                continue
+            taken.add(run.run_id)
+            made = assemble(root, repo, run.run_id, head_sha=at, clock=0.0, now=moment)
+            lines += [f"run {run.run_id}: {line}" for line in made.lines]
+            if not made.events:
+                continue
+            moved, ceiling = _renumbered(made.events, by=ceiling, about=at, run=run)
+            events += moved
+            kept.append(run.run_id)
+            said.append(
+                f"run {run.run_id} ({run.event}"
+                + (", recorded)" if run.recorded else ")")
+            )
+        nodes.append(Node(at, tuple(kept)))
+        lines.append(f"{at[:12]}: {', '.join(said) if said else 'no run assembled'}")
+        if left <= 0:
+            continue
+        found = repo.pr.find_by_head_sha(at)
+        if found is None or not found.merged_sha:
+            continue
+        lines.append(f"{at[:12]} merged as {found.merged_sha[:12]} by #{found.number}")
+        ahead.append((found.merged_sha, left - 1))
+    return Walked(events, tuple(nodes), lines)
+
+
+def _renumbered(
+    events: list[dict[str, Any]], *, by: int, about: str, run: Caused
+) -> tuple[list[dict[str, Any]], int]:
+    """*events* with every process shifted by *by*; them and the highest used.
+
+    Every run's own process carries the same number, and its legs'
+    groups are numbered from the same place, so two runs laid side by
+    side would read as one process. Shifting by what the chain has used
+    so far keeps them apart however many runs it walks. The run's own
+    process also takes the commit it is about into its name, because
+    two runs of one chain are told apart by that and not by their ids.
+    """
+    highest = by
+    moved: list[dict[str, Any]] = []
+    for event in events:
+        own = event.get("pid")
+        if not isinstance(own, int):
+            moved.append(event)
+            continue
+        shifted = {**event, "pid": own + by}
+        highest = max(highest, own + by)
+        if (
+            own == RUN_PID
+            and event.get("ph") == "M"
+            and event.get("name") == "process_name"
+        ):
+            shifted["args"] = {
+                "name": f"run {run.run_id} of {about[:12]} ({run.event})"
+            }
+        moved.append(shifted)
+    return moved, highest
 
 
 @dataclass(frozen=True)
@@ -521,6 +753,84 @@ def drop_run(repo: Repository, git: GitOps, *, run_id: str = "") -> str:
         return f"profile: the run was not traced ({error})"
     jobs = len({e["tid"] for e in made.events if e.get("cat") == "job"})
     return f"profile: run {found} joins this trace, {jobs} job(s)"
+
+
+def drop_chain(
+    repo: Repository, git: GitOps, *, commit: str = "", depth: int = 2
+) -> str:
+    """Put the chain from *commit* in this command's own drop box; the line.
+
+    For a verb that followed its work to the end of everything it
+    caused: a release, whose pull request run, base run and wave are one
+    story. The stamps are the wall clock's, which is what a box takes,
+    and this box's writer lays the whole thing on its own clock.
+
+    ``HEAD`` by default. Empty when no trace is being kept, which is the
+    ordinary case, so the verb pays one environment read.
+
+    Never raises. A trace is something noticed about work that is
+    already done, so nothing here may change what that work decided:
+    every failure, git's and the forge's alike, comes back as the line
+    to print.
+    """
+    from livery.footman.profile import dropped, keeping
+
+    if not keeping():
+        return ""
+    try:
+        at = commit or git.head_sha()
+        walked = chain(git.root, repo, at, depth=depth, now=None)
+        if not walked.events:
+            why = walked.lines[-1] if walked.lines else f"nothing about {at[:12]}"
+            return f"profile: {why}"
+        if dropped(walked.events) is None:
+            return ""
+    except Exception as error:
+        return f"profile: the chain was not traced ({error})"
+    runs = sum(len(node.runs) for node in walked.nodes)
+    return f"profile: {runs} run(s) of {len(walked.nodes)} commit(s) join this trace"
+
+
+def write_chain(
+    root: Path,
+    repo: Repository,
+    commit: str,
+    *,
+    depth: int = 2,
+    into: Path | None = None,
+) -> tuple[Path | None, list[str]]:
+    """Write the chain from *commit* where a person can open it; and the lines.
+
+    The same walk the release command drops into its own trace, asked
+    for from a commit instead. The directory is the contract's
+    ``[ci] profile-into`` unless the caller names another.
+    """
+    from livery.footman.profile import as_trace
+
+    kept, why = policy(root)
+    if why:
+        return None, [f"profile: {why}"]
+    walked = chain(root, repo, commit, depth=depth)
+    if not walked.events:
+        return None, walked.lines
+    where = into or Path(kept.into)
+    at = where if where.is_absolute() else root / where
+    at.mkdir(parents=True, exist_ok=True)
+    path = at / f"chain-{commit[:12]}.json"
+    stamps = [
+        float(event["ts"])
+        for event in walked.events
+        if isinstance(event.get("ts"), (int, float))
+    ]
+    origin = min(stamps) if stamps else 0.0
+    shifted = [
+        {**event, "ts": round(float(event["ts"]) - origin, 1)}
+        if isinstance(event.get("ts"), (int, float))
+        else event
+        for event in walked.events
+    ]
+    path.write_text(as_trace(shifted, origin=origin), encoding="utf-8")
+    return path, walked.lines
 
 
 def write_run(

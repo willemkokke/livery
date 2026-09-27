@@ -842,3 +842,248 @@ def test_a_job_the_forge_gave_no_extent_is_an_event_and_never_a_span(
     assert drawn["dispatch"]["ph"] == "i"
     assert drawn["Set up job"]["ph"] == "i"
     assert not [e for e in made.events if e.get("ph") == "X" and e.get("dur", 1) <= 0]
+
+
+class _Head:
+    """A git stand-in answering one commit as its head.
+
+    The fake forge mints shas of its own, and the commit a wave checks
+    out is one of those; a real checkout of it is nothing this test
+    needs.
+    """
+
+    def __init__(self, root: Path, sha: str) -> None:
+        self.root = root
+        self._sha = sha
+
+    def head_sha(self) -> str:
+        return self._sha
+
+
+def _wave(repo: Any, commit: str) -> Any:
+    """The dispatched run the forge filed under *commit*."""
+    return next(run for run in repo.checks.runs(head_sha=commit) if run.event != "push")
+
+
+def test_a_commit_nobody_can_walk_from_is_a_root_and_a_loop_cannot_spin(
+    work: Path,
+) -> None:
+    """The refusals first: nothing is guessed, and no walk runs away.
+
+    A commit with no run and no merge is a node with nothing under it.
+    A forge that answers a merge commit which leads back to a commit
+    already walked ends the walk there, and a depth of zero walks one
+    commit however many merges there are.
+    """
+    from typing import cast
+
+    from livery.forge import PullRequest, Repository
+
+    class _Checks:
+        def runs(self, *, head_sha: str = "", event: str = "") -> tuple[object, ...]:
+            return ()
+
+        def jobs(self, run: int) -> tuple[object, ...]:
+            return ()
+
+    class _Pulls:
+        def find_by_head_sha(self, sha: str) -> PullRequest:
+            # Every commit's merge leads back to itself: a forge cannot
+            # answer this, and the walk must not depend on it not doing so.
+            return PullRequest(
+                number=1,
+                title="t",
+                body="",
+                state="closed",
+                merged=True,
+                head_branch="",
+                head_sha=sha,
+                base_branch="main",
+                url="fake://pr/1",
+                author="someone",
+                merged_sha=sha,
+            )
+
+    class _Repo:
+        checks = _Checks()
+        pr = _Pulls()
+
+    repo = cast(Repository, cast(Any, _Repo()))
+    walked = _traces.chain(work, repo, "a" * 40, depth=3)
+    assert [node.commit for node in walked.nodes] == ["a" * 40]
+    assert walked.nodes[0].runs == ()
+    assert walked.events == []
+    assert any("no run assembled" in line for line in walked.lines)
+    # And a depth of zero never asks for the merge at all.
+    assert len(_traces.chain(work, repo, "b" * 40, depth=0).nodes) == 1
+
+
+def test_a_contract_that_wants_no_traces_records_nothing_about_a_run(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from typing import cast
+
+    _contract(work, profile=False)
+    _in_ci(monkeypatch, run="91", leg="publish")
+    context = _state.RunContext(
+        "github", "91", "workflow_dispatch", "refs/heads/main", "f" * 40
+    )
+    assert _traces.about(work, cast(Any, _Head(work, "e" * 40)), run=context) == ""
+    assert _state.read(work, _traces.ABOUT.series("e" * 40).ref).files is None
+
+
+def test_a_run_the_forge_files_under_another_commit_records_what_it_ran_on(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The record exists for one case and stays quiet in every other.
+
+    A push run and a pull request run are filed under the commit they
+    ran on, and then there is nothing to write down.
+    """
+    from typing import cast
+
+    _in_ci(monkeypatch, run="91", leg="publish")
+    ran_on, filed_under = "e" * 40, "f" * 40
+    same = _state.RunContext("github", "91", "push", "refs/heads/main", ran_on)
+    assert _traces.about(work, cast(Any, _Head(work, ran_on)), run=same) == ""
+    moved = _state.RunContext(
+        "github", "91", "workflow_dispatch", "refs/heads/main", filed_under
+    )
+    line = _traces.about(work, cast(Any, _Head(work, ran_on)), run=moved)
+    assert "run 91 recorded as the run of eeeeeeeeeeee" in line
+    rows = _traces.ABOUT.series(ran_on).rows(work)
+    assert [row.data["run"] for row in rows.rows] == ["91"]
+    assert rows.rows[0].data["event"] == "workflow_dispatch"
+
+
+def test_a_release_walks_from_its_branch_into_the_wave_its_squash_dispatched(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The whole point: every run a release caused, found by recorded fact.
+
+    A release is two commits and one hop. The branch commit carries its
+    own run, the merge commit carries the base's run, and the wave is
+    dispatched on the base, so the forge files it under whatever the
+    base's tip is by then. Another merge lands first here, which moves
+    that tip past the release squash, and the wave is still found,
+    through the commit it recorded rather than through a time.
+    """
+    from typing import cast
+
+    from livery.forge.testing import FakeDriver
+
+    driver = FakeDriver()
+    repo = driver.fresh_repo()
+    branch = driver.push(repo.owner, repo.name, "feature")
+    pr = repo.pr.open("feature", "main", "release: the set", "")
+    repo.pr.merge_now(pr.number, title="release: the set")
+    merged = repo.pr.get(pr.number)
+    assert merged is not None and merged.merged_sha
+    squash = merged.merged_sha
+    # The base's own run of the squash, as a forge files one for the
+    # commit a merge put there, and then an unrelated merge that moves
+    # the base past it.
+    driver.fake.push(repo.owner, repo.name, "main", sha=squash)
+    later = driver.fake.push(repo.owner, repo.name, "main")
+    repo.checks.dispatch("release.yml", ref="main", inputs={"ref": squash})
+    wave = _wave(repo, later)
+    # The wave writes down the commit it checked out, as its job does.
+    _in_ci(monkeypatch, run=str(wave.id), leg="publish")
+    context = _state.RunContext(
+        "github", str(wave.id), wave.event, "refs/heads/main", later
+    )
+    assert "recorded as the run of" in _traces.about(
+        work, cast(Any, _Head(work, squash)), run=context
+    )
+
+    walked = _traces.chain(work, cast(Any, repo), branch, depth=1)
+    assert [node.commit for node in walked.nodes] == [branch, squash]
+    about_branch = set(walked.nodes[0].runs)
+    assert about_branch == {str(run.id) for run in repo.checks.runs(head_sha=branch)}
+    # The squash carries the base's own run and the wave beside it, and
+    # not the run of the commit that merged after it.
+    base_run = next(
+        str(run.id) for run in repo.checks.runs(head_sha=squash) if run.event == "push"
+    )
+    assert set(walked.nodes[1].runs) == {base_run, str(wave.id)}
+    assert any(f"merged as {squash[:12]}" in line for line in walked.lines)
+    assert any("recorded)" in line for line in walked.lines)
+    # Each run is its own process group, and each says which commit it
+    # is about, because two runs of a chain are told apart by that.
+    groups = {
+        event["args"]["name"]
+        for event in walked.events
+        if event.get("ph") == "M" and event.get("name") == "process_name"
+    }
+    assert f"run {wave.id} of {squash[:12]} ({wave.event})" in groups
+    assert {event["pid"] for event in walked.events} == {1, 2, 3}
+
+
+def test_the_same_chain_walked_live_and_afterwards_is_the_same_tree(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The property the design exists for: no edge comes from a moment.
+
+    The first walk happens with the runs still queued, the second after
+    they finished. The timelines differ, because the jobs ran in
+    between; the tree does not.
+    """
+    from typing import cast
+
+    from livery.forge.testing import FakeDriver
+
+    driver = FakeDriver()
+    repo = driver.fresh_repo()
+    branch = driver.push(repo.owner, repo.name, "feature")
+    pr = repo.pr.open("feature", "main", "feat: change", "")
+    repo.pr.merge_now(pr.number, title="feat: change")
+    merged = repo.pr.get(pr.number)
+    assert merged is not None
+    driver.fake.push(repo.owner, repo.name, "main", sha=merged.merged_sha)
+    live = _traces.chain(work, cast(Any, repo), branch, depth=1)
+    for sha in (branch, merged.merged_sha):
+        driver.fake.settle(repo.owner, repo.name, sha)
+    after = _traces.chain(work, cast(Any, repo), branch, depth=1)
+    assert [(n.commit, n.runs) for n in live.nodes] == [
+        (n.commit, n.runs) for n in after.nodes
+    ]
+
+
+def test_a_chain_written_for_a_person_records_the_zero_it_is_measured_from(
+    work: Path,
+) -> None:
+    """A file of a chain reads on one clock, and says where that clock starts.
+
+    Every run of the walk keeps the stamps it was written with, so the
+    file records the earliest of them and measures from there. Without
+    the origin, another timeline could not be laid on this one.
+    """
+    import json as _json
+    from typing import cast
+
+    from livery.forge.testing import FakeDriver
+
+    driver = FakeDriver()
+    repo = driver.fresh_repo()
+    branch = driver.push(repo.owner, repo.name, "feature")
+    pr = repo.pr.open("feature", "main", "feat: change", "")
+    repo.pr.merge_now(pr.number, title="feat: change")
+    merged = repo.pr.get(pr.number)
+    assert merged is not None
+    driver.fake.push(repo.owner, repo.name, "main", sha=merged.merged_sha)
+    driver.fake.settle(repo.owner, repo.name, branch)
+    driver.fake.settle(repo.owner, repo.name, merged.merged_sha)
+    path, lines = _traces.write_chain(work, cast(Any, repo), branch, depth=1)
+    assert path is not None
+    assert path == work / ".fm" / "profiles" / f"chain-{branch[:12]}.json"
+    written = _json.loads(path.read_text(encoding="utf-8"))
+    # Measured from the earliest stamp of the whole walk, so nothing sits
+    # before zero, and the wall-clock moment of that zero is in the file.
+    assert written["originEpochUs"] > 0
+    stamps = [e["ts"] for e in written["traceEvents"] if "ts" in e]
+    assert stamps and min(stamps) == 0.0
+    assert any("merged as" in line for line in lines)
+    # A commit the forge knows nothing about writes no file, and says so.
+    nothing, why = _traces.write_chain(work, cast(Any, repo), "a" * 40, depth=1)
+    assert nothing is None
+    assert any("no run assembled" in line for line in why)

@@ -343,11 +343,24 @@ def test_an_armed_release_follows_its_pull_request_and_then_the_wave(
     assert followed == [(driver.branch, 90.0)]
     assert watched == [("release", 7)]
     assert rig.current_branch() == "main"
-    # A red wave ends the act with the wave's exit.
+    # A red wave ends the act with the wave's exit, and everything the
+    # release caused joins its own trace before that: a red wave's
+    # timeline is the one most worth having. The walk starts at the
+    # release branch's commit, whose merge commit it hops to, never at
+    # whatever main's tip happens to be.
+    chained: list[str] = []
+
+    def chaining(repo: object, git: object, *, commit: str = "", depth: int = 2) -> str:
+        chained.append(commit)
+        return "profile: the chain joins this trace"
+
+    monkeypatch.setattr("livery.workshop._traces.drop_chain", chaining)
     monkeypatch.setattr("livery.workshop._ci_tasks.follow_run", lambda *a, **k: 13)
     with pytest.raises(SystemExit) as caught:
         driver.on_merged()
     assert caught.value.code == 13
+    assert chained == [rig.sha_of(driver.branch)]
+    assert chained[0] != rig.head_sha()
 
 
 def test_a_release_already_stamped_on_the_base_reprepares_cleanly(

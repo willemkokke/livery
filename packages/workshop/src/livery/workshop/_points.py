@@ -729,6 +729,24 @@ def profile_box() -> AbstractContextManager[Path]:
     return box()
 
 
+def _push_about(root: Path) -> None:
+    """Record the commit this run ran on, where the forge files it elsewhere.
+
+    A line and never a verdict, like the trace beside it. Written per
+    job because any job of the run can write it and the write merges;
+    a run whose own head is the commit it checked out writes nothing.
+    """
+    from livery.workshop._git_ops import GitOps
+    from livery.workshop._traces import about
+
+    try:
+        line = about(root, GitOps(root))
+    except Exception as error:
+        line = f"profile: what this run ran on was not recorded ({error})"
+    if line:
+        print(f"  {line}")
+
+
 def _push_job(root: Path, drop: Path, *, job: str) -> None:
     """Write the job's own trace from what its entries left, and push it.
 
@@ -1129,5 +1147,6 @@ def run_point(
             # push happens whatever the entries did.
             if drop is not None:
                 _push_job(root, drop, job=display)
+                _push_about(root)
     if not entries:
         print(f"  {resolved}/{job}: nothing scheduled")
