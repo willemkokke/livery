@@ -64,8 +64,8 @@ def test_the_stub_imports_guidance_first_then_the_instance(tmp_path: Path) -> No
     sync_workspace(root)
     lines = (root / "CLAUDE.md").read_text().splitlines()
     imports = [line for line in lines if line.startswith("@")]
-    assert imports[0] == "@.workshop/interaction-voice.md"
-    assert imports[1] == "@.workshop/documentation-standards.md"
+    assert imports[0] == "@.workshop/fragments/interaction-voice.md"
+    assert imports[1] == "@.workshop/fragments/documentation-standards.md"
     assert imports[-1] == "@CLAUDE.project.md"
     for line in imports[:-1]:
         assert (root / line[1:]).is_file()
@@ -245,57 +245,63 @@ def test_a_settings_link_is_replaced_by_a_copy(tmp_path: Path) -> None:
     assert target.is_file() and not target.is_symlink()
 
 
-def test_a_file_the_delivery_never_wrote_survives_the_sweep(tmp_path: Path) -> None:
-    """The refusal first: `.workshop/` is not the sweep's to empty.
+def test_the_sweep_reaches_no_further_than_the_fragments(tmp_path: Path) -> None:
+    """The refusal first: the sweep walks its own directory and no other.
 
-    The directory holds layer fragments and this checkout's own
-    state side by side. Sweeping everything no layer ships deleted
-    the stub receipt, which the same sync reads a few steps later,
-    so the fast path it exists for had never once fired.
+    `.workshop/` holds this checkout's state beside the layers'
+    fragments. While the two shared a top level the sweep could not
+    tell them apart, and deleted the stub receipt that the same sync
+    reads a few steps later, so the fast path it exists for had never
+    once fired.
     """
     root = _workspace(tmp_path)
     sync_workspace(root)
-    receipt = root / ".workshop" / "stubs.json"
+    workshop = root / ".workshop"
+    receipt = workshop / "state" / "stubs.json"
+    receipt.parent.mkdir(parents=True, exist_ok=True)
     receipt.write_text('{"schema": 1}\n')
+    stranger = workshop / "left-by-an-older-layout.md"
+    stranger.write_text("not the sweep's to remove\n")
     lines = sync_workspace(root)
-    assert receipt.is_file(), "the sweep deleted a file it never wrote"
-    assert not any("stubs.json" in line for line in lines)
+    assert receipt.is_file(), "the sweep reached into state/"
+    assert stranger.is_file(), "the sweep reached the top level"
+    assert lines == []
 
 
 def test_a_fragment_a_layer_stopped_shipping_is_removed(tmp_path: Path) -> None:
-    """The sweep still does its job, for the files that are its own."""
+    """And inside its own directory the sweep still does its job."""
     root = _workspace(tmp_path)
     sync_workspace(root)
-    workshop = root / ".workshop"
-    withdrawn = workshop / "old-guidance.md"
+    withdrawn = root / ".workshop" / "fragments" / "old-guidance.md"
     withdrawn.write_text("shipped once\n")
-    record = workshop / ".workshop-fragments"
-    record.write_text(record.read_text(encoding="utf-8") + "old-guidance.md\n")
     lines = sync_workspace(root)
     assert not withdrawn.exists()
     assert any("removed old-guidance.md" in line for line in lines)
 
 
-def test_a_directory_with_no_record_is_adopted_and_swept_of_nothing(
-    tmp_path: Path,
-) -> None:
-    """No record means unknown history, never an empty inventory.
+def test_the_workshop_directory_holds_only_directories(tmp_path: Path) -> None:
+    """The convention that makes the sweep safe, pinned.
 
-    Claiming the directory on a first run would delete exactly the
-    files this fix protects. A fragment withdrawn before the record
-    existed stays until someone removes it, which is the honest cost.
+    Each kind of thing under `.workshop/` keeps its own directory, so
+    no walk of one kind can reach another. A state file added at the
+    top level would sit beside nothing that owns it, which is how the
+    stub receipt came to be deleted on every sync.
     """
     root = _workspace(tmp_path)
-    workshop = root / ".workshop"
-    workshop.mkdir()
-    stranger = workshop / "from-before.md"
-    stranger.write_text("older than the record\n")
-    lines = sync_workspace(root)
-    assert stranger.is_file()
-    assert not any("removed" in line for line in lines)
-    # Adopted for survival, not as a fragment: the next sync leaves it
-    # alone too, rather than claiming and then deleting it.
-    record = (workshop / ".workshop-fragments").read_text(encoding="utf-8")
-    assert "from-before.md" not in record
     sync_workspace(root)
-    assert stranger.is_file()
+    loose = [p.name for p in (root / ".workshop").iterdir() if p.is_file()]
+    assert loose == [], f"put these under a directory of their own: {loose}"
+
+
+def test_explain_tells_a_fragment_from_this_checkout_s_own_state(
+    tmp_path: Path,
+) -> None:
+    """A path under `.workshop/` is no longer a layer fragment by default."""
+    from livery.workshop._provenance import _materialised
+
+    fragment = _materialised(tmp_path, Path(".workshop/fragments/voice.md"))
+    assert fragment is not None and fragment.channel == "layer fragment"
+    state = _materialised(tmp_path, Path(".workshop/state/stubs.json"))
+    assert state is not None and state.channel == "checkout state"
+    receipts = _materialised(tmp_path, Path(".workshop/receipts/conan.json"))
+    assert receipts is not None and receipts.channel == "checkout state"

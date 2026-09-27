@@ -215,7 +215,7 @@ def test_the_stubs_are_written_for_the_locked_tools_at_their_locked_version(
 
     # A locked tool with no stub is named on every write: the receipt never
     # answers for this lock, so the catalogue is read again.
-    assert (root / ".workshop" / "stubs.json").is_file()
+    assert (root / ".workshop" / "state" / "stubs.json").is_file()
     reads: list[str] = []
     real = _tools._read_catalogue
 
