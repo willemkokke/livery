@@ -1000,6 +1000,9 @@ def _run_sequential(
             node.result.seq = node.seq
         else:  # a shared row keeps its above-the-record floor
             node.result.seq = max(node.result.seq, node.seq)
+        # The run's live view, as in the parallel path. Both paths publish,
+        # and this is the one a single-task run and `--sequential` take.
+        _futures.seal(node.result)
         node.state = "done"
         if status is not None:
             status.unit_finished(node.seg.task, node.result.ok)

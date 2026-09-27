@@ -1813,16 +1813,20 @@ def test_the_run_s_finished_rows_are_readable_from_inside_a_task(tmp_path):
             '''Nothing has concluded yet when this one looks.'''
             print("first saw:", ",".join(r.task for r in _schedule.finished_rows()))
 
-        @task
+        @task(pre=[first])
         def second():
             '''The first task, and the one its body called.'''
             helper()
             print("second saw:", ",".join(r.task for r in _schedule.finished_rows()))
         """)
     )
-    result = Runner().invoke("first second", tasks=tmp_path / "tasks.py")
+    # A prerequisite, not two segments on a line: two independent tasks run
+    # in parallel and either could finish first. Two nodes also keep the run
+    # on the parallel path, which is the one this exercises.
+    result = Runner().invoke("second", tasks=tmp_path / "tasks.py")
     assert result.ok, result.stdout + result.stderr
-    # Nothing had concluded, and the task looking is never its own row.
+    # Nothing had concluded when the prerequisite looked, and a task is never
+    # its own row.
     assert "first saw: \n" in result.stdout
     # In the order the work was asked for: the scheduled task, then the body
     # call that ran inside the task doing the looking.

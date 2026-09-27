@@ -506,7 +506,11 @@ def test_the_handoff_carries_the_tasks_the_run_had_already_finished(
     monkeypatch.chdir(tmp_path)
     src = tmp_path / "tasks.py"
     src.write_text(HANDOFF_TASKS)
-    result = Runner().invoke("--profile groundwork replaced", tasks=src)
+    # Sequential deliberately: two independent segments run in parallel, and
+    # then nothing says the prerequisite concluded before the handoff was
+    # taken. A verb with prerequisites is the case under test, so the order
+    # is the test's, not the pool's.
+    result = Runner().invoke("--sequential --profile groundwork replaced", tasks=src)
     assert not result.ok  # the second task failed where the exec would land
     box = Path(json.loads((tmp_path / "handed.json").read_text())["FM_PROFILE_HANDOFF"])
     events = _fragments(box)
