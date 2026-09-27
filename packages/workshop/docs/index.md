@@ -155,6 +155,15 @@ absence.
   `[ci] windows-temp = "system"` leaves the system temp, for a runner
   without a separate working drive; `"runner"` asks for the move on
   any forge.
+- A check leg pushes what it cost. The gate runs profiled, so the
+  leg writes a Chrome trace of every task, step and test it ran, and
+  the leg pushes that file to a channel of its own: refs no sync
+  mirrors and no gate reads, so a checkout pays for a trace only when
+  someone asks for one. `[ci] profile-legs = false` pushes none,
+  `[ci] profile-window` is how many runs the janitor keeps (twenty by
+  default), and `[ci] profile-into` is where an assembled file lands.
+  The push is observational: origin refusing it is a printed line and
+  never a leg's verdict.
 - On a GitHub-shaped workspace every job restores the tool store
   before it enters, under the runner's temp, the working drive, where
   the checkout and the venv are and where the store's links into the

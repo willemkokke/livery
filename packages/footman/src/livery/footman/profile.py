@@ -85,6 +85,11 @@ _mode: str = _OFF
 """What this run does with a trace: nothing, write the file (`--profile` on
 this command line), or drop a fragment in the box a parent opened."""
 
+_parent_box: str | None = None
+"""The box an ancestor opened, when this run writes a file of its own as
+well. Its whole trace goes up there too, so a leg that spawns a profiled
+child has that child's inside in its own file."""
+
 _child_dir: str | None = None
 """Where this run's children may drop trace fragments — created at
 `pre_tasks` when the line asked for a profile, swept and removed by the
@@ -114,14 +119,16 @@ def arm(inv: footman.Invocation) -> None:
     A line that mentions nothing and finds a box in its environment is a
     profiled run's child: it writes itself into that box instead of a file
     of its own, and leaves the box alone."""
-    global _child_dir, _mode
+    global _child_dir, _mode, _parent_box
     _child_dir, _mode = None, _OFF
+    # An ancestor's box, before this run's own may replace the name.
+    _parent_box = _box()
     # Taken out of the environment whatever this run turns out to be: the
     # box goes to one successor, and a grandchild that adopted it would
     # sweep it away from underneath its owner.
     handed = os.environ.pop(HANDOFF, None)
     if "profile" not in inv.cli:
-        if _box() is not None:
+        if _parent_box is not None:
             _mode = _FRAGMENT
         return
     _mode = _ROOT
@@ -450,6 +457,7 @@ def write(inv: footman.Invocation) -> None:
         for event in events:
             if "ts" in event:
                 event["ts"] = round(event["ts"] - first, 1)
+        zero += first / 1e6  # the trace's own zero moved with the slide
     path = Path(inv.cwd or ".") / target  # an absolute target wins the join
     tid = threading.get_native_id()
     events.append(
@@ -475,10 +483,22 @@ def write(inv: footman.Invocation) -> None:
             "dur": round((time.perf_counter() - begin) * 1e6, 1),
         }
     )
-    path.write_text(
-        json.dumps({"traceEvents": events, "displayTimeUnit": "ms"}), encoding="utf-8"
-    )
+    payload = {
+        "traceEvents": events,
+        "displayTimeUnit": "ms",
+        # Where this trace's zero is on the wall clock. Every stamp in the
+        # file is relative to it, so a reader on another machine can lay this
+        # timeline beside another one: the leg inside the run that ran it.
+        "originEpochUs": round(_epoch_origin(zero), 1),
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
     print(f"profile: {path}", file=sys.stderr)
+    # A run with a file of its own can still be somebody's child. Its whole
+    # trace, the fragments it embedded included, goes up into the box that
+    # was already in its environment, so the parent's file holds this run's
+    # inside and not just the step that spawned it.
+    if _parent_box is not None and Path(_parent_box).is_dir():
+        _drop(_parent_box, _stamped(_as_child(events), zero))
 
 
 def _write_fragment(inv: footman.Invocation) -> None:
@@ -587,6 +607,28 @@ def _handoff_events() -> list[dict[str, Any]]:
         if s.started is not None
     ]
     return events
+
+
+def _as_child(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """A copy of *events* claiming a process group of its own.
+
+    This run's own events carry the writer's process id, which is the same
+    constant in every run: handed up unchanged they would land in the
+    parent's own group and read as the parent's work. The fragments this run
+    embedded keep the process ids they came with, so a grandchild stays a
+    group of its own all the way up.
+    """
+    mine = os.getpid()
+    handed: list[dict[str, Any]] = []
+    for event in events:
+        if event.get("pid") != _PID:
+            handed.append(event)
+            continue
+        copy = {**event, "pid": mine}
+        if copy["ph"] == "M" and copy["name"] == "process_name":
+            copy["args"] = {"name": "fm (child)"}
+        handed.append(copy)
+    return handed
 
 
 def _stamped(events: list[dict[str, Any]], zero: float) -> list[dict[str, Any]]:

@@ -46,15 +46,6 @@ STORE_HOME = "${{ runner.temp }}/footman/toolroom"
 CONAN_HOME = "${{ runner.temp }}/conan"
 UPLOAD = "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1"
 DOWNLOAD = "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1"
-#: The upload action the gitea lane runs. An act_runner that delivers
-#: dashed action inputs empty breaks upstream's v4, which reads
-#: `include-hidden-files` with a throwing getter and aborts before
-#: uploading anything. This v4.0-era fork predates that input: it
-#: uploads on such a runner too, exiting 1 over the empty
-#: `if-no-files-found`, which the step's continue-on-error absorbs;
-#: a runner that carries the inputs sees it exit 0 (measured on the
-#: loop's runner).
-GITEA_UPLOAD = "christopherhx/gitea-upload-artifact@v4"
 
 
 def _facts(root: Path) -> dict[str, Any]:
@@ -466,24 +457,6 @@ def _deploy_key_step(job: Job) -> str:
     )
 
 
-def _profile_step(forge: str) -> str:
-    """The run's Chrome trace kept as an artifact, whatever the verdict."""
-    action = UPLOAD if forge == "github" else GITEA_UPLOAD
-    return (
-        "      # The run as a Chrome trace, one artifact per leg. Observational,\n"
-        "      # so it runs on a red gate too and its own exit never decides\n"
-        "      # the leg.\n"
-        "      - name: Upload the run profile\n"
-        "        if: always()\n"
-        "        continue-on-error: true\n"
-        f"        uses: {action}\n"
-        "        with:\n"
-        "          name: profile-${{ matrix.os }}-${{ matrix.python }}\n"
-        "          path: fm-profile.json\n"
-        "          if-no-files-found: ignore\n"
-    )
-
-
 _PAGES_GRANT = """    permissions:
       contents: read
       pages: write
@@ -613,8 +586,6 @@ def _actions_job(
     lines.append(_call_env(job, forge=forge))
     lines.append(_call_step(prog, point, job))
     lines.append(_publish_step(job, forge=forge))
-    if job.profile:
-        lines.append(_profile_step(forge))
     if pages:
         lines.append(_PAGES_STEPS)
     return "".join(lines)

@@ -148,20 +148,16 @@ def test_the_gate_shell_runs_the_declared_jobs_on_the_declared_events(
     # The deploy reads the receipt tags for the release view, on
     # every forge: one declaration renders both.
     assert depth["deploy"].get("fetch-tags") is True
-    # The profile trace is kept on the check legs alone, whatever the
-    # verdict.
-    uploads = {
-        name: [
-            step
-            for step in job["steps"]
-            if "upload-artifact" in str(step.get("uses", ""))
-        ]
-        for name, job in jobs.items()
-    }
-    assert [name for name, steps in uploads.items() if steps] == ["check"]
-    (upload,) = uploads["check"]
-    assert upload["if"] == "always()" and upload["continue-on-error"] is True
-    assert upload["with"]["path"] == "fm-profile.json"
+    # A leg's trace leaves through the verb that ran the leg, so no job
+    # of the gate workflow uploads an artifact at all. The wheels of a
+    # release are the one artifact an emitted job publishes, and they
+    # are the release workflow's.
+    assert [
+        step
+        for job in jobs.values()
+        for step in job["steps"]
+        if "upload-artifact" in str(step.get("uses", ""))
+    ] == []
 
 
 def test_the_github_gate_grants_the_store_writes_and_the_pages_deploy(

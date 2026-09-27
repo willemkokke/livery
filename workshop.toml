@@ -79,6 +79,10 @@ affected-legs = true
 # The one status name branch protection requires, spelled by contract
 # so each forge's CI renders it rather than anyone retyping it.
 required-context = "gate"
+# Every check leg pushes its trace to the traces' own refs, which no
+# sync mirrors. The window is a guess until the runs measure it.
+profile-legs = true
+profile-window = 20
 
 # toolroom's refresh, every two weeks on the nightly point: the tools'
 # new releases are observed, the stubs regenerated, and what moved is

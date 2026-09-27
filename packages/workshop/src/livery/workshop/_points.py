@@ -100,7 +100,6 @@ class Job:
             checkout carries the credential the push needs.
         publishes_index: Whether the job uploads to a package index,
             so the index token reaches it as ``UV_PUBLISH_TOKEN``.
-        profile: Whether the job's trace is kept as an artifact.
         docs_tools: Whether the docs generators' system requirements
             are installed before the call.
         conan_cache: Whether the job builds native packages, so the
@@ -138,7 +137,6 @@ class Job:
     writes: bool = False
     pushes: bool = False
     publishes_index: bool = False
-    profile: bool = False
     docs_tools: bool = False
     conan_cache: bool = False
     deploy: bool = False
@@ -215,7 +213,6 @@ DECLARED: tuple[Point, ...] = (
                 matrix="legs",
                 fetch="full",
                 writes=True,
-                profile=True,
                 note=(
                     "The check legs: the tests run metered, and only they."
                     " The leg's measured suites ride its per-run ref on the"
@@ -788,6 +785,10 @@ BUILTIN: tuple[Entry, ...] = (
     # The leg's one write: its timing row and its measured suites go
     # on its per-run ref together.
     Entry("gate", "check", "coverage.leg", ("--job={display}",)),
+    # The leg's trace, to the channel no sync mirrors. After the row,
+    # which reads the same file: a trace is written when the run that
+    # made it ends, so only a later entry can see it.
+    Entry("gate", "check", "ci.profile.push"),
     Entry("gate", "docs", "docs.build"),
     # The title check first: it reads the pull request's title from
     # the event payload, is green off a release branch, and refuses a
@@ -823,6 +824,7 @@ BUILTIN: tuple[Entry, ...] = (
     # The clock's point: the whole check, with the tests that declare
     # the nightly point selected in, on every python of the matrix.
     Entry("nightly", "nightly", "check", profiled=True),
+    Entry("nightly", "nightly", "ci.profile.push"),
     # The wave, at the squash the dispatch names: each platform's
     # wheels, then the publish that cuts the receipts, then the home's
     # template artifact. Each verb decides for itself what the ref

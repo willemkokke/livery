@@ -77,7 +77,7 @@ import json
 import os
 import re
 import tempfile
-from collections.abc import Callable, Generator, Iterable, Mapping
+from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -97,6 +97,14 @@ NAMESPACE = "refs/workshop/"
 #: a push never carries it, and a mirror push of ``refs/workshop/*``
 #: cannot carry it either. Worktrees share it; a fresh clone is empty.
 LOCAL_NAMESPACE = "refs/workshop-local/"
+
+#: The traces' own namespace: pushed to origin like a shared series
+#: and mirrored by nothing, because the one refspec `fetch_store`
+#: names is ``refs/workshop/*``. So a sync brings no traces, a gate
+#: reads none, and a checkout pays for them only when someone asks
+#: for one. A push here starts no workflow, for the same reason a
+#: push under `NAMESPACE` does not: it is neither a branch nor a tag.
+TRACE_NAMESPACE = "refs/workshop-trace/"
 
 #: Origin's store as this checkout last fetched it: every ref under
 #: `NAMESPACE` mirrored here by `fetch_store`, which `fm sync` and
@@ -214,6 +222,11 @@ class Series:
             by local runs, so ``ci_only`` must be false.
         age: How long a row stays before the janitor drops it, by the
             store's stamp; ``None`` keeps rows for the window alone.
+        namespace: The prefix the ref lives under, when it is neither
+            the shared namespace nor the local one:
+            [livery.workshop._state.TRACE_NAMESPACE][] is the one
+            such prefix, pushed to origin and mirrored by nothing.
+            Empty means the class ``local`` chooses.
     """
 
     name: str
@@ -222,6 +235,7 @@ class Series:
     schema: int = 1
     local: bool = False
     age: timedelta | None = None
+    namespace: str = ""
 
     def __post_init__(self) -> None:
         if self.local and self.ci_only:
@@ -229,11 +243,18 @@ class Series:
                 f"{self.name}: a local series is written by local runs; declare"
                 " it ci_only=False"
             )
+        if self.namespace and self.local:
+            raise ValueError(
+                f"{self.name}: a series in {self.namespace} is not local; declare"
+                " one or the other"
+            )
 
     @property
     def ref(self) -> str:
         """The full ref name, under the local namespace for a local series."""
-        return (LOCAL_NAMESPACE if self.local else NAMESPACE) + self.name
+        return (self.namespace or (LOCAL_NAMESPACE if self.local else NAMESPACE)) + (
+            self.name
+        )
 
     def rows(self, root: Path) -> Rows:
         """Every row of the series, newest first, with what was skipped and why.
@@ -340,6 +361,8 @@ class Keyed:
         schema: The rows' schema, shared by every series.
         local: Whether every series of the family is local, as for a
             [livery.workshop._state.Series][].
+        namespace: The prefix every series of the family lives under,
+            as for a [livery.workshop._state.Series][].
         stale_after: How long a key's ref may live, by its commit
             time, before the janitor drops it as an orphan; ``None``
             never drops by age.
@@ -352,6 +375,17 @@ class Keyed:
             coverage record is read by main's run for the squash that
             merged it, minutes after the branch is gone. ``None``
             drops such a key at once.
+        keep: How many values of the key's *first* part the family
+            keeps, read from the checkout root; the rest go. The parts
+            are ranked by value, as numbers where they are numbers, so
+            a forge's run id ranks by age without reading a commit.
+            For a family keyed by a run, this is how many runs are
+            kept. ``None``, and a bound the callable cannot tell, keep
+            everything.
+        holds_rows: Whether the family's series hold JSON rows the
+            janitor bounds like any other series. A family of blobs (a
+            leg's trace) says false: its files are not rows, and
+            ``keep`` is the whole bound.
     """
 
     name: str
@@ -360,9 +394,12 @@ class Keyed:
     ci_only: bool = True
     schema: int = 1
     local: bool = False
+    namespace: str = ""
     stale_after: timedelta | None = None
     current: Callable[[Path], set[tuple[str, ...]] | None] | None = None
     linger: timedelta | None = None
+    keep: Callable[[Path], int | None] | None = None
+    holds_rows: bool = True
 
     def __post_init__(self) -> None:
         if self.local and self.ci_only:
@@ -374,7 +411,8 @@ class Keyed:
     @property
     def prefix(self) -> str:
         """The refs' common prefix, ending in a slash."""
-        return f"{LOCAL_NAMESPACE if self.local else NAMESPACE}{self.name}/"
+        base = self.namespace or (LOCAL_NAMESPACE if self.local else NAMESPACE)
+        return f"{base}{self.name}/"
 
     def series(self, *key: str) -> Series:
         """The series of one *key*, one part per declared key name.
@@ -406,6 +444,7 @@ class Keyed:
             ci_only=self.ci_only,
             schema=self.schema,
             local=self.local,
+            namespace=self.namespace,
         )
 
     def listed(self, root: Path, *head: str) -> list[tuple[str, ...]] | None:
@@ -702,7 +741,7 @@ SNAPSHOT_VARIABLE = "WORKSHOP_SNAPSHOT"
 
 #: The ref namespaces one listing carries: the store's own, and the
 #: branches the coverage families' current keys are told by.
-LISTED = (NAMESPACE, "refs/heads/")
+LISTED = (NAMESPACE, TRACE_NAMESPACE, "refs/heads/")
 
 
 def _snapshot(root: Path) -> _Snapshot | None:
@@ -1275,10 +1314,10 @@ def put(
     write from outside CI, naming the rule. Every refusal is the
     returned reason; nothing here raises or prints.
     """
-    if not ref.startswith((NAMESPACE, LOCAL_NAMESPACE)):
+    if not ref.startswith((NAMESPACE, LOCAL_NAMESPACE, TRACE_NAMESPACE)):
         return (
-            f"refusing {ref}: the state store writes only under {NAMESPACE}"
-            f" and {LOCAL_NAMESPACE}"
+            f"refusing {ref}: the state store writes only under {NAMESPACE},"
+            f" {LOCAL_NAMESPACE} and {TRACE_NAMESPACE}"
         )
     if ci_only and run_context() is None:
         return f"refusing {ref}: only a CI run writes this series; local runs read"
@@ -1349,10 +1388,10 @@ def drop(root: Path, ref: str) -> str:
     A ref that is already absent counts as gone: the janitor re-runs
     as its own recovery, and a second sweep must find nothing to do.
     """
-    if not ref.startswith((NAMESPACE, LOCAL_NAMESPACE)):
+    if not ref.startswith((NAMESPACE, LOCAL_NAMESPACE, TRACE_NAMESPACE)):
         return (
-            f"refusing {ref}: the state store deletes only under {NAMESPACE}"
-            f" and {LOCAL_NAMESPACE}"
+            f"refusing {ref}: the state store deletes only under {NAMESPACE},"
+            f" {LOCAL_NAMESPACE} and {TRACE_NAMESPACE}"
         )
     if ref.startswith(LOCAL_NAMESPACE):
         deleted = _git(root, "update-ref", "-d", ref)
@@ -1482,10 +1521,16 @@ def _sweep_family(
         lines.append(
             f"  {family.prefix}*: the current keys could not be told; no orphan dropped"
         )
+    beyond, over_words = _beyond_the_count(root, family, keys)
+    if family.keep is not None and not over_words:
+        lines.append(
+            f"  {family.prefix}*: how many {family.keys[0]}s to keep could not be"
+            " told; none dropped by count"
+        )
     verb = "would drop" if dry_run else "dropped"
     for key in keys:
         series = family.at(*key)
-        reason = ""
+        reason = "" if key[0] not in beyond else over_words
         if family.stale_after is not None:
             made = _commit_time(root, series.ref)
             if made is None:
@@ -1511,8 +1556,35 @@ def _sweep_family(
             why = "" if dry_run else drop(root, series.ref)
             lines.append(f"  {series.ref}: {reason}; {why or verb}")
             continue
-        lines += _sweep_series(root, series, dry_run=dry_run, now=now)
+        if family.holds_rows:
+            lines += _sweep_series(root, series, dry_run=dry_run, now=now)
     return lines
+
+
+def _beyond_the_count(
+    root: Path, family: Keyed, keys: Sequence[tuple[str, ...]]
+) -> tuple[set[str], str]:
+    """The first key parts past the family's count, and the words for dropping them.
+
+    Ranked by the part's own value, as a number where it is one, so a
+    forge's run id puts the newest run last without a commit being
+    read: the janitor would otherwise fetch every trace it is about to
+    drop. A family that keeps no count, or whose count cannot be told,
+    drops nothing here and the empty words say which.
+    """
+    if family.keep is None:
+        return set(), ""
+    bound = family.keep(root)
+    if bound is None:
+        return set(), ""
+    parts = {key[0] for key in keys}
+    ranked = sorted(
+        parts,
+        key=lambda part: (part.isdigit(), int(part) if part.isdigit() else 0, part),
+    )
+    return set(ranked[: max(0, len(ranked) - bound)]), (
+        f"beyond the newest {bound} {family.keys[0]}(s) kept"
+    )
 
 
 def _older(when: str, age: timedelta | None, now: datetime) -> bool:

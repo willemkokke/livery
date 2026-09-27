@@ -16,6 +16,7 @@ from livery.workshop import (
     _gate_record,
     _metrics,
     _speed,
+    _traces,
     _verified,
 )
 from livery.workshop._state import FETCHED, Keyed, Series
@@ -30,5 +31,6 @@ DECLARED: tuple[Series | Keyed, ...] = (
     _coverage_store.RECORD,
     _gate_record.SERIES,
     _diagnostics.SERIES,
+    _traces.TRACES,
     FETCHED,
 )

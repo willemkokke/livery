@@ -48,17 +48,6 @@ jobs:
         run: >-
           fm ci.run --point=gate --job=check
           --os="${{ matrix.os }}" --python="${{ matrix.python }}"
-      # The run as a Chrome trace, one artifact per leg. Observational,
-      # so it runs on a red gate too and its own exit never decides
-      # the leg.
-      - name: Upload the run profile
-        if: always()
-        continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: profile-${{ matrix.os }}-${{ matrix.python }}
-          path: fm-profile.json
-          if-no-files-found: ignore
   # The strict site build: broken links and orphan pages go red here,
   # required through the gate context, never inside the local check.
   docs:

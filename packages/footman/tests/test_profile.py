@@ -638,3 +638,41 @@ def test_a_child_hands_on_a_box_that_was_never_its_own(tmp_path, monkeypatch):
     # one of its own: it stood down when it handed the box over.
     assert len(list(box.glob("*.json"))) == 1
     assert _groups(_fragments(box)) == {os.getpid(): "fm (before re-exec)"}
+
+
+def test_the_trace_records_the_epoch_its_own_zero_sits_at(tmp_path, monkeypatch):
+    """Every stamp in a file is relative to its run's zero.
+
+    A reader laying one machine's timeline beside another's needs to know
+    where that zero was on the wall clock, and no stamp in the file says.
+    """
+    monkeypatch.chdir(tmp_path)
+    before = time.time() * 1e6
+    result = Runner().invoke("--profile fast", tasks=_tasks(tmp_path))
+    assert result.ok, result.stderr
+    payload = json.loads((tmp_path / "fm-profile.json").read_text(encoding="utf-8"))
+    assert before - 60e6 < payload["originEpochUs"] < time.time() * 1e6
+
+
+def test_a_profiled_child_hands_its_whole_trace_up_as_well(tmp_path, monkeypatch):
+    """A run with a file of its own can still be somebody's child.
+
+    The leg of a CI run is the case: an entry writes the file a later entry
+    reads, and the run that spawned it wants that entry's inside rather than
+    the one step that spawned it.
+    """
+    monkeypatch.chdir(tmp_path)
+    box = tmp_path / "box"
+    box.mkdir()
+    monkeypatch.setenv("FM_PROFILE_DIR", str(box))
+    result = Runner().invoke("--profile=child.json fast", tasks=_tasks(tmp_path))
+    assert result.ok, result.stderr
+    own = _trace(tmp_path / "child.json")
+    assert _groups(own) == {1: "fm"}  # its own file is its own run
+    handed = _fragments(box)
+    assert _groups(handed) == {os.getpid(): "fm (child)"}
+    mine = next(e for e in handed if e.get("cat") == "task")
+    assert mine["name"] == "fast"
+    assert mine["ts"] > 1.7e15  # epoch microseconds, the box's convention
+    # The same task, once as the run's own and once handed up.
+    assert [e["name"] for e in own if e.get("cat") == "task"] == ["fast"]
