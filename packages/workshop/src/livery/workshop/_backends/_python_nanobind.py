@@ -220,23 +220,12 @@ def conan_environment(root: Path) -> dict[str, str]:
         Failed: when the provider or conan is in neither place; the
             message names `fm sync`, which supplies both.
     """
-    from livery.workshop._tools import receipts, store_home
+    from livery.workshop._tools import store_home
 
     home = store_home()
-    held = receipts(root)
-    # The provider's path is the cmake-conan record's own env entry,
-    # so nothing here spells the file name: a record that moves it
-    # moves this too.
-    provider = os.environ.get("CMAKE_CONAN_PROVIDER") or _receipted_env(
-        held, "cmake_conan", "CMAKE_CONAN_PROVIDER"
-    )
-    conan = _receipted_path(held, "conan")
-    if not provider or not conan:
-        missing = "the cmake-conan provider" if not provider else "conan"
-        fail(
-            f"{missing} is not materialised: the native kinds take both from"
-            f" the store; `{footman.prog()} sync` supplies them"
-        )
+    provider, conan, gap = conan_tools(root)
+    if gap:
+        fail(gap)
     conan_home = os.environ.get("CONAN_HOME") or str(Path.home() / ".conan2")
     env = {"CMAKE_CONAN_PROVIDER": provider, "CONAN_HOME": conan_home}
     if sys.platform.startswith("linux"):
@@ -260,6 +249,59 @@ def _receipted_env(held: Mapping[str, Receipt], name: str, variable: str) -> str
     """
     receipt = held.get(name)
     return receipt.env.get(variable, "") if receipt is not None else ""
+
+
+def conan_tools(root: Path) -> tuple[str, str, str]:
+    """The provider file, conan's directory, and why either is missing.
+
+    The provider comes from the environment first, so a caller who
+    names one wins; its value there is written from the record anyway.
+    Conan comes from *root*'s receipt first, which names the version
+    the lock pins, and from PATH second: a conan on PATH that is not
+    the store's is an accident rather than a decision, and a pinned
+    tool that another install can shadow is not pinned.
+
+    PATH is what makes a workspace with no receipts of its own work. A
+    CI leg and an entered shell both carry the store's tools there,
+    because the entry puts every receipt's paths on PATH, so a caller
+    running against a temporary directory still resolves the store's
+    conan.
+
+    Returns:
+        The provider file, the directory conan runs from, and a reason
+        when one of them is missing. The reason is empty when both are
+        there, and names only what is missing.
+    """
+    from livery.workshop._tools import receipts
+
+    held = receipts(root)
+    # The provider's path is the cmake-conan record's own env entry,
+    # so nothing here spells the file name: a record that moves it
+    # moves this too.
+    provider = os.environ.get("CMAKE_CONAN_PROVIDER") or _receipted_env(
+        held, "cmake_conan", "CMAKE_CONAN_PROVIDER"
+    )
+    conan = _receipted_path(held, "conan") or _resolved_dir("conan")
+    missing = [
+        name
+        for name, found in (("the cmake-conan provider", provider), ("conan", conan))
+        if not found
+    ]
+    if not missing:
+        return provider, conan, ""
+    return (
+        provider,
+        conan,
+        f"{' and '.join(missing)} is not here: the native kinds take both"
+        f" from the store; `{footman.prog()} sync` supplies them, and an"
+        " entered environment carries them",
+    )
+
+
+def _resolved_dir(name: str) -> str:
+    """The directory *name* runs from in this environment, or empty."""
+    found = shutil.which(name)
+    return str(Path(found).parent) if found else ""
 
 
 def _receipted_path(held: Mapping[str, Receipt], name: str) -> str:

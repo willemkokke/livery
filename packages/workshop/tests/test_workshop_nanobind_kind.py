@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from _pytest.outcomes import Skipped  # the skip a fixture raises
 
 from livery.toolroom import tools
 from livery.workshop._backends import _python, _python_nanobind
@@ -39,7 +40,21 @@ def _toolchain_gap() -> str:
     return ""
 
 
-needs_build_rig = pytest.mark.skipif(bool(_toolchain_gap()), reason=_toolchain_gap())
+@pytest.fixture
+def build_rig(tmp_path: Path) -> None:
+    """Skip unless this host can run an armed native build in *tmp_path*.
+
+    A fixture rather than a marker, because the second half of the
+    question is about the workspace the test builds in: a temporary
+    directory holds no receipts, so conan and the provider have to come
+    from the entered environment there. A marker is decided once at
+    import, before any workspace exists, and asked the host about the
+    compiler alone.
+    """
+    if gap := _toolchain_gap():
+        pytest.skip(gap)
+    if gap := _python_nanobind.conan_tools(tmp_path)[2]:
+        pytest.skip(gap)
 
 
 def _package(directory: Path, name: str) -> Package:
@@ -269,9 +284,8 @@ def _consume_the_library(package: Package) -> None:
 # the nightly point once more on the first, and a pull request's legs
 # not at all.
 @pytest.mark.only_at("merge", "nightly")
-@needs_build_rig
 def test_the_wheel_is_platform_tagged_and_imports(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    build_rig: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The extension links one third-party and one first-party symbol.
 
@@ -347,6 +361,25 @@ def _receipt(root: Path, tool: str, version: str, **fields: object) -> Path:
     return path
 
 
+def test_the_build_rig_skips_where_the_native_tools_are_not_here(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A host that cannot resolve the tools skips the armed tests, never fails them.
+
+    The skip is the fallback the armed tests rely on, and it asks about the
+    workspace they build in: a temporary directory with no receipts, where
+    the entered environment is the only source. A host with neither answers
+    nothing, and the tests say so instead of failing inside the kind.
+    """
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    monkeypatch.setenv("PATH", str(empty))
+    monkeypatch.delenv("CMAKE_CONAN_PROVIDER", raising=False)
+    with pytest.raises(Skipped) as skipped:
+        build_rig.__wrapped__(tmp_path)  # type: ignore[attr-defined]
+    assert "is not here" in str(skipped.value) or "toolchain" in str(skipped.value)
+
+
 def test_the_conan_environment_refuses_without_the_store_and_names_the_provider(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -356,8 +389,14 @@ def test_the_conan_environment_refuses_without_the_store_and_names_the_provider(
     home = Home(tmp_path / "toolroom")
     monkeypatch.setattr(_tools, "store_home", lambda: home)
     monkeypatch.delenv("CMAKE_CONAN_PROVIDER", raising=False)
-    # No receipts at all: the provider is named first.
-    with pytest.raises(_FAILURES, match="cmake-conan provider is not materialised"):
+    # An empty PATH, because conan falls back to it: the refusal is about
+    # a host that has neither a receipt nor a conan of its own, and this
+    # machine's own conan would otherwise answer.
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    monkeypatch.setenv("PATH", str(empty))
+    # No receipts at all: both are named.
+    with pytest.raises(_FAILURES, match="cmake-conan provider and conan"):
         _python_nanobind.conan_environment(tmp_path)
     # The provider's path is the record's own env entry, carried by
     # the receipt; nothing here rebuilds it from a file name.
@@ -370,12 +409,23 @@ def test_the_conan_environment_refuses_without_the_store_and_names_the_provider(
         tool_dir=str(provider.parent),
         env={"CMAKE_CONAN_PROVIDER": str(provider)},
     )
-    with pytest.raises(_FAILURES, match="conan is not materialised"):
+    with pytest.raises(_FAILURES, match="conan is not here"):
         _python_nanobind.conan_environment(tmp_path)
     # A receipt in a mode that puts nothing on PATH is no answer either.
     _receipt(tmp_path, "conan", "2.32.0", mode="none", entry_points=["conan"])
-    with pytest.raises(_FAILURES, match="conan is not materialised"):
+    with pytest.raises(_FAILURES, match="conan is not here"):
         _python_nanobind.conan_environment(tmp_path)
+    # Conan on PATH and nowhere else is an answer: a workspace with no
+    # receipts of its own is what a CI leg's tests build in, and there the
+    # entered environment carries the store's tools.
+    entered = tmp_path / "entered"
+    entered.mkdir()
+    (entered / "conan").write_text("#!/bin/sh\nexit 0\n")
+    (entered / "conan").chmod(0o755)
+    monkeypatch.setenv("PATH", str(entered))
+    if sys.platform != "win32":  # PATHEXT decides on Windows, and .sh is not on it
+        assert _python_nanobind.conan_tools(tmp_path)[1] == str(entered)
+    monkeypatch.setenv("PATH", str(empty))
     conan_bin = home.tools / "conan@2.32.0" / "bin"
     _receipt(
         tmp_path,
@@ -536,9 +586,8 @@ def test_the_floor_leg_pins_conan_to_the_floor_and_tests_that_wheel(
 # merge point's legs and the nightly point pay it, a pull request's
 # legs do not.
 @pytest.mark.only_at("merge", "nightly")
-@needs_build_rig
 def test_a_floor_whose_header_lacks_the_symbol_fails_the_leg(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    build_rig: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The whole route, end to end, on the version that must fail.
 
@@ -615,9 +664,8 @@ def test_a_floor_whose_header_lacks_the_symbol_fails_the_leg(
 
 
 @pytest.mark.only_at("merge", "nightly")
-@needs_build_rig
 def test_the_rendered_extension_configures_from_its_preset(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    build_rig: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The extension opens in an editor and configures, conan included.
 
