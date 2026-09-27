@@ -103,7 +103,64 @@ def test_the_contract_answers_its_defaults_when_it_says_nothing(work: Path) -> N
         legs=_traces.PROFILE_DEFAULT,
         window=_traces.WINDOW_DEFAULT,
         into=_traces.INTO_DEFAULT,
+        keep=_traces.KEEP_DEFAULT,
     )
+    # Beside the checkout's other records, and inside what the rendered
+    # ignore list already covers, so profiling adds nothing to the root.
+    assert _traces.INTO_DEFAULT.startswith(".workshop/")
+
+
+def test_a_keep_of_zero_is_no_ceiling_and_sweeps_nothing(tmp_path: Path) -> None:
+    for name in ("run-1.json", "run-2.json", "run-3.json"):
+        (tmp_path / name).write_text("{}", encoding="utf-8")
+    assert _traces.sweep(tmp_path, 0) == []
+    assert len(list(tmp_path.glob("*.json"))) == 3
+
+
+def test_a_directory_under_the_ceiling_is_left_alone(tmp_path: Path) -> None:
+    (tmp_path / "run-1.json").write_text("{}", encoding="utf-8")
+    assert _traces.sweep(tmp_path, 10) == []
+    assert len(list(tmp_path.glob("*.json"))) == 1
+
+
+def test_a_file_that_cannot_go_is_named_and_the_sweep_goes_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+
+    for index in range(3):
+        path = tmp_path / f"run-{index}.json"
+        path.write_text("{}", encoding="utf-8")
+        os.utime(path, (index, index))
+    real = Path.unlink
+
+    def _stubborn(self: Path, *args: object, **kwargs: object) -> None:
+        if self.name == "run-0.json":
+            raise OSError("held open")
+        real(self)
+
+    monkeypatch.setattr(Path, "unlink", _stubborn)
+    lines = _traces.sweep(tmp_path, 1)
+    assert "run-0.json stayed (held open)" in lines[-1]
+    assert "swept run-1.json" in " ".join(lines)
+    assert (tmp_path / "run-0.json").exists()
+
+
+def test_the_sweep_keeps_the_newest_and_takes_the_rest(tmp_path: Path) -> None:
+    import os
+
+    for index in range(5):
+        path = tmp_path / f"run-{index}.json"
+        path.write_text("{}", encoding="utf-8")
+        os.utime(path, (index, index))
+    # The name carries a run id or a commit and neither orders by age,
+    # so the sweep reads the clock.
+    lines = _traces.sweep(tmp_path, 2)
+    assert sorted(p.name for p in tmp_path.glob("*.json")) == [
+        "run-3.json",
+        "run-4.json",
+    ]
+    assert len(lines) == 3
 
 
 def test_a_key_of_the_wrong_type_is_named_and_its_default_stands(work: Path) -> None:
@@ -1208,7 +1265,7 @@ def test_a_chain_written_for_a_person_records_the_zero_it_is_measured_from(
     driver.fake.settle(repo.owner, repo.name, merged.merged_sha)
     path, lines = _traces.write_chain(work, cast(Any, repo), branch, depth=1)
     assert path is not None
-    assert path == work / ".fm" / "profiles" / f"chain-{branch[:12]}.json"
+    assert path == work / _traces.INTO_DEFAULT / f"chain-{branch[:12]}.json"
     written = _json.loads(path.read_text(encoding="utf-8"))
     # Measured from the earliest stamp of the whole walk, so nothing sits
     # before zero, and the wall-clock moment of that zero is in the file.

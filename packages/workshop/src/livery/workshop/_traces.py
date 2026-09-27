@@ -62,13 +62,20 @@ JOB_FILE = "job.json"
 PROFILE_KEY = "profile"
 WINDOW_KEY = "profile-window"
 INTO_KEY = "profile-into"
+KEEP_KEY = "profile-keep"
 
 #: What the contract answers when it says nothing. Twenty runs is a
 #: guess made before any run had pushed one; the window is measured
 #: and tuned once real runs have.
 PROFILE_DEFAULT = True
 WINDOW_DEFAULT = 20
-INTO_DEFAULT = ".fm/profiles"
+KEEP_DEFAULT = 10
+#: Beside the checkout's other records of what it did to itself: the
+#: receipts of the tools it installed, the entry points it linked, the
+#: state it keeps. An assembled trace is the same species, and the
+#: whole directory is already ignored, so the workspace root gains
+#: nothing from profiling.
+INTO_DEFAULT = ".workshop/profiles"
 
 
 @dataclass(frozen=True)
@@ -81,14 +88,21 @@ class Policy:
             runner, nothing is pushed, nothing recorded. A run from a
             period when it was off still assembles at the job level,
             because that shape comes from the forge.
-        window: How many runs' traces are kept.
+        window: How many runs' traces the pushed channel keeps. This
+            one governs what a later assembly can still read, so it
+            decides how far back a chain can be built.
         into: Where an assembled file lands, relative to the
             workspace root unless it is absolute.
+        keep: How many assembled files stay in that directory. This
+            one governs this checkout's own disk and nothing else: the
+            files here are output, never input, so sweeping them
+            strands no chain.
     """
 
     legs: bool
     window: int
     into: str
+    keep: int
 
 
 def policy(root: Path) -> tuple[Policy, str]:
@@ -105,9 +119,41 @@ def policy(root: Path) -> tuple[Policy, str]:
     legs, why_legs = _flag(found, PROFILE_KEY, PROFILE_DEFAULT)
     window, why_window = _count(found, WINDOW_KEY, WINDOW_DEFAULT)
     into, why_into = _text(found, INTO_KEY, INTO_DEFAULT)
-    return Policy(legs, window, into), "; ".join(
-        why for why in (why_legs, why_window, why_into) if why
+    keep, why_keep = _count(found, KEEP_KEY, KEEP_DEFAULT)
+    return Policy(legs, window, into, keep), "; ".join(
+        why for why in (why_legs, why_window, why_into, why_keep) if why
     )
+
+
+def sweep(at: Path, keep: int) -> list[str]:
+    """Keep the newest *keep* assembled files under *at*; what went.
+
+    Runs after each write, so a checkout that profiles often does not
+    accumulate. Newest by modification time, because the name carries a
+    run id or a commit and neither orders by age. A *keep* of zero
+    keeps everything: the count is a ceiling, and no ceiling means no
+    sweeping rather than sweeping all of it.
+
+    Returns one line per file removed, for the caller to report beside
+    whatever it wrote. A file that cannot be removed is named and the
+    sweep goes on: this is housekeeping and never a verdict.
+    """
+    if keep <= 0:
+        return []
+    found = sorted(
+        (path for path in at.glob("*.json") if path.is_file()),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    lines = []
+    for path in found[keep:]:
+        try:
+            path.unlink()
+        except OSError as error:
+            lines.append(f"profile: {path.name} stayed ({error})")
+            continue
+        lines.append(f"profile: swept {path.name}")
+    return lines
 
 
 def _flag(found: dict[str, Any], key: str, fallback: bool) -> tuple[bool, str]:
@@ -947,7 +993,7 @@ def write_chain(
         for event in walked.events
     ]
     path.write_text(as_trace(shifted, origin=origin), encoding="utf-8")
-    return path, walked.lines
+    return path, [*walked.lines, *sweep(at, kept.keep)]
 
 
 def write_run(
@@ -983,4 +1029,4 @@ def write_run(
     # The stamps are relative to the run's own first moment, so the file says
     # where that sits: another timeline can be laid on this one.
     path.write_text(as_trace(made.events, origin=made.origin), encoding="utf-8")
-    return path, made.lines
+    return path, [*made.lines, *sweep(at, kept.keep)]
