@@ -1,10 +1,11 @@
 # The end-to-end CI profile: one timeline from the local command to the last test
 
-Status: phase 1 landed 2026-09-27 (issue #782): a profiled run
-carries what it launches, within one machine. Phases 2 to 6 wait
-their turn, each gate-green and mergeable alone. The feature is
-investigative: a leg pushes its trace whatever happens, and nobody
-pays for it until someone asks a question.
+Status: phases 1 and 2 landed 2026-09-27 (issues #782, #795): a
+profiled run carries what it launches, and a leg's trace leaves the
+runner for a channel no sync mirrors. Phases 3 to 6 wait their turn,
+each gate-green and mergeable alone. The feature is investigative: a
+leg pushes its trace whatever happens, and nobody pays for it until
+someone asks a question.
 
 ## The prompt (Willem)
 
@@ -160,17 +161,30 @@ Deliverables:
 - The generator drops `_profile_step`: no artifact upload in any
   emitted workflow.
 
-Acceptance:
+Acceptance, and what proves each. The tests live in
+`packages/workshop/tests/test_workshop_traces.py` unless another file
+is named.
 
 - `uv run fm check` exits 0.
-- A test asserts the emitted `.github/workflows/ci.yml` carries no
-  `fm-profile.json` and no upload action.
-- A test asserts the new namespace is outside the mirror's refspec:
-  `fetch_store` brings nothing of it.
-- A test asserts a leg with `profile-legs = false` pushes nothing and
-  says nothing.
-- A test asserts a push that fails is named and the job's verdict is
-  unchanged.
+- The emitted workflows carry no trace out:
+  `test_workshop_templates.py::test_a_gate_leg_is_one_verb_and_uploads_no_trace`
+  reads both lanes and finds no `fm-profile.json` and no upload step,
+  and the check job's last step is the one verb.
+- The channel is outside the mirror's refspec, and the trace is on the
+  run's own ref:
+  `test_the_trace_lands_on_the_run_s_ref_and_no_mirror_brings_it`,
+  which fetches the store and finds nothing of it.
+- A leg told to push nothing says nothing:
+  `test_a_contract_that_wants_no_traces_pushes_nothing_and_says_nothing`.
+- Every other refusal is a line and no verdict: a run that is not CI,
+  a leg the runner did not name, a trace never written, a key of the
+  wrong type, and origin's own refusal, one test each.
+- The window is the janitor's:
+  `test_the_janitor_keeps_the_window_s_newest_runs_and_drops_the_rest`,
+  which also pins that a second sweep finds nothing to do.
+- The trace says where its zero sits on the wall clock, which phase 3
+  re-bases by:
+  `packages/footman/tests/test_profile.py::test_the_trace_records_the_epoch_its_own_zero_sits_at`.
 
 ## Phase 3: the skeleton and the assembler
 
@@ -276,7 +290,6 @@ Acceptance:
 | Scaffolding | Replaced by |
 | --- | --- |
 | The defaults of phase 2, chosen before any run had pushed | Phase 6's measured window |
-| The artifact upload step in every emitted workflow | Phase 2's push from the verb |
 
 ## Decision record
 
@@ -327,6 +340,29 @@ Acceptance:
   writer leaked its box, because the exit sweep asked whether a box
   was the newest rather than whether it was still open. 107 empty
   directories had gathered on this desk since 2026-09-24.
+- 2026-09-27, a leg's trace is the profiled entry's own file, pushed
+  by a later entry of the same job (`fm ci.profile.push`), and not a
+  trace of the whole leg. The leg's timing row is built by an entry
+  that reads the file the profiled entry wrote, and a trace of the
+  whole leg is only written once every entry has run, so the row would
+  have come out empty. What the leg's other entries cost is visible
+  from the forge's job skeleton instead, which is phase 3's input
+  anyway.
+- 2026-09-27, a profiled run that is itself a child hands its whole
+  trace up into the parent's box as well, rather than appearing there
+  as the one step that spawned it. So a profiled entry that spawns
+  another profiled run keeps its inside, which the release wave does.
+- 2026-09-27, the traces live under `refs/workshop-trace/`, a third
+  ref class beside the shared and the local ones. The store's write
+  and delete guards name it, and one listing carries it so a re-run's
+  compare-and-swap has a sha to lease against. The files are traces
+  and not rows, so the family declares as much and the row sweep
+  leaves them alone.
+- 2026-09-27, the window is a count of runs, applied by the janitor
+  through a family's own `keep`, and the runs are ranked by their ids
+  rather than by their refs' commit times: a forge hands out ids in
+  increasing order, and reading a commit time would mean fetching
+  every trace the janitor is about to delete.
 - 2026-09-27, what the pre-exec fragment carries: this process's own
   span and the running task's `run()` steps. Tasks that finished
   earlier in the same process are not reachable from a task body, and

@@ -348,41 +348,31 @@ def test_the_default_brand_emits_fm(tmp_path: Path) -> None:
     assert "fm ci.run --point=gate --job=gate" in gate
 
 
-def test_every_gate_leg_runs_profiled_and_uploads_its_trace(tmp_path: Path) -> None:
-    # Each check leg runs the gate under --profile and uploads the
-    # trace, one artifact per leg. The upload is observational, which
-    # two rules pin: it runs on a red gate too, and its own exit never
-    # decides the leg, because the gitea lane's action exits 1 after a
-    # successful upload. The input it exits over rides along for the
-    # day the runner carries it.
+def test_a_gate_leg_is_one_verb_and_uploads_no_trace(tmp_path: Path) -> None:
+    # A leg's trace leaves through the verb that runs the leg, pushed
+    # to a channel of its own, so the job is one line calling one verb
+    # on both lanes and no step carries a trace out as an artifact.
     import yaml
 
     from livery.workshop._ci_generate import generate
 
     lanes = (
-        ("github", ".github/workflows/ci.yml", "actions/upload-artifact@"),
-        ("gitea", ".gitea/workflows/ci.yml", "christopherhx/gitea-upload-artifact@"),
+        ("github", ".github/workflows/ci.yml"),
+        ("gitea", ".gitea/workflows/ci.yml"),
     )
-    for kind, path, action in lanes:
-        check = yaml.safe_load(generate(_contract_root(tmp_path, kind))[path])
+    for kind, path in lanes:
+        rendered = generate(_contract_root(tmp_path, kind))[path]
+        assert "fm-profile.json" not in rendered, kind
+        check = yaml.safe_load(rendered)
         steps = check["jobs"]["check"]["steps"]
-        # On both lanes the profiled gate runs inside ci.run.
         spelled = "fm ci.run --point=gate --job=check"
         gates = [step for step in steps if spelled in step.get("run", "")]
         assert len(gates) == 1, kind
+        assert steps.index(gates[0]) == len(steps) - 1, kind  # and it is the last
         uploads = [
-            step
-            for step in steps
-            if step.get("with", {}).get("path") == "fm-profile.json"
+            step for step in steps if "upload-artifact" in str(step.get("uses", ""))
         ]
-        assert len(uploads) == 1, kind
-        (upload,) = uploads
-        assert steps.index(upload) > steps.index(gates[0]), kind
-        assert upload["uses"].startswith(action), kind
-        assert upload["if"] == "always()", kind
-        assert upload["continue-on-error"] is True, kind
-        assert upload["with"]["if-no-files-found"] == "ignore", kind
-        assert upload["with"]["name"] == "profile-${{ matrix.os }}-${{ matrix.python }}"
+        assert uploads == [], kind
 
 
 def test_the_gitea_shell_is_one_verb_per_job_and_only_event_filters(
@@ -521,10 +511,9 @@ def test_the_github_shell_is_one_verb_per_job_for_the_gate_point(
     )
     assert not [s for s in check["steps"] if "ci.metrics.leg" in s.get("run", "")]
     # The leg's measured suites ride its per-run ref on the state
-    # store: no artifact carries coverage, on the leg or in the gate
-    # job, and the profile upload is the leg's one artifact step.
-    artifacts = [s for s in check["steps"] if "artifact" in s.get("uses", "")]
-    assert [s["name"] for s in artifacts] == ["Upload the run profile"]
+    # store and its trace goes to the traces' own channel: the leg
+    # carries nothing out as an artifact.
+    assert not [s for s in check["steps"] if "artifact" in s.get("uses", "")]
     gate = jobs["gate"]
     assert gate["needs"] == ["check", "docs"]
     # The stamp composes a narrowed run with its base tree's record,
@@ -1163,10 +1152,10 @@ def test_the_gitea_lane_meters_its_legs_and_unions_them_in_the_gate_job(
     check = workflow["jobs"]["check"]["steps"]
     run = next(step for step in check if step.get("name") == "Check")
     assert "env" not in run  # the test runner arms the meter, never the shell
-    # No artifact carries coverage: the leg's measured suites ride its
-    # per-run ref, and the gate job reads them from the store.
-    artifacts = [step for step in check if "artifact" in step.get("uses", "")]
-    assert [step["name"] for step in artifacts] == ["Upload the run profile"]
+    # No artifact carries coverage or a trace: the leg's measured
+    # suites ride its per-run ref, its trace rides the traces' own
+    # channel, and the gate job reads both from the store.
+    assert not [step for step in check if "artifact" in step.get("uses", "")]
     gate = workflow["jobs"]["gate"]["steps"]
     assert not [step for step in gate if "artifact" in step.get("uses", "")]
     # The union is a gate entry, never a YAML line: the shell stays plumbing.
