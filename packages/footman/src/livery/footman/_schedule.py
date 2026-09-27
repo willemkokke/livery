@@ -995,19 +995,32 @@ def _run_sequential(
             hint = f"{node.seg.task} runs until you stop it — Ctrl-C"
             err.write(_describe.dim(hint, True) + "\n")
             err.flush()
-        node.result = _run_attempts(node, ctx)
-        if node.result.seq is None or node.seq is None:
-            node.result.seq = node.seq
-        else:  # a shared row keeps its above-the-record floor
-            node.result.seq = max(node.result.seq, node.seq)
-        # The run's live view, as in the parallel path. Both paths publish,
-        # and this is the one a single-task run and `--sequential` take.
-        _futures.seal(node.result)
+        node.result = _sealed_row(node, ctx)
         node.state = "done"
         if status is not None:
             status.unit_finished(node.seg.task, node.result.ok)
         done[node.key] = node.result.ok
         failed = failed or not node.result.ok
+
+
+def _sealed_row(node: _Node, ctx: Any) -> _executor.TaskResult:
+    """Run *node*'s body and hand back its row, numbered and published.
+
+    The one place a row becomes the run's. Both run paths call it, so a
+    concern about finished rows is added here instead of in each of them.
+
+    What stays with the caller is the bookkeeping only that caller may do,
+    and it differs by path: the sequential run writes the run's state where
+    it stands, and the parallel run writes it in its completion loop on the
+    main thread, because a worker may not touch what the run shares.
+    """
+    result = _run_attempts(node, ctx)
+    if result.seq is None or node.seq is None:
+        result.seq = node.seq
+    else:  # a shared row keeps its above-the-record floor
+        result.seq = max(result.seq, node.seq)
+    _futures.seal(result)
+    return result
 
 
 def _run_attempts(node: _Node, ctx: Any) -> _executor.TaskResult:
@@ -1169,14 +1182,7 @@ def _run_parallel(
             # parallel pool: the arbiter's console lane guarantees one owner,
             # and captured siblings' flushes queue on the gate below.
             ctx.sink = ctx.err_sink = None
-        n.result = _run_attempts(n, ctx)
-        if n.result.seq is None or n.seq is None:
-            n.result.seq = n.seq
-        else:  # a shared row keeps its above-the-record floor
-            n.result.seq = max(n.result.seq, n.seq)
-        # The run's live view: published after the numbering, because a
-        # reader orders by it.
-        _futures.seal(n.result)
+        n.result = _sealed_row(n, ctx)
         if not capture and ctx.sink is not None:
             # Flush this task's buffered output as one block — queued while a
             # wizard owns the terminal, so it never splats over a prompt.
