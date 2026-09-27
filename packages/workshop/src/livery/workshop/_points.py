@@ -747,8 +747,12 @@ def _push_about(root: Path) -> None:
         print(f"  {line}")
 
 
-def _push_job(root: Path, drop: Path, *, job: str) -> None:
+def _push_job(root: Path, drop: Path, *, job: str, leg: str) -> None:
     """Write the job's own trace from what its entries left, and push it.
+
+    *leg* is the label this job gave the entries it spawned. This
+    process is not one of them, so its own environment never carried
+    the label and the push has to be told.
 
     Every line is printed and none is a verdict: a job's timeline is
     something noticed about the work, never part of deciding it.
@@ -762,7 +766,7 @@ def _push_job(root: Path, drop: Path, *, job: str) -> None:
             return
         written = drop.parent / f"{drop.name}.json"
         written.write_text(as_trace(events, origin=origin), encoding="utf-8")
-        line = push(root, written, job=job)
+        line = push(root, written, job=job, leg=leg)
         written.unlink(missing_ok=True)
     except Exception as error:
         line = f"profile: the job's trace was not kept ({error})"
@@ -1146,7 +1150,7 @@ def run_point(
             # A red job's timeline is the one most worth having, so the
             # push happens whatever the entries did.
             if drop is not None:
-                _push_job(root, drop, job=display)
+                _push_job(root, drop, job=display, leg=label)
                 _push_about(root)
     if not entries:
         print(f"  {resolved}/{job}: nothing scheduled")
