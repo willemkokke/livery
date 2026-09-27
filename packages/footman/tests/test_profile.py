@@ -342,6 +342,11 @@ HANDOFF_TASKS = textwrap.dedent(
         import shutil
 
         shutil.rmtree(os.environ["FM_PROFILE_DIR"])
+
+    @task
+    def groundwork():
+        r'''A prerequisite: it concludes before the handoff happens.'''
+        footman.run([sys.executable, "-c", "pass"])
     """
 )
 
@@ -478,10 +483,50 @@ def test_the_handoff_hands_the_box_on_and_writes_no_file(tmp_path, monkeypatch):
     assert _groups(events) == {os.getpid(): "fm (before re-exec)"}
     spans = [e for e in events if e["ph"] == "X"]
     (step,) = [e for e in spans if e["cat"] == "step"]
-    (lived,) = [e for e in spans if e["cat"] == "task"]
-    assert lived["name"] == "replaced"
+    # The span is the process's life, and it names the task that asked to be
+    # replaced. Nothing else ran, so there is no task span beside it.
+    (lived,) = [e for e in spans if e["cat"] == "process"]
+    assert lived["args"]["task"] == "replaced"
+    assert not [e for e in spans if e["cat"] == "task"]
     assert lived["ts"] <= step["ts"]  # the step ran inside the span
     assert step["ts"] + step["dur"] <= lived["ts"] + lived["dur"]
+    shutil.rmtree(box)
+
+
+def test_the_handoff_carries_the_tasks_the_run_had_already_finished(
+    tmp_path, monkeypatch
+):
+    """A task that ran before the re-exec is in the fragment, not lost with it.
+
+    The exec replaces the process, so whatever the run did in it and did not
+    write down is gone. The running task's own span was written down; the
+    tasks that concluded before it were not, and a verb with prerequisites
+    left a hole in its timeline where they had been.
+    """
+    monkeypatch.chdir(tmp_path)
+    src = tmp_path / "tasks.py"
+    src.write_text(HANDOFF_TASKS)
+    # Sequential deliberately: two independent segments run in parallel, and
+    # then nothing says the prerequisite concluded before the handoff was
+    # taken. A verb with prerequisites is the case under test, so the order
+    # is the test's, not the pool's.
+    result = Runner().invoke("--sequential --profile groundwork replaced", tasks=src)
+    assert not result.ok  # the second task failed where the exec would land
+    box = Path(json.loads((tmp_path / "handed.json").read_text())["FM_PROFILE_HANDOFF"])
+    events = _fragments(box)
+    tasks = {e["name"]: e for e in events if e.get("cat") == "task"}
+    # The prerequisite concluded, so it has a span; the task that handed off
+    # is still running and is named by the process's own span instead.
+    assert set(tasks) == {"groundwork"}
+    assert tasks["groundwork"]["dur"] > 0
+    (lived,) = [e for e in events if e.get("cat") == "process"]
+    assert lived["args"]["task"] == "replaced"
+    # It ran inside this process, and the process span says so.
+    assert lived["ts"] <= tasks["groundwork"]["ts"]
+    assert (
+        tasks["groundwork"]["ts"] + tasks["groundwork"]["dur"]
+        <= lived["ts"] + lived["dur"]
+    )
     shutil.rmtree(box)
 
 

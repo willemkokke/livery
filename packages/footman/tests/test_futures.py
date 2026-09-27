@@ -1782,3 +1782,52 @@ def test_a_body_calls_output_reaches_an_uncaptured_run(capsys):
     out = capsys.readouterr().out
     assert "CALLER PRINTED" in out
     assert "CALLEE PRINTED" in out
+
+
+def test_the_run_s_finished_rows_are_readable_from_inside_a_task(tmp_path):
+    """A task body can read what the run has already concluded.
+
+    Outside a run there is nothing to read, and a task never finds itself in
+    the answer: a row appears when its task concludes. A task reached by a
+    body call is in it too, because it ran.
+    """
+    import textwrap
+
+    from livery.footman import _futures, _schedule
+
+    # The refusal first: no run, no rows, and no failure either.
+    assert _futures.rows() == []
+    assert _schedule.finished_rows() == []
+
+    (tmp_path / "tasks.py").write_text(
+        textwrap.dedent("""
+        from livery.footman import task
+        from livery.footman import _schedule
+
+        @task
+        def helper():
+            '''Reached by a body call, so it runs as a real task.'''
+
+        @task
+        def first():
+            '''Nothing has concluded yet when this one looks.'''
+            print("first saw:", ",".join(r.task for r in _schedule.finished_rows()))
+
+        @task(pre=[first])
+        def second():
+            '''The first task, and the one its body called.'''
+            helper()
+            print("second saw:", ",".join(r.task for r in _schedule.finished_rows()))
+        """)
+    )
+    # A prerequisite, not two segments on a line: two independent tasks run
+    # in parallel and either could finish first. Two nodes also keep the run
+    # on the parallel path, which is the one this exercises.
+    result = Runner().invoke("second", tasks=tmp_path / "tasks.py")
+    assert result.ok, result.stdout + result.stderr
+    # Nothing had concluded when the prerequisite looked, and a task is never
+    # its own row.
+    assert "first saw: \n" in result.stdout
+    # In the order the work was asked for: the scheduled task, then the body
+    # call that ran inside the task doing the looking.
+    assert "second saw: first,helper\n" in result.stdout

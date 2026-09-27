@@ -110,6 +110,10 @@ class _Session:
         self.cells: dict[Any, _Cell] = {}
         self.waits: dict[int, Any] = {}  # thread -> the key it is blocked on
         self.results: list[TaskResult] = []
+        # Rows of scheduled tasks, appended as each one concludes, so a task
+        # still running can read what the run has already done. The list is
+        # the same rows the report is built from, not a copy of their facts.
+        self.sealed: list[TaskResult] = []
         # Tasks defined *while this run was in flight* — `(group, name, what
         # was there before)` — put back the way they were when it ends.
         self.ephemeral: list[tuple[Any, str, Any]] = []
@@ -173,6 +177,32 @@ def _sweep_ephemeral(run: _Session) -> None:
 def collected() -> list[TaskResult]:
     """Results of tasks run by body calls this run, in completion order."""
     return list(_active.results) if _active is not None else []
+
+
+def seal(result: TaskResult) -> None:
+    """Publish a scheduled task's row to the run's live view.
+
+    Called as the row is sealed, from the worker that ran it, so the rows
+    accumulate while the run is still going. Nothing outside a run.
+    """
+    run = _active
+    if run is None:
+        return
+    with run.lock:
+        run.sealed.append(result)
+
+
+def rows() -> list[TaskResult]:
+    """Every row this run has sealed so far, scheduled and body call alike.
+
+    Not ordered: the caller sorts, because request order lives with the
+    scheduler that hands out the numbers.
+    """
+    run = _active
+    if run is None:
+        return []
+    with run.lock:
+        return [*run.sealed, *run.results]
 
 
 def _freeze(value: Any) -> Any:

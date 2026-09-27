@@ -57,7 +57,7 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import livery.footman as footman
-from livery.footman import GlobalOption, context, matching
+from livery.footman import GlobalOption, _schedule, context, matching
 from livery.footman._executor import reported_state
 
 PROFILE = GlobalOption(
@@ -702,11 +702,11 @@ def hand_the_trace_on() -> Generator[dict[str, str]]:
     Nothing is written to `os.environ`, because a task-time write to the
     process environment is ambient and footman notes it.
 
-    What lands in the fragment is this process's own span and the `run()`
-    steps of the task at the moment of the handoff, which is what the exec
-    would otherwise lose. Tasks that finished earlier in the same process
-    are not in it: their rows belong to the run, and the run is what is
-    being replaced.
+    What lands in the fragment is this process's own span, the `run()` steps
+    of the task at the moment of the handoff, and a span for every task the
+    run had already finished. All of it is what the exec would otherwise
+    lose: a verb whose prerequisites ran before it re-exec'd would show a
+    timeline with a hole where they were.
 
     Yields:
         The entries the successor needs, empty when this run writes no trace
@@ -752,14 +752,20 @@ def _handoff_events() -> list[dict[str, Any]]:
         },
         {
             "ph": "X",
-            "cat": "task",
-            "name": ctx.address or ctx.task or "fm",
+            # The process, not the task: with prerequisites this span covers
+            # them too, and naming it after the task that happens to be
+            # running would read as that task having taken the whole time.
+            # The task is in the arguments, where a reader can see which one
+            # asked for the replacement.
+            "cat": "process",
+            "name": "fm",
             "pid": pid,
             "tid": tid,
             # The anchor is sampled as this module's context is imported,
             # which is the closest this process has to its own start.
             "ts": round(_epoch_origin(anchor_clock), 1),
             "dur": round((time.perf_counter() - anchor_clock) * 1e6, 1),
+            "args": {"task": ctx.address or ctx.task or "fm"},
         },
     ]
     events += [
@@ -774,6 +780,24 @@ def _handoff_events() -> list[dict[str, Any]]:
         }
         for s in ctx.steps
         if s.started is not None
+    ]
+    # Every task the run finished before this one: they ran in this process
+    # and the replacement cannot know about them. They sit inside the
+    # process's span on the same track, which is where they ran. A row the
+    # scheduler numbered but never ran has no start and is not drawn,
+    # because a thing with no extent is not a span.
+    events += [
+        {
+            "ph": "X",
+            "cat": "task",
+            "name": row.address or row.task,
+            "pid": pid,
+            "tid": tid,
+            "ts": round(_epoch_origin(row.started), 1),
+            "dur": round(row.duration * 1e6, 1),
+        }
+        for row in _schedule.finished_rows()
+        if row.started is not None
     ]
     return events
 
