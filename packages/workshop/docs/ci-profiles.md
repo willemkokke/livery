@@ -78,10 +78,22 @@ base's run and the wave.
 - The job's steps, inside the job.
 - Each leg's own timeline, in process groups of its own: its tasks, every
   command inside them, and every test's setup, call and teardown.
+- The runner's own work, on a track under the job: the part of the job's span
+  the leg's timeline does not cover, as `setup` before the first entry and
+  `teardown` after the last.
 
 A job the forge gave no length, a skip, is an instant carrying its conclusion
 rather than a span of no width. A job still running when the file was written
 is a slice up to that moment, and says so in its arguments.
+
+That last track is why a job adds up. The span comes from the forge, the
+entries' timelines come from the leg, and the difference is the checkout, the
+caches, the tool store and the post-job save. GitHub and Gitea itemise that
+work as steps too, and GitLab reports no steps at all, so there the difference
+is all a reader gets. The arithmetic is the same on all three.
+
+Where the two clocks disagree about a job, the line says so and nothing is
+drawn: a span of negative length would read as work that happened.
 
 Two timelines from two machines line up because each one records the
 wall-clock moment its own zero sits at. Nothing is placed by the order it

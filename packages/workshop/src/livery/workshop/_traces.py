@@ -535,7 +535,8 @@ def assemble(
     traced, refusals = _legs_of(root, run_id)
     lines += refusals
     pids = itertools.count(LEG_PIDS)
-    for tid, job in enumerate(sorted(jobs, key=_job_order), start=1):
+    ordered = sorted(jobs, key=_job_order)
+    for tid, job in enumerate(ordered, start=1):
         events += _job_events(job, tid=tid, zero=zero, created=created, now=moment)
         text = traced.get(job.name) or traced.get(slug(job.name))
         if text is None:
@@ -545,7 +546,12 @@ def assemble(
             lines.append(f"{job.name}: {why}")
             continue
         events += found
-        lines.append(f"{job.name}: {len(found)} event(s) of its own")
+        drawn, said = _residue(
+            job, found, tid=tid, total=len(ordered), zero=zero, now=moment
+        )
+        events += drawn
+        own = f"{job.name}: {len(found)} event(s) of its own"
+        lines.append(f"{own}, {said}" if said else own)
     return Assembled(events, zero, lines)
 
 
@@ -611,7 +617,17 @@ def _job_events(
             "pid": RUN_PID,
             "tid": tid,
             "args": {"name": job.name},
-        }
+        },
+        # Ordered explicitly: a job's residue track is numbered past
+        # every job's own, and this puts it under its job rather than
+        # with the other residues at the bottom.
+        {
+            "ph": "M",
+            "name": "thread_sort_index",
+            "pid": RUN_PID,
+            "tid": tid,
+            "args": {"sort_index": tid * 2},
+        },
     ]
     began = _epoch_us(job.started_at)
     ended = _epoch_us(job.completed_at) if began is not None else None
@@ -667,6 +683,96 @@ def _job_events(
             else {**drawn, "ph": "i", "s": "t"}
         )
     return events
+
+
+def _residue(
+    job: Job,
+    found: list[dict[str, Any]],
+    *,
+    tid: int,
+    total: int,
+    zero: float,
+    now: datetime,
+) -> tuple[list[dict[str, Any]], str]:
+    """The job's span less its own trace, drawn; the events and what to say.
+
+    A job's wall clock is the forge's. Under it sit the timelines of the
+    entries that job ran, and the difference is the runner's own work:
+    the checkout, the caches, the tool store, the post-job save. Drawn,
+    so a reader adds a job up and finds nothing unexplained, and drawn
+    from the entries' own stamps, so the arithmetic is the same on a
+    forge that reports steps and one that reports none.
+
+    Nothing to draw, and nothing said, when the forge gave the job no
+    start, when the trace carries no stamp, or when the trace fills the
+    span. A trace that reaches outside the span is said and not drawn:
+    the two clocks disagree about the job, and a span of negative
+    length would hide that.
+
+    Args:
+        job: The job the forge described.
+        found: That job's own trace, already on the run's clock.
+        tid: The job's own track.
+        total: How many jobs the run has, which is what the residue
+            tracks are numbered past.
+        zero: Where the run's clock starts, in wall-clock microseconds.
+        now: The moment a job still running is measured to.
+
+    Returns:
+        The events, and the part of the job's line that describes them.
+    """
+    began = _epoch_us(job.started_at)
+    if began is None:
+        return [], ""
+    ended = _epoch_us(job.completed_at)
+    if ended is None:
+        ended = now.timestamp() * 1e6
+    stamped = [event for event in found if isinstance(event.get("ts"), (int, float))]
+    if not stamped:
+        return [], ""
+    first = min(float(event["ts"]) for event in stamped)
+    last = max(float(event["ts"]) + float(event.get("dur") or 0.0) for event in stamped)
+    opened = began - zero
+    closed = ended - zero
+    track = total + tid
+    events: list[dict[str, Any]] = []
+    spans = (("setup", opened, first - opened), ("teardown", last, closed - last))
+    outside = [name for name, _at, span in spans if span < 0]
+    if outside:
+        return [], f"its trace reaches past the job's own span ({', '.join(outside)})"
+    for name, at, span in spans:
+        if span <= 0:
+            continue  # the trace starts or ends where the job does
+        events.append(
+            {
+                "ph": "X",
+                "cat": "runner",
+                "name": name,
+                "pid": RUN_PID,
+                "tid": track,
+                "ts": round(at, 1),
+                "dur": round(span, 1),
+            }
+        )
+    if not events:
+        return [], ""
+    return [
+        {
+            "ph": "M",
+            "name": "thread_name",
+            "pid": RUN_PID,
+            "tid": track,
+            "args": {"name": f"{job.name}: runner"},
+        },
+        {
+            "ph": "M",
+            "name": "thread_sort_index",
+            "pid": RUN_PID,
+            "tid": track,
+            "args": {"sort_index": tid * 2 + 1},
+        },
+        *events,
+    ], ", ".join(f"{event['name']} {event['dur'] / 1e6:.1f}s" for event in events)
 
 
 def _legs_of(root: Path, run_id: str) -> tuple[dict[str, str], list[str]]:

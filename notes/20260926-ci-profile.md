@@ -360,10 +360,6 @@ Deliverables:
   are gone, because a flag on two entries of twenty-three was a
   curated subset and one nobody sets is a gap. Off opens no box, passes
   no flag, pushes nothing, and never imports the plugin.
-- Each job's residue, the span the forge reports less the entries'
-  own timelines, drawn as the runner's setup and teardown.
-- `PullRequest.merged_sha`, filled on all three lanes, with a cassette
-  each.
 - **Landed.** A dispatched run records the commit it checked out, on
   `refs/workshop-trace/about/<commit>`, and only where the forge files
   it under another commit: a push run and a pull request run need no
@@ -375,6 +371,14 @@ Deliverables:
   group, named for the commit it is about. A commit with no run and no
   merge is a root, and a merge answer leading back to a commit already
   walked ends there.
+- **Landed.** Each job's residue, the span the forge reports less the
+  entries' own timelines, on a track under the job as `setup` and
+  `teardown`. Drawn only where the arithmetic holds: two clocks that
+  disagree about a job are said, because a negative span would read as
+  work that happened.
+- **Landed.** `PullRequest.merged_sha`, filled on all three lanes, the
+  one conformance scenario asserting it from each lane's committed
+  cassette, and the fake minting a squash that moves the base.
 
 Acceptance:
 
