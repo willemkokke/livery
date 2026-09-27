@@ -1,4 +1,8 @@
-"""The merge-state classifiers: every documented value, loud unknowns."""
+"""What each forge publishes about a merge: the states, and the commit it made.
+
+The classifiers take every documented value and refuse an unmapped one
+loudly. The reading of a merge's own commit is here beside them.
+"""
 
 from __future__ import annotations
 
@@ -211,3 +215,47 @@ def test_gitea_policy_prose_maps() -> None:
         )
         assert classified.state == state, native
         assert classified.category == "recoverable"
+
+
+def test_a_merged_pull_request_names_the_commit_its_merge_made() -> None:
+    """The only way from a pull request to what ran on the base after it.
+
+    Nothing on a pull request names the commit its merge produced: the head
+    is the branch's, and the squash is a new commit on the base. Every forge
+    holds it under its own name, so the reading is normalised here.
+    """
+    from livery.forge._gitea import _as_pull_request as gitea_pull
+    from livery.forge._github import _as_pull_request as github_pull
+    from livery.forge._gitlab import _as_pull_request as gitlab_pull
+
+    shared = {
+        "number": 7,
+        "iid": 7,
+        "title": "t",
+        "body": "b",
+        "description": "b",
+        "state": "closed",
+        "merged": True,
+        "head": {"ref": "topic", "sha": "a" * 40},
+        "base": {"ref": "main"},
+        "source_branch": "topic",
+        "target_branch": "main",
+        "sha": "a" * 40,
+    }
+    github = github_pull({**shared, "merge_commit_sha": "b" * 40})
+    assert github.merged_sha == "b" * 40
+    # Gitea's older spelling, and its newer one.
+    assert gitea_pull({**shared, "merged_commit_id": "c" * 40}).merged_sha == "c" * 40
+    assert gitea_pull({**shared, "merge_commit_sha": "d" * 40}).merged_sha == "d" * 40
+    # GitLab carries both when it squashed; the squash is what the base ran.
+    squashed = gitlab_pull(
+        {
+            **shared,
+            "state": "merged",
+            "merge_commit_sha": "e" * 40,
+            "squash_commit_sha": "f" * 40,
+        }
+    )
+    assert squashed.merged_sha == "f" * 40
+    # And nothing before the merge.
+    assert github_pull({**shared, "state": "open", "merged": False}).merged_sha == ""

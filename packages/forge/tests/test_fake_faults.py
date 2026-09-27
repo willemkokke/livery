@@ -153,3 +153,19 @@ def test_the_pipeline_success_block_refuses_red_without_contexts() -> None:
     repo2.pr.merge_now(pr2.number, title="feat: change")
     merged = repo2.pr.get(pr2.number)
     assert merged is not None and merged.merged
+
+
+def test_a_merge_puts_its_commit_on_the_base_and_reads_back_as_the_head() -> None:
+    # The fake models a merge the way every backend does: a new commit
+    # on the base branch. Workflows that follow a pull request into
+    # what ran after it read the base's head, so a fake whose base
+    # never moved would prove a walk that cannot work live.
+    driver = FakeDriver()
+    repo, pr, head = _repo_with_open_pr(driver)
+    assert driver.fake.branch_sha(repo.owner, repo.name, "main") != head
+    repo.pr.merge_now(pr.number, title="feat: change")
+    merged = repo.pr.get(pr.number)
+    assert merged is not None
+    assert driver.fake.branch_sha(repo.owner, repo.name, "main") == merged.merged_sha
+    # A branch nobody pushed answers empty, never a guess.
+    assert driver.fake.branch_sha(repo.owner, repo.name, "nothing") == ""

@@ -655,6 +655,10 @@ def _as_pull_request(data: Mapping[str, Any]) -> PullRequest:
         base_branch=str(base.get("ref") or ""),
         url=str(data.get("html_url", "")),
         author=str((data.get("user") or {}).get("login") or ""),
+        # Gitea spells it after the merge, never before.
+        merged_sha=str(
+            data.get("merge_commit_sha") or data.get("merged_commit_id") or ""
+        ),
     )
 
 
