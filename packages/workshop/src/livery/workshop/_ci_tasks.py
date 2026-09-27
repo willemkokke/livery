@@ -888,21 +888,22 @@ def ci_metrics_collect() -> None:
     metrics_collect_flow(git.root, repo, git)
 
 
-profile = ci.group("profile", help="The legs' traces", hidden=True)
+profile = ci.group("profile", help="A run as one timeline")
 
 
-def profile_push_flow(root: Path, trace: Path) -> None:
+def profile_push_flow(root: Path, trace: Path, *, job: str = "") -> None:
     """Push this leg's trace; print what happened and decide nothing."""
     from livery.workshop._traces import push
 
-    line = push(root, trace if trace.is_absolute() else root / trace)
+    line = push(root, trace if trace.is_absolute() else root / trace, job=job)
     if line:
         print(f"  {line}")
 
 
-@profile.task(name="push")
+@profile.task(name="push", hidden=True)
 def ci_profile_push(
     *,
+    job: Annotated[str, doc("the job's name as the forge lists it")] = "",
     trace: Annotated[Path, doc("the trace the profiled entry wrote")] = Path(TRACE),
 ) -> None:
     """Put this leg's trace where a reader can assemble the run from it.
@@ -922,7 +923,43 @@ def ci_profile_push(
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
-    profile_push_flow(root, Path(trace))
+    profile_push_flow(root, Path(trace), job=job)
+
+
+@profile.default
+def ci_profile(
+    *,
+    run: Annotated[str, doc("the run's id; the newest for HEAD by default")] = "",
+    into: Annotated[str, doc("where the file lands; the contract's own by default")] = (
+        ""
+    ),
+) -> None:
+    """Write one CI run as one timeline, to open at ui.perfetto.dev.
+
+    Every job of the run is a track at the forge's own times, its steps
+    inside it, and each leg that kept a trace brings its own tasks, steps
+    and tests, laid on the run's clock by the origin each side recorded.
+    This is what the legs' traces are kept for, and what the window bounds.
+
+    Refuses when no file could be written, naming why: a person asked for
+    one. A run whose traces have aged out of the window still assembles from
+    the forge's skeleton alone, and says which legs brought nothing.
+    """
+    from livery.workshop._traces import write_run
+
+    repo, git = _resolved()
+    path, lines = write_run(
+        git.root,
+        repo,
+        run_id=run,
+        head_sha="" if run else git.head_sha(),
+        into=Path(into) if into else None,
+    )
+    for line in lines:
+        print(f"  {line}")
+    if path is None:
+        fail(lines[0] if lines else "no run to assemble")
+    print(f"  profile: {path}")
 
 
 def timings_flow(root: Path, *, since: int, base: int) -> None:

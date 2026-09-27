@@ -9,6 +9,7 @@ sleeps, no network.
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 from typing import Any, cast
@@ -1864,3 +1865,65 @@ def test_the_watch_prints_each_jobs_move_and_names_the_red_one_with_its_lines(
     assert out.index("ci.yml / gate: failed") < out.index(
         "ci-failed: ci.yml: gate (failure)"
     )
+
+
+def test_a_profiled_submit_puts_the_run_it_followed_in_its_own_trace(
+    rig: tuple[FakeForge, SubmitGit],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The phase's point: one file from the local command to the last test.
+
+    The submit follows the run to its merge and then hands that run to
+    whatever is keeping this command's trace, so the timeline holds the verb
+    and the run it caused rather than the verb alone.
+    """
+    fake, git = rig
+    box = tmp_path / "box"
+    box.mkdir()
+    monkeypatch.setenv("FM_PROFILE_DIR", str(box))
+    _submit(fake, git, armed=True)
+    printed = capsys.readouterr().out
+    assert "joins this trace" in printed, printed
+    (fragment,) = list(box.glob("*.json"))
+    events = json.loads(fragment.read_text(encoding="utf-8"))["traceEvents"]
+    # Every job the forge listed for the run, on the wall clock.
+    assert [e["name"] for e in events if e.get("cat") == "job"]
+    assert min(e["ts"] for e in events if "ts" in e) > 1.7e15
+
+
+def test_an_unprofiled_submit_asks_the_forge_for_no_run_at_all(
+    rig: tuple[FakeForge, SubmitGit],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The ordinary submit pays one environment read and nothing else."""
+    fake, git = rig
+    monkeypatch.delenv("FM_PROFILE_DIR", raising=False)
+    _submit(fake, git, armed=True)
+    assert "joins this trace" not in capsys.readouterr().out
+
+
+def test_a_red_run_is_traced_too(
+    rig: tuple[FakeForge, SubmitGit],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A timeline is wanted most where something went wrong.
+
+    The first profiled submit of this feature followed a run that went red
+    and wrote a file holding the submit's own task and nothing else, because
+    the trace was taken on the way to a merge rather than at every way out.
+    """
+    fake, git = rig
+    box = tmp_path / "box"
+    box.mkdir()
+    monkeypatch.setenv("FM_PROFILE_DIR", str(box))
+    git.outcome = "failure"
+    with pytest.raises(SystemExit) as exited:
+        _submit(fake, git, armed=True)
+    assert exited.value.code == EXIT_CI_FAILED
+    assert "joins this trace" in capsys.readouterr().out
+    assert len(list(box.glob("*.json"))) == 1

@@ -212,11 +212,18 @@ def test_an_entry_off_its_day_is_skipped_and_says_when(
         "tools.refresh (workshop.toml) runs every 2w; next on 2026-09-28, skipped"
         in out
     )
-    assert [argv[-1] for argv in seen] == ["check", "ci.profile.push"]
+    assert [argv[1] for argv in seen] == [
+        "--profile=fm-profile.json",
+        "ci.profile.push",
+    ]
     monkeypatch.setattr(_points, "today", lambda: date(2026, 9, 28))
     seen.clear()
     _points.run_point(root, "nightly", "nightly", spawn=green)
-    assert [argv[-1] for argv in seen] == ["check", "ci.profile.push", "--submit"]
+    assert [argv[-1] for argv in seen] == [
+        "check",
+        "--job=nightly",
+        "--submit",
+    ]
 
 
 def test_the_nightly_carries_the_forge_token_where_the_repository_has_one() -> None:
@@ -301,8 +308,9 @@ def test_the_builtin_jobs_of_each_point(tmp_path: Path) -> None:
     assert _points.entries_for(root, "nightly", "nightly") == (
         _points.Entry("nightly", "nightly", "check", profiled=True),
         # The profiled entry's trace leaves through the entry after it:
-        # a trace is written when the run that made it ends.
-        _points.Entry("nightly", "nightly", "ci.profile.push"),
+        # a trace is written when the run that made it ends, and it
+        # carries the job's forge name, which is what joins a leg to it.
+        _points.Entry("nightly", "nightly", "ci.profile.push", ("--job={display}",)),
     )
     # The release's jobs are declared, with nothing scheduled on them
     # until the wave's verbs become entries; a point's own name is a
@@ -366,7 +374,7 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
     assert seen == [
         ["hse", "--profile=fm-profile.json", "check"],
         ["hse", "coverage.leg", "--job=check (ubuntu-latest, 3.14)"],
-        ["hse", "ci.profile.push"],
+        ["hse", "ci.profile.push", "--job=check (ubuntu-latest, 3.14)"],
     ]
     # On GitLab the job is named by its key alone, the leg's label
     # unchanged: the collect step joins the row with the forge's job
@@ -529,7 +537,7 @@ def test_the_nightly_point_runs_the_whole_check(
     _points.run_point(root, "nightly", "nightly", python="3.14", spawn=green)
     assert seen == [
         (["hse", "--profile=fm-profile.json", "check"], "nightly"),
-        (["hse", "ci.profile.push"], "nightly"),
+        (["hse", "ci.profile.push", "--job=nightly (3.14)"], "nightly"),
     ]
 
 

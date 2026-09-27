@@ -227,6 +227,42 @@ becomes visible. Under `--json` anything a hook prints goes to stderr,
 because the envelope owns stdout. Hooks run in cascade order; a raising hook is named
 and fails the invocation, exactly as a crashing reporter should.
 
+### When the process replaces itself: `@pre_reexec`
+
+A verb sometimes re-runs its own command line in a new process: a sync that
+installed the very code the process is running, a handoff into another
+environment. Everything the process held is lost across that, and no exit
+handler runs to notice. A plugin with state worth keeping subscribes to the
+moment:
+
+<!-- example: fragment -->
+```python
+@footman.pre_reexec
+@contextlib.contextmanager
+def carry_the_trace():
+    fragment = write_what_we_have()
+    yield {"MY_PLUGIN_STATE": str(fragment)}
+    fragment.unlink()  # still here, so nothing was replaced after all
+```
+
+The hook is a context manager taking nothing and yielding environment entries
+for the successor. The verb doing the replacing calls `handing_off`, which
+enters every subscriber, merges what they yield, and hands the caller one
+mapping to pass to `execve` or to `subprocess.run(env=…)`:
+
+<!-- example: fragment -->
+```python
+with footman.handing_off() as handed:
+    os.execve(exe, cmd, {**os.environ, **handed})
+```
+
+The block ends by not returning, so a *normal* return means the replacement
+did not happen and each hook takes its own state back. An exception means it
+did, a handoff that waits for its child exits with the child's code, and what
+the hooks wrote down stands. A hook that raises on the way in is named on
+stderr and skipped, because a plugin's bookkeeping must not stop a repair that
+was already under way.
+
 ### Which moments may call a task
 
 The four **per-task** moments run inside the run, so a task called from one

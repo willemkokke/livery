@@ -267,6 +267,8 @@ _API_SECTIONS: list[tuple[str, str, list[str]]] = [
             "pre_task",
             "post_task",
             "post_tasks",
+            "pre_reexec",
+            "handing_off",
             "GlobalOption",
             "config_section",
             "wrap_task",

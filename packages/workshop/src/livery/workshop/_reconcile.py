@@ -233,7 +233,6 @@ def _reexec(root: Path) -> None:
     environment explicitly, so there is nothing to catch.
     """
     import livery.footman as footman
-    from livery.footman import profile
 
     prog = footman.prog()
     if os.environ.get(_GUARD):
@@ -248,11 +247,11 @@ def _reexec(root: Path) -> None:
         return
     cmd = [uv, "run", "--project", str(root), "--no-sync", prog, *sys.argv[1:]]
     try:
-        # A profiled run hands its trace on with the guard, so the steps
-        # this process already ran are in the successor's trace instead of
-        # dying with the process that ran them.
-        with profile.handing_off() as traced:
-            handed_on = {**os.environ, _GUARD: "1", **traced}
+        # Whatever a plugin wants to survive the replacement rides in the
+        # environment beside the guard: a profiled run's trace, and
+        # whatever else subscribes later. Nothing mounted hands nothing on.
+        with footman.handing_off() as handed:
+            handed_on = {**os.environ, _GUARD: "1", **handed}
             if sys.platform == "win32":
                 completed = subprocess.run(cmd, check=False, env=handed_on)
                 # The successful handoff: SystemExit derives from

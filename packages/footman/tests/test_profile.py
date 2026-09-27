@@ -319,7 +319,7 @@ HANDOFF_TASKS = textwrap.dedent(
     def replaced():
         \"\"\"The reconcile's shape: work, then a block that does not return.\"\"\"
         footman.run([sys.executable, "-c", "pass"])
-        with profile.handing_off() as traced:
+        with footman.handing_off() as traced:
             Path("handed.json").write_text(json.dumps(traced), encoding="utf-8")
             footman.fail("replaced by the successor")
 
@@ -327,13 +327,13 @@ HANDOFF_TASKS = textwrap.dedent(
     def stayed():
         \"\"\"The same, where replacing the process did not work.\"\"\"
         footman.run([sys.executable, "-c", "pass"])
-        with profile.handing_off() as traced:
+        with footman.handing_off() as traced:
             Path("handed.json").write_text(json.dumps(traced), encoding="utf-8")
 
     @task
     def unwatched():
         r'''The same again, in a run nobody asked for a trace of.'''
-        with profile.handing_off() as traced:
+        with footman.handing_off() as traced:
             Path("handed.json").write_text(json.dumps(traced), encoding="utf-8")
 
     @task

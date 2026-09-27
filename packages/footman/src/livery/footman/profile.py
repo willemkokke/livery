@@ -34,10 +34,11 @@ A child `fm` is one of those children. It finds the box in its environment
 and writes its whole run there as a fragment, with its own process id,
 instead of a file of its own — so a verb that spawns a verb shows what it
 spawned from the inside, and the box is left for whoever opened it. A
-process about to replace itself does it inside `handing_off()`, which drops
-what the running task has recorded and hands the box to the successor, so
-the work before an exec is in the trace and the directory is consumed rather
-than leaked.
+process about to replace itself does that inside
+[livery.footman.handing_off][], which reaches this plugin's own `pre_reexec`
+block: it drops what the running task has recorded and hands the box to the
+successor, so the work before an exec is in the trace and the directory is
+consumed rather than leaked. A verb that re-execs knows none of that.
 """
 
 from __future__ import annotations
@@ -72,7 +73,12 @@ _PID = 1
 DROP = "FM_PROFILE_DIR"
 """The drop box, named in every task's environment so that every child
 inherits it. A child may leave Chrome-trace fragments there. One directory
-per profiled run, under `profiles/` in footman's cache."""
+per profiled run, under `profiles/` in footman's cache.
+
+The name is the same for every runner built on footman, brand and all,
+because it is a convention foreign tools speak: a test runner, a build, a
+converter for another program's timings. None of them can know a brand's
+prefix."""
 
 ORIGIN = "originEpochUs"
 """The key a trace records its own zero under, in wall-clock microseconds.
@@ -489,15 +495,7 @@ def write(inv: footman.Invocation) -> None:
             "dur": round((time.perf_counter() - begin) * 1e6, 1),
         }
     )
-    payload = {
-        "traceEvents": events,
-        "displayTimeUnit": "ms",
-        # Where this trace's zero is on the wall clock, so a reader on
-        # another machine can lay this timeline beside another one: the leg
-        # inside the run that ran it.
-        ORIGIN: round(_epoch_origin(zero), 1),
-    }
-    path.write_text(json.dumps(payload), encoding="utf-8")
+    path.write_text(as_trace(events, origin=_epoch_origin(zero)), encoding="utf-8")
     print(f"profile: {path}", file=sys.stderr)
     # A run with a file of its own can still be somebody's child. Its whole
     # trace, the fragments it embedded included, goes up into the box that
@@ -505,6 +503,26 @@ def write(inv: footman.Invocation) -> None:
     # inside and not just the step that spawned it.
     if _parent_box is not None and Path(_parent_box).is_dir():
         _drop(_parent_box, _stamped(_as_child(events), zero))
+
+
+def as_trace(events: list[dict[str, Any]], *, origin: float) -> str:
+    """*events* as the text of a trace file, for a reader to open.
+
+    One place builds the shape: the events, the unit a reader shows by
+    default, and where this trace's zero sits on the wall clock, so another
+    timeline can be laid on it.
+
+    Args:
+        events: Chrome-trace events, stamped relative to *origin*.
+        origin: That zero, in wall-clock microseconds. Zero when the stamps
+            are already the wall clock's.
+
+    Returns:
+        The file's text.
+    """
+    return json.dumps(
+        {"traceEvents": events, "displayTimeUnit": "ms", ORIGIN: round(origin, 1)}
+    )
 
 
 def laid_on(
@@ -567,6 +585,36 @@ def laid_on(
     return placed, ""
 
 
+def keeping() -> bool:
+    """Whether this run keeps a trace, so a caller can skip building one.
+
+    The cheap question, for a caller whose timeline costs something to
+    assemble: a run's worth of jobs read from a forge, a tool's report
+    parsed. One environment read, and no answer here is ever a reason to
+    fail: nothing is profiling in the ordinary case.
+    """
+    return _box() is not None
+
+
+def dropped(events: list[dict[str, Any]]) -> Path | None:
+    """Leave *events* in this run's drop box as a fragment of its own.
+
+    For a caller with a timeline to add that this process did not live: a CI
+    run it watched from here, a tool's own report. The stamps are epoch
+    microseconds, the convention every fragment follows, and the writer lays
+    the fragment on the run's clock like any other.
+
+    Args:
+        events: Chrome-trace events, stamped in epoch microseconds.
+
+    Returns:
+        The file, or `None` when this run is not profiled and there is no box
+        to drop into, which is the ordinary case.
+    """
+    sink = _box()
+    return None if sink is None else _drop(sink, events)
+
+
 def _write_fragment(inv: footman.Invocation) -> None:
     """Drop this whole run in the box a parent opened.
 
@@ -582,28 +630,29 @@ def _write_fragment(inv: footman.Invocation) -> None:
     _drop(sink, _stamped(events, zero))
 
 
+@footman.pre_reexec
 @contextlib.contextmanager
-def handing_off() -> Generator[dict[str, str]]:
-    """Hand this run's trace to the process about to replace this one.
+def hand_the_trace_on() -> Generator[dict[str, str]]:
+    """Give this run's trace to the process about to replace it.
 
-    Wraps the block that does the replacing, which is a block that ends by
-    not returning: an exec that works never comes back, and a Windows
-    handoff waits for its replacement and exits with its code. So returning
-    normally means the replacement did not happen, and the handoff is taken
-    back — the fragment is removed and this run writes its own file as
-    usual.
+    The `pre_reexec` moment, so a verb that re-runs its own command line
+    calls `livery.footman.handing_off` and knows nothing about traces. The
+    block it wraps ends by not returning: an exec that works never comes
+    back, and a handoff that waits for its replacement exits with its code.
+    So returning normally means the replacement did not happen, and this
+    takes the handoff back — the fragment is removed and the run writes its
+    own file as usual.
 
     Drops what the running task has recorded so far as a fragment, and
-    yields the environment entries that give the box to the successor: hand
-    them to `os.execve`, or to `subprocess.run(env=…)` where there is no
-    exec. Nothing is written to `os.environ`, because a task-time write to
-    the process environment is ambient and footman notes it.
+    yields the environment entries that give the box to the successor.
+    Nothing is written to `os.environ`, because a task-time write to the
+    process environment is ambient and footman notes it.
 
     What lands in the fragment is this process's own span and the `run()`
-    steps of the task that calls this, which is what the exec would
-    otherwise lose. Tasks that finished earlier in the same process are not
-    in it: their rows belong to the run, and the run is what is being
-    replaced.
+    steps of the task at the moment of the handoff, which is what the exec
+    would otherwise lose. Tasks that finished earlier in the same process
+    are not in it: their rows belong to the run, and the run is what is
+    being replaced.
 
     Yields:
         The entries the successor needs, empty when this run writes no trace

@@ -251,3 +251,33 @@ def test_configure_arms_only_under_a_profiled_run(tmp_path, monkeypatch):
     monkeypatch.setenv("FM_PROFILE_DIR", str(tmp_path))
     pytest_plugin.pytest_configure(config)
     assert registered == ["footman-profile-trace"]
+
+
+def test_a_test_never_inherits_the_drop_box_but_the_suite_still_reports(
+    pytester: pytest.Pytester,
+) -> None:
+    """Two things at once: the suite's timings are kept, the tests see no box.
+
+    A CI leg runs its gate under a profile, so every test in it would
+    otherwise read the leg's box out of its own environment, and a `Runner` in
+    a test would drop a fragment of its own once per test. The recorder took
+    the box's name when the session began, so it keeps reporting.
+    """
+    box = pytester.path / "box"
+    box.mkdir()
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setenv("FM_PROFILE_DIR", str(box))
+    try:
+        pytester.makepyfile(
+            """
+            import os
+
+            def test_the_box_is_not_in_here():
+                assert os.environ.get("FM_PROFILE_DIR") is None
+            """
+        )
+        pytester.runpytest_inprocess().assert_outcomes(passed=1)
+    finally:
+        monkeypatch.undo()
+    (fragment,) = list(box.glob("*.json"))
+    assert fragment.name.startswith("pytest-")

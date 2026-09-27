@@ -465,16 +465,17 @@ def test_the_rerun_hands_the_guard_on_and_writes_none_of_it_here(
 def test_a_profiled_rerun_hands_its_trace_on_with_the_guard(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The steps this process ran go to its replacement, not to the bin.
+    """Whatever a plugin hands on rides in the replacement's environment.
 
-    An exec runs no exit handler, so a profiled run's trace dies with the
-    process unless the replacement is told where to find what came before
-    it. Both arms build one environment, so pinning the exec's is pinning
-    the wait's too.
+    An exec runs no exit handler, so state worth keeping dies with the
+    process unless the replacement is told where to find it. The verb asks
+    footman, not a plugin: what subscribes to the moment is none of its
+    business. Both arms build one environment, so pinning the exec's is
+    pinning the wait's too.
     """
     import contextlib
 
-    from livery.footman import profile
+    import livery.footman as footman
     from livery.workshop import _reconcile
 
     if sys.platform == "win32":
@@ -486,7 +487,7 @@ def test_a_profiled_rerun_hands_its_trace_on_with_the_guard(
     def _handing_off() -> contextlib.AbstractContextManager[dict[str, str]]:
         return contextlib.nullcontext({"FM_PROFILE_HANDOFF": str(tmp_path / "box")})
 
-    monkeypatch.setattr(profile, "handing_off", _handing_off)
+    monkeypatch.setattr(footman, "handing_off", _handing_off)
     seen: list[dict[str, str]] = []
     monkeypatch.setattr(os, "execve", lambda path, argv, env: seen.append(dict(env)))
     _reconcile._reexec(tmp_path)
