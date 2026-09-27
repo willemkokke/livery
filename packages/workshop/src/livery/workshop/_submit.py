@@ -910,7 +910,7 @@ def _gate(fix: bool = False, *, root: Path, base: str = "main") -> None:
     the caller folds any rewrites into the branch before pushing.
     """
     from livery.workshop._gate_record import covering
-    from livery.workshop._quality import check
+    from livery.workshop._quality import check, say_skipped
 
     git = GitOps(root)
     with contextlib.suppress(GitError):
@@ -918,8 +918,8 @@ def _gate(fix: bool = False, *, root: Path, base: str = "main") -> None:
     proof, why = covering(git, base=base)
     if proof is not None:
         by = " by fm check" if proof.steps else ""
-        print(
-            f"  gate: tree {proof.tree[:12]} proved green{by}"
+        say_skipped(
+            f"gate: tree {proof.tree[:12]} proved green{by}"
             f" ({proof.describe()}); skipping"
         )
         return

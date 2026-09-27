@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from livery.workshop._verified import Verified
 
 import livery.footman as footman
-from livery.footman import Forward, doc, fail, group, parallel, task
+from livery.footman import Forward, context, doc, fail, group, parallel, task
 from livery.workshop._backends import _python, require_backends
 from livery.workshop._kinds import gated
 from livery.workshop._layers import workspace_root
@@ -393,7 +393,7 @@ def _run_check(full: bool, fix: bool, base: str) -> None:
             if root_for_ci is not None and run is not None:
                 subset = _with_unstored_suites(root_for_ci, run, packages, subset)
             if not subset:
-                print(f"  nothing affected: {_nothing_reason(ci_base)}")
+                say_skipped(f"nothing affected: {_nothing_reason(ci_base)}")
                 if root_for_ci is not None and run is not None:
                     _verified.write_marker(root_for_ci, _verified.NOTHING, leg=run.leg)
                 return
@@ -426,8 +426,8 @@ def _run_check(full: bool, fix: bool, base: str) -> None:
             reflex = _gate_record.plan(root_for_ci, git, base=base)
             proved_tree = reflex.tree
             if reflex.mode == "proved":
-                print(
-                    f"  proved: tree {reflex.tree[:12]} is green already"
+                say_skipped(
+                    f"proved: tree {reflex.tree[:12]} is green already"
                     f" ({reflex.why}); nothing to run"
                 )
                 return
@@ -444,8 +444,8 @@ def _run_check(full: bool, fix: bool, base: str) -> None:
                     subset = scope.packages
                     members = [p for p in subset if p.path != WORKSPACE_TESTS]
                     if not subset:
-                        print(
-                            "  nothing affected: only prose and site files changed"
+                        say_skipped(
+                            "nothing affected: only prose and site files changed"
                             " since the proved tree"
                         )
                         _remember_local(
@@ -579,6 +579,23 @@ def _current_point() -> str:
     from livery.workshop._state import POINT_VARIABLE
 
     return os.environ.get(POINT_VARIABLE, "gate")
+
+
+def say_skipped(text: str) -> None:
+    """Print a skip, and put it on the timeline as an event.
+
+    Work left undone because something already proves it is the one thing
+    an account of a run must not show as merely fast: a gate that skipped
+    and a gate that flew look identical from outside. The printed line is
+    unchanged, so a log reads as it always did, and the mark is what makes
+    the picture honest about why a leg was quick.
+
+    Marks only inside a task, since that is where a timeline exists; a
+    plain call outside a run prints and nothing more.
+    """
+    print(f"  {text}")
+    if context.current().in_task:
+        footman.mark(f"skipped: {text}")
 
 
 def _nothing_reason(base: str) -> str:
