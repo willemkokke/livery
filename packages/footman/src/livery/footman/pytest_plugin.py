@@ -113,6 +113,24 @@ def pytest_configure(config: pytest.Config) -> None:
         config.pluginmanager.register(_TraceRecorder(sink), "footman-profile-trace")
 
 
+@pytest.fixture(autouse=True)
+def _no_inherited_drop_box(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test behaves differently for running inside a profiled run.
+
+    A CI leg runs its gate under a profile, so every test in it inherits the
+    drop box's name, and code that asks whether a trace is being kept answers
+    one way on a runner and the other on a desk. That is the one thing a test
+    must never do. So the box leaves each test's environment, and a test that
+    wants one sets its own.
+
+    The suite's own fragment is untouched: the recorder above took the name
+    when the session started, and every test's timings still reach it. What
+    goes is the *inheriting* — a `Runner` inside a test would otherwise write
+    a fragment of its own into the leg's box, once per test.
+    """
+    monkeypatch.delenv("FM_PROFILE_DIR", raising=False)
+
+
 class _TraceRecorder:
     """Per-test timings as a Chrome-trace fragment, per the profile plugin's
     drop-directory convention: `ts` in epoch microseconds, our own `pid`.

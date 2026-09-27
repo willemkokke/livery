@@ -377,6 +377,13 @@ Acceptance:
   only on the way to a merge, so a red run wrote a file holding the
   local command and nothing else, which is the case a timeline is wanted
   for most. Every way out of the watch now traces the run.
+- 2026-09-27, and the deeper half of the same finding: inside a profiled
+  leg every test inherited the box, so a `Runner` in a test dropped a
+  fragment of its own once per test, and any code asking whether a trace
+  is kept answered one way on a runner and the other on a desk. The box
+  now leaves each test's environment, and a test that wants one sets its
+  own. The suite's own fragment is untouched, because the recorder takes
+  the name when the session begins.
 - 2026-09-27, Willem asked whether a group can have a default task. It
   can, and `fm ci.profile` is one, so the plan's own spelling stands.
   The leg's push stays hidden beside it.
