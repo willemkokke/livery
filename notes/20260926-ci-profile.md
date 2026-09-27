@@ -290,8 +290,8 @@ The walk is one function over those three:
 
 ```python
 def chain(commit, depth):
-    for run in runs_about(commit):   # the forge's answer, plus what recorded itself
-        assemble(run)                # every job, its steps, every entry's timeline
+    for run in runs_about(commit):  # the forge's answer, plus what recorded itself
+        assemble(run)  # every job, its steps, every entry's timeline
     merged = merge_commit_of(commit)  # the pull request this commit headed
     if merged and depth:
         chain(merged, depth - 1)

@@ -22,6 +22,14 @@ classifiers = [
 # Sealed-box encryption for GitHub CI secrets: turns the ci_secrets
 # capability on for livery.forge.GithubForge.
 github-secrets = ["pynacl>=1.5"]
+# The suite drives the dev plugin, the one part of this package that
+# reaches for the runner and the tool handles. Never runtime
+# dependencies: livery.forge is stdlib-only at import time, and the
+# plugin loads only through footman's own plugin().
+test = [
+    "livery-footman>=0.53.0",
+    "livery-toolroom>=0.7.0",
+]
 
 [project.entry-points."footman.tasks"]
 # The dev-container tasks (livery.forge._dev), mounted only by a
