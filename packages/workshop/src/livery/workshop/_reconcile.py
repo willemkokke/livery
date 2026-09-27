@@ -233,6 +233,7 @@ def _reexec(root: Path) -> None:
     environment explicitly, so there is nothing to catch.
     """
     import livery.footman as footman
+    from livery.footman import profile
 
     prog = footman.prog()
     if os.environ.get(_GUARD):
@@ -246,15 +247,19 @@ def _reexec(root: Path) -> None:
         _say(f"{prog}: uv is not on PATH; continuing on the loaded code")
         return
     cmd = [uv, "run", "--project", str(root), "--no-sync", prog, *sys.argv[1:]]
-    handed_on = {**os.environ, _GUARD: "1"}
     try:
-        if sys.platform == "win32":
-            completed = subprocess.run(cmd, check=False, env=handed_on)
-            # The successful handoff: SystemExit derives from
-            # BaseException, so the hook's Exception guard cannot
-            # swallow it.
-            raise SystemExit(completed.returncode)
-        os.execve(uv, cmd, handed_on)
+        # A profiled run hands its trace on with the guard, so the steps
+        # this process already ran are in the successor's trace instead of
+        # dying with the process that ran them.
+        with profile.handing_off() as traced:
+            handed_on = {**os.environ, _GUARD: "1", **traced}
+            if sys.platform == "win32":
+                completed = subprocess.run(cmd, check=False, env=handed_on)
+                # The successful handoff: SystemExit derives from
+                # BaseException, so the hook's Exception guard cannot
+                # swallow it.
+                raise SystemExit(completed.returncode)
+            os.execve(uv, cmd, handed_on)
     except (OSError, ValueError) as error:
         _say(
             f"{prog}: could not re-run on the updated code ({error});"

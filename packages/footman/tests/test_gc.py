@@ -158,6 +158,25 @@ def test_collect_sweeps_abandoned_part_files(tmp_path):
     assert (room / "inflight.c3d4.part").exists()
 
 
+def test_collect_sweeps_a_profile_box_its_run_never_took_away(tmp_path):
+    # A profiled run's box holds what its children dropped, and the run's
+    # writer removes it at the end. A run replaced by an exec, or killed,
+    # runs no exit handler and leaves the box: the directory is the clock,
+    # and a child writing a fragment into it keeps that clock fresh.
+    cache = tmp_path / "cache"
+    room = cache / "profiles"
+    (room / "abandoned").mkdir(parents=True)
+    (room / "abandoned" / "fm-4242-1.json").write_text("{}", encoding="utf-8")
+    then = time.time() - (_gc.BOX_DAYS + 0.5) * 86400
+    os.utime(room / "abandoned", (then, then))
+    (room / "live").mkdir()
+    (room / "live" / "fm-4243-1.json").write_text("{}", encoding="utf-8")
+
+    assert _gc.collect(cache) == 1
+    assert not (room / "abandoned").exists()
+    assert (room / "live" / "fm-4243-1.json").exists()
+
+
 def test_collect_tolerates_garbage_manifests(tmp_path):
     cache = tmp_path / "cache"
     cache.mkdir()

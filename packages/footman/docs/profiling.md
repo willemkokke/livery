@@ -125,6 +125,12 @@ directory, shifts every fragment onto the run's clock, and embeds each
 child as its own process group beside `fm`'s tracks. A malformed drop is
 named on stderr and skipped, never fatal.
 
+The box is one directory per profiled run, under `profiles/` in footman's
+cache, and the run's own writer removes it at the end. A run that never gets
+there, because it was killed or replaced itself, leaves the box behind; the
+collector sweeps one that has been silent for a day, so nobody has to notice
+it.
+
 **pytest speaks the convention out of the box.** footman ships a pytest
 plugin (the same one that provides the [testing fixtures](testing.md)),
 and when a pytest process inherits `FM_PROFILE_DIR` it records every
@@ -147,3 +153,45 @@ can join: a `cargo build --timings` converter, a `clang -ftime-trace`
 copy step, a script of your own. Drop the file, keep your `pid`, spell
 `ts` in epoch microseconds, and the run's profile carries your timeline
 where it happened.
+
+## A child `fm` joins the same way
+
+An `fm` a task spawns is a child like any other. It finds the box in its
+environment and writes its whole run there as a fragment instead of a file of
+its own, so its tasks, steps and sections appear under a process group of
+their own, inside the step that spawned them. A verb that calls a verb shows
+what it called from the inside. The box is left where it is, for whoever
+opened it to sweep.
+
+Nothing is configured for this. `--profile` on the outer line is the whole
+switch, and a child that finds no box writes nothing and reads nothing.
+
+### A process that replaces itself
+
+An exec runs no exit handler. Everything a process recorded before replacing
+itself would die with it, and its box would be left behind. So a process
+about to do that hands its trace on:
+
+<!-- example: fragment -->
+
+```python
+from livery.footman import profile
+
+with profile.handing_off() as traced:
+    os.execve(uv, cmd, {**os.environ, **traced})
+```
+
+`handing_off()` drops what the running task has recorded as a fragment, and
+yields the environment entries that give the box to the successor. The
+successor adopts that box instead of opening a second one, embeds the
+fragment, and removes the directory at the end, so the work before the exec
+sits in one file with the work after it. A fragment older than the run that
+reads it slides the whole trace, so the earliest moment in the file is zero
+and no stamp is negative.
+
+The block is one that ends by not returning. Where there is no exec, which is
+Windows, the handoff waits for its replacement and exits with its code, and
+the process that waited writes no file, so its replacement's file stands.
+Returning from the block normally means the replacement never happened: the
+handoff is taken back, the fragment is removed, and the run writes its own
+trace as usual.
