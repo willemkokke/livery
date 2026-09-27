@@ -30,7 +30,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from livery.footman.profile import laid_on
 from livery.workshop._state import (
     LEG_VARIABLE,
     TRACE_NAMESPACE,
@@ -273,6 +272,11 @@ def assemble(
         per thing worth saying. No events at all means the forge listed no
         job for the run.
     """
+    # The plugin lays one trace on another's clock, and is optional: an
+    # ordinary run of any verb must not import it, and importing this
+    # module is how the submit reaches `drop_run`.
+    from livery.footman.profile import laid_on
+
     moment = now or datetime.now(UTC)
     lines: list[str] = []
     jobs = repo.checks.jobs(int(run_id)) if run_id.isdigit() else ()

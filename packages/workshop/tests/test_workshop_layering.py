@@ -246,6 +246,33 @@ def test_the_task_tree_imports_no_pytest() -> None:
     assert "imported" in done.stdout
 
 
+def test_the_verbs_import_no_optional_plugin() -> None:
+    """An optional plugin is imported where it is used, never on the way in.
+
+    The profile plugin is mounted by a workspace that wants traces and is
+    inert otherwise. A module-level import of it anywhere a verb's own path
+    reaches makes every run of every verb pay for it, and makes a run that
+    mounted nothing carry its global option too. The submit reaches the
+    traces module for one function, which is how this was found.
+    """
+    import subprocess
+    import sys
+
+    probe = (
+        "import sys\n"
+        "import livery.workshop._submit\n"
+        "import livery.workshop._traces\n"
+        "import livery.workshop._ci_tasks\n"
+        "rode = [n for n in sys.modules if n.endswith('footman.profile')]\n"
+        "print('rode:', rode)\n"
+    )
+    done = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, check=False
+    )
+    assert done.returncode == 0, done.stderr
+    assert "rode: []" in done.stdout, done.stdout
+
+
 def _spawned_by_name(source: Path) -> list[str]:
     """Every `run([...])` under *source* whose program is a literal."""
     import ast

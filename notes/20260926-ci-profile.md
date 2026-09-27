@@ -377,6 +377,13 @@ Acceptance:
   only on the way to a merge, so a red run wrote a file holding the
   local command and nothing else, which is the case a timeline is wanted
   for most. Every way out of the watch now traces the run.
+- 2026-09-27, a reading of the whole branch caught one more: the
+  assembler's import of the plugin had drifted to the module's own
+  imports, and the submit imports that module for one function, so every
+  run of every verb pulled the optional plugin in and registered its
+  global option. Imported where it is used again, and a test in the
+  layering suite now walks a fresh interpreter to prove no verb's path
+  carries it.
 - 2026-09-27, assembling a real run found two more, and both were
   invisible to every test that had a job named `check`. A leg's ref is
   keyed by the label the runner sets and the forge lists a matrix job
