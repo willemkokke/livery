@@ -748,10 +748,11 @@ def test_a_trace_can_never_fail_the_command_it_watched(
     monkeypatch.setenv("FM_PROFILE_DIR", str(box))
     repo = cast(Repository, cast(Any, _forge(())))
     line = _traces.drop_run(repo, _git_at(work / "nowhere"))
-    # Git's own words, whatever they are: a directory that is not there, or
-    # one that is and holds no repository.
+    # The shape, never the words: what comes back is git's own reason on one
+    # platform and the operating system's on another, and a reason is printed
+    # verbatim rather than read.
     assert line.startswith("profile: the run was not traced (")
-    assert "nowhere" in line
+    assert line.endswith(")") and len(line) > len("profile: the run was not traced ()")
     assert list(box.glob("*.json")) == []
 
 
