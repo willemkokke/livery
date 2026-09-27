@@ -888,7 +888,7 @@ def ci_metrics_collect() -> None:
     metrics_collect_flow(git.root, repo, git)
 
 
-profile = ci.group("profile", help="The legs' traces", hidden=True)
+profile = ci.group("profile", help="A run as one timeline")
 
 
 def profile_push_flow(root: Path, trace: Path) -> None:
@@ -900,7 +900,7 @@ def profile_push_flow(root: Path, trace: Path) -> None:
         print(f"  {line}")
 
 
-@profile.task(name="push")
+@profile.task(name="push", hidden=True)
 def ci_profile_push(
     *,
     trace: Annotated[Path, doc("the trace the profiled entry wrote")] = Path(TRACE),
@@ -925,12 +925,12 @@ def ci_profile_push(
     profile_push_flow(root, Path(trace))
 
 
-@profile.task(name="write")
-def ci_profile_write(
+@profile.default
+def ci_profile(
     *,
     run: Annotated[str, doc("the run's id; the newest for HEAD by default")] = "",
-    into: Annotated[Path, doc("where the file lands; the contract says by default")] = (
-        Path("")
+    into: Annotated[str, doc("where the file lands; the contract's own by default")] = (
+        ""
     ),
 ) -> None:
     """Write one CI run as one timeline, to open at ui.perfetto.dev.
@@ -952,7 +952,7 @@ def ci_profile_write(
         repo,
         run_id=run,
         head_sha="" if run else git.head_sha(),
-        into=into if str(into) else None,
+        into=Path(into) if into else None,
     )
     for line in lines:
         print(f"  {line}")

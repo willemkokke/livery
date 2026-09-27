@@ -313,10 +313,6 @@ Acceptance:
 - The note's decision record carries the measured cost per run.
 - `uv run fm docs.build` renders the page.
 
-The verb is `fm ci.profile.write`, not `fm ci.profile` as this plan
-first spelled it: `ci.profile` is the group the leg's push already
-lives in, and footman has no way for a group to be a task as well.
-
 ## Temporary, replaced by
 
 | Scaffolding | Replaced by |
@@ -372,6 +368,18 @@ lives in, and footman has no way for a group to be a task as well.
   writer leaked its box, because the exit sweep asked whether a box
   was the newest rather than whether it was still open. 107 empty
   directories had gathered on this desk since 2026-09-24.
+- 2026-09-27, two things the first profiled submit taught, both found by
+  running the acceptance's own command rather than by a test. A leg runs
+  its own tests under a profile, so a submit test's rig with no
+  repository in it turned a watched merge into a failed submit: a trace
+  is observational, and nothing it does may change what the run decided,
+  so every failure inside it is a printed line. And the run was traced
+  only on the way to a merge, so a red run wrote a file holding the
+  local command and nothing else, which is the case a timeline is wanted
+  for most. Every way out of the watch now traces the run.
+- 2026-09-27, Willem asked whether a group can have a default task. It
+  can, and `fm ci.profile` is one, so the plan's own spelling stands.
+  The leg's push stays hidden beside it.
 - 2026-09-27, Willem: a re-exec is footman's moment, not a plugin's
   caller's. So footman grew a hook kind, `pre_reexec`, whose
   subscriber is a context manager yielding environment entries for the

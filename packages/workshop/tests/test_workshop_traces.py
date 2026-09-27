@@ -17,6 +17,7 @@ import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -619,7 +620,7 @@ def test_a_command_keeping_no_trace_drops_nothing(
 
     monkeypatch.delenv("FM_PROFILE_DIR", raising=False)
     repo = cast(Repository, cast(Any, _Repo()))
-    assert _traces.drop_run(work, repo, head_sha="abc123") == ""
+    assert _traces.drop_run(repo, _git_at(work)) == ""
     assert asked == []
 
 
@@ -644,7 +645,7 @@ def test_the_run_a_command_followed_joins_its_own_trace(
     monkeypatch.setenv("FM_PROFILE_DIR", str(box))
     jobs = (_job("check", started=began, completed="2026-09-27T10:00:01Z"),)
     repo = cast(Repository, cast(Any, _forge(jobs, created=began)))
-    line = _traces.drop_run(work, repo, head_sha="abc123")
+    line = _traces.drop_run(repo, _git_at(work))
     assert line == "profile: run 77 joins this trace, 1 job(s)"
     (fragment,) = list(box.glob("*.json"))
     events = json.loads(fragment.read_text(encoding="utf-8"))["traceEvents"]
@@ -717,3 +718,35 @@ def test_a_run_nobody_can_name_refuses_to_write_a_file(
     _contract(work, profile_window="lots")
     path, lines = _traces.write_run(work, repo, run_id="77")
     assert path is None and "profile-window" in lines[0]
+
+
+def _git_at(root: Path) -> Any:
+    """A git handle answering for *root*, as the submit hands one over."""
+    from livery.workshop._git_ops import GitOps
+
+    return GitOps(root)
+
+
+def test_a_trace_can_never_fail_the_command_it_watched(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Observational means observational, git's own failures included.
+
+    A CI leg runs its own tests under a profile, so a submit test's rig with
+    no repository in it turned a watched merge into a failed submit. Whatever
+    goes wrong here is the line to print and nothing else.
+    """
+    from typing import Any, cast
+
+    from livery.forge import Repository
+
+    box = work / "box"
+    box.mkdir()
+    monkeypatch.setenv("FM_PROFILE_DIR", str(box))
+    repo = cast(Repository, cast(Any, _forge(())))
+    line = _traces.drop_run(repo, _git_at(work / "nowhere"))
+    # Git's own words, whatever they are: a directory that is not there, or
+    # one that is and holds no repository.
+    assert line.startswith("profile: the run was not traced (")
+    assert "nowhere" in line
+    assert list(box.glob("*.json")) == []

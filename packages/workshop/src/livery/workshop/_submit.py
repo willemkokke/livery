@@ -34,7 +34,6 @@ from typing import Annotated, ParamSpec
 
 import livery.footman as footman
 from livery.footman import Arg, doc, fail, group
-from livery.footman.profile import keeping
 from livery.forge import ForgeError, PullRequest, Repository, Unsupported
 from livery.workshop._contract import load_contract, normalise_keys
 from livery.workshop._conventional import TITLE_RE, TYPES
@@ -843,6 +842,17 @@ def submit_flow(
     if not follow_to_verdict:
         return number
     heals = 0
+
+    def trace_the_run() -> None:
+        """Hand the run just followed to this command's own trace, if any.
+
+        Called at every way out of the watch, a red run included: a timeline
+        is wanted most where something went wrong. Nothing is kept in the
+        ordinary case, and nothing here can fail the submit.
+        """
+        if traced := drop_run(repo, git):
+            print(f"  {traced}")
+
     while True:
         try:
             follow(repo, plan.branch, git, interval=interval, timeout=timeout)
@@ -855,6 +865,7 @@ def submit_flow(
                 # 11 still surfaces on an *armed* submit, where a gone
                 # schedule means something interfered.
                 print(f"  done: CI is green and PR #{number} awaits your call")
+                trace_the_run()
                 return number
             if code in (EXIT_CONFLICTS, EXIT_BEHIND) and heals < _MAX_HEALS:
                 heals += 1
@@ -876,15 +887,11 @@ def submit_flow(
                     repo, git, plan, closes=linked, armed=armed, force=force
                 )
                 continue
+            trace_the_run()
             raise
-        # Before the tidy moves this checkout off the branch: the run that
-        # was just followed belongs in this command's own trace, when one is
-        # being kept. Asked first, because nothing is in the ordinary case
-        # and neither git nor the forge should be troubled for it.
-        if keeping():
-            traced = drop_run(git.root, repo, head_sha=git.head_sha())
-            if traced:
-                print(f"  {traced}")
+        # Before the tidy moves this checkout off the branch, whose head is
+        # how the run is found.
+        trace_the_run()
         _tidy_after_merge(repo, git, plan.branch, plan.base, number)
         return number
 

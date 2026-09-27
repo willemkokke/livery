@@ -1903,3 +1903,27 @@ def test_an_unprofiled_submit_asks_the_forge_for_no_run_at_all(
     monkeypatch.delenv("FM_PROFILE_DIR", raising=False)
     _submit(fake, git, armed=True)
     assert "joins this trace" not in capsys.readouterr().out
+
+
+def test_a_red_run_is_traced_too(
+    rig: tuple[FakeForge, SubmitGit],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A timeline is wanted most where something went wrong.
+
+    The first profiled submit of this feature followed a run that went red
+    and wrote a file holding the submit's own task and nothing else, because
+    the trace was taken on the way to a merge rather than at every way out.
+    """
+    fake, git = rig
+    box = tmp_path / "box"
+    box.mkdir()
+    monkeypatch.setenv("FM_PROFILE_DIR", str(box))
+    git.outcome = "failure"
+    with pytest.raises(SystemExit) as exited:
+        _submit(fake, git, armed=True)
+    assert exited.value.code == EXIT_CI_FAILED
+    assert "joins this trace" in capsys.readouterr().out
+    assert len(list(box.glob("*.json"))) == 1

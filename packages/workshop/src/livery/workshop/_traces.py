@@ -43,6 +43,7 @@ from livery.workshop._state import (
 
 if TYPE_CHECKING:
     from livery.forge import Job, Repository
+    from livery.workshop._git_ops import GitOps
 
 #: The one file a leg puts on its trace ref: the trace as its writer
 #: wrote it, byte for byte, so nothing re-serialises a megabyte to
@@ -450,8 +451,8 @@ def newest_run(repo: Repository, head_sha: str) -> str:
     return str(runs[0].id) if runs else ""
 
 
-def drop_run(root: Path, repo: Repository, *, head_sha: str, run_id: str = "") -> str:
-    """Put the run of *head_sha* in this command's own drop box; the line.
+def drop_run(repo: Repository, git: GitOps, *, run_id: str = "") -> str:
+    """Put the run of *git*'s head in this command's own drop box; the line.
 
     For a verb that followed a run to its end. With a trace being kept, the
     run it watched goes into the same box its own children drop into, so one
@@ -460,25 +461,33 @@ def drop_run(root: Path, repo: Repository, *, head_sha: str, run_id: str = "") -
     clock's, which is what a box takes, and this run's writer lays the whole
     thing on its own clock.
 
-    Empty when no trace is being kept, which is the ordinary case: a verb
-    calls this whatever the line asked for and pays one environment read.
+    Empty when no trace is being kept, which is the ordinary case: the verb
+    calls this whatever its line asked for and pays one environment read.
+
+    Never raises. A trace is something noticed about a run, so nothing here
+    may change what the run decided: every failure, git's and the forge's
+    alike, comes back as the line to print. A CI leg proved the point by
+    running its own tests under a profile, where a rig with no repository
+    turned a watched merge into a failure.
     """
     from livery.footman.profile import dropped, keeping
 
     # Assembling a run costs forge calls, so the cheap question comes first.
     if not keeping():
         return ""
-    found = run_id or newest_run(repo, head_sha)
-    if not found:
-        return f"profile: the forge lists no run for {head_sha[:12]}"
-    # On the wall clock, which is what a box takes: this run's own writer
-    # lays the fragment on its clock like any other.
-    made = assemble(root, repo, found, head_sha=head_sha, clock=0.0)
-    if not made.events:
-        why = made.lines[0] if made.lines else f"run {found} assembled to nothing"
-        return f"profile: {why}"
-    if dropped(made.events) is None:
-        return ""
+    try:
+        head_sha = git.head_sha()
+        found = run_id or newest_run(repo, head_sha)
+        if not found:
+            return f"profile: the forge lists no run for {head_sha[:12]}"
+        made = assemble(git.root, repo, found, head_sha=head_sha, clock=0.0)
+        if not made.events:
+            why = made.lines[0] if made.lines else f"run {found} assembled to nothing"
+            return f"profile: {why}"
+        if dropped(made.events) is None:
+            return ""
+    except Exception as error:
+        return f"profile: the run was not traced ({error})"
     jobs = len({e["tid"] for e in made.events if e.get("cat") == "job"})
     return f"profile: run {found} joins this trace, {jobs} job(s)"
 
