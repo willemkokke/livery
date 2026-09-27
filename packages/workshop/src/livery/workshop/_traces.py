@@ -23,23 +23,24 @@ nothing here knows a forge.
 from __future__ import annotations
 
 import itertools
+import json
 import os
-from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from livery.footman.profile import laid_on
 from livery.workshop._state import (
     LEG_VARIABLE,
     TRACE_NAMESPACE,
     Keyed,
     RunContext,
-    Series,
     put,
     run_context,
     slug,
 )
+from livery.workshop._state import read as state_read
 
 if TYPE_CHECKING:
     from livery.forge import Job, Repository
@@ -50,6 +51,13 @@ if TYPE_CHECKING:
 #: store it and two legs of one run delta against each other in the
 #: pack.
 TRACE_FILE = "trace.json"
+
+#: Beside it, the job the forge lists this leg as. The ref is keyed by
+#: the leg label the runner sets, and a matrix job's forge name is
+#: spelled another way entirely (``check (ubuntu-latest, 3.14)``
+#: against ``check-ubuntu-latest-3.14``), so the name the assembler
+#: joins on is written down rather than derived.
+JOB_FILE = "job.json"
 
 #: The contract's keys, under ``[ci]``.
 LEGS_KEY = "profile-legs"
@@ -153,8 +161,14 @@ def this_leg() -> str:
     return os.environ.get(LEG_VARIABLE, "")
 
 
-def push(root: Path, trace: Path, *, run: RunContext | None = None) -> str:
+def push(
+    root: Path, trace: Path, *, job: str = "", run: RunContext | None = None
+) -> str:
     """Put *trace* on this leg's ref of the run; the line to print.
+
+    *job* is the job's name as the forge lists it, written down beside
+    the trace: it is what an assembler joins the leg to its job by, and
+    a matrix job's forge name cannot be derived from the leg's label.
 
     Empty when the contract asks for no traces, so a workspace that
     wants none neither pushes nor says anything. Every other answer is
@@ -175,10 +189,13 @@ def push(root: Path, trace: Path, *, run: RunContext | None = None) -> str:
     if not trace.is_file():
         return f"profile: no trace at {trace}; nothing to push"
     series = TRACES.series(found.run_id, leg)
+    files = {TRACE_FILE: trace.read_text(encoding="utf-8")}
+    if job:
+        files[JOB_FILE] = json.dumps({"job": job}, sort_keys=True)
     refused = put(
         root,
         series.ref,
-        {TRACE_FILE: trace.read_text(encoding="utf-8")},
+        files,
         message=f"trace: {leg} of run {found.run_id}",
         ci_only=True,
     )
@@ -275,22 +292,17 @@ def assemble(
             "args": {"name": f"run {run_id}"},
         }
     ]
-    held = TRACES.listed(root, run_id)
-    if held is None:
-        lines.append(f"{TRACES.prefix}{run_id}/*: could not be listed; no leg's own")
-        held = []
-    traced = {key[-1]: key for key in held}
+    traced, refusals = _legs_of(root, run_id)
+    lines += refusals
     pids = itertools.count(LEG_PIDS)
     for tid, job in enumerate(sorted(jobs, key=_job_order), start=1):
         events += _job_events(job, tid=tid, zero=zero, created=created, now=moment)
-        key = traced.get(slug(job.name))
-        if key is None:
+        text = traced.get(job.name) or traced.get(slug(job.name))
+        if text is None:
             continue
-        found, why = _leg_events(
-            root, TRACES.at(*key), pids=pids, zero=zero, job=job.name
-        )
+        found, why = laid_on(text, zero=zero, pids=pids, label=job.name)
         if why:
-            lines.append(why)
+            lines.append(f"{job.name}: {why}")
             continue
         events += found
         lines.append(f"{job.name}: {len(found)} event(s) of its own")
@@ -362,87 +374,98 @@ def _job_events(
         }
     ]
     began = _epoch_us(job.started_at)
-    if began is None:
-        # Nothing ran, so nothing lasted: an event, not a span of no
-        # length. A skipped job is here because it happened.
-        events.append(
-            {
-                "ph": "i",
-                "s": "t",
-                "cat": "job",
-                "name": job.name,
-                "pid": RUN_PID,
-                "tid": tid,
-                "ts": 0.0,
-                "args": args,
-            }
-        )
-        return events
-    ended = _epoch_us(job.completed_at)
-    if ended is None:
+    ended = _epoch_us(job.completed_at) if began is not None else None
+    if began is not None and ended is None:
         ended = now.timestamp() * 1e6
         args["running"] = True  # the slice ends where the reading was taken
-    if created is not None and began > created:
-        events.append(
-            {
-                "ph": "X",
-                "cat": "queue",
-                "name": f"{job.name}: queued",
-                "pid": RUN_PID,
-                "tid": tid,
-                "ts": round(created - zero, 1),
-                "dur": round(began - created, 1),
-            }
-        )
-    events.append(
-        {
-            "ph": "X",
-            "cat": "job",
-            "name": job.name,
-            "pid": RUN_PID,
-            "tid": tid,
-            "ts": round(began - zero, 1),
-            "dur": round(ended - began, 1),
-            "args": args,
-        }
-    )
+    own: dict[str, Any] = {
+        "cat": "job",
+        "name": job.name,
+        "pid": RUN_PID,
+        "tid": tid,
+        "ts": 0.0 if began is None else round(began - zero, 1),
+        "args": args,
+    }
+    if began is None or ended is None or ended <= began:
+        # Nothing ran, or nothing lasted: an event, not a span of no length.
+        # A job the forge skipped is here because it happened, and a forge
+        # times in whole seconds, which is how a skip came back ending a
+        # second before it began. Its steps are still drawn below: they have
+        # nothing to sit inside, and they happened too.
+        events.append({**own, "ph": "i", "s": "t"})
+    else:
+        if created is not None and began > created:
+            events.append(
+                {
+                    "ph": "X",
+                    "cat": "queue",
+                    "name": f"{job.name}: queued",
+                    "pid": RUN_PID,
+                    "tid": tid,
+                    "ts": round(created - zero, 1),
+                    "dur": round(began - created, 1),
+                }
+            )
+        events.append({**own, "ph": "X", "dur": round(ended - began, 1)})
     for step in job.steps:
         start, stop = _epoch_us(step.started_at), _epoch_us(step.completed_at)
         if start is None or stop is None:
             continue  # a step the forge did not time is not drawn
+        drawn: dict[str, Any] = {
+            "cat": "step",
+            "name": step.name,
+            "pid": RUN_PID,
+            "tid": tid,
+            "ts": round(start - zero, 1),
+            "args": {"conclusion": step.conclusion},
+        }
+        # The same rule as a job's: what had no extent is an event. A
+        # forge times in whole seconds, so a step inside one is common.
         events.append(
-            {
-                "ph": "X",
-                "cat": "step",
-                "name": step.name,
-                "pid": RUN_PID,
-                "tid": tid,
-                "ts": round(start - zero, 1),
-                "dur": round(max(stop - start, 0.0), 1),
-                "args": {"conclusion": step.conclusion},
-            }
+            {**drawn, "ph": "X", "dur": round(stop - start, 1)}
+            if stop > start
+            else {**drawn, "ph": "i", "s": "t"}
         )
     return events
 
 
-def _leg_events(
-    root: Path, series: Series, *, pids: Iterator[int], zero: float, job: str
-) -> tuple[list[dict[str, Any]], str]:
-    """A leg's own trace on the run's clock; the events, or why not.
+def _legs_of(root: Path, run_id: str) -> tuple[dict[str, str], list[str]]:
+    """Every leg's trace for *run_id*, by the job it belongs to; and the lines.
 
-    The laying on is the trace format's own, so the plugin that writes a
-    trace does it: this reads the leg's file out of the channel and
-    names the job in whatever the plugin refuses.
+    One read of each ref, which carries the trace and the name of the
+    job the forge lists the leg as. A leg that recorded no job name is
+    answered for by its own key, which is what a job whose name needs
+    no spelling looks like.
     """
-    from livery.footman.profile import laid_on
+    keys = TRACES.listed(root, run_id)
+    if keys is None:
+        return {}, [f"{TRACES.prefix}{run_id}/*: could not be listed; no leg's own"]
+    lines: list[str] = []
+    found: dict[str, str] = {}
+    for key in keys:
+        series = TRACES.at(*key)
+        read = state_read(root, series.ref)
+        if read.files is None:
+            lines.append(f"{key[-1]}: {read.reason or 'its ref could not be read'}")
+            continue
+        text = read.files.get(TRACE_FILE)
+        if text is None:
+            lines.append(f"{key[-1]}: {series.ref} carries no {TRACE_FILE}")
+            continue
+        found[_job_named(read.files.get(JOB_FILE)) or key[-1]] = text
+    return found, lines
 
-    found, why = series.file(root, TRACE_FILE)
-    if why:
-        return [], f"{job}: {why}"
-    if found is None:
-        return [], f"{job}: {series.ref} carries no {TRACE_FILE}"
-    placed, refused = laid_on(found, zero=zero, pids=pids, label=job)
-    return placed, f"{job}: {refused}" if refused else ""
+
+def _job_named(text: str | None) -> str:
+    """The job name a leg wrote down, or empty when it wrote none."""
+    if not text:
+        return ""
+    try:
+        data: Any = json.loads(text)
+    except ValueError:
+        return ""
+    name = data.get("job") if isinstance(data, dict) else None
+    return name if isinstance(name, str) else ""
 
 
 def newest_run(repo: Repository, head_sha: str) -> str:

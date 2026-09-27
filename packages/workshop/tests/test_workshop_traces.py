@@ -287,6 +287,7 @@ def _pushed(
     leg: str,
     origin: float,
     tasks: dict[str, float],
+    job: str = "",
 ) -> None:
     """Push a trace for *leg* whose zero sits at *origin*, with named tasks."""
     trace = work / f"{leg}.json"
@@ -319,7 +320,7 @@ def _pushed(
         encoding="utf-8",
     )
     _in_ci(monkeypatch, run="77", leg=leg)
-    assert "pushed" in _traces.push(work, trace)
+    assert "pushed" in _traces.push(work, trace, job=job)
 
 
 def _epoch(stamp: str) -> float:
@@ -535,9 +536,11 @@ def test_a_ref_the_channel_cannot_read_names_the_job_it_belonged_to(
 
     _pushed(work, monkeypatch, leg="check", origin=1.0, tasks={"check": 1.0})
     monkeypatch.setattr(
-        _state.Series,
-        "file",
-        lambda self, root, name: (None, "the remote hung up"),
+        _traces,
+        "state_read",
+        lambda root, ref: _state.Read(
+            None, None, failed=True, reason="the remote hung up"
+        ),
     )
     began = "2026-09-27T10:00:00Z"
     jobs = (_job("check", started=began, completed="2026-09-27T10:00:01Z"),)
@@ -750,3 +753,80 @@ def test_a_trace_can_never_fail_the_command_it_watched(
     assert line.startswith("profile: the run was not traced (")
     assert "nowhere" in line
     assert list(box.glob("*.json")) == []
+
+
+def test_a_matrix_leg_joins_its_job_by_the_name_the_forge_uses(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A ref's key and its job's name are different spellings of one leg.
+
+    The runner labels a leg ``check-ubuntu-latest-3.14`` and the forge lists
+    the job as ``check (ubuntu-latest, 3.14)``. Joining on a slug of either
+    matched nothing, so every matrix leg's own trace was dropped on the floor
+    while the skeleton looked complete. The name is written down beside the
+    trace and joined on.
+    """
+    from typing import Any, cast
+
+    from livery.forge import Repository
+
+    began = "2026-09-27T10:00:00Z"
+    forge_name = "check (ubuntu-latest, 3.14)"
+    _pushed(
+        work,
+        monkeypatch,
+        leg="check-ubuntu-latest-3.14",
+        origin=_epoch(began),
+        tasks={"check": 1000.0},
+        job=forge_name,
+    )
+    jobs = (_job(forge_name, started=began, completed="2026-09-27T10:00:01Z"),)
+    repo = cast(Repository, cast(Any, _forge(jobs)))
+    made = _traces.assemble(work, repo, "77")
+    assert any(f"{forge_name}: " in line for line in made.lines)
+    assert [e["name"] for e in made.events if e.get("cat") == "task"] == ["check"]
+
+
+def test_a_job_the_forge_gave_no_extent_is_an_event_and_never_a_span(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A forge times in whole seconds, so a skip can end before it began.
+
+    A real run drew ``govern`` as a slice of minus one second, and two more
+    at zero length. Nothing that had no extent is a span.
+    """
+    from typing import Any, cast
+
+    from livery.forge import Repository, Step
+
+    jobs = (
+        # Ends a second before it starts, as a skipped job came back.
+        _job(
+            "govern",
+            started="2026-09-27T10:00:01Z",
+            completed="2026-09-27T10:00:00Z",
+            conclusion="skipped",
+        ),
+        # Starts and ends in the same second.
+        _job(
+            "dispatch",
+            started="2026-09-27T10:00:05Z",
+            completed="2026-09-27T10:00:05Z",
+            steps=(
+                Step(
+                    "Set up job",
+                    "success",
+                    "2026-09-27T10:00:05Z",
+                    "2026-09-27T10:00:05Z",
+                ),
+            ),
+        ),
+    )
+    repo = cast(Repository, cast(Any, _forge(jobs)))
+    made = _traces.assemble(work, repo, "77")
+    drawn = {e["name"]: e for e in made.events if e.get("cat") in {"job", "step"}}
+    assert drawn["govern"]["ph"] == "i"
+    assert drawn["govern"]["args"]["conclusion"] == "skipped"
+    assert drawn["dispatch"]["ph"] == "i"
+    assert drawn["Set up job"]["ph"] == "i"
+    assert not [e for e in made.events if e.get("ph") == "X" and e.get("dur", 1) <= 0]

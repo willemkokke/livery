@@ -891,11 +891,11 @@ def ci_metrics_collect() -> None:
 profile = ci.group("profile", help="A run as one timeline")
 
 
-def profile_push_flow(root: Path, trace: Path) -> None:
+def profile_push_flow(root: Path, trace: Path, *, job: str = "") -> None:
     """Push this leg's trace; print what happened and decide nothing."""
     from livery.workshop._traces import push
 
-    line = push(root, trace if trace.is_absolute() else root / trace)
+    line = push(root, trace if trace.is_absolute() else root / trace, job=job)
     if line:
         print(f"  {line}")
 
@@ -903,6 +903,7 @@ def profile_push_flow(root: Path, trace: Path) -> None:
 @profile.task(name="push", hidden=True)
 def ci_profile_push(
     *,
+    job: Annotated[str, doc("the job's name as the forge lists it")] = "",
     trace: Annotated[Path, doc("the trace the profiled entry wrote")] = Path(TRACE),
 ) -> None:
     """Put this leg's trace where a reader can assemble the run from it.
@@ -922,7 +923,7 @@ def ci_profile_push(
     root = workspace_root()
     if root is None:
         fail("no workspace: no workshop.toml above the working directory")
-    profile_push_flow(root, Path(trace))
+    profile_push_flow(root, Path(trace), job=job)
 
 
 @profile.default

@@ -377,6 +377,18 @@ Acceptance:
   only on the way to a merge, so a red run wrote a file holding the
   local command and nothing else, which is the case a timeline is wanted
   for most. Every way out of the watch now traces the run.
+- 2026-09-27, assembling a real run found two more, and both were
+  invisible to every test that had a job named `check`. A leg's ref is
+  keyed by the label the runner sets and the forge lists a matrix job
+  under another spelling entirely, so the join matched nothing and every
+  matrix leg's own trace was dropped while the skeleton looked whole.
+  The name the forge uses is written down beside the trace now and joined
+  on. And a forge times in whole seconds, so a skipped job came back
+  ending a second before it began: a job or a step with no extent is an
+  event, never a span, which is the plan's own ground truth. The display
+  name of a one-dimension matrix was wrong too, `nightly (, 3.14)`
+  against the forge's `nightly (3.14)`, which nothing had needed until
+  the join did.
 - 2026-09-27, and the deeper half of the same finding: inside a profiled
   leg every test inherited the box, so a `Runner` in a test dropped a
   fragment of its own once per test, and any code asking whether a trace

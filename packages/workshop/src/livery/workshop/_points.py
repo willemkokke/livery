@@ -788,7 +788,7 @@ BUILTIN: tuple[Entry, ...] = (
     # The leg's trace, to the channel no sync mirrors. After the row,
     # which reads the same file: a trace is written when the run that
     # made it ends, so only a later entry can see it.
-    Entry("gate", "check", "ci.profile.push"),
+    Entry("gate", "check", "ci.profile.push", ("--job={display}",)),
     Entry("gate", "docs", "docs.build"),
     # The title check first: it reads the pull request's title from
     # the event payload, is green off a release branch, and refuses a
@@ -824,7 +824,7 @@ BUILTIN: tuple[Entry, ...] = (
     # The clock's point: the whole check, with the tests that declare
     # the nightly point selected in, on every python of the matrix.
     Entry("nightly", "nightly", "check", profiled=True),
-    Entry("nightly", "nightly", "ci.profile.push"),
+    Entry("nightly", "nightly", "ci.profile.push", ("--job={display}",)),
     # The wave, at the squash the dispatch names: each platform's
     # wheels, then the publish that cuts the receipts, then the home's
     # template artifact. Each verb decides for itself what the ref
@@ -1014,9 +1014,14 @@ def run_point(
     # 3.14)``; GitLab names the job by its key alone, the matrix
     # riding its variables and never its name.
     run = run_context()
-    matrix = bool(os_label or python) and (run is None or run.forge != "gitlab")
-    display = f"{job} ({os_label}, {python})" if matrix else job
-    label = f"{job}-{os_label}-{python}" if os_label or python else job
+    # Only the dimensions the matrix actually has: the nightly point runs a
+    # matrix of pythons and no runners, and the forge lists that job as
+    # ``nightly (3.14)``. Spelling an absent dimension as an empty one gave
+    # ``nightly (, 3.14)``, which matched no job the forge had.
+    parts = [part for part in (os_label, python) if part]
+    matrix = bool(parts) and (run is None or run.forge != "gitlab")
+    display = f"{job} ({', '.join(parts)})" if matrix else job
+    label = "-".join([job, *parts])
     facts = {"display": display, "label": label, "os": os_label, "python": python}
     # A dispatched point's inputs, as the run received them, by name:
     # the release's ``{ref}`` names the squash the wave publishes.
