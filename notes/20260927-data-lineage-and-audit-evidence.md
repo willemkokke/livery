@@ -1,4 +1,4 @@
-# Data lineage and audit evidence: the investigation
+# Audit evidence as a workshop capability: the investigation
 
 Status: an investigation, opened 2026-09-27 at Willem's request. It is
 not a plan and it rules nothing on its own. Its purpose is to hold the
@@ -9,20 +9,51 @@ record.
 
 ## What this is
 
+Any workspace the workshop manages should produce the evidence an audit
+asks for as a by-product of the render, rather than as a document
+somebody assembles under time pressure. That is the subject: a
+capability every consumer gets, not one company's preparation.
+
+The delivery vehicle is a plugin. The seam and the generic kinds ship in
+livery; a consumer's own specifics ship in a private layer, which the
+kind registry already supports.
+
+## What a general capability must satisfy
+
+Six properties, each a constraint on the design rather than a
+preference. They follow from the capability serving workspaces nobody
+here has seen.
+
+- **Value with zero declaration.** A workspace that does nothing still
+  gets a document generated from the locks it already has. If the first
+  step is filling in a register, most consumers never take it.
+- **Enforcement opt-in, with a level.** A gate that refused undeclared
+  components would break every existing workspace on upgrade. It takes
+  the shape the contract already uses for an optional capability, where
+  off costs nothing and a workspace turns it up when it wants it: off,
+  report, enforce.
+- **Honest per kind.** A kind with no enumerator says so, the way the
+  gate already skips a verb that does not apply rather than passing
+  vacuously. Other people's workspaces will carry kinds nobody has
+  written an enumerator for, and a silently empty document is worse than
+  no document, because it is handed over believed.
+- **No store assumed, no forge assumed.** Retention works for a
+  consumer with no strongroom, which means documents attached to
+  releases, on every forge kind the workshop renders.
+- **The consumer declares intent, not format.** They say what they
+  ship; the workshop picks CycloneDX 1.6 and validates it. Nobody
+  should have to learn a schema to get a compliant document.
+- **Keep the human part small.** Declaration is the part that does not
+  scale across consumers, so discovery covers everything it can and
+  declaration is reserved for what genuinely cannot be discovered.
+
+## The worked example
+
+One consumer's shape, which motivated the investigation and is used
+throughout as the hard case. It is not the scope of the design.
+
 The work repositories are being converted into one monorepo managed by
-the workshop, and that monorepo is what gets audited. livery is the
-tool, not the subject. The question is what functionality the workshop
-and toolroom can provide, and enforce, so that supply-chain and lineage
-evidence is a property of the render rather than a document somebody
-assembles under time pressure.
-
-The delivery vehicle is a plugin: the seam and the generic kinds ship
-in livery, and the employer's specifics ship in a private layer, which
-the kind registry already supports.
-
-## The ground
-
-What the monorepo will contain, as ruled on 2026-09-27:
+the workshop. What it will contain, as ruled on 2026-09-27:
 
 - **Python, a large part of it machine learning.** PyTorch, first-party
   models trained on first-party data, and some models built on public
@@ -35,21 +66,19 @@ What the monorepo will contain, as ruled on 2026-09-27:
 - **Shipped model weights.** Weights are distributed inside the
   products, not only served.
 
-The consequence of shipping plugins and weights to third parties is
-that the products are placed on the market and the company is the
-upstream supplier in its customers' bills of materials. Customers who
-sell into the EU are bound by the CRA, whose reporting obligations
-started on 2026-09-11, with full compliance due 2027-12-11, and the way
-they satisfy "know your components" is by asking their suppliers. So
-the evidence is a deliverable that ships with the product on request,
-per version, not an artifact produced once under duress. That is the
-better thing to design for: a document handed to customers routinely
-cannot be stale, cannot be quietly incomplete, and has an owner by
-construction.
+The property that generalises from it: a consumer who ships anything to
+third parties becomes the upstream in somebody else's bill of
+materials, and their customers ask them for one. So the evidence is a
+deliverable that ships with the product on request, per version, rather
+than an artifact produced once under duress. A document handed over
+routinely cannot be stale, cannot be quietly incomplete, and has an
+owner by construction. That is the better thing to design for, and it
+holds for any consumer with customers.
 
-If the product is an AI system on the EU market, the AI Act is a second
-axis above the CRA, with heavier technical documentation. Which of the
-two governs is an open question.
+Which regulation governs a given consumer is theirs to know, not the
+workshop's. The capability's job is to keep the components, the
+obligations and the change record available and current, whichever
+regime reads them.
 
 ## What the audience requires
 
@@ -585,18 +614,39 @@ refuse the build while it is missing.
 
 ## Ordering
 
-Build the plugin's evidence generation first, against the formats that
-exist today, with its own records and refs as roots. It produces the
-documents the audience needs, and it produces the measurements the
-annotation format should be ruled on: how many rules a real corpus
-needs, whether per-key resolution earns its complexity, how large the
-manifests get. It also produces the requirements list the fabric's
-receipt has to satisfy, from a consumer that exists rather than from
-imagination.
+By value to an arbitrary consumer per unit of work. The first four need
+no declaration from anybody and no new strongroom format, which is
+where a capability for other people starts.
 
-The point of that order is that the audit's calendar never sets the
-store's format, which is the only mechanism by which this work could
-make strongroom worse.
+1. **A report of what the render already knows.** Owners and approval
+   counts, required contexts, the branch protection the configure verb
+   asserts, the toolchain pin with its per-host digests, the gate's
+   record, the release receipts. Almost no new mechanism, and it answers
+   the change-control and build-integrity half of any audit for every
+   workspace, including pure-Python ones that ship no weights and no
+   native code.
+2. **A dependency document per released artifact**, from the lock,
+   validated against its schema, attached to the release. Every Python
+   consumer gets it on day one.
+3. **Licence inventory and a generated attribution artifact**, with
+   undeclared licences listed rather than refused until the consumer
+   turns the level up.
+4. **The attestation in the publish path.** One change in one place,
+   and every consumer publishing to an index benefits.
+5. **Per-kind enumerators** beyond Python: conan, nanobind, and
+   whatever a layer brings.
+6. **The declaration register and the enforcing gate**, opt-in, at the
+   level the consumer chose.
+7. **Vulnerability mapping** over retained documents.
+
+Two things that order protects. The plugin's evidence generation runs
+ahead of any new hashed format, so the measurements come from a
+consumer that exists rather than from imagination: how many annotation
+rules a real corpus needs, whether per-key resolution earns its
+complexity, how large the manifests get, and what the fabric's receipt
+has to carry. And an audit's calendar never sets the store's format,
+which is the only mechanism by which this work could make strongroom
+worse.
 
 ## Decision record
 
@@ -613,6 +663,11 @@ make strongroom worse.
   built on public checkpoints such as wav2vec.
 - 2026-09-27, this is an investigation, not musings, and it leads to a
   plan.
+- 2026-09-27, the subject is the capability, not one audit (Willem).
+  The concern is that a workspace managed by the workshop gets as much
+  automatic help in passing an audit as can be provided. One consumer's
+  monorepo is the worked example, and its scheduling is not the
+  design's input.
 - 2026-09-27, the lineage relation is first class (Willem): a
   strongroom format, not a consumer format above it. The format itself
   is not settled and nothing here fixes a field list. **Superseded the
@@ -647,27 +702,25 @@ make strongroom worse.
 
 ## Open
 
-1. **Which audit comes first**: acquirer diligence, a customer security
-   review, or a certification. It changes the order of the work, not
-   its content.
-2. **Whether the CRA or the AI Act governs** the products, which
-   decides how heavy the documentation must be.
-3. **The annotation format**, in full: the rule shape, the binding to a
+1. **The level vocabulary** a workspace declares, off, report and
+   enforce as the candidate, and the default for a workspace that
+   declares nothing.
+2. **The annotation format**, in full: the rule shape, the binding to a
    tree digest, and whether required keys are a namespace profile.
    Nothing here fixes a field list.
-4. **Per-key merge or per-rule replacement** when annotation rules
+3. **Per-key merge or per-rule replacement** when annotation rules
    nest, and whether the exported form is always the flattened view.
-5. **Whether the three destinations hold** as proposed above, and where
+4. **Whether the three destinations hold** as proposed above, and where
    the mutable index keyed by digest lives.
-6. **When the fabric's receipt grows the inputs it owes**, listed
+5. **When the fabric's receipt grows the inputs it owes**, listed
    above, and whether the plugin keeps its own records until then.
-7. **Manifest cost at dataset scale**, measured with the redesign's
+6. **Manifest cost at dataset scale**, measured with the redesign's
    large-data runs: manifest bytes as a fraction of corpus bytes, and
    whether a corpus wants a different grouping.
-8. **Corpus layout ruling**: lay corpora out so the axes that must be
+7. **Corpus layout ruling**: lay corpora out so the axes that must be
    queried are prefixes.
-9. **The `artifact` vocabulary** for a kind that ships through neither
+8. **The `artifact` vocabulary** for a kind that ships through neither
    a Python nor a conan registry, and whether Swift becomes a kind of
    its own.
-10. **Retention period** for release documents, which follows the
-    support lifetime the products promise.
+9. **Retention period** for release documents, which a consumer
+   declares because it follows the support lifetime they promise.
