@@ -7,6 +7,7 @@ nav = [
     { "Index" = "index.md" },
     { "Development patterns" = "development-patterns.md" },
     { "Releases" = "releases.md" },
+    { "CI profiles" = "ci-profiles.md" },
     # nav:begin tasks
     # nav:end tasks
 ]

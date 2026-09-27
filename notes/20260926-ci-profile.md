@@ -303,15 +303,22 @@ Deliverables:
 
 - A measured window: what a run's traces actually cost on origin once
   packed, from real runs rather than the desk's estimate.
-- The defaults tuned to it, in the contract and in the docs.
+- The defaults tuned to it, in the contract and in the docs. The
+  measurement is in; the number itself is Willem's and stays open
+  below, so twenty stands in both places until he rules, and both say
+  the same number.
 - A page in the workshop's docs: what the file holds, how to open it,
   and what a leg without children means.
 
-Acceptance:
+Acceptance, and what proves each:
 
 - `uv run fm check` exits 0.
-- The note's decision record carries the measured cost per run.
-- `uv run fm docs.build` renders the page.
+- The measured cost is in the decision record: 9.19 MB of raw traces
+  from one run's three legs, 837 KiB once origin packs them.
+- `uv run fm docs.build` renders `packages/workshop/docs/ci-profiles.md`
+  with no issues, and the page is in that package's `nav.toml`, which
+  the docs tests require of every authored page.
+- The index links the page where it first names the feature.
 
 ## Temporary, replaced by
 
@@ -484,6 +491,9 @@ Acceptance:
 
 ## Open
 
-1. **The window's depth**, from phase 5's measurement. Owner: Willem.
+1. **The window's depth.** Measured: 837 KiB a run once packed, so
+   twenty runs is about 16 MB on origin and fifty about 42 MB. The
+   number is Willem's. Twenty stands in the contract and on the page
+   until he says otherwise, and both say the same number.
 2. **Whether a leg of a nightly or a release run pushes too**, or the
    gate alone. Owner: Willem, once phase 1 has run a few days.
