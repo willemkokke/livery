@@ -251,3 +251,44 @@ release's version where the record pins one, so either the image
 installs the pinned build or the record says the image's version is
 the distribution's. Not now; raw material for the tool record plan's
 open questions.
+
+## 2026-09-28: a native strongroom, and only the tests the change needs
+
+Willem, on two pieces that stack. First, an in-memory, file-backed
+implementation of strongroom, memory-mapped, written in native code,
+most likely Rust, reached from Python through an extension. Second, on
+top of it, a Rust library extracted from pants2 that gives most of what
+pants2 gives: running exactly the tests a change requires and no
+others. Cross platform and cross forge, and robust enough to leave on
+in CI all the time rather than as an opt-in experiment.
+
+What makes the second part attractive here is that the selection today
+is package-level: the gate runs the packages a change touched plus
+everyone declaring an edge on them, so a change to one package runs
+whole suites that share nothing with it, and a package whose tests
+alone use a sibling is not selected at all. pants2 avoids both by
+making the file the unit of the graph and inferring the edges from the
+sources. The pieces it does that with are a per-file parse, a module
+map built from source roots, longest-match resolution with ambiguity
+refused, ancestor `conftest.py` counted as a dependency of the tests
+below it, and memoization keyed by content digests.
+
+Three facts that bear on it, none of them a decision:
+
+- The input digests are free. Git already names every file's bytes,
+  and the gate record already keys on tree ids, so a memo table stores
+  derived values and never the sources.
+- The keys are not one kind. Parsing a file is a function of that
+  file's bytes; resolving an import depends on the whole module map;
+  selecting depends on the diff and the resolved graph. Three layers,
+  three keys, which is why pants2 has a rule graph rather than a
+  cache.
+- The measured prize is small today. The whole workspace parses in
+  about a second inside one test. A file-level graph makes that more
+  and the suites it would skip are minutes, so the case rests on the
+  skipping, not on the parsing.
+
+A Rust core with a Python extension is a kind this workspace does not
+have: the nanobind kind is C++ over conan. `livery-cbor` wants the
+same shape for its own native implementation, so the two would share
+whatever kind answers it.
