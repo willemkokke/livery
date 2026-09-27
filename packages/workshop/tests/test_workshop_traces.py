@@ -842,3 +842,111 @@ def test_a_job_the_forge_gave_no_extent_is_an_event_and_never_a_span(
     assert drawn["dispatch"]["ph"] == "i"
     assert drawn["Set up job"]["ph"] == "i"
     assert not [e for e in made.events if e.get("ph") == "X" and e.get("dur", 1) <= 0]
+
+
+def test_a_trace_outside_its_jobs_span_is_said_and_never_drawn(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The refusals first: a residue is only drawn where the arithmetic holds.
+
+    A job's span and a leg's trace are two clocks written down
+    independently. They usually agree, and when they do not, saying so
+    is the whole value: a span of negative length would read as work
+    that happened.
+    """
+    from typing import Any, cast
+
+    from livery.forge import Repository
+
+    created = "2026-09-27T11:00:00Z"
+    # A trace that began before the job the forge timed.
+    _pushed(
+        work,
+        monkeypatch,
+        leg="early",
+        origin=_epoch("2026-09-27T10:59:58Z"),
+        tasks={"a": 1_000_000.0},
+    )
+    # One that ran past the job's end.
+    _pushed(
+        work,
+        monkeypatch,
+        leg="late",
+        origin=_epoch("2026-09-27T11:00:01Z"),
+        tasks={"b": 60_000_000.0},
+    )
+    # One with no stamp at all: a trace of nothing but its own name.
+    _pushed(work, monkeypatch, leg="bare", origin=_epoch(created), tasks={})
+    # And a job the forge never timed, which a skip is.
+    _pushed(work, monkeypatch, leg="govern", origin=_epoch(created), tasks={"c": 1.0})
+    jobs = (
+        _job("early", started=created, completed="2026-09-27T11:00:10Z"),
+        _job("late", started=created, completed="2026-09-27T11:00:10Z"),
+        _job("bare", started=created, completed="2026-09-27T11:00:10Z"),
+        _job("govern", status="completed", conclusion="skipped"),
+    )
+    repo = cast(Repository, cast(Any, _forge(jobs, created=created)))
+    made = _traces.assemble(work, repo, "77", head_sha="abc123")
+    assert not [event for event in made.events if event.get("cat") == "runner"]
+    said = {line.split(":")[0]: line for line in made.lines}
+    assert "reaches past the job's own span (setup)" in said["early"]
+    assert "reaches past the job's own span (teardown)" in said["late"]
+    # Nothing to subtract from, and nothing to subtract: the job's line
+    # says what it has, its own events, and stops there.
+    for leg in ("bare", "govern"):
+        assert said[leg].endswith("event(s) of its own")
+
+
+def test_a_jobs_entries_and_its_residue_add_up_to_the_span_the_forge_reported(
+    work: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The point of the residue: a reader adds a job up and nothing is missing."""
+    from typing import Any, cast
+
+    from livery.forge import Repository
+
+    created = "2026-09-27T12:00:00Z"
+    _pushed(
+        work,
+        monkeypatch,
+        leg="check",
+        origin=_epoch("2026-09-27T12:00:05Z"),
+        tasks={"test": 12_000_000.0},
+    )
+    jobs = (
+        _job("check", started="2026-09-27T12:00:02Z", completed="2026-09-27T12:00:22Z"),
+    )
+    repo = cast(Repository, cast(Any, _forge(jobs, created=created)))
+    made = _traces.assemble(work, repo, "77", head_sha="abc123")
+    job = next(event for event in made.events if event.get("cat") == "job")
+    runner = {
+        event["name"]: event for event in made.events if event.get("cat") == "runner"
+    }
+    # The checkout, the caches and the store, before the first entry.
+    assert runner["setup"]["ts"] == job["ts"]
+    assert runner["setup"]["dur"] == 3_000_000.0
+    # The post-job save, after the last one.
+    assert runner["teardown"]["dur"] == 5_000_000.0
+    assert (
+        runner["teardown"]["ts"] + runner["teardown"]["dur"] == job["ts"] + job["dur"]
+    )
+    entries = next(event for event in made.events if event.get("cat") == "task")
+    assert (
+        runner["setup"]["dur"] + entries["dur"] + runner["teardown"]["dur"]
+        == (job["dur"])
+    )
+    # A track of its own, under its job's.
+    tracks = {
+        event["tid"]: event["args"]["name"]
+        for event in made.events
+        if event["ph"] == "M" and event["name"] == "thread_name"
+    }
+    assert tracks[runner["setup"]["tid"]] == "check: runner"
+    order = {
+        event["tid"]: event["args"]["sort_index"]
+        for event in made.events
+        if event["ph"] == "M" and event["name"] == "thread_sort_index"
+    }
+    assert order[runner["setup"]["tid"]] == order[job["tid"]] + 1
+    # And the line carries the arithmetic.
+    assert "setup 3.0s, teardown 5.0s" in made.lines[0]
