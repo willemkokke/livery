@@ -3,9 +3,12 @@
 Three channels, walked in layer order so a later layer's same-named
 file wins and the instance always wins last:
 
-- fragments into ``.workshop/`` (gitignored, regenerated wholesale):
-  each layer's ``content/fragments/*``, the files the managed
-  ``CLAUDE.md`` stub imports.
+- fragments into ``.workshop/fragments/`` (gitignored, regenerated
+  wholesale): each layer's ``content/fragments/*``, the files the
+  managed ``CLAUDE.md`` stub imports. Their own directory, so the
+  sweep that clears a withdrawn fragment owns everything it walks;
+  ``.workshop/`` itself holds this checkout's state, in directories
+  beside it.
 - skills and hooks into ``.claude/skills`` and ``.claude/hooks``
   through the materialiser: links where possible, copies where not,
   local overrides kept and named. A layer's ``settings.json`` lands
@@ -64,36 +67,12 @@ def _layer_content(layer: str) -> Path | None:
     return content if content.is_dir() else None
 
 
-#: What the last delivery wrote into ``.workshop/``, one name a line.
-#: The sweep removes a fragment a layer stopped shipping, and it must
-#: know which files were ever its own: the directory also holds state
-#: this checkout wrote for itself, and a sweep over everything deleted
-#: the stub receipt that the same sync reads a few steps later.
-_DELIVERED = ".workshop-fragments"
-
-
-def _delivered_before(workshop_dir: Path) -> set[str]:
-    """The names the previous delivery wrote, empty when there is none.
-
-    Empty means unknown rather than nothing, so the first sync after
-    this record exists adopts the directory and sweeps none of it. A
-    fragment a layer stopped shipping before then stays until someone
-    removes it; inventing ownership would delete files this never
-    wrote, which is the fault being fixed.
-    """
-    try:
-        text = (workshop_dir / _DELIVERED).read_text(encoding="utf-8")
-    except OSError:
-        return set()
-    return {line.strip() for line in text.splitlines() if line.strip()}
-
-
-def _record_delivered(workshop_dir: Path, names: set[str]) -> None:
-    """Write what this delivery wrote, so the next one can sweep it."""
-    body = "".join(f"{name}\n" for name in sorted(names))
-    path = workshop_dir / _DELIVERED
-    if not path.is_file() or path.read_text(encoding="utf-8") != body:
-        write_lf(path, body)
+#: Where the mounted layers' fragments land, under the workspace root.
+#: Their own directory, so the sweep below owns every file it walks.
+#: ``.workshop/`` itself holds this checkout's state, each kind in a
+#: directory of its own: a shared top level cost the stub receipt,
+#: which a sweep for withdrawn fragments deleted on every sync.
+FRAGMENTS = ".workshop/fragments"
 
 
 def sync_workspace(root: Path) -> list[str]:
@@ -101,11 +80,6 @@ def sync_workspace(root: Path) -> list[str]:
 
     The engine behind ``fm sync``, separated so tests drive it against
     temporary trees.
-
-    The sweep removes only what an earlier delivery wrote: ``.workshop/``
-    also holds this checkout's own state, and deleting a file no layer
-    ships is right for a withdrawn fragment and wrong for everything
-    else.
     """
     lines: list[str] = []
     layers = layer_names(root)
@@ -115,8 +89,8 @@ def sync_workspace(root: Path) -> list[str]:
         if (content := _layer_content(layer)) is not None
     ]
 
-    workshop_dir = root / ".workshop"
-    workshop_dir.mkdir(exist_ok=True)
+    fragment_home = root / FRAGMENTS
+    fragment_home.mkdir(parents=True, exist_ok=True)
     fragments: dict[str, Path] = {}
     for _layer, content in contents:
         fragment_dir = content / "fragments"
@@ -127,19 +101,17 @@ def sync_workspace(root: Path) -> list[str]:
                 fragments[fragment.name] = fragment
     written = 0
     for name, source in fragments.items():
-        target = workshop_dir / name
+        target = fragment_home / name
         body = source.read_bytes()
         if not target.is_file() or target.read_bytes() != body:
             target.write_bytes(body)
             written += 1
-    for stale in sorted(_delivered_before(workshop_dir) - set(fragments)):
-        path = workshop_dir / stale
-        if path.is_file():
-            path.unlink()
-            lines.append(f"  .workshop: removed {stale} (no layer ships it)")
-    _record_delivered(workshop_dir, set(fragments))
+    for stale in sorted(fragment_home.iterdir()):
+        if stale.is_file() and stale.name not in fragments:
+            stale.unlink()
+            lines.append(f"  fragments: removed {stale.name} (no layer ships it)")
     if written:
-        lines.append(f"  .workshop: {written} fragment(s) refreshed")
+        lines.append(f"  fragments: {written} refreshed")
 
     for _layer, content in contents:
         lines += materialise(root, content / "skills", "skills")
@@ -151,7 +123,7 @@ def sync_workspace(root: Path) -> list[str]:
     ordered = [name for name in _GUIDANCE_FIRST if name in fragments]
     ordered += [name for name in sorted(fragments) if name not in _GUIDANCE_FIRST]
     stub = _STUB_HEADER.format(prog=footman.prog())
-    stub += "".join(f"@.workshop/{name}\n" for name in ordered)
+    stub += "".join(f"@{FRAGMENTS}/{name}\n" for name in ordered)
     stub += "@CLAUDE.project.md\n"
     stub_path = root / "CLAUDE.md"
     current = stub_path.read_text(encoding="utf-8") if stub_path.is_file() else ""

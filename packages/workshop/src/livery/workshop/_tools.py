@@ -980,9 +980,9 @@ def write_stubs(root: Path, *, offline: bool = False) -> Stubbed:
     it shadows the package for a checker run on explicit paths. Without
     a lock nothing is written.
 
-    A receipt under `.workshop/` names the lock and the source the last
-    write rendered from, a records directory by its stat fingerprint
-    and an index by its pointer. When both stand and every file it
+    A receipt under `.workshop/state/` names the lock and the source
+    the last write rendered from, a records directory by its stat
+    fingerprint and an index by its pointer. When both stand and every file it
     wrote is there, nothing is read and nothing is written, which is
     the steady state of every sync; otherwise a stub already on disk
     as the source renders it is kept, so a checker's cache stands.
@@ -1049,8 +1049,14 @@ def source_mark(source: str) -> str:
     return str(digest_of(canonical(read_pointer(source))))
 
 
-STUBS_RECEIPT = ".workshop/stubs.json"
-"""The receipt naming the lock and the source the last stub write rendered from."""
+STUBS_RECEIPT = ".workshop/state/stubs.json"
+"""The receipt naming the lock and the source the last stub write rendered from.
+
+Under `state/` rather than `receipts/`: that directory is the tool
+receipts, which `receipts()` reads as a set and refuses a file of
+another shape in. Each kind of thing under `.workshop/` keeps its own
+directory, so no walk of one kind can reach another.
+"""
 
 
 def _stubs_receipt_path(root: Path) -> Path:

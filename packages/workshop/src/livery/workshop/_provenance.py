@@ -172,10 +172,21 @@ def _materialised(root: Path, relative: Path) -> Provenance | None:
     prog = footman.prog()
     parts = relative.parts
     if parts[0] == ".workshop":
+        if parts[1:2] == ("fragments",):
+            return Provenance(
+                "layer fragment",
+                f"a mounted layer's content/fragments/{relative.name}",
+                f"edit the layer's copy; `{prog} sync` rewrites this one wholesale",
+            )
+        # Everything else under .workshop is this checkout's own: the
+        # tool receipts, the stub receipt, the linked binaries, a layer
+        # home's composed templates. None of them has an edit path, and
+        # calling them layer fragments was a lie the directory's older
+        # shape made easy to tell.
         return Provenance(
-            "layer fragment",
-            f"a mounted layer's content/fragments/{relative.name}",
-            f"edit the layer's copy; `{prog} sync` rewrites this one wholesale",
+            "checkout state",
+            f"written by `{prog} sync` for this checkout alone",
+            "nothing to edit here; delete it and the next sync writes it again",
         )
     if parts[0] == "CLAUDE.md" and len(parts) == 1:
         return Provenance(

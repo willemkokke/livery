@@ -24,7 +24,7 @@ spelling and the file to rename it in.
   never rewritten.
 
 Each layer may carry a `content/` directory; `fm sync` delivers it:
-guidance fragments into `.workshop/`, skills and hooks into
+guidance fragments into `.workshop/fragments/`, skills and hooks into
 `.claude/` as links (a local override is kept and named), and the
 managed `CLAUDE.md` stub whose imports end at the instance's own
 `CLAUDE.project.md`.
@@ -95,7 +95,7 @@ workspace does not deploy gets no stub. `fm sync`, the lock verbs
 and the entry script write them as well, so a checkout and a CI runner
 type against the same stubs. The store renders each stub from the
 locked version's own surface, from the records or the index, so no
-source holds a stub; a receipt under `.workshop/` names the lock and
+source holds a stub; a receipt under `.workshop/state/` names the lock and
 the source the last write rendered from, and while both stand nothing
 is read or written. `fm env.check` counts them and names their
 absence.
