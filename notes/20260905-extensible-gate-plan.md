@@ -124,8 +124,8 @@ place the tool exists:
   ruff judges a cpp-conan package's `conanfile.py` by one set and
   a python package's sources by another, derived from the claim
   instead of typed into a `per-file-ignores` table by hand. The
-  classification comes from the shared path registry below, not
-  from a table of the check's own;
+  classification is the file's part, from the registry below,
+  never a table of the check's own;
 - how it narrows under `--affected`: by explicit paths, by a
   package subset, or not at all (the whole is always checked);
 - the configuration fragments the render manages for it, one per
@@ -158,22 +158,32 @@ to the template plus the passes, and every rewrite of TOML or of
 JSON with comments either loses the prose or dictates how it may
 be written, which these files carry on purpose.
 
-**What a file is, answered in one place.** The workshop asks more
-than one question about a path. What is this to the build: source,
-a test, test support, configuration? Who owns it, and where do I
-edit it: a layer's fragment, a rendered file, an emitted one, or
-yours? Those are separate questions and one file has an answer to
-each, so they are separate *axes*, never one merged vocabulary.
+**What a file is, and who owns it.** The workshop asks two
+questions about a path, and one file answers both. Its **part**:
+what this is to the package, one of source, test, test support or
+configuration. Its **channel**: who wrote it and where to edit it,
+one of a layer's fragment, a rendered file, an emitted one, the
+contract, or yours. `packages/forge/workshop.toml` is
+configuration on the first and the contract on the second;
+`packages/forge/src/livery/forge/_http.py` is source and yours.
+Neither answer can be read off the other, so the two vocabularies
+stay apart and are never merged into one.
 
-They are the same mechanism, though: an ordered set of rules from
-a path to an answer, with a fallback, and the most specific rule
-winning. So there is one registry of path rules, carrying several
-axes, and a kind or a layer registers into it exactly as it
-registers a kind or a check. Today each axis is instead a closed
-ladder in one module, which is why a layer can teach the workshop
-a new package kind but not what a file of that kind *is*, and why
-`fm explain` answered "layer fragment" for a tool receipt until
-the directory it lived in was split.
+Each is a registry that a kind or a layer registers into, through
+the channel that already carries kinds and checks. Two registries
+rather than one with an axis parameter: a file's part is a pure
+function of its path inside a package, while its channel is read
+from the delivery manifest, the emitted set and the template
+source, so a single registry over both would answer `object` and
+hand every rule a context that is the union of two unrelated
+needs. What the two share is the walk, an ordered list of rules
+where the first to claim a path wins and the caller supplies the
+fallback. Same shape, without paying for that shape in types.
+
+Today each is instead a closed ladder in one module. That is why a
+layer can teach the workshop a new package kind but not what a
+file of that kind *is*, and why `fm explain` called a tool receipt
+a layer fragment until the directory it lived in was split.
 
 Registered, not configured. The layout a kind expects is a fact
 about the kind, so it is layer code like everything else here. One
@@ -372,9 +382,8 @@ are listed as available, activating nothing (contract 3).
 
 ### Phase 4: the check owns its configuration and tool
 
-A check's claim reads the shared path registry, so the phase that
-builds that registry comes first and this one is renumbered behind
-it. Its design is not settled (open item 9), and building the claim
+A check's claim reads the part registry, so the phase that builds
+it comes first and this one is renumbered behind it. Its design is not settled (open item 9), and building the claim
 on today's per-kind `classify` instead would be the second shape
 this plan then replaces, which is the argument that retired
 `kindcheck` inside phase 2.
@@ -694,6 +703,28 @@ the kit cannot drift from the enforcement.
   numbering is left alone until the design settles, because a
   third of this note's phase references are dated decision-record
   lines that must keep meaning what they meant.
+- 2026-09-27, two registries rather than one (Willem: "B for
+  now", choosing between one registry taking an axis parameter and
+  two that share only their walk). The axes have the same shape
+  and nothing else: a part is a pure function of a path inside a
+  package, a channel is read from the delivery manifest, the
+  emitted set and the template source, and their answers are a
+  label and a three-field record. One registry over both would
+  type its answers as `object` and hand every rule a context that
+  is the union of two unrelated needs, which is paying in types
+  for a shape. Each registry keeps its own types and its own
+  fallback, and the ordered walk they share is a helper.
+  Promotion to the single registry stays mechanical, a dictionary
+  key, and earns its keep when a third axis is real rather than
+  imagined.
+- 2026-09-27, the axes are named **part** and **channel**
+  (from the discussion). `channel` was already the field
+  `fm explain` prints, so it needs no new word. `part` is new and
+  avoids two collisions the obvious names walk into: `type` is
+  what contract 9 is freeing from the contract, and `source` is
+  an answer *on the part axis*, so a `classify_source` returning
+  `yours` for a file whose part is `source` reads as a
+  contradiction.
 
 ## Open
 
@@ -736,31 +767,32 @@ the kit cannot drift from the enforcement.
    verify offline, so the check record either carries a verified
    id or carries nothing and the editor keeps quiet about that
    tool. Owner: Willem, with phase 4.
-9. The shared path registry's design, which the decision record
-   rules the direction of and leaves the shape of. Six questions,
-   and the first two decide the rest:
-   - **What a rule is.** The two axes are not alike today. A kind's
-     `classify` is a pure function of a package-relative string. A
-     provenance answer reads state: the materialise manifest, the
-     emitters' path set, the rendered names, the template source.
-     One mechanism must admit both, which makes it a registry of
-     callables rather than a table of patterns, and gives up
-     declaring rules as data.
-   - **What an answer is.** One axis answers a label
-     (`source`), the other a record of three fields (channel,
-     source, edit path). Generic over the answer buys extensibility
-     and costs the registry any ability to check the answers
-     themselves.
+9. The part and channel registries' remaining shape. The decision
+   record settles two registries, their names, their types and the
+   shared walk; these are what is left:
+   - **Whether a part rule may be data rather than a callable.**
+     Nothing about a part reads state, so that axis could take a
+     pattern table, which is easier to read and to render into
+     documentation. A callable on both keeps promotion to a single
+     registry mechanical. Symmetry against legibility, and only
+     this axis has the choice.
    - **How rules from two layers order.** Most specific wins is
      easy to say and needs defining over callables. Whatever it
      is, two checkouts of one commit must order alike.
    - **How far the per-package exception reaches**, in the shape a
      coverage floor already has. A vendored tree that is not
      source is the motivating case; "these paths are not what the
-     kind would assume" is the bound to hold it to.
-   - **Whether the existing two axes migrate, or only the new
-     claim uses the registry first.** Migrating both proves the
-     mechanism; migrating neither leaves three ladders.
-   - **What `fm explain` prints** once a path has an answer on
-     more than one axis.
+     kind would assume" is the bound to hold it to. It applies to
+     the part axis; whether a package may say anything about its
+     own channel is a separate question, and the lean is no.
+   - **Whether both existing ladders migrate at once.** Each
+     becomes the builtin rules of its own registry, which is the
+     natural shape; doing one first leaves two mechanisms for a
+     while and proves less.
+   - **What `fm explain` prints** now a path has a part and a
+     channel, and whether it names the layer that supplied each.
+   - **When the single registry earns its keep.** A third axis is
+     the trigger; "is this a documented surface" from the docs
+     phase is the nearest candidate. Naming the trigger now keeps
+     the promotion a decision rather than a drift.
    Owner: Willem. Blocks the claim in phase 4.
