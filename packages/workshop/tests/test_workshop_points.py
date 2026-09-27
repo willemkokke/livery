@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -212,18 +213,11 @@ def test_an_entry_off_its_day_is_skipped_and_says_when(
         "tools.refresh (workshop.toml) runs every 2w; next on 2026-09-28, skipped"
         in out
     )
-    assert [argv[1] for argv in seen] == [
-        "--profile=fm-profile.json",
-        "ci.profile.push",
-    ]
+    assert [argv[-1] for argv in seen] == ["check"]
     monkeypatch.setattr(_points, "today", lambda: date(2026, 9, 28))
     seen.clear()
     _points.run_point(root, "nightly", "nightly", spawn=green)
-    assert [argv[-1] for argv in seen] == [
-        "check",
-        "--job=nightly",
-        "--submit",
-    ]
+    assert [argv[-1] for argv in seen] == ["check", "--submit"]
 
 
 def test_the_nightly_carries_the_forge_token_where_the_repository_has_one() -> None:
@@ -306,11 +300,7 @@ def test_the_builtin_jobs_of_each_point(tmp_path: Path) -> None:
     # The nightly point runs the whole check, its own tests selected in.
     assert _points.jobs_of(root, "nightly") == ("nightly",)
     assert _points.entries_for(root, "nightly", "nightly") == (
-        _points.Entry("nightly", "nightly", "check", profiled=True),
-        # The profiled entry's trace leaves through the entry after it:
-        # a trace is written when the run that made it ends, and it
-        # carries the job's forge name, which is what joins a leg to it.
-        _points.Entry("nightly", "nightly", "ci.profile.push", ("--job={display}",)),
+        _points.Entry("nightly", "nightly", "check"),
     )
     # The release's jobs are declared, with nothing scheduled on them
     # until the wave's verbs become entries; a point's own name is a
@@ -337,7 +327,7 @@ def test_a_declared_entry_joins_its_point(tmp_path: Path) -> None:
     # declared ones.
     assert _points.jobs_of(root, "gate") == ("check", "docs", "gate")
     entries = _points.entries_for(root, "nightly", "nightly")
-    assert [e.task for e in entries] == ["check", "ci.profile.push", "release.replay"]
+    assert [e.task for e in entries] == ["check", "release.replay"]
     assert entries[-1] == _points.Entry(
         "nightly", "nightly", "release.replay", ("--all",), source="workshop.toml"
     )
@@ -371,10 +361,15 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
     # and the point, which selects the tests.
     assert legs == ["check-ubuntu-latest-3.14"] * len(seen)
     assert points == ["gate"] * len(seen)
+    # Every entry under a trace of its own, named after the task it ran.
     assert seen == [
-        ["hse", "--profile=fm-profile.json", "check"],
-        ["hse", "coverage.leg", "--job=check (ubuntu-latest, 3.14)"],
-        ["hse", "ci.profile.push", "--job=check (ubuntu-latest, 3.14)"],
+        ["hse", "--profile=fm-profile-check.json", "check"],
+        [
+            "hse",
+            "--profile=fm-profile-coverage-leg.json",
+            "coverage.leg",
+            "--job=check (ubuntu-latest, 3.14)",
+        ],
     ]
     # On GitLab the job is named by its key alone, the leg's label
     # unchanged: the collect step joins the row with the forge's job
@@ -386,7 +381,12 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
     _points.run_point(
         root, "gate", "check", os_label="ubuntu-latest", python="3.14", spawn=green
     )
-    assert seen[-2] == ["hse", "coverage.leg", "--job=check"]
+    assert seen[-1] == [
+        "hse",
+        "--profile=fm-profile-coverage-leg.json",
+        "coverage.leg",
+        "--job=check",
+    ]
     assert legs[-1] == "check-ubuntu-latest-3.14"
     monkeypatch.delenv("GITLAB_CI")
     monkeypatch.delenv("CI_PIPELINE_SOURCE")
@@ -395,14 +395,23 @@ def test_the_runner_spawns_each_entry_with_the_legs_facts(
     # The render gate and the provenance check live in the gate job,
     # the one place a scoped leg cannot skip them.
     assert seen == [
-        ["hse", "workflow.release.check-title"],
-        ["hse", "template.check"],
-        ["hse", "provenance"],
-        ["hse", "coverage.union"],
-        ["hse", "ci.metrics.collect"],
-        ["hse", "speed.judge"],
-        ["hse", "ci.verdict", "--needs=check,docs"],
-        ["hse", "ci.verified.stamp"],
+        [
+            "hse",
+            "--profile=fm-profile-workflow-release-check-title.json",
+            "workflow.release.check-title",
+        ],
+        ["hse", "--profile=fm-profile-template-check.json", "template.check"],
+        ["hse", "--profile=fm-profile-provenance.json", "provenance"],
+        ["hse", "--profile=fm-profile-coverage-union.json", "coverage.union"],
+        ["hse", "--profile=fm-profile-ci-metrics-collect.json", "ci.metrics.collect"],
+        ["hse", "--profile=fm-profile-speed-judge.json", "speed.judge"],
+        [
+            "hse",
+            "--profile=fm-profile-ci-verdict.json",
+            "ci.verdict",
+            "--needs=check,docs",
+        ],
+        ["hse", "--profile=fm-profile-ci-verified-stamp.json", "ci.verified.stamp"],
     ]
 
 
@@ -480,7 +489,14 @@ def test_a_push_promotes_the_gate_to_the_merge_point(
         return 0
 
     _points.run_point(root, "gate", "govern", spawn=green)
-    assert seen == [["fm", "workflow.configure", "--if-changed"]]
+    assert seen == [
+        [
+            "fm",
+            "--profile=fm-profile-workflow-configure.json",
+            "workflow.configure",
+            "--if-changed",
+        ]
+    ]
     assert "point: gate on a push is the merge point" in capsys.readouterr().out
     monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
     assert _points.effective_point("gate") == "gate"
@@ -505,20 +521,41 @@ def test_a_dispatched_points_inputs_reach_its_entries(
 
     # Outside a dispatch the input is empty: the verb takes HEAD.
     _points.run_point(root, "release", "publish", spawn=green)
-    assert seen == [["hse", "workflow.release.publish", "--ref="]]
+    assert seen == [
+        [
+            "hse",
+            "--profile=fm-profile-workflow-release-publish.json",
+            "workflow.release.publish",
+            "--ref=",
+        ]
+    ]
     seen.clear()
     # GitHub and Gitea carry the inputs in the event payload.
     event = tmp_path / "event.json"
     event.write_text(json.dumps({"inputs": {"ref": "abc123", "workshop": ""}}))
     monkeypatch.setenv("GITHUB_EVENT_PATH", str(event))
     _points.run_point(root, "release", "wheels", spawn=green)
-    assert seen == [["hse", "release.wheels", "--ref=abc123"]]
+    assert seen == [
+        [
+            "hse",
+            "--profile=fm-profile-release-wheels.json",
+            "release.wheels",
+            "--ref=abc123",
+        ]
+    ]
     seen.clear()
     # GitLab carries them as pipeline variables, environment by name.
     monkeypatch.delenv("GITHUB_EVENT_PATH")
     monkeypatch.setenv("ref", "def456")
     _points.run_point(root, "release", "templates", spawn=green)
-    assert seen == [["hse", "release.templates", "--ref=def456"]]
+    assert seen == [
+        [
+            "hse",
+            "--profile=fm-profile-release-templates.json",
+            "release.templates",
+            "--ref=def456",
+        ]
+    ]
 
 
 def test_the_nightly_point_runs_the_whole_check(
@@ -535,10 +572,7 @@ def test_the_nightly_point_runs_the_whole_check(
         return 0
 
     _points.run_point(root, "nightly", "nightly", python="3.14", spawn=green)
-    assert seen == [
-        (["hse", "--profile=fm-profile.json", "check"], "nightly"),
-        (["hse", "ci.profile.push", "--job=nightly (3.14)"], "nightly"),
-    ]
+    assert seen == [(["hse", "--profile=fm-profile-check.json", "check"], "nightly")]
 
 
 def test_the_merge_points_gate_job_ends_with_the_janitor_and_the_gates_does_not(
@@ -563,3 +597,134 @@ def test_the_check_legs_are_one_per_runner_and_gate_python(tmp_path: Path) -> No
         "check-macos-latest-3.13",
         "check-macos-latest-3.14",
     ]
+
+
+def test_a_job_keeps_one_trace_of_every_entry_it_ran(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The job's own timeline is the union of the work it did.
+
+    Every entry writes its own trace and drops a copy in the job's box, so
+    one file holds them all and the runner pushes that. The box is named to
+    the entries through the environment the runner builds for them: writing
+    this process's own from inside a task is ambient, which footman notes.
+    """
+    from livery.workshop import _traces
+
+    root = _root(tmp_path)
+    boxes: list[str] = []
+    pushed: list[tuple[str, str]] = []
+
+    def green(argv: list[str], env: dict[str, str]) -> int:
+        boxes.append(env.get("FM_PROFILE_DIR", "<unset>"))
+        # Each entry leaves a fragment, as a profiled child does.
+        drop = Path(env["FM_PROFILE_DIR"])
+        (drop / f"{len(boxes)}.json").write_text(
+            json.dumps(
+                {
+                    "traceEvents": [
+                        {
+                            "ph": "X",
+                            "cat": "task",
+                            "name": argv[-1],
+                            "pid": len(boxes),
+                            "tid": 1,
+                            "ts": 1_000_000.0 + len(boxes),
+                            "dur": 10.0,
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        return 0
+
+    def fake_push(root: Path, trace: Path, *, job: str = "", run: object = None) -> str:
+        pushed.append((job, trace.read_text(encoding="utf-8")))
+        return f"profile: {trace.stat().st_size} bytes pushed"
+
+    monkeypatch.setattr(_traces, "push", fake_push)
+    _points.run_point(root, "gate", "gate", spawn=green)
+    # One box for the whole job, named to every entry.
+    assert len(set(boxes)) == 1 and boxes[0] != "<unset>"
+    assert not Path(boxes[0]).exists()  # and taken away with the job
+    (job, text) = pushed[0]
+    assert job == "gate"
+    drawn = json.loads(text)["traceEvents"]
+    assert [e["name"] for e in drawn] == [
+        "workflow.release.check-title",
+        "template.check",
+        "provenance",
+        "coverage.union",
+        "ci.metrics.collect",
+        "speed.judge",
+        "--needs=check,docs",
+        "ci.verified.stamp",
+    ]
+    assert min(e["ts"] for e in drawn) == 0.0  # the file starts at its own zero
+    assert "pushed" in capsys.readouterr().out
+
+
+def test_a_job_that_went_red_still_keeps_its_trace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A red job's timeline is the one most worth having."""
+    from livery.footman import Failed
+    from livery.workshop import _traces
+
+    root = _root(tmp_path)
+    pushed: list[str] = []
+
+    def red(argv: list[str], env: dict[str, str]) -> int:
+        drop = Path(env["FM_PROFILE_DIR"])
+        (drop / "one.json").write_text(
+            json.dumps(
+                {
+                    "traceEvents": [
+                        {
+                            "ph": "X",
+                            "name": "up to here",
+                            "pid": 1,
+                            "tid": 1,
+                            "ts": 5.0,
+                            "dur": 1.0,
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        return 1
+
+    def kept(root: Path, trace: Path, *, job: str = "", run: object = None) -> str:
+        pushed.append(job)
+        return "profile: kept"
+
+    monkeypatch.setattr(_traces, "push", kept)
+    with pytest.raises(Failed):
+        _points.run_point(root, "merge", "govern", spawn=red)
+    assert pushed == ["govern"]
+
+
+def test_a_workspace_that_keeps_no_traces_pays_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Off is zero cost: no box, no flag, no push, and no plugin loaded."""
+    from livery.workshop import _traces
+
+    root = _root(tmp_path, schedule="\n[ci]\nprofile = false\n")
+    seen: list[list[str]] = []
+    boxed: list[str] = []
+
+    def green(argv: list[str], env: dict[str, str]) -> int:
+        seen.append(argv)
+        boxed.append(env.get("FM_PROFILE_DIR", "<unset>"))
+        return 0
+
+    def refuse(*args: object, **kwargs: object) -> str:
+        raise AssertionError("a workspace that keeps no traces pushed one")
+
+    monkeypatch.setattr(_traces, "push", refuse)
+    _points.run_point(root, "merge", "govern", spawn=green)
+    assert seen == [["fm", "workflow.configure", "--if-changed"]]
+    assert boxed == ["<unset>"]

@@ -206,7 +206,7 @@ def test_the_runner_runs_a_contributed_points_task_on_its_day(
         python="3.12",
         spawn=green,
     )
-    assert seen == [["hse", "layers"]]
+    assert seen == [["hse", "--profile=fm-profile-layers.json", "layers"]]
     assert "host-audit/host-audit: layers (packages/audit)" in capsys.readouterr().out
 
 

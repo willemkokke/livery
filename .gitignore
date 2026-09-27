@@ -7,7 +7,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .coverage*
-fm-profile.json
+fm-profile*.json
 fm-gate.json
 .claude/worktrees/
 .mypy_cache/

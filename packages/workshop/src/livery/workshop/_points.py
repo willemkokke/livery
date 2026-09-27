@@ -33,9 +33,11 @@ workspace has, the builtin four first; every reader takes that set.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 from collections.abc import Callable
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
@@ -706,8 +708,64 @@ DISPATCHABLE = tuple(
 #: the gate's jobs and its own.
 INHERITS = {point.name: point.inherits for point in DECLARED if point.inherits}
 
-#: The trace the profiled gate writes, read by the leg's row.
-TRACE = "fm-profile.json"
+
+def _tracing(root: Path) -> bool:
+    """Whether this workspace keeps a trace of what CI does."""
+    from livery.workshop._traces import policy
+
+    kept, _why = policy(root)
+    return kept.legs
+
+
+def profile_box() -> AbstractContextManager[Path]:
+    """The job's drop box, where every entry leaves its own timeline.
+
+    The plugin owns the directory and its sweeping; this names it to the
+    entries through the environment the runner already builds for them,
+    which is why nothing here writes this process's own.
+    """
+    from livery.footman.profile import box
+
+    return box()
+
+
+def _push_job(root: Path, drop: Path, *, job: str) -> None:
+    """Write the job's own trace from what its entries left, and push it.
+
+    Every line is printed and none is a verdict: a job's timeline is
+    something noticed about the work, never part of deciding it.
+    """
+    from livery.footman.profile import as_trace, swept
+    from livery.workshop._traces import push
+
+    try:
+        events, origin = swept(drop)
+        if not events:
+            return
+        written = drop.parent / f"{drop.name}.json"
+        written.write_text(as_trace(events, origin=origin), encoding="utf-8")
+        line = push(root, written, job=job)
+        written.unlink(missing_ok=True)
+    except Exception as error:
+        line = f"profile: the job's trace was not kept ({error})"
+    if line:
+        print(f"  {line}")
+
+
+def trace_file(task: str) -> str:
+    """The file an entry's own trace is written to, named after the task.
+
+    One file per entry rather than one per job: the leg's timing row reads
+    the gate's own file, and a person reading a runner's working directory
+    can tell which entry a trace belongs to.
+    """
+    from livery.workshop._state import slug
+
+    return f"fm-profile-{slug(task)}.json"
+
+
+#: The gate's own trace, which the leg's timing row reads.
+TRACE = trace_file("check")
 
 
 @dataclass(frozen=True)
@@ -724,8 +782,6 @@ class Entry:
             and each of the point's dispatch inputs by name
             (``{ref}`` on the release), empty when the run was not
             dispatched with it.
-        profiled: Whether the task runs under ``--profile``, its
-            trace left at `TRACE` for the leg's timing row.
         source: Where the entry was declared.
         every: The cadence, ``""`` for every run of the point, ``1w``
             for one run a week, ``2w`` for one run every two weeks;
@@ -737,7 +793,6 @@ class Entry:
     job: str
     task: str
     args: tuple[str, ...] = ()
-    profiled: bool = False
     source: str = "builtin"
     every: str = ""
 
@@ -774,21 +829,18 @@ def due(every: str, on: date) -> tuple[bool, date]:
     return False, following
 
 
-#: The workshop's own schedule. The gate's check job runs the gate
-#: profiled and records the leg's timing row; its verdict job
-#: collects the run's rows, then judges the jobs it needs. The merge
+#: The workshop's own schedule. Every entry runs profiled, so a job's
+#: own timeline is the union of the work it did; the gate's check job
+#: also records the leg's timing row, and its verdict job collects the
+#: run's rows, then judges the jobs it needs. The merge
 #: point adds the deploy, the governance reconcile, which classifies
 #: its own commit and exits fast when no contract path changed, and
 #: the release dispatch, green unless a merged release is unpublished.
 BUILTIN: tuple[Entry, ...] = (
-    Entry("gate", "check", "check", profiled=True),
+    Entry("gate", "check", "check"),
     # The leg's one write: its timing row and its measured suites go
     # on its per-run ref together.
     Entry("gate", "check", "coverage.leg", ("--job={display}",)),
-    # The leg's trace, to the channel no sync mirrors. After the row,
-    # which reads the same file: a trace is written when the run that
-    # made it ends, so only a later entry can see it.
-    Entry("gate", "check", "ci.profile.push", ("--job={display}",)),
     Entry("gate", "docs", "docs.build"),
     # The title check first: it reads the pull request's title from
     # the event payload, is green off a release branch, and refuses a
@@ -823,8 +875,7 @@ BUILTIN: tuple[Entry, ...] = (
     Entry("merge", "gate", "janitor"),
     # The clock's point: the whole check, with the tests that declare
     # the nightly point selected in, on every python of the matrix.
-    Entry("nightly", "nightly", "check", profiled=True),
-    Entry("nightly", "nightly", "ci.profile.push", ("--job={display}",)),
+    Entry("nightly", "nightly", "check"),
     # The wave, at the squash the dispatch names: each platform's
     # wheels, then the publish that cuts the receipts, then the home's
     # template artifact. Each verb decides for itself what the ref
@@ -992,9 +1043,11 @@ def run_point(
     *os_label* and *python* are the matrix facts the shell passes for
     a matrix job; they format the entries' arguments and name the
     leg. An entry with a cadence runs only on its day, judged by
-    `today`, and says when it runs next otherwise. A profiled entry
-    runs under ``--profile`` with its trace
-    left at `TRACE`. Every child's environment names the leg in
+    `today`, and says when it runs next otherwise. Every entry runs
+    under ``--profile``, writing its own trace beside the others, and
+    the job's box collects them into one timeline the runner pushes;
+    ``[ci] profile = false`` does none of that. Every child's
+    environment names the leg in
     `livery.workshop._state.LEG_VARIABLE`, the key of the leg's rows
     and stamps, and the resolved point in
     `livery.workshop._state.POINT_VARIABLE`, which selects the
@@ -1036,27 +1089,45 @@ def run_point(
     # One listing of the state store's namespace for the whole job:
     # every entry reads through it and records what it writes for the
     # entries after it, so the job lists once, not once per entry.
-    with remote_snapshot(root, publish=True) as published:
+    with contextlib.ExitStack() as scope:
+        # Every entry writes its own trace and drops a copy in the job's
+        # box, so the job's own timeline is the union of the work it did.
+        # `[ci] profile = false` opens no box, passes no flag, and pushes
+        # nothing: off costs nothing rather than less.
+        drop = scope.enter_context(profile_box()) if _tracing(root) else None
+        published = scope.enter_context(remote_snapshot(root, publish=True))
         env = {**os.environ, LEG_VARIABLE: label, POINT_VARIABLE: resolved}
         if published:
             env[SNAPSHOT_VARIABLE] = published
-        for entry in entries:
-            if entry.every:
-                is_due, when = due(entry.every, today())
-                if not is_due:
-                    print(
-                        f"  {resolved}/{job}: {entry.task} ({entry.source}) runs"
-                        f" every {entry.every}; next on {when:%Y-%m-%d}, skipped"
-                    )
-                    continue
-            argv = [prog]
-            if entry.profiled:
-                argv.append(f"--profile={TRACE}")
-            argv.append(entry.task)
-            argv.extend(arg.format(**facts) for arg in entry.args)
-            print(f"  {resolved}/{job}: {entry.task} ({entry.source})")
-            code = spawn(argv, env)
-            if code != 0:
-                fail(f"{resolved}/{job}: {entry.task} exited {code}")
+        if drop is not None:
+            # Named here and nowhere else: a workspace that keeps no traces
+            # never imports the plugin that writes them.
+            from livery.footman.profile import DROP
+
+            env[DROP] = str(drop)
+        try:
+            for entry in entries:
+                if entry.every:
+                    is_due, when = due(entry.every, today())
+                    if not is_due:
+                        print(
+                            f"  {resolved}/{job}: {entry.task} ({entry.source}) runs"
+                            f" every {entry.every}; next on {when:%Y-%m-%d}, skipped"
+                        )
+                        continue
+                argv = [prog]
+                if drop is not None:
+                    argv.append(f"--profile={trace_file(entry.task)}")
+                argv.append(entry.task)
+                argv.extend(arg.format(**facts) for arg in entry.args)
+                print(f"  {resolved}/{job}: {entry.task} ({entry.source})")
+                code = spawn(argv, env)
+                if code != 0:
+                    fail(f"{resolved}/{job}: {entry.task} exited {code}")
+        finally:
+            # A red job's timeline is the one most worth having, so the
+            # push happens whatever the entries did.
+            if drop is not None:
+                _push_job(root, drop, job=display)
     if not entries:
         print(f"  {resolved}/{job}: nothing scheduled")

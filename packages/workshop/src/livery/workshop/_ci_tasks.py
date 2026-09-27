@@ -41,7 +41,6 @@ from livery.forge import (
 from livery.workshop._contract import load_contract
 from livery.workshop._git_ops import GitOps
 from livery.workshop._layers import workspace_root
-from livery.workshop._points import TRACE
 from livery.workshop._verdict import (
     EXIT_CI_FAILED,
     EXIT_PENDING,
@@ -889,41 +888,6 @@ def ci_metrics_collect() -> None:
 
 
 profile = ci.group("profile", help="A run as one timeline")
-
-
-def profile_push_flow(root: Path, trace: Path, *, job: str = "") -> None:
-    """Push this leg's trace; print what happened and decide nothing."""
-    from livery.workshop._traces import push
-
-    line = push(root, trace if trace.is_absolute() else root / trace, job=job)
-    if line:
-        print(f"  {line}")
-
-
-@profile.task(name="push", hidden=True)
-def ci_profile_push(
-    *,
-    job: Annotated[str, doc("the job's name as the forge lists it")] = "",
-    trace: Annotated[Path, doc("the trace the profiled entry wrote")] = Path(TRACE),
-) -> None:
-    """Put this leg's trace where a reader can assemble the run from it.
-
-    Runs after the entry whose trace it pushes, in the same job, so
-    the file is there to read: a trace is written when the run that
-    made it ends. The refs live outside the store's own namespace and
-    nothing mirrors them, so no sync pays for a trace and the gate
-    reads none.
-
-    The contract decides. ``[ci] profile-legs = false`` pushes nothing
-    and says nothing, and ``profile-window`` is how many runs the
-    janitor keeps. Observational throughout: a missing trace, a leg
-    the runner did not name, and origin's own refusal are each a
-    printed line and none of them fails the job.
-    """
-    root = workspace_root()
-    if root is None:
-        fail("no workspace: no workshop.toml above the working directory")
-    profile_push_flow(root, Path(trace), job=job)
 
 
 @profile.default

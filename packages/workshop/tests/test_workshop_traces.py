@@ -100,7 +100,7 @@ def test_the_contract_answers_its_defaults_when_it_says_nothing(work: Path) -> N
     kept, why = _traces.policy(work)
     assert why == ""
     assert kept == _traces.Policy(
-        legs=_traces.LEGS_DEFAULT,
+        legs=_traces.PROFILE_DEFAULT,
         window=_traces.WINDOW_DEFAULT,
         into=_traces.INTO_DEFAULT,
     )
@@ -113,12 +113,12 @@ def test_a_key_of_the_wrong_type_is_named_and_its_default_stands(work: Path) -> 
     key that reads as false by accident would keep nothing at all and
     say nothing about why.
     """
-    _contract(work, profile_legs="yes", profile_window="lots", profile_into=17)
+    _contract(work, profile="yes", profile_window="lots", profile_into=17)
     kept, why = _traces.policy(work)
-    assert kept.legs is _traces.LEGS_DEFAULT
+    assert kept.legs is _traces.PROFILE_DEFAULT
     assert kept.window == _traces.WINDOW_DEFAULT
     assert kept.into == _traces.INTO_DEFAULT
-    assert "[ci] profile-legs is 'yes'; it is true or false" in why
+    assert "[ci] profile is 'yes'; it is true or false" in why
     assert "[ci] profile-window is 'lots'; it is a whole number of runs" in why
     assert "[ci] profile-into is 17; it is a path" in why
 
@@ -126,7 +126,7 @@ def test_a_key_of_the_wrong_type_is_named_and_its_default_stands(work: Path) -> 
 def test_a_contract_that_wants_no_traces_pushes_nothing_and_says_nothing(
     work: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _contract(work, profile_legs=False)
+    _contract(work, profile=False)
     _in_ci(monkeypatch)
     assert _traces.push(work, _trace_file(work)) == ""
     assert _state.list_refs(work, _traces.TRACES.prefix) == {}
@@ -159,12 +159,23 @@ def test_a_push_origin_refuses_is_named_and_decides_nothing(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """The trace is observational: origin's own words, and the job goes on."""
-    from livery.workshop._ci_tasks import profile_push_flow
+    from livery.workshop._points import _push_job
 
     _in_ci(monkeypatch)
     _git(work, "remote", "set-url", "origin", str(tmp_path / "gone.git"))
-    _trace_file(work)
-    profile_push_flow(work, Path("fm-profile.json"))
+    drop = work / "drop"
+    drop.mkdir()
+    (drop / "one.json").write_text(
+        json.dumps(
+            {
+                "traceEvents": [
+                    {"ph": "X", "name": "a", "pid": 1, "tid": 1, "ts": 1.0, "dur": 1.0}
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    _push_job(work, drop, job="check")
     printed = capsys.readouterr().out
     assert "the trace was not pushed" in printed
 

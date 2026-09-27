@@ -181,6 +181,76 @@ def _boxes_home() -> Path:
     return home
 
 
+@contextlib.contextmanager
+def box() -> Generator[Path]:
+    """A drop box for the children of this block, removed when it ends.
+
+    For a runner that spawns work and wants one timeline of it, whether or
+    not its own run is profiled: a CI job's verbs, a build's compilers.
+
+    The directory is yielded and nothing else happens: naming it to the
+    children is the caller's, because a caller that spawns already builds
+    their environment, and writing this process's own environment from
+    inside a task is ambient and footman notes it. Name it under
+    [livery.footman.profile.DROP][] in the environment you hand them.
+
+    Yields:
+        The directory to name, which exists for the block's duration.
+    """
+    made = Path(tempfile.mkdtemp(dir=_boxes_home()))
+    _open_boxes.add(str(made))
+    atexit.register(_sweep_orphan, str(made))
+    try:
+        yield made
+    finally:
+        _open_boxes.discard(str(made))
+        shutil.rmtree(made, ignore_errors=True)
+
+
+def swept(
+    where: Path | str, *, zero: float | None = None
+) -> tuple[list[dict[str, Any]], float]:
+    """Every fragment in *where*, on one clock; the events and that clock.
+
+    A fragment is stamped in epoch microseconds, so reading a box is
+    subtracting one moment from every stamp. *zero* is that moment, in
+    wall-clock microseconds; the earliest stamp in the box by default,
+    which makes a file that starts at zero rather than at fifty thousand
+    years. A fragment that will not parse is named on stderr and skipped,
+    never fatal, because the run it rode in is the point.
+
+    Args:
+        where: The directory the fragments are in.
+        zero: The wall-clock moment to measure from, or ``None`` for the
+            earliest stamp found.
+
+    Returns:
+        The events, and the moment they are measured from. No fragments at
+        all is no events and the *zero* asked for, or zero.
+    """
+    found: list[dict[str, Any]] = []
+    for fragment in sorted(Path(where).glob("*.json")):
+        try:
+            payload: Any = json.loads(fragment.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            print(f"profile: skipped fragment {fragment.name}: {exc}", file=sys.stderr)
+            continue
+        events = payload.get("traceEvents") if isinstance(payload, dict) else payload
+        if not isinstance(events, list):
+            continue
+        found += [event for event in events if isinstance(event, dict)]
+    origin = zero
+    if origin is None:
+        stamps = [ts for e in found if isinstance(ts := e.get("ts"), (int, float))]
+        origin = min(stamps, default=0.0)
+    return [
+        {**e, "ts": round(ts - origin, 1)}
+        if isinstance(ts := e.get("ts"), (int, float))
+        else e
+        for e in found
+    ], origin
+
+
 def _box() -> str | None:
     """The drop box this process may write into, while it is still there.
 
@@ -418,23 +488,7 @@ def _sweep_children(zero: float) -> list[dict[str, Any]]:
     if sink is None:
         return []
     os.environ.pop(DROP, None)
-    zero_wall_us = _epoch_origin(zero)
-    embedded: list[dict[str, Any]] = []
-    for fragment in sorted(Path(sink).glob("*.json")):
-        try:
-            payload = json.loads(fragment.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc:
-            print(f"profile: skipped fragment {fragment.name}: {exc}", file=sys.stderr)
-            continue
-        found = payload.get("traceEvents") if isinstance(payload, dict) else payload
-        if not isinstance(found, list):
-            continue
-        for event in found:
-            if not isinstance(event, dict):
-                continue
-            if isinstance(ts := event.get("ts"), (int, float)):
-                event = {**event, "ts": round(ts - zero_wall_us, 1)}
-            embedded.append(event)
+    embedded, _origin = swept(sink, zero=_epoch_origin(zero))
     _open_boxes.discard(sink)
     shutil.rmtree(sink, ignore_errors=True)
     return embedded
