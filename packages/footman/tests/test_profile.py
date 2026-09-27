@@ -676,3 +676,104 @@ def test_a_profiled_child_hands_its_whole_trace_up_as_well(tmp_path, monkeypatch
     assert mine["ts"] > 1.7e15  # epoch microseconds, the box's convention
     # The same task, once as the run's own and once handed up.
     assert [e["name"] for e in own if e.get("cat") == "task"] == ["fast"]
+
+
+LAID = json.dumps(
+    {
+        "originEpochUs": 1_000_000.0,
+        "traceEvents": [
+            {"ph": "M", "name": "process_name", "pid": 1, "args": {"name": "fm"}},
+            {
+                "ph": "X",
+                "cat": "task",
+                "name": "check",
+                "pid": 1,
+                "tid": 7,
+                "ts": 0.0,
+                "dur": 500.0,
+            },
+            {
+                "ph": "X",
+                "cat": "test.call",
+                "name": "one",
+                "pid": 99,
+                "tid": 1,
+                "ts": 100.0,
+                "dur": 50.0,
+            },
+            "not an event",
+        ],
+    }
+)
+
+
+def test_a_trace_that_cannot_be_laid_on_a_clock_says_why():
+    """Fallbacks first: the three ways a trace refuses to be placed."""
+    import itertools
+
+    from livery.footman import profile
+
+    pids = itertools.count(1000)
+    assert profile.laid_on("not json", zero=0.0, pids=pids) == (
+        [],
+        "the trace does not parse (Expecting value: line 1 column 1 (char 0))",
+    )
+    assert profile.laid_on("[]", zero=0.0, pids=pids) == (
+        [],
+        "the trace is not a trace object",
+    )
+    # A trace with no origin cannot be placed at all: every stamp in it is
+    # relative to a moment it never wrote down.
+    assert profile.laid_on('{"traceEvents": []}', zero=0.0, pids=pids) == (
+        [],
+        "the trace records no originEpochUs, so it cannot be placed",
+    )
+    assert profile.laid_on('{"originEpochUs": 1.0}', zero=0.0, pids=pids) == (
+        [],
+        "the trace carries no events",
+    )
+
+
+def test_a_trace_is_laid_on_another_clock_by_the_origins_alone():
+    """Two clocks, written down independently, are what aligns the two."""
+    import itertools
+
+    from livery.footman import profile
+
+    # The reading clock's zero is half a second before this trace's.
+    placed, why = profile.laid_on(
+        LAID, zero=500_000.0, pids=itertools.count(1000), label="check (ubuntu)"
+    )
+    assert why == ""
+    # Every stamp moved by the difference, and nothing else moved.
+    spans = {e["name"]: e for e in placed if e["ph"] == "X"}
+    assert spans["check"]["ts"] == 500_000.0
+    assert spans["check"]["dur"] == 500.0
+    assert spans["one"]["ts"] == 500_100.0
+    # Two groups in, two fresh numbers out, and the label says whose they are.
+    assert {e["pid"] for e in placed} == {1000, 1001}
+    named = next(e for e in placed if e["ph"] == "M")
+    assert named["args"]["name"] == "check (ubuntu): fm"
+    assert len(placed) == 3  # what is not an event is not carried
+
+
+def test_a_grandchild_stays_a_group_of_its_own_on_the_way_up(tmp_path, monkeypatch):
+    """What a child embedded rides up with the child, still its own.
+
+    A run hands its whole trace to the box above it, the fragments it
+    embedded included, and those keep the process ids they came with: a leg
+    that spawns a run that spawns a test runner shows all three.
+    """
+    monkeypatch.chdir(tmp_path)
+    box = tmp_path / "box"
+    box.mkdir()
+    monkeypatch.setenv("FM_PROFILE_DIR", str(box))
+    src = tmp_path / "tasks.py"
+    src.write_text(FRAGMENT_TASKS)
+    result = Runner().invoke("--profile=child.json drops", tasks=src)
+    assert result.ok, result.stderr
+    handed = _fragments(box)
+    # Its own group renumbered to this process, and the group it embedded
+    # carried through as it was.
+    assert _groups(handed) == {os.getpid(): "fm (child)"}
+    assert {e["pid"] for e in handed if e.get("cat") == "child"} == {4242}
