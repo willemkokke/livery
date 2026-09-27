@@ -238,7 +238,12 @@ That deletes the asset-provenance register, per-seat entitlement
 tracking and the transferability problem, and it has to be set before
 someone drags in a purchased asset pack.
 
-## Strongroom and lineage
+## Lineage belongs to the fabric, annotations to strongroom
+
+Ruled 2026-09-27, after the investigation first proposed a lineage
+format inside strongroom. The proposal is withdrawn and the reasoning
+is kept, because the argument that defeated it is the one that decides
+where anything of this kind goes.
 
 ### Two relations, not one
 
@@ -252,122 +257,94 @@ nothing distinguishes training data from evaluation data.
 
 History is "model v2 follows model v1", and `parents` already has it.
 Derivation is "model v2 was produced from these inputs", which git has
-no equivalent of and Nix does.
+no equivalent of.
 
-### Four designs
+### Why derivation is not a store relation
 
-1. **No new format.** Keep a ref per cited object as a retention root,
-   since refs are already collection roots, and hold the lineage in a
-   consumer blob. It works today and costs strongroom nothing. Its
-   weakness is that the retention invariant then holds by convention:
-   nothing stops someone deleting a ref whose purpose is recorded
-   nowhere a machine can read, and the loss is silent and late. It
-   stays on the table as the cheapest option.
-2. **Overload `parents`.** Free, and it destroys the first relation.
-3. **A lineage blob in `attachments`.** Works with no format change,
-   and the spec blesses the slot for "a tool spec, a dataset card". The
-   problem is reachability: an input named only inside an opaque
-   attachment is not reachable, so collection can delete the dataset
-   version a model's lineage cites, and the lineage silently becomes a
-   dangling claim. No vectors either, so every consumer invents its own
-   shape.
-4. **A first-class lineage format.** A specified record whose digest is
-   the digest of its own bytes, naming its inputs as name-to-digest
-   pairs, with a producer, a receipt and its parameters. Inputs named by
-   it are reachable, so the store can hold the invariant that a model's
-   cited inputs cannot be collected while the model is retained. It
-   gets golden vectors and conformance scenarios like every other
-   format.
+The relation is real and it is needed. It is not strongroom's.
 
-The fourth is ruled (2026-09-27): the lineage relation is a
-first-class strongroom format. Reachability is the argument that
-decides it: a lineage claim whose referent can be collected is worse
-than no claim, because the loss is silent until it is needed. The
-format itself is open, and deliberately so; nothing below fixes a
-field list.
+- **A derivation is a call.** Training, conversion, quantisation,
+  packaging and building are calls with inputs and outputs, and the
+  fabric owns calls.
+- **The layering already says so.** `Version.receipt` is "the receipt
+  of the producing call": strongroom points at the call and does not
+  describe it. `Subject` carries `call` and `receipt` kinds for the
+  same reason. Adding inputs to a store format would invert a decision
+  the store has already taken.
+- **The vocabulary is already spoken for.**
+  `derivations/<call key>` is a published namespace convention for an
+  evaluator's skip tier. The name collided because the concept was
+  already one layer up.
+- **The multipurpose evidence pointed the other way.** The non-ML
+  consumers offered in favour of a store format, IoStore containers as
+  a derivation from the store, a tool view derived from an archive, a
+  docs site derived from its sources, are all calls. That is one fabric
+  relation seen four times, not a store relation with many users.
+- **Non-determinism is a call property.** Training does not replay to
+  an identical digest. The fabric already reasons about which calls are
+  cacheable, so "not reproducible, and here is what went in" is its
+  question.
 
-The relation is not a new axis. `Version` already carries `producer`
-and `receipt`: it records what produced a version, and points at the
-call without describing it. What it does not record is what went into
-it. The inputs axis is the missing half of provenance that the version
-already half-carries.
+### Reachability needs no new format
 
-The layering stays honest if the format is domain-neutral the way
-`Tree` is. Inputs are name-to-digest pairs whose names mean nothing to
-the store, exactly as a tree entry's name means nothing to it.
-Strongroom specifies the relation; the plugin owns the words
-"training-data", "base-checkpoint" and "eval-set".
+Reachability was the argument that first made a store format look
+necessary: a lineage claim whose referent can be collected is worse
+than no claim, because the loss is silent and late. The store already
+answers it.
 
-Naming collision to settle: the fabric already uses "derivation" for a
-call key. The data-lineage record needs a different word.
+`pins/<name>` is in the store-owned namespace table, points at
+anything, and exists as "explicit roots for the sweep". The fabric pins
+the inputs its receipt cites. The store guarantees retention; the
+fabric records why, with the pin's consumer-owned `meta` pointing back
+at the receipt. `lifecycle.md` also promises that every ref on disk is
+a root in every namespace, whoever declared it, so a receipt published
+under the fabric's own ref is rooted by any sweeper, including one that
+has never heard of the fabric.
 
-**Timing, and why the direction decides it.** Phase 11 of
-[the redesign plan](20260925-strongroom-redesign-plan.md) is the
-freeze, and phases 2 to 11 are still waiting. The formats refuse
-unknown keys: `version.md` and `tree.md` both say "exactly those keys".
-That cuts both ways, and it sets the price of the freeze.
+With that, the three questions this investigation had opened, which
+direction a lineage record points, what it is called, and whether it
+must land before the redesign's freeze, all dissolve. Strongroom needs
+no new format for lineage and no new reserved namespace.
 
-A lineage record that **names its outputs**, pointing backward, leaves
-`Version` untouched and is a standalone object. An implementation never
-meets it unless a referrer points at it, so it is a pure addition and
-can land after the freeze. Finding a model's lineage then needs an
-index, and an index is a backend property, never in the name, exactly
-as the layout ruling has it; the store already keeps local marks under
-`index/`.
+### What the fabric owes
 
-A record that **points forward** makes the version grow a key, which is
-a break, and it must land before phase 11.
+Recorded here so the fabric is not designed without this case in view:
 
-So the direction removes or creates the deadline. Backward-pointing
-lineage is why "first class" and "the format is not settled" stop being
-in tension.
+- A receipt that names its inputs with roles and its outputs, not only
+  a key and a result.
+- Receipts retained rather than discarded after a cache hit, for as
+  long as the artifacts they explain are supported.
+- Signable, since an assertion about an artifact carries an author and
+  a date, and several assertions about one output must coexist without
+  erasing each other.
+- Exportable as an in-toto style statement, which is the shape every
+  attestation format already uses: the statement names its subject.
+- One receipt may name several outputs, since a training run emits
+  weights, a tokenizer, a config and an evaluation report from one
+  call.
 
-### Fit with strongroom's goals
+The scheduling cost, stated plainly: there is no fabric package yet, so
+either lineage waits on the fabric or the plugin keeps its own records
+until it lands. That is tolerable because the plugin's evidence
+generation is sequenced first anyway.
 
-Strongroom is meant to stay clean, generic, multipurpose, easy to
-implement in any language, and fast. Both additions are judged against
-that, and the price is stated rather than waved away.
+### What stays in strongroom
 
-**Spec surface is the real cost.** `packages/strongroom/spec/` has ten
-pages. Two more is a fifth more to read and to implement, and that
-bears on "easy to implement" more than anything else here does.
-
-**Two guards keep them from growing.** For annotations: the store never
-interprets a value. It checks that keys resolve and that a namespace's
-required keys are present, and nothing else, which leaves the store's
-contribution thin and correct. For lineage: strongroom points at the
-call and does not describe it, the way `Version.receipt` already does.
-Named inputs, a producer, a receipt, and stop. Parameters, environment
-and command lines belong to the fabric, which owns calls. Without that
-line the store grows into a build system.
-
-**Multipurpose is provable, not asserted.** Lineage has consumers with
-no machine learning in them: the redesign already frames IoStore
-containers as a derivation from the store, a tool view is derived from
-an archive, the tool record's replay-to-identical-digest property is a
-derivation with reproducibility asserted, and a rendered docs site is
-derived from its sources. Annotations likewise: classification and
-retention class on any corpus, attribution text on any vendored tree.
-A format with only the ML case behind it would be the signal to keep it
-out.
-
-**Performance is not where the risk is.** Both records are small
-objects, sized by rules and by edges rather than by files, and
-collection already traverses trees and versions. The performance risk
-in this area is dataset-scale manifests, chunking and the pack layout,
-which is the redesign's own measurement work. The two worries are
-separate and should stay separate.
-
-**One subtlety for the annotation page**: prefix matching is on stored
-names, never on materialised ones, or an escaped name on a platform
-that cannot hold the original would fall out of its own claim.
+Origin, not derivation. A purchased corpus or a downloaded checkpoint
+was produced by no call of ours; it has a source, a licence and an
+acquisition basis. That is a statement about bytes, scoped over tree
+paths, checked for coverage against a tree digest, and wanted by
+consumers that make no calls at all. Annotations are strongroom's;
+derivation is the fabric's. Each side passes its own test, which is
+below.
 
 ### Travelling with the artifact
 
 Two senses, and both are needed.
 
-Inside the store, lineage is a walk from a model version through its
-lineage records to every input.
+Inside the system, lineage is a walk from a shipped artifact through
+the receipts that produced it to every input, held by the fabric and
+rooted in the store by pins.
 
 When the artifact leaves, it is a closure export: the transitive graph,
 flattened, carrying each input's digest and descriptor but not its
@@ -386,10 +363,11 @@ for, nothing else has both properties.
 
 ### What the graph buys
 
-- **The NOTICE file becomes computed.** Walk a shipped model's graph,
-  union the licence and obligation fields of the inputs, emit the
-  attribution document. That automates the obligation loop, and it only
-  automates if lineage is machine-readable.
+- **The NOTICE file becomes computed.** Walk a shipped model's
+  receipts to its inputs, union their licence and obligation
+  annotations, emit the attribution document. That automates the
+  obligation loop, and it only automates if both halves, the receipts
+  and the annotations, are machine-readable.
 - **Train and evaluation contamination is a set intersection over
   digests.** Exact, cheap, and currently unanswerable anywhere.
 - **Erasure impact becomes a query.** Weights cannot be unlearned. The
@@ -399,11 +377,12 @@ for, nothing else has both properties.
 - **"Are these the weights we shipped in 3.2"** is a digest
   comparison.
 
-A property the format must not claim: training does not replay to an
-identical digest, unlike the tool graph. A lineage record is an
-attestation of inputs, never a build recipe, and the gate can check
-completeness but never reproduction. That belongs in the format's prose
-so no later reader takes it for a promise it cannot keep.
+A property the receipt must not claim: training does not replay to an
+identical digest, unlike the tool graph. A receipt of a training call
+is an attestation of inputs, never a build recipe, and the gate can
+check completeness but never reproduction. That belongs in the
+fabric's prose so no later reader takes it for a promise it cannot
+keep.
 
 ### Dataset-scale trees and prefix claims
 
@@ -607,12 +586,13 @@ refuse the build while it is missing.
 ## Ordering
 
 Build the plugin's evidence generation first, against the formats that
-exist today, with consumer-owned records and refs as roots. It produces
-the documents the audience needs, and it produces the measurements the
-formats should be ruled on: how many rules a real corpus needs, whether
-per-key resolution earns its complexity, how large the manifests get,
-which lineage edges are actually walked. Then rule the two formats with
-that in hand and land them as additions.
+exist today, with its own records and refs as roots. It produces the
+documents the audience needs, and it produces the measurements the
+annotation format should be ruled on: how many rules a real corpus
+needs, whether per-key resolution earns its complexity, how large the
+manifests get. It also produces the requirements list the fabric's
+receipt has to satisfy, from a consumer that exists rather than from
+imagination.
 
 The point of that order is that the audit's calendar never sets the
 store's format, which is the only mechanism by which this work could
@@ -635,21 +615,29 @@ make strongroom worse.
   plan.
 - 2026-09-27, the lineage relation is first class (Willem): a
   strongroom format, not a consumer format above it. The format itself
-  is not settled and nothing here fixes a field list.
+  is not settled and nothing here fixes a field list. **Superseded the
+  same day by the fabric entry below**: first class stands, the layer
+  does not.
 - 2026-09-27, three destinations for a fact (proposed, awaiting
   Willem): annotations in content for statements about the bytes,
   namespace policy for instructions to an implementation, and a
   mutable index keyed by digest for facts about the world that move
   while the bytes do not. The four-question test is above.
-- 2026-09-27, the freeze costs only what touches a version (found
-  while reviewing the strict-key discipline): a backward-pointing
-  lineage record is a pure addition and carries no deadline; a
-  forward-pointing one grows a key on the version and must land before
-  phase 11. The index that a backward record needs is a backend
-  property, not a format.
+- 2026-09-27, lineage belongs to the fabric (Willem). The earlier
+  proposal of a first-class lineage format inside strongroom is
+  withdrawn. A derivation is a call, the fabric owns calls, and the
+  store already points at the call through `Version.receipt` without
+  describing it. Strongroom gains no lineage format and no reserved
+  namespace; retention comes from `pins/`, which exists for it.
+- 2026-09-27, a correction to the entry this replaces. An earlier
+  finding here claimed the freeze made a version's key set
+  unextendable, reading layout 1's `version.md`. Ruling 5 of the
+  redesign supersedes that page: a version carries known and unknown
+  header pairs, so it can grow. The freeze argument was wrong, and the
+  question is moot now that lineage is not a store format.
 - 2026-09-27, the plugin's schedule does not set the store's format
   (proposed, awaiting Willem): evidence generation ships against
-  today's formats, and the two new formats are ruled once real corpora
+  today's formats, and the annotation format is ruled once real corpora
   have been measured.
 - 2026-09-27, the runtime routes (Willem): Unreal NNE with the ORT
   backend and an onnxruntime Python wheel today, CoreML reached
@@ -671,24 +659,15 @@ make strongroom worse.
    nest, and whether the exported form is always the flattened view.
 5. **Whether the three destinations hold** as proposed above, and where
    the mutable index keyed by digest lives.
-6. **The lineage format**, likewise open. It is first class, and it
-   must be ruled before the redesign's phase 11 freeze, because after
-   the freeze a new hashed format costs compatibility.
-7. **Which direction the lineage record points**: a version naming its
-   lineage record, or the record naming its outputs. Backward is the
-   candidate, because it leaves the version untouched, makes the format
-   a pure addition after the freeze, and needs only a local index,
-   which is a backend property. Forward references break the
-   immutability of the earlier object and create a deadline.
-8. **What the record is called**, since the fabric already uses
-   "derivation" for a call key.
-9. **Manifest cost at dataset scale**, measured with the redesign's
+6. **When the fabric's receipt grows the inputs it owes**, listed
+   above, and whether the plugin keeps its own records until then.
+7. **Manifest cost at dataset scale**, measured with the redesign's
    large-data runs: manifest bytes as a fraction of corpus bytes, and
    whether a corpus wants a different grouping.
-10. **Corpus layout ruling**: lay corpora out so the axes that must be
-    queried are prefixes.
-11. **The `artifact` vocabulary** for a kind that ships through neither
-    a Python nor a conan registry, and whether Swift becomes a kind of
-    its own.
-12. **Retention period** for release documents, which follows the
+8. **Corpus layout ruling**: lay corpora out so the axes that must be
+   queried are prefixes.
+9. **The `artifact` vocabulary** for a kind that ships through neither
+   a Python nor a conan registry, and whether Swift becomes a kind of
+   its own.
+10. **Retention period** for release documents, which follows the
     support lifetime the products promise.
