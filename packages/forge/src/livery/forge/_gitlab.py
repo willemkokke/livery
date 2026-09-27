@@ -835,6 +835,11 @@ def _as_pull_request(data: Mapping[str, Any]) -> PullRequest:
         base_branch=str(data.get("target_branch") or ""),
         url=str(data.get("web_url", "")),
         author=str((data.get("author") or {}).get("username") or ""),
+        # A squashed merge request carries both; the squash is the commit
+        # the base actually ran, so it wins.
+        merged_sha=str(
+            data.get("squash_commit_sha") or data.get("merge_commit_sha") or ""
+        ),
     )
 
 

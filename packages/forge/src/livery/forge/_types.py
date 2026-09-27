@@ -223,6 +223,12 @@ class PullRequest:
         author: The login of whoever opened it; empty when the forge
             does not say. Compare with livery.forge.Forge.whoami, the
             same namespace.
+        merged_sha: The commit the merge produced, empty until it has
+            merged. On a squash-only repository this is the squash, and
+            it is the only way to follow a pull request into what ran on
+            the base afterwards: the base's own runs are filed under
+            this commit, and nothing on the pull request itself names
+            it.
     """
 
     number: int
@@ -235,6 +241,7 @@ class PullRequest:
     base_branch: str
     url: str = ""
     author: str = ""
+    merged_sha: str = ""
 
 
 @dataclass(frozen=True)

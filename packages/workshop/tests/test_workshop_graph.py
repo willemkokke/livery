@@ -226,7 +226,12 @@ def test_the_python_kind_classifies_tests_support_source_and_configuration() -> 
 
 def test_a_test_file_reaches_its_package_alone_and_runs_alone(seeds: Seeds) -> None:
     root = _workspace(seeds)
-    _paths(root, "packages/mid/tests/test_a.py")
+    _paths(
+        root,
+        "packages/mid/tests/test_a.py",
+        "packages/top/tests/test_a.py",
+        "packages/aside/tests/test_z.py",
+    )
     packages = discover_packages(root)
     scope = affected_from_paths(root, packages, ["packages/mid/tests/test_a.py"])
     assert scope is not None
@@ -266,6 +271,25 @@ def test_a_test_file_reaches_its_package_alone_and_runs_alone(seeds: Seeds) -> N
         "packages/aside": ("packages/aside/tests/test_z.py",),
         "packages/mid": ("packages/mid/tests/test_a.py",),
     }
+
+
+def test_a_deleted_test_file_runs_its_packages_suite(seeds: Seeds) -> None:
+    # The fallback first: a test file the change removed is still a
+    # changed path, and it cannot be run. Its package also proves less
+    # than it did, so the package's suite runs and the dependents with
+    # it, exactly as a source change does.
+    root = _workspace(seeds)
+    # A workspace suite that exists, so the question is one file, not
+    # the whole unit disappearing.
+    _paths(root, "tests/test_all.py")
+    packages = discover_packages(root)
+    scope = affected_from_paths(root, packages, ["packages/mid/tests/test_gone.py"])
+    assert scope is not None and scope.tests == {}
+    assert [p.path for p in scope.packages] == ["packages/mid", "packages/top"]
+    # The workspace suite the same way: the unit runs whole.
+    scope = affected_from_paths(root, packages, ["tests/test_gone.py"])
+    assert scope is not None and scope.tests == {}
+    assert [p.path for p in scope.packages] == ["tests"]
 
 
 def test_the_workspace_tests_unit_runs_its_changed_files_alone_or_its_suite(

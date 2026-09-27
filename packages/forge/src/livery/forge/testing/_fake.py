@@ -138,6 +138,7 @@ class _PullRequestState:
     author: str = "fake-user"
     reviews: list[Review] = field(default_factory=list)
     events: list[ScheduleEvent] = field(default_factory=list)
+    merged_sha: str = ""
 
 
 @dataclass
@@ -393,6 +394,16 @@ class FakeForge:
         self._start_run(state, sha, workflow="ci.yml", event="push", outcome=outcome)
         return sha
 
+    def branch_sha(self, owner: str, name: str, branch: str) -> str:
+        """What *branch* points at, empty when there is no such branch.
+
+        The counterpart of livery.forge.testing.FakeForge.push, for a
+        test that has to name a head it did not push: what a merge
+        left on the base, which is the sha the base's own runs are
+        filed under.
+        """
+        return self._require_repo(owner, name).branches.get(branch, "")
+
     def create_tag(self, owner: str, name: str, tag: str) -> None:
         """Simulate a tag push: *tag* at the default branch's head."""
         state = self._require_repo(owner, name)
@@ -580,6 +591,11 @@ class FakeForge:
         pr.head_sha = state.branches.get(pr.head_branch, pr.head_sha)
         pr.state = "closed"
         pr.merged = True
+        # The squash: a new commit on the base, which is what the base's
+        # own runs are then filed under, and the only thing that leads
+        # from a pull request to what ran after it.
+        pr.merged_sha = self._sha()
+        state.branches[pr.base_branch] = pr.merged_sha
         pr.events.append(ScheduleEvent(kind="merged", actor="fake-user"))
         if state.delete_branch_on_merge:
             state.branches.pop(pr.head_branch, None)
@@ -771,6 +787,7 @@ class _FakePullRequests:
             base_branch=pr.base_branch,
             url=f"fake://{self._owner}/{self._name}/pulls/{pr.number}",
             author=pr.author,
+            merged_sha=pr.merged_sha,
         )
 
     def open(self, head: str, base: str, title: str, body: str = "") -> PullRequest:

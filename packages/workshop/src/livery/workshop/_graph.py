@@ -183,7 +183,8 @@ def affected_from_paths(
             continue
         if path.startswith(WORKSPACE_TESTS + "/"):
             tests_changed = True
-            if _python.classify(workspace_suite(root) or packages[0], path) == TEST:
+            classified = _python.classify(workspace_suite(root) or packages[0], path)
+            if classified == TEST and (root / path).is_file():
                 picked.setdefault(WORKSPACE_TESTS, []).append(path)
             else:
                 unit_suite = True
@@ -191,7 +192,14 @@ def affected_from_paths(
         for package in packages:
             if path.startswith(package.path + "/"):
                 relative = path[len(package.path) + 1 :]
-                if backend_for(package).classify(package, relative) == TEST:
+                if (
+                    backend_for(package).classify(package, relative) == TEST
+                    # A test file the change deleted is still a changed
+                    # path, and pytest handed a path that is gone ends
+                    # the whole gate on "no tests ran". The package also
+                    # proves less than it did, so its suite runs.
+                    and (package.directory / relative).is_file()
+                ):
                     picked.setdefault(package.path, []).append(path)
                 else:
                     seeds.add(package.path)

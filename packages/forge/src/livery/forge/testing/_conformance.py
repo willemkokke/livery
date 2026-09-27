@@ -441,6 +441,8 @@ def _pr_merge_now(driver: ForgeDriver) -> None:
     repo.configure(RepoConfig(delete_branch_on_merge=True))
     sha = driver.push(repo.owner, repo.name, "feature")
     pr = repo.pr.open("feature", _default_branch(driver, repo), "feat: merge", "")
+    # Nothing names a merge commit before there is one.
+    assert pr.merged_sha == ""
     driver.await_mergeable(repo.owner, repo.name, pr.number)
     # The published hold of a mergeable pull request is the forge's
     # go word, or empty on a forge that publishes none.
@@ -452,6 +454,12 @@ def _pr_merge_now(driver: ForgeDriver) -> None:
     assert merged.merged
     assert merged.state == "closed"
     assert not repo.branch_exists("feature")
+    # The merge made a commit on the base, and the pull request names
+    # it. This is the only link from a pull request to what the base
+    # then runs, since the head sha belongs to the branch.
+    assert len(merged.merged_sha) == 40
+    assert set(merged.merged_sha) <= set("0123456789abcdef")
+    assert merged.merged_sha != sha
     by_sha = repo.pr.find_by_head_sha(sha)
     assert by_sha is not None
     assert by_sha.number == pr.number
