@@ -219,7 +219,7 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
             " one is a new dependency, not a fact the graph already has"
         )
     problems.extend(_cycles(packages))
-    problems.extend(_forge_is_stdlib_only(root))
+    problems.extend(_forge_is_stdlib_only(root, packages))
     problems.extend(_terminal_is_asked_through_the_runner(root, packages))
     if problems:
         raise ValueError(
@@ -388,12 +388,9 @@ def _cycles(packages: tuple[Package, ...]) -> list[str]:
 #: set is a plan decision, not an edit.
 _FORGE_LAZY_EXTRAS = frozenset({"nacl"})
 
-#: The dev plugin's subtree, the one place in forge that may import
-#: footman and toolroom: its only loader is footman's own plugin(),
-#: and only a workshop workspace mounts layers, so both are present
-#: whenever it loads and livery-forge still declares no dependency.
-_FORGE_PLUGIN_DIR = "packages/forge/src/livery/forge/_dev"
-_FORGE_PLUGIN_IMPORTS = frozenset({"livery.footman", "livery.toolroom"})
+#: The distribution the stdlib-at-import-time rule is about. The whole
+#: ecosystem stands on it being installable with nothing behind it.
+_FORGE_DIST = "livery-forge"
 
 
 #: The runner's distribution name. It implements the terminal
@@ -480,19 +477,40 @@ def _terminal_is_asked_through_the_runner(
     return problems
 
 
-def _forge_is_stdlib_only(root: Path) -> list[str]:
-    """Violations of the forge's stdlib-at-import-time rule."""
+def _forge_is_stdlib_only(root: Path, packages: tuple[Package, ...]) -> list[str]:
+    """Violations of the forge's stdlib-at-import-time rule.
+
+    A module the package declares as a footman task entry point is
+    exempt: its only loader is footman's own ``plugin()``, so the
+    runner is present by construction and the mounted layers with it,
+    and the distribution still declares no dependency on either. The
+    entry point is where that fact already lives, so nothing here
+    repeats the module's path.
+    """
     stdlib = sys.stdlib_module_names
     allowed = set(stdlib) | {"livery"} | _FORGE_LAZY_EXTRAS
-    plugin_dir = root / _FORGE_PLUGIN_DIR
+    from livery.workshop._kinds import kind_for, kind_names
+
+    forge = next((p for p in packages if p.name == _FORGE_DIST), None)
+    if forge is None or forge.type not in kind_names():
+        return []
+    # The same reader the kind's own reference check uses, so one
+    # answer about what a package declares serves both.
+    reader = getattr(kind_for(forge.type).backend, "plugin_modules", None)
+    plugins: tuple[str, ...] = () if reader is None else reader(forge)
+    base = forge.directory / "src"
     problems = []
-    for source in sorted((root / "packages/forge/src").rglob("*.py")):
+    for source in sorted(base.rglob("*.py")):
         # Under the namespace the top-level name says nothing: the
-        # dotted path is judged, livery.forge everywhere and the dev
-        # plugin's two tools in its own subtree only.
+        # dotted path is judged, livery.forge everywhere and anything
+        # the runner brings inside a declared plugin module.
+        dotted = ".".join(source.relative_to(base).parts)
+        dotted = dotted.removesuffix(".py").removesuffix(".__init__")
         livery_ok = {"livery.forge"}
-        if source.is_relative_to(plugin_dir):
-            livery_ok |= _FORGE_PLUGIN_IMPORTS
+        if any(
+            dotted == module or dotted.startswith(module + ".") for module in plugins
+        ):
+            livery_ok = {"livery"}
         tree = ast.parse(source.read_text("utf-8"), filename=str(source))
         for node in ast.walk(tree):
             names: list[str] = []
