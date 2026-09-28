@@ -65,12 +65,6 @@ WINDOW_KEY = "profile-window"
 INTO_KEY = "profile-into"
 KEEP_KEY = "profile-keep"
 
-#: What the two writers name their files. The sweep looks for these and
-#: nothing else: a trace written by hand belongs in the same directory,
-#: `fm --profile=FILE` chooses its own path, and housekeeping must not
-#: remove what it did not write.
-ASSEMBLED = ("run-*.json", "chain-*.json")
-
 #: What the contract answers when it says nothing. A hundred runs is
 #: about a working week on a repository pushing twenty a day, which is
 #: what the channel is for: a Monday can still open Friday's run.
@@ -146,9 +140,11 @@ def sweep(at: Path, keep: int) -> list[str]:
     keeps everything: the count is a ceiling, and no ceiling means no
     sweeping rather than sweeping all of it.
 
-    Only the assembled files are candidates, the ones this module's own
-    writers named. A trace written by hand shares the directory and is
-    left where it is.
+    Every trace in the directory is a candidate, whichever writer made
+    it. The directory belongs to the mechanism, so a new writer gets
+    housekeeping and an ignore rule without either being taught about
+    it; the cost is that a file put there by hand is swept like the
+    rest, and a trace to keep belongs somewhere else.
 
     Returns one line per file removed, for the caller to report beside
     whatever it wrote. A file that cannot be removed is named and the
@@ -157,7 +153,7 @@ def sweep(at: Path, keep: int) -> list[str]:
     if keep <= 0:
         return []
     found = sorted(
-        (path for pattern in ASSEMBLED for path in at.glob(pattern) if path.is_file()),
+        (path for path in at.glob("*.json") if path.is_file()),
         key=lambda path: path.stat().st_mtime,
         reverse=True,
     )
