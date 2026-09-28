@@ -496,6 +496,8 @@ def _run_check(full: bool, fix: bool, base: str) -> None:
     # under --fix, the tree recomputed so the judges read what they
     # left, then every judge together.
     _checks.verify_roles()
+    for line in _checks.narrowings():
+        print(line)
     ctx = _context(fix=fix)
     _rewrite(ctx)
     if fix:

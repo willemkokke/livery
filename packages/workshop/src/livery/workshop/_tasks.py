@@ -60,7 +60,12 @@ def layers() -> None:
     if not names:
         print("  no workspace: no workshop.toml above the working directory")
         return
+    from livery.workshop._layers import requirers
+
+    who = requirers()
     for name in names:
         marker = " (this package)" if name == SELF else ""
-        print(f"  {name}{marker}")
+        needed = who.get(name, ())
+        by = f" (required by {', '.join(needed)})" if needed else ""
+        print(f"  {name}{marker}{by}")
     print("  ... then the instance's own files, which always win")
