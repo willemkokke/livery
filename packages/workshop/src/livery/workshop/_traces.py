@@ -64,12 +64,18 @@ WINDOW_KEY = "profile-window"
 INTO_KEY = "profile-into"
 KEEP_KEY = "profile-keep"
 
+#: What the two writers name their files. The sweep looks for these and
+#: nothing else: a trace written by hand belongs in the same directory,
+#: `fm --profile=FILE` chooses its own path, and housekeeping must not
+#: remove what it did not write.
+ASSEMBLED = ("run-*.json", "chain-*.json")
+
 #: What the contract answers when it says nothing. Twenty runs is a
 #: guess made before any run had pushed one; the window is measured
 #: and tuned once real runs have.
 PROFILE_DEFAULT = True
 WINDOW_DEFAULT = 20
-KEEP_DEFAULT = 10
+KEEP_DEFAULT = 25
 #: Beside the checkout's other records of what it did to itself: the
 #: receipts of the tools it installed, the entry points it linked, the
 #: state it keeps. An assembled trace is the same species, and the
@@ -134,6 +140,10 @@ def sweep(at: Path, keep: int) -> list[str]:
     keeps everything: the count is a ceiling, and no ceiling means no
     sweeping rather than sweeping all of it.
 
+    Only the assembled files are candidates, the ones this module's own
+    writers named. A trace written by hand shares the directory and is
+    left where it is.
+
     Returns one line per file removed, for the caller to report beside
     whatever it wrote. A file that cannot be removed is named and the
     sweep goes on: this is housekeeping and never a verdict.
@@ -141,7 +151,7 @@ def sweep(at: Path, keep: int) -> list[str]:
     if keep <= 0:
         return []
     found = sorted(
-        (path for path in at.glob("*.json") if path.is_file()),
+        (path for pattern in ASSEMBLED for path in at.glob(pattern) if path.is_file()),
         key=lambda path: path.stat().st_mtime,
         reverse=True,
     )

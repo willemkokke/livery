@@ -146,6 +146,27 @@ def test_a_file_that_cannot_go_is_named_and_the_sweep_goes_on(
     assert (tmp_path / "run-0.json").exists()
 
 
+def test_the_sweep_leaves_a_trace_it_did_not_write(tmp_path: Path) -> None:
+    import os
+
+    # `fm --profile=FILE` chooses its own path, and this directory is
+    # the obvious one to choose. Housekeeping must not take it.
+    by_hand = tmp_path / "fm-profile.json"
+    by_hand.write_text("{}", encoding="utf-8")
+    os.utime(by_hand, (0, 0))
+    for index in range(3):
+        path = tmp_path / f"run-{index}.json"
+        path.write_text("{}", encoding="utf-8")
+        os.utime(path, (index + 1, index + 1))
+    lines = _traces.sweep(tmp_path, 1)
+    assert by_hand.exists()
+    assert sorted(p.name for p in tmp_path.glob("*.json")) == [
+        "fm-profile.json",
+        "run-2.json",
+    ]
+    assert not any("fm-profile" in line for line in lines)
+
+
 def test_the_sweep_keeps_the_newest_and_takes_the_rest(tmp_path: Path) -> None:
     import os
 
