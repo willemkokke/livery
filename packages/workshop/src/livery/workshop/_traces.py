@@ -7,8 +7,9 @@ that leg: every task, step and test it ran, and the wall-clock origin of its
 own clock, so one leg's timeline can be laid beside another's.
 
 The workspace contract decides, under ``[ci]``: ``profile`` whether CI
-keeps a trace of itself at all, ``profile-window`` how many runs are kept,
-and ``profile-into`` where an assembled file lands.
+keeps a trace of itself at all, ``profile-window`` how many runs the pushed
+channel keeps, ``profile-into`` where an assembled file lands, and
+``profile-keep`` how many of those files stay there.
 
 The push is observational. A contract that says no, a trace that is not
 there, and a push origin refuses are each one printed line, and none of them
