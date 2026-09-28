@@ -20,7 +20,7 @@ def _workspace(root: Path, *packages: str) -> None:
     for name in packages:
         package = root / "packages" / name
         (package / "tests").mkdir(parents=True)
-        (package / "workshop.toml").write_text(f'type = "python"\nname = "{name}"\n')
+        (package / "workshop.toml").write_text(f'kind = "python"\nname = "{name}"\n')
 
 
 def test_the_plugin_rides_the_entry_point() -> None:

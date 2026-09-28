@@ -33,7 +33,7 @@ def _member(root: Path, name: str, *, suite: bool = True) -> Package:
     directory = root / "packages" / name
     directory.mkdir(parents=True)
     (directory / "workshop.toml").write_text(
-        f'type = "python"\nname = "livery-{name}"\n'
+        f'kind = "python"\nname = "livery-{name}"\n'
     )
     if suite:
         (directory / "tests").mkdir()
@@ -41,7 +41,7 @@ def _member(root: Path, name: str, *, suite: bool = True) -> Package:
         directory=directory,
         path=f"packages/{name}",
         name=f"livery-{name}",
-        type="python",
+        kind="python",
         depends=(),
     )
 

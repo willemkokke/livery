@@ -62,7 +62,7 @@ def _package(directory: Path, name: str) -> Package:
         directory=directory,
         path=f"packages/{directory.name}",
         name=name,
-        type="python-nanobind",
+        kind="python-nanobind",
         depends=(),
     )
 
@@ -166,7 +166,7 @@ def test_the_chain_renders_parent_files_under_the_leaf(tmp_path: Path) -> None:
     assert 'build-backend = "scikit_build_core.build"' in pyproject
     assert 'version = "0.0.0"' in pyproject
     # The contract and the receipt record the leaf kind.
-    assert 'type = "python-nanobind"' in (directory / "workshop.toml").read_text()
+    assert 'kind = "python-nanobind"' in (directory / "workshop.toml").read_text()
     assert "package-python-nanobind" in (directory / ".copier-answers.yml").read_text()
     # The leaf's __init__ re-exports the compiled surface.
     init = (directory / "src" / "acme" / "ext" / "__init__.py").read_text()
@@ -470,12 +470,12 @@ def _floor_workspace(tmp_path: Path) -> tuple[Path, Package]:
     (root / "packages" / "geometry").mkdir(parents=True)
     (root / "workshop.toml").write_text("[workspace]\n")
     (root / "packages" / "geometry" / "workshop.toml").write_text(
-        'type = "cpp-conan"\nname = "acme-geometry"\n'
+        'kind = "cpp-conan"\nname = "acme-geometry"\n'
     )
     extension = root / "packages" / "ext"
     extension.mkdir(parents=True)
     (extension / "workshop.toml").write_text(
-        'type = "python-nanobind"\nname = "acme-ext"\n'
+        'kind = "python-nanobind"\nname = "acme-ext"\n'
         "[[depends]]\n"
         'path = "packages/geometry"\nkind = "build"\nfloor = "0.1.0"\n'
     )
@@ -491,7 +491,7 @@ def _floor_workspace(tmp_path: Path) -> tuple[Path, Package]:
         directory=extension,
         path="packages/ext",
         name="acme-ext",
-        type="python-nanobind",
+        kind="python-nanobind",
         depends=(Edge(path="packages/geometry", kind="build", floor="0.1.0"),),
     )
     return root, package
@@ -642,7 +642,7 @@ def test_a_floor_whose_header_lacks_the_symbol_fails_the_leg(
         directory=extension.directory,
         path="packages/ext",
         name="acme-ext",
-        type="python-nanobind",
+        kind="python-nanobind",
         depends=(Edge(path="packages/geometry", kind="build", floor="0.1.0"),),
     )
 

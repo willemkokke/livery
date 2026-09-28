@@ -1,7 +1,7 @@
 """The quality verbs: the gate and its parts, dispatched by contract.
 
 Each verb discovers the packages by their ``workshop.toml``, refuses
-any type without a backend, and hands the work to the type's backend
+any package kind without a backend, and hands the work to the kind's backend
 module. ``check`` is the whole local gate; CI runs the same command.
 """
 
@@ -53,7 +53,7 @@ def run_kind_checks(
 
     default_verbs = CiContract().check_verbs
     for package in packages:
-        record = kind_for(package.type)
+        record = kind_for(package.kind)
         if not record.ci.kind_verbs:
             continue
         backend = backend_for(package)
@@ -97,7 +97,7 @@ def lint(
         bool, doc("apply fixes safe for in-progress edits (keeps imports)")
     ] = False,
 ) -> None:
-    """Lint every package with its type's linter.
+    """Lint every package with its package kind's linter.
 
     With *paths*, lints exactly those files (foreign filetypes pass
     through); without, every package. ``--safe-fix`` is the
@@ -140,16 +140,16 @@ def _format_native(packages: tuple[Package, ...], *, fix: bool) -> None:
     from livery.workshop._kinds import kind_for, kind_names
 
     for package in packages:
-        if package.type not in kind_names():
+        if package.kind not in kind_names():
             continue
-        if not kind_for(package.type).native_sources:
+        if not kind_for(package.kind).native_sources:
             continue
         _cpp_conan.format_check(package, fix=fix)
 
 
 @task
 def typecheck() -> None:
-    """Type-check every package with its type's gating checkers."""
+    """Type-check every package with its package kind's gating checkers."""
     _packages()
     _python.run_typecheck()
 

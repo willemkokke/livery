@@ -26,7 +26,7 @@ def _package(tmp_path: Path) -> Package:
         directory=member,
         path="packages/one",
         name="livery-one",
-        type="python",
+        kind="python",
         depends=(),
     )
 
@@ -152,7 +152,7 @@ def test_the_module_derives_from_the_src_tree_not_the_dist_name(
         directory=member,
         path="packages/loop-echo",
         name="ci-e2e-loop-loop-echo",
-        type="python",
+        kind="python",
         depends=(),
     )
     assert module_for(package) == "ci_e2e_loop.loop_echo"
@@ -169,7 +169,7 @@ def test_a_srcless_package_falls_back_to_the_dist_spelling(
         directory=member,
         path="packages/plain",
         name="livery-loop-echo",
-        type="python",
+        kind="python",
         depends=(),
     )
     assert module_for(package) == "livery.loop_echo"

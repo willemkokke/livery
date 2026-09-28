@@ -32,7 +32,7 @@ def _refusal(action: Callable[[], object]) -> str:
 def test_a_platform_wheel_member_without_the_key_refuses_naming_it(
     tmp_path: Path,
 ) -> None:
-    _member(tmp_path, "ext", 'type = "python-nanobind"\nname = "ext"\n')
+    _member(tmp_path, "ext", 'kind = "python-nanobind"\nname = "ext"\n')
     message = _refusal(lambda: _wheels.wheel_runners(tmp_path))
     assert "packages/ext: [ci] wheel-platforms is missing" in message
     assert "python-nanobind" in message and '"ubuntu-latest"' in message
@@ -42,20 +42,20 @@ def test_an_empty_or_malformed_list_refuses(tmp_path: Path) -> None:
     _member(
         tmp_path,
         "ext",
-        'type = "python-nanobind"\nname = "ext"\n[ci]\nwheel-platforms = []\n',
+        'kind = "python-nanobind"\nname = "ext"\n[ci]\nwheel-platforms = []\n',
     )
     assert "must be a non-empty list of runner labels" in _refusal(
         lambda: _wheels.wheel_runners(tmp_path)
     )
     (tmp_path / "packages" / "ext" / "workshop.toml").write_text(
-        'type = "python-nanobind"\nname = "ext"\n[ci]\n'
+        'kind = "python-nanobind"\nname = "ext"\n[ci]\n'
         'wheel-platforms = "ubuntu-latest"\n'
     )
     assert "must be a non-empty list" in _refusal(
         lambda: _wheels.wheel_runners(tmp_path)
     )
     (tmp_path / "packages" / "ext" / "workshop.toml").write_text(
-        'type = "python-nanobind"\nname = "ext"\n[ci]\n'
+        'kind = "python-nanobind"\nname = "ext"\n[ci]\n'
         'wheel-platforms = ["ubuntu-latest", 3]\n'
     )
     assert "entry 3 is not a runner label" in _refusal(
@@ -67,7 +67,7 @@ def test_the_key_on_a_pure_member_refuses(tmp_path: Path) -> None:
     _member(
         tmp_path,
         "lib",
-        'type = "python"\nname = "lib"\n[ci]\nwheel-platforms = ["ubuntu-latest"]\n',
+        'kind = "python"\nname = "lib"\n[ci]\nwheel-platforms = ["ubuntu-latest"]\n',
     )
     message = _refusal(lambda: _wheels.wheel_runners(tmp_path))
     assert "declared on a python member" in message and "remove the key" in message
@@ -77,7 +77,7 @@ def test_the_key_on_a_pure_member_refuses(tmp_path: Path) -> None:
 
 
 def test_a_pure_workspace_declares_no_wheel_runners(tmp_path: Path) -> None:
-    _member(tmp_path, "lib", 'type = "python"\nname = "lib"\n')
+    _member(tmp_path, "lib", 'kind = "python"\nname = "lib"\n')
     assert _wheels.wheel_runners(tmp_path) == []
     (package,) = discover_packages(tmp_path)
     assert _wheels.declared_wheel_platforms(package) == []
@@ -88,16 +88,16 @@ def test_the_matrix_is_the_union_in_declaration_order(tmp_path: Path) -> None:
     _member(
         tmp_path,
         "alpha",
-        'type = "python-nanobind"\nname = "alpha"\n[ci]\n'
+        'kind = "python-nanobind"\nname = "alpha"\n[ci]\n'
         'wheel-platforms = ["ubuntu-latest", "macos-latest"]\n',
     )
     _member(
         tmp_path,
         "beta",
-        'type = "python-nanobind"\nname = "beta"\n[ci]\n'
+        'kind = "python-nanobind"\nname = "beta"\n[ci]\n'
         'wheel-platforms = ["windows-latest", "ubuntu-latest"]\n',
     )
-    _member(tmp_path, "lib", 'type = "python"\nname = "lib"\n')
+    _member(tmp_path, "lib", 'kind = "python"\nname = "lib"\n')
     assert _wheels.wheel_runners(tmp_path) == [
         "ubuntu-latest",
         "macos-latest",
@@ -122,7 +122,7 @@ def test_the_emitted_wheels_jobs_run_the_declared_labels(tmp_path: Path) -> None
     _member(
         tmp_path,
         "ext",
-        'type = "python-nanobind"\nname = "ext"\n[ci]\n'
+        'kind = "python-nanobind"\nname = "ext"\n[ci]\n'
         'wheel-platforms = ["ubuntu-latest"]\n',
     )
     facts = _facts(tmp_path)
@@ -140,7 +140,7 @@ def test_the_emitted_wheels_jobs_run_the_declared_labels(tmp_path: Path) -> None
     )
     # A pure workspace emits no wheels job at all.
     (tmp_path / "packages" / "ext" / "workshop.toml").write_text(
-        'type = "python"\nname = "ext"\n'
+        'kind = "python"\nname = "ext"\n'
     )
     pure = _facts(tmp_path)
     assert pure["wheel_runners"] == []
@@ -189,7 +189,7 @@ def test_the_wheels_verb_sets_the_build_set_on_the_task_context(
     _member(
         tmp_path,
         "ext",
-        'type = "python-nanobind"\nname = "ext"\n[ci]\n'
+        'kind = "python-nanobind"\nname = "ext"\n[ci]\n'
         'wheel-platforms = ["ubuntu-latest"]\n',
     )
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
@@ -253,11 +253,11 @@ def test_the_leg_creates_the_conan_member_before_the_wheels_and_proves_the_floor
     (tmp_path / "workshop.toml").write_text(
         '[workspace]\nlayers = ["livery.workshop"]\n\n[forge]\nkind = "github"\n'
     )
-    _member(tmp_path, "geometry", 'type = "cpp-conan"\nname = "geometry"\n')
+    _member(tmp_path, "geometry", 'kind = "cpp-conan"\nname = "geometry"\n')
     _member(
         tmp_path,
         "ext",
-        'type = "python-nanobind"\nname = "ext"\n[ci]\n'
+        'kind = "python-nanobind"\nname = "ext"\n[ci]\n'
         'wheel-platforms = ["ubuntu-latest"]\n',
     )
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
@@ -286,7 +286,7 @@ def test_the_leg_creates_the_conan_member_before_the_wheels_and_proves_the_floor
             calls.append(f"build {package.name}")
             dist = package.directory / "dist"
             dist.mkdir(exist_ok=True)
-            if package.type == "python-nanobind":
+            if package.kind == "python-nanobind":
                 (dist / "ext-0.1.0-cp314-cp314-manylinux_2_28_x86_64.whl").write_text(
                     ""
                 )

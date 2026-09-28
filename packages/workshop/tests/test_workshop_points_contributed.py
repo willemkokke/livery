@@ -42,7 +42,7 @@ def _workspace(tmp_path: Path, kind: str = "github", *members: tuple[str, str]) 
         member = root / "packages" / directory
         (member / "src").mkdir(parents=True)
         (member / "workshop.toml").write_text(
-            f'type = "python"\nname = "acme-{directory}"\n{tail}'
+            f'kind = "python"\nname = "acme-{directory}"\n{tail}'
         )
         (member / "pyproject.toml").write_text(
             f'[project]\nname = "acme-{directory}"\n'

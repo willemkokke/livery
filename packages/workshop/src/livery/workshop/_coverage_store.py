@@ -86,7 +86,7 @@ def workspace_suite(root: Path) -> Package | None:
         directory=directory,
         path=WORKSPACE_TESTS,
         name="workspace-tests",
-        type="workspace",
+        kind="workspace",
         depends=(),
     )
 

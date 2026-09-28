@@ -194,7 +194,7 @@ def test_release_verify_refuses_each_malformed_shape(tmp_path: Path) -> None:
     assert "not a workspace package" in str(caught.value)
     thing = root / "packages" / "thing"
     thing.mkdir()
-    (thing / "workshop.toml").write_text('type = "python"\nname = "livery-thing"\n')
+    (thing / "workshop.toml").write_text('kind = "python"\nname = "livery-thing"\n')
     (thing / "pyproject.toml").write_text(
         '[project]\nname = "livery-thing"\nversion = "0.1.0"\ndependencies = []\n'
     )
@@ -209,7 +209,7 @@ def test_the_enforcement_reads_real_coverage_data(tmp_path: Path) -> None:
     package_dir = tmp_path / "packages" / "thing"
     (package_dir / "src").mkdir(parents=True)
     (package_dir / "workshop.toml").write_text(
-        'type = "python"\nname = "livery-thing"\n[qa]\ncoverage-floor = 50\n'
+        'kind = "python"\nname = "livery-thing"\n[qa]\ncoverage-floor = 50\n'
     )
     module = package_dir / "src" / "mod.py"
     module.write_text("def run():\n    return 1\n\nrun()\n")
@@ -240,14 +240,14 @@ def test_the_enforcement_reads_real_coverage_data(tmp_path: Path) -> None:
         directory=package_dir,
         path="packages/thing",
         name="livery-thing",
-        type="python",
+        kind="python",
         depends=(),
     )
     measured = _python.measured_coverage(tmp_path, (package,))
     assert measured["packages/thing"] > 0
     _python.enforce_coverage(tmp_path, (package,))  # above its floor
     (package_dir / "workshop.toml").write_text(
-        'type = "python"\nname = "livery-thing"\n[qa]\ncoverage-floor = 101\n'
+        'kind = "python"\nname = "livery-thing"\n[qa]\ncoverage-floor = 101\n'
     )
     with pytest.raises(_FAILURES):
         _python.enforce_coverage(tmp_path, (package,))
@@ -265,7 +265,7 @@ def _cliff_workspace(tmp_path: Path, kind: str) -> tuple[Path, Package]:
         directory=directory,
         path="packages/thing",
         name="livery-thing",
-        type="python",
+        kind="python",
         depends=(),
     )
     return tmp_path, package

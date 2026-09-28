@@ -30,7 +30,7 @@ def _workspace(tmp_path: Path, *, docs_table: str = "") -> Path:
     member = root / "packages" / "core"
     (member / "src" / "acme" / "core").mkdir(parents=True)
     (member / "src" / "acme" / "core" / "__init__.py").write_text("")
-    (member / "workshop.toml").write_text('type = "python"\nname = "acme-core"\n')
+    (member / "workshop.toml").write_text('kind = "python"\nname = "acme-core"\n')
     (member / "pyproject.toml").write_text('[project]\nname = "acme-core"\n')
     (member / "docs").mkdir()
     (member / "docs" / "index.md").write_text("# core\n\nThe core manual.\n")

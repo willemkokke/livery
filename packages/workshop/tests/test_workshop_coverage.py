@@ -30,13 +30,13 @@ def _package(tmp_path: Path, name: str, extra: str = "") -> Package:
     directory = tmp_path / "packages" / name
     directory.mkdir(parents=True)
     (directory / "workshop.toml").write_text(
-        f'type = "python"\nname = "livery-{name}"\n{extra}'
+        f'kind = "python"\nname = "livery-{name}"\n{extra}'
     )
     return Package(
         directory=directory,
         path=f"packages/{name}",
         name=f"livery-{name}",
-        type="python",
+        kind="python",
         depends=(),
     )
 
@@ -93,7 +93,7 @@ def _ratchet(
             directory=directory,
             path="packages/thing",
             name="livery-thing",
-            type="python",
+            kind="python",
             depends=(),
         )
     else:
@@ -975,7 +975,7 @@ def test_the_union_of_two_legs_covers_what_each_left_uncovered(
 ) -> None:
     package = _suite(tmp_path, "x")
     (tmp_path / "packages" / "x" / "workshop.toml").write_text(
-        'type = "python"\nname = "livery-x"\n[qa]\ncoverage-floor = 95\n'
+        'kind = "python"\nname = "livery-x"\n[qa]\ncoverage-floor = 95\n'
     )
     source = str(_source(tmp_path, "x"))
     _in_ci(monkeypatch, "gate")

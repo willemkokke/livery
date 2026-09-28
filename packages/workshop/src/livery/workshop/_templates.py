@@ -565,7 +565,7 @@ def _managed_for(directory: Path) -> tuple[str, ...]:
     contract = directory / "workshop.toml"
     if not contract.is_file():
         return PACKAGE_MANAGED
-    declared = str(load_contract(contract).get("type", "python"))
+    declared = str(load_contract(contract).get("kind", "python"))
     return managed_files(declared)
 
 

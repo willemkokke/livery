@@ -19,13 +19,13 @@ from livery.workshop._registries import RegistryTarget
 _FAILURES = (SystemExit, Failed)
 
 
-def _package(directory: Path, name: str, type_name: str) -> Package:
+def _package(directory: Path, name: str, kind_name: str) -> Package:
     directory.mkdir(parents=True, exist_ok=True)
     return Package(
         directory=directory,
         path=f"packages/{directory.name}",
         name=name,
-        type=type_name,
+        kind=kind_name,
         depends=(),
     )
 
@@ -147,7 +147,7 @@ def cross_train(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     (root / "workshop.toml").write_text("[workspace]\n")
     lib = root / "packages" / "geometry"
     lib.mkdir(parents=True)
-    (lib / "workshop.toml").write_text('type = "cpp-conan"\nname = "acme-geometry"\n')
+    (lib / "workshop.toml").write_text('kind = "cpp-conan"\nname = "acme-geometry"\n')
     (lib / "conanfile.py").write_text(
         'class G:\n    name = "acme-geometry"\n    version = "0.3.0"\n'
     )
@@ -155,7 +155,7 @@ def cross_train(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     ext = root / "packages" / "ext"
     (ext / "src" / "acme" / "ext").mkdir(parents=True)
     (ext / "workshop.toml").write_text(
-        'type = "python-nanobind"\nname = "acme-ext"\n'
+        'kind = "python-nanobind"\nname = "acme-ext"\n'
         "[[depends]]\n"
         'path = "packages/geometry"\nkind = "build"\nfloor = "0.3.0"\n'
     )
@@ -200,7 +200,7 @@ def test_the_cross_kind_wave_orders_and_dispatches(
     def _fake_build(package: Package, _root: Path, *, epoch: int = 0) -> Path:
         dist = package.directory / "dist"
         dist.mkdir(exist_ok=True)
-        if package.type == "python-nanobind":
+        if package.kind == "python-nanobind":
             (dist / "acme_ext-0.3.0-cp314-cp314-manylinux_x86_64.whl").touch()
         return dist
 
@@ -226,7 +226,7 @@ def test_the_cross_kind_wave_orders_and_dispatches(
     monkeypatch.setattr("livery.workshop._publish.publish_wheels", _fake_wheels)
 
     def registry_for(package: Package) -> _Ledger:
-        return conan_registry if package.type == "cpp-conan" else registry
+        return conan_registry if package.kind == "cpp-conan" else registry
 
     receipts = publish_release(
         root,
@@ -281,7 +281,7 @@ def test_a_releases_target_tags_before_it_uploads_and_a_rerun_finishes_it(
     def _fake_build(package: Package, _root: Path, *, epoch: int = 0) -> Path:
         dist = package.directory / "dist"
         dist.mkdir(exist_ok=True)
-        if package.type == "python-nanobind":
+        if package.kind == "python-nanobind":
             (dist / "acme_ext-0.3.0-cp314-cp314-manylinux_x86_64.whl").touch()
         else:
             (dist / _cpp_conan.cache_name(package.name, "0.3.0")).write_bytes(b"cache")
@@ -300,7 +300,7 @@ def test_a_releases_target_tags_before_it_uploads_and_a_rerun_finishes_it(
     conan_registry = _cpp_conan.ConanRegistry(target, root=root)
 
     def registry_for(package: Package):
-        return conan_registry if package.type == "cpp-conan" else registry
+        return conan_registry if package.kind == "cpp-conan" else registry
 
     # The upload dies after the tag is cut.
     def _refuse(*_args: object, **_kwargs: object) -> None:
@@ -363,7 +363,7 @@ def test_prebuilt_refuses_an_empty_collection(
     monkeypatch.setattr(cpp, "publish", _fake_conan_publish)
 
     def registry_for(package: Package) -> _Ledger:
-        return conan_registry if package.type == "cpp-conan" else registry
+        return conan_registry if package.kind == "cpp-conan" else registry
 
     # The library's own collection is there, so the wave reaches the
     # extension, whose wheels the matrix never handed over.
@@ -404,7 +404,7 @@ def test_prebuilt_refuses_a_conan_member_with_no_saved_cache(
     )
 
     def registry_for(package: Package) -> _Ledger:
-        return conan_registry if package.type == "cpp-conan" else registry
+        return conan_registry if package.kind == "cpp-conan" else registry
 
     with pytest.raises(_FAILURES) as caught:
         publish_release(

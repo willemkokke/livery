@@ -99,9 +99,9 @@ def affected_packages(
     # honest. Everything runs, and the reason is printed rather than
     # silently widening the gate.
     for package in packages:
-        if package.type not in kind_names():
+        if package.kind not in kind_names():
             print(
-                f"  {package.path}: type {package.type!r} is not a"
+                f"  {package.path}: kind {package.kind!r} is not a"
                 " registered kind; failing open to everything"
             )
             return None

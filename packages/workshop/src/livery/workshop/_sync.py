@@ -509,7 +509,7 @@ def conan_editables(root: Path) -> list[str]:
     from livery.toolroom import tools
     from livery.workshop._packages import discover_packages
 
-    members = [p for p in discover_packages(root) if p.type == "cpp-conan"]
+    members = [p for p in discover_packages(root) if p.kind == "cpp-conan"]
     if not members:
         return []
     conan = tools.conan.opts(nofail=True, recorded=False)

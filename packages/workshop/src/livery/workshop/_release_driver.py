@@ -223,7 +223,7 @@ def _wheel_dists(plans: tuple[MemberPlan, ...]) -> tuple[Path, ...]:
     return tuple(
         plan.package.directory / "dist"
         for plan in plans
-        if kind_for(plan.package.type).wheel_identity
+        if kind_for(plan.package.kind).wheel_identity
     )
 
 
@@ -249,10 +249,10 @@ def validate_member(
     """
     from livery.workshop._kinds import kind_for
 
-    if not kind_for(plan.package.type).wheel_identity:
+    if not kind_for(plan.package.kind).wheel_identity:
         print(
             f"  {plan.package.name}: isolated legs skip"
-            f" ({plan.package.type} kind publishes no wheels; its own"
+            f" ({plan.package.kind} kind publishes no wheels; its own"
             " gate builds and tests)"
         )
         return
@@ -1198,12 +1198,12 @@ def workflow_release_publish(
         prebuilt = collected_wheels(root, git, ref)
 
     def registry_for(package: Package) -> Registry:
-        artifact = kind_for(package.type).artifact
+        artifact = kind_for(package.kind).artifact
         cached = registries.get(artifact)
         if cached is None:
             if artifact != "conan":
                 fail(
-                    f"{package.name}: kind {package.type!r} publishes"
+                    f"{package.name}: kind {package.kind!r} publishes"
                     f" to {artifact!r}, and the wave has no probe for"
                     " that artifact kind"
                 )
@@ -1246,7 +1246,7 @@ def collected_wheels(root: Path, git: GitOps, ref: str) -> bool:
     fed = [
         package.name
         for package, _version in discover_release(root, git, ref or git.head_sha())
-        if kind_for(package.type).wheel_identity == "platform"
+        if kind_for(package.kind).wheel_identity == "platform"
         and any((package.directory / "dist").glob("*.whl"))
     ]
     if fed:

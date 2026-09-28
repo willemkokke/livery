@@ -33,7 +33,7 @@ def _workspace(tmp_path: Path, *, docs_table: str = "") -> Path:
         (member / "src" / "acme" / name).mkdir(parents=True)
         (member / "src" / "acme" / name / "__init__.py").write_text("")
         (member / "workshop.toml").write_text(
-            f'type = "python"\nname = "acme-{name}"\n'
+            f'kind = "python"\nname = "acme-{name}"\n'
         )
         (member / "pyproject.toml").write_text(f'[project]\nname = "acme-{name}"\n')
         if pages:
@@ -698,7 +698,7 @@ def test_the_preview_tree_rebuilds_whole_and_stays_scoped(tmp_path: Path) -> Non
 
 def _declare_generators(root: Path, package: str, table: str) -> None:
     contract = root / "packages" / package / "workshop.toml"
-    contract.write_text(f'type = "python"\nname = "acme-{package}"\n\n[docs]\n{table}')
+    contract.write_text(f'kind = "python"\nname = "acme-{package}"\n\n[docs]\n{table}')
 
 
 def _package(root: Path, name: str):

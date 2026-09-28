@@ -739,7 +739,7 @@ def missing_host_tools(root: Path) -> tuple[str, ...]:
     from livery.workshop._packages import discover_packages
 
     types = (
-        {package.type for package in discover_packages(root)}
+        {package.kind for package in discover_packages(root)}
         if (root / "packages").is_dir()
         else set()
     )

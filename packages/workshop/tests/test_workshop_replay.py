@@ -57,7 +57,7 @@ def released(seeds: Seeds) -> tuple[Path, GitOps, Package]:
         directory=root / "packages" / "thing",
         path="packages/thing",
         name="livery-thing",
-        type="python",
+        kind="python",
         depends=(),
     )
     return root, GitOps(root), package

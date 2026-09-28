@@ -835,7 +835,7 @@ def test_a_wheel_without_a_test_extra_installs_plain(tmp_path: Path) -> None:
         directory=member,
         path="packages/plain",
         name="livery-plain",
-        type="python",
+        kind="python",
         depends=(),
     )
     wheel = member / "dist" / "livery_plain-0.1.0-py3-none-any.whl"
@@ -859,7 +859,7 @@ def test_a_declared_test_extra_rides_the_leg_install(tmp_path: Path) -> None:
         directory=member,
         path="packages/hosted",
         name="livery-hosted",
-        type="python",
+        kind="python",
         depends=(),
     )
     wheel = member / "dist" / "livery_hosted-0.1.0-py3-none-any.whl"

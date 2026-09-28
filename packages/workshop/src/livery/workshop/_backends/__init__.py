@@ -22,5 +22,5 @@ __all__ = ["backend_for", "require_backends"]
 
 def require_backends(packages: tuple[Package, ...]) -> None:
     """Refuse any package whose declared type is unregistered."""
-    for type_name in sorted({package.type for package in packages}):
-        kind_for(type_name)
+    for kind_name in sorted({package.kind for package in packages}):
+        kind_for(kind_name)

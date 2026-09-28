@@ -1702,7 +1702,7 @@ def render_python_coverage(root: Path) -> list[str]:
         return []
     rendered: list[str] = []
     for package in discover_packages(root):
-        if not is_python_kind(package.type):
+        if not is_python_kind(package.kind):
             continue
         if not any(
             path == "htmlcov" for _label_, path in package_coverage_reports(package)

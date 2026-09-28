@@ -127,10 +127,10 @@ def requirements(root: Path) -> tuple[Requirement, ...]:
     does: its own `tasks.py` runs on python.
     """
     packages = discover_packages(root) if (root / "packages").is_dir() else ()
-    types = {package.type for package in packages} or {"python"}
+    kinds = {package.kind for package in packages} or {"python"}
     found: list[Requirement] = []
-    for type_name in sorted(types):
-        for record in kind_chain(type_name):
+    for kind_name in sorted(kinds):
+        for record in kind_chain(kind_name):
             for text in record.tools:
                 found.append(Requirement.parse(text, site=f"kind {record.name}"))
     for package in packages:

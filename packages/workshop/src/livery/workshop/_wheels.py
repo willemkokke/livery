@@ -26,8 +26,8 @@ WHEEL_PLATFORMS_KEY = "wheel-platforms"
 def publishes_platform_wheels(package: Package) -> bool:
     """Whether *package*'s kind builds wheels tagged for one platform."""
     return (
-        package.type in kind_names()
-        and kind_for(package.type).wheel_identity == "platform"
+        package.kind in kind_names()
+        and kind_for(package.kind).wheel_identity == "platform"
     )
 
 
@@ -49,13 +49,13 @@ def declared_wheel_platforms(package: Package) -> list[str]:
     if not publishes_platform_wheels(package):
         if declared is not None:
             fail(
-                f"{where} is declared on a {package.type} member, whose one"
+                f"{where} is declared on a {package.kind} member, whose one"
                 " wheel installs on every platform; remove the key"
             )
         return []
     if declared is None:
         fail(
-            f"{where} is missing: a {package.type} member names the runner labels"
+            f"{where} is missing: a {package.kind} member names the runner labels"
             ' that build its wheels, like ["ubuntu-latest", "macos-latest",'
             ' "windows-latest"]'
         )
@@ -86,7 +86,7 @@ def wheel_runners(root: Path) -> list[str]:
 def member_roster(root: Path) -> list[dict[str, str]]:
     """Every member as the emitter facts carry it: directory, name, kind."""
     return [
-        {"dir": package.directory.name, "name": package.name, "kind": package.type}
+        {"dir": package.directory.name, "name": package.name, "kind": package.kind}
         for package in discover_packages(root)
     ]
 

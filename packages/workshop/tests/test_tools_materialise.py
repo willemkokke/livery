@@ -75,7 +75,7 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         'requires = ["tea", "ruff"]\n'
     )
     (root / "packages" / "member" / "workshop.toml").write_text(
-        'type = "bare"\nname = "acme-member"\n'
+        'kind = "bare"\nname = "acme-member"\n'
     )
     (root / "packages" / "member" / "pyproject.toml").write_text(
         '[project]\nname = "acme-member"\n'

@@ -24,14 +24,14 @@ def _member(
     root: Path,
     name: str,
     *,
-    type_name: str,
+    kind_name: str,
     contract_tail: str = "",
     files: dict[str, str] | None = None,
 ) -> Path:
     directory = root / "packages" / name
     directory.mkdir(parents=True)
     (directory / "workshop.toml").write_text(
-        f'type = "{type_name}"\nname = "acme-{name}"\n{contract_tail}'
+        f'kind = "{kind_name}"\nname = "acme-{name}"\n{contract_tail}'
     )
     for filename, body in (files or {}).items():
         (directory / filename).write_text(body)
@@ -42,7 +42,7 @@ def _library(root: Path, *, requires: str = "") -> Path:
     return _member(
         root,
         "geometry",
-        type_name="cpp-conan",
+        kind_name="cpp-conan",
         files={"conanfile.py": f'requires = ({requires})\nname = "acme-geometry"\n'},
     )
 
@@ -57,7 +57,7 @@ def _extension(root: Path, *, conan_ref: str, floor: str = "0.1.0") -> Path:
     if conan_ref:
         files["conanfile.py"] = f'requires = "{conan_ref}"\n'
     return _member(
-        root, "ext", type_name="python-nanobind", contract_tail=tail, files=files
+        root, "ext", kind_name="python-nanobind", contract_tail=tail, files=files
     )
 
 
@@ -104,7 +104,7 @@ def test_an_undeclared_internal_conan_require_refuses(tmp_path: Path) -> None:
     _member(
         tmp_path,
         "ext",
-        type_name="python-nanobind",
+        kind_name="python-nanobind",
         files={
             "pyproject.toml": '[project]\nname = "acme-ext"\ndependencies = []\n',
             "conanfile.py": 'requires = "acme-geometry/[>=0.1.0]"\n',
@@ -115,7 +115,7 @@ def test_an_undeclared_internal_conan_require_refuses(tmp_path: Path) -> None:
 
 
 def test_an_unextractable_kind_refuses_in_the_lint(tmp_path: Path) -> None:
-    _member(tmp_path, "mystery", type_name="carrier-pigeon")
+    _member(tmp_path, "mystery", kind_name="carrier-pigeon")
     with pytest.raises(ValueError, match="not a registered kind"):
         verify_workspace(tmp_path)
 
@@ -123,7 +123,7 @@ def test_an_unextractable_kind_refuses_in_the_lint(tmp_path: Path) -> None:
 def test_affected_fails_open_on_an_unknown_kind(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _member(tmp_path, "mystery", type_name="carrier-pigeon")
+    _member(tmp_path, "mystery", kind_name="carrier-pigeon")
 
     class _Git:
         def changed_paths(self, base: str) -> list[str]:
@@ -194,7 +194,7 @@ def test_the_extension_extractor_unions_both_ecosystems(tmp_path: Path) -> None:
     directory = _member(
         tmp_path,
         "ext",
-        type_name="python-nanobind",
+        kind_name="python-nanobind",
         files={
             "pyproject.toml": (
                 '[project]\nname = "acme-ext"\ndependencies = ["acme-core>=0.3.0"]\n'
@@ -206,7 +206,7 @@ def test_the_extension_extractor_unions_both_ecosystems(tmp_path: Path) -> None:
         directory=directory,
         path="packages/ext",
         name="acme-ext",
-        type="python-nanobind",
+        kind="python-nanobind",
         depends=(),
     )
     from livery.workshop._backends import _python_nanobind

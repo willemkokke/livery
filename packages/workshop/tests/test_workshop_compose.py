@@ -31,7 +31,7 @@ def _home(tmp_path: Path) -> Path:
         '[project]\nname = "home"\nrequires-python = ">=3.11"\n'
     )
     member = root / "packages" / "brand"
-    (member / "workshop.toml").write_text('type = "python"\nname = "acme-brand"\n')
+    (member / "workshop.toml").write_text('kind = "python"\nname = "acme-brand"\n')
     (member / "pyproject.toml").write_text('[project]\nname = "acme-brand"\n')
     overlay = member / "src" / "acme" / "brand" / "templates"
     (overlay / "project").mkdir(parents=True)

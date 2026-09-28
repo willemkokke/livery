@@ -96,14 +96,14 @@ class _FakeBackend:
         return {}
 
 
-def _package(tmp_path: Path, type_name: str) -> Package:
+def _package(tmp_path: Path, kind_name: str) -> Package:
     directory = tmp_path / "packages" / "thing"
     directory.mkdir(parents=True, exist_ok=True)
     return Package(
         directory=directory,
         path="packages/thing",
         name="acme-thing",
-        type=type_name,
+        kind=kind_name,
         depends=(),
     )
 
@@ -213,7 +213,7 @@ def test_the_workspace_profile_grows_only_with_the_kind(
     (root / "packages" / "member").mkdir(parents=True)
     (root / "workshop.toml").write_text("[workspace]\n")
     (root / "packages" / "member" / "workshop.toml").write_text(
-        'type = "python"\nname = "acme-member"\n'
+        'kind = "python"\nname = "acme-member"\n'
     )
     (root / "packages" / "member" / "pyproject.toml").write_text(
         '[project]\nname = "acme-member"\n'
@@ -223,7 +223,7 @@ def test_the_workspace_profile_grows_only_with_the_kind(
     register_kind(KindRecord(name="cpp-fake", backend=_FakeBackend(), tools=("cmake",)))
     (root / "packages" / "native").mkdir(parents=True)
     (root / "packages" / "native" / "workshop.toml").write_text(
-        'type = "cpp-fake"\nname = "acme-native"\n'
+        'kind = "cpp-fake"\nname = "acme-native"\n'
     )
     (root / "packages" / "native" / "pyproject.toml").write_text(
         '[project]\nname = "acme-native"\n'
