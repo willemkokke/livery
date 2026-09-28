@@ -70,9 +70,12 @@ KEEP_KEY = "profile-keep"
 #: what the channel is for: a Monday can still open Friday's run.
 #: Consecutive runs of one shape cost about 10 KiB each, because they
 #: delta against each other, so the bound is retention and not size.
+#: The checkout keeps fewer and for a different reason: a file there is
+#: plain on disk and deltas against nothing, so fifty bounds a disk
+#: rather than a ref.
 PROFILE_DEFAULT = True
 WINDOW_DEFAULT = 100
-KEEP_DEFAULT = 10
+KEEP_DEFAULT = 50
 #: Beside the checkout's other records of what it did to itself: the
 #: receipts of the tools it installed, the entry points it linked, the
 #: state it keeps. An assembled trace is the same species, and the
@@ -136,6 +139,12 @@ def sweep(at: Path, keep: int) -> list[str]:
     run id or a commit and neither orders by age. A *keep* of zero
     keeps everything: the count is a ceiling, and no ceiling means no
     sweeping rather than sweeping all of it.
+
+    Every trace in the directory is a candidate, whichever writer made
+    it. The directory belongs to the mechanism, so a new writer gets
+    housekeeping and an ignore rule without either being taught about
+    it; the cost is that a file put there by hand is swept like the
+    rest, and a trace to keep belongs somewhere else.
 
     Returns one line per file removed, for the caller to report beside
     whatever it wrote. A file that cannot be removed is named and the
