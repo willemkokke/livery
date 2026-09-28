@@ -34,7 +34,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
-from livery.footman import doc, fail, group, prog
+from livery.footman import context, doc, fail, group, prog
 
 if TYPE_CHECKING:
     from livery.workshop._packages import Package
@@ -132,10 +132,10 @@ class CheckRecord:
         in_scoped: Whether a workspace check runs in a package-scoped
             gate at all. The render gate does not: its inputs are
             root answers a package-scoped change cannot touch.
-        after: The checks this one runs after, by name, when both
-            judge the same package: a build after its configure, a
-            ctest after its build. Declared as the task's
-            prerequisites, so the scheduler orders them.
+        after: The checks this one runs after, by name: a build
+            after its configure, a ctest after its build. Each runs
+            through its task before this one's body, once per gate
+            whoever asks first.
         layer: The layer that registered the check, named when a
             narrowing is printed.
     """
@@ -304,8 +304,7 @@ def _ensure_task(record: CheckRecord) -> None:
 
     body.__name__ = name.replace("-", "_")
     body.__doc__ = f"Run the {name} check over the gate's context."
-    pre = [_TASKS[earlier] for earlier in record.after if earlier in _TASKS]
-    _TASKS[name] = checks.task(name=name, pre=pre)(body)
+    _TASKS[name] = checks.task(name=name)(body)
 
 
 def task_for(name: str) -> Any:
@@ -320,7 +319,11 @@ def run_check(name: str, ctx: GateContext, *, fix: bool = False) -> None:
     A workspace check runs once; a package check runs once per
     package it judges, in package order, each announced by name. A
     check without a fix mode does nothing in fix mode, and is judged
-    after the rewriters like every other judge.
+    after the rewriters like every other judge. The checks named in
+    ``after`` run first, through their tasks: a call from a task body
+    runs the earlier check here or waits on the copy the block
+    already started, so a build never reads a directory its
+    configure has not made.
     """
     from livery.workshop._kinds import kind_for
 
@@ -328,6 +331,13 @@ def run_check(name: str, ctx: GateContext, *, fix: bool = False) -> None:
     body = record.fix if fix else record.run
     if body is None:
         return
+    if not fix and context.current().in_task:
+        # Inside a run the scheduler dedups a task call, so the earlier
+        # check runs once for the whole gate; outside one (a test
+        # driving a check by hand) there is no run to dedup against,
+        # and the caller orders the checks itself.
+        for earlier in record.after:
+            task_for(earlier)()
     if record.scope == WORKSPACE:
         body(ctx)
         return

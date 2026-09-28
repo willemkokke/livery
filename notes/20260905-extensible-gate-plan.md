@@ -1514,6 +1514,15 @@ project.
   package, ctest being its check, and the skip test says so. The
   router's one line per package became one line per check, as the
   phase named, and the chain asserts the new lines.
+- 2026-09-28, livery#870, found by the chain after phase 2 merged:
+  a native package's checks ran out of order in the gate's block,
+  build and ctest before configure, because the task prerequisites
+  they were declared with do not order tasks called inside a block.
+  A check's `after` prerequisites now run through their tasks from
+  the check's own body, once per gate by footman's dedup, and
+  outside a run, where nothing dedups, the caller orders them.
+  Phase 2 merged with the fix uncommitted, since an armed submit
+  merges on green; the fix is its own change.
 - 2026-09-28, contract 10's vocabulary test scoped (the agent's
   correction of its own sentence, on Willem's question): the core
   names no package kind and no check tool; the interpreter, uv and
