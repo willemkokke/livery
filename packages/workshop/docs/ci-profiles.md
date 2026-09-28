@@ -126,15 +126,22 @@ line and the job's own result is untouched.
 
 ## What it costs
 
-Measured across one run's three check legs:
+Measured on a channel of 21 runs, 81 legs between them:
 
-| Where | Size |
-| --- | --- |
-| The three files a run's check legs wrote | 9.19 MB |
-| The same three on origin, packed | 837 KiB |
+| Kept | What the legs wrote | On origin, packed |
+| --- | --- | --- |
+| 5 runs | 14.0 MiB | 1.28 MiB |
+| 10 runs | 28 MiB | 1.29 MiB |
+| 21 runs | 74.7 MiB | 6.81 MiB |
 
 Near-identical traces delta against each other, which is why they are kept as
-git objects rather than compressed one by one.
+git objects rather than compressed one by one. Doubling from five runs to ten
+cost 10 KiB, because those runs ran the same tasks and tests and differ only in
+their timings. A span where a trace's own shape changes costs a few hundred KiB
+a run instead, so the window's real bound is how long it keeps rather than how
+much it holds.
+
+No clone pays any of it: the channel is pushed and never mirrored.
 
 ## The contract
 
@@ -143,7 +150,7 @@ git objects rather than compressed one by one.
 # Whether CI keeps a trace of what it did at all.
 profile = true
 # How many runs of traces are kept.
-profile-window = 20
+profile-window = 100
 # Where an assembled file lands, beside the checkout's other records of
 # what it did to itself.
 profile-into = ".workshop/profiles"

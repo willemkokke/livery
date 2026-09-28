@@ -65,11 +65,13 @@ WINDOW_KEY = "profile-window"
 INTO_KEY = "profile-into"
 KEEP_KEY = "profile-keep"
 
-#: What the contract answers when it says nothing. Twenty runs is a
-#: guess made before any run had pushed one; the window is measured
-#: and tuned once real runs have.
+#: What the contract answers when it says nothing. A hundred runs is
+#: about a working week on a repository pushing twenty a day, which is
+#: what the channel is for: a Monday can still open Friday's run.
+#: Consecutive runs of one shape cost about 10 KiB each, because they
+#: delta against each other, so the bound is retention and not size.
 PROFILE_DEFAULT = True
-WINDOW_DEFAULT = 20
+WINDOW_DEFAULT = 100
 KEEP_DEFAULT = 10
 #: Beside the checkout's other records of what it did to itself: the
 #: receipts of the tools it installed, the entry points it linked, the

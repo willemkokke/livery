@@ -83,7 +83,6 @@ required-context = "gate"
 # no sync mirrors. Off is zero cost, for an installation that wants it
 # only while investigating.
 profile = true
-profile-window = 20
 
 # toolroom's refresh, every two weeks on the nightly point: the tools'
 # new releases are observed, the stubs regenerated, and what moved is
