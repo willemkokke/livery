@@ -292,3 +292,97 @@ A Rust core with a Python extension is a kind this workspace does not
 have: the nanobind kind is C++ over conan. `livery-cbor` wants the
 same shape for its own native implementation, so the two would share
 whatever kind answers it.
+
+## 2026-09-28: the base and the house, and what has to compose
+
+Willem: workshop's defaults and livery's house convention need
+rigidly separating. The house should be a thin layer on top of a
+simpler base, and that layer is where anything worth customising
+happens, so nobody has to fork the templates. Four type checkers is
+the house's extremity, not a default.
+
+### What the layer system does today
+
+A layer is an ordinary distribution named in the root contract's
+`[workspace] layers`, in precedence order, workshop first and the
+instance implicitly last. Discovery is that list alone. It carries
+four things: verbs through its footman plugin, a template overlay
+under `<module>/templates/` with an `overlay.toml`, content under
+`<module>/content/`, and the kinds it registers at mount.
+
+Content is pushed by `fm sync` in layer order: fragments into
+`.workshop/fragments/`, skills and hooks into `.claude/` through the
+materialiser, and the managed `CLAUDE.md` stub whose last import is
+the repository's own `CLAUDE.project.md`. Templates are composed at
+render, bottom to top, into one source tree, from each layer's own
+tree in the installed wheel, or the member tree when the layer is
+self-hosting.
+
+An overlay may add a file, replace a base file wholesale with a
+declared reason, or contribute defaulted questions. It may not edit a
+base file, and a declared replace ends inheritance for that file.
+
+### The findings behind the discomfort
+
+- The base layer ships house convention today, by its own
+  definition. `CLAUDE.workshop.md` says the base fragment carries
+  "only the rules the workshop itself enforces", and beside it sit
+  `interaction-voice.md` and `documentation-standards.md`, both of
+  which open by saying they are imported from hse's guidance.
+- Wholesale replacement is the only escape hatch an overlay has, so
+  every customisation of an existing file is a fork in all but name:
+  base improvements stop arriving and nothing says so.
+- Python check configuration is root-only and managed. Every
+  `[tool.*]` table lives in the workspace's root `pyproject.toml`, so
+  one configuration serves every python package and a kind cannot
+  differ.
+- Native check configuration is the mirror image: `.clang-tidy` is
+  per package and declares itself a seed the template never rewrites,
+  so a kind differs freely and an improvement never arrives.
+- `requirements()` gathers tools from three sites, the kinds present,
+  each package's contract and the root's. A layer is not one of them,
+  so a layer's verb needing a tool has nowhere to say so.
+- The managed-union that kinds use is a union of which files the
+  drift gate judges, not of their contents. Composing contents is
+  what the gate plan's phase 4 proposes to build.
+
+### What was ruled while talking
+
+- Templates aim to be generic enough that customisation is a layer's
+  job and forking is never the answer.
+- The small default set is the base's; four type checkers are the
+  house layer's choice.
+- Enabling a check the workshop provides generates its
+  configuration; disabling removes it, and only when the file that
+  exists is the one we generated.
+- Tools should be declarable in a layer.
+- A check's configuration varies by kind, clang-tidy under unreal
+  against conan-cpp against nanobind, so it resolves down the kind
+  chain rather than belonging to the check alone.
+- Where a format composes itself, use that rather than inventing a
+  mechanism: git reads a `.gitignore` per directory, clang-tidy
+  searches up the tree and can inherit its parent, CMakePresets has
+  `include`, the editor's settings already split into managed and
+  local.
+- Where a format forces one file, a managed file may carry a region
+  the repository owns, preserved across renders. The root
+  `.gitignore` is the case that needs it, since its own rules cannot
+  be split into parts.
+
+### Open
+
+Whether a check's configuration lives as fragments inside a rendered
+file or as a file per check. Both work; the file per check makes
+withdrawal a deletion rather than a diff, and the withdrawal
+semantics already exist in the materialiser, which keeps a local
+override and names it. ruff, mypy, pyright, pytest and coverage all
+support a standalone file; ty and pyrefly want checking.
+
+Whether the region a repository owns is written by the instance or
+contributed by a layer. Both are wanted and they are not the same
+feature: a layer's section composes at render, an instance's edit is
+state that must survive one.
+
+A test for whether the separation is real: a plain workshop project,
+with the house layer absent, gates green with the small set and
+keeps its voice rules nowhere.
