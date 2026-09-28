@@ -2,11 +2,20 @@
 
 Status: phase 0 approved and landed 2026-09-05 (issue #227), pulled
 ahead of the docs prepass so that plan's emitter tests pin the bare
-`fm` spelling. Phases 1 to 7 are drafted and await Willem's
-review, phase 4 having split into 4 and 4b because its two halves
-block on different things. The design section below is written to
-graduate into `packages/workshop/docs/` after review; everything
-else is working record.
+`fm` spelling. Contract 7's pinning tests landed 2026-09-28 (commit
+94096846), so phase 2 starts when the plan is approved. Phases 1 to
+8 are drafted and await Willem's review: phase 4 split into 4 and
+4b because its two halves block on different things, and the
+revision of 2026-09-28 added phase 3b (the part and channel
+registries, which 4b waits on), phase 3c (the regions a repository
+owns in its managed files, ruled generic that day) and phase 8 (the
+house layer, which that day's base-and-house ruling calls for),
+folded the day's other
+rulings into the design, contracts 10 to 12, phases 3 and 4, and
+the open list, and corrected one claim of the 2026-09-09 record. The
+design section below is written to graduate into
+`packages/workshop/docs/` after review; everything else is working
+record.
 
 ## Why
 
@@ -25,6 +34,16 @@ and a boundary ruling (what may be a `workshop.toml` option versus
 what must be layer code) that this plan lands together with the
 seam, because the seam's vocabulary is wrong to build on an
 unbound word.
+
+The seam also has to separate two things one wheel ships today.
+The workshop's defaults and livery's house convention travel
+together: the base layer's fragments carry the voice rules imported
+from hse, and the base template's `pyproject.toml` carries four
+type checkers. A project that wants the workshop without livery's
+opinions has no layer to leave out. The ruling of 2026-09-28 is
+that the base registers a small check set and a house layer adds
+the rest, so the proof that the seam works is a house layer that is
+thin and a base that gates green without it.
 
 ## The design, as the documentation will state it
 
@@ -57,7 +76,8 @@ checkout resolves its own pinned era from the store.
 
 **Facts live in the contract, opinions live in layers.** A
 `workshop.toml` carries facts about one workspace or one package:
-its name, its kind, its dependency edges, its coverage floor.
+its name, its kind, its dependency edges, its coverage floor,
+whether it publishes.
 A coverage floor is a fact because it is a measured high-water
 mark of that package. "Private members are not documented" is not
 a fact about a package; it is an opinion about what documentation
@@ -96,6 +116,34 @@ prose the full name is "package kind" at first mention, because
 the contract also names an edge kind (`[[depends]] kind`) and a
 forge kind (`[forge] kind`); each is bound by its owner.
 
+**The base operates; languages and houses are layers.** The
+workshop's base layer carries the engine and what operates it: uv
+and the entry contract, the root project and its `tasks.py`, the
+render and the drift gate, the gate's walk, the abstract base kind
+with the changelog engine, and the workspace's own checks (render
+drift, provenance, layering). It registers no language. Each
+language is a layer derived from the base: `livery.workshop.python`
+carries the python package kind, its template, its checks
+(formatting, lint, one type checker, the tests with their coverage
+floors) and its tools; `livery.workshop.cpp` carries the C++ kinds
+the same way. A house is a layer on top of the languages it wants:
+a second and a third type checker, a docstring convention, a voice,
+each a registration or content, listed by the project that wants
+it. The base is abstract, the way the base kind is: it heads
+every stack, carries what every layer needs, and is used by nobody
+alone. A workspace listing the base alone registers no kind and can
+create no package; it is not a thing anyone uses. What the base is
+for is the boundary: the core stays independent of every language
+and every layer, and the proof is static, in the core's own gate.
+The layering lint refuses an import from the core into a language
+layer, dependencies pointing down from a layer into the core and
+never back, and a vocabulary test refuses a package kind's or a
+check tool's name in the core's own modules; the interpreter that
+operates the workshop is the base's own. The conformance suite's
+base-alone birth
+proves only that the engine renders and gates with nothing listed,
+its rendered `tasks.py` judged by the drift gate byte for byte.
+
 **The quality gate is a set of checks, grouped by role.** A
 *check* is one tool's judgment: ruff's format pass, mypy on
 linux, the render drift comparison. A *role* is what a check is
@@ -129,11 +177,22 @@ place the tool exists:
   never a table of the check's own;
 - how it narrows under `--affected`: by explicit paths, by a
   package subset, or not at all (the whole is always checked);
-- the configuration fragments the render manages for it, one per
+- the configuration the render manages for it, one fragment per
   rendered file it has something to say in: its table in
   `pyproject.toml`, its settings in `.vscode/settings.json`, its
-  id in `.vscode/extensions.json`. One owner, several files, and
-  unregistering the check clears every one of them together;
+  id in `.vscode/extensions.json`. A fragment belongs to the check
+  and to the package kind together, because one tool wants
+  different defaults under different kinds (clang-tidy under a
+  binding kind, under a plain C++ library, under a future engine
+  kind), and it resolves down the kind chain the way a kind's tools
+  and managed files do: the nearest kind's fragment wins, and a
+  kind without one inherits its parent's. One owner, several files,
+  and the configuration exists exactly while the check is
+  registered: unregistering the check removes every fragment from
+  the next render, and a file the render wrote for that check alone
+  is removed with it, only when the bytes on disk are the bytes the
+  render wrote. An edited one is a local override, kept and named,
+  the rule the sync verb already applies to delivered content;
 - the tool it contributes to the derived profile. The tool store
   is machine-wide and shared across projects: each version lives
   in it once, side by side with its siblings, and the entry
@@ -145,10 +204,14 @@ place the tool exists:
   only reads files never lives in a venv.
 
 Adding a tool is one record in a layer's plugin. Removing one is
-re-registering the role without it. A narrowed gate is always
-visible: every skipped check prints its name and the reason, and
-a layer that narrows a role is named in the gate's output, so a
-lighter gate is a legible brand decision, never a silent one.
+re-registering the role without it. A layer whose verbs need a
+tool with no check involved declares the tool at the same mount,
+the way it registers a kind or a check, and the derived profile
+takes it beside what the kinds and the contracts require. A
+narrowed gate is always visible: every skipped check prints its
+name and the reason, and a layer that narrows a role is named in
+the gate's output, so a lighter gate is a legible brand decision,
+never a silent one.
 
 A fragment is contributed, never applied afterwards. The render
 composes the base template with each registered check's fragment
@@ -158,6 +221,52 @@ the rendered file instead would move the truth from the template
 to the template plus the passes, and every rewrite of TOML or of
 JSON with comments either loses the prose or dictates how it may
 be written, which these files carry on purpose.
+
+**Where a tool composes its own configuration, the render uses
+that.** Tools differ in how they find their configuration, and the
+render follows each one rather than building a second mechanism. A
+tool that reads one file per project (basedpyright, mypy, ty,
+pyrefly, pytest, coverage) gets its section in the shared rendered
+file, and what varies by package inside it is written the way the
+tool itself spells variation: an execution environment, a module
+override, a per-path override table. A tool that searches upward
+from each file it judges (ruff, clang-format, clang-tidy, git's
+ignore rules) gets a file where it looks, so a kind's configuration
+lands in the package, and a package's own additions have two
+homes, the managed file's own region or the tool's own inheritance
+(`extend` for ruff, `InheritParentConfig` for clang-tidy and
+clang-format, `include` for CMake presets), never a merge of ours.
+The check record says which shape its tool has, and the render
+emits accordingly.
+
+**Two ways into a managed file, and they are different.** A
+layer's section composes at render: a fragment, contributed the way
+a check's is, ordered and byte-stable; the forge layer's
+`.forge.dev.env` rule in the root `.gitignore` is one, written today
+into the base template where it does not belong. A repository's own
+region is state that must survive a render, and it is a feature of
+every managed file, not of one format: a pair of marker comments the
+render writes, with the repository's lines between them. The render
+reads each region from the committed file as an input, the way it
+reads the answers, and writes it back in place, so the drift gate
+still compares whole bytes, and an edit outside a region, or a
+removed marker, is drift like any other. The root `pyproject.toml`
+carries the repository's own tables and its own dependencies this
+way, the root `.gitignore` its own rules, `tasks.py` its own tasks,
+and a package's managed files the same. What a region may say is
+the format's business: in TOML a tail region adds whole tables and
+array entries and never a key inside a rendered table, so a tool's
+own `extend-` spelling is used where it has one. A format without
+comments still carries the repository's content, appended: the
+render knows its own bytes, so the region is the unmarked tail
+after them. A format whose grammar closes, a strict JSON object,
+takes no tail and uses its own include instead, as CMake presets do
+with `CMakeUserPresets.json`. Where a format also composes itself,
+a package may use that instead: its own `.clang-tidy` beneath the
+managed one, with `InheritParentConfig`. `fm explain` says which
+form a managed file carries and where its lines are, and a drift
+report says where the repository's own lines belong, so the refusal
+teaches the seam instead of only naming the file.
 
 **What a file is, and who owns it.** The workshop asks two
 questions about a path, and one file answers both. Its **part**:
@@ -260,6 +369,39 @@ reviewed byte and never an install-time side effect.
 9. Bare "kind" never stands alone in published prose: "package
    kind", "edge kind", "forge kind" at first mention in every
    document.
+10. The base layer is abstract: it carries the engine and what
+    operates it, registers the workspace checks alone, ships no
+    language kind and no house convention, and is used by nobody
+    alone. Each language and each house is a layer depending on
+    the base, never the reverse: the core imports no layer and
+    names no package kind and no check tool, and the layering lint
+    and a vocabulary test refuse both on every change. The
+    interpreter, uv and the venv that operate the workshop are the
+    base's own and stay named.
+11. A check's configuration exists exactly while the check is
+    registered, resolved per package kind down the kind chain. The
+    render removes a file it wrote for a withdrawn check only when
+    the bytes on disk are the bytes it wrote; anything else is kept
+    and named.
+12. Where a tool composes its own configuration (upward search,
+    `extend`, `InheritParentConfig`, `include`), the render uses
+    that composition and builds no second one.
+13. A managed file may carry content the repository owns: named
+    regions between marker comments, or an appended tail where the
+    format has no comments. The render reads it from the committed
+    file and writes it back in place, so it survives every render;
+    everything else, the markers included, is judged as rendered
+    bytes. `fm explain` names which form a file carries, and a
+    drift report says where the repository's own lines belong.
+14. The base templates aim to be generic enough that a house layer
+    needs no overlay, so most projects need no template repository.
+    A house customises a rendered file through a fragment, a region,
+    or content, all of which travel in its wheel; an overlay stays
+    the declared exception for what those cannot say, because it
+    makes its home the template publisher and costs it an artifact
+    repository. What a house needs that no fragment or region can
+    say is first treated as a gap in the base template; open item 16
+    carries what remains.
 
 ## Phases
 
@@ -348,10 +490,34 @@ for the roles that do not apply stay as they are. Adding this
 before phase 2 would build a second interim shape, so it lands
 inside the swap.
 
+The pinning tests of contract 7 are in place: the four
+`test_the_whole_gate_is_eight_members_in_one_parallel_block`,
+`test_the_fixing_gate_rewrites_serially_then_judges_in_parallel`,
+`test_the_judges_read_the_tree_the_rewriters_left` and
+`test_one_refusing_member_is_the_gate_s_verdict` in
+`packages/workshop/tests/test_workshop_quality.py`. The `Backend`
+protocol has two members beside `declared_requirements` that this
+phase keeps, `module_roots` and `referenced_siblings`: they are
+kind knowledge the layering lint reads, not the `check` member the
+router used. hse has no registry to port here: its `quality.py`
+names its gates in code, so the registry is livery's own, and the
+compare against hse is of the gate's composition (rewriters serially,
+judges together), which the pinning tests hold.
+
+The first fix-mode check after the swap is livery#829, the layering
+lint's `--fix` that writes the `[[depends]]` edge and the native
+requirement for a sibling the graph already reaches. It is a
+workspace-scoped record with a fix mode, landing in its own change
+right after the registry, so the registry's fix mode is driven by a
+real check before a fake one.
+
 **Acceptance**
 
 - The pinning tests pass before and after the swap, proven by
   running them at both commits.
+- `fm check --fix` writes the edge and the requirement for a
+  reachable sibling reference and still refuses an unreachable one
+  (livery#829), proven by that change's own tests.
 - `fm check` output names the same members and skips as
   before, and `--affected` narrows identically. The one named
   change: a cpp-conan package prints `configure`, `build`, and
@@ -372,8 +538,21 @@ API version (contract 8). `fm doctor` learns entry-point
 discovery: installed check or kind plugins that no layer mounts
 are listed as available, activating nothing (contract 3).
 
+A layer also declares the tools its own verbs need, at the same
+mount, so `_tools.requirements()` gains a fourth site beside the
+kinds, the packages and the root contract: `tools.lock` resolves
+them, the receipts record them, and `fm doctor` and `fm env.check`
+name an absence. Two checkouts listing the same layers derive the
+same profile, so the declaration is a registration at mount, never
+an installed wheel's metadata (contracts 2 and 3). Today a layer
+has nowhere to say it.
+
 **Acceptance**
 
+- A test layer declaring a tool with no check sees it among the
+  lock's requirements and in the entered environment, and unlisting
+  the layer drops it, proven by a forced test of the unlisted arm
+  first.
 - A test layer drops one checker and adds a fake one; the gate
   output names both moves, proven by a conformance-suite test.
 - An installed-but-unlisted plugin appears in `fm doctor` output
@@ -381,28 +560,245 @@ are listed as available, activating nothing (contract 3).
 - A layer declaring an incompatible API version refuses at mount
   with the version named.
 
+### Phase 3b: the part and channel registries
+
+The one shared, extensible classification the 2026-09-27 rulings
+call for, numbered beside phase 3 because it needs nothing from
+phase 4 and phase 4b needs it. Two registries that share only their
+walk: the **part** registry answers what a path is to its package
+(`source`, `test`, `test-support`, `configuration`), the
+**channel** registry answers who wrote it and where to edit it
+(`rendered`, `generated`, `materialised`, `layer content`, `seed`,
+`contract`, `yours`, and the rest `fm explain` prints today). Each
+is an ordered list of rules where the first to claim a path wins
+and the caller supplies the fallback. Both existing ladders
+migrate at once: every kind backend's `classify` becomes that
+kind's builtin part rules, and `_provenance.classify` becomes the
+channel's builtin rules, each registered through the same channel
+that carries kinds and checks. A layer or a kind registers rules
+into either. The per-package exception enters the contract in the
+narrow shape a coverage floor has: these paths are not what the
+kind would assume, on the part axis alone.
+
+The docs job's condition rides along (livery#839): the predicate
+"the site reads this path" is answered here, and the docs job skips
+on a change the site does not read, leaving the `gate` context
+reportable. The predicate is paths under `notes/` alone, narrower
+than `is_prose`, since `README.md` and every package's `docs/`
+markdown are published and the site build is their only gate.
+
+The leans on open item 9's remaining questions, each a ruling
+before this phase starts:
+
+- A part rule is data, a pattern table, where nothing reads state,
+  and a callable otherwise. The table renders into documentation
+  and the callable keeps promotion to one registry mechanical.
+- Rules order by registration, the most specific claim first, and
+  a tie refuses at mount naming both rules, so two checkouts of one
+  commit order alike.
+- `fm explain` prints the part, the channel, and the layer that
+  supplied each.
+- The single registry over both waits for a third axis. "Does the
+  site read it" is the first candidate and is answered here as a
+  channel fact until then.
+
+**Acceptance**
+
+- Every kind's `classify` and `_provenance.classify` are gone:
+  `grep -rn "def classify" packages/workshop/src` finds only the
+  registries' own entry points, and `fm explain <path>` prints part,
+  channel and supplier for a rendered file, a seed, a contract, a
+  package source and a materialised entry.
+- A test layer registers a part rule and a channel rule and both
+  answer, with the supplier named; an ambiguous pair refuses at
+  mount naming both, proven by a forced test.
+- A package declaring the per-package exception is classified by it
+  and nothing wider enters the contract, proven by a test that a
+  wider key refuses naming the shape.
+- A pull request changing only `notes/` skips the docs job and the
+  `gate` context still reports, proven by the conformance chain; a
+  change to `README.md` or a package's `docs/` still builds the
+  site.
+- `fm check` green, output unchanged.
+
+### Phase 3c: the regions a repository owns in its managed files
+
+A feature of the render, needing nothing from the phases before it,
+so it may land first. Any managed file whose format has a comment
+style may carry named regions: a pair of marker comments the
+template renders, with the repository's own lines between them. The
+render reads each region from the committed file as an input, the
+way it reads the answers, and writes it back in place, so
+`fm template.apply` preserves it by construction and
+`fm template.check` still compares whole bytes. An edit inside a
+region is the repository's; an edit outside it is drift; the
+markers are rendered bytes, so a removed marker is drift too. A
+file without the region yet, rendered before it existed or born
+now, renders it empty and gains the markers on the next apply. A
+format without comments still carries the repository's content,
+appended: the render knows its own bytes, so the region is the
+unmarked tail after them, and a changed prefix is drift the same
+way. No managed file needs that form today, since every one of them
+has a comment style, so the rule exists for the next one. A format
+whose grammar closes, a strict JSON object, takes no tail and uses
+its own include instead, as CMake presets do with
+`CMakeUserPresets.json`. The editor's `.vscode/extensions.json` is
+JSON with comments to the editor, like `settings.json`, so it takes
+a marked region inside its list for the repository's own
+recommendations beside the derived ones.
+
+The first carriers, each with the lines that move into it today:
+
+- the root `pyproject.toml`, two regions. One inside the `dev`
+  dependency group's list, for the repository's own dependencies:
+  today's `types-pyyaml`, which is this repository's need, since the
+  workshop's yaml reads are type-checked here only because the
+  workshop is a member. One at the end of the file, for the
+  repository's own tables: today's three basedpyright execution
+  environments for the imported tests. TOML decides what a tail
+  region can say, whole tables and array-of-table entries and never
+  a key inside a table the render wrote, so where a tool spells
+  extension as its own key (ruff's `extend-per-file-ignores` and
+  `extend-select`) the region uses it;
+- the root `.gitignore`, one region for the repository's own rules;
+- `.vscode/settings.json`, one region inside the object for the
+  repository's own editor settings;
+- `tasks.py`, one region below the mount for the repository's own
+  tasks. The workshop's docs page already promises that anything
+  below the plugin line is the instance's, and today's rendered
+  file says the opposite in its own docstring; this makes the
+  promise true and the docstring follows;
+- a package's managed files, `cliff.toml` today and the native
+  configurations phase 4 makes managed, the same way, so a package's
+  own `.clang-tidy` lines have a home beside the tool's own
+  `InheritParentConfig`.
+
+`fm explain` distinguishes the two forms. For a file with marked
+regions it names each region and the lines its markers enclose,
+and says a line of the repository's own goes inside; for a file
+with an appended tail it names the line the render's bytes end on
+and says the repository's lines follow it. The drift report adapts
+the same way, so a refusal teaches the seam instead of only naming
+the file. Today's line, `<file>: differs from its render (the
+<layer> layer owns it)`, becomes one of three: a difference outside
+a marked region names the region the repository's lines belong in;
+a missing or altered marker says the markers are rendered and that
+`fm template.apply` restores them; a difference in a tail file's
+prefix names the lines the render owns and says the repository's
+follow them. A file with no repository-owned content keeps today's
+line. The lines pinned in `test_workshop_compose.py` and
+`test_workshop_templates.py` follow the new wording in the same
+change. Contract 13.
+
+**Acceptance**
+
+- A line added inside a region survives `fm template.apply` and
+  passes `fm template.check`; an edit outside it is reported as
+  drift; a removed marker is reported as drift; proven by a forced
+  test of each arm, the drift arms first.
+- The base template names nothing of this repository:
+  `grep -n "packages/toolroom\|packages/footman\|types-pyyaml"
+  packages/workshop/src/livery/workshop/templates/project/pyproject.toml.jinja`
+  finds nothing, and this repository's root `pyproject.toml` still
+  carries the three execution environments and `types-pyyaml`,
+  inside its regions.
+- A workspace born now and a workspace rendered before the regions
+  existed both gain the markers with empty content on
+  `fm template.apply`, proven by the conformance chain and by a test
+  over a marker-less committed file.
+- A managed file without comments keeps its appended tail across
+  `fm template.apply` and reports a changed prefix as drift, proven
+  by a test over a fixture file, since no managed file needs the
+  form today.
+- `fm explain pyproject.toml` names its two regions with the lines
+  their markers enclose, and `fm explain` on a tail-form fixture
+  names the line the render ends on; the two outputs are distinct,
+  proven by a test that pins both.
+- The drift report's three adapted lines each appear for their arm,
+  and today's line still appears for a file with no
+  repository-owned content, proven by a forced test per arm, the
+  marker arm first.
+- `fm check` green, output unchanged.
+
 ### Phase 4: the check owns its configuration and tool
 
 Everything a check owns that does not depend on what a file *is*.
 Split from the claim, which follows, because the two halves block
 on different things: this one needs only the registry from phase
-2, while the claim needs the part registry whose design is open.
-Joined, the editor work waits on a question it has nothing to do
-with.
+2, while the claim needs the part registry of phase 3b. Joined,
+the editor work waits on a question it has nothing to do with.
 
-The record gains its configuration fragments and its tool-profile
-contribution, moving both out of their current homes. A fragment
-names the rendered file it goes in, so one record reaches
-`pyproject.toml`, `.vscode/settings.json` and
-`.vscode/extensions.json` at once; the render composes the base
-template with the registered fragments in check-name order, and
-the drift gate judges the result through the same managed-union
-mechanism kinds use.
+The record gains its configuration and its tool-profile
+contribution, moving both out of their current homes. Today every
+python check's configuration is in the root `pyproject.toml`
+template (`[tool.ruff]`, `[tool.basedpyright]`, `[tool.mypy]`,
+`[tool.ty]`, `[tool.pyrefly]`, `[tool.coverage.*]`,
+`[tool.pytest.ini_options]`), so one configuration serves every
+python package and no kind can differ; four packages carry a
+hand-written `[tool.ruff]` stub that `extend`s the root with their
+own `per-file-ignores`; and the native checks are the mirror
+image, a `.clang-tidy` and a `.clang-format` seeded per package
+that the template never rewrites, so a kind varies freely and an
+improvement never arrives. The base template also names three of
+this repository's packages in basedpyright execution environments,
+an instance fact in the core (0903 plan, contract 18) that phase 3c
+moves into the repository's own region of the rendered file.
+
+Nothing today composes what goes inside a rendered file: the
+"managed union" kinds use is `managed_files(kind)`, a union of
+which file names the drift gate judges. This phase builds the
+content composition. Three things the record carries, and what the
+render does with each:
+
+- **Fragments per rendered file, per kind.** A fragment names the
+  rendered file it goes in and the kind it applies to; the render
+  resolves each check's fragment for each package down
+  `kind_chain` (nearest kind wins, a kind without one inherits its
+  parent's) and composes the base template with the registered
+  fragments in check-name order, so two machines write the same
+  bytes, and the drift gate judges the result.
+- **The tool's discovery shape**, one of two, as the design
+  section states it. A tool that reads one file per project gets
+  its section in the shared rendered file, and per-package
+  variation is spelled the tool's own way inside it (basedpyright
+  execution environments, mypy module overrides, ty and pyrefly
+  per-path override tables; the phase reads each tool's own
+  documentation at the locked version before emitting). A tool
+  that searches upward from each file gets a managed file where it
+  looks: `.clang-tidy` and `.clang-format` become managed renders
+  of their check records' kind fragments instead of seeds, the
+  first per-package emission and the case the kind ruling names. A
+  package's own additions go in the managed file's region (phase
+  3c) or ride the tool's inheritance, a deeper file with
+  `InheritParentConfig`, never a merge of ours. One trap
+  to hold: a `ruff.toml` beside a `pyproject.toml` shadows the
+  table inside it, so a managed ruff file per package never sits
+  beside a package's own table without extending it.
+- **Withdrawal.** A section vanishes from the next render with its
+  fragment. A managed file the render wrote for a withdrawn check
+  is removed by the render's sweep only when its bytes are the
+  bytes the render last wrote; an edited one is kept and named as
+  a local override. The record of what was written and its digest
+  is the materialiser's manifest, the `.workshop-materialised`
+  shape of `_materialise.py`, reused rather than invented twice.
 
 Ruff (format and lint) is the proof: its rendered configuration,
 its editor settings, its recommended extension, its version pin,
 and its profile entry all derive from its two check records, so
-removing the records removes every trace.
+removing the records removes every trace. clang-tidy is the second
+proof, for the per-kind and per-package halves: its fragment under
+`python-nanobind` and under `cpp-conan` renders each native
+package's `.clang-tidy`, and the seeded copies are adopted where
+they match the render and named as overrides where they do not.
+
+hse is the reference for a file per check: its devkit wheel ships
+`config/ruff.toml`, `mypy.ini`, `ty.toml`, `pyrefly.toml` and
+`basedpyright.json`, and an instance carries a thin
+`.config/.ruff.toml` that `extend`s the wheel's copy. Livery
+renders the configuration per workspace from the registered set
+instead of shipping it whole, and the deviation is named here:
+a check a layer drops must take its configuration with it, which a
+wheel-shipped file cannot do.
 
 Two things belong to the set rather than to any check, and the
 render derives them the way it derives the profile: the type
@@ -417,6 +813,12 @@ registered checks. Closes livery#779.
   ruff configuration in the render, no ruff in the rendered
   editor settings or extension recommendations, and no ruff in
   the derived profile, proven by a test.
+- A check's fragment differs between two kinds and each package
+  renders its own kind's, proven by a test over the conformance
+  workspace's nanobind and cpp-conan members' `.clang-tidy`.
+- A managed per-package file of a withdrawn check is kept and
+  named when edited and removed when unedited, proven by a forced
+  test of both arms, the edited arm first.
 - The drift gate catches a hand-edited check-owned fragment,
   proven by a forced test.
 - A rendered `.vscode/extensions.json` names only extension ids
@@ -436,11 +838,14 @@ differ from the rules it applies to sources, and the rendered
 `per-file-ignores` is generated from the claim rather than
 written by hand.
 
-This phase needs the part registry, whose design is open item 9,
-and lands after the phase that builds it. Building the claim on
-today's per-kind `classify` instead would be the second shape
-this plan then replaces, which is the argument that retired
-`kindcheck` inside phase 2.
+This phase needs the part registry of phase 3b and lands after
+it. Building the claim on today's per-kind `classify` instead
+would be the second shape this plan then replaces, which is the
+argument that retired `kindcheck` inside phase 2. The hand-written
+`[tool.ruff]` stubs in four packages are the interim the claim
+retires: their `per-file-ignores` derive from the claim, and what
+remains in them, the imported sources' docstring carve-outs, is the
+tracked content pass's debt, not this plan's.
 
 **Acceptance**
 
@@ -502,8 +907,11 @@ documented as absent".
 `livery.workshop.testing` ships the pinning tests a third-party
 kind or check plugin must pass: the backend protocol, skip
 printing, narrowing behaviour, fix ordering, config-fragment
-drift. The workshop's own kinds and checks run the same kit, so
-the kit cannot drift from the enforcement.
+drift, a fragment resolving per kind down the chain, and a
+withdrawn check's file removed only when unedited (contract 11).
+The workshop's own kinds and checks run the same kit, so the kit
+cannot drift from the enforcement. Once phase 8 exists the kit
+carries the base-alone case of contract 10 too.
 
 **Acceptance**
 
@@ -511,6 +919,105 @@ the kit cannot drift from the enforcement.
   builtin check pass the kit, wired into `fm check`.
 - A deliberately broken fake plugin fails the kit with the
   violated clause named, proven per clause.
+
+### Phase 8: the house layer, and the base's small set
+
+The proof that the seam separates the workshop from livery's
+opinions. A house layer is a member of this workspace and a layer
+in its `[workspace] layers` list, after `livery.workshop`. Its
+plugin registers the checks the base does not: mypy on its three
+platforms, ty and pyrefly under the `types` role, and whatever the
+ruling on open item 2 leaves for `typecomplete`. Its
+`content/fragments/` carries `interaction-voice.md`,
+`documentation-standards.md` and the house half of today's
+`CLAUDE.workshop.md`: the four-checker sentence, the docstring
+convention, and every other line that states livery's preference
+rather than what the workshop enforces; the base's fragment keeps
+the rest. The base template's `pyproject.toml` loses `[tool.mypy]`,
+`[tool.ty]` and `[tool.pyrefly]`, which arrive as the house's
+fragments through phase 4, and the base's `python` kind record
+loses the three tools, which arrive through the layer's declaration
+of phase 3.
+
+The python package kind and its tooling leave the base too, into
+`livery.workshop.python` (ruled 2026-09-28, open item 17), a layer
+derived from the base that the house depends on. That extraction
+is a plan of its own, sequenced with the C++ layer's, and this
+phase does not wait for it. Until it lands the python kind is
+still the base's, the house depends on the base, and the base-alone
+acceptance below means no house checker and no house fragment;
+after it, base-alone means no language check at all, and the
+acceptance is run again at that plan's landing.
+
+The house can be born before its name is settled and before
+anyone outside this workspace needs it, because a package may opt
+out of publishing. That opt-out lands first, in its own change,
+needing nothing from the other phases, and every kind obeys it:
+`[release] publish = false` in a package's `workshop.toml`, a fact
+of the package in the base kind's contract vocabulary, read by the
+release wave's per-member step before the kind's publisher runs, so
+no backend knows about it. The wave still derives the version,
+writes the changelog entry, stamps, builds (the release legs still
+prove the artifact) and cuts the receipt tag; it skips the registry
+upload and the served probe, prints the skip by name, and writes
+the receipt as unpublished. A re-run walks past a tagged opted-out
+member the way it walks past a served one. The kind record's empty
+`artifact` already says a kind publishes nothing; this is the same
+answer for one package of a kind that does. What it does not cover:
+a repository outside this workspace that lists an unpublished layer
+must reach it by a source uv can install from, a git source or a
+private index, which the template does not render. The house ships
+no template overlay (ruled 2026-09-28, contract 14): its
+configuration is fragments and its voice is content, both in the
+wheel. The reason is concrete here: `fm release.templates` names
+as publisher the last layer in the stack that ships a template
+tree, and publishes that layer's composed tree to the one
+`[workspace] templates-artifact` this workspace declares. A house
+overlay would make the house the publisher of the base's artifact
+at `workshop-templates`, versioned by the house, and every workshop
+instance would receive livery's house in its templates. Whatever
+the house needs of a rendered file that a fragment or a region
+cannot say is first a gap in the base template, fixed in the base;
+what that cannot cover either is open item 16, and the house is
+born without an overlay until it is ruled.
+
+Needs phases 3 and 4: a check moved out of the base takes its
+configuration and its tool with it, and both need the seams those
+phases build. Independent of phases 5 to 7. Livery's own gate does
+not change, because the house is listed: the same members run and
+the same fragments are delivered. What changes is what a project
+born without the house gets, and the conformance suite gains that
+project.
+
+**Acceptance**
+
+- The base ships no house convention: the workshop package's
+  `content/fragments/` holds no voice or documentation fragment,
+  and mounting the base alone in a test registers no mypy, ty or
+  pyrefly check, proven on the layer's own content and registry.
+  The conformance suite's fixture born without the house gates
+  green, its rendered `pyproject.toml` has no `[tool.mypy]` table,
+  and its gate output names no house member.
+- This workspace's gate output names the same members as before the
+  phase, proven by the pinning tests of contract 7 unchanged.
+- `fm layers` names the house after the workshop, and `fm doctor`
+  on a checkout with the house installed and unlisted names it as
+  available and changes no verdict.
+- `grep -rin "four type checkers"
+  packages/workshop/src/livery/workshop/content/fragments/` finds
+  nothing.
+- An opted-out member of each kind (python, python-nanobind,
+  cpp-conan) releases with its tag cut, its changelog written and
+  its publisher never called, the skip printed by name, proven by a
+  test per kind and by `fm workflow.release --local` on the
+  conformance workspace with one such member per kind; a second run
+  walks past it.
+- This workspace's house member is born with `publish = false`, and
+  `fm workflow.release --local` releases the workspace with it
+  unpublished.
+- The house ships no template tree: `layer_template_tree` answers
+  None for it, and `fm release.templates` on this workspace still
+  names `livery-workshop` as the publisher, proven by a test.
 
 ## Temporary, replaced by
 
@@ -521,9 +1028,15 @@ the kit cannot drift from the enforcement.
 | The POSIX-only entry script | a pwsh spelling, at the tool-store port; CI's windows leg runs `setup.sh` under the runner's bash until then |
 | The hand-pinned setup-uv version in nightly.yml and release-legs.yml | emitter-derived pins, when those workflows become generated |
 | The argv[0] probe deciding which process reconciles | footman's own real-invocation marker, when footman joins the workspace |
-| The gate tools pinned in the rendered dev group | toolroom's versioned store, once it exists |
+| The gate tools still pinned in the rendered dev group beside their store records (mypy, pytest, coverage) | the check record's one tool declaration, with open item 6's ruling on the venv-side remainder (phase 4) |
 | Test role builtin wiring (phases 2-4) | the registered test role (phase 5) |
 | Windows C++ coverage deferral (phase 5) | a ruling once an MSVC toolchain answer exists |
+| `.clang-tidy` and `.clang-format` seeded per package, never rewritten | managed per-kind renders of the clang-tidy and clang-format check records (phase 4) |
+| The three basedpyright execution environments naming this repository's packages in the base template | the repository's own tail region in the root `pyproject.toml` (phase 3c); the lines themselves are the tracked content pass's debt |
+| `types-pyyaml` in the base template's dev group | the repository's own region inside the dev group (phase 3c) |
+| The forge layer's `.forge.dev.env` rule in the base `.gitignore` template | the forge layer's fragment for `.gitignore` (phase 4) |
+| The hand-written `[tool.ruff]` stubs in four packages | the claim-derived `per-file-ignores` (phase 4b); the docstring carve-outs inside them are the content pass's |
+| The four checkers and the voice fragments shipped by the base | the house layer (phase 8) |
 
 ## Decision record
 
@@ -777,6 +1290,171 @@ the kit cannot drift from the enforcement.
   open item 9. Joined, the editor work waited on a design question
   it has nothing to do with, against the rule that a phase lands
   alone.
+- 2026-09-28, the base is small and the house is a layer (Willem:
+  the workshop's defaults and livery's house convention need
+  rigidly separating; the house is a thin layer on a simpler base,
+  and that layer is where anything worth customising happens, so
+  nobody forks the templates; four type checkers are the house's
+  extremity, not a default). Contract 10 and phase 8. The finding
+  behind it: the base's own fragment says it carries only what the
+  workshop enforces, and beside it sit two fragments that open by
+  saying they are imported from hse's guidance.
+- 2026-09-28, a check's configuration exists while the check is
+  active (Willem: enabling a check the workshop provides generates
+  its configuration; disabling removes it, and only when the file
+  that exists is the one we generated). Contract 11. The withdrawal
+  semantics already exist in `_materialise.py` and `_sync.py`, which
+  record what was delivered, sweep a withdrawn item, and keep a local
+  override while naming it; phase 4 reuses them.
+- 2026-09-28, a check's configuration varies by package kind
+  (Willem: clang-tidy under an engine kind, under cpp-conan, under
+  nanobind). A fragment is a property of the check and the kind
+  together and resolves down `kind_chain`, which already composes a
+  kind's tools and managed files; no second mechanism keyed on
+  kind.
+- 2026-09-28, a layer declares tools (Willem). `_tools.requirements()`
+  gathers from the kinds, the packages and the root contract, and a
+  layer is none of them; phase 3 adds the site, as a registration
+  at mount.
+- 2026-09-28, where a format composes itself, use that (Willem:
+  git reads a `.gitignore` per directory, clang-tidy searches up
+  and inherits its parent, CMakePresets has `include`, the editor's
+  settings already split into managed and local). Contract 12, and
+  the per-tool table in the design section. The open question of
+  fragments in a shared file against a file per check is answered
+  per tool by its discovery shape, not by one rule for all;
+  proposed, open item 10.
+- 2026-09-28, a managed file may carry a region the repository owns
+  where the format forces one file (Willem), the root `.gitignore`
+  the case. A layer's section and a repository's region are two
+  features: one composes at render, the other is state a render
+  preserves. The proposed mechanics, the region read from the
+  committed file as an input to the render so the drift gate stays
+  byte-exact, are open item 11.
+- 2026-09-28, templates aim to be generic enough that customisation
+  is a layer's job and forking is never the answer (Willem). The
+  overlay's wholesale replace stays the escape hatch it was ruled
+  to be (0903 plan, contract 20), and the fragment mechanism of
+  phase 4 is what makes a customisation of an existing file an
+  addition instead of a fork.
+- 2026-09-28, a correction to the 2026-09-09 refinement, from
+  reading the tools rather than recalling them: mypy and the
+  pyright family read one configuration per invocation and do not
+  walk up from a file to the nearest one; ruff, clang-format and
+  clang-tidy do. So "per-package emission by tool-native discovery"
+  holds for the second group only, and the first group's
+  per-package variation is a section inside the one file, spelled
+  the tool's way. The structural claim survives in that form and
+  phase 4 carries it.
+- 2026-09-28, the plan revised on the handover (the agent; the
+  additions await Willem's review): phase 3b written out, since the
+  2026-09-27 record placed the registries phase before 4b without a
+  phase text; phase 8 added for the house layer; livery#829 slotted
+  as the first fix-mode check after the swap; open items 10 to 15
+  opened with a lean on each.
+- 2026-09-28, repository-owned regions are generic, and
+  `pyproject.toml` carries them too (Willem: "as generic as
+  possible"; the earlier lean of a `.gitignore`-only carrier is
+  withdrawn). Contract 13 and phase 3c. Every managed file with a
+  comment style may carry named regions; the first contents are the
+  three basedpyright execution environments and `types-pyyaml`,
+  both this repository's facts sitting in the base template today.
+  Open item 15 closes with them: the region is the package rung's
+  answer for the repository's own lines, so no instance rung is
+  built. The `tasks.py` region makes the docs page's promise about
+  the lines below the plugin call true, which today's rendered file
+  contradicts. Later the same day (Willem): a format without
+  comments still takes the repository's content, appended; the
+  render knows its own bytes, so the tail needs no marker.
+- 2026-09-28, `fm explain` distinguishes the two forms of
+  repository-owned content and the drift report adapts to them
+  (Willem). A refusal that only names the file leaves the person to
+  find the seam; the report names the region, the marker, or the
+  render's last line instead. Phase 3c, contract 13.
+- 2026-09-28, a package may opt out of publishing, for internal
+  tools, and every kind obeys it (Willem: it should work for all
+  package kinds, so it is a setting of the base package kind). A
+  fact of the package in its contract, read by the release wave for
+  every kind and by no backend; phase 8 lands it first, and the
+  house layer is its first user, so no index name is claimed before
+  the name is ruled.
+- 2026-09-28, the house layer's name is not settled (Willem: not
+  sure about the name). Open item 13 stays open, and the opt-out
+  lets the birth precede the name.
+- 2026-09-28, the base templates are generic enough that a house
+  needs no overlay (Willem: strive for that, whatever the house's
+  name, so most projects avoid an overlay and the template
+  repository it needs). Contract 14. An overlay makes its home the
+  template publisher, so the cost is a template repository per
+  overlaying layer; here it would also make the house the publisher
+  of the base's own artifact. What a house needs that a fragment or
+  a region cannot say is a gap in the base template.
+- 2026-09-28, the overlay-free house is an aim, not yet a proof
+  (Willem: not sure that will work for everything we need).
+  Contract 14 states the aim; open item 16 lists what a fragment, a
+  region and content cannot do, and the two ways out.
+- 2026-09-28, the C++ support becomes a layer of its own, named
+  `livery.workshop.cpp` (Willem: sounds good), so a python-only
+  project pays nothing for the conan kinds, their five tools, the
+  compilers, the conan registry kind and the releases route. The
+  spelling follows `livery.toolroom.bench`, a distribution of its
+  own inside its parent's namespace, which costs the workshop the
+  namespace restructure toolroom had on 2026-09-12. The extraction
+  is a plan of its own after this plan's registry phases, and the
+  proof that the seams are complete; open item 17 holds what blocks
+  it today.
+- 2026-09-28, layers declare the layers they depend on (Willem's
+  question, on the agent's weaker proposal that the contract's list
+  spell out the closure: it saves configuration errors and tracing
+  which ones are missing, and he sees no downside). The agent had
+  argued only against a parent that activates without a
+  declaration; a dependency declared in the layer's own code is
+  deterministic per commit, since the lock pins the layer. The
+  design is open item 18, with the lean that the list names what
+  the project wants and mount brings each listed layer's declared
+  dependencies in before it.
+- 2026-09-28, the base and the python kind are separate layers
+  (Willem, against the agent's lean that they stay one: the base
+  contains enough to run the python that operates the workshop; the
+  python package kinds and their tooling are separate and derived
+  from the base). `livery.workshop.python` beside
+  `livery.workshop.cpp`, each a layer depending on the base, and
+  the house depending on the languages it wants. Contract 10 and
+  the design section restated; open items 12 and 17 carry the sets
+  and the extraction.
+- 2026-09-28, the base layer is abstract, an organisational
+  boundary and not a workspace anyone uses (Willem: a base-only
+  workspace registers no packages to create; it is the interface
+  that keeps the core language- and layer-independent, separation
+  of concerns, like an abstract base class in C++; done from the
+  start it would have prevented the coupling the agent measured).
+  The proof of the separation is static, in the core's own gate:
+  the layering lint refuses an import from the core into a layer,
+  and a vocabulary test refuses a language's name in the core. The
+  conformance suite's base-alone birth proves only that the engine
+  runs with nothing listed. Contract 10 restated; the coupling in
+  open item 17 is the retrofit's bill, not a reason against.
+- 2026-09-28, the language layers are layers inside the one
+  workshop wheel, not distributions (Willem: no need for different
+  PyPI packages for a long time, but decoupled enough that it
+  could). A layer module imports the core and never the reverse,
+  carries its own templates, content and registrations, and is
+  activated only by its listing; a split later is a move and a
+  distribution name. Open item 17 restated; their templates stay
+  in the one tree, so open item 16 narrows to the house's seeds.
+- 2026-09-28, the layers list is kept closed under declared
+  dependencies by the lint and its fix, never by mount pulling
+  layers in (Willem: automated, it removes the objection and is
+  more explicit). The layering lint is a workspace check the base
+  owns, code and no tool, so contract 10 holds. Open item 18
+  restated; the soft form stays open.
+- 2026-09-28, contract 10's vocabulary test scoped (the agent's
+  correction of its own sentence, on Willem's question): the core
+  names no package kind and no check tool; the interpreter, uv and
+  the venv that operate the workshop are the base's own. The
+  python layer adds what a python package needs on top, the
+  nanobind layer adds its kind on top of both, as Willem said; the
+  objection was to the test's wording alone.
 
 ## Open
 
@@ -785,8 +1463,11 @@ the kit cannot drift from the enforcement.
    Owner: Willem.
 2. How long do `typecomplete` and the release-path checks stay
    builtin roles a layer cannot drop? The release train leans on
-   typecomplete; dropping it may need its own ruling. Owner:
-   Willem.
+   typecomplete; dropping it may need its own ruling. Since the
+   base-and-house ruling the question is also which side of that
+   line `typecomplete` sits: the lean is the python layer, because
+   it rides that layer's one type checker and judges python
+   distributions alone. Owner: Willem, before phase 8.
 3. The Windows MSVC coverage answer (phase 5 deferral): llvm-cov
    via clang-cl, or documented absence? Owner: Willem, when a
    consumer exists.
@@ -797,22 +1478,27 @@ the kit cannot drift from the enforcement.
 5. Resolved 2026-09-05: `setup.sh` at the root, sourcing optional
    (see the decision record). What stays open is the pwsh spelling,
    deferred to the tool-store port. Owner: Willem.
-6. The venv-side remainder, once toolroom's store exists: which
-   tools must stay in the lock because they import the project's
-   environment (pytest and its plugins, coverage certainly), and
-   whether mypy and basedpyright run from the store pointed at
-   the venv's interpreter or stay locked beside it. The store's
-   committed pin home and its update flavor of
-   `fm workflow.update` are decided with the store itself.
-   Owner: Willem.
-7. A fragment can only add. When a check needs a line the base
-   template already wrote to say something else, the answers are
-   the whole-file override the 2026-09-09 record settles for a
-   layer, or splitting the base template until the line is a slot
-   nobody else owns. Which one applies to a check rather than a
-   layer is undecided, and deciding it late means discovering it
-   as a fragment that cannot be written. Owner: Willem, with
-   phase 4.
+6. The venv-side remainder, now that toolroom's store exists:
+   which tools must stay in the lock because they import the
+   project's environment (pytest and its plugins, coverage
+   certainly), and whether mypy and basedpyright run from the
+   store pointed at the venv's interpreter or stay locked beside
+   it. The fact today: mypy, pytest and coverage are declared in
+   both places, the rendered dev group and the store (a receipt in
+   `.workshop/receipts/` for each, beside the venv's copy), so which
+   one answers is PATH order after entry. Phase 4's tool-profile
+   contribution makes the check record the one declaration, and the
+   phase settles this with it. Owner: Willem, with phase 4.
+7. A fragment can only add. Two of the three cases are answered
+   since 2026-09-28: a kind that wants a different value than its
+   parent's replaces the parent's fragment for that check down the
+   chain, and a package that wants more than its kind's file rides
+   the tool's own inheritance. What remains is a check whose
+   fragment must contradict a line the base template itself wrote.
+   The lean is splitting the base template until the line is a
+   slot nobody else owns, because the whole-file override forfeits
+   every later base improvement for that file (0903 plan, contract
+   20). Owner: Willem, with phase 4.
 8. Which extensions a registered check names, and what the render
    does with a check whose tool has none. Every id shipped is a
    claim about a marketplace entry that this repository cannot
@@ -864,4 +1550,185 @@ the kit cannot drift from the enforcement.
      docs job must leave the context reportable. And the answer is
      not an opinion, so it is not layer code by default: whether
      the site reads a path is a fact about the render.
-   Owner: Willem. Blocks phase 4b.
+   Owner: Willem. Blocks phase 4b; phase 3b states a lean on each
+   question and starts on the rulings.
+10. Fragments in a shared rendered file, or a file per check. The
+    proposal (design section, contract 12): neither by rule; the
+    check record names its tool's discovery shape and the render
+    follows it, a section for a tool that reads one file per
+    project, a file where the tool looks for one that searches
+    upward. The per-tool assignment: basedpyright, mypy, ty,
+    pyrefly, pytest and coverage are sections; ruff, clang-format,
+    clang-tidy and the ignore rules are files. ty reads `ty.toml`
+    or `[tool.ty]` and pyrefly reads `pyrefly.toml` or
+    `[tool.pyrefly]`, both checked against the locked versions'
+    `--help`, so either shape is available and the section is chosen
+    because their per-path variation is a table inside the one file.
+    Owner: Willem, before phase 4.
+11. Resolved 2026-09-28: the region a repository owns is a feature
+    of every managed file, read from the committed file as an input
+    to the render and written back in place (contract 13, phase
+    3c); a format without comments takes an unmarked tail. What
+    stays open inside it: the marker shape, one per comment style or
+    one text in every style; whether the root
+    `pyproject.toml` carries regions beyond the two named (the dev
+    group's list and the tail); and whether a region inside a list
+    is allowed in every format that has lists, or only where the
+    format tolerates an empty one. A layer's section is the fragment
+    mechanism of phase 4 and needs nothing new. Owner: Willem, with
+    phase 3c.
+12. The sets, member by member, since the 2026-09-28 ruling that
+    the base operates and languages are layers. The base: the
+    workspace checks (render drift, provenance, layering) and
+    nothing that reads a language. The python layer: ruff format
+    and ruff lint, basedpyright as the one type checker (the editor
+    answer and `typecomplete` ride it), pytest with the coverage
+    floors. The house: mypy on three platforms, ty, pyrefly, the
+    docstring convention, the voice. Two questions inside it: which
+    ruff rule set the python layer selects (the lean: today's
+    selection minus `D`, with the google docstring convention the
+    house's), and whether the docstring convention's sentence in
+    `CLAUDE.workshop.md` moves with it. Owner: Willem, before
+    phase 8.
+13. The house layer's name and home. Not settled (Willem,
+    2026-09-28: not sure about the name). The constraints: the layer
+    is livery's, so its import and distribution names carry livery,
+    and the instance-visible words speak workshop; the family's rule
+    holds, that a name is an identifier and no sentence depends on
+    the metaphor. Candidates, each with what it collides with:
+    `livery.house` (house style; vague alone); `livery.brand` (the
+    word the plans and code already use for what sits above the
+    base, and a born project's "brand's name"; near-redundant, since
+    a livery is a brand's paint); `livery.standards` (what the layer
+    holds, the documentation standards and the checkers; corporate);
+    `livery.household` (the family's register, the house's people
+    and their order, what a footman serves; long);
+    `livery.customs` (a company's established practices; collides
+    with customisation in a sentence); `livery.canon` (the accepted
+    body of rules; collides with "canonical" in code prose);
+    `livery.opinions` (the plan's own word, facts in the contract
+    and opinions in layers; unusual as a package name);
+    `livery.warden` (the wardens enforce a livery company's
+    ordinances, which fits the checks; reads as an agent). Its home
+    is this workspace
+    (0903 plan, contract 19), listed second in `[workspace] layers`.
+    The publishing opt-out lets the birth precede the name: the
+    member is born with `publish = false`, and the name is ruled
+    before the first release lifts it, so no index name is claimed
+    early. Owner: Willem, before the first release of the house.
+14. How a layer declares a tool: a registration at mount beside
+    `register_kind` and `register_check` (the lean, since the
+    profile then derives from the registry and two checkouts agree
+    by construction), or a `[tools] requires` table in the layer's
+    own contract. Owner: Willem, before phase 3.
+15. Resolved 2026-09-28: the repository's own override of a
+    check's configuration lives in the managed file's region (phase
+    3c), so the three basedpyright execution environments move there
+    and no instance rung is built. The package rung of the
+    2026-09-09 record, a package contributing to another file than
+    its own, is designed when such a case exists.
+16. Whether the house can do without an overlay (Willem,
+    2026-09-28: not sure that will work for everything we need).
+    What a fragment, a region, or content cannot do today: add a
+    file the base template does not render (a house's own seed, a
+    brand's `og-card.png` and palette, a second workflow); replace a
+    seed wholesale (a brand's README or LICENSE seed, which the 0903
+    plan calls the cheap, ordinary customisation); contribute a
+    copier question. Each of those is an overlay, and an overlay
+    makes its home the template publisher. Two ways out, for
+    ruling. First, the designed one: the house's home is a child
+    workspace of its own (0903 plan, contract 19: a child created
+    with one added layer becomes that layer's home), which
+    publishes its own composed artifact, so the base's at
+    `workshop-templates` stays pure; the cost is a repository and a
+    gate of its own, and the house leaves this workspace. Second,
+    a layer contributes files and seeds through the registry at
+    mount, the unioned-registries rung of the 0903 plan's contract
+    20, which inherits fully and needs no template repository, and
+    the overlay keeps only the wholesale replace and the questions.
+    The lean is the second, designed when the first such file is
+    real, with the house born here without an overlay until then;
+    a wholesale seed replace the house turns out to need is what
+    decides for the first. Since the language layers live in the
+    workshop's one wheel and one template tree (open item 17), the
+    question is the house's alone: its seeds carry livery's
+    identity, which contract 18 of the 0903 plan keeps out of the
+    workshop's artifact, so a house seed means the house's own
+    home and artifact, and everything short of a seed means none.
+    Owner: Willem.
+17. The language layers, `livery.workshop.python`,
+    `livery.workshop.cpp` and `livery.workshop.nanobind`, each
+    derived from the base (ruled 2026-09-28: the base contains
+    enough to run the python that operates the workshop; the python
+    package kind and its tooling are separate; nanobind adds its
+    kind on top of both). Ruled the same day: they are layers, not
+    distributions. Each is a module inside the one workshop wheel,
+    listed in `[workspace] layers` by its import path and activated
+    only by that listing, and decoupled enough to become a
+    distribution of its own the day a cadence or an owner differs:
+    a layer module imports the core and never the reverse, imports
+    a sibling layer only through a declared dependency, and carries
+    its own `templates/`, `content/` and registrations, so a later
+    split is a move and a distribution name. `layer_entries` today
+    derives a distribution from the import path by dots to dashes,
+    which names nothing for a submodule; the lean is to resolve the
+    distribution from the installed metadata of the import path's
+    top-level package, the table form staying for the odd case.
+    Because the layers share the workshop's one wheel, their
+    templates stay in the one template tree and the one artifact,
+    organised by layer, so no layer needs an overlay and open item
+    16 narrows to the house's seeds. The python layer takes the
+    `python` kind record and backend, the `package-python` template
+    and its layer variant, the python checks and their tools (ruff,
+    basedpyright, pytest, coverage; uv stays in the base, since it
+    operates the workshop), the coverage measurement and the test
+    runner's python half, and the claim over the root's own
+    `tests/`. The C++ layer takes the cpp-conan kind, its tools and
+    host tools, the conan registry kind and the releases route; the
+    nanobind layer takes the python-nanobind kind and the wheels
+    matrix, depending on both. What the extraction faces today: the
+    python backend is imported directly by six modules,
+    `_quality.py` alone reaching into it fourteen times, and conan
+    is named outside the backends in six modules, about sixty
+    references, each a call site to route through a registry, most
+    of them phase 2's; the engine tests for the python kind by name
+    in five modules beyond the registry (`_docs.py`,
+    `_packages.py`, `_registries.py`, `_release.py`,
+    `_templates.py`, eleven sites), so "joins the uv workspace" and
+    "is a python distribution" must become facts of the kind record
+    before the name leaves the base; and the coverage store, the
+    leg and union verbs and the floors are written against
+    coverage.py's data files, which phase 5 turns into the kind's
+    answer, so the python extraction follows phase 5 as well as
+    phases 2 to 4. Each lands as its own plan after those phases,
+    python first, since the house depends on it. Each extraction's
+    acceptance is the static proof of contract 10: the layering
+    lint's rule that the core imports no language layer, and the
+    vocabulary test, both green after the cut. Owner: Willem, for
+    the sequencing.
+18. Layer dependencies. A layer declares, in its plugin at mount,
+    the layers it depends on, and the contract's list is kept
+    closed under those declarations (ruled 2026-09-28: automated,
+    it removes the objection and is more explicit). The list stays
+    the whole truth a reader and a reviewer see: `fm sync` and
+    `fm check --fix` append a missing dependency before its
+    dependent, with a comment naming who requires it, the same
+    shape as the layering lint's fix that writes a `[[depends]]`
+    edge (livery#829); the layering lint, a workspace check of the
+    base, refuses a list that lacks a dependency or orders one
+    after its dependent, naming the fix; and mount mounts in list
+    order, refusing at a dependency listed after its dependent so a
+    hand-edited list never runs half-wired. Contract 3 keeps its
+    wording: the list is the only activation channel, and the lint
+    is what keeps it complete. `fm layers` names who requires each
+    layer; a cycle refuses naming the ring; a declared dependency
+    that is not also a dependency of the layer's wheel refuses at
+    the lint, since the import would fail anyway. One form the
+    design still needs: a soft dependency beside the hard one. A
+    house with opinions on two languages must not drag both
+    languages into every project that lists it, so a layer also
+    names layers it mounts after when they are listed, contributing
+    its registrations for that language only then; the hard form
+    is for a layer that cannot mount without the other. Without the
+    soft form the alternative is one house per language. Owner:
+    Willem, for the soft form.
