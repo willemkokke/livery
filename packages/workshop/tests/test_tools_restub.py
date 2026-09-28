@@ -306,3 +306,30 @@ def test_the_entry_script_materialises_the_tools_before_it_emits(
         < script.index("tools.materialise")
         < script.index("env.emit")
     )
+
+
+def test_a_shell_missing_a_tool_with_no_lock_is_told_to_lock_before_syncing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`sync` supplies nothing without a lock, so the remedy names the lock.
+
+    A newborn workspace reaches for the gate's checkers and finds none.
+    Being told to run `sync` there sends a reader in a circle: it
+    materialises what a lock names, and there is no lock.
+    """
+    # A workspace that requires a tool and has locked nothing, which is
+    # what a newborn is.
+    _workspace(
+        tmp_path, monkeypatch, '[workspace]\n\n[tools]\nrequires = ["ruff>=0.1"]\n'
+    )
+    # And nothing resolves in this shell: the store supplied nothing and
+    # there is nothing on PATH either.
+    monkeypatch.setattr(
+        "livery.workshop._env_tasks._resolves", lambda tool, receipt, bin_dir: False
+    )
+    monkeypatch.setattr("livery.workshop._env_tasks._uv_drift", lambda root: "")
+    assert _env_tasks.env_check() == 1
+    said = capsys.readouterr().out
+    assert "are not locked" in said
+    assert said.index("tools.lock") < said.index("sync` supplies")
+    assert "[tools]" in said and "index =" in said

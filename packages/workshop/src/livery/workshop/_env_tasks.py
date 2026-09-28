@@ -788,7 +788,19 @@ def _resolves(tool: str, receipt: Receipt | None, bin_dir: Path) -> bool:
     paths. The names come from the receipt, since a tool's name is not
     always a binary's (`git_cliff` puts `git-cliff` on PATH); without
     a receipt the name itself is looked for.
+
+    A receipt that names no entry point, puts nothing on PATH and
+    carries an environment value has no executable to find: what it
+    offers is that value, and the cmake-conan provider is a file CMake
+    reads rather than a program anything runs. Being materialised is
+    the whole of what such a tool can be.
     """
+    if (
+        receipt is not None
+        and receipt.env
+        and not (receipt.entry_points or receipt.paths)
+    ):
+        return True
     names = (receipt.entry_points if receipt is not None else ()) or (tool,)
     own = [Path(p) for p in receipt.paths] if receipt is not None else []
     return any(
@@ -817,6 +829,7 @@ def env_check() -> int:
         current_lock,
         has_index,
         receipts,
+        store_cannot_supply,
         stubs_present,
     )
     from livery.workshop._tools import drift as receipt_drift
@@ -827,9 +840,8 @@ def env_check() -> int:
     said = receipt_drift(root)
     written = receipts(root)
     for tool in tool_profile(root):
-        resolves = _resolves(tool, written.get(tool), bin_dir)
         verdict = said.get(tool, "")
-        if not resolves:
+        if not _resolves(tool, written.get(tool), bin_dir):
             problems.append(f"{tool}: MISSING" + (f" ({verdict})" if verdict else ""))
             continue
         if verdict.startswith("DRIFT"):
@@ -867,9 +879,17 @@ def env_check() -> int:
     for index, entry in enumerate(os.environ.get("PATH", "").split(os.pathsep), 1):
         marker = "" if Path(entry).is_dir() else "  (missing)"
         print(f"    {index:>2}  {entry}{marker}")
-    print(
-        "  The tools are what the kinds, the packages and the project require."
-        f" Run `{footman.prog()} sync` to materialise them, or enter the"
-        f" environment with `{footman.prog()} shell`."
-    )
+    unsupplied = store_cannot_supply(root)
+    if unsupplied:
+        # Nothing is locked, so `sync` would supply nothing: the remedy
+        # is the declaration and the lock, in that order.
+        print("  The tools are what the kinds, the packages and the project require.")
+        for line in unsupplied.splitlines():
+            print(f"  {line}" if line else "")
+    else:
+        print(
+            "  The tools are what the kinds, the packages and the project require."
+            f" Run `{footman.prog()} sync` to materialise them, or enter the"
+            f" environment with `{footman.prog()} shell`."
+        )
     return 1

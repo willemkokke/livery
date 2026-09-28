@@ -178,6 +178,45 @@ def has_index(root: Path) -> bool:
     return isinstance(declared, str) and bool(declared)
 
 
+def store_cannot_supply(root: Path) -> str:
+    """Why the store supplies nothing here; empty when it can.
+
+    The sites require tools whatever a contract says, because a kind
+    brings its own: a workspace with no packages still runs on the
+    python kind, whose gate checkers come from the store. Nothing is
+    supplied until a lock names versions, and nothing can be locked
+    until the contract names a catalogue to resolve against, so the
+    two are one question with one answer a reader can act on.
+
+    Empty when a lock is present, and empty for a workspace that
+    requires no tool at all.
+    """
+    required = tool_names(root)
+    if not required or current_lock(root) is not None:
+        return ""
+    named = ", ".join(required[:4])
+    rest = f", and {len(required) - 4} more" if len(required) > 4 else ""
+    lines = [
+        f"the tools this workspace requires are not locked: {named}{rest}."
+        " Nothing is materialised from a store without a lock, so the"
+        " first verb that reaches for one fails with no executable found."
+    ]
+    if not has_index(root):
+        lines += [
+            "",
+            "Name the catalogue to resolve against in workshop.toml:",
+            "",
+            "  [tools]",
+            '  index = "<the published index\'s URL, or a directory of records>"',
+        ]
+    lines += [
+        "",
+        f"Then `{prog()} tools.lock` writes the lock and"
+        f" `{prog()} sync` supplies what it names.",
+    ]
+    return "\n".join(lines)
+
+
 def _is_records(source: str) -> bool:
     """Whether *source* is a directory of records rather than an index."""
     if "://" in source:

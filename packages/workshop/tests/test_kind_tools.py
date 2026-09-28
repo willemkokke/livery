@@ -598,3 +598,47 @@ def test_the_catalogue_reads_an_index_directory_through_the_machines_store(
     monkeypatch.setattr("livery.footman.context.data_dir", lambda: tmp_path / "data")
     assert _tools.write_lock(root) == _tools.write_lock(root)
     assert _tools.write_lock(root).tools["ruff"].version == "1.1.0"
+
+
+def test_a_workspace_with_no_lock_is_told_what_to_declare_and_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The refusal a newborn meets, and it names both halves.
+
+    A workspace requires tools whatever its contract says, because a
+    kind brings its own: a project with no packages still runs on the
+    python kind. Nothing is supplied until a lock names versions, and
+    nothing is locked until the contract names a catalogue, so the
+    answer has to carry both or a reader fixes one and hits the other.
+    """
+    root = tmp_path / "newborn"
+    root.mkdir()
+    (root / "workshop.toml").write_text('[workspace]\nlayers = ["livery.workshop"]\n')
+    told = _tools.store_cannot_supply(root)
+    # What is missing, in the tools' own names.
+    assert "are not locked" in told
+    for name in ("ruff", "pytest"):
+        assert name in told
+    # The declaration, then the two verbs, in the order a reader runs them.
+    assert "[tools]" in told and "index =" in told
+    assert told.index("tools.lock") < told.index("sync")
+    # A contract that already names a catalogue is told only what is left.
+    (root / "workshop.toml").write_text(
+        '[workspace]\n\n[tools]\nindex = "https://example.test/index"\n'
+    )
+    named = _tools.store_cannot_supply(root)
+    assert "index =" not in named
+    assert "tools.lock" in named
+    # A lock answers the question, so nothing is said.
+    _records(root, *_python_tools("1.0.0"))
+    monkeypatch.setattr(
+        "livery.workshop._layers.workspace_root", lambda start=None: root
+    )
+    (root / "workshop.toml").write_text('[workspace]\n\n[tools]\nindex = "records"\n')
+    _tool_tasks.tools_lock()
+    assert _tools.current_lock(root) is not None
+    assert _tools.store_cannot_supply(root) == ""
+    # And a workspace that requires nothing at all has nothing to say.
+    monkeypatch.setattr(_tools, "tool_names", lambda _root: ())
+    (root / "tools.lock").unlink()
+    assert _tools.store_cannot_supply(root) == ""
