@@ -568,18 +568,24 @@ def test_env_check_names_each_receipt_and_the_drift_under_it(
         "livery.workshop._env_tasks.shutil.which", lambda tool: "/x/" + tool
     )
     monkeypatch.setattr("livery.workshop._env_tasks._uv_drift", lambda root: "")
-    # No lock yet: named, and not a problem while the tools resolve.
-    assert _env_tasks.env_check() == 0
+    # No lock and nothing materialised: every required tool is a miss,
+    # whatever the host carries of that name, and the remedy is the
+    # declaration and the lock rather than a sync that would supply
+    # nothing.
+    assert _env_tasks.env_check() == 1
     out = capsys.readouterr().out
-    assert "tea: on PATH; not locked; run `fm tools.lock`" in out
+    assert "tea: MISSING (no receipt" in out
+    assert "not locked; run `fm tools.lock`" in out
     _tools.write_lock(root)
-    # A lock expects stubs; without them the check names the remedy.
+    # A lock expects stubs; without them the check names the remedy too.
     assert _env_tasks.env_check() == 1
     assert "stubs: MISSING; run `fm tools.restub`" in capsys.readouterr().out
     _tools.write_stubs(root)
-    assert _env_tasks.env_check() == 0
+    assert _env_tasks.env_check() == 1
     out = capsys.readouterr().out
-    assert "ruff: on PATH; no receipt for 0.16.0; run `fm sync`" in out
+    # The lock names a version the store has not installed, so the
+    # answer is still the receipt's absence and not the host's PATH.
+    assert "ruff: MISSING (no receipt" in out
     assert "stubs: 1 in typings/" in out
     _tools.materialise(root)
     assert _env_tasks.env_check() == 0

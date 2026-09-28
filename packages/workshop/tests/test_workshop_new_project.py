@@ -56,6 +56,18 @@ def _birth_rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeForge:
     monkeypatch.setattr("livery.workshop._new_project._git", informed)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("livery.workshop._uv.run_uv", lambda *args, root: None)
+    # The first lock resolves against the published index over the
+    # network; the suite records that it was asked for and writes one.
+    locked: list[Path] = []
+
+    def _locked(root: Path) -> None:
+        locked.append(root)
+        (root / "tools.lock").write_text('{"schema": 1, "tools": {}}\n')
+
+    monkeypatch.setattr("livery.workshop._new_project._lock_tools", _locked)
+    monkeypatch.setattr(
+        "livery.workshop._new_project._locked_roots", locked, raising=False
+    )
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "gitconfig"))
     (tmp_path / "gitconfig").write_text(
         "[user]\n\temail = t@l\n\tname = T\n[init]\n\tdefaultBranch = main\n"
@@ -239,3 +251,24 @@ def test_the_push_target_carries_the_token_on_git_transport_only() -> None:
     assert _push_target(url, "t") == "http://oauth2:t@gitea:3000/livery/loop.git"
     assert _push_target(url, "") == "origin"
     assert _push_target("git@gitea:livery/loop.git", "t") == "origin"
+
+
+def test_a_newborn_names_the_index_and_holds_a_lock(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A project born here can run its own gate on the machine that bore it.
+
+    The gate's checkers come from the store, which supplies what a lock
+    names, and nothing can be locked until the contract names a catalogue
+    to resolve against. The birth seeds both, in that order, so the
+    sequence a person had to run by hand is the birth's own.
+    """
+    from livery.workshop._new_project import PUBLISHED_INDEX
+
+    _birth(local=True)
+    contract = (tmp_path / "acme-tools" / "workshop.toml").read_text()
+    assert f'index = "{PUBLISHED_INDEX}"' in contract
+    # The index is named before the lock is asked for, since the lock
+    # resolves against it.
+    assert contract.index("[tools]") < contract.index("[ci]")
+    assert (tmp_path / "acme-tools" / "tools.lock").is_file()

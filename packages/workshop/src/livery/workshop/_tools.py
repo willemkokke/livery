@@ -178,6 +178,55 @@ def has_index(root: Path) -> bool:
     return isinstance(declared, str) and bool(declared)
 
 
+def receipt_gap(tool: str, receipt: Receipt, bin_dir: Path) -> str:
+    """Why what *receipt* claims does not hold here; empty when it does.
+
+    A receipt is the store's own record of what it installed for this
+    checkout, so it is the thing to check: looking for an executable by
+    a tool's name instead answers a different question, and answers it
+    wrongly for a tool that is not a program.
+
+    What a receipt claims depends on how the tool was supplied. One
+    that puts directories on PATH claims they exist and that each entry
+    point runs from one of them, the venv's own bin, or PATH, since a
+    name is not always a binary's (``git_cliff`` installs
+    ``git-cliff``). One that carries environment values claims each
+    value that is a path is there: the cmake-conan provider is a file
+    CMake reads, and no program by that name exists anywhere. One that
+    claims nothing was verified on the host rather than installed, so
+    the host must still answer for it.
+
+    Returns:
+        The first claim that does not hold, as a line to print after
+        the tool's name, or empty when every claim does.
+    """
+    for spelled in receipt.paths:
+        if not Path(spelled).is_dir():
+            return f"MISSING (the receipt's path {spelled} is not there)"
+    for name in receipt.entry_points:
+        if not _entry_point_runs(name, receipt, bin_dir):
+            return f"MISSING (the receipt names {name}, which does not run)"
+    for key, value in sorted(receipt.env.items()):
+        if value.startswith("/") and not Path(value).exists():
+            return f"MISSING ({key} names {value}, which is not there)"
+    # A receipt claiming nothing was verified on the host rather than
+    # installed, so the host has to answer for the tool now.
+    claims_nothing = not (receipt.paths or receipt.entry_points or receipt.env)
+    if claims_nothing and not (shutil.which(tool) or (bin_dir / tool).is_file()):
+        return "MISSING (verified on the host, and not on PATH now)"
+    return ""
+
+
+def _entry_point_runs(name: str, receipt: Receipt, bin_dir: Path) -> bool:
+    """Whether *name* runs: from the receipt's paths, the venv's bin, or PATH."""
+    own = (Path(spelled) / name for spelled in receipt.paths)
+    return (
+        any(candidate.is_file() for candidate in own)
+        or (bin_dir / name).is_file()
+        or bool(shutil.which(name))
+    )
+
+
 def store_cannot_supply(root: Path) -> str:
     """Why the store supplies nothing here; empty when it can.
 

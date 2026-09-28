@@ -642,3 +642,75 @@ def test_a_workspace_with_no_lock_is_told_what_to_declare_and_run(
     monkeypatch.setattr(_tools, "tool_names", lambda _root: ())
     (root / "tools.lock").unlink()
     assert _tools.store_cannot_supply(root) == ""
+
+
+def test_a_receipt_is_checked_against_what_it_claims(tmp_path: Path) -> None:
+    """The store's own record is what gets checked, claim by claim.
+
+    Looking for an executable by a tool's name answers a different
+    question and answers it wrongly twice over: a tool whose binary is
+    spelled differently reads as missing, and a tool that is no program
+    at all can never be found. What a receipt claims is what has to hold.
+    """
+    bin_dir = tmp_path / "venv" / "bin"
+    bin_dir.mkdir(parents=True)
+    held = tmp_path / "store" / "tool" / "bin"
+    held.mkdir(parents=True)
+
+    def receipt(**fields: object) -> _tools.Receipt:
+        body: dict[str, object] = {
+            "tool": "tea",
+            "version": "1.0.0",
+            "host": "linux-x64",
+            "kind": "download",
+            "mode": "path",
+            "deployment": "sha256:" + "0" * 64,
+            "tool_dir": str(held.parent),
+        }
+        body.update(fields)
+        return _tools.Receipt(**body)  # type: ignore[arg-type]
+
+    # The refusals first. A path the receipt claims and the store lost.
+    gone = _tools.receipt_gap(
+        "tea", receipt(paths=(str(tmp_path / "vanished"),)), bin_dir
+    )
+    assert "is not there" in gone
+    # An entry point that runs from nowhere.
+    silent = _tools.receipt_gap(
+        "tea", receipt(paths=(str(held),), entry_points=("teapot",)), bin_dir
+    )
+    assert "teapot" in silent and "does not run" in silent
+    # An environment value pointing at a file the store no longer holds.
+    absent = _tools.receipt_gap(
+        "tea",
+        receipt(mode="none", env={"TEA_PROVIDER": str(tmp_path / "provider.cmake")}),
+        bin_dir,
+    )
+    assert "TEA_PROVIDER" in absent and "is not there" in absent
+    # A receipt claiming nothing was verified on the host, so the host
+    # has to answer for it now.
+    assert "not on PATH now" in _tools.receipt_gap("tea", receipt(mode="none"), bin_dir)
+
+    # And what holds, in each of the three shapes.
+    (held / "tea-real").touch()
+    assert (
+        _tools.receipt_gap(
+            "tea", receipt(paths=(str(held),), entry_points=("tea-real",)), bin_dir
+        )
+        == ""
+    )
+    (bin_dir / "tea-venv").touch()
+    assert (
+        _tools.receipt_gap(
+            "tea", receipt(paths=(str(held),), entry_points=("tea-venv",)), bin_dir
+        )
+        == ""
+    )
+    provider = tmp_path / "provider.cmake"
+    provider.write_text("# a file CMake reads\n")
+    assert (
+        _tools.receipt_gap(
+            "tea", receipt(mode="none", env={"TEA_PROVIDER": str(provider)}), bin_dir
+        )
+        == ""
+    )

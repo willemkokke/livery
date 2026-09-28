@@ -246,11 +246,13 @@ def test_the_lock_verbs_and_sync_write_the_stubs_and_env_check_counts_them(
     )
     monkeypatch.setattr("livery.workshop._env_tasks._uv_drift", lambda root: "")
     monkeypatch.setattr(_tools, "materialise", lambda root, names=(), **kw: ())
-    # Before a lock nothing expects a stub: the check names the lock
-    # verb and no stubs line.
-    assert _env_tasks.env_check() == 0
+    # Before a lock nothing expects a stub, and nothing is materialised
+    # either: the tool is a miss and the check names the lock verb,
+    # with no stubs line.
+    assert _env_tasks.env_check() == 1
     out = capsys.readouterr().out
-    assert "ruff: on PATH; not locked; run `fm tools.lock`" in out
+    assert "ruff: MISSING (no receipt" in out
+    assert "not locked; run `fm tools.lock`" in out
     assert "stubs:" not in out
     _tool_tasks.tools_lock()
     assert "  stubs: 1 in typings/, wrote 1" in capsys.readouterr().out
@@ -273,7 +275,10 @@ def test_the_lock_verbs_and_sync_write_the_stubs_and_env_check_counts_them(
     _tool_tasks.tools_upgrade(["ruff"])
     assert "  stubs: 1 in typings/" in capsys.readouterr().out
     assert _sync.materialise_tools(root)[-1] == "  stubs: 1 in typings/"
-    assert _env_tasks.env_check() == 0
+    # This test stands in for the store, so no receipt was ever written
+    # and the tool is a miss; the stubs are what it is about, and they
+    # are counted either way.
+    assert _env_tasks.env_check() == 1
     assert "  stubs: 1 in typings/" in capsys.readouterr().out
 
 
@@ -285,7 +290,9 @@ def test_a_workspace_that_names_no_index_is_not_asked_for_stubs(
         "livery.workshop._env_tasks.shutil.which", lambda tool: "/x/" + tool
     )
     monkeypatch.setattr("livery.workshop._env_tasks._uv_drift", lambda root: "")
-    assert _env_tasks.env_check() == 0  # no index named at all
+    # This workspace requires no tool at all, so there is nothing to
+    # miss and no stubs are asked for, which is what this is about.
+    assert _env_tasks.env_check() == 0
     assert "stubs" not in capsys.readouterr().out
 
 
@@ -322,11 +329,8 @@ def test_a_shell_missing_a_tool_with_no_lock_is_told_to_lock_before_syncing(
     _workspace(
         tmp_path, monkeypatch, '[workspace]\n\n[tools]\nrequires = ["ruff>=0.1"]\n'
     )
-    # And nothing resolves in this shell: the store supplied nothing and
-    # there is nothing on PATH either.
-    monkeypatch.setattr(
-        "livery.workshop._env_tasks._resolves", lambda tool, receipt, bin_dir: False
-    )
+    # Nothing was ever materialised here, so the required tool has no
+    # receipt and the shell cannot answer for it.
     monkeypatch.setattr("livery.workshop._env_tasks._uv_drift", lambda root: "")
     assert _env_tasks.env_check() == 1
     said = capsys.readouterr().out
