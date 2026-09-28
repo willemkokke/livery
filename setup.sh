@@ -45,13 +45,14 @@ uv sync --project "$_root" "${_sync_args[@]}" >&2 \
 # per-command reconcile compares the two and re-syncs on drift.
 [ -f "$_root/uv.lock" ] && cp "$_root/uv.lock" "$_root/.venv/.workshop-sync-receipt"
 _run() { uv run --project "$_root" --no-sync fm "$@"; }
-# The tools the lock holds, supplied through the machine's store with
-# a receipt each, and the stubs the type checkers read rendered into
-# typings/. The emission below puts the receipts' paths on PATH, so a
+# The tools the lock holds, installed exactly as it holds them and
+# never re-resolved here, with a receipt each, and the stubs the type
+# checkers read rendered into typings/. The emission below puts the
+# receipts' paths on PATH, so a
 # tool the venv does not carry (an archive from its own release)
 # resolves for the gate. Not fatal: a tool the store could not supply
 # is named, and the gate says which check that cost.
-_run tools.materialise >&2 \
+_run tools.sync --frozen >&2 \
     || echo "setup: the tools were not materialised; the gate names what is missing" >&2
 if [ "${1:-}" = github ]; then _run env.emit --github >/dev/null
 elif (return 0 2>/dev/null); then eval "$(_run env.emit posix)"; fi

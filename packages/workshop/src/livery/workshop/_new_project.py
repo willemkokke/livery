@@ -37,6 +37,26 @@ if TYPE_CHECKING:
 _PUBLIC_HOSTS = {"github": "https://github.com", "gitlab": "https://gitlab.com"}
 
 
+#: The catalogue a newborn resolves its tools against: this layer's own
+#: published index, a strongroom store served as static files under the
+#: site the layer publishes. Hardcoded, and it moves when the site does.
+PUBLISHED_INDEX = "https://docs.willem.net/livery/tools/"
+
+
+def _sync_tools(root: Path) -> None:
+    """Write the newborn's first `tools.lock` and install what it names.
+
+    Without this a newborn's own gate reaches for checkers the store
+    never installed: the lock says what to install and nothing writes
+    one for a project that has never had one. Idempotent, like every
+    other step of the birth.
+    """
+    from livery.workshop._tool_tasks import tools_sync
+
+    with footman.chdir(root):
+        tools_sync()
+
+
 def _git(root: Path, *args: str) -> str:
     """Run git under *root*; stdout, or fail with git's own words."""
     result = tools.git.opts(cwd=root, nofail=True, recorded=False)(*args)
@@ -202,6 +222,9 @@ def new_project(
             lines.append(f'url = "{url}"')
         lines += [
             "",
+            "[tools]",
+            f'index = "{PUBLISHED_INDEX}"',
+            "",
             "[ci]",
             'runners = ["ubuntu-latest"]',
             'required-context = "gate"',
@@ -250,6 +273,8 @@ def new_project(
     run_uv("lock", root=root)
     run_uv("sync", root=root)
     print("  environment: locked and synced")
+
+    _sync_tools(root)
 
     from livery.workshop._sync import sync_workspace
 

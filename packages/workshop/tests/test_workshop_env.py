@@ -488,10 +488,20 @@ def test_env_check_red_prints_the_breakdown_and_the_remedy(
     out = capsys.readouterr().out
     assert "uv: MISSING" in out
     assert "PATH:" in out and "sync" in out
-    # With tools resolving, the same shell reports ok.
+    # A receipt for each required tool, and a host that answers for the
+    # entry point each receipt names: the same shell reports ok. Without
+    # the receipts a resolving PATH is not enough, because what would
+    # run then is whatever the host carries rather than the pinned
+    # version.
     monkeypatch.setattr(
         "livery.workshop._env_tasks.shutil.which", lambda _tool: "/usr/bin/tool"
     )
+    from livery.workshop._tools import tool_names
+
+    assert _env_tasks.env_check() == 1  # the receipts are still absent
+    capsys.readouterr()
+    for tool in tool_names(tmp_path):
+        _receipt(tmp_path, tool)
     assert _env_tasks.env_check() == 0
 
 

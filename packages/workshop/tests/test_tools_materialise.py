@@ -287,15 +287,20 @@ def test_a_tool_that_left_the_lock_takes_its_receipt_with_it(
     assert set(_tools.receipts(root)) == {"tea"}
 
 
-def test_the_materialise_verb_supplies_the_bundle_and_writes_the_stubs(
+def test_the_frozen_sync_supplies_the_bundle_and_writes_the_stubs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """What the entry script runs on a runner: receipts and stubs, nothing else."""
+    """What the entry script runs on a runner: receipts and stubs, nothing else.
+
+    Frozen resolves nothing, so a checkout with no lock has nothing to
+    install and says so rather than writing one: a runner's checkout is
+    judged, never re-resolved.
+    """
     root = _workspace(tmp_path, monkeypatch)
-    _tool_tasks.tools_materialise()
+    _tool_tasks.tools_sync(frozen=True)
     assert "tools: no tools.lock; `fm tools.lock` writes one" in capsys.readouterr().out
     _tools.write_lock(root)
-    _tool_tasks.tools_materialise()
+    _tool_tasks.tools_sync(frozen=True)
     out = capsys.readouterr().out
     assert "tools: 2 receipt(s), installed ruff, tea" in out
     assert "stubs: 1 in typings/" in out
@@ -568,18 +573,24 @@ def test_env_check_names_each_receipt_and_the_drift_under_it(
         "livery.workshop._env_tasks.shutil.which", lambda tool: "/x/" + tool
     )
     monkeypatch.setattr("livery.workshop._env_tasks._uv_drift", lambda root: "")
-    # No lock yet: named, and not a problem while the tools resolve.
-    assert _env_tasks.env_check() == 0
+    # No lock and nothing materialised: every required tool is a miss,
+    # whatever the host carries of that name, and the remedy is the
+    # declaration and the lock rather than a sync that would supply
+    # nothing.
+    assert _env_tasks.env_check() == 1
     out = capsys.readouterr().out
-    assert "tea: on PATH; not locked; run `fm tools.lock`" in out
+    assert "tea: MISSING (no receipt" in out
+    assert "not locked; run `fm tools.lock`" in out
     _tools.write_lock(root)
-    # A lock expects stubs; without them the check names the remedy.
+    # A lock expects stubs; without them the check names the remedy too.
     assert _env_tasks.env_check() == 1
     assert "stubs: MISSING; run `fm tools.restub`" in capsys.readouterr().out
     _tools.write_stubs(root)
-    assert _env_tasks.env_check() == 0
+    assert _env_tasks.env_check() == 1
     out = capsys.readouterr().out
-    assert "ruff: on PATH; no receipt for 0.16.0; run `fm sync`" in out
+    # The lock names a version the store has not installed, so the
+    # answer is still the receipt's absence and not the host's PATH.
+    assert "ruff: MISSING (no receipt" in out
     assert "stubs: 1 in typings/" in out
     _tools.materialise(root)
     assert _env_tasks.env_check() == 0

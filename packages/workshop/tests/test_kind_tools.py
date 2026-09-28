@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -400,7 +401,7 @@ def test_upgrade_moves_one_entry_and_every_package_with_it(
     _tool_tasks.tools_lock()
     assert Lock.load(root / "tools.lock").tools["ruff"].version == "1.1.0"
     capsys.readouterr()
-    _tool_tasks.tools_upgrade(["ruff"])
+    _tool_tasks.tools_lock(upgrade_tool=["ruff"])
     out = capsys.readouterr().out
     assert "ruff 1.2.0  moved" in out
     after = Lock.load(root / "tools.lock")
@@ -408,10 +409,10 @@ def test_upgrade_moves_one_entry_and_every_package_with_it(
     assert {n: e for n, e in after.tools.items() if n != "ruff"} == {
         n: e for n, e in before.tools.items() if n != "ruff"
     }  # one entry moved, the diff names one version
-    _tool_tasks.tools_upgrade(["ruff"])
+    _tool_tasks.tools_lock(upgrade_tool=["ruff"])
     assert "nothing moved: ruff already at the newest" in capsys.readouterr().out
     with pytest.raises(Failed, match=r"black is not a tool the sites require"):
-        _tool_tasks.tools_upgrade(["black"])
+        _tool_tasks.tools_lock(upgrade_tool=["black"])
 
 
 def test_the_verbs_refuse_outside_a_workspace(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -598,3 +599,207 @@ def test_the_catalogue_reads_an_index_directory_through_the_machines_store(
     monkeypatch.setattr("livery.footman.context.data_dir", lambda: tmp_path / "data")
     assert _tools.write_lock(root) == _tools.write_lock(root)
     assert _tools.write_lock(root).tools["ruff"].version == "1.1.0"
+
+
+def test_a_workspace_with_no_lock_is_told_what_to_declare_and_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The refusal a newborn meets, and it names both halves.
+
+    A workspace requires tools whatever its contract says, because a
+    kind brings its own: a project with no packages still runs on the
+    python kind. Nothing is supplied until a lock names versions, and
+    nothing is locked until the contract names a catalogue, so the
+    answer has to carry both or a reader fixes one and hits the other.
+    """
+    root = tmp_path / "newborn"
+    root.mkdir()
+    (root / "workshop.toml").write_text('[workspace]\nlayers = ["livery.workshop"]\n')
+    told = _tools.store_cannot_supply(root)
+    # What is missing, in the tools' own names.
+    assert "are not locked" in told
+    for name in ("ruff", "pytest"):
+        assert name in told
+    # The declaration, then the two verbs, in the order a reader runs them.
+    assert "[tools]" in told and "index =" in told
+    assert told.index("tools.lock") < told.index("sync")
+    # A contract that already names a catalogue is told only what is left.
+    (root / "workshop.toml").write_text(
+        '[workspace]\n\n[tools]\nindex = "https://example.test/index"\n'
+    )
+    named = _tools.store_cannot_supply(root)
+    assert "index =" not in named
+    assert "tools.lock" in named
+    # A lock answers the question, so nothing is said.
+    _records(root, *_python_tools("1.0.0"))
+    monkeypatch.setattr(
+        "livery.workshop._layers.workspace_root", lambda start=None: root
+    )
+    (root / "workshop.toml").write_text('[workspace]\n\n[tools]\nindex = "records"\n')
+    _tool_tasks.tools_lock()
+    assert _tools.current_lock(root) is not None
+    assert _tools.store_cannot_supply(root) == ""
+    # And a workspace that requires nothing at all has nothing to say.
+    monkeypatch.setattr(_tools, "tool_names", lambda _root: ())
+    (root / "tools.lock").unlink()
+    assert _tools.store_cannot_supply(root) == ""
+
+
+def test_a_receipt_is_checked_against_what_it_claims(tmp_path: Path) -> None:
+    """The store's own record is what gets checked, claim by claim.
+
+    Looking for an executable by a tool's name answers a different
+    question and answers it wrongly twice over: a tool whose binary is
+    spelled differently reads as missing, and a tool that is no program
+    at all can never be found. What a receipt claims is what has to hold.
+    """
+    bin_dir = tmp_path / "venv" / "bin"
+    bin_dir.mkdir(parents=True)
+    held = tmp_path / "store" / "tool" / "bin"
+    held.mkdir(parents=True)
+
+    def receipt(**fields: object) -> _tools.Receipt:
+        body: dict[str, object] = {
+            "tool": "tea",
+            "version": "1.0.0",
+            "host": "linux-x64",
+            "kind": "download",
+            "mode": "path",
+            "deployment": "sha256:" + "0" * 64,
+            "tool_dir": str(held.parent),
+        }
+        body.update(fields)
+        return _tools.Receipt(**body)  # type: ignore[arg-type]
+
+    # The refusals first. A path the receipt claims and the store lost.
+    gone = _tools.receipt_gap(
+        "tea", receipt(paths=(str(tmp_path / "vanished"),)), bin_dir
+    )
+    assert "is not there" in gone
+    # An entry point that runs from nowhere.
+    silent = _tools.receipt_gap(
+        "tea", receipt(paths=(str(held),), entry_points=("teapot",)), bin_dir
+    )
+    assert "teapot" in silent and "does not run" in silent
+    # An environment value pointing at a file the store no longer holds.
+    absent = _tools.receipt_gap(
+        "tea",
+        receipt(mode="none", env={"TEA_PROVIDER": str(tmp_path / "provider.cmake")}),
+        bin_dir,
+    )
+    assert "TEA_PROVIDER" in absent and "is not there" in absent
+    # A receipt claiming nothing was verified on the host, so the host
+    # has to answer for it now.
+    assert "not on PATH now" in _tools.receipt_gap("tea", receipt(mode="none"), bin_dir)
+
+    # And what holds, in each of the three shapes.
+    (held / "tea-real").touch()
+    assert (
+        _tools.receipt_gap(
+            "tea", receipt(paths=(str(held),), entry_points=("tea-real",)), bin_dir
+        )
+        == ""
+    )
+    (bin_dir / "tea-venv").touch()
+    assert (
+        _tools.receipt_gap(
+            "tea", receipt(paths=(str(held),), entry_points=("tea-venv",)), bin_dir
+        )
+        == ""
+    )
+    provider = tmp_path / "provider.cmake"
+    provider.write_text("# a file CMake reads\n")
+    assert (
+        _tools.receipt_gap(
+            "tea", receipt(mode="none", env={"TEA_PROVIDER": str(provider)}), bin_dir
+        )
+        == ""
+    )
+
+
+def _no_install(monkeypatch: pytest.MonkeyPatch, seen: list[bool]) -> None:
+    """Stand in for the store: the modes are about the lock, not the install."""
+
+    def stood_in(root: Path, offline: bool = False) -> list[str]:
+        seen.append(offline)
+        return ["  tools: stood in for"]
+
+    monkeypatch.setattr("livery.workshop._sync.materialise_tools", stood_in)
+
+
+def test_the_sync_modes_refuse_before_anything_is_installed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The refusals first: two answers to one question, and a lock that moved.
+
+    `--frozen` installs the lock as it is and `--locked` refuses when it
+    is not current, so asking for both asks for opposite things.
+    """
+    root = _workspace(tmp_path, monkeypatch)
+    installs: list[bool] = []
+    _no_install(monkeypatch, installs)
+    with pytest.raises(Failed, match="two answers to one question"):
+        _tool_tasks.tools_sync(frozen=True, locked=True)
+    # Nothing is locked yet, so --locked refuses and names what is missing.
+    with pytest.raises(Failed, match=re.escape("there is no tools.lock")):
+        _tool_tasks.tools_sync(locked=True)
+    assert installs == []  # neither refusal reached the store
+    # Frozen installs what the lock says and never resolves, so with no
+    # lock it has nothing to install and says so.
+    _tool_tasks.tools_sync(frozen=True)
+    assert installs == [False]
+    assert _tools.current_lock(root) is None
+
+
+def test_the_default_sync_writes_the_lock_it_needs_then_installs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Uv's shape: lock when there is none or the declarations moved, then install."""
+    root = _workspace(tmp_path, monkeypatch)
+    installs: list[bool] = []
+    _no_install(monkeypatch, installs)
+    _tool_tasks.tools_sync()
+    assert _tools.current_lock(root) is not None
+    assert "writing it" in capsys.readouterr().out
+    assert installs == [False]
+    # A second run finds the lock current, writes nothing, installs again.
+    held = (root / "tools.lock").read_bytes()
+    _tool_tasks.tools_sync()
+    assert (root / "tools.lock").read_bytes() == held
+    assert "writing it" not in capsys.readouterr().out
+    assert installs == [False, False]
+    # --locked passes now, and --offline reaches the store's own copy.
+    _tool_tasks.tools_sync(locked=True, offline=True)
+    assert installs == [False, False, True]
+
+
+def test_the_lock_check_answers_without_writing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`--check` is uv's: the answer, and nothing written whichever way it goes."""
+    root = _workspace(tmp_path, monkeypatch)
+    # The refusals first: no lock at all, and a contradiction.
+    with pytest.raises(Failed, match=re.escape("there is no tools.lock")):
+        _tool_tasks.tools_lock(check=True)
+    with pytest.raises(Failed, match="cannot be asked to upgrade"):
+        _tool_tasks.tools_lock(check=True, upgrade=True)
+    assert _tools.current_lock(root) is None
+    _tool_tasks.tools_lock()
+    capsys.readouterr()
+    _tool_tasks.tools_lock(check=True)
+    assert "current" in capsys.readouterr().out
+    # A tool the sites require and the lock does not hold: the check names
+    # what would move and writes nothing, so the file stands until
+    # someone locks deliberately.
+    held = (root / "tools.lock").read_bytes()
+    _records(root, Record("tea", kind="pypi", deltas=_read("1.0.0")))
+    _tools.declare(root, "tea")
+    with pytest.raises(Failed, match="the lock would move: tea"):
+        _tool_tasks.tools_lock(check=True)
+    assert (root / "tools.lock").read_bytes() == held
+    # A requirement the catalogue cannot satisfy at all is the other
+    # reason, and it is reported as the resolver put it.
+    _tools.declare(root, "coffee")
+    with pytest.raises(Failed, match="no record of coffee"):
+        _tool_tasks.tools_lock(check=True)
+    assert (root / "tools.lock").read_bytes() == held

@@ -1165,14 +1165,14 @@ def test_colorprobe_render_round_trips():
 def test_sync_records_a_reading_and_audit_then_agrees(stubs, capsys):
     from livery.toolroom.bench import _tasks as tools_tasks
 
-    tools_tasks.sync(only="ruff")
+    tools_tasks.read(only="ruff")
     assert (stubs / "records" / "ruff.jsonl").exists()
     assert "recorded 1 reading(s): ruff" in capsys.readouterr().out
     rendered = _rendered(stubs, "ruff")
     ast.parse(rendered)
     assert "class Ruff(ToolBase[_R]):" in rendered
     # A second sync of the same tool changes nothing.
-    tools_tasks.sync(only="ruff")
+    tools_tasks.read(only="ruff")
     assert "recorded 0 reading(s): none changed" in capsys.readouterr().out
 
     tools_tasks.audit(only="ruff")
@@ -1265,7 +1265,7 @@ def test_sync_skips_and_names_the_tools_it_cannot_ask(stubs, capsys):
     """
     from livery.toolroom.bench import _tasks as tools_tasks
 
-    tools_tasks.sync(only="definitely-not-installed")
+    tools_tasks.read(only="definitely-not-installed")
     out = capsys.readouterr().out
     assert "recorded 0 reading(s)" in out
 
@@ -2408,7 +2408,7 @@ def test_a_tool_older_than_the_snapshot_is_left_alone(stubs, capsys, monkeypatch
     from livery.toolroom.bench import _drivers
     from livery.toolroom.bench import _tasks as tools_tasks
 
-    tools_tasks.sync(only="ruff")
+    tools_tasks.read(only="ruff")
     written = _rendered(stubs, "ruff")
     capsys.readouterr()
 
@@ -2420,7 +2420,7 @@ def test_a_tool_older_than_the_snapshot_is_left_alone(stubs, capsys, monkeypatch
     assert report["behind"] == []  # not behind — unanswered
     assert report["checked"] == 0
 
-    tools_tasks.sync(only="ruff")
+    tools_tasks.read(only="ruff")
     assert _rendered(stubs, "ruff") == written  # unchanged
 
 

@@ -26,10 +26,11 @@ from __future__ import annotations
 import importlib
 from importlib import resources
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 import livery.footman as footman
-from livery.footman import fail, task
+from livery.footman import doc, fail, task
+from livery.footman.params import Forward
 
 if TYPE_CHECKING:
     from livery.workshop._git_ops import GitOps
@@ -356,16 +357,86 @@ def bring_current(root: Path, git: GitOps, *, interactive: bool) -> None:
         print(f"  origin/{branch} follows (leased force-push)")
 
 
+def _uv_flags(
+    *,
+    frozen: bool = False,
+    locked: bool = False,
+    offline: bool = False,
+    upgrade: bool = False,
+) -> tuple[str, ...]:
+    """The uv flags for the options this verb was given, in uv's spelling."""
+    flags: list[str] = []
+    if frozen:
+        flags.append("--frozen")
+    if locked:
+        flags.append("--locked")
+    if offline:
+        flags.append("--offline")
+    if upgrade:
+        flags.append("--upgrade")
+    return tuple(flags)
+
+
+@task
+def lock(
+    upgrade: Forward[bool] = False,
+    upgrade_tool: Annotated[
+        list[str] | None, doc("move just these tools to their newest")
+    ] = None,
+    check: Forward[bool] = False,
+) -> None:
+    """Write both locks: `tools.lock` for the tools, `uv.lock` for the venv.
+
+    The pair to `sync`, in uv's shape: this decides what a checkout
+    installs and nothing on the machine changes, and `sync` installs
+    what these say. An entry that still satisfies its declarations
+    stands, so a newer release moves nothing until an upgrade asks.
+
+    ``--upgrade`` moves every entry of both locks to its newest eligible
+    version, and ``--check`` reports whether both locks are current and
+    writes nothing, exiting non-zero when either would move. Both mean
+    the same thing to each half, so both reach both.
+
+    A name does not. ``--upgrade-tool`` names tools and reaches the
+    tools alone, because a tool is not a package in ``uv.lock``: for one
+    package there, ``uv lock --upgrade-package`` is the verb.
+    """
+    from livery.workshop._tool_tasks import tools_lock
+    from livery.workshop._uv import run_uv
+
+    root = workspace_root()
+    if root is None:
+        fail("no workspace: no workshop.toml above the working directory")
+    tools_lock(upgrade_tool=upgrade_tool)
+    run_uv(
+        "lock",
+        *_uv_flags(upgrade=upgrade),
+        *(("--check",) if check else ()),
+        root=root,
+    )
+
+
 @task(interactive=True)
-def sync() -> None:
+def sync(
+    frozen: Forward[bool] = False,
+    locked: Forward[bool] = False,
+    offline: Forward[bool] = False,
+) -> None:
     """Bring the checkout current, materialise content, match the lock.
 
     The one-stop: fast-forward or rebase the current branch (asking
     before anything conflicted or shared), fetch origin's state store
     into the checkout's mirror for the gate to read, then every
-    layer's fragments, skills, and hooks, then ``uv sync`` so the
-    environment agrees with ``uv.lock``. Idempotent: re-running it
-    is the recovery procedure.
+    layer's fragments, skills, and hooks, then the two locks. Both
+    halves match their lock the way uv does: `tools.sync` for the
+    tools, ``uv sync`` for the environment, each writing its lock when
+    there is none or the declarations have moved past it. Idempotent:
+    re-running it is the recovery procedure.
+
+    The three options are uv's and reach both halves: ``--frozen``
+    installs each lock as it is and resolves nothing, ``--locked``
+    refuses when a lock is not current, and ``--offline`` uses what the
+    machine already holds.
 
     A checkout the first act moved holds code this process has not
     loaded, so the rest of the sync is handed to a fresh process on
@@ -373,6 +444,7 @@ def sync() -> None:
     started continues on the loaded code and says so.
     """
     from livery.workshop._git_ops import GitOps
+    from livery.workshop._tool_tasks import tools_sync
     from livery.workshop._uv import run_uv
 
     root = workspace_root()
@@ -389,11 +461,10 @@ def sync() -> None:
     # The tools come before `uv sync`: a native member's build under uv
     # runs cmake, conan and the provider the store supplies, and a
     # sibling library is consumed at HEAD only once it is registered.
-    for line in materialise_tools(root):
-        print(line)
+    tools_sync()
     for line in conan_editables(root):
         print(line)
-    run_uv("sync", root=root)
+    run_uv("sync", *_uv_flags(frozen=frozen, locked=locked, offline=offline), root=root)
     # The receipt records this sync, so the next command's reconcile
     # compares instead of syncing again.
     from livery.workshop._reconcile import record_receipt

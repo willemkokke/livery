@@ -34,7 +34,7 @@ from livery.workshop._envfile import (
 )
 
 if TYPE_CHECKING:
-    from livery.workshop._tools import Receipt
+    pass
 
 #: Names never emitted for an agent: the PATH family is composed per
 #: shell, not copied between sessions.
@@ -781,42 +781,31 @@ def _set_ci_secret(root: Path, key: str, value: str) -> None:
         )
 
 
-def _resolves(tool: str, receipt: Receipt | None, bin_dir: Path) -> bool:
-    """Whether *tool* is found, by the names of its executables.
-
-    On PATH, in the venv's bin directory, or on the receipt's own
-    paths. The names come from the receipt, since a tool's name is not
-    always a binary's (`git_cliff` puts `git-cliff` on PATH); without
-    a receipt the name itself is looked for.
-    """
-    names = (receipt.entry_points if receipt is not None else ()) or (tool,)
-    own = [Path(p) for p in receipt.paths] if receipt is not None else []
-    return any(
-        shutil.which(name)
-        or (bin_dir / name).is_file()
-        or any((directory / name).is_file() for directory in own)
-        for name in names
-    )
-
-
 @env.task(name="check")
 def env_check() -> int:
     """Verify this shell against the tools the sites require.
 
     Run it bare from the session being checked: a freshly entered
-    shell would report itself, not yours. Every required tool must
-    resolve, and each one's receipt is named with its version; a
-    receipt the lock has moved under is drift, a tool with no receipt
-    that still resolves from PATH is named and not a problem, and a
-    miss prints the PATH breakdown and the remedy. With a lock, the
-    stubs under `typings/` are counted, and their absence is a problem
-    too.
+    shell would report itself, not yours.
+
+    Every required tool must have a receipt, and every claim that
+    receipt makes must hold here: the store wrote it to say what it
+    installed, so it is what gets checked rather than a guess about
+    where a tool of that name might live. A required tool with no
+    receipt is a miss even when something of its name is on PATH,
+    because what would run then is whatever the host happens to carry
+    rather than the version this checkout pins. A receipt the lock has
+    moved under is drift, and a miss prints the PATH breakdown and the
+    remedy. With a lock, the stubs under `typings/` are counted, and
+    their absence is a problem too.
     """
     from livery.workshop._tools import (
         TYPINGS,
         current_lock,
         has_index,
+        receipt_gap,
         receipts,
+        store_cannot_supply,
         stubs_present,
     )
     from livery.workshop._tools import drift as receipt_drift
@@ -827,10 +816,16 @@ def env_check() -> int:
     said = receipt_drift(root)
     written = receipts(root)
     for tool in tool_profile(root):
-        resolves = _resolves(tool, written.get(tool), bin_dir)
         verdict = said.get(tool, "")
-        if not resolves:
-            problems.append(f"{tool}: MISSING" + (f" ({verdict})" if verdict else ""))
+        receipt = written.get(tool)
+        if receipt is None:
+            problems.append(
+                f"{tool}: MISSING (no receipt; `{footman.prog()} sync` writes one)"
+                + (f" ({verdict})" if verdict else "")
+            )
+            continue
+        if gap := receipt_gap(tool, receipt, bin_dir):
+            problems.append(f"{tool}: {gap}" + (f" ({verdict})" if verdict else ""))
             continue
         if verdict.startswith("DRIFT"):
             problems.append(f"{tool}: {verdict}")
@@ -867,9 +862,17 @@ def env_check() -> int:
     for index, entry in enumerate(os.environ.get("PATH", "").split(os.pathsep), 1):
         marker = "" if Path(entry).is_dir() else "  (missing)"
         print(f"    {index:>2}  {entry}{marker}")
-    print(
-        "  The tools are what the kinds, the packages and the project require."
-        f" Run `{footman.prog()} sync` to materialise them, or enter the"
-        f" environment with `{footman.prog()} shell`."
-    )
+    unsupplied = store_cannot_supply(root)
+    if unsupplied:
+        # Nothing is locked, so `sync` would supply nothing: the remedy
+        # is the declaration and the lock, in that order.
+        print("  The tools are what the kinds, the packages and the project require.")
+        for line in unsupplied.splitlines():
+            print(f"  {line}" if line else "")
+    else:
+        print(
+            "  The tools are what the kinds, the packages and the project require."
+            f" Run `{footman.prog()} sync` to materialise them, or enter the"
+            f" environment with `{footman.prog()} shell`."
+        )
     return 1

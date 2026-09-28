@@ -178,6 +178,98 @@ def has_index(root: Path) -> bool:
     return isinstance(declared, str) and bool(declared)
 
 
+def receipt_gap(tool: str, receipt: Receipt, bin_dir: Path) -> str:
+    """Why what *receipt* claims does not hold here; empty when it does.
+
+    A receipt is the store's own record of what it installed for this
+    checkout, so it is the thing to check: looking for an executable by
+    a tool's name instead answers a different question, and answers it
+    wrongly for a tool that is not a program.
+
+    What a receipt claims depends on how the tool was supplied. One
+    that puts directories on PATH claims they exist and that each entry
+    point runs from one of them, the venv's own bin, or PATH, since a
+    name is not always a binary's (``git_cliff`` installs
+    ``git-cliff``). One that carries environment values claims each
+    value that is a path is there: the cmake-conan provider is a file
+    CMake reads, and no program by that name exists anywhere. One that
+    claims nothing was verified on the host rather than installed, so
+    the host must still answer for it.
+
+    Returns:
+        The first claim that does not hold, as a line to print after
+        the tool's name, or empty when every claim does.
+    """
+    for spelled in receipt.paths:
+        if not Path(spelled).is_dir():
+            return f"MISSING (the receipt's path {spelled} is not there)"
+    for name in receipt.entry_points:
+        if not _entry_point_runs(name, receipt, bin_dir):
+            return f"MISSING (the receipt names {name}, which does not run)"
+    for key, value in sorted(receipt.env.items()):
+        # A value that is a path is checked, and a path is judged by
+        # `is_absolute`: a Windows receipt names `C:\...`, which starts
+        # with a drive and not a slash.
+        named = Path(value)
+        if named.is_absolute() and not named.exists():
+            return f"MISSING ({key} names {value}, which is not there)"
+    # A receipt claiming nothing was verified on the host rather than
+    # installed, so the host has to answer for the tool now.
+    claims_nothing = not (receipt.paths or receipt.entry_points or receipt.env)
+    if claims_nothing and not (shutil.which(tool) or (bin_dir / tool).is_file()):
+        return "MISSING (verified on the host, and not on PATH now)"
+    return ""
+
+
+def _entry_point_runs(name: str, receipt: Receipt, bin_dir: Path) -> bool:
+    """Whether *name* runs: from the receipt's paths, the venv's bin, or PATH."""
+    own = (Path(spelled) / name for spelled in receipt.paths)
+    return (
+        any(candidate.is_file() for candidate in own)
+        or (bin_dir / name).is_file()
+        or bool(shutil.which(name))
+    )
+
+
+def store_cannot_supply(root: Path) -> str:
+    """Why the store supplies nothing here; empty when it can.
+
+    The sites require tools whatever a contract says, because a kind
+    brings its own: a workspace with no packages still runs on the
+    python kind, whose gate checkers come from the store. Nothing is
+    supplied until a lock names versions, and nothing can be locked
+    until the contract names a catalogue to resolve against, so the
+    two are one question with one answer a reader can act on.
+
+    Empty when a lock is present, and empty for a workspace that
+    requires no tool at all.
+    """
+    required = tool_names(root)
+    if not required or current_lock(root) is not None:
+        return ""
+    named = ", ".join(required[:4])
+    rest = f", and {len(required) - 4} more" if len(required) > 4 else ""
+    lines = [
+        f"the tools this workspace requires are not locked: {named}{rest}."
+        " Nothing is materialised from a store without a lock, so the"
+        " first verb that reaches for one fails with no executable found."
+    ]
+    if not has_index(root):
+        lines += [
+            "",
+            "Name the catalogue to resolve against in workshop.toml:",
+            "",
+            "  [tools]",
+            '  index = "<the published index\'s URL, or a directory of records>"',
+        ]
+    lines += [
+        "",
+        f"Then `{prog()} tools.lock` writes the lock and"
+        f" `{prog()} sync` supplies what it names.",
+    ]
+    return "\n".join(lines)
+
+
 def _is_records(source: str) -> bool:
     """Whether *source* is a directory of records rather than an index."""
     if "://" in source:
@@ -233,8 +325,57 @@ def current_lock(root: Path) -> Lock | None:
         fail(str(error))
 
 
+def lock_is_current(root: Path, *, offline: bool = False) -> tuple[bool, str]:
+    """Whether `tools.lock` is what the sites resolve to now; and what moved.
+
+    The question `--locked` and `--check` ask, and nothing is written to
+    answer it. An entry that still satisfies every floor stands, so a
+    newer version published since the lock was written moves nothing:
+    that is what an upgrade is for. What moves the answer is a
+    requirement the lock does not hold, or holds at a version that no
+    longer satisfies.
+
+    The graphs are not compared. A delegated tool's graph is resolved
+    when its version enters the lock and written beside it, which is a
+    write, and this reads.
+
+    Returns:
+        Whether the lock on disk is current, and why not when it is
+        not: no lock at all, a requirement nothing satisfies, or the
+        tools whose entries would move.
+    """
+    held = current_lock(root)
+    if held is None:
+        return False, f"there is no {LOCK_FILE}"
+    listing = catalogue(root, offline=offline)
+    try:
+        fresh = resolve_lock(
+            listing,
+            with_runtimes(tuple(requirements(root)), listing),
+            hosts=locked_hosts(root),
+            keep=held,
+        )
+    except LockError as error:
+        return False, str(error)
+    if fresh.to_json() == held.to_json():
+        return True, ""
+    names = set(fresh.tools) | set(held.tools)
+    moved = sorted(
+        name
+        for name in names
+        if name not in fresh.tools
+        or name not in held.tools
+        or fresh.tools[name].to_json() != held.tools[name].to_json()
+    )
+    return False, f"the lock would move: {', '.join(moved)}"
+
+
 def write_lock(
-    root: Path, *, upgrade: tuple[str, ...] = (), relock: tuple[str, ...] = ()
+    root: Path,
+    *,
+    upgrade: tuple[str, ...] = (),
+    relock: tuple[str, ...] = (),
+    offline: bool = False,
 ) -> Lock:
     """Resolve the sites' requirements and write the lock; the lock written.
 
@@ -246,7 +387,7 @@ def write_lock(
     stands, which is what an install the graph could not satisfy asks
     for.
     """
-    listing = catalogue(root)
+    listing = catalogue(root, offline=offline)
     kept = current_lock(root)
     try:
         lock = resolve_lock(

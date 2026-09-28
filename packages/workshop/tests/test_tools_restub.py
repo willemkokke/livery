@@ -246,11 +246,13 @@ def test_the_lock_verbs_and_sync_write_the_stubs_and_env_check_counts_them(
     )
     monkeypatch.setattr("livery.workshop._env_tasks._uv_drift", lambda root: "")
     monkeypatch.setattr(_tools, "materialise", lambda root, names=(), **kw: ())
-    # Before a lock nothing expects a stub: the check names the lock
-    # verb and no stubs line.
-    assert _env_tasks.env_check() == 0
+    # Before a lock nothing expects a stub, and nothing is materialised
+    # either: the tool is a miss and the check names the lock verb,
+    # with no stubs line.
+    assert _env_tasks.env_check() == 1
     out = capsys.readouterr().out
-    assert "ruff: on PATH; not locked; run `fm tools.lock`" in out
+    assert "ruff: MISSING (no receipt" in out
+    assert "not locked; run `fm tools.lock`" in out
     assert "stubs:" not in out
     _tool_tasks.tools_lock()
     assert "  stubs: 1 in typings/, wrote 1" in capsys.readouterr().out
@@ -270,10 +272,13 @@ def test_the_lock_verbs_and_sync_write_the_stubs_and_env_check_counts_them(
     monkeypatch.setattr(_tools, "_read_catalogue", real)
     (_tools.stubs_dir(root) / "ruff.pyi").unlink()
     assert _tools.write_stubs(root).written == ("ruff",)
-    _tool_tasks.tools_upgrade(["ruff"])
+    _tool_tasks.tools_lock(upgrade_tool=["ruff"])
     assert "  stubs: 1 in typings/" in capsys.readouterr().out
     assert _sync.materialise_tools(root)[-1] == "  stubs: 1 in typings/"
-    assert _env_tasks.env_check() == 0
+    # This test stands in for the store, so no receipt was ever written
+    # and the tool is a miss; the stubs are what it is about, and they
+    # are counted either way.
+    assert _env_tasks.env_check() == 1
     assert "  stubs: 1 in typings/" in capsys.readouterr().out
 
 
@@ -285,7 +290,9 @@ def test_a_workspace_that_names_no_index_is_not_asked_for_stubs(
         "livery.workshop._env_tasks.shutil.which", lambda tool: "/x/" + tool
     )
     monkeypatch.setattr("livery.workshop._env_tasks._uv_drift", lambda root: "")
-    assert _env_tasks.env_check() == 0  # no index named at all
+    # This workspace requires no tool at all, so there is nothing to
+    # miss and no stubs are asked for, which is what this is about.
+    assert _env_tasks.env_check() == 0
     assert "stubs" not in capsys.readouterr().out
 
 
@@ -299,10 +306,34 @@ def test_the_entry_script_materialises_the_tools_before_it_emits(
     root.mkdir()
     (root / "uv.lock").write_text('[[package]]\nname = "uv"\nversion = "0.11.0"\n')
     script = entry_script(root)
-    assert "_run tools.materialise >&2" in script
+    assert "_run tools.sync --frozen >&2" in script
     assert '|| echo "setup: the tools were not materialised' in script
     assert (
         script.index("uv sync")
-        < script.index("tools.materialise")
+        < script.index("tools.sync --frozen")
         < script.index("env.emit")
     )
+
+
+def test_a_shell_missing_a_tool_with_no_lock_is_told_to_lock_before_syncing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`sync` supplies nothing without a lock, so the remedy names the lock.
+
+    A newborn workspace reaches for the gate's checkers and finds none.
+    Being told to run `sync` there sends a reader in a circle: it
+    materialises what a lock names, and there is no lock.
+    """
+    # A workspace that requires a tool and has locked nothing, which is
+    # what a newborn is.
+    _workspace(
+        tmp_path, monkeypatch, '[workspace]\n\n[tools]\nrequires = ["ruff>=0.1"]\n'
+    )
+    # Nothing was ever materialised here, so the required tool has no
+    # receipt and the shell cannot answer for it.
+    monkeypatch.setattr("livery.workshop._env_tasks._uv_drift", lambda root: "")
+    assert _env_tasks.env_check() == 1
+    said = capsys.readouterr().out
+    assert "are not locked" in said
+    assert said.index("tools.lock") < said.index("sync` supplies")
+    assert "[tools]" in said and "index =" in said
