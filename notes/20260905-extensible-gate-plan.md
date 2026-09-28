@@ -2,10 +2,11 @@
 
 Status: phase 0 approved and landed 2026-09-05 (issue #227), pulled
 ahead of the docs prepass so that plan's emitter tests pin the bare
-`fm` spelling. Phases 1 to 7 are drafted and await Willem's review.
-The design section below is written to graduate into
-`packages/workshop/docs/` after review; everything else is working
-record.
+`fm` spelling. Phases 1 to 7 are drafted and await Willem's
+review, phase 4 having split into 4 and 4b because its two halves
+block on different things. The design section below is written to
+graduate into `packages/workshop/docs/` after review; everything
+else is working record.
 
 ## Why
 
@@ -382,16 +383,17 @@ are listed as available, activating nothing (contract 3).
 
 ### Phase 4: the check owns its configuration and tool
 
-A check's claim reads the part registry, so the phase that builds
-it comes first and this one is renumbered behind it. Its design is not settled (open item 9), and building the claim
-on today's per-kind `classify` instead would be the second shape
-this plan then replaces, which is the argument that retired
-`kindcheck` inside phase 2.
+Everything a check owns that does not depend on what a file *is*.
+Split from the claim, which follows, because the two halves block
+on different things: this one needs only the registry from phase
+2, while the claim needs the part registry whose design is open.
+Joined, the editor work waits on a question it has nothing to do
+with.
 
-The record gains its configuration fragments, its claim, and the
-tool-profile contribution, moving all three out of their current
-homes. A fragment names the rendered file it goes in, so one
-record reaches `pyproject.toml`, `.vscode/settings.json` and
+The record gains its configuration fragments and its tool-profile
+contribution, moving both out of their current homes. A fragment
+names the rendered file it goes in, so one record reaches
+`pyproject.toml`, `.vscode/settings.json` and
 `.vscode/extensions.json` at once; the render composes the base
 template with the registered fragments in check-name order, and
 the drift gate judges the result through the same managed-union
@@ -400,18 +402,14 @@ mechanism kinds use.
 Ruff (format and lint) is the proof: its rendered configuration,
 its editor settings, its recommended extension, its version pin,
 and its profile entry all derive from its two check records, so
-removing the records removes every trace. Its claim is the second
-proof: the rules it applies to a package's configuration files
-differ from the rules it applies to sources, and the rendered
-`per-file-ignores` is generated from the claim rather than
-written by hand.
+removing the records removes every trace.
 
 Two things belong to the set rather than to any check, and the
 render derives them the way it derives the profile: the type
 checker that answers in an editor is the one whose configuration
 this workspace writes, so the second opinion's language server is
 turned off, and the extensions recommended are those of the
-registered checks (livery#779).
+registered checks. Closes livery#779.
 
 **Acceptance**
 
@@ -424,9 +422,35 @@ registered checks (livery#779).
 - A rendered `.vscode/extensions.json` names only extension ids
   that resolve, proven by a test reading the ids from the
   registered checks.
+- A rendered project's editor and its gate answer alike on a file
+  the gate excludes, proven by a test over the rendered settings.
+- `fm check` green, output unchanged.
+
+### Phase 4b: the check claims its files
+
+The other half, and the one that waits. A check record gains its
+claim, named in the part vocabulary rather than as globs, and a
+check judges the files its claim reaches. Ruff is the proof
+again: the rules it applies to a package's configuration files
+differ from the rules it applies to sources, and the rendered
+`per-file-ignores` is generated from the claim rather than
+written by hand.
+
+This phase needs the part registry, whose design is open item 9,
+and lands after the phase that builds it. Building the claim on
+today's per-kind `classify` instead would be the second shape
+this plan then replaces, which is the argument that retired
+`kindcheck` inside phase 2.
+
+**Acceptance**
+
 - Two checks claiming one classification under different rules
   render one `per-file-ignores` table with both, in a stable
   order, proven by rendering twice and comparing bytes.
+- A check judges every file its claim reaches and no other,
+  proven by a fake check over a fixture package of each kind.
+- `conanfile.py` is judged by the checks that claim
+  configuration, closing the gap the design section names.
 - `fm check` green, output unchanged.
 
 ### Phase 5: the test role and coverage measurement by kind
@@ -741,6 +765,18 @@ the kit cannot drift from the enforcement.
   an answer *on the part axis*, so a `classify_source` returning
   `yours` for a file whose part is `source` reads as a
   contradiction.
+- 2026-09-28, phase 4 splits (Willem's question, whether livery#779
+  needs the whole plan first). It needed less of it than the
+  parking suggested: every one of its deliverables, the language
+  server setting, the extension ids, ruff as the formatter and the
+  provenance plumbing, is a fragment or a fact about the registered
+  set, and none of them classifies a file. So the two halves block
+  on different things. Phase 4 keeps the fragments and the
+  tool-profile contribution and needs only the registry from phase
+  2; phase 4b takes the claim and waits on the part registry and
+  open item 9. Joined, the editor work waited on a design question
+  it has nothing to do with, against the rule that a phase lands
+  alone.
 
 ## Open
 
@@ -828,4 +864,4 @@ the kit cannot drift from the enforcement.
      docs job must leave the context reportable. And the answer is
      not an opinion, so it is not layer code by default: whether
      the site reads a path is a fact about the render.
-   Owner: Willem. Blocks the claim in phase 4.
+   Owner: Willem. Blocks phase 4b.
