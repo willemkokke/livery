@@ -75,7 +75,7 @@ ASSEMBLED = ("run-*.json", "chain-*.json")
 #: and tuned once real runs have.
 PROFILE_DEFAULT = True
 WINDOW_DEFAULT = 20
-KEEP_DEFAULT = 25
+KEEP_DEFAULT = 50
 #: Beside the checkout's other records of what it did to itself: the
 #: receipts of the tools it installed, the entry points it linked, the
 #: state it keeps. An assembled trace is the same species, and the
