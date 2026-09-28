@@ -66,6 +66,15 @@ python_floor:
     the oldest Python the workspace supports; injected at render time
     from the root pyproject's requires-python
 
+regions:
+  type: yaml
+  default: {}
+  when: false
+  help: >-
+    the regions the committed managed files carry, by file then by
+    name; injected at render time from the files themselves, so the
+    render writes each back in place
+
 layer_imports:
   type: yaml
   default: [livery.workshop]

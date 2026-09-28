@@ -124,7 +124,12 @@ def test_package_drift_judges_only_the_managed_files(tmp_path: Path) -> None:
     (package / "README.md").write_text("# thing\n\nWritten by its authors.\n")
     assert package_drift(root) == []
     (package / "cliff.toml").write_text("# edited by hand\n")
-    assert package_drift(root) == ["packages/thing/cliff.toml: differs from its render"]
+    # Rewritten wholesale, the file has lost its `own` region's markers,
+    # which are rendered bytes: the line says so.
+    assert package_drift(root) == [
+        "packages/thing/cliff.toml: the `own` region's markers are rendered;"
+        " restore them, `fm template.apply` rewrites them"
+    ]
 
 
 def test_a_receipt_without_package_dir_renders_the_right_paths(
@@ -231,7 +236,11 @@ def test_apply_settles_and_drift_names_the_file(tmp_path: Path) -> None:
     assert apply_project(root) == []  # idempotent: a clean tree changes nothing
     (root / "pyproject.toml").write_text("# doctored\n")
     drift = project_drift(root)
-    assert "pyproject.toml: differs from its render" in drift
+    # Doctored wholesale, the file has lost its `tables` region's markers.
+    assert (
+        "pyproject.toml: the `tables` region's markers are rendered; restore"
+        " them, `fm template.apply` rewrites them" in drift
+    )
 
 
 def _render_kind(tmp_path: Path, forge_kind: str, **extra: object) -> Path:

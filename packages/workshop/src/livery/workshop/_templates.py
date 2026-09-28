@@ -253,12 +253,19 @@ def render_injections(root: Path, answers: dict[str, Any]) -> dict[str, Any]:
         if isinstance(entry, dict)
     }
     from livery.workshop._docs import docs_table
+    from livery.workshop._provenance import PROJECT_RENDERED
+    from livery.workshop._regions import contents
 
     return {
         "runner_prog": footman.prog(),
         "python_floor": python_floor(root),
         "docs_site_url": str(docs_table(root).get("site-url", "")),
         "template_source_label": redacted_source(template_source(root)),
+        # The regions the committed files carry, an input like the
+        # answers: the render writes each back in place, so an apply
+        # keeps the repository's own lines and the drift gate judges
+        # whole bytes.
+        "regions": {name: contents(root / name) for name in PROJECT_RENDERED},
         "layer_imports": [import_path for import_path, _ in entries],
         "layer_requirements": [
             dist for _, dist in entries if _requirement_name(dist) not in members
@@ -518,8 +525,12 @@ def project_drift(root: Path) -> list[str]:
                 drift.append(
                     f"{relative}: rendered, but missing from the repository{named}"
                 )
-            elif _lf(committed.read_bytes()) != _lf(rendered.read_bytes()):
-                drift.append(f"{relative}: differs from its render{named}")
+                continue
+            drift.extend(
+                _drift_line(
+                    relative, committed.read_bytes(), rendered.read_bytes(), named
+                )
+            )
     from livery.workshop._ci_generate import generated_files
     from livery.workshop._governance import codeowners_file
 
@@ -549,6 +560,57 @@ def project_drift(root: Path) -> list[str]:
     return drift
 
 
+#: Managed files whose format has no comments: the render owns their
+#: first lines, as many as it renders, and the repository's own lines
+#: follow as an appended tail. None of the project's managed files
+#: needs the form today; the rule exists for the next one.
+TAIL_FILES: tuple[str, ...] = ()
+
+
+def _drift_line(
+    relative: str, committed: bytes, rendered: bytes, named: str = ""
+) -> list[str]:
+    """The drift report's line for one managed file, or none when it matches.
+
+    A file with regions the repository owns is judged outside them,
+    since the render already carries the committed regions as its
+    input: a difference is outside a region or a missing marker, and
+    the line says which. A tail file is judged on the lines the
+    render owns. Any other file is judged whole.
+    """
+    from livery.workshop import _regions
+
+    committed, rendered = _lf(committed), _lf(rendered)
+    if relative in TAIL_FILES:
+        prefix, _tail = _regions.tail_split(committed, rendered)
+        if prefix == rendered:
+            return []
+        owned = rendered.count(b"\n")
+        return [
+            f"{relative}: differs from its render in the lines it owns"
+            f" (1 to {owned}); your own lines go after them{named}"
+        ]
+    if committed == rendered:
+        return []
+    names = _regions.region_names(rendered.decode("utf-8", "replace"))
+    if not names:
+        return [f"{relative}: differs from its render{named}"]
+    text = committed.decode("utf-8", "replace")
+    present = {region.name for region in _regions.regions_in(text)}
+    missing = [name for name in names if name not in present]
+    if missing:
+        listed = ", ".join(f"`{name}`" for name in missing)
+        return [
+            f"{relative}: the {listed} region's markers are rendered; restore"
+            f" them, `{footman.prog()} template.apply` rewrites them{named}"
+        ]
+    listed = ", ".join(f"`{name}`" for name in names)
+    return [
+        f"{relative}: differs from its render outside the {listed} region;"
+        f" lines of your own go inside the region{named}"
+    ]
+
+
 #: What a package's own render owns for good. Every other rendered
 #: file is a package's seed, which its authors then write: comparing
 #: those would report a living package as drift from its own birth.
@@ -556,6 +618,13 @@ def project_drift(root: Path) -> list[str]:
 #: chain's union, livery.workshop._kinds.managed_files, and a pin
 #: keeps this legacy name agreeing with the registry.
 PACKAGE_MANAGED = ("cliff.toml",)
+
+
+def _package_regions(directory: Path) -> dict[str, dict[str, str]]:
+    """The regions a package's managed files carry, by file name."""
+    from livery.workshop._regions import contents
+
+    return {name: contents(directory / name) for name in _managed_for(directory)}
 
 
 def _managed_for(directory: Path) -> tuple[str, ...]:
@@ -623,6 +692,7 @@ def package_drift(root: Path) -> list[str]:
             **package_injections(root),
             "package_dir": directory.name,
             "release_baseline": _release_baseline(directory),
+            "regions": _package_regions(directory),
         }
         with tempfile.TemporaryDirectory() as scratch:
             # The full chain, parent first, exactly as the package
@@ -643,8 +713,10 @@ def package_drift(root: Path) -> list[str]:
                     drift.append(
                         f"{relative}: rendered, but missing from the repository"
                     )
-                elif _lf(committed.read_bytes()) != _lf(rendered.read_bytes()):
-                    drift.append(f"{relative}: differs from its render")
+                    continue
+                drift.extend(
+                    _drift_line(relative, committed.read_bytes(), rendered.read_bytes())
+                )
     return drift
 
 
@@ -662,6 +734,12 @@ def apply_project(root: Path) -> list[str]:
             if relative in PROJECT_SEEDS and committed.is_file():
                 continue  # a seed is the workspace's own once it exists
             body = _lf(rendered.read_bytes())
+            if relative in TAIL_FILES and committed.is_file():
+                # The render owns the first lines; the tail is the
+                # repository's and rides along.
+                from livery.workshop._regions import tail_split
+
+                body += tail_split(_lf(committed.read_bytes()), body)[1]
             if not committed.is_file() or _lf(committed.read_bytes()) != body:
                 committed.parent.mkdir(parents=True, exist_ok=True)
                 committed.write_bytes(body)
@@ -722,6 +800,7 @@ def apply_packages(root: Path) -> list[str]:
             **package_injections(root),
             "package_dir": directory.name,
             "release_baseline": _release_baseline(directory),
+            "regions": _package_regions(directory),
         }
         with tempfile.TemporaryDirectory() as scratch:
             # The full chain, parent first, as in package_drift.

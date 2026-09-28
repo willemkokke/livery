@@ -29,6 +29,22 @@ guidance fragments into `.workshop/fragments/`, skills and hooks into
 managed `CLAUDE.md` stub whose imports end at the instance's own
 `CLAUDE.project.md`.
 
+A rendered file is the template's, judged byte for byte, and some of
+them carry lines of your own. Those lines live in a region: a pair of
+marker comments the render writes, such as
+`# -- workshop: region tables, yours to edit; the render keeps it --`
+and `# -- workshop: end tables --`. The render reads what stands
+between the markers from the committed file and writes it back in
+place, so `fm template.apply` keeps your lines and `fm template.check`
+still compares the whole file: an edit inside a region is yours, an
+edit outside it is drift, and a removed marker is drift too. The root
+`pyproject.toml` carries a `tables` region for your own tables, the
+root `.gitignore` a `rules` region, `.vscode/settings.json` a
+`settings` region, `tasks.py` a `tasks` region below the mount, and a
+package's `cliff.toml` an `own` region. `fm explain <file>` names a
+file's regions and their lines. A managed file whose format has no
+comments keeps your lines as a tail after the lines the render owns.
+
 ## The tools a workspace requires
 
 Three sites declare tool requirements, each a name with a floor,

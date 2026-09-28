@@ -7,6 +7,9 @@
   // profile evaluates the workspace's environment, then hands over to
   // the interactive shell, which inherits it. Per-user terminal
   // settings belong in the user's own settings, never here.
+  // The repository's own settings, each line ending with a comma.
+  // -- workshop: region settings, yours to edit; the render keeps it --
+  // -- workshop: end settings --
   "terminal.integrated.profiles.osx": {
     "livery": {
       "path": "zsh",

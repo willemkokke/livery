@@ -160,10 +160,13 @@ def test_the_home_gate_composes_the_local_overlay_and_names_the_owner(
     assert ".gitignore" in changed
     assert "brand-extra/" in (root / ".gitignore").read_text()
     assert project_drift(root) == []
-    # A doctored composed file names the layer that owns it.
+    # A doctored composed file names the layer that owns it. Doctored
+    # wholesale, it has also lost its `rules` region's markers, which
+    # the line names first.
     (root / ".gitignore").write_text("# doctored\n")
     drift = project_drift(root)
     assert any(
-        ".gitignore: differs from its render (the acme.brand layer owns it)" in line
+        ".gitignore: the `rules` region's markers are rendered; restore them,"
+        " `fm template.apply` rewrites them (the acme.brand layer owns it)" in line
         for line in drift
     )

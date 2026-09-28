@@ -32,3 +32,6 @@ coverage-data/
 # Finder writes .DS_Store into any directory it opens; a workflow verb
 # refuses a dirty tree, so the file is never a change.
 .DS_Store
+# The repository's own rules.
+# -- workshop: region rules, yours to edit; the render keeps it --
+{{ (regions.get('.gitignore') or {}).get('rules', '') }}# -- workshop: end rules --
