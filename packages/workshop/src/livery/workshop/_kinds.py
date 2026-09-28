@@ -110,16 +110,6 @@ class Backend(Protocol):
         """
         ...
 
-    def check(self, package: Package, root: Path) -> None:
-        """Run the kind's own per-package gate; a refusal is the verdict.
-
-        The gate calls it only for a kind whose contract names
-        ``kind_verbs``: a kind whose verbs run at workspace scope
-        (python's checkers cover every python package in one
-        invocation) declares none and is never called here.
-        """
-        ...
-
     def classify(self, package: Package, path: str) -> str:
         """What *path*, relative to the package, is to the kind.
 
@@ -162,15 +152,15 @@ class Backend(Protocol):
 
 @dataclass(frozen=True)
 class CiContract:
-    """Which gate verbs apply to a kind.
+    """Which gate roles apply to a kind.
 
     The default is the widest answer (everything applies), so an
     unregistered override can only widen the gate, never quietly
-    narrow it. A verb absent from ``check_verbs`` skips by name in
-    the gate output. ``kind_verbs`` names the kind's own per-package
-    checks: a non-empty tuple makes the gate call the backend's
-    ``check`` for each package of the kind and print these names as
-    what ran.
+    narrow it. A role absent from ``check_verbs`` skips by name in
+    the gate output. A role is the set of registered checks that
+    implement it ([livery.workshop._checks.CheckRecord][]), never a
+    tool: a kind says ``test`` applies, and whether that means
+    pytest or ctest is the checks' business.
     """
 
     check_verbs: tuple[str, ...] = (
@@ -180,7 +170,6 @@ class CiContract:
         "typecomplete",
         "test",
     )
-    kind_verbs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -206,7 +195,7 @@ class KindRecord:
         managed: The rendered files the template keeps matching in
             a package of this kind; the chain's union is what the
             drift gate judges.
-        ci: The gate verbs that apply.
+        ci: The gate roles that apply.
         artifact: Which registry kind the release wave publishes
             through (``python`` or ``conan``); empty for a kind
             that publishes nothing.
@@ -268,6 +257,11 @@ def register_kind(record: KindRecord) -> None:
 def kind_names() -> tuple[str, ...]:
     """The vocabulary a contract's ``kind`` may name, sorted: the concrete kinds."""
     return tuple(sorted(name for name, record in _KINDS.items() if not record.abstract))
+
+
+def all_kinds() -> tuple[KindRecord, ...]:
+    """Every registered kind, abstract ones included, in registration order."""
+    return tuple(_KINDS.values())
 
 
 def kind_for(kind_name: str) -> KindRecord:
@@ -489,10 +483,11 @@ def _register_builtin() -> None:
         )
     )
     # The C/C++ library: cmake configures and builds, ctest is the
-    # test verb, conan packages the result. The python checkers do
-    # not gate it (there is no dist to verify types on), but ruff
-    # still formats and lints its conanfile.py, so those two verbs
-    # stay in the contract.
+    # test check, conan packages the result. The python type checkers
+    # do not gate it (there is no dist to verify types on); ruff
+    # formats and lints its conanfile.py beside clang-format and
+    # clang-tidy over its sources, and its build and ctest records
+    # carry the build and test roles.
     register_kind(
         KindRecord(
             name="cpp-conan",
@@ -502,10 +497,7 @@ def _register_builtin() -> None:
             tools=("cmake", "conan", "ninja", "clang_format", "clang_tidy"),
             native_sources=True,
             host_tools=("cc", "c++"),
-            ci=CiContract(
-                check_verbs=("format", "lint"),
-                kind_verbs=("configure", "build", "ctest"),
-            ),
+            ci=CiContract(check_verbs=("format", "lint", "build", "test")),
             artifact="conan",
             wheel_identity="",
             tests_need_build=True,

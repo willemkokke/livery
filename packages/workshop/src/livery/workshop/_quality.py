@@ -16,12 +16,18 @@ if TYPE_CHECKING:
 
 import livery.footman as footman
 from livery.footman import Forward, context, doc, fail, group, parallel, task
+from livery.workshop import _checks
 from livery.workshop._backends import _python, require_backends
+from livery.workshop._checks import GateContext
 from livery.workshop._kinds import gated
 from livery.workshop._layers import workspace_root
 from livery.workshop._packages import Package, discover_packages
 from livery.workshop._state import RunContext
-from livery.workshop._templates import template_check
+
+# Re-exported by name: the render check's record looks it up on this
+# module at run time, which is where the gate's characterisation tests
+# patch it.
+from livery.workshop._templates import template_check as template_check
 
 
 def _packages() -> tuple[Package, ...]:
@@ -34,50 +40,41 @@ def _packages() -> tuple[Package, ...]:
     return packages
 
 
-def run_kind_checks(
-    packages: tuple[Package, ...],
-    root: Path,
+def _context(
     *,
+    subset: tuple[Package, ...] | None = None,
+    fix: bool = False,
+    check_style: bool = True,
     tests: Mapping[str, tuple[str, ...]] | None = None,
     pages: Mapping[str, tuple[str, ...]] | None = None,
-) -> None:
-    """Run each kind's own per-package gate, in package order.
+) -> GateContext:
+    """This workspace's gate context: the root, every package, and the run's scope."""
+    root = workspace_root()
+    if root is None:
+        raise ValueError("no workspace: no workshop.toml above the working directory")
+    return GateContext(
+        root=root,
+        packages=_packages(),
+        subset=subset,
+        tests=tests or {},
+        pages=pages or {},
+        fix=fix,
+        check_style=check_style,
+    )
 
-    Only kinds whose contract names ``kind_verbs`` take part; the
-    announcement carries the package and the verbs, so the gate
-    output says what ran beside what skipped. A package named in
-    *tests* runs those files alone, after the kind's gate build when
-    its tests run on a build.
-    """
-    from livery.workshop._kinds import CiContract, backend_for, kind_for
 
-    default_verbs = CiContract().check_verbs
-    for package in packages:
-        record = kind_for(package.kind)
-        if not record.ci.kind_verbs:
-            continue
-        backend = backend_for(package)
-        skipped = [v for v in default_verbs if v not in record.ci.check_verbs]
-        selection = (tests or {}).get(package.path)
-        if selection is None:
-            print(
-                f"  {package.path} ({record.name}):"
-                f" {', '.join(record.ci.kind_verbs)} run;"
-                f" {', '.join(skipped)} skip"
-            )
-            backend.check(package, root)
-            continue
-        relative = tuple(path[len(package.path) + 1 :] for path in selection)
-        narrowed = (pages or {}).get(package.path, ())
-        build = "gate build, then " if record.tests_need_build else ""
-        print(
-            f"  {package.path} ({record.name}): {build}the tests of"
-            f" {', '.join(relative)} run; {', '.join(skipped)} skip"
-            + (f"; the examples of {', '.join(narrowed)} alone" if narrowed else "")
-        )
-        if record.tests_need_build:
-            backend.gate_build(package, root)
-        backend.test(package, root, selection=relative, pages=narrowed)
+def _rewrite(ctx: GateContext) -> None:
+    """Run every rewriter's task serially, before any judge reads the tree."""
+    with _checks.current(ctx):
+        for name in _checks.rewriters(ctx):
+            _checks.task_for(name)(fix=True)
+
+
+def _judge(ctx: GateContext) -> None:
+    """Run every judge's task in one parallel block; one refusal is the verdict."""
+    with _checks.current(ctx), parallel():
+        for name in _checks.judges(ctx):
+            _checks.task_for(name)()
 
 
 def _refuse_both(fix: bool, safe_fix: bool) -> None:
@@ -170,19 +167,6 @@ def test(*pytest_args: str) -> None:
     packages = gated(_packages(), "test")
     root = workspace_root()
     _python.run_test(*pytest_args, packages=packages, root=root)
-
-
-@task
-def kindcheck() -> None:
-    """Run each non-python kind's own gate over its packages.
-
-    Quiet in a pure-python workspace: no kind declares its own
-    verbs, so nothing runs and nothing prints.
-    """
-    packages = _packages()
-    root = workspace_root()
-    assert root is not None
-    run_kind_checks(packages, root)
 
 
 #: The contract key that lets CI's check legs run the scoped gate.
@@ -291,7 +275,7 @@ def check(
     fix: Forward[bool] = False,
     base: Annotated[str, doc("the branch the chain's root is taken from")] = "main",
 ) -> None:
-    """Run the gate: format, lint, types, tests, render gate, in parallel.
+    """Run the gate: every registered check, the rewriters first under --fix.
 
     On a machine the gate is the reflex: it runs what the working
     tree changed since the nearest tree this checkout's own green
@@ -508,30 +492,15 @@ def _run_check(full: bool, fix: bool, base: str) -> None:
     # as a root change on the next affected gate.
     if root_for_ci is not None and run is not None:
         _verified.write_marker(root_for_ci, _verified.FULL, leg=run.leg)
-    from livery.workshop._provenance import provenance_check
-
+    # The whole gate is the registry's walk: the rewriters serially
+    # under --fix, the tree recomputed so the judges read what they
+    # left, then every judge together.
+    _checks.verify_roles()
+    ctx = _context(fix=fix)
+    _rewrite(ctx)
     if fix:
-        format(fix=True)
-        lint(fix=True)
-        provenance_check(fix=True)
         proved_tree = _rewritten_tree(root_for_ci, run, proved_tree)
-        with parallel():
-            typecheck()
-            typecomplete()
-            test()
-            kindcheck()
-            template_check()
-        _remember_local(root_for_ci, run, tree=proved_tree, packages=None)
-        return
-    with parallel():
-        format()
-        lint()
-        typecheck()
-        typecomplete()
-        test()
-        kindcheck()
-        template_check()
-        provenance_check()
+    _judge(ctx)
     _remember_local(root_for_ci, run, tree=proved_tree, packages=None)
 
 
@@ -758,37 +727,22 @@ def _scoped_check(
     tests: Mapping[str, tuple[str, ...]] | None = None,
     pages: Mapping[str, tuple[str, ...]] | None = None,
 ) -> None:
-    """The gate over *subset* only: this routes, the backends compose.
+    """The gate over *subset* only: the registry's walk, narrowed.
 
-    The render gate is skipped: its inputs are the root answers and
-    the template source, which a package-scoped change cannot touch
-    (touching them makes the change root-scoped, and the full gate
-    runs instead). ``fix`` runs every kind's rewriters serially
-    before any check reads the tree, exactly as the whole gate does,
-    unless ``rewritten`` says the caller ran them already, to measure
-    the tree they left; what each kind checks, and in what parallel
-    shape, is its backend's knowledge, not this router's. *tests*
-    names, per package path, the test files that stand for the
-    package's suite in this run.
+    A workspace check that does not run in a scoped gate (the render
+    gate, whose inputs a package-scoped change cannot touch) is left
+    out by its record. ``fix`` runs every rewriter serially before
+    any judge reads the tree, unless ``rewritten`` says the caller
+    ran them already to measure the tree they left; the style judges
+    then skip, since re-judging what was just written only spends
+    time agreeing. *tests* names, per package path, the test files
+    that stand for the package's suite in this run; *pages* the docs
+    pages an examples harness narrows to.
     """
-    from livery.footman import step
-
-    root = workspace_root()
-    assert root is not None
+    _checks.verify_roles()
     if fix and not rewritten:
-        _python.scoped_rewrite(subset)
-    from livery.workshop._coverage_store import WORKSPACE_TESTS
-
-    # The workspace's own tests are a unit of the python gate alone:
-    # no kind owns them.
-    members = tuple(package for package in subset if package.path != WORKSPACE_TESTS)
-    with parallel() as p:
-        p(
-            step(_python.scoped_gate, title="python")(
-                subset, root=root, check_style=not fix, tests=tests, pages=pages
-            )
-        )
-        run_kind_checks(members, root, tests=tests, pages=pages)
+        _rewrite(_context(subset=subset, fix=True, tests=tests, pages=pages))
+    _judge(_context(subset=subset, check_style=not fix, tests=tests, pages=pages))
 
 
 coverage = group("coverage", help="The measured union and its floors")

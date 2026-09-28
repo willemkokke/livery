@@ -8,6 +8,13 @@ from pathlib import Path
 import pytest
 
 from livery.workshop._backends import _cpp_conan
+from livery.workshop._checks import (
+    GateContext,
+    check_for,
+    judges,
+    register_check,
+    run_check,
+)
 from livery.workshop._kinds import (
     CiContract,
     KindRecord,
@@ -20,7 +27,6 @@ from livery.workshop._kinds import (
     template_chain,
 )
 from livery.workshop._packages import Neighbours, Package, discover_packages
-from livery.workshop._quality import run_kind_checks
 from livery.workshop._registries import RegistryTarget
 from livery.workshop._templates import read_answers, render
 
@@ -49,12 +55,15 @@ needs_toolchain = pytest.mark.skipif(
 
 @pytest.fixture
 def restored_registry():
-    from livery.workshop import _kinds
+    from livery.workshop import _checks, _kinds
 
     before = dict(_kinds._KINDS)
+    checks = dict(_checks._CHECKS)
     yield
     _kinds._KINDS.clear()
     _kinds._KINDS.update(before)
+    _checks._CHECKS.clear()
+    _checks._CHECKS.update(checks)
 
 
 def _package(directory: Path, name: str, kind_name: str) -> Package:
@@ -165,8 +174,9 @@ def test_a_red_ctest_is_a_refusal(tmp_path: Path) -> None:
     test_file = package.directory / "tests" / "test_native.cpp"
     broken = test_file.read_text().replace("return 0;", "return 1;")
     test_file.write_text(broken)
+    _cpp_conan.gate_build(package, tmp_path)
     with pytest.raises(_FAILURES, match="ctest failed"):
-        _cpp_conan.check(package, tmp_path)
+        _cpp_conan.test(package, tmp_path)
 
 
 def test_discovery_requires_pyproject_only_of_python_kinds(tmp_path: Path) -> None:
@@ -191,12 +201,14 @@ def test_python_verbs_skip_by_name(
 ) -> None:
     py = _package(tmp_path / "packages" / "member", "acme-member", "python")
     native = _package(tmp_path / "packages" / "native", "acme-native", "cpp-conan")
-    for verb in ("typecheck", "typecomplete", "test"):
+    for verb in ("typecheck", "typecomplete"):
         assert gated((py, native), verb) == (py,)
         out = capsys.readouterr().out
         assert f"{verb}: packages/native skips (cpp-conan kind)" in out
     # format and lint stay: the conanfile is python and ruff gates it.
-    for verb in ("format", "lint"):
+    # test applies too: ctest is the kind's own check under that role,
+    # so the role no longer skips by name for a native package.
+    for verb in ("format", "lint", "test"):
         assert gated((py, native), verb) == (py, native)
         assert "skips" not in capsys.readouterr().out
 
@@ -207,99 +219,63 @@ def test_a_pure_python_workspace_gate_is_unchanged(
     py = _package(tmp_path / "packages" / "member", "acme-member", "python")
     for verb in CiContract().check_verbs:
         assert gated((py,), verb) == (py,)
-    run_kind_checks((py,), tmp_path)
+    # No package check judges a python package: the walk schedules
+    # none of the native records for a workspace of python packages.
+    ctx = GateContext(root=tmp_path, packages=(py,))
+    native_checks = {"clang-format", "configure", "build", "ctest", "clang-tidy"}
+    assert not native_checks & set(judges(ctx))
     assert capsys.readouterr().out == ""
 
 
-def test_kind_checks_announce_and_dispatch(
+def test_the_native_checks_run_per_package_in_order(
     restored_registry, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    checked: list[str] = []
+    from dataclasses import replace
 
-    class _Spy:
-        def build(self, package: Package, root: Path, *, epoch: int = 0) -> Path:
-            return package.directory
+    ran: list[tuple[str, str, tuple[str, ...]]] = []
+    for name in ("clang-format", "configure", "build", "ctest", "clang-tidy"):
+        record = check_for(name)
 
-        def module_roots(self, package: Package) -> tuple[str, ...]:
-            return ()
+        def spy(ctx: GateContext, name: str = name) -> None:
+            assert ctx.package is not None
+            ran.append((name, ctx.package.name, ctx.selection))
 
-        def referenced_siblings(
-            self, package: Package, around: Neighbours
-        ) -> dict[str, str]:
-            return {}
-
-        def publish_artifact(
-            self,
-            package: Package,
-            root: Path,
-            *,
-            version: str,
-            target: RegistryTarget,
-        ) -> bool:
-            return True
-
-        def check(self, package: Package, root: Path) -> None:
-            checked.append(package.name)
-
-        def classify(self, package: Package, path: str) -> str:
-            return "source"
-
-        def gate_build(self, package: Package, root: Path) -> None:
-            checked.append(f"build {package.name}")
-
-        def test(
-            self,
-            package: Package,
-            root: Path,
-            *,
-            selection: tuple[str, ...] = (),
-            pages: tuple[str, ...] = (),
-        ) -> None:
-            checked.append(f"test {package.name} {' '.join(selection)}")
-
-        def current_version(self, package: Package) -> str:
-            return "0.0.1"
-
-        def stamp_version(self, package: Package) -> _FakeStamper:
-            return _FakeStamper()
-
-        def declared_requirements(self, package: Package) -> dict[str, str]:
-            return {}
-
-    record = kind_for("cpp-conan")
-    register_kind(
-        KindRecord(
-            name="cpp-conan",
-            backend=_Spy(),
-            template=record.template,
-            parent=record.parent,
-            tools=record.tools,
-            host_tools=record.host_tools,
-            managed=record.managed,
-            ci=record.ci,
-            tests_need_build=record.tests_need_build,
-        )
-    )
+        register_check(replace(record, run=spy, fix=None))
     native = _package(tmp_path / "packages" / "native", "acme-native", "cpp-conan")
-    run_kind_checks((native,), tmp_path)
-    out = capsys.readouterr().out
-    assert "packages/native (cpp-conan): configure, build, ctest run" in out
-    assert "typecheck, typecomplete, test skip" in out
-    assert checked == ["acme-native"]
-    # A selection: the gate build first, since the kind's tests run on
-    # a build, then those files alone.
-    checked.clear()
-    run_kind_checks(
-        (native,),
-        tmp_path,
+
+    def run_package(ctx: GateContext) -> str:
+        for name in judges(ctx):
+            if check_for(name).scope == "package":
+                run_check(name, ctx)
+        return capsys.readouterr().out
+
+    out = run_package(GateContext(root=tmp_path, packages=(native,)))
+    for name in ("clang-format", "configure", "build", "ctest", "clang-tidy"):
+        assert f"  {name}: packages/native runs (cpp-conan kind)" in out
+    assert [name for name, _, _ in ran] == [
+        "clang-format",
+        "configure",
+        "build",
+        "ctest",
+        "clang-tidy",
+    ]
+    # A selection: the build first, since the kind's tests run on a
+    # build, then the chosen ctest alone; the formatter and the linter
+    # sit out a change confined to the tests.
+    ran.clear()
+    scoped = GateContext(
+        root=tmp_path,
+        packages=(native,),
+        subset=(native,),
         tests={"packages/native": ("packages/native/tests/test_native.cpp",)},
     )
-    out = capsys.readouterr().out
-    assert (
-        "packages/native (cpp-conan): gate build, then the tests of"
-        " tests/test_native.cpp run" in out
-    )
-    assert checked == ["build acme-native", "test acme-native tests/test_native.cpp"]
+    out = run_package(scoped)
+    assert "clang-format" not in out
+    assert ran == [
+        ("configure", "acme-native", ("tests/test_native.cpp",)),
+        ("build", "acme-native", ("tests/test_native.cpp",)),
+        ("ctest", "acme-native", ("tests/test_native.cpp",)),
+    ]
 
 
 def test_host_tools_are_named_when_missing(restored_registry, tmp_path: Path) -> None:
@@ -431,7 +407,11 @@ def test_the_rendered_package_builds_and_its_ctest_passes(tmp_path: Path) -> Non
     assert (package.directory / "conanfile.py").is_file()
     assert (package.directory / "CMakeLists.txt").is_file()
     assert (package.directory / "src" / "native.cpp").is_file()
-    _cpp_conan.check(package, tmp_path)
+    # The kind's records, in the order the gate runs them.
+    _cpp_conan.format_check(package)
+    _cpp_conan.gate_build(package, tmp_path)
+    _cpp_conan.test(package, tmp_path)
+    _cpp_conan.lint(package, tmp_path)
     assert (package.directory / _cpp_conan.GATE_BUILD_DIR).is_dir()
 
 

@@ -3,8 +3,10 @@
 Status: phase 0 approved and landed 2026-09-05 (issue #227), pulled
 ahead of the docs prepass so that plan's emitter tests pin the bare
 `fm` spelling. Contract 7's pinning tests landed 2026-09-28 (commit
-94096846). Phase 1 landed 2026-09-28 (issue #860). Phases 2 to 8
-are drafted and await Willem's review: phase 4 split into 4 and
+94096846). Phase 1 landed 2026-09-28 (issue #860, pull request
+#866); phase 2 was built the same day (issue #867), stacked on it.
+Phases 3 to 8 are drafted and await Willem's review: phase 4 split
+into 4 and
 4b because its two halves block on different things, and the
 revision of 2026-09-28 added phase 3b (the part and channel
 registries, which 4b waits on), phase 3c (the regions a repository
@@ -466,10 +468,12 @@ mode, and exclusivity notes. A frozen `GateContext` (root,
 packages, subset, git) is the run signature. The eight current
 gate members re-register as the first checks with nothing
 special-cased; `check` and `_scoped_check` become one walk over
-the registry. Before the replacement, the pinning tests of
-contract 7 land against the current implementation and survive
-the swap unchanged. `CiContract.check_verbs` validates against
-registered roles, refusing unknown names with the vocabulary.
+the registry. The pinning tests of contract 7 are in, against the
+current implementation, and are the phase's own regression suite:
+a failure there is either a lost property or a change this note
+records with its reason. `CiContract.check_verbs` validates
+against registered roles, refusing unknown names with the
+vocabulary.
 
 One of the eight is not a check but a router: `fm kindcheck`
 (`_quality.py`) reads each kind's `CiContract.kind_verbs` and
@@ -514,7 +518,8 @@ real check before a fake one.
 **Acceptance**
 
 - The pinning tests pass before and after the swap, proven by
-  running them at both commits.
+  running them at both commits; a test edited to make the swap
+  pass is named in the decision record with its reason.
 - `fm check --fix` writes the edge and the requirement for a
   reachable sibling reference and still refuses an unreachable one
   (livery#829), proven by that change's own tests.
@@ -1484,6 +1489,31 @@ project.
   to green, each finding the next thing, which is what an armed
   test that nothing on the merge path runs looks like on the day it
   is run. The chain then: 1 passed, 0 failed, 0 skipped in 247 s, from the junit report.
+- 2026-09-28, phase 2 built (issue #867): `CheckRecord` and
+  `register_check` in `_checks.py`, every registered check also a
+  hidden task `checks.<name>` that the gate schedules (rewriters
+  serially under `--fix`, judges together, a package's checks
+  ordered by `after`), `kindcheck`, `run_kind_checks`,
+  `CiContract.kind_verbs` and `Backend.check` gone, the cpp-conan
+  kind registering clang-format, configure, build, ctest and
+  clang-tidy, and the layering lint registered as the base's
+  workspace check with a fix mode to come (livery#829). One thing
+  changed while building it: the first walk scheduled each check as
+  a step on the block, and the pins passed, but the descendant
+  chain's child showed what a person sees, no member rows and no
+  skip lines, since a green step prints no row and a step's prints
+  are captured. A gate member is a task in footman's model, one
+  report row and its prints on the console, so each check became a
+  task and the fixtures the step shape had touched went back to
+  their original lines. Two deliberate edits to pinned tests, each
+  with its reason: the eight members are now format, lint,
+  typecheck, typecomplete, test, template_check, provenance_check
+  and layering, since kindcheck retired and the layering check
+  joined; and the cpp-conan contract carries the build and test
+  roles, so the `test` role no longer skips by name for a native
+  package, ctest being its check, and the skip test says so. The
+  router's one line per package became one line per check, as the
+  phase named, and the chain asserts the new lines.
 - 2026-09-28, contract 10's vocabulary test scoped (the agent's
   correction of its own sentence, on Willem's question): the core
   names no package kind and no check tool; the interpreter, uv and

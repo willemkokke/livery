@@ -638,20 +638,18 @@ def classify(package: Package, path: str) -> str:
     return CONFIGURATION
 
 
-def gate_build(package: Package, root: Path) -> None:
-    """Configure and build *package* into the gate's build directory.
+def configure(package: Package) -> None:
+    """Configure *package* into the gate's build directory.
 
     The dependency-free library needs no conan at gate time: cmake
-    configures against the host toolchain and ninja builds, so a
-    rebuild after one edit costs that edit. A package that declares
-    conan requirements gains a conan install step when the
-    cross-kind dependency lands; today a missing generator file
+    configures against the host toolchain with the Ninja generator
+    and exports the compile commands clang-tidy reads. A package
+    that declares conan requirements gains a conan install step when
+    the cross-kind dependency lands; today a missing generator file
     fails the configure with cmake's own message.
     """
-    del root
     build_dir = package.directory / GATE_BUILD_DIR
-    cmake = tools.cmake.opts(cwd=package.directory)
-    cmake(
+    tools.cmake.opts(cwd=package.directory)(
         "-S",
         ".",
         "-B",
@@ -660,7 +658,24 @@ def gate_build(package: Package, root: Path) -> None:
         "Ninja",
         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
     )
-    cmake("--build", str(build_dir))
+
+
+def compile(package: Package) -> None:
+    """Build the configured *package*; incremental, so one edit costs that edit."""
+    build_dir = package.directory / GATE_BUILD_DIR
+    tools.cmake.opts(cwd=package.directory)("--build", str(build_dir))
+
+
+def gate_build(package: Package, root: Path) -> None:
+    """Configure and build *package* into the gate's build directory.
+
+    What the kind's tests run on, in one call, for the affected
+    gate's test-only step; the two halves are the ``configure`` and
+    ``build`` checks the kind registers.
+    """
+    del root
+    configure(package)
+    compile(package)
 
 
 def test(
@@ -849,14 +864,6 @@ def lint(package: Package, root: Path) -> None:
             f"{package.name}: clang-tidy found something:\n"
             f"{result.stdout[-4000:]}{result.stderr[-2000:]}"
         )
-
-
-def check(package: Package, root: Path) -> None:
-    """Format, configure, build, ctest and lint; a refusal is the verdict."""
-    format_check(package)
-    gate_build(package, root)
-    test(package, root)
-    lint(package, root)
 
 
 def build(package: Package, root: Path, *, epoch: int = 0) -> Path:

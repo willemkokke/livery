@@ -28,7 +28,6 @@ if TYPE_CHECKING:
     from livery.workshop._packages import Package
     from livery.workshop._tools import Receipt
 
-check = _python.check
 classify = _python.classify
 gate_build = _python.gate_build
 test = _python.test

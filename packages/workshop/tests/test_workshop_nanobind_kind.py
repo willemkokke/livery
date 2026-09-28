@@ -144,7 +144,6 @@ def test_the_kind_chains_from_python() -> None:
         "typecomplete",
         "test",
     )
-    assert record.ci.kind_verbs == ()
     assert record.host_tools == ("cc", "c++")
 
 
