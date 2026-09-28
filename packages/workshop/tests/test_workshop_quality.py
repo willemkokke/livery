@@ -236,3 +236,159 @@ def test_the_pages_reach_pytest_as_docs_page_arguments(
         package.path: (f"{package.path}/tests/test_docs_examples.py",)
     }
     assert _python.page_arguments(()) == []
+
+
+# --- what the gate is, pinned before the check registry replaces it -----------
+#
+# Characterisation, not specification: these say what the gate does
+# today so that a reimplementation which still passes them preserved
+# the behaviour. A failure after the swap is either a regression or a
+# deliberate change that updates the test with its reason. Nothing
+# here asserts that the current shape is the right one.
+#
+# Two properties are pinned elsewhere and are not repeated:
+# `test_workshop_cpp_kind.py` holds both skip prints, `gated()`'s
+# per-verb line and the kind gate's run-beside-skip announcement.
+
+
+def _whole_gate(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> tuple[list[str], list[str]]:
+    """Drive the whole gate against a seeded repository; what ran, and trees.
+
+    Returns the recorded run, with `<parallel` and `>parallel` around
+    each block footman schedules, and the tree ids the rewrite pass
+    recomputed.
+    """
+    import contextlib
+
+    # The block from its owner, not through the gate's re-export: the
+    # name patched below is the gate's, the behaviour wrapped is
+    # footman's own.
+    from livery.footman import parallel as real_parallel
+    from livery.toolroom import tools
+
+    ran: list[str] = []
+    trees: list[str] = []
+
+    def named(name: str):
+        def body(*args: object, **kwargs: object) -> None:
+            ran.append(name)
+
+        return body
+
+    @contextlib.contextmanager
+    def watched():
+        ran.append("<parallel")
+        with real_parallel():
+            yield
+        # The members run as the real block exits, so they land
+        # between the markers rather than after them.
+        ran.append(">parallel")
+
+    # A local run: no run context, and no CI variable, which the gate
+    # reads to refuse --fix on a checkout nobody keeps.
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.setattr(_quality, "workspace_root", lambda: tmp_path)
+    monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
+    monkeypatch.setattr(_quality, "parallel", watched)
+    monkeypatch.setattr(_quality, "run_kind_checks", named("kindcheck"))
+    monkeypatch.setattr(_quality, "template_check", named("template_check"))
+    monkeypatch.setattr(
+        "livery.workshop._provenance.provenance_check", named("provenance_check")
+    )
+    monkeypatch.setattr(_python, "run_format", named("format"))
+    monkeypatch.setattr(_python, "run_lint", named("lint"))
+    monkeypatch.setattr(_python, "run_typecheck", named("typecheck"))
+    monkeypatch.setattr(_python, "run_typecomplete", named("typecomplete"))
+    monkeypatch.setattr(_python, "run_test", named("test"))
+
+    def rewritten(root: object, run: object, tree: str) -> str:
+        trees.append(tree)
+        return tree + "-after"
+
+    monkeypatch.setattr(_quality, "_rewritten_tree", rewritten)
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nlayers = ["livery.workshop"]\n'
+    )
+    git = tools.git.opts(cwd=tmp_path, nofail=True, recorded=False)
+    git("init", "-q", "--initial-branch=main")
+    git("add", "-A")
+    git(
+        "-c",
+        "user.email=t@t",
+        "-c",
+        "user.name=t",
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "-q",
+        "-m",
+        "seed",
+    )
+    return ran, trees
+
+
+def test_the_whole_gate_is_eight_members_in_one_parallel_block(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ran, _ = _whole_gate(monkeypatch, tmp_path)
+    _quality._run_check(full=True, fix=False, base="")
+    assert ran[0] == "<parallel"
+    assert ran[-1] == ">parallel"
+    assert sorted(ran[1:-1]) == [
+        "format",
+        "kindcheck",
+        "lint",
+        "provenance_check",
+        "template_check",
+        "test",
+        "typecheck",
+        "typecomplete",
+    ]
+
+
+def test_the_fixing_gate_rewrites_serially_then_judges_in_parallel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ran, _ = _whole_gate(monkeypatch, tmp_path)
+    _quality._run_check(full=True, fix=True, base="")
+    opened = ran.index("<parallel")
+    # The three rewriters, in order, before any block is opened: they
+    # write the files the judges then read.
+    assert ran[:opened] == ["format", "lint", "provenance_check"]
+    assert sorted(ran[opened + 1 : -1]) == [
+        "kindcheck",
+        "template_check",
+        "test",
+        "typecheck",
+        "typecomplete",
+    ]
+    assert ran[-1] == ">parallel"
+
+
+def test_the_judges_read_the_tree_the_rewriters_left(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The tree is recomputed between the two, and only under --fix."""
+    ran, trees = _whole_gate(monkeypatch, tmp_path)
+    _quality._run_check(full=True, fix=True, base="")
+    assert len(trees) == 1
+    ran.clear()
+    trees.clear()
+    _quality._run_check(full=True, fix=False, base="")
+    assert trees == []
+
+
+def test_one_refusing_member_is_the_gate_s_verdict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The gate is the conjunction: one member's refusal is the answer."""
+    _whole_gate(monkeypatch, tmp_path)
+
+    def refuse(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("typecheck says no")
+
+    monkeypatch.setattr(_python, "run_typecheck", refuse)
+    with pytest.raises(BaseException, match="typecheck says no"):
+        _quality._run_check(full=True, fix=False, base="")
