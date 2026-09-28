@@ -15,7 +15,7 @@ someone asks a question.
 ```console
 $ fm ci.profile
   check (ubuntu-latest, 3.14): 15701 event(s) of its own
-  profile: .fm/profiles/run-36287488870.json
+  profile: .workshop/profiles/run-36287488870.json
 ```
 
 That writes the newest run for the commit you are on. `--run=<id>` names a run
@@ -46,7 +46,7 @@ $ fm ci.profile --from=HEAD
   4f2a91c8e1b0: run 36331515850 (pull_request)
   4f2a91c8e1b0 merged as 9ab3c7d15e22 by #817
   9ab3c7d15e22: run 36332008144 (push), run 36332114907 (workflow_dispatch, recorded)
-  profile: .fm/profiles/chain-4f2a91c8e1b0.json
+  profile: .workshop/profiles/chain-4f2a91c8e1b0.json
 ```
 
 Three recorded facts make the walk, and nothing else does:
@@ -144,9 +144,17 @@ git objects rather than compressed one by one.
 profile = true
 # How many runs of traces are kept.
 profile-window = 20
-# Where an assembled file lands.
-profile-into = ".fm/profiles"
+# Where an assembled file lands, beside the checkout's other records of
+# what it did to itself.
+profile-into = ".workshop/profiles"
+# How many assembled files stay there.
+profile-keep = 10
 ```
+
+The two bounds answer different questions. `profile-window` governs the
+pushed channel, so it decides how far back a run can still be assembled;
+`profile-keep` governs this checkout's own disk, and the files it sweeps are
+output rather than input, so losing one strands nothing.
 
 A key of the wrong type is named on the leg that read it, and its default
 stands: whether a timeline is kept is not worth failing a run over.
