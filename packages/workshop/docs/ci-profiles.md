@@ -15,7 +15,7 @@ someone asks a question.
 ```console
 $ fm ci.profile
   check (ubuntu-latest, 3.14): 15701 event(s) of its own
-  profile: .fm/profiles/run-36287488870.json
+  profile: .workshop/profiles/run-36287488870.json
 ```
 
 That writes the newest run for the commit you are on. `--run=<id>` names a run
@@ -46,7 +46,7 @@ $ fm ci.profile --from=HEAD
   4f2a91c8e1b0: run 36331515850 (pull_request)
   4f2a91c8e1b0 merged as 9ab3c7d15e22 by #817
   9ab3c7d15e22: run 36332008144 (push), run 36332114907 (workflow_dispatch, recorded)
-  profile: .fm/profiles/chain-4f2a91c8e1b0.json
+  profile: .workshop/profiles/chain-4f2a91c8e1b0.json
 ```
 
 Three recorded facts make the walk, and nothing else does:
@@ -126,15 +126,22 @@ line and the job's own result is untouched.
 
 ## What it costs
 
-Measured across one run's three check legs:
+Measured on a channel of 21 runs, 81 legs between them:
 
-| Where | Size |
-| --- | --- |
-| The three files a run's check legs wrote | 9.19 MB |
-| The same three on origin, packed | 837 KiB |
+| Kept | What the legs wrote | On origin, packed |
+| --- | --- | --- |
+| 5 runs | 14.0 MiB | 1.28 MiB |
+| 10 runs | 28 MiB | 1.29 MiB |
+| 21 runs | 74.7 MiB | 6.81 MiB |
 
 Near-identical traces delta against each other, which is why they are kept as
-git objects rather than compressed one by one.
+git objects rather than compressed one by one. Doubling from five runs to ten
+cost 10 KiB, because those runs ran the same tasks and tests and differ only in
+their timings. A span where a trace's own shape changes costs a few hundred KiB
+a run instead, so the window's real bound is how long it keeps rather than how
+much it holds.
+
+No clone pays any of it: the channel is pushed and never mirrored.
 
 ## The contract
 
@@ -143,10 +150,18 @@ git objects rather than compressed one by one.
 # Whether CI keeps a trace of what it did at all.
 profile = true
 # How many runs of traces are kept.
-profile-window = 20
-# Where an assembled file lands.
-profile-into = ".fm/profiles"
+profile-window = 100
+# Where an assembled file lands, beside the checkout's other records of
+# what it did to itself.
+profile-into = ".workshop/profiles"
+# How many assembled files stay there.
+profile-keep = 10
 ```
+
+The two bounds answer different questions. `profile-window` governs the
+pushed channel, so it decides how far back a run can still be assembled;
+`profile-keep` governs this checkout's own disk, and the files it sweeps are
+output rather than input, so losing one strands nothing.
 
 A key of the wrong type is named on the leg that read it, and its default
 stands: whether a timeline is kept is not worth failing a run over.
