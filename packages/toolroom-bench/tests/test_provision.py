@@ -616,8 +616,8 @@ def test_task_prints_table_and_export(tmp_path, monkeypatch, capsys):
     assert f'export PATH="{_provision.bin_dir(tmp_path)}:$PATH"' in out
 
 
-def test_task_sync_runs_sync_against_the_prefix(tmp_path, monkeypatch):
-    """`--sync` hands the prefix to `sync`, which puts its `bin/` on PATH for
+def test_task_sync_runs_the_reading_against_the_prefix(tmp_path, monkeypatch):
+    """`--sync` hands the prefix to `read`, which puts its `bin/` on PATH for
     the read — the same `--prefix` any caller can pass by hand.
     """
     import os
@@ -627,11 +627,11 @@ def test_task_sync_runs_sync_against_the_prefix(tmp_path, monkeypatch):
     monkeypatch.setattr(_provision, "provision", lambda *a, **k: [])
     seen: dict[str, str] = {}
 
-    def fake_sync(only="", prefix=""):
+    def fake_read(only="", prefix=""):
         with tools._on_path(prefix):
             seen.update(only=only, path=os.environ.get("PATH", ""))
 
-    monkeypatch.setattr(tools, "sync", fake_sync)
+    monkeypatch.setattr(tools, "read", fake_read)
     tools.provision(prefix=tmp_path, sync_=True)
     assert str(_provision.bin_dir(tmp_path)) in seen["path"]
 

@@ -272,7 +272,7 @@ def test_the_lock_verbs_and_sync_write_the_stubs_and_env_check_counts_them(
     monkeypatch.setattr(_tools, "_read_catalogue", real)
     (_tools.stubs_dir(root) / "ruff.pyi").unlink()
     assert _tools.write_stubs(root).written == ("ruff",)
-    _tool_tasks.tools_upgrade(["ruff"])
+    _tool_tasks.tools_lock(upgrade_tool=["ruff"])
     assert "  stubs: 1 in typings/" in capsys.readouterr().out
     assert _sync.materialise_tools(root)[-1] == "  stubs: 1 in typings/"
     # This test stands in for the store, so no receipt was ever written
@@ -306,11 +306,11 @@ def test_the_entry_script_materialises_the_tools_before_it_emits(
     root.mkdir()
     (root / "uv.lock").write_text('[[package]]\nname = "uv"\nversion = "0.11.0"\n')
     script = entry_script(root)
-    assert "_run tools.materialise >&2" in script
+    assert "_run tools.sync --frozen >&2" in script
     assert '|| echo "setup: the tools were not materialised' in script
     assert (
         script.index("uv sync")
-        < script.index("tools.materialise")
+        < script.index("tools.sync --frozen")
         < script.index("env.emit")
     )
 

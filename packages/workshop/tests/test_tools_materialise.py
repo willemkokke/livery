@@ -287,15 +287,20 @@ def test_a_tool_that_left_the_lock_takes_its_receipt_with_it(
     assert set(_tools.receipts(root)) == {"tea"}
 
 
-def test_the_materialise_verb_supplies_the_bundle_and_writes_the_stubs(
+def test_the_frozen_sync_supplies_the_bundle_and_writes_the_stubs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """What the entry script runs on a runner: receipts and stubs, nothing else."""
+    """What the entry script runs on a runner: receipts and stubs, nothing else.
+
+    Frozen resolves nothing, so a checkout with no lock has nothing to
+    install and says so rather than writing one: a runner's checkout is
+    judged, never re-resolved.
+    """
     root = _workspace(tmp_path, monkeypatch)
-    _tool_tasks.tools_materialise()
+    _tool_tasks.tools_sync(frozen=True)
     assert "tools: no tools.lock; `fm tools.lock` writes one" in capsys.readouterr().out
     _tools.write_lock(root)
-    _tool_tasks.tools_materialise()
+    _tool_tasks.tools_sync(frozen=True)
     out = capsys.readouterr().out
     assert "tools: 2 receipt(s), installed ruff, tea" in out
     assert "stubs: 1 in typings/" in out

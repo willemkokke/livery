@@ -48,7 +48,7 @@ catalogue and writes `tools.lock` at the root: one version per tool for
 the whole repository, the newest that satisfies every floor and
 resolves on every locked host, refusing by name otherwise. `fm
 tools.add <requirement>` declares a tool at the project site, locks it
-and materialises it; `fm tools.upgrade <tool>` moves one entry to the
+and materialises it; `fm tools.lock --upgrade-tool=<tool>` moves one entry to the
 newest eligible version, and every package with it, since no package
 runs a version of its own.
 

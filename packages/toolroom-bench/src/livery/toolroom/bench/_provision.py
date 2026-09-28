@@ -1,7 +1,7 @@
 """Fetch the latest curated tools into a throwaway prefix — the engine behind
 `fm tools.provision`.
 
-The stubs are read from the *installed* binaries (`fm tools.sync`), so
+The stubs are read from the *installed* binaries (`fm tools.read`), so
 telling an editor what the newest release accepts means having the newest
 release on `PATH` — across five ecosystems (PyPI, npm, bun, Go, C++), none of
 which should be allowed to touch the machine's own environment.

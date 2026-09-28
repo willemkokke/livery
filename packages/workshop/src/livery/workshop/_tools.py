@@ -321,8 +321,57 @@ def current_lock(root: Path) -> Lock | None:
         fail(str(error))
 
 
+def lock_is_current(root: Path, *, offline: bool = False) -> tuple[bool, str]:
+    """Whether `tools.lock` is what the sites resolve to now; and what moved.
+
+    The question `--locked` and `--check` ask, and nothing is written to
+    answer it. An entry that still satisfies every floor stands, so a
+    newer version published since the lock was written moves nothing:
+    that is what an upgrade is for. What moves the answer is a
+    requirement the lock does not hold, or holds at a version that no
+    longer satisfies.
+
+    The graphs are not compared. A delegated tool's graph is resolved
+    when its version enters the lock and written beside it, which is a
+    write, and this reads.
+
+    Returns:
+        Whether the lock on disk is current, and why not when it is
+        not: no lock at all, a requirement nothing satisfies, or the
+        tools whose entries would move.
+    """
+    held = current_lock(root)
+    if held is None:
+        return False, f"there is no {LOCK_FILE}"
+    listing = catalogue(root, offline=offline)
+    try:
+        fresh = resolve_lock(
+            listing,
+            with_runtimes(tuple(requirements(root)), listing),
+            hosts=locked_hosts(root),
+            keep=held,
+        )
+    except LockError as error:
+        return False, str(error)
+    if fresh.to_json() == held.to_json():
+        return True, ""
+    names = set(fresh.tools) | set(held.tools)
+    moved = sorted(
+        name
+        for name in names
+        if name not in fresh.tools
+        or name not in held.tools
+        or fresh.tools[name].to_json() != held.tools[name].to_json()
+    )
+    return False, f"the lock would move: {', '.join(moved)}"
+
+
 def write_lock(
-    root: Path, *, upgrade: tuple[str, ...] = (), relock: tuple[str, ...] = ()
+    root: Path,
+    *,
+    upgrade: tuple[str, ...] = (),
+    relock: tuple[str, ...] = (),
+    offline: bool = False,
 ) -> Lock:
     """Resolve the sites' requirements and write the lock; the lock written.
 
@@ -334,7 +383,7 @@ def write_lock(
     stands, which is what an install the graph could not satisfy asks
     for.
     """
-    listing = catalogue(root)
+    listing = catalogue(root, offline=offline)
     kept = current_lock(root)
     try:
         lock = resolve_lock(

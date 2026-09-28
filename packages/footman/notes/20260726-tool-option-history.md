@@ -551,5 +551,5 @@ runbook in `CLAUDE.md`:
 ```sh
 fm tools.provision
 fm tools.audit --prefix .tools-latest    # what moved → the CHANGELOG line
-fm tools.sync  --prefix .tools-latest
+fm tools.read  --prefix .tools-latest
 ```

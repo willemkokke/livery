@@ -57,14 +57,15 @@ def _birth_rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeForge:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("livery.workshop._uv.run_uv", lambda *args, root: None)
     # The first lock resolves against the published index over the
-    # network; the suite records that it was asked for and writes one.
+    # network and installs what it names; the suite records that it was
+    # asked for and writes the lock.
     locked: list[Path] = []
 
     def _locked(root: Path) -> None:
         locked.append(root)
         (root / "tools.lock").write_text('{"schema": 1, "tools": {}}\n')
 
-    monkeypatch.setattr("livery.workshop._new_project._lock_tools", _locked)
+    monkeypatch.setattr("livery.workshop._new_project._sync_tools", _locked)
     monkeypatch.setattr(
         "livery.workshop._new_project._locked_roots", locked, raising=False
     )

@@ -10,7 +10,7 @@ one into a package.
 
     fm tools.list                  what footman curates, and what's installed
     fm tools.spec ruff             what one tool says about itself, right now
-    fm tools.sync                  read the installed tools into their records
+    fm tools.read                  read the installed tools into their records
     fm tools.audit                 which tools have moved past their record
     fm tools.color                 how footman forces colour, per tool
 
@@ -613,7 +613,7 @@ def _prefix_root(prefix: str) -> Path | None:
 
 
 @tasks.task
-def sync(
+def read(
     only: Annotated[str, doc("regenerate just this tool")] = "",
     prefix: Annotated[str, doc("read binaries from this prefix's bin/")] = "",
 ) -> None:
@@ -755,7 +755,7 @@ def _audit(
         f"{len(stale)} tool(s) have released a newer version than the stub "
         f"snapshot: {', '.join(stale)}\n"
         f"nothing is broken — the bridge speaks flags the stub hasn't heard "
-        f"of. Take a fresh snapshot with `fm tools.sync` when you want one."
+        f"of. Take a fresh snapshot with `fm tools.read` when you want one."
     )
     if strict:
         raise SystemExit(2)
@@ -2788,7 +2788,7 @@ def provision(
         doc("directory to materialise into; omitted = footman's data dir"),
     ] = None,
     sync_: Annotated[
-        bool, doc("run `tools sync` against the prefix afterwards")
+        bool, doc("run `tools read` against the prefix afterwards")
     ] = False,
     clean: Annotated[bool, doc("remove the prefix when done")] = False,
     strict: Annotated[bool, doc("fail if any tier could not be provisioned")] = False,
@@ -2862,7 +2862,7 @@ def _print_outcomes(outcomes: list[_provision.Outcome]) -> None:
 
 def _sync_against(prefix: Path, only: str) -> None:
     """Run `sync` with the prefix on PATH, so it reads the fresh binaries."""
-    sync(only=only, prefix=str(prefix))
+    read(only=only, prefix=str(prefix))
 
 
 # `platform` is everyone who read the release — "Linux", or "Linux and
@@ -2887,7 +2887,7 @@ your PATH already works. These pages document the **stubs**: what each
 curated tool accepted at the versions its record was read from, with that
 tool's own help text per flag.
 
-Nothing here is a wrapper. The records are read by `fm tools.sync`, which
+Nothing here is a wrapper. The records are read by `fm tools.read`, which
 asks the installed binaries what they take, and `fm tools.audit` reports
 which tools have released a newer version since; a workspace materialises
 the stubs the records render to with `fm tools.restub`. A flag missing

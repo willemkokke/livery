@@ -91,7 +91,7 @@ its options untouched.
 
 **`_observe`'s same-version branch becomes `merge()`** (F3): the current
 overwrite never recomputes the first delta — a latent replay bug today, and
-under this design a single maintainer `fm tools.sync` on macOS would erase a
+under this design a single maintainer `fm tools.read` on macOS would erase a
 matrix's worth of tags while `platforms` kept claiming them. Highest-risk
 existing code touched; regression tests around the release-runbook sync.
 

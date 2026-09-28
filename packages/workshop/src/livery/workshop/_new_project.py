@@ -43,18 +43,18 @@ _PUBLIC_HOSTS = {"github": "https://github.com", "gitlab": "https://gitlab.com"}
 PUBLISHED_INDEX = "https://docs.willem.net/livery/tools/"
 
 
-def _lock_tools(root: Path) -> None:
-    """Write the newborn's first `tools.lock`, resolving against the index.
+def _sync_tools(root: Path) -> None:
+    """Write the newborn's first `tools.lock` and install what it names.
 
-    The sync that follows materialises what a lock names, so without one
-    it supplies nothing and the newborn's own gate reaches for checkers
-    the store never installed. Idempotent, like every other step of the
-    birth: a lock already there is rewritten from the same records.
+    Without this a newborn's own gate reaches for checkers the store
+    never installed: the lock says what to install and nothing writes
+    one for a project that has never had one. Idempotent, like every
+    other step of the birth.
     """
-    from livery.workshop._tool_tasks import tools_lock
+    from livery.workshop._tool_tasks import tools_sync
 
     with footman.chdir(root):
-        tools_lock()
+        tools_sync()
 
 
 def _git(root: Path, *args: str) -> str:
@@ -274,7 +274,7 @@ def new_project(
     run_uv("sync", root=root)
     print("  environment: locked and synced")
 
-    _lock_tools(root)
+    _sync_tools(root)
 
     from livery.workshop._sync import sync_workspace
 
