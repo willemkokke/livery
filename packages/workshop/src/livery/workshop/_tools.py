@@ -207,7 +207,11 @@ def receipt_gap(tool: str, receipt: Receipt, bin_dir: Path) -> str:
         if not _entry_point_runs(name, receipt, bin_dir):
             return f"MISSING (the receipt names {name}, which does not run)"
     for key, value in sorted(receipt.env.items()):
-        if value.startswith("/") and not Path(value).exists():
+        # A value that is a path is checked, and a path is judged by
+        # `is_absolute`: a Windows receipt names `C:\...`, which starts
+        # with a drive and not a slash.
+        named = Path(value)
+        if named.is_absolute() and not named.exists():
             return f"MISSING ({key} names {value}, which is not there)"
     # A receipt claiming nothing was verified on the host rather than
     # installed, so the host has to answer for the tool now.
