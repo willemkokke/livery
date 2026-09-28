@@ -645,10 +645,13 @@ def _chain(
         _entered(child_fm, child, child_env),
     )
     child_gate = _run([str(child_fm), "check"], child, child_env)
-    assert (
-        "packages/geometry (cpp-conan): configure, build, ctest run"
-        in child_gate.stdout
-    )
+    # The kind's checks, one line each: the registry walks a native
+    # package's records in order, and a role the kind lacks skips by
+    # name.
+    for check in ("clang-format", "configure", "build", "ctest", "clang-tidy"):
+        assert (
+            f"  {check}: packages/geometry runs (cpp-conan kind)" in child_gate.stdout
+        )
     assert "typecomplete: packages/geometry skips (cpp-conan kind)" in child_gate.stdout
     # One compiled module, both sides of the graph: the member's own
     # test calls fmt through the greeting and the sibling library

@@ -22,6 +22,7 @@ def _package(tmp_path: Path) -> Package:
     (member / "pyproject.toml").write_text(
         '[project]\nname = "livery-one"\nversion = "0.1.0"\n'
     )
+    (member / "workshop.toml").write_text('kind = "python"\nname = "livery-one"\n')
     return Package(
         directory=member,
         path="packages/one",
@@ -45,7 +46,7 @@ def _record(
         return body
 
     monkeypatch.setattr(_quality, "workspace_root", lambda: tmp_path)
-    monkeypatch.setattr(_quality, "run_kind_checks", named("kindcheck"))
+    monkeypatch.setattr("livery.workshop._packages.verify_workspace", named("layering"))
     monkeypatch.setattr(_python, "run_format", named("format"))
     monkeypatch.setattr(_python, "run_lint", named("lint"))
     monkeypatch.setattr(_python, "run_typecheck", named("typecheck"))
@@ -69,9 +70,11 @@ def test_the_scoped_gate_runs_every_verb(
 ) -> None:
     ran, _ = _record(monkeypatch, tmp_path)
     _quality._scoped_check((_package(tmp_path),))
+    # kindcheck retired with the registry: a python package has no
+    # per-package check, and the layering check runs in a scoped gate.
     assert sorted(ran) == [
         "format",
-        "kindcheck",
+        "layering",
         "lint",
         "test",
         "typecheck",
@@ -98,7 +101,6 @@ def test_the_workspace_tests_are_a_unit_of_the_scoped_gate_with_no_kind(
     assert by_verb["typecomplete"]["args"] == ((),)
     assert by_verb["test"]["packages"] == (unit,)
     assert by_verb["test"]["scoped"] is True
-    assert by_verb["kindcheck"]["args"] == ((), tmp_path)
     # Beside a package, the unit rides along and the package keeps its
     # own paths.
     ran.clear()
@@ -108,7 +110,6 @@ def test_the_workspace_tests_are_a_unit_of_the_scoped_gate_with_no_kind(
     by_verb = {c["verb"]: c for c in calls}
     assert by_verb["format"]["paths"] == ("packages/one/tests", "tests")
     assert by_verb["test"]["packages"] == (package, unit)
-    assert by_verb["kindcheck"]["args"] == ((package,), tmp_path)
 
 
 def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
@@ -122,7 +123,7 @@ def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
     assert ran[:2] == ["format", "lint"]
     assert sorted(ran) == [
         "format",
-        "kindcheck",
+        "layering",
         "lint",
         "test",
         "typecheck",
@@ -135,7 +136,7 @@ def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
     # left, says so: the checks run and the rewriters do not run twice.
     ran.clear()
     _quality._scoped_check((package,), fix=True, rewritten=True)
-    assert sorted(ran) == ["kindcheck", "test", "typecheck", "typecomplete"]
+    assert sorted(ran) == ["layering", "test", "typecheck", "typecomplete"]
 
 
 def test_the_module_derives_from_the_src_tree_not_the_dist_name(
@@ -292,8 +293,8 @@ def _whole_gate(
     monkeypatch.setattr(_quality, "workspace_root", lambda: tmp_path)
     monkeypatch.setattr("livery.workshop._state.run_context", lambda: None)
     monkeypatch.setattr(_quality, "parallel", watched)
-    monkeypatch.setattr(_quality, "run_kind_checks", named("kindcheck"))
     monkeypatch.setattr(_quality, "template_check", named("template_check"))
+    monkeypatch.setattr("livery.workshop._packages.verify_workspace", named("layering"))
     monkeypatch.setattr(
         "livery.workshop._provenance.provenance_check", named("provenance_check")
     )
@@ -336,9 +337,11 @@ def test_the_whole_gate_is_eight_members_in_one_parallel_block(
     _quality._run_check(full=True, fix=False, base="")
     assert ran[0] == "<parallel"
     assert ran[-1] == ">parallel"
+    # kindcheck retired with the registry (its cpp-conan records judge
+    # no package here) and the layering check joined the base's set.
     assert sorted(ran[1:-1]) == [
         "format",
-        "kindcheck",
+        "layering",
         "lint",
         "provenance_check",
         "template_check",
@@ -358,7 +361,7 @@ def test_the_fixing_gate_rewrites_serially_then_judges_in_parallel(
     # write the files the judges then read.
     assert ran[:opened] == ["format", "lint", "provenance_check"]
     assert sorted(ran[opened + 1 : -1]) == [
-        "kindcheck",
+        "layering",
         "template_check",
         "test",
         "typecheck",
