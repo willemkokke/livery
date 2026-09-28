@@ -1,8 +1,8 @@
 """One backend per registered kind; dispatch through the registry.
 
-The quality verbs read each package's ``type`` from its contract
+The quality verbs read each package's ``kind`` from its contract
 and ask livery.workshop._kinds for the backend; an unregistered
-type refuses by name before anything runs, because a package the
+kind refuses by name before anything runs, because a package the
 gate silently skips is a package the gate lies about.
 
 Adding a kind means: a backend module exposing the build callables
@@ -21,6 +21,6 @@ __all__ = ["backend_for", "require_backends"]
 
 
 def require_backends(packages: tuple[Package, ...]) -> None:
-    """Refuse any package whose declared type is unregistered."""
+    """Refuse any package whose declared kind is unregistered."""
     for kind_name in sorted({package.kind for package in packages}):
         kind_for(kind_name)

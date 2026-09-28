@@ -279,6 +279,13 @@ def test_the_chain_creates_customises_and_inherits(tmp_path: Path) -> None:
     # report then cannot resolve.
     for measured in [name for name in base_env if name.startswith("COVERAGE_")]:
         base_env.pop(measured, None)
+    # Nor the runner's loop belt. A global `fm` that handed this suite
+    # to `uv run --project` set it, and a child `fm` that inherits it
+    # skips its own handoff and runs this workspace's footman against
+    # the born project's tasks file, where that project's layers are
+    # not importable (livery#865).
+    for belt in ("FOOTMAN_UV_REEXEC", "FOOTMAN_NO_UV"):
+        base_env.pop(belt, None)
     fm = str(ROOT / ".venv" / "bin" / "fm")
     for name in ("dummy", "child", f"{BRAND}-templates"):
         _destroy(token, name)
@@ -517,7 +524,7 @@ def _chain(
     # The brand's content arrived through sync.
     assert (
         "Always speak plainly."
-        in (child / ".workshop" / f"CLAUDE.{BRAND}.md").read_text()
+        in (child / ".workshop" / "fragments" / f"CLAUDE.{BRAND}.md").read_text()
     )
     assert (child / ".claude" / "skills" / "hello" / "SKILL.md").exists()
 
@@ -759,7 +766,7 @@ def _chain(
     # The fragment improvement arrived through the wheel and sync.
     assert (
         "The gate's verdict is its exit code."
-        in (child / ".workshop" / "CLAUDE.workshop.md").read_text()
+        in (child / ".workshop" / "fragments" / "CLAUDE.workshop.md").read_text()
     )
     # The engine refuses a dirty tree rather than guessing; the
     # child's customisation commits before the wave, as a person's
@@ -810,5 +817,5 @@ def _chain(
     # No layer-owned line changed: the brand's overlay content stands.
     assert (
         "Always speak plainly."
-        in (child / ".workshop" / f"CLAUDE.{BRAND}.md").read_text()
+        in (child / ".workshop" / "fragments" / f"CLAUDE.{BRAND}.md").read_text()
     )

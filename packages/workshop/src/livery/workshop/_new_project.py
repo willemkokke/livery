@@ -49,12 +49,13 @@ def _sync_tools(root: Path) -> None:
     Without this a newborn's own gate reaches for checkers the store
     never installed: the lock says what to install and nothing writes
     one for a project that has never had one. Idempotent, like every
-    other step of the birth.
+    other step of the birth. The engine takes the newborn's root as a
+    value: this runs inside the birth's own task, and a task may not
+    change the process directory.
     """
-    from livery.workshop._tool_tasks import tools_sync
+    from livery.workshop._tool_tasks import sync_tools
 
-    with footman.chdir(root):
-        tools_sync()
+    sync_tools(root)
 
 
 def _git(root: Path, *args: str) -> str:

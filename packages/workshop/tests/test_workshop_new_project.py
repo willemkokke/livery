@@ -9,7 +9,13 @@ from typing import Any
 import pytest
 
 from livery.forge.testing import FakeForge
+from livery.workshop import _new_project as _newborn_module
 from livery.workshop._new_project import new_project
+
+#: The birth's tool sync, bound at import, before the module's fixture
+#: stubs it for every birth below: the one test of the real function
+#: calls this.
+_REAL_SYNC_TOOLS = _newborn_module._sync_tools
 
 ROOT = Path(__file__).resolve().parents[3]
 TEMPLATES = ROOT / "packages/workshop/src/livery/workshop/templates"
@@ -273,3 +279,19 @@ def test_a_newborn_names_the_index_and_holds_a_lock(
     # resolves against it.
     assert contract.index("[tools]") < contract.index("[ci]")
     assert (tmp_path / "acme-tools" / "tools.lock").is_file()
+
+
+def test_the_newborn_tool_sync_takes_the_root_and_changes_no_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The birth runs inside a task, and a task may not change directory."""
+    from livery.workshop import _tool_tasks
+
+    seen: list[Path] = []
+    monkeypatch.setattr(
+        _tool_tasks, "sync_tools", lambda root, **kwargs: seen.append(root)
+    )
+    before = Path.cwd()
+    _REAL_SYNC_TOOLS(tmp_path)
+    assert seen == [tmp_path]
+    assert Path.cwd() == before

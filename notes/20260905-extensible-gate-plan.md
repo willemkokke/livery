@@ -3,8 +3,8 @@
 Status: phase 0 approved and landed 2026-09-05 (issue #227), pulled
 ahead of the docs prepass so that plan's emitter tests pin the bare
 `fm` spelling. Contract 7's pinning tests landed 2026-09-28 (commit
-94096846), so phase 2 starts when the plan is approved. Phases 1 to
-8 are drafted and await Willem's review: phase 4 split into 4 and
+94096846). Phase 1 landed 2026-09-28 (issue #860). Phases 2 to 8
+are drafted and await Willem's review: phase 4 split into 4 and
 4b because its two halves block on different things, and the
 revision of 2026-09-28 added phase 3b (the part and channel
 registries, which 4b waits on), phase 3c (the regions a repository
@@ -1448,6 +1448,42 @@ project.
   more explicit). The layering lint is a workspace check the base
   owns, code and no tool, so contract 10 holds. Open item 18
   restated; the soft form stays open.
+- 2026-09-28, phase 1 landed (issue #860): the contract key `type`
+  became `kind` across 66 files, discovery refuses the old key with
+  the migration line, and the four templates render the new key.
+  Two things the phase found. A scripted rename has to know which
+  `type=` is a package's: a task's `--type` override and a copier
+  question's `type = "str"` are not, and the first gate run caught
+  one of each. And the tests write the contract in six spellings
+  (a literal, an f-string, a helper, a triple-quoted block, a seed
+  helper, a kwarg), every one of which the new refusal caught in
+  the first gate run, which is the refusal proving itself before the
+  happy path. The descendant chain ran before submit and found a
+  defect that had merged that morning: a newborn's tool sync ran the
+  `tools.sync` task under `footman.chdir()` inside a task, which
+  footman refuses, so every birth failed (livery#864). Fixed in the
+  same change with the ladder's first rung, an engine that takes the
+  root as a value; nothing on the merge path runs the chain, which is
+  why the defect merged green. The chain's next run found a second
+  thing: run through the global `fm`, which hands off through
+  `uv run --project`, every child `fm` inherits the handoff's loop
+  belt and skips its own handoff, so the born home's verbs ran this
+  workspace's footman against the newborn's tasks file
+  (livery#865, footman's to scope; the chain now scrubs the belt
+  from its children's environment). Its third run found the test
+  itself behind the product: three reads of a delivered fragment at
+  `.workshop/<name>.md`, where fragments have lived in
+  `.workshop/fragments/` since 2026-09-27, fixed in the test. Its
+  fourth run hung in the child's own `fm sync`, the hang every sync
+  on this desk had shown all day (livery#862): `sync` is an
+  interactive task that owns the console, and since the same
+  morning commit its body called the `tools.sync` task, whose
+  console gate waits for a holder that is its own caller. Fixed
+  here the same way as the birth, the engine called with the root;
+  footman's half, a self-wait with no note, stays open. Five runs
+  to green, each finding the next thing, which is what an armed
+  test that nothing on the merge path runs looks like on the day it
+  is run. The chain then: 1 passed, 0 failed, 0 skipped in 247 s, from the junit report.
 - 2026-09-28, contract 10's vocabulary test scoped (the agent's
   correction of its own sentence, on Willem's question): the core
   names no package kind and no check tool; the interpreter, uv and

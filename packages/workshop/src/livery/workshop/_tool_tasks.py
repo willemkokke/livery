@@ -173,17 +173,29 @@ def tools_sync(
     makes. ``--offline`` reads the catalogue and the deployments from
     the machine's store alone.
     """
-    from livery.toolroom.store import LOCK_FILE
-    from livery.workshop._sync import materialise_tools
-    from livery.workshop._tools import lock_is_current, write_lock
-
     if frozen and locked:
         fail(
             "--frozen and --locked are two answers to one question: frozen"
             " installs the lock as it is, locked refuses when it is not"
             " current. Pass one."
         )
-    root = _root()
+    sync_tools(_root(), frozen=frozen, locked=locked, offline=offline)
+
+
+def sync_tools(
+    root: Path, *, frozen: bool = False, locked: bool = False, offline: bool = False
+) -> None:
+    """Match this machine to *root*'s `tools.lock`, writing the lock first if it must.
+
+    The engine behind ``tools.sync``, taking the workspace root as an
+    argument: a birth runs it for the newborn from inside its own
+    task, and a task may not change the process directory, so the
+    root travels as a value. The flags mean what the task's do.
+    """
+    from livery.toolroom.store import LOCK_FILE
+    from livery.workshop._sync import materialise_tools
+    from livery.workshop._tools import lock_is_current, write_lock
+
     if not frozen:
         current, why = lock_is_current(root, offline=offline)
         if not current:

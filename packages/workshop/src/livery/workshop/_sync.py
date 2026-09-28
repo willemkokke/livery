@@ -444,7 +444,7 @@ def sync(
     started continues on the loaded code and says so.
     """
     from livery.workshop._git_ops import GitOps
-    from livery.workshop._tool_tasks import tools_sync
+    from livery.workshop._tool_tasks import sync_tools
     from livery.workshop._uv import run_uv
 
     root = workspace_root()
@@ -461,7 +461,10 @@ def sync(
     # The tools come before `uv sync`: a native member's build under uv
     # runs cmake, conan and the provider the store supplies, and a
     # sibling library is consumed at HEAD only once it is registered.
-    tools_sync()
+    # The engine, not the `tools.sync` task: this task owns the console,
+    # and a task called from inside it waits for the console to free,
+    # which it never does while its caller runs.
+    sync_tools(root, frozen=frozen, locked=locked, offline=offline)
     for line in conan_editables(root):
         print(line)
     run_uv("sync", *_uv_flags(frozen=frozen, locked=locked, offline=offline), root=root)
