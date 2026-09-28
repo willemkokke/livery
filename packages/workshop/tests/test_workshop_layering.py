@@ -20,7 +20,7 @@ def _package(
     directory = root / "packages" / name
     directory.mkdir(parents=True)
     (directory / "workshop.toml").write_text(
-        f'type = "python"\nname = "livery-{name}"\n{contract_extra}'
+        f'kind = "python"\nname = "livery-{name}"\n{contract_extra}'
     )
     deps = ", ".join(f'"{d}"' for d in dependencies)
     (directory / "pyproject.toml").write_text(
@@ -34,7 +34,7 @@ def _forge_stub(root: Path, *, plugin: str = "") -> None:
     src.mkdir(parents=True)
     (src / "ok.py").write_text("import json\n")
     (root / "packages" / "forge" / "workshop.toml").write_text(
-        'type = "python"\nname = "livery-forge"\n'
+        'kind = "python"\nname = "livery-forge"\n'
     )
     # *plugin* is a dotted module declared as a footman task entry
     # point, which is what exempts it from the stdlib-only rule.
@@ -575,9 +575,26 @@ def test_a_kind_that_reads_no_sources_contributes_no_reference() -> None:
         directory=Path("/nowhere"),
         path="packages/native",
         name="native",
-        type="cpp-conan",
+        kind="cpp-conan",
         depends=(),
     )
     around = Neighbours(owners={}, by_path={})
     assert _cpp_conan.module_roots(package) == ()
     assert _cpp_conan.referenced_siblings(package, around) == {}
+
+
+def test_a_contract_naming_the_kind_under_type_is_refused_with_the_migration(
+    tmp_path: Path,
+) -> None:
+    directory = tmp_path / "packages" / "old"
+    directory.mkdir(parents=True)
+    (directory / "workshop.toml").write_text('type = "python"\nname = "livery-old"\n')
+    (directory / "pyproject.toml").write_text('[project]\nname = "livery-old"\n')
+    with pytest.raises(
+        ValueError,
+        match=re.escape(
+            "old: workshop.toml names the package kind under `type`;"
+            " rename `type` to `kind` in workshop.toml"
+        ),
+    ):
+        discover_packages(tmp_path)

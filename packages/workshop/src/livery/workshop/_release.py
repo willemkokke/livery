@@ -91,7 +91,7 @@ def verify_release(
     body = changelog.read_text("utf-8") if changelog.is_file() else ""
     if f"## {version}" not in body and f"## [{version}]" not in body:
         problems.append(f"CHANGELOG.md has no '## {version}' entry")
-    if requires_pyproject(package.type):
+    if requires_pyproject(package.kind):
         inits = list((package.directory / "src").rglob("__init__.py"))
         stamp = f'__version__ = "{version}"'
         if not any(stamp in init.read_text("utf-8") for init in inits):
@@ -440,12 +440,12 @@ def release_wheels(
     conan_members = [
         (package, version)
         for package, version in members
-        if kind_for(package.type).artifact == "conan"
+        if kind_for(package.kind).artifact == "conan"
     ]
     native = [
         package
         for package, _version in members
-        if kind_for(package.type).wheel_identity == "platform"
+        if kind_for(package.kind).wheel_identity == "platform"
     ]
     if not native and not conan_members:
         print("  no native members in this release; nothing to build")

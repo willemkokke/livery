@@ -50,7 +50,7 @@ def _build(base: Path) -> None:
         directory = root / "packages" / name
         (directory / "src" / "livery" / name).mkdir(parents=True)
         (directory / "workshop.toml").write_text(
-            f'type = "python"\nname = "livery-{name}"\n{extra}'
+            f'kind = "python"\nname = "livery-{name}"\n{extra}'
         )
         (directory / "pyproject.toml").write_text(
             f'[project]\nname = "livery-{name}"\nversion = "0.2.0"\n'

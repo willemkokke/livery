@@ -57,12 +57,12 @@ def restored_registry():
     _kinds._KINDS.update(before)
 
 
-def _package(directory: Path, name: str, type_name: str) -> Package:
+def _package(directory: Path, name: str, kind_name: str) -> Package:
     return Package(
         directory=directory,
         path=f"packages/{directory.name}",
         name=name,
-        type=type_name,
+        kind=kind_name,
         depends=(),
     )
 
@@ -173,14 +173,14 @@ def test_discovery_requires_pyproject_only_of_python_kinds(tmp_path: Path) -> No
     packages_dir = tmp_path / "packages"
     (packages_dir / "native").mkdir(parents=True)
     (packages_dir / "native" / "workshop.toml").write_text(
-        'type = "cpp-conan"\nname = "acme-native"\n'
+        'kind = "cpp-conan"\nname = "acme-native"\n'
     )
     found = discover_packages(tmp_path)
     assert [package.name for package in found] == ["acme-native"]
     # A python member without its pyproject still refuses.
     (packages_dir / "member").mkdir(parents=True)
     (packages_dir / "member" / "workshop.toml").write_text(
-        'type = "python"\nname = "acme-member"\n'
+        'kind = "python"\nname = "acme-member"\n'
     )
     with pytest.raises(ValueError, match=r"member: no pyproject\.toml"):
         discover_packages(tmp_path)
@@ -307,7 +307,7 @@ def test_host_tools_are_named_when_missing(restored_registry, tmp_path: Path) ->
 
     (tmp_path / "packages" / "member").mkdir(parents=True)
     (tmp_path / "packages" / "member" / "workshop.toml").write_text(
-        'type = "python"\nname = "acme-member"\n'
+        'kind = "python"\nname = "acme-member"\n'
     )
     (tmp_path / "packages" / "member" / "pyproject.toml").write_text(
         '[project]\nname = "acme-member"\n'
@@ -373,7 +373,7 @@ def test_host_tools_are_named_when_missing(restored_registry, tmp_path: Path) ->
     )
     (tmp_path / "packages" / "native").mkdir(parents=True)
     (tmp_path / "packages" / "native" / "workshop.toml").write_text(
-        'type = "cpp-fake"\nname = "acme-native"\n'
+        'kind = "cpp-fake"\nname = "acme-native"\n'
     )
     assert missing_host_tools(tmp_path) == ("surely-absent-compiler",)
 

@@ -33,7 +33,7 @@ def _workspace(tmp_path: Path) -> Path:
         '[workspace]\n[forge]\nkind = "gitea"\nowner = "acme"\n'
     )
     (root / "packages" / "geometry" / "workshop.toml").write_text(
-        'type = "cpp-conan"\nname = "acme-geometry"\n'
+        'kind = "cpp-conan"\nname = "acme-geometry"\n'
     )
     (root / "packages" / "geometry" / "CHANGELOG.md").write_text(
         "# Changelog\n\n## [0.3.0]\n\n- the area function\n\n## [0.2.0]\n\n- older\n"
@@ -46,7 +46,7 @@ def _member(root: Path) -> Package:
         directory=root / "packages" / "geometry",
         path="packages/geometry",
         name="acme-geometry",
-        type="cpp-conan",
+        kind="cpp-conan",
         depends=(),
     )
 
@@ -288,7 +288,7 @@ def test_the_waves_floor_check_reads_the_attached_caches(
         directory=root / "packages" / "ext",
         path="packages/ext",
         name="acme-ext",
-        type="python-nanobind",
+        kind="python-nanobind",
         depends=(Edge(path="packages/geometry", kind="build", floor="0.1.0"),),
     )
     target = RegistryTarget(kind="conan", url="fake://acme", releases=True)

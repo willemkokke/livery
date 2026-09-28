@@ -1,7 +1,7 @@
 # The package contract. Discovery is by this file: a directory under
 # packages/ is a package exactly when it carries one.
 
-type = "python"
+kind = "python"
 name = "livery-workshop"
 
 [verbs]

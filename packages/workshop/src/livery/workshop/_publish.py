@@ -239,7 +239,7 @@ def assert_wheel_identity(package: Package) -> None:
     """
     from livery.workshop._kinds import kind_for
 
-    identity = kind_for(package.type).wheel_identity
+    identity = kind_for(package.kind).wheel_identity
     if not identity:
         return
     wheels = sorted((package.directory / "dist").glob("*.whl"))
@@ -249,13 +249,13 @@ def assert_wheel_identity(package: Package) -> None:
         pure = "none-any" in wheel.name
         if identity == "platform" and pure:
             fail(
-                f"{package.name} is a {package.type} package and"
+                f"{package.name} is a {package.kind} package and"
                 f" {wheel.name} is pure-tagged: the extension did not"
                 " compile into the wheel"
             )
         if identity == "pure" and not pure:
             fail(
-                f"{package.name} is a {package.type} package and"
+                f"{package.name} is a {package.kind} package and"
                 f" {wheel.name} carries a platform tag: a pure kind"
                 " must ship none-any, or its declared kind is wrong"
             )
@@ -433,7 +433,7 @@ def publish_release(
         kind="python", url=index_url, publish_url=index_url, token=token
     )
     conan_target = None
-    if any(_kind_for(p.type).artifact == "conan" for p in ordered):
+    if any(_kind_for(p.kind).artifact == "conan" for p in ordered):
         # Resolved once, before anything uploads: a ladder refusal
         # (no conan target anywhere) must stop the wave while there
         # is still nothing to undo.
@@ -481,7 +481,7 @@ def publish_release(
                 return
             from livery.workshop._kinds import backend_for, kind_for
 
-            record = kind_for(package.type)
+            record = kind_for(package.kind)
             if prebuilt and record.wheel_identity == "platform":
                 # The matrix already built and collected this
                 # member's wheels; a rebuild here would clobber them

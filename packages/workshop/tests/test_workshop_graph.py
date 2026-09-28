@@ -33,7 +33,7 @@ def _packages(root: Path) -> None:
         directory = root / "packages" / name
         directory.mkdir(parents=True)
         (directory / "workshop.toml").write_text(
-            f'type = "python"\nname = "livery-{name}"\n{extra}'
+            f'kind = "python"\nname = "livery-{name}"\n{extra}'
         )
         (directory / "pyproject.toml").write_text(
             f'[project]\nname = "livery-{name}"\ndependencies = []\n'

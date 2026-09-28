@@ -355,7 +355,7 @@ def test_the_dev_act_pins_a_released_member_and_drops_its_stale_wheels(
         home = tmp_path / "packages" / member
         home.mkdir(parents=True)
         (home / "workshop.toml").write_text(
-            f'type = "python"\nname = "livery-{member}"\n'
+            f'kind = "python"\nname = "livery-{member}"\n'
         )
         (home / "pyproject.toml").write_text(
             f'[project]\nname = "livery-{member}"\nversion = "0"\n'

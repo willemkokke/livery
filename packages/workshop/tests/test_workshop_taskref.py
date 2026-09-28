@@ -33,7 +33,7 @@ def _workspace(tmp_path: Path) -> Path:
         (member / "src" / "acme" / name).mkdir(parents=True)
         (member / "src" / "acme" / name / "__init__.py").write_text("")
         (member / "workshop.toml").write_text(
-            f'type = "python"\nname = "acme-{name}"\n'
+            f'kind = "python"\nname = "acme-{name}"\n'
         )
         table = "".join(
             f'[project.entry-points."footman.tasks"]\n"{point}" = "x"\n'
@@ -242,7 +242,7 @@ def test_a_shared_verb_declared_twice_runs_once(
     root = _workspace(tmp_path)
     for name in ("core", "bare"):
         (root / "packages" / name / "workshop.toml").write_text(
-            f'type = "python"\nname = "acme-{name}"\n'
+            f'kind = "python"\nname = "acme-{name}"\n'
             '[docs]\ngenerators = ["docs.task-reference"]\n'
         )
     monkeypatch.setattr(shutil_module, "which", lambda name: "/stub/fm")

@@ -48,7 +48,7 @@ def _workspace(tmp_path: Path) -> Path:
         member = root / "packages" / name
         (member / "src").mkdir(parents=True)
         (member / "workshop.toml").write_text(
-            f'type = "{kind}"\nname = "acme-{name}"\n'
+            f'kind = "{kind}"\nname = "acme-{name}"\n'
         )
         (member / "pyproject.toml").write_text(f'[project]\nname = "acme-{name}"\n')
         (member / "CHANGELOG.md").write_text("## 1.0.0\n")

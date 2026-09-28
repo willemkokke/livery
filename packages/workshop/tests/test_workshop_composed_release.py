@@ -31,7 +31,7 @@ def _home(tmp_path: Path) -> Path:
     (root / "pyproject.toml").write_text(
         '[project]\nname = "home"\nrequires-python = ">=3.11"\n'
     )
-    (member / "workshop.toml").write_text('type = "python"\nname = "acme-brand"\n')
+    (member / "workshop.toml").write_text('kind = "python"\nname = "acme-brand"\n')
     (member / "pyproject.toml").write_text('[project]\nname = "acme-brand"\n')
     (overlay / "project" / "BRAND.md.jinja").write_text("# {{ project_name }}\n")
     (root / ".copier-answers.yml").write_text(

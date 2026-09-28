@@ -130,7 +130,7 @@ def floor_legs(
         floor = getattr(edge, "floor", "")
         if dependency is None or not floor:
             continue
-        if kind_for(dependency.type).artifact != "conan":
+        if kind_for(dependency.kind).artifact != "conan":
             continue
         if released.get(edge.path) == floor:
             print(

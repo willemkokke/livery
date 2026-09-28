@@ -51,14 +51,15 @@ class Package:
         path: The identity path from the workspace root
             (``packages/forge``).
         name: The distribution name (``livery-forge``).
-        type: The backend selector (``python`` today).
+        kind: The package kind, as the contract's ``kind`` declares
+            it: ``python``, ``python-nanobind`` or ``cpp-conan``.
         depends: The declared edges, in contract order.
     """
 
     directory: Path
     path: str
     name: str
-    type: str
+    kind: str
     depends: tuple[Edge, ...]
 
 
@@ -68,8 +69,10 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
     Raises ValueError, with every finding listed, when a directory
     under ``packages/`` lacks its contract, or lacks the
     ``pyproject.toml`` its declared kind requires: a half-present
-    package is a wrong state, not a lesser one. An unknown type
+    package is a wrong state, not a lesser one. An unknown kind
     passes discovery so the backend refusal can name the vocabulary.
+    A contract still naming the package kind under ``type`` refuses
+    with the one-line migration.
     """
     from livery.workshop._kinds import requires_pyproject
 
@@ -86,9 +89,15 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
             problems.append(f"{directory.name}: no workshop.toml")
             continue
         contract = load_contract(contract_file)
-        type_name = str(contract.get("type", ""))
+        if "type" in contract:
+            problems.append(
+                f"{directory.name}: workshop.toml names the package kind under"
+                " `type`; rename `type` to `kind` in workshop.toml"
+            )
+            continue
+        kind_name = str(contract.get("kind", ""))
         if (
-            requires_pyproject(type_name)
+            requires_pyproject(kind_name)
             and not (directory / "pyproject.toml").is_file()
         ):
             problems.append(f"{directory.name}: no pyproject.toml")
@@ -106,7 +115,7 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
                 directory=directory,
                 path=f"packages/{directory.name}",
                 name=str(contract.get("name", "")),
-                type=type_name,
+                kind=kind_name,
                 depends=depends,
             )
         )
@@ -147,15 +156,15 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
         # The kind's own extractor answers what the package declares
         # natively: pyproject dependencies for a python kind, conan
         # references for a conan one, the union for the extension.
-        if package.type not in kind_names():
+        if package.kind not in kind_names():
             known = ", ".join(kind_names())
             problems.append(
-                f"{package.path}: type {package.type!r} is not a"
+                f"{package.path}: kind {package.kind!r} is not a"
                 f" registered kind (kinds: {known}); its edges cannot"
                 " be checked"
             )
             continue
-        record = kind_for(package.type)
+        record = kind_for(package.kind)
         extractor = getattr(record.backend, "declared_requirements", None)
         if extractor is None:
             problems.append(
@@ -178,7 +187,7 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
             dep = by_path[edge.path]
             home = (
                 "[project.dependencies]"
-                if is_python_kind(dep.type)
+                if is_python_kind(dep.kind)
                 else f'conanfile.py (requires "{dep.name}/[>={edge.floor}]")'
             )
             constraint = native.get(dep.name)
@@ -264,9 +273,9 @@ def neighbours(packages: tuple[Package, ...]) -> Neighbours:
 
     owners: dict[str, str] = {}
     for package in packages:
-        if package.type not in kind_names():
+        if package.kind not in kind_names():
             continue
-        roots = getattr(kind_for(package.type).backend, "module_roots", None)
+        roots = getattr(kind_for(package.kind).backend, "module_roots", None)
         if roots is None:
             continue
         for prefix in roots(package):
@@ -335,10 +344,10 @@ def undeclared_references(
     writable: list[tuple[Package, Package, str, str]] = []
     refused: list[tuple[Package, Package]] = []
     for package in packages:
-        if package.type not in kind_names():
+        if package.kind not in kind_names():
             continue
         referenced = getattr(
-            kind_for(package.type).backend, "referenced_siblings", None
+            kind_for(package.kind).backend, "referenced_siblings", None
         )
         if referenced is None:
             continue
@@ -492,11 +501,11 @@ def _forge_is_stdlib_only(root: Path, packages: tuple[Package, ...]) -> list[str
     from livery.workshop._kinds import kind_for, kind_names
 
     forge = next((p for p in packages if p.name == _FORGE_DIST), None)
-    if forge is None or forge.type not in kind_names():
+    if forge is None or forge.kind not in kind_names():
         return []
     # The same reader the kind's own reference check uses, so one
     # answer about what a package declares serves both.
-    reader = getattr(kind_for(forge.type).backend, "plugin_modules", None)
+    reader = getattr(kind_for(forge.kind).backend, "plugin_modules", None)
     plugins: tuple[str, ...] = () if reader is None else reader(forge)
     base = forge.directory / "src"
     problems = []

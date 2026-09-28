@@ -1053,10 +1053,10 @@ def test_the_release_baseline_reads_the_contract_or_stays_empty(tmp_path):
     package = tmp_path / "packages" / "thing"
     package.mkdir(parents=True)
     assert _release_baseline(package) == ""
-    (package / "workshop.toml").write_text('type = "python"\nname = "thing"\n')
+    (package / "workshop.toml").write_text('kind = "python"\nname = "thing"\n')
     assert _release_baseline(package) == ""
     (package / "workshop.toml").write_text(
-        'type = "python"\nname = "thing"\n[release]\nbaseline = "0.6.1"\n'
+        'kind = "python"\nname = "thing"\n[release]\nbaseline = "0.6.1"\n'
     )
     assert _release_baseline(package) == "0.6.1"
 

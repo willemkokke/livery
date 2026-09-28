@@ -126,7 +126,7 @@ def _workspace(
         f'[workspace]\n\n[tools]\nindex = "records"\n{tools}'
     )
     (root / "packages" / "member" / "workshop.toml").write_text(
-        'type = "python"\nname = "acme-member"\n'
+        'kind = "python"\nname = "acme-member"\n'
     )
     (root / "packages" / "member" / "pyproject.toml").write_text(
         '[project]\nname = "acme-member"\n'
@@ -146,7 +146,7 @@ def test_two_floors_that_cannot_both_be_met_refuse_naming_each_and_its_site(
 ) -> None:
     root = _workspace(tmp_path, monkeypatch, tools='requires = ["ruff>=1.1"]\n')
     (root / "packages" / "member" / "workshop.toml").write_text(
-        'type = "python"\nname = "acme-member"\n\n[tools]\nrequires = ["ruff>=9.0"]\n'
+        'kind = "python"\nname = "acme-member"\n\n[tools]\nrequires = ["ruff>=9.0"]\n'
     )
     with pytest.raises(Failed) as refused:
         _tools.write_lock(root)
@@ -285,7 +285,7 @@ def test_the_three_sites_union_and_each_names_itself(
         tmp_path, monkeypatch, tools='requires = ["git-cliff", "ruff>=1.1"]\n'
     )
     (root / "packages" / "member" / "workshop.toml").write_text(
-        'type = "python"\nname = "acme-member"\n\n[tools]\nrequires = ["cspell>=1.0"]\n'
+        'kind = "python"\nname = "acme-member"\n\n[tools]\nrequires = ["cspell>=1.0"]\n'
     )
     _records(
         root,

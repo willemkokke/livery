@@ -104,7 +104,7 @@ def _workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, contract: str) -
     # One package of a kind that requires nothing, so the sites'
     # requirements are the contract's alone.
     (root / "packages" / "member" / "workshop.toml").write_text(
-        'type = "bare"\nname = "acme-member"\n'
+        'kind = "bare"\nname = "acme-member"\n'
     )
     (root / "packages" / "member" / "pyproject.toml").write_text(
         '[project]\nname = "acme-member"\n'

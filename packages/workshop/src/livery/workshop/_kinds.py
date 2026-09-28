@@ -1,4 +1,4 @@
-"""The kind registry: what a package type is, in one record.
+"""The kind registry: what a package kind is, in one record.
 
 A kind answers four questions through one registration: how to
 build (the backend, three callables), what to render (the template
@@ -11,7 +11,7 @@ passes vacuously).
 Adding a kind means one call: ``register_kind`` with the record.
 The workshop registers ``base`` and ``python`` at import; a layer's
 plugin registers its own kinds at mount, which is how a brand ships
-a kind the way it ships fragments. An unknown declared type refuses
+a kind the way it ships fragments. An unknown declared kind refuses
 naming the vocabulary: a typo that silently builds the wrong kind
 is worse than a stop.
 
@@ -19,7 +19,7 @@ is worse than a stop.
 every package template renders first. It heads every kind's chain
 and carries what every kind needs because every kind releases, the
 changelog engine and the ``cliff.toml`` it reads, so a leaf kind
-never restates them. A package's ``type`` never names it: the
+never restates them. A package's ``kind`` never names it: the
 vocabulary a contract may use is the concrete kinds.
 """
 
@@ -188,7 +188,7 @@ class KindRecord:
     """One package kind, completely.
 
     Attributes:
-        name: The contract's ``type`` value.
+        name: The contract's ``kind`` value.
         backend: The module carrying the kind's build callables.
         template: The template directory name the kind renders, or
             empty for a kind with no template of its own.
@@ -222,7 +222,7 @@ class KindRecord:
         abstract: Whether the kind exists for its children alone: it
             heads their chains with its tools, managed files and
             template, builds nothing, and is never a package's
-            ``type``. A concrete kind needs a backend; an abstract
+            ``kind``. A concrete kind needs a backend; an abstract
             one has none.
     """
 
@@ -266,31 +266,31 @@ def register_kind(record: KindRecord) -> None:
 
 
 def kind_names() -> tuple[str, ...]:
-    """The vocabulary a contract's ``type`` may name, sorted: the concrete kinds."""
+    """The vocabulary a contract's ``kind`` may name, sorted: the concrete kinds."""
     return tuple(sorted(name for name, record in _KINDS.items() if not record.abstract))
 
 
-def kind_for(type_name: str) -> KindRecord:
-    """The record for the contract's ``type`` value; refusal teaches."""
-    record = _KINDS.get(type_name)
+def kind_for(kind_name: str) -> KindRecord:
+    """The record for the contract's ``kind`` value; refusal teaches."""
+    record = _KINDS.get(kind_name)
     if record is None:
         known = ", ".join(kind_names())
-        fail(f"{type_name!r} is not a registered package kind; kinds: {known}")
+        fail(f"{kind_name!r} is not a registered package kind; kinds: {known}")
     return record
 
 
 def backend_for(package: Package) -> Backend:
-    """The backend that builds *package*, by its declared type.
+    """The backend that builds *package*, by its declared kind.
 
     An abstract kind refuses naming the vocabulary: it builds nothing,
-    and a contract that names it has the wrong type.
+    and a contract that names it has the wrong kind.
     """
-    record = kind_for(package.type)
+    record = kind_for(package.kind)
     if record.backend is None:
         known = ", ".join(kind_names())
         fail(
-            f"{package.path}: type {package.type!r} is an abstract kind and builds"
-            f" nothing; a package's type is one of {known}"
+            f"{package.path}: kind {package.kind!r} is an abstract kind and builds"
+            f" nothing; a package's kind is one of {known}"
         )
     return record.backend
 
@@ -304,7 +304,7 @@ def gated(packages: tuple[Package, ...], verb: str) -> tuple[Package, ...]:
     """
     kept = []
     for package in packages:
-        record = kind_for(package.type)
+        record = kind_for(package.kind)
         if verb in record.ci.check_verbs:
             kept.append(package)
         else:
@@ -312,14 +312,14 @@ def gated(packages: tuple[Package, ...], verb: str) -> tuple[Package, ...]:
     return tuple(kept)
 
 
-def kind_chain(type_name: str) -> tuple[KindRecord, ...]:
-    """The render chain, parent first, ending at *type_name*.
+def kind_chain(kind_name: str) -> tuple[KindRecord, ...]:
+    """The render chain, parent first, ending at *kind_name*.
 
     A cycle refuses naming the chain rather than recursing forever.
     """
     chain: list[KindRecord] = []
     seen: set[str] = set()
-    name = type_name
+    name = kind_name
     while name:
         if name in seen:
             fail(
@@ -365,10 +365,10 @@ def template_chain(template_kind: str) -> tuple[str, ...]:
     return chain
 
 
-def managed_files(type_name: str) -> tuple[str, ...]:
+def managed_files(kind_name: str) -> tuple[str, ...]:
     """The drift-judged rendered files: the chain's union, sorted."""
     managed: set[str] = set()
-    for record in kind_chain(type_name):
+    for record in kind_chain(kind_name):
         managed.update(record.managed)
     return tuple(sorted(managed))
 
@@ -376,8 +376,8 @@ def managed_files(type_name: str) -> tuple[str, ...]:
 def kind_tools(present_types: set[str]) -> tuple[str, ...]:
     """The union of tool requirements the present kinds declare, sorted."""
     tools: set[str] = set()
-    for type_name in present_types:
-        for record in kind_chain(type_name):
+    for kind_name in present_types:
+        for record in kind_chain(kind_name):
             tools.update(record.tools)
     return tuple(sorted(tools))
 
@@ -385,13 +385,13 @@ def kind_tools(present_types: set[str]) -> tuple[str, ...]:
 def kind_host_tools(present_types: set[str]) -> tuple[str, ...]:
     """The union of host requirements the present kinds name, sorted."""
     tools: set[str] = set()
-    for type_name in present_types:
-        for record in kind_chain(type_name):
+    for kind_name in present_types:
+        for record in kind_chain(kind_name):
             tools.update(record.host_tools)
     return tuple(sorted(tools))
 
 
-def is_python_kind(type_name: str) -> bool:
+def is_python_kind(kind_name: str) -> bool:
     """Whether the kind is a Python distribution, by its chain.
 
     True when ``python`` sits anywhere in the chain: a child kind (a
@@ -399,19 +399,19 @@ def is_python_kind(type_name: str) -> bool:
     while a kind outside the chain (``cpp-conan``) is not and never
     joins the uv workspace.
     """
-    return any(record.name == "python" for record in kind_chain(type_name))
+    return any(record.name == "python" for record in kind_chain(kind_name))
 
 
-def requires_pyproject(type_name: str) -> bool:
-    """Whether a package of this declared type must carry a pyproject.
+def requires_pyproject(kind_name: str) -> bool:
+    """Whether a package of this declared kind must carry a pyproject.
 
-    An unregistered type answers False so discovery can finish and
+    An unregistered kind answers False so discovery can finish and
     the backend refusal can name the vocabulary; a missing file
     would otherwise mask the real problem, the typo.
     """
-    if type_name not in _KINDS:
+    if kind_name not in _KINDS:
         return False
-    return is_python_kind(type_name)
+    return is_python_kind(kind_name)
 
 
 def record_for_template(template_kind: str) -> KindRecord | None:
@@ -448,7 +448,7 @@ def _register_builtin() -> None:
     )
     # Two contract kinds exist today. The layer package template
     # (package-python-layer) is a template variant of python, not
-    # a contract type of its own: every member declares "python".
+    # a contract kind of its own: every member declares "python".
     # The python kind's tools: uv makes the venv the checkers run in,
     # and the checkers, the formatter and the test runner are what the
     # gate runs on every python package. Declared here as data, so a

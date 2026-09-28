@@ -37,7 +37,7 @@ def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Package, Packa
         directory = tmp_path / "packages" / name
         directory.mkdir(parents=True)
         (directory / "workshop.toml").write_text(
-            f'type = "python"\nname = "livery-{name}"\n\n'
+            f'kind = "python"\nname = "livery-{name}"\n\n'
             f"[qa]\ncoverage-floor = {floor}\n"
         )
         members.append(
@@ -45,7 +45,7 @@ def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Package, Packa
                 directory=directory,
                 path=f"packages/{name}",
                 name=f"livery-{name}",
-                type="python",
+                kind="python",
                 depends=(),
             )
         )

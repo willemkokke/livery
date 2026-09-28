@@ -60,7 +60,7 @@ def _member(root: Path, name: str, *, floors_on: tuple[str, ...] = ()) -> None:
     )
     requirements = ", ".join(f'"livery-{dep}>=0.3.0"' for dep in floors_on)
     (directory / "workshop.toml").write_text(
-        f'type = "python"\nname = "livery-{name}"\n{depends}'
+        f'kind = "python"\nname = "livery-{name}"\n{depends}'
     )
     (directory / "pyproject.toml").write_text(
         f'[project]\nname = "livery-{name}"\nversion = "0.3.0"\n'
@@ -168,7 +168,7 @@ def test_publish_refuses_without_an_upload_address(tmp_path: Path) -> None:
         directory=tmp_path,
         path="packages/thing",
         name="thing",
-        type="python",
+        kind="python",
         depends=(),
     )
     with pytest.raises(_FAILURES) as caught:
@@ -196,7 +196,7 @@ def test_an_empty_publish_token_variable_never_reaches_uv(
         directory=tmp_path,
         path="packages/thing",
         name="thing",
-        type="python",
+        kind="python",
         depends=(),
     )
     (tmp_path / "dist").mkdir()
@@ -242,7 +242,7 @@ def test_every_index_wording_of_a_duplicate_upload_is_walked_past(
         directory=tmp_path,
         path="packages/thing",
         name="thing",
-        type="python",
+        kind="python",
         depends=(),
     )
     (tmp_path / "dist").mkdir()

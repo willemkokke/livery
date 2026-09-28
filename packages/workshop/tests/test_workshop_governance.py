@@ -41,7 +41,7 @@ def _workspace(tmp_path: Path, *, owners: bool = True) -> Path:
         f'[workspace]\n\n[forge]\nkind = "github"\nowner = "acme"\n\n{owner_block}'
     )
     (root / "packages" / "core" / "workshop.toml").write_text(
-        'type = "python"\nname = "livery-core"\n\n[owners]\nusers = ["bob"]\n'
+        'kind = "python"\nname = "livery-core"\n\n[owners]\nusers = ["bob"]\n'
     )
     (root / "packages" / "core" / "pyproject.toml").write_text(
         '[project]\nname = "livery-core"\nversion = "0.1.0"\n'
@@ -257,7 +257,7 @@ def test_the_check_title_task_refuses_a_drifted_title(
     _git(root, "checkout", "-b", "workflow/release/core")
     member = root / "packages" / "core"
     member.mkdir(parents=True, exist_ok=True)
-    (member / "workshop.toml").write_text('type = "python"\nname = "livery-core"\n')
+    (member / "workshop.toml").write_text('kind = "python"\nname = "livery-core"\n')
     (member / "CHANGELOG.md").write_text("# Changelog\n\n## [0.2.0]\n\n- x\n")
     # A rider file rides too: the title rebuilds from the changelogs,
     # so it changes nothing.
