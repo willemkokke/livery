@@ -89,3 +89,7 @@ body = """
 """
 {%- endraw %}
 trim = true
+
+# The package's own tables.
+# -- workshop: region own, yours to edit; the render keeps it --
+{{ (regions.get('cliff.toml') or {}).get('own', '') }}# -- workshop: end own --

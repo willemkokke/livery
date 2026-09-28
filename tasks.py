@@ -5,9 +5,10 @@
 
 Run with ``fm <task>``. ``fm check`` is the whole local gate;
 CI runs the same command. The tree comes from the mounted layers, and
-the render owns this file: the gate keeps it matching the template, so
-a workspace adds tasks through the layers its contract names, never by
-editing this file.
+the render owns this file above the mount: the gate keeps that part
+matching the template, and a workspace adds tasks through the layers
+its contract names, or in the region below the mount, which is its
+own.
 """
 
 from livery.footman import plugin
@@ -29,3 +30,7 @@ plugin("footman.profile")
 from livery.workshop import mount_layers  # noqa: E402
 
 mount_layers()
+
+# The repository's own tasks, below the mount.
+# -- workshop: region tasks, yours to edit; the render keeps it --
+# -- workshop: end tasks --

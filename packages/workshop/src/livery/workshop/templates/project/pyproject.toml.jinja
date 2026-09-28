@@ -135,25 +135,6 @@ pythonVersion = "{{ python_floor }}"
 typeCheckingMode = "standard"
 reportMissingModuleSource = false
 
-# The imported toolroom tests monkeypatch module internals by
-# attribute, which this checker reads as private-import use; their
-# conformance rides the same tracked content pass as the docstrings.
-[[tool.basedpyright.executionEnvironments]]
-root = "packages/toolroom/tests"
-reportPrivateImportUsage = false
-
-# The bench's tests are toolroom's machinery tests, moved with it.
-[[tool.basedpyright.executionEnvironments]]
-root = "packages/toolroom-bench/tests"
-reportPrivateImportUsage = false
-
-# The imported footman tests drive internals (`_app`, `_paths`,
-# `_complete`) by design: the suite is the framework's own, and its
-# subjects are private modules. Same tracked pass as toolroom's.
-[[tool.basedpyright.executionEnvironments]]
-root = "packages/footman/tests"
-reportPrivateImportUsage = false
-
 [tool.mypy]
 # Second gate of the four. {{ namespace_package }}.* is fully strict; tests and tasks.py
 # run the usage-checking half (check_untyped_defs, on via strict), so
@@ -289,3 +270,10 @@ pythonpath = [{% for package in py %}"packages/{{ package.dir }}/tests", {% endf
 # are uneven (footman measured it; the choice carries until we measure
 # here).
 addopts = "-q -n auto --dist=worksteal --import-mode=importlib"
+
+# The repository's own tables: whole tables and array-of-table entries
+# (a `[[tool.basedpyright.executionEnvironments]]` for an imported
+# suite, a `[tool.x]` of your own), never a key inside a table the
+# render wrote; a tool with an `extend-` spelling takes that.
+# -- workshop: region tables, yours to edit; the render keeps it --
+{{ (regions.get('pyproject.toml') or {}).get('tables', '') }}# -- workshop: end tables --

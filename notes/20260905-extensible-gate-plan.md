@@ -4,8 +4,10 @@ Status: phase 0 approved and landed 2026-09-05 (issue #227), pulled
 ahead of the docs prepass so that plan's emitter tests pin the bare
 `fm` spelling. Contract 7's pinning tests landed 2026-09-28 (commit
 94096846). Phase 1 landed 2026-09-28 (issue #860, pull request
-#866); phase 2 was built the same day (issue #867), stacked on it.
-Phases 3 to 8 are drafted and await Willem's review: phase 4 split
+#866); phase 2 landed the same day (issue #867, pull request #869,
+its ordering fix #870); phase 3c was built the same day (issue #874)
+and phase 8's first change, the publishing opt-out, too (issue #871).
+Phases 3, 3b, 4 to 8 are drafted and await Willem's review: phase 4 split
 into 4 and
 4b because its two halves block on different things, and the
 revision of 2026-09-28 added phase 3b (the part and channel
@@ -1514,6 +1516,23 @@ project.
   package, ctest being its check, and the skip test says so. The
   router's one line per package became one line per check, as the
   phase named, and the chain asserts the new lines.
+- 2026-09-28, phase 3c built (issue #874): `_regions.py` reads a
+  managed file's marked regions and splits a tail file into the
+  lines the render owns and the rest; the project and package
+  renders take the committed regions as an input beside the
+  answers; the drift report's line adapts (outside a region, a
+  missing marker, a changed prefix); `fm explain` names a file's
+  regions with their lines. The carriers: the root `pyproject.toml`
+  (a `tables` region, which took the three basedpyright execution
+  environments out of the base template), the root `.gitignore`
+  (`rules`), `.vscode/settings.json` (`settings`, first inside the
+  object so each line ends with a comma), `tasks.py` (`tasks`, below
+  the mount, which makes the docs page's promise true), and every
+  package's `cliff.toml` (`own`). No managed file needs the tail
+  form today; the rule is built and tested on a fixture. Not done,
+  deliberately: the region inside the dependency groups (Willem's
+  third objection is not ruled), so `types-pyyaml` stays in the base
+  template and that acceptance line stays open.
 - 2026-09-28, livery#870, found by the chain after phase 2 merged:
   a native package's checks ran out of order in the gate's block,
   build and ctest before configure, because the task prerequisites

@@ -400,6 +400,35 @@ def explain(
     print(f"    channel: {answer.channel}")
     print(f"    source: {answer.source}")
     print(f"    edit: {answer.edit}")
+    for line in owned_lines(root, relative):
+        print(f"    {line}")
+
+
+def owned_lines(root: Path, relative: Path) -> list[str]:
+    """What a managed file carries that the repository owns, one line each.
+
+    A marked region is named with the lines its markers enclose; a
+    tail file names the line the render's bytes end on. A file with
+    neither says nothing.
+    """
+    from livery.workshop import _regions
+    from livery.workshop._templates import TAIL_FILES
+
+    posix = relative.as_posix()
+    path = root / relative
+    if not path.is_file():
+        return []
+    if posix in TAIL_FILES:
+        return [
+            "yours: the render owns this file's first lines, as many as it"
+            " renders; your own lines follow them"
+        ]
+    text = path.read_text(encoding="utf-8", errors="replace")
+    return [
+        f"region {region.name}: lines {region.first} to {region.last}, yours to"
+        " edit inside the markers; the render keeps it"
+        for region in _regions.regions_in(text)
+    ]
 
 
 def _content_trees(root: Path) -> list[tuple[str, Path]]:

@@ -82,3 +82,7 @@ body = """
 {% endfor %}
 """
 trim = true
+
+# The package's own tables.
+# -- workshop: region own, yours to edit; the render keeps it --
+# -- workshop: end own --
