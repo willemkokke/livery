@@ -598,11 +598,20 @@ Acceptance, and what proves each:
   not, and a gate skipped because the tree is already proved shows on
   the timeline.
 
+- 2026-09-28, Willem: the window is 100 runs, about a working week at
+  twenty runs a day. Measured on the live channel rather than on the
+  desk's estimate: 21 runs and 81 legs wrote 74.7 MiB, which packs to
+  6.81 MiB on origin, and going from five kept runs to ten cost 10 KiB
+  because consecutive runs of one shape delta against each other. The
+  first estimate, 837 KiB a run, came from one run's three legs with no
+  cross-run delta and was five to ten times too pessimistic. Every leg
+  on the channel had been pushed the same day, so twenty runs held under
+  a day, which is empty exactly when someone comes looking. The
+  workspace's own contract stops repeating the number and takes the
+  default.
+
 ## Open
 
-1. **The window's depth.** Measured: 837 KiB a run once packed, so
-   twenty runs is about 16 MB on origin and fifty about 42 MB. The
-   number is Willem's. Twenty stands in the contract and on the page
-   until he says otherwise, and both say the same number.
-2. ~~Whether a leg of a nightly or a release run pushes too.~~ Decided:
-   every job of every point does, under the one switch.
+None. Both questions this plan raised are answered in the decision
+record: every job of every point pushes, under the one switch, and the
+window is 100 runs.
