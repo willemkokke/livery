@@ -464,6 +464,19 @@ def _register_builtin() -> None:
 
         verify_workspace(ctx.root)
 
+    def layering_fix(ctx: GateContext) -> None:
+        from livery.workshop._packages import verify_workspace, write_edges
+        from livery.workshop._uv import run_uv
+
+        written = write_edges(ctx.root)
+        for line in written:
+            print(line)
+        if any("pyproject.toml" in line for line in written):
+            # A new requirement moves the lock; the fix leaves the tree
+            # consistent, as a person would after editing by hand.
+            run_uv("lock", root=ctx.root)
+        verify_workspace(ctx.root)
+
     def package_of(ctx: GateContext) -> Package:
         assert ctx.package is not None
         return ctx.package
@@ -517,7 +530,7 @@ def _register_builtin() -> None:
             fix=provenance_fix,
             in_scoped=False,
         ),
-        CheckRecord("layering", "layering", layering_run),
+        CheckRecord("layering", "layering", layering_run, fix=layering_fix),
         CheckRecord(
             "configure",
             "build",

@@ -1523,6 +1523,20 @@ project.
   outside a run, where nothing dedups, the caller orders them.
   Phase 2 merged with the fix uncommitted, since an armed submit
   merges on green; the fix is its own change.
+- 2026-09-28, livery#829 built on phase 2: the layering check's fix
+  mode. `write_edges` declares every sibling reference the graph
+  already reaches, the `[[depends]]` edge in the contract and the
+  native requirement through a new `Backend.declare_requirement`
+  (pyproject's list for python, the recipe's `requires` tuple for
+  conan, the dependency's kind deciding for the extension), at the
+  floor the graph carries; a reference nothing reaches stays a
+  refusal, and the refusal names `--fix`. `fm checks.layering --fix`
+  is the check's own spelling. A written python requirement moves the
+  lock, so the fix runs `uv lock` before it judges. The first
+  fix-mode check driven by a real tool rather than a fake. Two pins
+  follow it: under `--fix` the layering check is the fourth
+  rewriter, after provenance, and not a judge, and a scoped run
+  whose caller already rewrote leaves it out like format and lint.
 - 2026-09-28, contract 10's vocabulary test scoped (the agent's
   correction of its own sentence, on Willem's question): the core
   names no package kind and no check tool; the interpreter, uv and

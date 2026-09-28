@@ -8,6 +8,9 @@ from pathlib import Path
 import pytest
 
 from livery.workshop import discover_packages, verify_workspace
+from livery.workshop._packages import write_edges
+
+_FAILURES = (BaseException,)
 
 
 def _package(
@@ -598,3 +601,176 @@ def test_a_contract_naming_the_kind_under_type_is_refused_with_the_migration(
         ),
     ):
         discover_packages(tmp_path)
+
+
+# --- the fix mode: the edge the graph already reaches is written -----------
+
+
+def test_a_reference_nothing_reaches_is_not_written(tmp_path: Path) -> None:
+    _forge_stub(tmp_path)
+    _package(tmp_path, "low")
+    _sourced(tmp_path, "low", "livery/low/__init__.py", "")
+    _package(tmp_path, "high")
+    _sourced(tmp_path, "high", "livery/high/__init__.py", "import livery.low\n")
+    assert write_edges(tmp_path) == []
+    assert (
+        "[[depends]]"
+        not in (tmp_path / "packages" / "high" / "workshop.toml").read_text()
+    )
+    with pytest.raises(ValueError, match="this one is a new dependency"):
+        verify_workspace(tmp_path)
+
+
+def test_a_reference_the_graph_reaches_is_written_at_the_inherited_floor(
+    tmp_path: Path,
+) -> None:
+    _forge_stub(tmp_path)
+    _package(tmp_path, "low")
+    _sourced(tmp_path, "low", "livery/low/__init__.py", "")
+    _package(
+        tmp_path,
+        "mid",
+        contract_extra=_edge("packages/low", "runtime", "1.2.0"),
+        dependencies=("livery-low>=1.2.0",),
+    )
+    _sourced(tmp_path, "mid", "livery/mid/__init__.py", "")
+    _package(
+        tmp_path,
+        "high",
+        contract_extra=_edge("packages/mid", "runtime", "0.1.0"),
+        dependencies=("livery-mid>=0.1.0",),
+    )
+    _sourced(tmp_path, "high", "livery/high/__init__.py", "import livery.low\n")
+    with pytest.raises(ValueError, match=re.escape("the gate's --fix writes both")):
+        verify_workspace(tmp_path)
+    written = write_edges(tmp_path)
+    assert written == [
+        "  layering: packages/high declares the runtime edge on packages/low at"
+        " floor 1.2.0 (workshop.toml, pyproject.toml)"
+    ]
+    contract = (tmp_path / "packages" / "high" / "workshop.toml").read_text()
+    assert _edge("packages/low", "runtime", "1.2.0") in contract
+    pyproject = (tmp_path / "packages" / "high" / "pyproject.toml").read_text()
+    assert '"livery-low>=1.2.0"' in pyproject
+    # The lint is satisfied, and a second fix writes nothing.
+    verify_workspace(tmp_path)
+    assert write_edges(tmp_path) == []
+
+
+def test_a_test_reference_writes_the_test_edge_and_no_requirement(
+    tmp_path: Path,
+) -> None:
+    _forge_stub(tmp_path)
+    _package(tmp_path, "low")
+    _sourced(tmp_path, "low", "livery/low/__init__.py", "")
+    _package(
+        tmp_path,
+        "mid",
+        contract_extra=_edge("packages/low", "runtime", "1.2.0"),
+        dependencies=("livery-low>=1.2.0",),
+    )
+    _sourced(tmp_path, "mid", "livery/mid/__init__.py", "")
+    _package(
+        tmp_path,
+        "high",
+        contract_extra=_edge("packages/mid", "runtime", "0.1.0"),
+        dependencies=("livery-mid>=0.1.0",),
+    )
+    _sourced(tmp_path, "high", "livery/high/__init__.py", "")
+    _tested(tmp_path, "high", "test_low.py", "import livery.low\n")
+    written = write_edges(tmp_path)
+    assert written == [
+        "  layering: packages/high declares the test edge on packages/low at"
+        " floor 1.2.0 (workshop.toml)"
+    ]
+    pyproject = (tmp_path / "packages" / "high" / "pyproject.toml").read_text()
+    assert "livery-low" not in pyproject
+    verify_workspace(tmp_path)
+
+
+def test_the_python_requirement_joins_a_list_opens_one_or_refuses_without_project(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._backends import _python
+    from livery.workshop._packages import Package
+
+    def member(name: str, pyproject: str) -> Package:
+        directory = tmp_path / "packages" / name
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "pyproject.toml").write_text(pyproject)
+        return Package(
+            directory=directory,
+            path=f"packages/{name}",
+            name=f"livery-{name}",
+            kind="python",
+            depends=(),
+        )
+
+    low = member("low", '[project]\nname = "livery-low"\n')
+    listed = member(
+        "listed",
+        '[project]\nname = "livery-listed"\ndependencies = [\n    "pyyaml",\n]\n',
+    )
+    assert _python.declare_requirement(listed, low, "1.2.0") == ["pyproject.toml"]
+    assert (listed.directory / "pyproject.toml").read_text() == (
+        '[project]\nname = "livery-listed"\ndependencies = [\n'
+        '    "pyyaml",\n    "livery-low>=1.2.0",\n]\n'
+    )
+    inline = member("inline", '[project]\nname = "livery-inline"\ndependencies = []\n')
+    _python.declare_requirement(inline, low, "1.2.0")
+    assert (inline.directory / "pyproject.toml").read_text() == (
+        '[project]\nname = "livery-inline"\ndependencies = [\n'
+        '    "livery-low>=1.2.0",\n]\n'
+    )
+    bare = member("bare", '[project]\nname = "livery-bare"\n')
+    _python.declare_requirement(bare, low, "1.2.0")
+    assert '"livery-low>=1.2.0"' in (bare.directory / "pyproject.toml").read_text()
+    # Already declared, at any constraint: nothing to write.
+    assert _python.declare_requirement(bare, low, "9.9.9") == []
+    orphan = member("orphan", "[tool.uv]\npackage = false\n")
+    with pytest.raises(_FAILURES, match="no \\[project\\] table"):
+        _python.declare_requirement(orphan, low, "1.2.0")
+
+
+def test_the_conan_requirement_joins_the_tuple_or_refuses_without_one(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._backends import _cpp_conan
+    from livery.workshop._packages import Package
+
+    def recipe(name: str, body: str) -> Package:
+        directory = tmp_path / "packages" / name
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "conanfile.py").write_text(body)
+        return Package(
+            directory=directory,
+            path=f"packages/{name}",
+            name=f"acme-{name}",
+            kind="cpp-conan",
+            depends=(),
+        )
+
+    low = recipe("low", 'class Low:\n    name = "acme-low"\n')
+    seeded = recipe(
+        "seeded",
+        'class Seeded:\n    name = "acme-seeded"\n    requires = ("fmt/[>=11.0]",)\n',
+    )
+    assert _cpp_conan.declare_requirement(seeded, low, "0.3.0") == ["conanfile.py"]
+    assert (
+        'requires = ("fmt/[>=11.0]", "acme-low/[>=0.3.0]")'
+        in (seeded.directory / "conanfile.py").read_text()
+    )
+    assert _cpp_conan.declare_requirement(seeded, low, "0.4.0") == []
+    empty = recipe(
+        "empty", 'class Empty:\n    name = "acme-empty"\n    requires = ()\n'
+    )
+    _cpp_conan.declare_requirement(empty, low, "0.3.0")
+    assert (
+        'requires = ("acme-low/[>=0.3.0]",)'
+        in (empty.directory / "conanfile.py").read_text()
+    )
+    bare = recipe("bare", 'class Bare:\n    name = "acme-bare"\n')
+    with pytest.raises(
+        _FAILURES, match=re.escape("declares no `requires = (...)` tuple")
+    ):
+        _cpp_conan.declare_requirement(bare, low, "0.3.0")

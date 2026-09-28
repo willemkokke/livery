@@ -1596,6 +1596,48 @@ def declared_requirements(package: Package) -> dict[str, str]:
     return entries
 
 
+def declare_requirement(package: Package, dependency: Package, floor: str) -> list[str]:
+    """Add ``<dependency>>=<floor>`` to the project's dependencies; the files changed.
+
+    A text edit that keeps the manifest's formatting: the entry joins
+    the existing list, one per line, or opens the list when the
+    project declares none. Already declared, whatever the constraint,
+    means nothing to write. A manifest without a ``[project]`` table
+    refuses naming it.
+    """
+    import re as _re
+
+    pyproject = package.directory / "pyproject.toml"
+    if dependency.name in declared_requirements(package):
+        return []
+    text = pyproject.read_text("utf-8")
+    entry = f'    "{dependency.name}>={floor}",\n'
+    listed = _re.search(r"^dependencies = \[(.*?)^\]", text, flags=_re.M | _re.S)
+    inline = _re.search(r"^dependencies = \[(.*)\]$", text, flags=_re.M)
+    if listed is not None:
+        head, tail = text[: listed.end() - 1], text[listed.end() - 1 :]
+        text = head + entry + tail
+    elif inline is not None:
+        items = [item.strip() for item in inline.group(1).split(",") if item.strip()]
+        lines = "".join(f"    {item},\n" for item in items) + entry
+        text = (
+            text[: inline.start()]
+            + f"dependencies = [\n{lines}]"
+            + text[inline.end() :]
+        )
+    else:
+        header = _re.search(r"^\[project\]\n", text, flags=_re.M)
+        if header is None:
+            fail(f"{pyproject} has no [project] table to declare a dependency in")
+        text = (
+            text[: header.end()]
+            + f"dependencies = [\n{entry}]\n"
+            + text[header.end() :]
+        )
+    pyproject.write_text(text, encoding="utf-8")
+    return ["pyproject.toml"]
+
+
 def build(package: Package, root: Path, *, epoch: int = 0) -> Path:
     """Build *package*'s wheel and sdist into its ``dist/``; the dist dir.
 

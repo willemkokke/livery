@@ -77,6 +77,37 @@ def conan_requirements(conanfile: Path) -> dict[str, str]:
     return entries
 
 
+def declare_requirement(package: Package, dependency: Package, floor: str) -> list[str]:
+    """Add ``<dependency>/[>=<floor>]`` to the recipe's requires; the files changed.
+
+    The reference joins the ``requires`` tuple the template seeds,
+    as text, so the recipe's own layout stays. A recipe that declares
+    its requirements another way (``self.requires`` calls, no tuple)
+    refuses naming the line to add, rather than guessing where a
+    method body wants it. Already declared means nothing to write.
+    """
+    import re as _re
+
+    conanfile = package.directory / "conanfile.py"
+    if dependency.name in conan_requirements(conanfile):
+        return []
+    text = conanfile.read_text("utf-8")
+    reference = f'"{dependency.name}/[>={floor}]"'
+    match = _re.search(r"^(\s*)requires = \((.*?)\)$", text, flags=_re.M | _re.S)
+    if match is None:
+        fail(
+            f"{conanfile} declares no `requires = (...)` tuple to add"
+            f" {reference} to; add the requirement by hand"
+        )
+    indent, inner = match.group(1), match.group(2).strip()
+    items = [item.strip() for item in inner.split(",") if item.strip()]
+    items.append(reference)
+    body = ", ".join(items) + ("," if len(items) == 1 else "")
+    text = text[: match.start()] + f"{indent}requires = ({body})" + text[match.end() :]
+    conanfile.write_text(text, encoding="utf-8")
+    return ["conanfile.py"]
+
+
 def module_roots(package: Package) -> tuple[str, ...]:
     """Nothing: a conan package is referenced by recipe name, not import.
 

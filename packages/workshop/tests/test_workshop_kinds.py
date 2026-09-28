@@ -95,6 +95,11 @@ class _FakeBackend:
     def declared_requirements(self, package: Package) -> dict[str, str]:
         return {}
 
+    def declare_requirement(
+        self, package: Package, dependency: Package, floor: str
+    ) -> list[str]:
+        return []
+
 
 def _package(tmp_path: Path, kind_name: str) -> Package:
     directory = tmp_path / "packages" / "thing"
