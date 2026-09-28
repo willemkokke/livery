@@ -433,10 +433,11 @@ def publish_release(
         kind="python", url=index_url, publish_url=index_url, token=token
     )
     conan_target = None
-    if any(_kind_for(p.kind).artifact == "conan" for p in ordered):
+    if any(_kind_for(p.kind).artifact == "conan" for p in ordered if p.publish):
         # Resolved once, before anything uploads: a ladder refusal
         # (no conan target anywhere) must stop the wave while there
-        # is still nothing to undo.
+        # is still nothing to undo. A member that opts out of
+        # publishing needs no target and asks for none.
         from livery.workshop._registries import resolve_registry
 
         conan_target = resolve_registry(root, "conan")
@@ -452,6 +453,36 @@ def publish_release(
     failures: dict[str, BaseException] = {}
     lock = threading.Lock()
 
+    def _build_member(package: Package, version: str) -> None:
+        """Build the member's artifact, or trust the matrix's collection."""
+        from livery.workshop._kinds import backend_for, kind_for
+
+        record = kind_for(package.kind)
+        if prebuilt and record.wheel_identity == "platform":
+            # The matrix already built and collected this member's
+            # wheels; a rebuild here would clobber them with one
+            # platform's.
+            if not list((package.directory / "dist").glob("*.whl")):
+                fail(
+                    f"{package.name}: --prebuilt, and dist/ holds"
+                    " no collected wheels; the wheels matrix did"
+                    " not feed this wave"
+                )
+        elif prebuilt and record.artifact == "conan":
+            # The matrix created this member once per host and saved
+            # each cache; building again here would cost minutes and
+            # publish nothing the collection lacks.
+            saved = (package.directory / "dist").glob(f"{package.name}-{version}-*.tgz")
+            if not list(saved):
+                fail(
+                    f"{package.name}: --prebuilt, and dist/ holds no"
+                    " saved conan cache; the wheels matrix did not"
+                    " feed this wave"
+                )
+        else:
+            backend_for(package).build(package, root, epoch=epoch)
+        assert_wheel_identity(package)
+
     def _run_member(package: Package) -> None:
         version = manifest[package.name]
         tag = f"{package.path}/v{version}"
@@ -465,6 +496,29 @@ def publish_release(
                             f" {edge.path} failed, so this member never"
                             " started"
                         )
+            # A package that opts out of publishing is versioned,
+            # built and tagged by the train and never uploaded: the
+            # registry is neither probed nor written for it, and a
+            # re-run walks past its tag the way it walks past a
+            # served version. The kind's backend never learns of it.
+            if not package.publish:
+                if tag in git.tags():
+                    print(
+                        f"  {package.name} v{version}: already tagged;"
+                        " publish = false, done"
+                    )
+                else:
+                    _build_member(package, version)
+                    cut_tag(git, tag, resolved_ref)
+                    print(
+                        f"  {package.name} v{version}: publish = false; the"
+                        " registry upload skips, the tag and the changelog stand"
+                    )
+                with lock:
+                    receipts[package.path] = Receipt(
+                        package, version, tag, published=False
+                    )
+                return
             # A version the target already serves is walked past
             # before any build or upload: a re-run after a died
             # receipt, from CI or from a machine without a publish
@@ -482,32 +536,7 @@ def publish_release(
             from livery.workshop._kinds import backend_for, kind_for
 
             record = kind_for(package.kind)
-            if prebuilt and record.wheel_identity == "platform":
-                # The matrix already built and collected this
-                # member's wheels; a rebuild here would clobber them
-                # with one platform's.
-                if not list((package.directory / "dist").glob("*.whl")):
-                    fail(
-                        f"{package.name}: --prebuilt, and dist/ holds"
-                        " no collected wheels; the wheels matrix did"
-                        " not feed this wave"
-                    )
-            elif prebuilt and record.artifact == "conan":
-                # The matrix created this member once per host and
-                # saved each cache; building again here would cost
-                # minutes and publish nothing the collection lacks.
-                saved = (package.directory / "dist").glob(
-                    f"{package.name}-{version}-*.tgz"
-                )
-                if not list(saved):
-                    fail(
-                        f"{package.name}: --prebuilt, and dist/ holds no"
-                        " saved conan cache; the wheels matrix did not"
-                        " feed this wave"
-                    )
-            else:
-                backend_for(package).build(package, root, epoch=epoch)
-            assert_wheel_identity(package)
+            _build_member(package, version)
             # The kind's backend owns the upload; the wave only picks
             # the resolved target for the kind's artifact.
             if record.artifact == "conan":

@@ -54,6 +54,10 @@ class Package:
         kind: The package kind, as the contract's ``kind`` declares
             it: ``python``, ``python-nanobind`` or ``cpp-conan``.
         depends: The declared edges, in contract order.
+        publish: Whether the release train uploads the package's
+            artifact to its registry. ``[release] publish = false``
+            keeps an internal tool versioned, tagged and built by the
+            train and never uploaded; the default is true.
     """
 
     directory: Path
@@ -61,6 +65,7 @@ class Package:
     name: str
     kind: str
     depends: tuple[Edge, ...]
+    publish: bool = True
 
 
 def discover_packages(root: Path) -> tuple[Package, ...]:
@@ -110,6 +115,14 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
             )
             for edge in contract.get("depends", [])
         )
+        release = contract.get("release") or {}
+        publish = release.get("publish", True) if isinstance(release, dict) else True
+        if not isinstance(publish, bool):
+            problems.append(
+                f"{directory.name}: [release] publish must be true or false,"
+                f" not {publish!r}"
+            )
+            continue
         packages.append(
             Package(
                 directory=directory,
@@ -117,6 +130,7 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
                 name=str(contract.get("name", "")),
                 kind=kind_name,
                 depends=depends,
+                publish=publish,
             )
         )
     if problems:

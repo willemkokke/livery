@@ -582,3 +582,97 @@ def test_receipts_expose_the_ledger(train) -> None:
             published=True,
         ),
     )
+
+
+# --- a package that opts out of publishing --------------------------------
+
+
+def _opt_out(root: Path, member: str) -> None:
+    contract = root / "packages" / member / "workshop.toml"
+    contract.write_text(contract.read_text() + "\n[release]\npublish = false\n")
+
+
+def test_a_publish_key_that_is_not_a_boolean_refuses(tmp_path: Path) -> None:
+    from livery.workshop._packages import discover_packages
+
+    directory = tmp_path / "packages" / "tool"
+    directory.mkdir(parents=True)
+    (directory / "workshop.toml").write_text(
+        'kind = "python"\nname = "livery-tool"\n\n[release]\npublish = "never"\n'
+    )
+    (directory / "pyproject.toml").write_text('[project]\nname = "livery-tool"\n')
+    with pytest.raises(ValueError, match="publish must be true or false"):
+        discover_packages(tmp_path)
+
+
+def test_an_opted_out_member_is_built_and_tagged_and_never_uploaded(
+    train, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root, git, registry, spans = train
+    _opt_out(root, "left")
+    sha = _squash(root, ("base", "left"))
+    receipts = publish_release(
+        root, git, lambda _p: registry, ref=sha, index_url="https://idx.example/"
+    )
+    by_name = {r.package.directory.name: r for r in receipts}
+    assert by_name["base"].published is True
+    assert by_name["left"].published is False
+    assert "left" not in spans  # the publisher never ran for it
+    assert registry.versions("livery-left") == ()
+    out = capsys.readouterr().out
+    assert (
+        "livery-left v0.3.0: publish = false; the registry upload skips,"
+        " the tag and the changelog stand" in out
+    )
+    tags = subprocess.run(
+        ["git", "tag", "--list", "packages/*"], cwd=root, capture_output=True, text=True
+    ).stdout.split()
+    assert "packages/left/v0.3.0" in tags
+    # A re-run walks past the tagged member without building or probing.
+    again = publish_release(
+        root, git, lambda _p: registry, ref=sha, index_url="https://idx.example/"
+    )
+    assert {r.package.directory.name: r.published for r in again}["left"] is False
+    assert "livery-left v0.3.0: already tagged; publish = false, done" in (
+        capsys.readouterr().out
+    )
+
+
+def test_an_opted_out_conan_member_is_built_and_tagged_and_asks_for_no_target(
+    train, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The opt-out is the base kind's: a conan member obeys it the same way."""
+    root, git, registry, _spans = train
+    native = root / "packages" / "native"
+    native.mkdir()
+    (native / "workshop.toml").write_text(
+        'kind = "cpp-conan"\nname = "livery-native"\n\n[release]\npublish = false\n'
+    )
+    (native / "conanfile.py").write_text(
+        'class Native:\n    name = "livery-native"\n    version = "0.3.0"\n'
+    )
+    (native / "CHANGELOG.md").write_text("# Changelog\n")
+    built: list[str] = []
+
+    def _fake_create(package: Package, _root: Path, *, epoch: int = 0) -> Path:
+        built.append(package.name)
+        return package.directory
+
+    monkeypatch.setattr("livery.workshop._backends._cpp_conan.build", _fake_create)
+    sha = _squash(root, ("base", "native"))
+    # No conan registry is declared anywhere: the wave resolves a conan
+    # target only for members that publish, so this one asks for none.
+    receipts = publish_release(
+        root, git, lambda _p: registry, ref=sha, index_url="https://idx.example/"
+    )
+    by_name = {r.package.directory.name: r for r in receipts}
+    assert built == ["livery-native"]
+    assert by_name["native"].published is False
+    assert by_name["base"].published is True
+    assert registry.versions("livery-native") == ()
+    out = capsys.readouterr().out
+    assert "livery-native v0.3.0: publish = false; the registry upload skips" in out
+    tags = subprocess.run(
+        ["git", "tag", "--list", "packages/*"], cwd=root, capture_output=True, text=True
+    ).stdout.split()
+    assert "packages/native/v0.3.0" in tags
