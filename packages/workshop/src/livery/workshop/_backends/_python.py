@@ -1443,7 +1443,7 @@ def module_roots(package: Package) -> tuple[str, ...]:
     return tuple(roots)
 
 
-def _plugin_modules(package: Package) -> tuple[str, ...]:
+def plugin_modules(package: Package) -> tuple[str, ...]:
     """The modules *package* declares as footman task entry points.
 
     A module the runner loads as a plugin has the runner present by
@@ -1549,7 +1549,7 @@ def referenced_siblings(package: Package, around: Neighbours) -> dict[str, str]:
     import guarded by ``try``/``except ImportError``.
     """
     exempt_dists = _extra_distributions(package)
-    plugins = _plugin_modules(package)
+    plugins = plugin_modules(package)
     found: dict[str, str] = {}
     for area in ("tests", "src"):
         base = package.directory / area

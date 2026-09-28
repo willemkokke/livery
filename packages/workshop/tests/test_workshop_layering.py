@@ -28,7 +28,7 @@ def _package(
     )
 
 
-def _forge_stub(root: Path) -> None:
+def _forge_stub(root: Path, *, plugin: str = "") -> None:
     # The stdlib rule walks packages/forge/src; give the tree a clean one.
     src = root / "packages" / "forge" / "src"
     src.mkdir(parents=True)
@@ -36,8 +36,15 @@ def _forge_stub(root: Path) -> None:
     (root / "packages" / "forge" / "workshop.toml").write_text(
         'type = "python"\nname = "livery-forge"\n'
     )
+    # *plugin* is a dotted module declared as a footman task entry
+    # point, which is what exempts it from the stdlib-only rule.
+    entry = (
+        f'\n[project.entry-points."footman.tasks"]\nforge = "{plugin}:tasks"\n'
+        if plugin
+        else ""
+    )
     (root / "packages" / "forge" / "pyproject.toml").write_text(
-        '[project]\nname = "livery-forge"\ndependencies = []\n'
+        f'[project]\nname = "livery-forge"\ndependencies = []\n{entry}'
     )
 
 
@@ -174,29 +181,56 @@ def test_a_forge_third_party_import_is_refused(tmp_path: Path) -> None:
         verify_workspace(tmp_path)
 
 
-def test_the_dev_plugin_may_import_its_two_tools_and_nothing_else(
+def test_only_a_declared_plugin_module_may_import_what_the_runner_brings(
     tmp_path: Path,
 ) -> None:
+    """The exemption follows the entry point, never a path spelled twice.
+
+    A module the runner loads as a plugin has the runner present by
+    construction, and the mounted layers with it. The package's own
+    metadata is where that is declared, so a module at the same path
+    with no entry point naming it is not exempt, and renaming the
+    module in the metadata moves the exemption with it.
+    """
     _forge_stub(tmp_path)
-    plugin_dir = tmp_path / "packages" / "forge" / "src" / "livery" / "forge" / "_dev"
+    inside = tmp_path / "packages" / "forge" / "src" / "livery" / "forge"
+    plugin_dir = inside / "_dev"
     plugin_dir.mkdir(parents=True)
-    # The refusals first: a forge module outside the plugin importing
-    # the runner, and the plugin importing a third-party package.
-    bad = tmp_path / "packages" / "forge" / "src" / "livery" / "forge" / "_bad.py"
+    plugin_dir.joinpath("__init__.py").write_text("from livery import footman\n")
+    # The refusals first. Nothing declares this module, so its import of
+    # the runner is the ordinary violation however it is spelled.
+    with pytest.raises(ValueError, match=r"imports 'livery\.footman'"):
+        verify_workspace(tmp_path)
+    # A module outside it is refused the same way when one is declared.
+    _forge_stub_replace(tmp_path, plugin="livery.forge._dev")
+    bad = inside / "_bad.py"
     bad.write_text("from livery import footman\n")
     with pytest.raises(ValueError, match=r"imports 'livery\.footman'"):
         verify_workspace(tmp_path)
     bad.unlink()
-    (plugin_dir / "__init__.py").write_text(
+    # The exemption covers what the runner brings, not a third party.
+    plugin_dir.joinpath("__init__.py").write_text(
         "from livery import footman\nimport requests\n"
     )
     with pytest.raises(ValueError, match="stdlib-only at import time"):
         verify_workspace(tmp_path)
-    (plugin_dir / "__init__.py").write_text(
+    plugin_dir.joinpath("__init__.py").write_text(
         "from livery import footman\nfrom livery.toolroom import tools\n"
         "from livery.forge import Forge\n"
     )
     verify_workspace(tmp_path)
+    # The metadata decides: name another module and this one is refused.
+    _forge_stub_replace(tmp_path, plugin="livery.forge._other")
+    with pytest.raises(ValueError, match=r"imports 'livery\.footman'"):
+        verify_workspace(tmp_path)
+
+
+def _forge_stub_replace(root: Path, *, plugin: str) -> None:
+    """Rewrite forge's manifest to declare *plugin* as its task entry point."""
+    entry = f'\n[project.entry-points."footman.tasks"]\nforge = "{plugin}:tasks"\n'
+    (root / "packages" / "forge" / "pyproject.toml").write_text(
+        f'[project]\nname = "livery-forge"\ndependencies = []\n{entry}'
+    )
 
 
 def test_a_clean_tree_passes(tmp_path: Path) -> None:
