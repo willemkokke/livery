@@ -229,6 +229,9 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
             " one is a new dependency, not a fact the graph already has"
         )
     problems.extend(_cycles(packages))
+    from livery.workshop._layers import closure_problems
+
+    problems.extend(closure_problems(root))
     problems.extend(_forge_is_stdlib_only(root, packages))
     problems.extend(_terminal_is_asked_through_the_runner(root, packages))
     if problems:

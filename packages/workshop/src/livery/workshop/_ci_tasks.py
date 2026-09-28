@@ -1041,4 +1041,12 @@ def doctor() -> None:
             f"  host: {tool} MISSING (a compiler the present package"
             " kinds need; install the platform toolchain)"
         )
+    from livery.workshop._layers import available_layers, layer_names
+
+    for module, dist in available_layers(layer_names(root)):
+        named = f" ({dist})" if dist else ""
+        print(
+            f"  layers: {module}{named} is installed and not listed; it does"
+            " nothing until [workspace] layers names it"
+        )
     doctor_flow(this_forge(root))

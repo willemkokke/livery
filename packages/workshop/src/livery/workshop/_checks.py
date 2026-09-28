@@ -155,6 +155,10 @@ class CheckRecord:
 
 _CHECKS: dict[str, CheckRecord] = {}
 
+#: Builtin checks a layer withdrew, name to the layer that did: the
+#: gate names them, so a lighter gate is a legible decision.
+_WITHDRAWN: dict[str, str] = {}
+
 
 def register_check(record: CheckRecord) -> None:
     """Register *record*; a name already registered is replaced.
@@ -180,14 +184,36 @@ def register_check(record: CheckRecord) -> None:
             " package check applies to the kinds it lists"
         )
     _CHECKS[record.name] = record
+    _WITHDRAWN.pop(record.name, None)
     _ensure_task(record)
 
 
-def unregister_check(name: str) -> None:
-    """Drop the check *name*; unknown names refuse naming the registry."""
+def unregister_check(name: str, *, by: str = "") -> None:
+    """Drop the check *name*; unknown names refuse naming the registry.
+
+    *by* names the layer withdrawing a check it did not register, so
+    the gate can print who narrowed it.
+    """
     if name not in _CHECKS:
         fail(f"{name!r} is not a registered check; checks: {', '.join(_CHECKS)}")
-    del _CHECKS[name]
+    record = _CHECKS.pop(name)
+    if by and record.layer != by:
+        _WITHDRAWN[name] = by
+
+
+def narrowings() -> tuple[str, ...]:
+    """The gate's lines naming what a layer added, replaced or withdrew.
+
+    A check the base did not register names its layer; a builtin a
+    layer withdrew names the layer too. Empty for the base alone.
+    """
+    lines = [
+        f"  {record.name}: registered by {record.layer}"
+        for record in _CHECKS.values()
+        if record.layer != BASE_LAYER
+    ]
+    lines += [f"  {name}: withdrawn by {layer}" for name, layer in _WITHDRAWN.items()]
+    return tuple(lines)
 
 
 def check_names() -> tuple[str, ...]:
@@ -465,9 +491,12 @@ def _register_builtin() -> None:
         verify_workspace(ctx.root)
 
     def layering_fix(ctx: GateContext) -> None:
+        from livery.workshop._layers import write_layers
         from livery.workshop._packages import verify_workspace, write_edges
         from livery.workshop._uv import run_uv
 
+        for line in write_layers(ctx.root):
+            print(line)
         written = write_edges(ctx.root)
         for line in written:
             print(line)

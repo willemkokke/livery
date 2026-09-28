@@ -1542,6 +1542,24 @@ project.
   outside a run, where nothing dedups, the caller orders them.
   Phase 2 merged with the fix uncommitted, since an armed submit
   merges on green; the fix is its own change.
+- 2026-09-28, phase 3 built up to the closure lint (issue #876,
+  stacked on livery#829): a layer's plugin module may declare
+  `WORKSHOP_API_VERSION`, and mount refuses another version than the
+  workshop's naming both (contract 8); a layer's checks register
+  through `register_check` with the layer named on the record, and
+  the gate prints what a layer registered and what builtin it
+  withdrew (`unregister_check(name, by=layer)`), so a narrowed gate
+  is legible (contract 4); a layer declares the layers it depends on
+  in `WORKSHOP_DEPENDS`, the layering check refuses a
+  `[workspace] layers` list that lacks one or orders one after its
+  dependent, and the fix mode appends the missing line before its
+  dependent with a comment naming who requires it (open item 18's
+  ruled form: the list stays the whole truth, never pulled in at
+  mount); `fm layers` names who requires each layer; `fm doctor`
+  lists installed layers the contract does not mount, which do
+  nothing until it does. Not built: the layer's own tool
+  declaration, which waits on open item 14, and the soft dependency
+  of open item 18.
 - 2026-09-28, livery#829 built on phase 2: the layering check's fix
   mode. `write_edges` declares every sibling reference the graph
   already reaches, the `[[depends]]` edge in the contract and the
