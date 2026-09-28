@@ -1574,6 +1574,14 @@ project.
   follow it: under `--fix` the layering check is the fourth
   rewriter, after provenance, and not a judge, and a scoped run
   whose caller already rewrote leaves it out like format and lint.
+- 2026-09-28, the publishing opt-out built (issue #871), phase 8's
+  first change: `[release] publish = false` is a fact of the package
+  (`Package.publish`), refused when not a boolean; the wave reads it
+  before the registry is probed or the kind's publisher runs, so no
+  backend knows about it. An opted-out member is built, tagged and
+  receipted as unpublished, its skip printed by name, and a re-run
+  walks past its tag; the conan target is resolved only for members
+  that publish, so an opted-out conan member asks for none.
 - 2026-09-28, contract 10's vocabulary test scoped (the agent's
   correction of its own sentence, on Willem's question): the core
   names no package kind and no check tool; the interpreter, uv and
