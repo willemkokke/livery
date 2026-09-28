@@ -136,7 +136,9 @@ def test_the_scoped_fix_mode_rewrites_first_and_still_checks(
     # left, says so: the checks run and the rewriters do not run twice.
     ran.clear()
     _quality._scoped_check((package,), fix=True, rewritten=True)
-    assert sorted(ran) == ["layering", "test", "typecheck", "typecomplete"]
+    # The layering check rewrites, so it sits out a run whose caller
+    # already ran the rewriters, the way format and lint do.
+    assert sorted(ran) == ["test", "typecheck", "typecomplete"]
 
 
 def test_the_module_derives_from_the_src_tree_not_the_dist_name(
@@ -359,9 +361,10 @@ def test_the_fixing_gate_rewrites_serially_then_judges_in_parallel(
     opened = ran.index("<parallel")
     # The three rewriters, in order, before any block is opened: they
     # write the files the judges then read.
-    assert ran[:opened] == ["format", "lint", "provenance_check"]
+    # The layering check rewrites too since its fix mode landed, so it
+    # is the fourth rewriter and no longer a judge under --fix.
+    assert ran[:opened] == ["format", "lint", "provenance_check", "layering"]
     assert sorted(ran[opened + 1 : -1]) == [
-        "layering",
         "template_check",
         "test",
         "typecheck",

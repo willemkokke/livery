@@ -94,6 +94,19 @@ class Backend(Protocol):
         """What the package declares natively, name to constraint."""
         ...
 
+    def declare_requirement(
+        self, package: Package, dependency: Package, floor: str
+    ) -> list[str]:
+        """Write *dependency* at *floor* into the package's native manifest.
+
+        The files changed, relative to the package; empty when the
+        manifest already names the dependency. Which file that is, and
+        how a requirement is spelled there, is the kind's knowledge:
+        the layering check's fix mode calls this for a sibling the
+        graph already reaches, at the floor the graph carries.
+        """
+        ...
+
     def module_roots(self, package: Package) -> tuple[str, ...]:
         """The names other packages reference this one's code by."""
         ...

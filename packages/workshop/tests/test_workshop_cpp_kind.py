@@ -340,6 +340,11 @@ def test_host_tools_are_named_when_missing(restored_registry, tmp_path: Path) ->
         def declared_requirements(self, package: Package) -> dict[str, str]:
             return {}
 
+        def declare_requirement(
+            self, package: Package, dependency: Package, floor: str
+        ) -> list[str]:
+            return []
+
     register_kind(
         KindRecord(
             name="cpp-fake",
