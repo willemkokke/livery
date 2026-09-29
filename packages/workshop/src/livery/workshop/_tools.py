@@ -433,7 +433,27 @@ def write_lock(
     lock.save(lock_path(root))
     for note in notes:
         print(f"  {note}")
+    for note in unreached_scopes(root, lock):
+        print(f"  {note}")
     return lock
+
+
+def unreached_scopes(root: Path, lock: Lock) -> list[str]:
+    """One line per scoped requirement no locked host matches, and so locks nothing."""
+    lines: list[str] = []
+    seen: set[str] = set()
+    for requirement in requirements(root):
+        if not requirement.hosts or requirement.name in lock.tools:
+            continue
+        spelled = str(requirement)
+        if spelled in seen or requirement.on(lock.hosts):
+            continue
+        seen.add(spelled)
+        lines.append(
+            f"{spelled} ({requirement.site}): no locked host is"
+            f" {', '.join(requirement.hosts)}; not locked"
+        )
+    return lines
 
 
 def resolve_graph(
@@ -688,23 +708,38 @@ def with_runtimes(
 ) -> tuple[Requirement, ...]:
     """*found*, plus each runtime a tool among them runs on and nothing names.
 
-    An `npm` tool is installed through its runtime and runs on it, so
-    the runtime is the tool's dependency and the lock holds it as
-    such: the site named is the first tool that needs it. A
-    requirement the catalogue does not list is left for the resolver
-    to refuse by name.
+    An `npm` or `dotnet` tool is installed through its runtime and
+    runs on it, so the runtime is the tool's dependency and the lock
+    holds it as such, on the hosts the tool is required on: the site
+    named is the tool that needs it. A runtime some site requires on
+    every host needs no more; otherwise one requirement per distinct
+    scope is added, and the lock unions them. A requirement the
+    catalogue does not list is left for the resolver to refuse by
+    name.
     """
-    named = {requirement.name for requirement in found}
+    everywhere = {requirement.name for requirement in found if not requirement.hosts}
+    present = {(requirement.name, requirement.hosts) for requirement in found}
     added: list[Requirement] = []
     for requirement in found:
         try:
-            runtime = runtime_of(listing.listed(requirement.name))
+            listed = listing.listed(requirement.name)
         except CatalogueError:
             continue
-        if not runtime or runtime in named:
+        runtime = runtime_of(listed)
+        if (
+            not runtime
+            or runtime in everywhere
+            or (runtime, requirement.hosts) in present
+        ):
             continue
-        named.add(runtime)
-        added.append(Requirement.parse(runtime, site=f"{requirement.name} (npm)"))
+        present.add((runtime, requirement.hosts))
+        added.append(
+            Requirement(
+                runtime,
+                site=f"{requirement.name} ({listed.kind})",
+                hosts=requirement.hosts,
+            )
+        )
     return (*found, *added)
 
 
@@ -974,8 +1009,10 @@ def materialise(
 ) -> tuple[Materialised, ...]:
     """Supply every locked tool, or *names* alone, and write their receipts.
 
-    The bundle is what the sites require: every tool the lock holds.
-    A downloaded kind is supplied from the catalogue's deployment for
+    The bundle is what the sites require: every tool the lock holds
+    for this host; one locked for other hosts alone is skipped, and
+    named it refuses. A downloaded kind is supplied from the
+    catalogue's deployment for
     this host through the store's sources and the origin; a delegated
     kind through its installer. A system tool is the machine's own,
     held to the highest of the record's floor and the sites' floors;
@@ -996,16 +1033,22 @@ def materialise(
     lock = current_lock(root)
     if lock is None:
         fail(f"no {LOCK_FILE}: lock the tools first with `{prog()} tools.lock`")
-    wanted = names or tuple(sorted(lock.tools))
+    listing = catalogue(root, offline=offline)
+    store = Store(_home(), sources=sources(root), offline=offline)
+    host = store.host
+    here = lock.on_host(host)
+    wanted = names or here
     for name in wanted:
         if name not in lock.tools:
             fail(
                 f"{name} is not in {LOCK_FILE}; the lock holds"
                 f" {', '.join(sorted(lock.tools)) or 'nothing'}"
             )
-    listing = catalogue(root, offline=offline)
-    store = Store(_home(), sources=sources(root), offline=offline)
-    host = store.host
+        if name not in here:
+            fail(
+                f"{name} is locked for {', '.join(lock.tools[name].on)} and not"
+                f" for this host ({host}); the sites require it there alone"
+            )
     floors = site_floors(root)
     done: list[Materialised] = []
     linked: list[tuple[Receipt, Ensured]] = []
@@ -1083,11 +1126,12 @@ def materialise(
             json.dumps(made.receipt.to_json(), indent=2) + "\n", encoding="utf-8"
         )
     if not names:
-        # A tool that left the lock leaves the environment: a receipt
-        # kept past its tool would keep the tool's directory on PATH
-        # ahead of whatever replaced it.
+        # A tool that left the lock, or is locked for other hosts
+        # alone, leaves the environment: a receipt kept past its tool
+        # would keep the tool's directory on PATH ahead of whatever
+        # replaced it.
         for stale in receipts_dir(root).glob("*.json"):
-            if stale.stem not in lock.tools:
+            if stale.stem not in here:
                 stale.unlink()
     return tuple(done)
 

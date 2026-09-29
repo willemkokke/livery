@@ -37,7 +37,9 @@ def _report(lock: Lock, moved: tuple[str, ...] = ()) -> None:
 
     for name in sorted(lock.tools):
         mark = "  moved" if name in moved else ""
-        print(f"  {name} {lock.tools[name].version}{mark}")
+        scope = lock.tools[name].on
+        where = f"  on {', '.join(scope)}" if scope else ""
+        print(f"  {name} {lock.tools[name].version}{where}{mark}")
     print(f"  {LOCK_FILE}: {len(lock.tools)} tool(s) on {', '.join(lock.hosts)}")
 
 

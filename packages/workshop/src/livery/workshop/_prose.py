@@ -627,8 +627,11 @@ def render_tools(root: Path, audience: str | None) -> str:
     lines.append("")
     for name in sorted(lock.tools):
         where = ", ".join(sorted(sites.get(name, ())))
+        scope = ", ".join(lock.tools[name].on)
         lines.append(
-            f"- {name} {lock.tools[name].version}" + (f": {where}" if where else "")
+            f"- {name} {lock.tools[name].version}"
+            + (f": {where}" if where else "")
+            + (f" ({scope} only)" if scope else "")
         )
     return "\n".join(lines) + "\n"
 

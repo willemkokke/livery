@@ -506,7 +506,10 @@ def _register_builtin() -> None:
             backend=_cpp_conan,
             template="package-cpp-conan",
             parent="base",
-            tools=("cmake", "conan", "ninja"),
+            # Microsoft's coverage engine measures a run built with
+            # MSVC, so it is required on the Windows hosts alone; the
+            # .NET SDK it runs on rides as its runtime, there too.
+            tools=("cmake", "conan", "ninja", "dotnet_coverage@windows"),
             managed=(".clang-format", ".clang-tidy"),
             native_sources=True,
             host_tools=("cc", "c++"),

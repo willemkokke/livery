@@ -71,14 +71,18 @@
     "dotnet": {
       "version": "10.0.401",
       "hosts": {
-        "linux-x64": "sha256:33e5e298b8d559a9220531ffb77962cf3bc384dbd6946e4689c93ca3326ac6f8",
-        "macos-arm": "sha256:12c6a75296f2097efd69df547f83a315ed037a00f7c6f532eb6aebdfa27a2353",
         "windows-x64": "sha256:27e84422ee546c1c928f2e786f533ebcb0c2cb22d11c848c275ca995e252790a"
-      }
+      },
+      "on": [
+        "windows-x64"
+      ]
     },
     "dotnet_coverage": {
       "version": "18.11.2",
-      "hosts": {}
+      "hosts": {},
+      "on": [
+        "windows-x64"
+      ]
     },
     "git": {
       "version": "2.55.0",

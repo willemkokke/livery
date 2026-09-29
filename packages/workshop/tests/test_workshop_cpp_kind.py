@@ -418,7 +418,12 @@ def test_the_kind_registers_alone_in_the_chain() -> None:
     assert record_for_template("package-layer") is None
     # The build tools are the kind's; clang-format and clang-tidy ride
     # their check records, which is where the profile reads them.
-    assert kind_for("cpp-conan").tools == ("cmake", "conan", "ninja")
+    assert kind_for("cpp-conan").tools == (
+        "cmake",
+        "conan",
+        "ninja",
+        "dotnet_coverage@windows",
+    )
     from livery.workshop._checks import tools_for_kind
 
     # ruff rides in too: it judges the package's conanfile.py.

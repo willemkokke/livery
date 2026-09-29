@@ -4,7 +4,7 @@ Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
 tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
 2026-09-28 (issues #860, #867 with its ordering fix #870, #874; 3c's leftover on 2026-09-29, #896), phase 3
 up to the dependency closure the same day (#876) and the rest of it on
-2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912) beside the layering
+2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912) and host-scoped tool requirements (#917) beside the layering
 check's fix mode (#829) and phase 8's first change, the publishing
 opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
 item the remaining phases waited on; the decision record carries each
@@ -1152,9 +1152,10 @@ leaves clang 20's profile names section empty and only clang 22
 and later survive it. gcov and the llvm tools are host tools beside
 the compiler that built, verified on the host and never downloaded;
 Microsoft's engine is a tool of the store, `dotnet_coverage` on the
-.NET SDK, which the workspace requires in its `[tools] requires`. A
-host with the compiler and without its measurer refuses on that
-leg by name. On Windows the gate builds with MSVC unless `CXX` names
+.NET SDK, which the cpp-conan kind requires on the lock's Windows
+hosts alone (`dotnet_coverage@windows`), so a macOS or Linux sync of
+a workspace with a native package installs neither. A host with the
+compiler and without its measurer refuses on that leg by name. On Windows the gate builds with MSVC unless `CXX` names
 another compiler: with `cl` off PATH it enters the newest Visual
 Studio's C++ build tools itself, `vswhere` naming the installation
 and its vcvars batch file read back through `set`. The union is a set union of lines per file across the
@@ -2445,6 +2446,29 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   name. Placed before phase 7b publishes the template series under
   their names; no package born from the old name exists outside the
   conformance loop, so nothing migrates.
+- 2026-09-29, host-scoped tool requirements (Willem's ruling on the
+  MSVC measurer's tool: a requirement of a cpp package on Windows
+  alone, installed on neither macOS nor Linux though the lock is one
+  file for every host; issue #917). A requirement may end in
+  `@hosts`: `dotnet_coverage@windows`, `tea>=1.1@linux,macos-arm`,
+  each token a platform (every locked host of it) or a lock host key,
+  anything else refused at parse with its site. The lock resolves a
+  tool on the union of its requirements' scopes, the whole host list
+  for an unscoped one; an entry locked on fewer hosts than the lock's
+  carries `on` naming them and digests for those alone, and a scope
+  reaching no locked host locks nothing, which `fm tools.lock` says
+  per requirement. A runtime inherits the scope of the tool that runs
+  on it, one requirement per distinct scope, so the .NET SDK rides
+  with `dotnet-coverage` to Windows and nowhere else unless a site
+  requires it outright. `fm sync` supplies the tools locked for its
+  host, skips the others, sweeps a receipt they left, and refuses one
+  named outright with the hosts it is locked for; the stubs are
+  written for every locked tool, since the handle exists on every
+  host and a call on the wrong one refuses through the backend. The
+  cpp-conan kind requires `dotnet_coverage@windows` itself, so every
+  consumer's Windows leg measures with no line in its contract, and
+  this repository requires the same for its Windows leg's proof. The
+  lock schema stays 1: the field is additive. Open item 20 closes.
 
 ## Open
 
@@ -2506,15 +2530,9 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
     not written. Cost named: a row per check keyed by its input
     digest, and the affected walk asking each check instead of
     classifying paths itself. Owner: Willem, after 4b.
-20. Where `dotnet_coverage` is required. Today the workspace names it
-    in `[tools] requires` and a Windows run without it refuses naming
-    the line; the cpp-conan kind requiring it would make every
-    consumer's Windows leg measure without a line, at the .NET SDK on
-    every host of every cpp-conan workspace, the conformance loop's
-    Alpine runner included, where the SDK's linux-x64 build does not
-    run. Options: the kind; a host-scoped requirement in the lock (a
-    shape the lock does not have); the package template seeding the
-    line in the package's own contract. Owner: Willem.
+20. Resolved 2026-09-29: the cpp-conan kind requires
+    `dotnet_coverage@windows`, a host-scoped requirement the lock
+    holds on the Windows hosts alone. Decision record.
 20. A per-project opt-out of one target's opinions beyond deleting
     a name from `for`, a negative spelling say. Not built until
     wanted. Owner: Willem.
