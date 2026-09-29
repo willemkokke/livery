@@ -38,10 +38,11 @@ services:
       retries: 90
 
   act_runner:
-    # Built on the digest runner.Dockerfile pins (the same reason the
-    # server is pinned): the base image ships without node, git, bash,
-    # or curl, and host-mode jobs need all four from the first
-    # actions/checkout step.
+    # Built from runner.Dockerfile on node's Debian image, pinned by
+    # digest (the same reason the server is pinned): glibc like the
+    # hosted runners, so the tools the store downloads run on it, with
+    # node, git, bash and curl for the first actions/checkout step and
+    # the runner binaries pinned there.
     build:
       context: .
       dockerfile: runner.Dockerfile
