@@ -27,6 +27,7 @@ from livery.toolroom.store import (
     Surface,
     _engine,
 )
+from toolroom_bench_readings import repository_records  # noqa: F401
 
 LINUX, WINDOWS = "linux-x64", "windows-x64"
 

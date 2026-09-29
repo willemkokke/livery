@@ -28,6 +28,7 @@ from toolroom_bench_readings import (
     platform,
     reading,
     release_surface,
+    repository_records,  # noqa: F401
     save,
     serve,
     spec_of,
