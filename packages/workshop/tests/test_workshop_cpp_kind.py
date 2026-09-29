@@ -223,6 +223,14 @@ def test_a_red_ctest_is_a_refusal(tmp_path: Path) -> None:
         _cpp_conan.test(package, tmp_path)
 
 
+def test_the_cpp_template_seeds_a_line_coverage_floor(tmp_path: Path) -> None:
+    """A native member is judged like the others: its contract carries a floor."""
+    from livery.workshop._backends import _python
+
+    package = _render_cpp(tmp_path)
+    assert _python.coverage_floor(package) == 100.0
+
+
 def test_discovery_requires_pyproject_only_of_python_kinds(tmp_path: Path) -> None:
     packages_dir = tmp_path / "packages"
     (packages_dir / "native").mkdir(parents=True)
