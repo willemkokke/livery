@@ -524,7 +524,7 @@ Deliverables:
   cut. How `copier.yml` composes is open item 10: wholesale-only
   cannot merge a questions file, so it is generated from data at
   compose time (contract 17) or gets the one ruled exception.
-- The `package-python-layer` kind, flat: entry point wiring,
+- The `package-layer` kind, flat: entry point wiring,
   `content/{fragments,skills,hooks}`, the overlay tree, a `_tasks`
   stub. What an overlay may ask (its own copier questions) is open
   item 5, ruled here.
@@ -951,7 +951,7 @@ green so each feature ships through the proven seams:
   layer whose plugin registers no tasks mounts as a content-only
   note, never a failure: a young layer legitimately ships only
   content, and the scaffold's `_tasks` stub registers nothing
-  until its author does. The `package-python-layer` kind is the
+  until its author does. The `package-layer` kind is the
   python kind plus the layer surfaces: the `footman.tasks` entry
   point wired, a starter guidance fragment with its provenance
   header, the overlay manifest seeded with commented examples.

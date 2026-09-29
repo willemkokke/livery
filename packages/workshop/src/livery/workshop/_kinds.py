@@ -357,7 +357,7 @@ def template_chain(template_kind: str) -> tuple[str, ...]:
     registry: the record whose template is *template_kind* chains
     through its parents' templates, and the ``base`` kind heads every
     chain, so the base template comes first. A template the registry
-    does not map (a variant such as ``package-python-layer``) renders
+    does not map (a variant such as ``package-layer``) renders
     over the base alone.
     """
     by_template = {r.template: r for r in _KINDS.values() if r.template}
@@ -425,7 +425,7 @@ def requires_pyproject(kind_name: str) -> bool:
 def record_for_template(template_kind: str) -> KindRecord | None:
     """The record whose template is *template_kind*; None when unmapped.
 
-    A template variant (``package-python-layer``) maps to no record
+    A template variant (``package-layer``) maps to no record
     and the caller falls back to the python wiring.
     """
     for record in _KINDS.values():
@@ -455,7 +455,7 @@ def _register_builtin() -> None:
         )
     )
     # Two contract kinds exist today. The layer package template
-    # (package-python-layer) is a template variant of python, not
+    # (package-layer) is a template variant of python, not
     # a contract kind of its own: every member declares "python".
     # The python kind's tools: uv makes the venv the checkers run in,
     # and the checkers, the formatter and the test runner are what the
