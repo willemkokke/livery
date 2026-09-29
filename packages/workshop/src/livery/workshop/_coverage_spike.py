@@ -70,7 +70,13 @@ def _run(
 ) -> tuple[int, str]:
     """Run *argv*, print its exit code and output, return both; never raises."""
     result = footman.run(
-        argv, nofail=True, recorded=False, env=env, cwd=cwd, encoding=encoding
+        argv,
+        nofail=True,
+        recorded=False,
+        env=env,
+        cwd=cwd,
+        encoding=encoding,
+        timeout=180,
     )
     code = int(result)
     text = f"{result.stdout}{result.stderr}".replace("\ufeff", "").strip()
@@ -99,7 +105,9 @@ def _msvc_env(vs: str, work: Path) -> dict[str, str]:
         f'@call "{vs}\\VC\\Auxiliary\\Build\\vcvars64.bat" >nul\n@set\n',
         encoding="utf-8",
     )
-    result = footman.run([SHELL, "/d", "/c", str(batch)], nofail=True, recorded=False)
+    result = footman.run(
+        [SHELL, "/d", "/c", str(batch)], nofail=True, recorded=False, timeout=120
+    )
     if int(result) != 0:
         print(f"  vcvars64.bat exited {int(result)}: {result.stderr.strip()[:300]}")
         return env
@@ -216,32 +224,67 @@ def _measure_engine(engine: Path, exe: Path, tag: str, work: Path) -> bool:
     return _print_xml(xml, ("<range", "<source_file"))
 
 
+SETTINGS = """<?xml version="1.0" encoding="utf-8"?>
+<Configuration>
+  <CodeCoverage>
+    <EnableStaticNativeInstrumentation>True</EnableStaticNativeInstrumentation>
+    <EnableDynamicNativeInstrumentation>True</EnableDynamicNativeInstrumentation>
+    <EnableStaticManagedInstrumentation>False</EnableStaticManagedInstrumentation>
+    <EnableDynamicManagedInstrumentation>False</EnableDynamicManagedInstrumentation>
+    <UseVerifiableInstrumentation>False</UseVerifiableInstrumentation>
+    <AllowLowIntegrityProcesses>True</AllowLowIntegrityProcesses>
+    <CollectFromChildProcesses>True</CollectFromChildProcesses>
+    <ModulePaths>
+      <Include>
+        <ModulePath>.*spike.*</ModulePath>
+      </Include>
+    </ModulePaths>
+  </CodeCoverage>
+</Configuration>
+"""
+
+
 def _dotnet_coverage(env: dict[str, str], exe: Path, work: Path) -> bool:
-    """Collect with dotnet-coverage, dynamically and after static instrumentation."""
+    """Collect with dotnet-coverage, natively instrumented through its settings."""
     dotnet = shutil.which("dotnet", path=env.get("PATH", ""))
     if not dotnet:
         print("  dotnet is not on PATH")
         return False
     _run([dotnet, "--version"])
     tools = str(Path(env.get("USERPROFILE", "")) / ".dotnet" / "tools")
-    _run([dotnet, "tool", "install", "--global", "dotnet-coverage"], env=env)
+    _run([dotnet, "tool", "install", "--global", "dotnet-coverage"], env=env, lines=3)
     run_env = dict(env)
     run_env["PATH"] = tools + os.pathsep + env.get("PATH", "")
+    run_env["DOTNET_COVERAGE_TELEMETRY_OPTOUT"] = "1"
+    run_env["DOTNET_COVERAGE_NOLOGO"] = "1"
     tool = shutil.which("dotnet-coverage", path=run_env["PATH"])
     if not tool:
         print(f"  dotnet-coverage did not land in {tools}")
         return False
-    _run([tool, "--version"], env=run_env)
+    _run([tool, "--version"], env=run_env, lines=1)
+    settings = work / "coverage.config"
+    settings.write_text(SETTINGS, encoding="utf-8")
     dynamic = work / "spike-dotnet-dynamic.xml"
     _run(
-        [tool, "collect", "-f", "cobertura", "-o", str(dynamic), "--", str(exe)],
+        [
+            tool,
+            "collect",
+            "-s",
+            str(settings),
+            "-f",
+            "cobertura",
+            "-o",
+            str(dynamic),
+            "--",
+            str(exe),
+        ],
         env=run_env,
         cwd=work,
     )
     got = _print_xml(dynamic, ("<line ", "<class "))
     instrumented = work / "spike-msvc-instrumented.exe"
     _run(
-        [tool, "instrument", "-o", str(instrumented), str(exe)],
+        [tool, "instrument", "-s", str(settings), "-o", str(instrumented), str(exe)],
         env=run_env,
         cwd=work,
     )
@@ -251,6 +294,8 @@ def _dotnet_coverage(env: dict[str, str], exe: Path, work: Path) -> bool:
             [
                 tool,
                 "collect",
+                "-s",
+                str(settings),
                 "-f",
                 "cobertura",
                 "-o",
@@ -265,8 +310,38 @@ def _dotnet_coverage(env: dict[str, str], exe: Path, work: Path) -> bool:
     return got
 
 
+def _console_engine(vs: str, exe: Path, work: Path) -> bool:
+    """Microsoft.CodeCoverage.Console from the Visual Studio install, if present."""
+    home = Path(vs) / "Team Tools"
+    found: list[Path] = []
+    if home.is_dir():
+        found = sorted(home.rglob("Microsoft.CodeCoverage.Console.exe"))
+    print("  console engine: " + (", ".join(str(p) for p in found) or "not installed"))
+    if not found:
+        return False
+    settings = work / "coverage.config"
+    settings.write_text(SETTINGS, encoding="utf-8")
+    xml = work / "spike-console.xml"
+    _run(
+        [
+            str(found[0]),
+            "collect",
+            "-s",
+            str(settings),
+            "-f",
+            "cobertura",
+            "-o",
+            str(xml),
+            "--",
+            str(exe),
+        ],
+        cwd=work,
+    )
+    return _print_xml(xml, ("<line ", "<class "))
+
+
 def _open_cpp_coverage(exe: Path, work: Path) -> bool:
-    """Collect with OpenCppCoverage, its installer unpacked by 7-Zip or run silently."""
+    """Collect with OpenCppCoverage, its Inno Setup installer run silently."""
     installer = work / "OpenCppCoverageSetup.exe"
     try:
         urllib.request.urlretrieve(OCC, installer)
@@ -275,12 +350,17 @@ def _open_cpp_coverage(exe: Path, work: Path) -> bool:
         return False
     print(f"  downloaded {installer.stat().st_size} bytes")
     home = work / "occ"
-    if Path(SEVEN_ZIP).is_file():
-        _run([SEVEN_ZIP, "x", "-y", f"-o{home}", str(installer)], cwd=work, lines=12)
+    _run(
+        [
+            str(installer),
+            "/VERYSILENT",
+            "/SUPPRESSMSGBOXES",
+            "/NORESTART",
+            f"/DIR={home}",
+        ],
+        cwd=work,
+    )
     found = sorted(home.rglob("OpenCppCoverage.exe")) if home.is_dir() else []
-    if not found:
-        _run([str(installer), "/S", f"/D={home}"], cwd=work)
-        found = sorted(home.rglob("OpenCppCoverage.exe")) if home.is_dir() else []
     print("  OpenCppCoverage.exe: " + (", ".join(str(p) for p in found) or "not found"))
     if not found:
         return False
@@ -392,6 +472,12 @@ def spike() -> None:
     _say("dotnet-coverage")
     if msvc is not None:
         verdicts["msvc + dotnet-coverage"] = _dotnet_coverage(env, msvc, work)
+
+    _say("Microsoft.CodeCoverage.Console from the Visual Studio install")
+    if vs and msvc is not None:
+        verdicts["msvc + Microsoft.CodeCoverage.Console"] = _console_engine(
+            vs, msvc, work
+        )
 
     _say("OpenCppCoverage")
     if msvc is not None:
