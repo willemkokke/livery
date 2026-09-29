@@ -16,6 +16,15 @@ from dataclasses import dataclass
 from itertools import takewhile
 from pathlib import Path
 
+from livery.workshop._ast_rules import (
+    AstRule,
+    ParsedModule,
+    RuleContext,
+    ast_rules,
+    parsed_modules,
+    parsed_source,
+    register_ast_rule,
+)
 from livery.workshop._contract import load_contract
 
 
@@ -226,28 +235,16 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
                         f" [[depends]] edge on {dep_path}"
                     )
 
-    writable, refused = undeclared_references(packages)
-    for package, dependency, kind, floor in writable:
-        problems.append(
-            f"{package.path}: uses {dependency.name} through a sibling that"
-            f" brings it in, with no [[depends]] edge on {dependency.path}."
-            f" Declare the {kind} edge at floor {floor}, the one the graph"
-            " already carries, and the matching requirement; the gate's"
-            " --fix writes both"
-        )
-    for package, dependency in refused:
-        problems.append(
-            f"{package.path}: uses {dependency.name}, and nothing it"
-            f" depends on brings that in. Declare the edge on"
-            f" {dependency.path} and its requirement deliberately: this"
-            " one is a new dependency, not a fact the graph already has"
-        )
     problems.extend(_cycles(packages))
     from livery.workshop._layers import closure_problems
 
     problems.extend(closure_problems(root))
-    problems.extend(_forge_is_stdlib_only(root, packages))
-    problems.extend(_terminal_is_asked_through_the_runner(root, packages))
+    # The rules over the sources, builtin and registered alike, read
+    # the one parse; each problem carries its rule's name.
+    context = RuleContext(root=root, packages=packages)
+    modules = parsed_modules(root, packages)
+    for rule in ast_rules():
+        problems.extend(f"{rule.name}: {line}" for line in rule.judge(modules, context))
     if problems:
         raise ValueError(
             "the workspace breaks its layering:\n  " + "\n  ".join(problems)
@@ -526,15 +523,15 @@ def _terminal_is_asked_through_the_runner(
     for source in sources:
         if not source.is_file():
             continue
-        tree = ast.parse(source.read_text("utf-8"), filename=str(source))
-        if not _imports_the_runner(tree):
+        parsed = parsed_source(source)
+        if parsed is None or not _imports_the_runner(parsed.tree):
             continue
         problems.extend(
             f"{source.relative_to(root)} asks the terminal with {spelling}():"
             " a module that imports the runner asks"
             " livery.footman.attended() instead, which knows --no-input"
             " and --dry-run as well"
-            for spelling in _terminal_calls(tree)
+            for spelling in _terminal_calls(parsed.tree)
         )
     return problems
 
@@ -573,8 +570,10 @@ def _forge_is_stdlib_only(root: Path, packages: tuple[Package, ...]) -> list[str
             dotted == module or dotted.startswith(module + ".") for module in plugins
         ):
             livery_ok = {"livery"}
-        tree = ast.parse(source.read_text("utf-8"), filename=str(source))
-        for node in ast.walk(tree):
+        parsed = parsed_source(source)
+        if parsed is None:
+            continue
+        for node in ast.walk(parsed.tree):
             names: list[str] = []
             if isinstance(node, ast.Import):
                 names = [alias.name for alias in node.names]
@@ -597,3 +596,59 @@ def _forge_is_stdlib_only(root: Path, packages: tuple[Package, ...]) -> list[str
                         " livery.forge is stdlib-only at import time"
                     )
     return problems
+
+
+def _runner_terminal(
+    modules: tuple[ParsedModule, ...], context: RuleContext
+) -> list[str]:
+    """The one-answer rule as a registered rule; its own walk reads the shared parse."""
+    del modules
+    return _terminal_is_asked_through_the_runner(context.root, context.packages)
+
+
+def _forge_stdlib(modules: tuple[ParsedModule, ...], context: RuleContext) -> list[str]:
+    """The forge's stdlib rule as a registered rule."""
+    del modules
+    return _forge_is_stdlib_only(context.root, context.packages)
+
+
+def _sibling_references(
+    modules: tuple[ParsedModule, ...], context: RuleContext
+) -> list[str]:
+    """The undeclared sibling references, by what the graph reaches."""
+    del modules
+    problems: list[str] = []
+    writable, refused = undeclared_references(context.packages)
+    for package, dependency, kind, floor in writable:
+        problems.append(
+            f"{package.path}: uses {dependency.name} through a sibling that"
+            f" brings it in, with no [[depends]] edge on {dependency.path}."
+            f" Declare the {kind} edge at floor {floor}, the one the graph"
+            " already carries, and the matching requirement; the gate's"
+            " --fix writes both"
+        )
+    for package, dependency in refused:
+        problems.append(
+            f"{package.path}: uses {dependency.name}, and nothing it"
+            f" depends on brings that in. Declare the edge on"
+            f" {dependency.path} and its requirement deliberately: this"
+            " one is a new dependency, not a fact the graph already has"
+        )
+    return problems
+
+
+def _write_edges_fix(
+    modules: tuple[ParsedModule, ...], context: RuleContext
+) -> list[str]:
+    """The sibling rule's fix: declare what the graph already reaches."""
+    del modules
+    return write_edges(context.root)
+
+
+# The builtin rules, registered at import the way the builtin checks
+# and kinds are; a layer registers its own beside them.
+register_ast_rule(AstRule("runner-terminal", _runner_terminal))
+register_ast_rule(AstRule("forge-stdlib-only", _forge_stdlib))
+register_ast_rule(
+    AstRule("sibling-references", _sibling_references, fix=_write_edges_fix)
+)

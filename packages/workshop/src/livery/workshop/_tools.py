@@ -1,11 +1,12 @@
-"""The tools a workspace requires: three declaration sites, one lock, receipts.
+"""The tools a workspace requires: four declaration sites, one lock, receipts.
 
 A tool requirement is a name with a floor, `ruff` or `ruff>=0.16`, and
-three sites declare them: a package kind, in its record, for the tools
-its checks run; a package instance, in its `workshop.toml` under
-`[tools] requires`, for what its kind cannot know; and the project, in
-the root contract's `[tools] requires`, for what belongs to the
-repository. The sites' requirements union, and `tools.lock` at the
+four sites declare them: a package kind, in its record, for the tools
+its checks run; a listed layer, as `WORKSHOP_TOOLS` on its plugin
+module, for what its own verbs need; a package instance, in its
+`workshop.toml` under `[tools] requires`, for what its kind cannot
+know; and the project, in the root contract's `[tools] requires`, for
+what belongs to the repository. The sites' requirements union, and `tools.lock` at the
 root holds one version per tool for the whole repository, the newest
 the catalogue lists that satisfies every floor and resolves on every
 locked host. The root contract's `[tools] hosts` names those hosts,
@@ -121,11 +122,16 @@ def _requires(table: dict[str, object], *, site: str) -> list[Requirement]:
 
 
 def requirements(root: Path) -> tuple[Requirement, ...]:
-    """Every requirement the three sites declare: kinds, packages, then the project.
+    """Every requirement the four sites declare: kinds, layers, packages, the project.
 
     A workspace with no package types requires what the python kind
-    does: its own `tasks.py` runs on python.
+    does: its own `tasks.py` runs on python. A layer's site is
+    `layer <import path>`, read from its plugin module's
+    `WORKSHOP_TOOLS`; an unlisted layer declares nothing here, since
+    listing is the only activation channel.
     """
+    from livery.workshop._layers import layer_tools
+
     packages = discover_packages(root) if (root / "packages").is_dir() else ()
     kinds = {package.kind for package in packages} or {"python"}
     found: list[Requirement] = []
@@ -133,6 +139,17 @@ def requirements(root: Path) -> tuple[Requirement, ...]:
         for record in kind_chain(kind_name):
             for text in record.tools:
                 found.append(Requirement.parse(text, site=f"kind {record.name}"))
+    try:
+        declared_by_layer = layer_tools(root)
+    except RuntimeError as error:
+        fail(str(error))
+    for layer, declared in declared_by_layer.items():
+        try:
+            found += [
+                Requirement.parse(text, site=f"layer {layer}") for text in declared
+            ]
+        except LockError as error:
+            fail(str(error))
     for package in packages:
         contract = package.directory / "workshop.toml"
         found += _requires(tools_table(contract), site=f"{package.path}/workshop.toml")

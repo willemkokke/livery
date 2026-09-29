@@ -774,3 +774,98 @@ def test_the_conan_requirement_joins_the_tuple_or_refuses_without_one(
         _FAILURES, match=re.escape("declares no `requires = (...)` tuple")
     ):
         _cpp_conan.declare_requirement(bare, low, "0.3.0")
+
+
+# The one parse, and the rules a layer registers into it.
+
+
+def test_the_layering_check_parses_each_source_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop import _ast_rules
+
+    _package(tmp_path, "tool")
+    _module(tmp_path, "tool", "a.py", "import json\n")
+    _module(tmp_path, "tool", "b.py", "import os\n")
+    (tmp_path / "tasks.py").write_text("x = 1\n")
+    _forge_stub(tmp_path)
+    counted: list[Path] = []
+    real = _ast_rules._parse
+
+    def counting(path: Path) -> _ast_rules.Parsed | None:
+        counted.append(path)
+        return real(path)
+
+    monkeypatch.setattr(_ast_rules, "_parse", counting)
+    _ast_rules._PARSED.clear()
+    assert len(_ast_rules.ast_rules()) >= 3
+    verify_workspace(tmp_path)
+    assert sorted(p.name for p in counted) == ["a.py", "b.py", "ok.py", "tasks.py"]
+    # The memo: a second gate over the same bytes parses nothing.
+    verify_workspace(tmp_path)
+    assert len(counted) == 4
+    # An edited file parses again, once.
+    _module(tmp_path, "tool", "a.py", "import json\nimport re\n")
+    verify_workspace(tmp_path)
+    assert [p.name for p in counted[4:]] == ["a.py"]
+
+
+def test_a_registered_rule_sees_every_module_and_its_refusal_names_it(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop import discover_packages
+    from livery.workshop._ast_rules import (
+        AstRule,
+        ParsedModule,
+        RuleContext,
+        register_ast_rule,
+        unregister_ast_rule,
+    )
+    from livery.workshop._checks import GateContext, check_for
+
+    seen: list[str] = []
+
+    def judge(modules: tuple[ParsedModule, ...], context: RuleContext) -> list[str]:
+        seen.extend(module.relative for module in modules)
+        if (context.root / "fixed.marker").is_file():
+            return []
+        return ["the marker is missing; the gate's --fix writes it"]
+
+    def fix(modules: tuple[ParsedModule, ...], context: RuleContext) -> list[str]:
+        del modules
+        (context.root / "fixed.marker").write_text("")
+        return ["  acme-rule: wrote fixed.marker"]
+
+    register_ast_rule(AstRule("acme-rule", judge, fix=fix, layer="acme.brand"))
+    try:
+        _package(tmp_path, "tool")
+        _module(tmp_path, "tool", "a.py", "import json\n")
+        tests = tmp_path / "packages" / "tool" / "tests"
+        tests.mkdir()
+        (tests / "test_a.py").write_text("import json\n")
+        _forge_stub(tmp_path)
+        # The refusal first, naming the rule.
+        with pytest.raises(ValueError, match="acme-rule: the marker is missing"):
+            verify_workspace(tmp_path)
+        assert "packages/tool/src/a.py" in seen
+        assert "packages/tool/tests/test_a.py" in seen
+        assert "packages/forge/src/ok.py" in seen
+        # The fix runs inside the layering check's rewrite, and the
+        # judge that follows it passes.
+        record = check_for("layering")
+        assert record.fix is not None
+        context = GateContext(
+            root=tmp_path, packages=discover_packages(tmp_path), fix=True
+        )
+        record.fix(context)
+        assert (tmp_path / "fixed.marker").is_file()
+        verify_workspace(tmp_path)
+    finally:
+        unregister_ast_rule("acme-rule")
+
+
+def test_a_rule_without_a_name_refuses() -> None:
+    from livery.workshop._ast_rules import AstRule, register_ast_rule
+
+    with pytest.raises(ValueError, match="needs a name"):
+        register_ast_rule(AstRule("", lambda modules, context: []))

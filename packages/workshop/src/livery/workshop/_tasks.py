@@ -16,7 +16,7 @@ invoked there.
 
 from __future__ import annotations
 
-from livery.footman import task
+from livery.footman import fail, task
 
 # Importing registers each module's tasks with footman.
 from livery.workshop import (  # noqa: F401
@@ -45,7 +45,7 @@ from livery.workshop import (  # noqa: F401
     _update_driver,
     _workflow_tasks,
 )
-from livery.workshop._layers import SELF, layer_names
+from livery.workshop._layers import layer_names
 
 
 @task
@@ -60,12 +60,12 @@ def layers() -> None:
     if not names:
         print("  no workspace: no workshop.toml above the working directory")
         return
-    from livery.workshop._layers import requirers
+    from livery.workshop._layers import describe_layers
 
-    who = requirers()
-    for name in names:
-        marker = " (this package)" if name == SELF else ""
-        needed = who.get(name, ())
-        by = f" (required by {', '.join(needed)})" if needed else ""
-        print(f"  {name}{marker}{by}")
+    try:
+        lines = describe_layers()
+    except RuntimeError as error:
+        fail(str(error))
+    for line in lines:
+        print(line)
     print("  ... then the instance's own files, which always win")
