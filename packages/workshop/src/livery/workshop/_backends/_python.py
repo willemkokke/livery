@@ -12,7 +12,6 @@ platform matrix.
 
 from __future__ import annotations
 
-import ast
 import json
 import os
 import re
@@ -1488,53 +1487,17 @@ def _extra_distributions(package: Package) -> frozenset[str]:
     return frozenset(found)
 
 
-def _guarded_imports(tree: ast.AST) -> set[int]:
-    """The ids of import nodes under a ``try`` that catches an absent module.
-
-    An import written that way says the code runs without what it
-    imports, which is a declaration of its own and needs no other.
-    """
-    guarded: set[int] = set()
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Try):
-            continue
-        catches = any(
-            handler.type is None
-            or (
-                isinstance(handler.type, ast.Name)
-                and handler.type.id in ("ImportError", "ModuleNotFoundError")
-            )
-            for handler in node.handlers
-        )
-        if not catches:
-            continue
-        for statement in node.body:
-            for inner in ast.walk(statement):
-                if isinstance(inner, (ast.Import, ast.ImportFrom)):
-                    guarded.add(id(inner))
-    return guarded
-
-
 def _references_in(source: Path) -> list[str]:
-    """The dotted names *source* imports, guarded ones left out."""
-    try:
-        tree = ast.parse(source.read_text("utf-8"), filename=str(source))
-    except SyntaxError:
-        return []  # the syntax gate names it; this reads what parses
-    guarded = _guarded_imports(tree)
-    names: list[str] = []
-    for node in ast.walk(tree):
-        if id(node) in guarded:
-            continue
-        if isinstance(node, ast.Import):
-            names += [alias.name for alias in node.names]
-        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-            # The imported name too: under a PEP 420 namespace the
-            # module alone can be the namespace, and the package that
-            # owns the code is one segment further down.
-            names.append(node.module)
-            names += [f"{node.module}.{alias.name}" for alias in node.names]
-    return names
+    """The dotted names *source* imports, guarded ones left out.
+
+    Read through the layering check's one parse, so a file another
+    rule also reads is parsed once per gate; a file that does not
+    parse contributes nothing, since the syntax gate names it.
+    """
+    from livery.workshop._ast_rules import parsed_source
+
+    parsed = parsed_source(source)
+    return [] if parsed is None else list(parsed.imports)
 
 
 def referenced_siblings(package: Package, around: Neighbours) -> dict[str, str]:

@@ -491,13 +491,21 @@ def _register_builtin() -> None:
         verify_workspace(ctx.root)
 
     def layering_fix(ctx: GateContext) -> None:
+        from livery.workshop._ast_rules import RuleContext, ast_rules, parsed_modules
         from livery.workshop._layers import write_layers
-        from livery.workshop._packages import verify_workspace, write_edges
+        from livery.workshop._packages import verify_workspace
         from livery.workshop._uv import run_uv
 
         for line in write_layers(ctx.root):
             print(line)
-        written = write_edges(ctx.root)
+        # Every rule's fix runs here, inside the one rewrite and over
+        # the one parse; the judgments follow in the check's judge.
+        context = RuleContext(root=ctx.root, packages=ctx.packages)
+        modules = parsed_modules(ctx.root, ctx.packages)
+        written: list[str] = []
+        for rule in ast_rules():
+            if rule.fix is not None:
+                written += rule.fix(modules, context)
         for line in written:
             print(line)
         if any("pyproject.toml" in line for line in written):

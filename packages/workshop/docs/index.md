@@ -23,6 +23,35 @@ spelling and the file to rename it in.
   anything below the plugin line in `tasks.py`) are seeded once and
   never rewritten.
 
+A layer declares what the mount needs to know as attributes of its
+plugin module, read at mount and never from a wheel's metadata:
+`WORKSHOP_API_VERSION`, the plugin API it was written for, refused
+at mount when it is not this workshop's; `WORKSHOP_DEPENDS`, the
+layers it needs mounted before it, which the layering check keeps
+listed before it and its `--fix` adds; `WORKSHOP_TOOLS`, the tools
+its own verbs need, `("docker>=27",)`, the fourth site the tool
+profile reads; and `WORKSHOP_FOR`, a map from a target layer to the
+module carrying the registrations for that target,
+`{"livery.workshop.python": "acme.house.python"}`. The mount imports
+a contribution module once both its owner and its target are
+mounted, so a house with opinions on several languages contributes
+to each only where the language is listed, and no mount code
+branches. The layering check's `--fix` writes the resolved targets
+into the entry once, `{ import = "acme.house", for = ["livery.workshop.python"] }`;
+from then on `for` is the truth: a name deleted from it stays
+deleted, which is a project's opt-out from that target's opinions,
+and a name the list does not carry refuses. `fm layers` prints each
+layer, who requires it, its tools and its targets.
+
+The layering check parses every python source once per gate and
+memoises the parse by the file's bytes, and a kind or a layer may
+register a rule over that parse beside the builtin three (the
+runner's one-answer rule, the forge's stdlib rule, the sibling
+references): `register_ast_rule(AstRule(name, judge, fix=...))` in
+`livery.workshop._ast_rules`. A rule's fix runs inside the check's
+rewrite and its judgment inside the check's judge, and each problem
+it reports carries the rule's name.
+
 Each layer may carry a `content/` directory; `fm sync` delivers it:
 guidance fragments into `.workshop/fragments/`, skills and hooks into
 `.claude/` as links (a local override is kept and named), and the
@@ -47,13 +76,14 @@ comments keeps your lines as a tail after the lines the render owns.
 
 ## The tools a workspace requires
 
-Three sites declare tool requirements, each a name with a floor,
+Four sites declare tool requirements, each a name with a floor,
 `ruff` or `ruff>=0.16`: a package kind, in its record, for the tools
 its checks run, which is how the python kind requires uv, ruff, pytest
-and the checkers; a package instance, in its `workshop.toml` under
-`[tools] requires`, for what its kind cannot know; and the project, in
-the root contract's `[tools] requires`, for what belongs to the
-repository. The root contract's `[tools] index` names where the
+and the checkers; a listed layer, as `WORKSHOP_TOOLS` on its plugin
+module, for what its own verbs need; a package instance, in its
+`workshop.toml` under `[tools] requires`, for what its kind cannot
+know; and the project, in the root contract's `[tools] requires`, for
+what belongs to the repository. The root contract's `[tools] index` names where the
 catalogue is read from, the published index's URL or a directory
 holding the index or the records that build one, and `[tools] hosts`
 the hosts the repository locks for, the gated three unless it says

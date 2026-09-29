@@ -31,6 +31,19 @@ API_VERSION = 1
 #: with: the import paths of the layers it needs mounted before it.
 DEPENDS_ATTRIBUTE = "WORKSHOP_DEPENDS"
 
+#: The attribute a layer's plugin module declares the tools its own
+#: verbs need with: requirement strings, ``docker`` or ``docker>=27``.
+#: The derived profile reads it as its fourth site, beside the kinds,
+#: the packages and the root contract.
+TOOLS_ATTRIBUTE = "WORKSHOP_TOOLS"
+
+#: The attribute a layer's plugin module declares its contributions
+#: with: a map from a target layer's import path to the module that
+#: carries the registrations for that target. The mount imports the
+#: module once both the owner and the target are mounted, so no mount
+#: code branches on what is listed.
+FOR_ATTRIBUTE = "WORKSHOP_FOR"
+
 
 def workspace_root(start: Path | None = None) -> Path | None:
     """The nearest ancestor carrying a ``workshop.toml``, or None.
@@ -56,7 +69,9 @@ def layer_entries(start: Path | None = None) -> tuple[tuple[str, str], ...]:
     ``[workspace] layers`` list: no guessing, no defaults.
     """
     root = workspace_root(start)
-    if root is None:
+    if root is None or not (root / "workshop.toml").is_file():
+        # A root handed in without a contract, as a test's workspace
+        # may be, lists no layers: nothing to guess from.
         return ()
     # Parsed raw on purpose: this read happens while the layers mount,
     # before any verb runs, and a refusal here would take every
@@ -83,6 +98,32 @@ def layer_names(start: Path | None = None) -> tuple[str, ...]:
     empty on the same terms.
     """
     return tuple(import_path for import_path, _ in layer_entries(start))
+
+
+def layer_targets(start: Path | None = None) -> dict[str, tuple[str, ...] | None]:
+    """Each listed layer's ``for`` list from its contract entry; None without one.
+
+    A table entry may carry ``for = [...]``, the targets the layer
+    contributes to, written once by the layering check's fix and a
+    person's to edit from then on: a name deleted from it stays
+    deleted, which is a project's opt-out from that target's
+    opinions.
+    """
+    root = workspace_root(start)
+    if root is None or not (root / "workshop.toml").is_file():
+        return {}
+    contract = tomllib.loads((root / "workshop.toml").read_text("utf-8"))
+    workspace = contract.get("workspace") or {}
+    found: dict[str, tuple[str, ...] | None] = {}
+    for layer in workspace.get("layers") or []:
+        if isinstance(layer, dict):
+            targets = layer.get("for")
+            found[str(layer.get("import", ""))] = (
+                None if targets is None else tuple(str(name) for name in targets)
+            )
+        else:
+            found[str(layer)] = None
+    return found
 
 
 #: Whether mount_layers ran in this process. The cascade hook reads
@@ -115,8 +156,17 @@ def mount_layers(start: Path | None = None) -> tuple[str, ...]:
     MOUNTED = True
     builtin = set(_paths.builtin())
     mounted = []
+    declared = contributions(start)
+    active = resolved_targets(start)
+    # The workshop and the App's builtins are present before this walk;
+    # every other layer joins once its mount ran, content-only ones too.
+    present = [
+        layer for layer in layer_names(start) if layer == SELF or layer in builtin
+    ]
+    grafted: set[tuple[str, str]] = set()
     for layer, dist in layer_entries(start):
         if layer == SELF or layer in builtin:
+            _graft_contributions(present, declared, active, grafted)
             continue
         # An absent layer is refused by the mount below, which names the install.
         with contextlib.suppress(ModuleNotFoundError):
@@ -142,7 +192,36 @@ def mount_layers(start: Path | None = None) -> tuple[str, ...]:
             print(f"  note: layer {layer} contributes content only (no tasks): {error}")
         else:
             mounted.append(layer)
+        present.append(layer)
+        _graft_contributions(present, declared, active, grafted)
     return tuple(mounted)
+
+
+def _graft_contributions(
+    present: list[str],
+    declared: dict[str, dict[str, str]],
+    active: dict[str, tuple[str, ...]],
+    grafted: set[tuple[str, str]],
+) -> None:
+    """Import every contribution whose owner and target are both present.
+
+    Called after each layer mounts, so a contribution lands whichever
+    of the two mounts later. A module that does not import refuses
+    naming the owner, the target and the module.
+    """
+    for owner in present:
+        for target in active.get(owner, ()):
+            if target not in present or (owner, target) in grafted:
+                continue
+            module = declared[owner][target]
+            try:
+                importlib.import_module(module)
+            except ModuleNotFoundError as error:
+                raise RuntimeError(
+                    f"layer {owner!r} contributes {module!r} for {target}, and"
+                    f" the module does not import: {error}"
+                ) from error
+            grafted.add((owner, target))
 
 
 def check_api_version(layer: str, module: ModuleType) -> None:
@@ -161,6 +240,20 @@ def check_api_version(layer: str, module: ModuleType) -> None:
         )
 
 
+def _plugin_module(layer: str) -> ModuleType | None:
+    """The listed layer's plugin module; None for the workshop itself or an absent one.
+
+    The workshop declares nothing about itself here, and an absent
+    layer is the mount's to refuse, naming the install.
+    """
+    if layer == SELF:
+        return None
+    try:
+        return importlib.import_module(layer)
+    except ModuleNotFoundError:
+        return None
+
+
 def layer_dependencies(start: Path | None = None) -> dict[str, tuple[str, ...]]:
     """Each listed layer's declared dependencies, import path to import paths.
 
@@ -170,17 +263,107 @@ def layer_dependencies(start: Path | None = None) -> dict[str, tuple[str, ...]]:
     """
     found: dict[str, tuple[str, ...]] = {}
     for layer in layer_names(start):
-        if layer == SELF:
-            found[layer] = ()
-            continue
-        try:
-            module = importlib.import_module(layer)
-        except ModuleNotFoundError:
-            found[layer] = ()
-            continue
-        declared = getattr(module, DEPENDS_ATTRIBUTE, ())
+        module = _plugin_module(layer)
+        declared = () if module is None else getattr(module, DEPENDS_ATTRIBUTE, ())
         found[layer] = tuple(str(name) for name in declared)
     return found
+
+
+def layer_tools(start: Path | None = None) -> dict[str, tuple[str, ...]]:
+    """Each listed layer's declared tools, import path to requirement strings.
+
+    Read from ``WORKSHOP_TOOLS`` on the plugin module, a tuple of
+    requirement strings such as ``("docker>=27",)``. The workshop
+    itself and a layer that cannot be imported declare none here. A
+    value of another shape refuses naming the layer: a tool declared
+    in a shape the lock cannot read is a tool the environment lacks in
+    silence.
+
+    Raises:
+        RuntimeError: when a layer's declaration is not a tuple of
+            strings.
+    """
+    found: dict[str, tuple[str, ...]] = {}
+    for layer in layer_names(start):
+        module = _plugin_module(layer)
+        declared = () if module is None else getattr(module, TOOLS_ATTRIBUTE, ())
+        if isinstance(declared, str) or not (
+            isinstance(declared, (tuple, list))
+            and all(isinstance(text, str) for text in declared)
+        ):
+            raise RuntimeError(
+                f"layer {layer!r} declares {TOOLS_ATTRIBUTE} as {declared!r};"
+                ' it is a tuple of requirement strings, ("docker>=27",)'
+            )
+        found[layer] = tuple(declared)
+    return found
+
+
+def contributions(start: Path | None = None) -> dict[str, dict[str, str]]:
+    """Each listed layer's declared contributions, owner to target to module.
+
+    Read from ``WORKSHOP_FOR`` on the plugin module, a map from a
+    target layer's import path to the module carrying the
+    registrations for that target. A value of another shape refuses
+    naming the layer.
+
+    Raises:
+        RuntimeError: when a layer's declaration is not a map of
+            strings to strings.
+    """
+    found: dict[str, dict[str, str]] = {}
+    for layer in layer_names(start):
+        module = _plugin_module(layer)
+        declared = {} if module is None else getattr(module, FOR_ATTRIBUTE, {})
+        if not isinstance(declared, dict) or not all(
+            isinstance(target, str) and isinstance(name, str)
+            for target, name in declared.items()
+        ):
+            raise RuntimeError(
+                f"layer {layer!r} declares {FOR_ATTRIBUTE} as {declared!r}; it"
+                " is a map from a target layer's import path to the module"
+                ' carrying the registrations for it, {"livery.workshop.python":'
+                ' "acme.house.python"}'
+            )
+        found[layer] = dict(declared)
+    return found
+
+
+def resolved_targets(start: Path | None = None) -> dict[str, tuple[str, ...]]:
+    """Each listed layer's active targets, in list order.
+
+    The entry's ``for`` list when it has one, since that is the truth
+    once written; otherwise every declared target that is listed.
+    """
+    names = layer_names(start)
+    declared = contributions(start)
+    written = layer_targets(start)
+    found: dict[str, tuple[str, ...]] = {}
+    for owner in names:
+        targets = written.get(owner)
+        if targets is None:
+            targets = tuple(name for name in names if name in declared.get(owner, {}))
+        found[owner] = targets
+    return found
+
+
+def describe_layers(start: Path | None = None) -> list[str]:
+    """The lines ``fm layers`` prints: each layer with what it declares."""
+    names = layer_names(start)
+    who = requirers(start)
+    tools = layer_tools(start)
+    targets = resolved_targets(start)
+    lines: list[str] = []
+    for name in names:
+        marker = " (this package)" if name == SELF else ""
+        needed = who.get(name, ())
+        by = f" (required by {', '.join(needed)})" if needed else ""
+        lines.append(f"  {name}{marker}{by}")
+        if tools.get(name):
+            lines.append(f"    tools: {', '.join(tools[name])}")
+        if targets.get(name):
+            lines.append(f"    for: {', '.join(targets[name])}")
+    return lines
 
 
 def closure_problems(start: Path | None = None) -> list[str]:
@@ -205,6 +388,21 @@ def closure_problems(start: Path | None = None) -> list[str]:
                 problems.append(
                     f"[workspace] layers lists {needed} after {layer}, which"
                     f" depends on it; move {needed} before {layer}"
+                )
+    declared = contributions(start)
+    for owner, targets in layer_targets(start).items():
+        for target in targets or ():
+            if target not in order:
+                problems.append(
+                    f"[workspace] layers: the entry for {owner} names {target}"
+                    " in `for`, and does not list it; list it, or remove it"
+                    " from `for`"
+                )
+            elif target not in declared.get(owner, {}):
+                problems.append(
+                    f"[workspace] layers: the entry for {owner} names {target}"
+                    f" in `for`, and {owner} declares no contribution for it;"
+                    " remove it from `for`"
                 )
     return problems
 
@@ -247,9 +445,66 @@ def write_layers(root: Path) -> list[str]:
                 f"  layering: [workspace] layers gains {needed} before {layer},"
                 " which requires it"
             )
+    recorded = layer_targets(root)
+    for owner, targets in resolved_targets(root).items():
+        if recorded.get(owner) is not None or not targets:
+            continue
+        text, done = _write_for(text, owner, targets)
+        if not done:
+            continue
+        written.append(
+            f"  layering: [workspace] layers records {owner} for {', '.join(targets)}"
+        )
     if written:
         contract.write_text(text, encoding="utf-8")
     return written
+
+
+def _write_for(text: str, owner: str, targets: tuple[str, ...]) -> tuple[str, bool]:
+    """*text* with *owner*'s entry carrying ``for = [targets]``, and whether it does.
+
+    Written once: the string entry becomes a table entry, a table entry
+    gains the key, and an entry in a shape this does not read is left
+    for a person, with the judge naming nothing since a missing ``for``
+    is not a problem.
+    """
+    listed = ", ".join(f'"{target}"' for target in targets)
+    table = f'{{ import = "{owner}", for = [{listed}] }}'
+    line = re.compile(rf'^(\s*)"{re.escape(owner)}",?\s*(#.*)?$', re.M)
+    match = line.search(text)
+    if match is not None:
+        comment = f"  {match.group(2)}" if match.group(2) else ""
+        return (
+            text[: match.start()]
+            + f"{match.group(1)}{table},{comment}"
+            + text[match.end() :],
+            True,
+        )
+    entry = re.compile(
+        rf'^(\s*\{{ import = "{re.escape(owner)}"(?:, [a-z]+ = [^,}}]+)*)'
+        r" \}(,?\s*(?:#.*)?)$",
+        re.M,
+    )
+    match = entry.search(text)
+    if match is not None:
+        return (
+            text[: match.start()]
+            + f"{match.group(1)}, for = [{listed}] }}{match.group(2)}"
+            + text[match.end() :],
+            True,
+        )
+    inline = re.compile(r"^(layers = \[)(.*?)(\])", re.M | re.S)
+    match = inline.search(text)
+    if match is None:
+        return text, False
+    items = [item.strip() for item in match.group(2).split(",") if item.strip()]
+    target = f'"{owner}"'
+    if target not in items:
+        return text, False
+    items[items.index(target)] = table
+    return text[: match.start()] + "layers = [" + ", ".join(items) + "]" + text[
+        match.end() :
+    ], True
 
 
 def _insert_layer(text: str, needed: str, *, before: str) -> tuple[str, bool]:

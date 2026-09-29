@@ -186,3 +186,176 @@ def test_the_doctor_lists_installed_layers_the_contract_does_not_mount() -> None
         )
         == []
     )
+
+
+# The tool declaration and the contributions by target: refusals and
+# the unlisted arms first.
+
+
+def test_a_layer_declaring_tools_off_the_shape_refuses_naming_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fake_layers(tmp_path, monkeypatch, odd='WORKSHOP_TOOLS = "docker"\n')
+    _contract(tmp_path, '["livery.workshop", "acme.odd"]')
+    with pytest.raises(RuntimeError, match=r"acme\.odd.*WORKSHOP_TOOLS"):
+        _layers.layer_tools(tmp_path)
+    from livery.footman.context import Failed
+    from livery.workshop._tools import requirements
+
+    with pytest.raises(Failed, match=r"acme\.odd"):
+        requirements(tmp_path)
+
+
+def test_an_unlisted_layers_tools_never_enter_the_profile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._tools import requirements, tool_names
+
+    _fake_layers(tmp_path, monkeypatch, tooled='WORKSHOP_TOOLS = ("docker>=27",)\n')
+    _contract(tmp_path, '["livery.workshop"]')
+    assert "layer acme.tooled" not in {r.site for r in requirements(tmp_path)}
+    assert "docker" not in tool_names(tmp_path)
+    # Listed, the layer is the fourth site, named as the kinds are.
+    _contract(tmp_path, '["livery.workshop", "acme.tooled"]')
+    found = [r for r in requirements(tmp_path) if r.site == "layer acme.tooled"]
+    assert [(r.name, r.floor) for r in found] == [("docker", "27")]
+    assert "docker" in tool_names(tmp_path)
+    assert "    tools: docker>=27" in _layers.describe_layers(tmp_path)
+
+
+def test_a_layer_declaring_contributions_off_the_shape_refuses_naming_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fake_layers(tmp_path, monkeypatch, odd='WORKSHOP_FOR = ["acme.python"]\n')
+    _contract(tmp_path, '["livery.workshop", "acme.odd"]')
+    with pytest.raises(RuntimeError, match=r"acme\.odd.*WORKSHOP_FOR"):
+        _layers.contributions(tmp_path)
+
+
+def _house(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A house contributing to a python layer, and the python layer, importable."""
+    _fake_layers(
+        tmp_path,
+        monkeypatch,
+        house='WORKSHOP_FOR = {"acme.python": "acme.house_python"}\n',
+        house_python="GRAFTED = True\n",
+        python="",
+    )
+
+
+def _mount(root: Path) -> None:
+    from livery.footman import registry
+
+    with registry.capture():
+        _layers.mount_layers(root)
+
+
+def test_a_contribution_for_an_unlisted_target_never_mounts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import sys
+
+    _house(tmp_path, monkeypatch)
+    _contract(tmp_path, '["livery.workshop", "acme.house"]')
+    _mount(tmp_path)
+    assert "acme.house_python" not in sys.modules
+    assert _layers.resolved_targets(tmp_path)["acme.house"] == ()
+    assert "    for: acme.python" not in _layers.describe_layers(tmp_path)
+
+
+def test_a_contribution_mounts_once_both_are_listed_whichever_is_later(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import sys
+
+    _house(tmp_path, monkeypatch)
+    for listed in (
+        '["livery.workshop", "acme.python", "acme.house"]',
+        '["livery.workshop", "acme.house", "acme.python"]',
+    ):
+        monkeypatch.delitem(sys.modules, "acme.house_python", raising=False)
+        _contract(tmp_path, listed)
+        _mount(tmp_path)
+        assert sys.modules["acme.house_python"].GRAFTED is True
+        assert _layers.resolved_targets(tmp_path)["acme.house"] == ("acme.python",)
+    assert "    for: acme.python" in _layers.describe_layers(tmp_path)
+
+
+def test_a_contribution_module_that_does_not_import_refuses_naming_all_three(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fake_layers(
+        tmp_path,
+        monkeypatch,
+        house='WORKSHOP_FOR = {"acme.python": "acme.absent_module"}\n',
+        python="",
+    )
+    _contract(tmp_path, '["livery.workshop", "acme.python", "acme.house"]')
+    with pytest.raises(
+        RuntimeError, match=r"acme\.house.*acme\.absent_module.*acme\.python"
+    ):
+        _mount(tmp_path)
+
+
+def test_the_fix_records_for_once_and_a_deleted_name_stays_deleted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _house(tmp_path, monkeypatch)
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nlayers = [\n    "livery.workshop",\n    "acme.python",\n'
+        '    "acme.house",  # the opinions\n]\n'
+    )
+    assert _layers.write_layers(tmp_path) == [
+        "  layering: [workspace] layers records acme.house for acme.python"
+    ]
+    text = (tmp_path / "workshop.toml").read_text()
+    assert (
+        '    { import = "acme.house", for = ["acme.python"] },  # the opinions\n'
+        in text
+    )
+    assert _layers.write_layers(tmp_path) == []  # written once
+    # From then on the list is the truth: a deleted name stays deleted.
+    (tmp_path / "workshop.toml").write_text(
+        text.replace('for = ["acme.python"]', "for = []")
+    )
+    assert _layers.write_layers(tmp_path) == []
+    assert _layers.resolved_targets(tmp_path)["acme.house"] == ()
+    assert _layers.closure_problems(tmp_path) == []
+    # A name the list does not carry, or the layer does not declare, refuses.
+    (tmp_path / "workshop.toml").write_text(
+        text.replace('for = ["acme.python"]', 'for = ["acme.cpp"]')
+    )
+    (problem,) = _layers.closure_problems(tmp_path)
+    assert problem == (
+        "[workspace] layers: the entry for acme.house names acme.cpp in `for`,"
+        " and does not list it; list it, or remove it from `for`"
+    )
+    _contract(tmp_path, '["livery.workshop", "acme.python", "acme.house"]')
+    # The inline form takes the entry the same way, and a table entry
+    # without `for` gains the key.
+    _layers.write_layers(tmp_path)
+    assert (
+        'layers = ["livery.workshop", "acme.python", { import = "acme.house",'
+        ' for = ["acme.python"] }]' in (tmp_path / "workshop.toml").read_text()
+    )
+    (tmp_path / "workshop.toml").write_text(
+        '[workspace]\nlayers = [\n    "livery.workshop",\n    "acme.python",\n'
+        '    { import = "acme.house", dist = "acme-house" },\n]\n'
+    )
+    _layers.write_layers(tmp_path)
+    assert (
+        '    { import = "acme.house", dist = "acme-house", for = ["acme.python"] },\n'
+        in (tmp_path / "workshop.toml").read_text()
+    )
+
+
+def test_a_root_without_a_contract_lists_no_layers_and_declares_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A verb handed a root with no workshop.toml, as the env check's
+    # tests do, reads an empty list rather than a missing file.
+    monkeypatch.setattr(_layers, "workspace_root", lambda start=None: tmp_path)
+    assert _layers.layer_entries(tmp_path) == ()
+    assert _layers.layer_targets(tmp_path) == {}
+    assert _layers.layer_tools(tmp_path) == {}
+    assert _layers.resolved_targets(tmp_path) == {}
