@@ -45,6 +45,12 @@ test = [
 [project.entry-points."footman.tasks"]
 "livery.toolroom.bench" = "livery.toolroom.bench"
 
+[project.entry-points.pytest11]
+# Every test session with the bench installed runs apart from the
+# machine's provisioned tools and store; a directory the environment
+# already points away is left alone.
+livery-toolroom-bench-isolation = "livery.toolroom.bench._pytest_isolation"
+
 [project.urls]
 Repository = "https://github.com/willemkokke/livery"
 

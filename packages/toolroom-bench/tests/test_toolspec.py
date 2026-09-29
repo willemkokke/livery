@@ -22,6 +22,7 @@ import pytest
 from livery.footman import _globals
 from livery.toolroom.bench import _drivers, _toolhelp, _toolspec
 from livery.toolroom.store import NameCollision, Option, ToolSpec, Verb, render
+from toolroom_bench_readings import repository_records  # noqa: F401
 
 CLAP = """\
 Usage: ruff check [OPTIONS] [FILES]...

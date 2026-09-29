@@ -18,7 +18,12 @@ from livery.toolroom.store import (
     RecordError,
     resolve,
 )
-from toolroom_bench_readings import history, reading, with_flags
+from toolroom_bench_readings import (  # noqa: F401
+    history,
+    reading,
+    repository_records,
+    with_flags,
+)
 
 SHA = "d8b96221828ad6f97ac7ac0ab7e95872341af763001e8803e8267652c2652620"
 

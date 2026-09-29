@@ -23,6 +23,7 @@ from livery.toolroom.store import (
     Verb,
     resolve,
 )
+from toolroom_bench_readings import repository_records  # noqa: F401
 
 SHA = "d8b96221828ad6f97ac7ac0ab7e95872341af763001e8803e8267652c2652620"
 HOST = "linux-x64"

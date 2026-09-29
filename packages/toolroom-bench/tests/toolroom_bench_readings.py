@@ -11,8 +11,28 @@ import pathlib
 from collections.abc import Mapping
 from typing import Any
 
-from livery.toolroom.bench import _surfaces
+import pytest
+
+from livery.toolroom.bench import _surfaces, _tasks
 from livery.toolroom.store import Option, Record, ToolSpec, Verb
+
+RECORDS = pathlib.Path(__file__).resolve().parents[3] / "records"
+"""The repository's records, found from this file: the suite's own position."""
+
+
+@pytest.fixture(autouse=True)
+def repository_records(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point the bench at the repository's records for every test of the module.
+
+    The bench resolves the records from the run's project root, which
+    is the repository when the suite runs from a checkout. A release
+    leg runs the suite from a scratch directory against the installed
+    wheel, where neither the project root nor the module's own
+    position reaches them, so a test module that reads records imports
+    this fixture and names them itself. A test that points `_RECORDS`
+    elsewhere sets it after this fixture and wins.
+    """
+    monkeypatch.setattr(_tasks, "_RECORDS", RECORDS)
 
 
 def spec_of(**over: Any) -> ToolSpec:
