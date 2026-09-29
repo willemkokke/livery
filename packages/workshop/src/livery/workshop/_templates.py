@@ -255,6 +255,7 @@ def render_injections(root: Path, answers: dict[str, Any]) -> dict[str, Any]:
     from livery.workshop._docs import docs_table
     from livery.workshop._provenance import PROJECT_RENDERED
     from livery.workshop._regions import contents
+    from livery.workshop._slots import all_composed
 
     return {
         "runner_prog": footman.prog(),
@@ -266,6 +267,10 @@ def render_injections(root: Path, answers: dict[str, Any]) -> dict[str, Any]:
         # keeps the repository's own lines and the drift gate judges
         # whole bytes.
         "regions": {name: contents(root / name) for name in PROJECT_RENDERED},
+        # The slots the check records fill: the dev group's tool lines,
+        # pytest's addopts. A layer's contribution lands here, and a
+        # withdrawn check takes its line with it.
+        "slots": all_composed(),
         "layer_imports": [import_path for import_path, _ in entries],
         "layer_requirements": [
             dist for _, dist in entries if _requirement_name(dist) not in members

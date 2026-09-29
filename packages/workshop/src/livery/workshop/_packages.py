@@ -63,6 +63,10 @@ class Package:
         kind: The package kind, as the contract's ``kind`` declares
             it: ``python``, ``python-nanobind`` or ``cpp-conan``.
         depends: The declared edges, in contract order.
+        checks: The options the package sets on its checks, from the
+            contract's ``[checks.<name>]`` tables, check name to
+            ``(option, value)`` pairs; the check registry validates
+            them against what each record declares.
         categories: The package's own reassignments of its paths
             among the categories, ``[categories] vendored =
             ["docs/assets/vendor/**"]``: a fact about the package in
@@ -81,6 +85,7 @@ class Package:
     depends: tuple[Edge, ...]
     publish: bool = True
     categories: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    checks: tuple[tuple[str, tuple[tuple[str, object], ...]], ...] = ()
 
 
 def discover_packages(root: Path) -> tuple[Package, ...]:
@@ -153,6 +158,21 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
                     f" of path patterns, not {patterns!r}"
                 )
             reassigned.append((str(category), tuple(patterns)))
+        checks_table = contract.get("checks", {})
+        if not isinstance(checks_table, dict) or not all(
+            isinstance(options, dict) for options in checks_table.values()
+        ):
+            raise ValueError(
+                f"{directory.name}: [checks] holds one table per check,"
+                " [checks.<name>] with the options the check declares"
+            )
+        options_by_check = tuple(
+            (
+                str(name),
+                tuple((str(option), value) for option, value in options.items()),
+            )
+            for name, options in checks_table.items()
+        )
         publish = release.get("publish", True) if isinstance(release, dict) else True
         if not isinstance(publish, bool):
             problems.append(
@@ -169,6 +189,7 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
                 depends=depends,
                 publish=publish,
                 categories=tuple(reassigned),
+                checks=options_by_check,
             )
         )
     if problems:
@@ -268,6 +289,9 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
     from livery.workshop._layers import closure_problems
 
     problems.extend(closure_problems(root))
+    from livery.workshop._checks import option_problems
+
+    problems.extend(option_problems(packages))
     if (root / "src").is_dir():
         problems.append(
             "src/ at the workspace root is not a member: the root is never a"

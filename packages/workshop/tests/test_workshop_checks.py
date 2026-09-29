@@ -168,3 +168,103 @@ def test_a_package_check_runs_for_its_kinds_alone_and_skips_by_name(
 def test_the_constants_name_the_vocabulary() -> None:
     assert (WORKSPACE, PACKAGE) == ("workspace", "package")
     assert (PATHS, PACKAGES, NONE) == ("paths", "packages", "none")
+
+
+# The options a package may set, refusals first.
+
+
+def _member_with(tmp_path: Path, checks: str) -> Package:
+    from livery.workshop._packages import discover_packages
+
+    member = tmp_path / "packages" / "x"
+    member.mkdir(parents=True, exist_ok=True)
+    member.joinpath("workshop.toml").write_text(
+        f'kind = "python"\nname = "livery-x"\n{checks}'
+    )
+    member.joinpath("pyproject.toml").write_text('[project]\nname = "livery-x"\n')
+    (package,) = discover_packages(tmp_path)
+    return package
+
+
+def test_an_option_on_an_unknown_check_or_an_undeclared_option_refuses(
+    tmp_path: Path,
+) -> None:
+    from livery.workshop._checks import check_for, option_problems, option_value
+
+    package = _member_with(tmp_path, "[checks.nothing]\nenabled = false\n")
+    (problem,) = option_problems((package,))
+    assert problem.startswith(
+        "packages/x/workshop.toml: [checks.nothing] names no registered check"
+    )
+    package = _member_with(tmp_path, "[checks.test]\nworkers = 3\n")
+    (problem,) = option_problems((package,))
+    assert "declares no option 'workers'; its options are parallel, enabled" in problem
+    package = _member_with(tmp_path, '[checks.test]\nparallel = "no"\n')
+    (problem,) = option_problems((package,))
+    assert problem.endswith("[checks.test] parallel is bool, not 'no'")
+    with pytest.raises(_FAILURES, match="parallel is bool"):
+        option_value(check_for("test"), package, "parallel")
+    with pytest.raises(_FAILURES, match="declares no option 'workers'"):
+        option_value(check_for("test"), package, "workers")
+
+
+def test_a_checks_table_off_the_shape_refuses(tmp_path: Path) -> None:
+    from livery.workshop._packages import discover_packages
+
+    member = tmp_path / "packages" / "x"
+    member.mkdir(parents=True)
+    member.joinpath("workshop.toml").write_text(
+        'kind = "python"\nname = "livery-x"\nchecks = 3\n'
+    )
+    member.joinpath("pyproject.toml").write_text('[project]\nname = "livery-x"\n')
+    with pytest.raises(ValueError, match=r"\[checks\] holds one table per check"):
+        discover_packages(tmp_path)
+
+
+def test_a_package_turns_a_check_off_and_is_skipped_by_name(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop._checks import check_for, enabled, option_value
+
+    package = _member_with(tmp_path, "[checks.typecomplete]\nenabled = false\n")
+    assert option_value(check_for("typecomplete"), package, "enabled") is False
+    assert option_value(check_for("test"), package, "enabled") is True
+    assert enabled("typecomplete", (package,)) == ()
+    assert (
+        "typecomplete: packages/x skips (turned off in packages/x/workshop.toml)"
+        in (capsys.readouterr().out)
+    )
+    assert enabled("test", (package,)) == (package,)
+
+
+def test_a_package_that_is_not_parallel_safe_runs_its_suite_under_n_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.workshop._backends import _python
+    from livery.workshop._checks import GateContext, check_for
+
+    serial = _member_with(tmp_path, "[checks.test]\nparallel = false\n")
+    other = tmp_path / "packages" / "y"
+    other.mkdir()
+    other.joinpath("workshop.toml").write_text('kind = "python"\nname = "livery-y"\n')
+    other.joinpath("pyproject.toml").write_text('[project]\nname = "livery-y"\n')
+    from livery.workshop._packages import discover_packages
+
+    packages = discover_packages(tmp_path)
+    runs: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
+
+    def fake_run_test(
+        *args: str, packages: tuple[Package, ...], **kwargs: object
+    ) -> None:
+        del kwargs
+        runs.append((args, tuple(p.path for p in packages)))
+
+    monkeypatch.setattr(_python, "run_test", fake_run_test)
+    monkeypatch.setattr("livery.workshop._quality.workspace_root", lambda: tmp_path)
+    ctx = GateContext(root=tmp_path, packages=packages)
+    check_for("test").run(ctx)
+    assert runs == [
+        ((), ("packages/y",)),
+        (("-n", "0"), ("packages/x",)),
+    ]
+    del serial

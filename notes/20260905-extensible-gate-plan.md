@@ -751,12 +751,15 @@ category rule is a pattern table, since nothing a category needs
 reads state, and the table renders into the documentation:
 
 ```python
-register_categories("python", [
-    ("src/**", "source"),
-    ("tests/**/test_*.py", "test"),
-    ("tests/**", "test-support"),
-    ("**", "configuration"),
-])
+register_categories(
+    "python",
+    [
+        ("src/**", "source"),
+        ("tests/**/test_*.py", "test"),
+        ("tests/**", "test-support"),
+        ("**", "configuration"),
+    ],
+)
 ```
 
 A channel rule is a callable, since it reads the delivery manifest,

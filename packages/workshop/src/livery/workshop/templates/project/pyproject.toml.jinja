@@ -63,24 +63,13 @@ dev = [
     # where nanobind's cmake directory is, so the venv carries it
     # beside the build's own isolated copy.
     "nanobind>=2.7",
-{% endif %}    "pytest>=8.0",
-    # Coverage feeds the per-package floors the gate enforces;
-    # `patch = ["subprocess"]` needs coverage 7.10 or newer.
-    "pytest-cov>=5",
-    "coverage[toml]>=7.10",
-    # Installs the .pth that arms coverage.process_startup() in every
-    # python the venv starts when COVERAGE_PROCESS_START is set: how
-    # the CI test runner meters pytest and every process the tests
-    # start without wrapping them.
-    "coverage-enable-subprocess>=1.0",
-    # Parallelise the suite across cores (`-n auto`, wired into addopts).
-    "pytest-xdist>=3.6",
-    # Stubs for the workshop's own yaml reads, so mypy stays strict.
+{% endif %}    # What the registered checks need in the venv: each line is a
+    # check record's contribution to the `python.dev-group` slot, so a
+    # check a layer withdraws takes its line with it, and the record
+    # is where its floor and its reason live.
+{% for requirement in slots['python.dev-group'] %}    "{{ requirement }}",
+{% endfor %}    # Stubs for the workshop's own yaml reads, so mypy stays strict.
     "types-pyyaml",
-    # The four-checker typing gate, footman's shape: all gating, none
-    # advisory. The lockfile pins them, so a new checker release only
-    # lands through a deliberate lock bump.
-    "mypy>=1.14",
 ]
 
 # Ruff and basedpyright configuration cribbed from footman's pyproject:
@@ -269,7 +258,7 @@ pythonpath = [{% for package in py %}"packages/{{ package.dir }}/tests", {% endf
 # `-n auto` fans the suite across cores; `worksteal` because durations
 # are uneven (footman measured it; the choice carries until we measure
 # here).
-addopts = "-q -n auto --dist=worksteal --import-mode=importlib"
+addopts = "{{ slots['python.test.addopts'] | join(' ') }}"
 
 # The repository's own tables: whole tables and array-of-table entries
 # (a `[[tool.basedpyright.executionEnvironments]]` for an imported
