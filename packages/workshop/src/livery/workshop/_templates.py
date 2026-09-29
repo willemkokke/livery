@@ -1153,7 +1153,7 @@ def wire_package(root: Path, name: str, *, kind: str = "package-python") -> str:
     members = list(answers.get("packages", []))
     if record is None or is_python_kind(record.name):
         # A python member joins the uv workspace and the dev group.
-        # An unmapped template (package-python-layer) is a python
+        # An unmapped template (package-layer) is a python
         # variant, so it takes the same wiring. A chained kind rides
         # along by name so the CI emitters can see it (the wheels
         # matrix exists only where a platform-wheel kind lives).

@@ -2351,6 +2351,16 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   here: the MSVC measurer through `dotnet-coverage` and the `dotnet`
   kind (the second change), and the conformance loop's cpp-conan
   member (the third).
+- 2026-09-29, the layer template is `package-layer` (Willem's ruling,
+  issue #908): every other template names what it makes, and a layer
+  is a python plugin by definition, so the python in
+  `package-python-layer` said nothing; the directory, the birth's
+  layer arm, the template vocabulary and the plan notes take the new
+  name, and the kind mapping needs no change, since an unmapped
+  template renders over the base and takes the python wiring by
+  name. Placed before phase 7b publishes the template series under
+  their names; no package born from the old name exists outside the
+  conformance loop, so nothing migrates.
 
 ## Open
 
