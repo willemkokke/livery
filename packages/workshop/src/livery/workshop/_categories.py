@@ -329,6 +329,14 @@ def channel_of(
     return None
 
 
+def known_categories() -> frozenset[str]:
+    """Every category a registered table names, the four builtin ones among them."""
+    found = {SOURCE, TEST, TEST_SUPPORT, CONFIGURATION}
+    for rules in _CATEGORIES.values():
+        found.update(rule.category for rule in rules)
+    return frozenset(found)
+
+
 def table(kind: str) -> list[str]:
     """The category table for *kind* as lines, one rule each, for documentation."""
     return [

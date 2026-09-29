@@ -96,9 +96,14 @@ select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF", "D"]
 convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
-# Test bodies explain themselves by name and assertion.
+# The claims first: each line is a category's patterns for a present
+# kind, with the rules a check withholds there.
+"packages/*/tests/**" = ["D1"]
+"packages/*/tests/**/*_test.py" = ["D1"]
+"packages/*/tests/**/test_*.py" = ["D1"]
 "tests/**" = ["D1"]
-"**/tests/**" = ["D1"]
+"tests/**/*_test.py" = ["D1"]
+"tests/**/test_*.py" = ["D1"]
 # The provenance headers name the template source verbatim, and a
 # source URL or path may be long.
 "tasks.py" = ["E501"]

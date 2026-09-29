@@ -648,6 +648,10 @@ def verify_digest(name: str, data: bytes, digest: str) -> None:
 #: The extensions of a C or C++ test source under ``tests/``.
 TEST_SOURCES = (".cpp", ".cc", ".cxx", ".c")
 
+#: The extensions of a C or C++ source or header: what clang-format
+#: walks, and what a native check's claims admit.
+SOURCE_SUFFIXES = (*TEST_SOURCES, ".hpp", ".h", ".hxx")
+
 
 def configure(package: Package) -> None:
     """Configure *package* into the gate's build directory.
@@ -760,7 +764,7 @@ def sources(package: Package) -> list[Path]:
         directory = package.directory / name
         if not directory.is_dir():
             continue
-        for suffix in (*TEST_SOURCES, ".hpp", ".h", ".hxx"):
+        for suffix in SOURCE_SUFFIXES:
             found.extend(directory.rglob(f"*{suffix}"))
     return sorted(found)
 

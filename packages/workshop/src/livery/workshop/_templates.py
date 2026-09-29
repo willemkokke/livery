@@ -292,10 +292,18 @@ def compose_fragments(data: dict[str, Any]) -> dict[str, str]:
     reads the same names the template does. A render that builds its
     own data hands it here for the same result.
     """
+    from livery.workshop._checks import per_file_ignores
     from livery.workshop._fragments import compose_project
+    from livery.workshop._kinds import record_for_template
     from livery.workshop._slots import all_composed
 
     roster = [entry for entry in data.get("packages", []) if isinstance(entry, dict)]
+    kinds = []
+    for entry in roster:
+        record = record_for_template(str(entry.get("kind", "package-python")))
+        name = record.name if record is not None else "python"
+        if name not in kinds:
+            kinds.append(name)
     return compose_project(
         {
             # The slots come from the registry when the caller's data
@@ -304,6 +312,8 @@ def compose_fragments(data: dict[str, Any]) -> dict[str, str]:
             **data,
             "py": [entry for entry in roster if entry.get("dev")],
             "native": [entry for entry in roster if not entry.get("dev")],
+            # The per-file ignores the claims render, for the kinds present.
+            "per_file_ignores": per_file_ignores(tuple(kinds) or ("python",)),
         }
     )
 

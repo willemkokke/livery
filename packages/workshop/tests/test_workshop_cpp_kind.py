@@ -388,9 +388,11 @@ def test_the_kind_registers_alone_in_the_chain() -> None:
     assert kind_for("cpp-conan").tools == ("cmake", "conan", "ninja")
     from livery.workshop._checks import tools_for_kind
 
+    # ruff rides in too: it judges the package's conanfile.py.
     assert {tool for tool, _ in tools_for_kind("cpp-conan")} == {
         "clang_format",
         "clang_tidy",
+        "ruff",
     }
 
 

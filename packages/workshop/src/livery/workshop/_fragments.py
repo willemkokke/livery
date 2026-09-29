@@ -155,10 +155,10 @@ select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF", "D"]
 convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
-# Test bodies explain themselves by name and assertion.
-"tests/**" = ["D1"]
-"**/tests/**" = ["D1"]
-# The provenance headers name the template source verbatim, and a
+# The claims first: each line is a category's patterns for a present
+# kind, with the rules a check withholds there.
+{% for pattern, codes in per_file_ignores %}"{{ pattern }}" = [{% for code in codes %}"{{ code }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+{% endfor %}# The provenance headers name the template source verbatim, and a
 # source URL or path may be long.
 "tasks.py" = ["E501"]
 "tests/test_workspace_contracts.py" = ["E501"]
