@@ -252,12 +252,13 @@ def render_injections(root: Path, answers: dict[str, Any]) -> dict[str, Any]:
         for entry in answers.get("packages", [])
         if isinstance(entry, dict)
     }
+    from livery.workshop._checks import extensions
     from livery.workshop._docs import docs_table
     from livery.workshop._provenance import PROJECT_RENDERED
     from livery.workshop._regions import contents
     from livery.workshop._slots import all_composed
 
-    return {
+    injected: dict[str, Any] = {
         "runner_prog": footman.prog(),
         "python_floor": python_floor(root),
         "docs_site_url": str(docs_table(root).get("site-url", "")),
@@ -275,8 +276,36 @@ def render_injections(root: Path, answers: dict[str, Any]) -> dict[str, Any]:
         "layer_requirements": [
             dist for _, dist in entries if _requirement_name(dist) not in members
         ],
+        # The editor extension ids the registered checks carry.
+        "extensions": list(extensions()),
         **registry_injections(root),
     }
+    injected["fragments"] = compose_fragments({**answers, **injected})
+    return injected
+
+
+def compose_fragments(data: dict[str, Any]) -> dict[str, str]:
+    """The check records' fragments composed per rendered file over *data*.
+
+    The roster is split the way the template splits it, ``py`` for the
+    members with a dev entry and ``native`` for the rest, so a fragment
+    reads the same names the template does. A render that builds its
+    own data hands it here for the same result.
+    """
+    from livery.workshop._fragments import compose_project
+    from livery.workshop._slots import all_composed
+
+    roster = [entry for entry in data.get("packages", []) if isinstance(entry, dict)]
+    return compose_project(
+        {
+            # The slots come from the registry when the caller's data
+            # carries none, as the render injection would supply them.
+            "slots": all_composed(),
+            **data,
+            "py": [entry for entry in roster if entry.get("dev")],
+            "native": [entry for entry in roster if not entry.get("dev")],
+        }
+    )
 
 
 def package_injections(root: Path) -> dict[str, Any]:
@@ -710,10 +739,11 @@ def package_drift(root: Path) -> list[str]:
                 render(source, Path(scratch), {**data, "kind": chained_kind})
             for name in _managed_for(directory):
                 rendered = Path(scratch) / name
-                if not rendered.is_file():
-                    continue
                 committed = directory / name
                 relative = committed.relative_to(root).as_posix()
+                if not rendered.is_file():
+                    drift.extend(judge_fragment_file(directory, name, data, relative))
+                    continue
                 if not committed.is_file():
                     drift.append(
                         f"{relative}: rendered, but missing from the repository"
@@ -723,6 +753,151 @@ def package_drift(root: Path) -> list[str]:
                     _drift_line(relative, committed.read_bytes(), rendered.read_bytes())
                 )
     return drift
+
+
+#: The receipt of what the render wrote into a package for the checks'
+#: per-package files, name to digest: what lets a withdrawn check's
+#: file go only when nobody edited it.
+RENDERED_MANIFEST = ".workshop-rendered"
+
+
+def _digest(body: bytes) -> str:
+    return hashlib.sha256(body).hexdigest()
+
+
+def read_rendered(directory: Path) -> dict[str, str]:
+    """The package's rendered-file receipts, name to digest; empty without any."""
+    import json
+
+    path = directory / RENDERED_MANIFEST
+    if not path.is_file():
+        return {}
+    try:
+        loaded = json.loads(path.read_text("utf-8"))
+    except ValueError:
+        return {}
+    return (
+        {str(k): str(v) for k, v in loaded.items()} if isinstance(loaded, dict) else {}
+    )
+
+
+def write_rendered(directory: Path, receipts: dict[str, str]) -> None:
+    """Write the receipts, or remove the file when there are none."""
+    import json
+
+    path = directory / RENDERED_MANIFEST
+    if not receipts:
+        if path.is_file():
+            path.unlink()
+        return
+    path.write_bytes(
+        (json.dumps(dict(sorted(receipts.items())), indent=2) + "\n").encode()
+    )
+
+
+def _fragment_render(directory: Path, name: str, data: dict[str, Any]) -> bytes | None:
+    """*name* rendered from the package kind's fragment, or None when no check owns it.
+
+    The answers spell the template kind; the record behind it is the
+    kind the fragments are registered for, and the one the fragment's
+    own text names.
+    """
+    from livery.workshop._fragments import compose_package
+    from livery.workshop._kinds import kind_for, kind_names, record_for_template
+
+    spelled = str(data.get("kind", ""))
+    record = record_for_template(spelled)
+    if record is None and spelled in kind_names():
+        record = kind_for(spelled)  # a caller that names the record itself
+    if record is None:
+        return None
+    text = compose_package(record.name, name, {**data, "kind": record.name})
+    return None if text is None else _lf(text.encode())
+
+
+def judge_fragment_file(
+    directory: Path, name: str, data: dict[str, Any], relative: str
+) -> list[str]:
+    """The drift lines for a per-package file a check's fragment renders.
+
+    A file the receipts say the render wrote is judged against the
+    render, and against nothing when its check was withdrawn: then an
+    unedited copy is stale and the apply removes it, while an edited
+    copy is a local override, kept and named by explain and not
+    drift. A file no receipt names is adopted where it equals the
+    render and kept as an override where it does not.
+    """
+    committed = directory / name
+    body = _fragment_render(directory, name, data)
+    receipts = read_rendered(directory)
+    if body is None:
+        if committed.is_file() and receipts.get(name) == _digest(
+            _lf(committed.read_bytes())
+        ):
+            prog = footman.prog()
+            return [
+                f"{relative}: written for a check that is withdrawn; `{prog}"
+                " template.apply` removes it"
+            ]
+        return []
+    if not committed.is_file():
+        return [f"{relative}: rendered, but missing from the repository"]
+    if name not in receipts:
+        return []  # an unreceipted copy is adopted or kept as an override by the apply
+    return _drift_line(relative, committed.read_bytes(), body)
+
+
+def settle_fragment_files(directory: Path, data: dict[str, Any]) -> list[str]:
+    """Settle every managed file of the package's kind that no template renders.
+
+    The lines printed, one per file written, kept or removed; a
+    package born from the template chain gets its native configs this
+    way, since the records render them and the template ships none.
+    """
+    lines: list[str] = []
+    for name in _managed_for(directory):
+        if name in PACKAGE_MANAGED:
+            continue  # the template chain renders these
+        line = settle_fragment_file(directory, name, data)
+        if line:
+            lines.append(line)
+    return lines
+
+
+def settle_fragment_file(directory: Path, name: str, data: dict[str, Any]) -> str:
+    """Write, adopt, keep or remove one per-package fragment file; the line printed.
+
+    Empty when nothing changed.
+    """
+    committed = directory / name
+    body = _fragment_render(directory, name, data)
+    receipts = read_rendered(directory)
+    if body is None:
+        if not committed.is_file():
+            if name in receipts:
+                receipts.pop(name)
+                write_rendered(directory, receipts)
+            return ""
+        current = _lf(committed.read_bytes())
+        if receipts.get(name) == _digest(current):
+            committed.unlink()
+            receipts.pop(name)
+            write_rendered(directory, receipts)
+            return f"removed: {name} (its check is withdrawn, and nobody edited it)"
+        return f"kept: {name} (its check is withdrawn; edited, a local override)"
+    if (
+        committed.is_file()
+        and name not in receipts
+        and _lf(committed.read_bytes()) != body
+    ):
+        return f"kept: {name} (a local override; the render's copy differs)"
+    changed = not committed.is_file() or _lf(committed.read_bytes()) != body
+    if changed:
+        committed.write_bytes(body)
+    if receipts.get(name) != _digest(body):
+        receipts[name] = _digest(body)
+        write_rendered(directory, receipts)
+    return f"rendered: {name}" if changed else ""
 
 
 def apply_project(root: Path) -> list[str]:
@@ -816,6 +991,11 @@ def apply_packages(root: Path) -> list[str]:
             for name in _managed_for(directory):
                 rendered = Path(scratch) / name
                 if not rendered.is_file():
+                    line = settle_fragment_file(directory, name, data)
+                    if line:
+                        changed.append(
+                            f"{directory.relative_to(root).as_posix()}/{line}"
+                        )
                     continue
                 committed = directory / name
                 body = _lf(rendered.read_bytes())
@@ -978,6 +1158,17 @@ def wire_package(root: Path, name: str, *, kind: str = "package-python") -> str:
         members.append({"dir": name, "name": package_name, "kind": record.name})
     answers["packages"] = members
     _write_root_answers(root, answers)
+    # The files the records render for the kind, the native configs,
+    # land with the birth: the template ships none of them.
+    settle_fragment_files(
+        destination,
+        {
+            **read_answers(destination / _ANSWERS),
+            **package_injections(root),
+            "package_dir": name,
+            "kind": kind,
+        },
+    )
     for changed in apply_project(root):
         print(f"  rendered: {changed}")
     from livery.workshop._uv import run_uv

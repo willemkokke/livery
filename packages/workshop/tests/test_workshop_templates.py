@@ -657,7 +657,10 @@ def test_the_rendered_answers_never_store_the_brand(tmp_path: Path) -> None:
 
     answers = read_answers(ROOT / ".copier-answers.yml")
     destination = tmp_path / "branded"
-    render(TEMPLATES, destination, {**answers, "runner_prog": "hse"})
+    from livery.workshop._templates import compose_fragments
+
+    data = {**answers, "runner_prog": "hse"}
+    render(TEMPLATES, destination, {**data, "fragments": compose_fragments(data)})
     stored = (destination / ".copier-answers.yml").read_text()
     # The brand belongs to the process; a stored copy would pin the
     # instance to the CLI that happened to render it.

@@ -75,15 +75,15 @@ dev = [
     "types-pyyaml",
 ]
 
-# Ruff and basedpyright configuration cribbed from footman's pyproject:
-# footman's rules, global. The workshop adds pydocstyle in the google
-# convention: Google docstrings only, everywhere.
 [tool.footman]
 # Task names in --list/--tree/--help (and --json rows) link into the
 # published task reference; the alias tree there redirects each task
 # to its page in the owning package's section.
 docs-url = "https://docs.willem.net/livery/tasks/{slug}/"
 
+# The tables the registered checks own, each a check record's
+# fragment for this file, composed in check-name order; a check a
+# layer withdraws takes its tables with it.
 [tool.ruff]
 line-length = 88
 target-version = "py311"
@@ -104,9 +104,51 @@ convention = "google"
 "tasks.py" = ["E501"]
 "tests/test_workspace_contracts.py" = ["E501"]
 "tests/test_docs_drift.py" = ["E501"]
-# The CI emitters carry workflow YAML as string content; its lines
-# are the generated files' lines, not prose to wrap.
+# The CI emitters carry workflow YAML as string content, and the
+# check records' fragments carry the rendered files' tables; their
+# lines are the generated files' lines, not prose to wrap.
 "**/_ci_generate.py" = ["E501"]
+"**/_fragments.py" = ["E501"]
+
+[tool.coverage.run]
+# The tests measure, and every process they start, every
+# fm child a test spawns included: inside CI the test
+# runner arms COVERAGE_PROCESS_START in pytest's environment, the
+# installed .pth starts the meter in every python under it, and the
+# patch cascades through the workers. The gate's own driver is never
+# metered, so a line counts only when a test reached it. Parallel
+# data files merge per leg, then across legs in the aggregating
+# gate job.
+patch = ["subprocess"]
+parallel = true
+relative_files = true
+# Branches as well as statements: a conditional's untaken arm is
+# uncovered, where line coverage shows the conditional as covered
+# once its line ran. The floors judge the combined figure.
+branch = true
+source = ["livery"]
+# The C tracer, not sys.monitoring: the sysmon core records a line
+# under the first context that reaches it and never again, and the
+# check legs split one run's data per suite by context, which needs
+# every context complete.
+core = "ctrace"
+
+[tool.coverage.paths]
+# One identity for a file whichever separator wrote it, so Windows
+# and POSIX legs combine as one file set.
+packages = ["packages/", "packages\\"]
+
+[tool.pytest.ini_options]
+testpaths = ["packages", "tests"]
+# Test modules are named by their path (`--import-mode=importlib`), so
+# two packages may both have a tests/test_lifecycle.py. That leaves the
+# tests directories off sys.path, so they go on pythonpath for the
+# helper modules, which carry their package's name and so never clash.
+pythonpath = ["packages/forge/tests", "packages/workshop/tests", "packages/toolroom/tests", "packages/footman/tests", "packages/strongroom/tests", "packages/toolroom-bench/tests", "packages/toolroom-store/tests", "packages/cbor/tests", "tests"]
+# `-n auto` fans the suite across cores; `worksteal` because durations
+# are uneven (footman measured it; the choice carries until we measure
+# here).
+addopts = "-q -n auto --dist=worksteal --import-mode=importlib"
 
 [tool.basedpyright]
 include = ["packages", "tests", "tasks.py"]
@@ -250,46 +292,6 @@ unnecessary-type-conversion = "error"
 # an ambient write is fixed or deliberately classified, never
 # ambient. Loosen a single kind here with a reason, never the star.
 "*" = "error"
-
-[tool.coverage.run]
-# The tests measure, and every process they start, every
-# fm child a test spawns included: inside CI the test
-# runner arms COVERAGE_PROCESS_START in pytest's environment, the
-# installed .pth starts the meter in every python under it, and the
-# patch cascades through the workers. The gate's own driver is never
-# metered, so a line counts only when a test reached it. Parallel
-# data files merge per leg, then across legs in the aggregating
-# gate job.
-patch = ["subprocess"]
-parallel = true
-relative_files = true
-# Branches as well as statements: a conditional's untaken arm is
-# uncovered, where line coverage shows the conditional as covered
-# once its line ran. The floors judge the combined figure.
-branch = true
-source = ["livery"]
-# The C tracer, not sys.monitoring: the sysmon core records a line
-# under the first context that reaches it and never again, and the
-# check legs split one run's data per suite by context, which needs
-# every context complete.
-core = "ctrace"
-
-[tool.coverage.paths]
-# One identity for a file whichever separator wrote it, so Windows
-# and POSIX legs combine as one file set.
-packages = ["packages/", "packages\\"]
-
-[tool.pytest.ini_options]
-testpaths = ["packages", "tests"]
-# Test modules are named by their path (`--import-mode=importlib`), so
-# two packages may both have a tests/test_lifecycle.py. That leaves the
-# tests directories off sys.path, so they go on pythonpath for the
-# helper modules, which carry their package's name and so never clash.
-pythonpath = ["packages/forge/tests", "packages/workshop/tests", "packages/toolroom/tests", "packages/footman/tests", "packages/strongroom/tests", "packages/toolroom-bench/tests", "packages/toolroom-store/tests", "packages/cbor/tests", "tests"]
-# `-n auto` fans the suite across cores; `worksteal` because durations
-# are uneven (footman measured it; the choice carries until we measure
-# here).
-addopts = "-q -n auto --dist=worksteal --import-mode=importlib"
 
 # The repository's own tables: whole tables and array-of-table entries
 # (a `[[tool.basedpyright.executionEnvironments]]` for an imported

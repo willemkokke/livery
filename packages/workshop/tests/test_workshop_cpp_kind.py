@@ -93,6 +93,13 @@ def _render_cpp(tmp_path: Path) -> Package:
             "project_name": "acme",
         },
     )
+    # The native configs come from the check records, as they do at a
+    # birth: the template ships none.
+    from livery.workshop._templates import settle_fragment_files
+
+    settle_fragment_files(
+        destination, {"kind": "package-cpp-conan", "package_dir": "native"}
+    )
     return _package(destination, "acme-native", "cpp-conan")
 
 
@@ -370,7 +377,7 @@ def test_the_kind_registers_alone_in_the_chain() -> None:
         "package-base",
         "package-cpp-conan",
     )
-    assert managed_files("cpp-conan") == ("cliff.toml",)
+    assert managed_files("cpp-conan") == (".clang-format", ".clang-tidy", "cliff.toml")
     assert not is_python_kind("cpp-conan")
     assert is_python_kind("python")
     record = record_for_template("package-cpp-conan")
@@ -394,7 +401,10 @@ def test_the_project_render_wires_only_python_members(tmp_path: Path) -> None:
         {"dir": "alpha", "name": "acme-alpha", "dev": "acme-alpha"},
         {"dir": "native", "name": "acme-native", "kind": "cpp-conan"},
     ]
-    render(str(TEMPLATES), destination, {**answers, "kind": "project"})
+    from livery.workshop._templates import compose_fragments
+
+    data = {**answers, "kind": "project"}
+    render(str(TEMPLATES), destination, {**data, "fragments": compose_fragments(data)})
     pyproject = (destination / "pyproject.toml").read_text()
     assert '"packages/alpha"' in pyproject
     assert 'members = ["packages/alpha"]' in pyproject

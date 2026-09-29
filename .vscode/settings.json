@@ -10,6 +10,11 @@
   // The repository's own settings, each line ending with a comma.
   // -- workshop: region settings, yours to edit; the render keeps it --
   // -- workshop: end settings --
+  // What the registered checks say to the editor, each a check
+  // record's fragment for this file.
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff"
+  },
   "terminal.integrated.profiles.osx": {
     "livery": {
       "path": "zsh",

@@ -116,7 +116,13 @@ def test_the_kind_chains_from_python() -> None:
     assert is_python_kind("python-nanobind")
     # The managed union is the parent's: the leaf adds build files
     # the package owns, not rendered-managed ones.
-    assert managed_files("python-nanobind") == ("cliff.toml",)
+    # The native configs are rendered from the check records, so the kind
+    # manages them beside the changelog config.
+    assert managed_files("python-nanobind") == (
+        ".clang-format",
+        ".clang-tidy",
+        "cliff.toml",
+    )
     # The chain's union of what operates the kinds: the base's and
     # python's beneath the kind's own build tools; the checkers, the
     # formatter, the test runner and the two clang tools ride their

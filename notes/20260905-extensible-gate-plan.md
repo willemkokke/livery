@@ -4,7 +4,7 @@ Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
 tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
 2026-09-28 (issues #860, #867 with its ordering fix #870, #874), phase 3
 up to the dependency closure the same day (#876) and the rest of it on
-2026-09-29 (#884); phase 3b was built the same day (#886), and phase 4's first change too (#888) beside the layering
+2026-09-29 (#884); phase 3b was built the same day (#886), and phase 4's two changes too (#888, #890) beside the layering
 check's fix mode (#829) and phase 8's first change, the publishing
 opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
 item the remaining phases waited on; the decision record carries each
@@ -2132,6 +2132,35 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   built here: the second change, the configuration fragments and
   the discovery shape, the editor settings and extensions, and the
   ruff and clang-tidy proofs.
+
+- 2026-09-29, phase 4's second change built (issue #890): a check
+  record carries `fragments`, one per rendered file it has something
+  to say in, and the render composes them in check-name order over
+  the same data the template reads, so the base `pyproject.toml`
+  template lost every `[tool.*]` table to the format, lint, typecheck
+  and test records and reads one `fragments` injection instead;
+  `.vscode/settings.json` reads a fragment block the same way and the
+  ruff record names itself the python formatter there;
+  `.vscode/extensions.json` is a new rendered file naming the
+  extension ids the records carry (ruff's and basedpyright's) with a
+  region for the repository's own, and a record without a verified
+  id recommends none (open item 8). The native kinds' `.clang-format`
+  and `.clang-tidy` are managed renders of the clang-format and
+  clang-tidy records' fragments per kind, resolved down the chain,
+  in place of seeds the template never rewrote; a package's
+  `.workshop-rendered` receipt records what the render wrote, so a
+  withdrawn check's file goes only when nobody edited it, an edited
+  one is kept and named, and an unreceipted copy is adopted where it
+  equals the render and kept as an override where it does not
+  (contract 11). Proven: unregistering the ruff records leaves no
+  ruff table, editor line, extension or profile entry; a layer's
+  `.clang-tidy` fragment for the nanobind kind differs from the
+  cpp-conan kind's and each resolves to its own. Two things the
+  change found. The fragments need the roster split the template
+  makes (`py` and `native`), so the injection computes it once in
+  python and hands it to both; and the drift gate judges a fragment
+  file only where a receipt says the render wrote it, since a copy
+  nobody receipted is either adopted or an override, never drift.
 
 ## Open
 
