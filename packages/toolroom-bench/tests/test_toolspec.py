@@ -919,8 +919,9 @@ def test_version_of_a_missing_tool_is_empty():
 
 
 def test_in_process_capability_is_the_entry_point():
-    # coverage publishes a console script; a shell builtin never will.
-    assert _drivers.in_process_capable("coverage") is True
+    # pytest publishes a console script, and runs this test, so it is
+    # installed wherever the suite is; a shell builtin never will.
+    assert _drivers.in_process_capable("pytest") is True
     assert _drivers.in_process_capable("definitely-not-a-real-tool-xyz") is False
 
 
@@ -1822,6 +1823,10 @@ def test_pages_writes_one_per_tool_plus_an_index(tmp_path):
 
 
 def test_pages_emits_the_tools_nav_block_beside_the_pages(tmp_path):
+    # The block is written through the workshop's emitter, which a
+    # release leg does not install (the bench declares no dependency
+    # on it); the proof runs where the workshop is.
+    pytest.importorskip("livery.workshop")
     from livery.toolroom.bench import _tasks as tools_tasks
 
     generated = tmp_path / "_generated"
@@ -1837,6 +1842,7 @@ def test_pages_emits_the_tools_nav_block_beside_the_pages(tmp_path):
 def test_the_emitted_tools_nav_lists_every_stubbed_driver(tmp_path):
     # Fails when a driver is added without the block following: the
     # generator emits the sidebar from the drivers, never by hand.
+    pytest.importorskip("livery.workshop")
     from livery.toolroom.bench import _tasks as tools_tasks
 
     generated = tmp_path / "_generated"
@@ -2424,6 +2430,7 @@ def test_a_tool_older_than_the_snapshot_is_left_alone(stubs, capsys, monkeypatch
     assert _rendered(stubs, "ruff") == written  # unchanged
 
 
+@needs_ruff
 def test_a_tool_missing_from_the_prefix_is_left_alone(stubs, tmp_path, capsys):
     """A partial provision must not read as drift: a provisioned tool that
     isn't in the prefix falls back to nothing, never to the host's copy.
