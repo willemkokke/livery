@@ -361,9 +361,10 @@ def lock_is_current(root: Path, *, offline: bool = False) -> tuple[bool, str]:
     requirement the lock does not hold, or holds at a version that no
     longer satisfies.
 
-    The graphs are not compared. A delegated tool's graph is resolved
-    when its version enters the lock and written beside it, which is a
-    write, and this reads.
+    The graphs are not compared: a delegated tool's graph is resolved
+    when its version enters the lock and written beside it, so a fresh
+    resolution never carries one, and reading its absence as a move
+    would move every delegated entry on every check.
 
     Returns:
         Whether the lock on disk is current, and why not when it is
@@ -383,17 +384,20 @@ def lock_is_current(root: Path, *, offline: bool = False) -> tuple[bool, str]:
         )
     except LockError as error:
         return False, str(error)
-    if fresh.to_json() == held.to_json():
+    current, resolved = _entries(held), _entries(fresh)
+    if fresh.hosts == held.hosts and resolved == current:
         return True, ""
-    names = set(fresh.tools) | set(held.tools)
-    moved = sorted(
-        name
-        for name in names
-        if name not in fresh.tools
-        or name not in held.tools
-        or fresh.tools[name].to_json() != held.tools[name].to_json()
-    )
+    names = set(resolved) | set(current)
+    moved = sorted(name for name in names if resolved.get(name) != current.get(name))
     return False, f"the lock would move: {', '.join(moved)}"
+
+
+def _entries(lock: Lock) -> dict[str, dict[str, Any]]:
+    """The lock's entries without their graphs: what the current check compares."""
+    return {
+        name: {key: value for key, value in entry.to_json().items() if key != "graph"}
+        for name, entry in lock.tools.items()
+    }
 
 
 def write_lock(
