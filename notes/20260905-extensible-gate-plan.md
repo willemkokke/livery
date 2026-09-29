@@ -4,7 +4,7 @@ Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
 tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
 2026-09-28 (issues #860, #867 with its ordering fix #870, #874; 3c's leftover on 2026-09-29, #896), phase 3
 up to the dependency closure the same day (#876) and the rest of it on
-2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894) and phase 5's first change (#905) beside the layering
+2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905) and the dotnet kind (#907) beside the layering
 check's fix mode (#829) and phase 8's first change, the publishing
 opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
 item the remaining phases waited on; the decision record carries each
@@ -2351,6 +2351,42 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   here: the MSVC measurer through `dotnet-coverage` and the `dotnet`
   kind (the second change), and the conformance loop's cpp-conan
   member (the third).
+- 2026-09-29, the dotnet kind built (issue #907, phase 5's second
+  change, its toolroom half): the store's `dotnet` kind installs a
+  .NET tool package from nuget.org through the dotnet SDK, its
+  runtime, with `dotnet tool install --tool-path` into a directory
+  per version under the home's `dotnet/`, the shims the SDK writes
+  under `bin` its entry points, no graph since the package carries
+  its dependencies and the version pins the whole; `RUNTIMES` gains
+  dotnet and a dotnet record may name it, an npm record may not. The
+  bench gains two tiers, `dotnet` for the SDK from Microsoft's
+  release metadata (the channels in active or maintenance support,
+  the SDK version each release shipped, six archives at a versioned
+  address) and `nuget` for a tool package from NuGet's flat container
+  and its gzipped registration; the SDK is provisioned whole and
+  linked into the prefix's bin, the tool installs through it, and a
+  walk without a dotnet names the tool as skipped as it names one
+  without node. The workshop orders the SDK before the tools that
+  run on it and locks it beside them; `DOTNET_ROOT` rides the SDK
+  record's environment, so a shim finds the store's runtime and
+  never the machine's. Ruled on the way: the kind is cross-platform,
+  since `dotnet-coverage` runs on the cross-platform runtime and
+  only its native instrumentation is Windows-only, so no host list
+  on delegated records; the SDK rather than the bare runtime, since
+  `dotnet tool install` is the SDK's, at about 200 MB per host;
+  PowerShell 7 becomes a download record from its GitHub releases,
+  self-contained per platform, its surface the hand-written shell
+  stub as before. The first records are `dotnet` (the SDK) and
+  `dotnet_coverage`, read on the desk and recorded for the six
+  hosts, every ingest check passing on each, `dnx` and PowerShell's
+  `createdump.exe` excluded from their trees as npm is from node's;
+  proven on the desk by a scratch workspace that locked both, took
+  the SDK from the store with `DOTNET_ROOT` on its receipt, installed
+  the tool through it into its own directory, and ran the shim to its
+  version under that environment. Not here: the MSVC measurer that
+  reads `dotnet-coverage`,
+  which lands with the vcvars environment and the conformance loop's
+  cpp-conan member in the phase's third change.
 
 ## Open
 
