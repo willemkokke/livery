@@ -1141,10 +1141,15 @@ measurer follows the compiler the conan profile names, never the
 operating system (ruled 2026-09-29): gcc to gcov (`--coverage`,
 `gcov --json-format`), clang and apple-clang to llvm-cov
 (`-fprofile-instr-generate -fcoverage-mapping`, `llvm-profdata
-merge`, `llvm-cov export -format=lcov`), msvc to a PDB-driven
-engine the Windows spike chooses. clang on Windows, `clang-cl` on
-the MSVC ABI or MinGW clang, is the llvm family, and MinGW gcc the
-gcov family. The measurer's tools are host tools beside the
+merge`, `llvm-cov export -format=lcov`), msvc to Microsoft's Code
+Coverage engine, `dotnet-coverage instrument` on the
+`/PROFILE`-linked binary and `collect -f cobertura` over the
+instrumented run, native instrumentation enabled in its settings.
+clang on Windows, `clang-cl` on the MSVC ABI or MinGW clang, is the
+llvm family, and MinGW gcc the gcov family; an instrumented
+`clang-cl` link goes through `lld-link`, since MSVC's `link.exe`
+leaves clang 20's profile names section empty and only clang 22
+and later survive it. The measurer's tools are host tools beside the
 compiler that built, verified on the host and never downloaded; a
 host with the compiler and without its measurer refuses on that
 leg by name. The union is a set union of lines per file across the
@@ -1162,12 +1167,10 @@ gaining gcc and gcov if it lacks them.
 
 **Acceptance**
 
-- The Windows spike (branch `chore/coverage-spike-windows`, the
-  contributed point `coverage-spike`) shows per-line data for one
-  program from MSVC under Microsoft's Code Coverage engine and from
-  `clang-cl` under llvm-cov, its log quoted in the decision record
-  and the MSVC tool chosen there, before the measurer table is
-  written.
+- The Windows spike showed per-line data for one program from MSVC
+  under Microsoft's Code Coverage engine and from `clang-cl` under
+  llvm-cov, its log quoted in the decision record and the MSVC tool
+  chosen there (2026-09-29, PR #902, never merged).
 - A C++ package below its floor fails `fm coverage.enforce` with
   the same prose Python gets, proven by a forced fixture.
 - The CI union job unions the three legs' line sets, gcc's, clang's
@@ -2276,6 +2279,39 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   `chore/coverage-spike-windows`, and its result decides the MSVC
   tool; this closes open item 3 and replaces the phase's earlier
   wording, under which llvm merged profdata in the union.
+- 2026-09-29, the Windows coverage spike (PR #902, branch
+  `chore/coverage-spike-windows`, never merged; three rounds on
+  windows-latest with Visual Studio 18 Enterprise, MSVC 14.51, LLVM
+  20.1.8 on the image and clang 22.1.3 bundled with Visual Studio):
+  the MSVC measurer is Microsoft's Code Coverage engine through
+  `dotnet-coverage` (18.11.2, installed with `dotnet tool install`),
+  which instruments the `/PROFILE`-linked binary statically and
+  reports Cobertura with one `<line number hits>` per instrumentable
+  line, 13 lines and 9 hit for the spike's program, the untaken
+  branch and the never-called function at zero. Its dynamic mode
+  covers .NET only ("Profiler was not initialized"), and native
+  static instrumentation is off by default, enabled by
+  `EnableStaticNativeInstrumentation` in its settings file. The
+  deprecated `CodeCoverage.exe`, from nuget.org and from the Visual
+  Studio copy, prints its usage for every command, and
+  `Microsoft.CodeCoverage.Console` is not in the Visual Studio 18
+  install. OpenCppCoverage 0.9.9.0 gave the same lines after a silent
+  Inno Setup install and is not chosen: its last release is from
+  2019, it ships as an installer and not an archive, and the
+  maintained engine answers. clang-cl is the llvm family: clang 22
+  bundled with Visual Studio gave full lcov with branches linked by
+  `link.exe`; the image's clang 20.1.8 gave a profile `llvm-profdata`
+  refuses ("symbol name is empty") linked by `link.exe` and a good
+  one linked by `lld-link`, so an instrumented clang-cl link uses
+  lld-link. The tool shape for phase 5: `dotnet` is a host tool
+  beside the compiler, Visual Studio installs it, and
+  `dotnet-coverage` comes from nuget.org through it, a delegated kind
+  beside npm and pypi whose runtime is the host's .NET. Open item 3
+  closes. Two verbs learned on the way: a point contributed on a
+  branch alone cannot be dispatched (issue #903), so the spike rode
+  the gate's check job through a `[[ci.schedule]]` entry, and a
+  spike step without a timeout hung a Windows leg for forty minutes
+  behind an installer's window.
 
 ## Open
 
@@ -2286,9 +2322,9 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
    layer's basedpyright check family, on by default; the wave
    follows the gate. Decision record.
 3. Resolved 2026-09-29: Windows is tier 1 and measures; MSVC through
-   a PDB-driven engine the spike chooses (Microsoft's Code Coverage
-   engine first, OpenCppCoverage the fallback), clang on Windows as
-   the llvm family. Decision record.
+   Microsoft's Code Coverage engine (`dotnet-coverage`, static native
+   instrumentation), chosen by the spike; clang on Windows as the
+   llvm family, linked by lld-link when instrumented. Decision record.
 4. Where the graduated design page lives:
    `packages/workshop/docs/` under what name, and whether the
    facts-versus-policy boundary also enters the hse-imported
