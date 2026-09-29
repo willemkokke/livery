@@ -22,4 +22,4 @@ from livery.toolroom.bench._tasks import Refreshed, submit_refresh, tasks
 
 __all__ = ["Refreshed", "__version__", "submit_refresh", "tasks"]
 
-__version__ = "0.0.0"
+__version__ = "0.1.0"
