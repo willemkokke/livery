@@ -601,6 +601,9 @@ def test_new_package_renders_and_wires(
             )
         ),
     )
+    monkeypatch.setattr(
+        "livery.workshop._tool_tasks.sync_tools", lambda root, **kwargs: None
+    )
     with pytest.raises(_FAILURES):
         new_package("Bad Name")
     new_package("scratch")

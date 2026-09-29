@@ -67,6 +67,71 @@ def _package(directory: Path, name: str) -> Package:
     )
 
 
+needs_clang_format = pytest.mark.skipif(
+    shutil.which("clang-format") is None, reason="clang-format is not on PATH"
+)
+
+
+def _render_named(tmp_path: Path, package_name: str) -> Path:
+    """The nanobind template rendered for *package_name*, native configs settled."""
+    from livery.workshop._templates import settle_fragment_files
+
+    answers = read_answers(ROOT / ".copier-answers.yml")
+    destination = tmp_path / "packages" / "native"
+    render(
+        str(TEMPLATES),
+        destination,
+        {
+            "kind": "package-python-nanobind",
+            "package_name": package_name,
+            "package_description": "A native extension.",
+            "namespace_package": "acme",
+            "author_name": answers["author_name"],
+            "author_email": answers["author_email"],
+            "copyright_year": answers["copyright_year"],
+            "project_name": "acme",
+        },
+    )
+    settle_fragment_files(
+        destination, {"kind": "package-python-nanobind", "package_dir": "native"}
+    )
+    return destination
+
+
+@pytest.mark.parametrize("package_name", ["ci-e2e-loop-loop-native", "x-y"])
+def test_the_rendered_member_passes_its_own_format_checks_whatever_its_name(
+    tmp_path: Path, package_name: str
+) -> None:
+    """A long or short package name reshapes no line the gate's formatters judge.
+
+    The name lands in a literal on a line of its own, so clang-format
+    finds the source as it wants it, and no rendered python line
+    exceeds the column limit ruff enforces.
+    """
+    import subprocess
+
+    rendered = _render_named(tmp_path, package_name)
+    over = [
+        (path.name, line)
+        for path in rendered.rglob("*.py")
+        for line in path.read_text("utf-8").splitlines()
+        if len(line) > 88
+    ]
+    assert over == []
+    clang_format = shutil.which("clang-format")
+    if clang_format is None:
+        pytest.skip("clang-format is not on PATH")
+    for source in sorted(rendered.rglob("*.cpp")):
+        formatted = subprocess.run(
+            [clang_format, "--style=file", str(source)],
+            capture_output=True,
+            text=True,
+            cwd=rendered,
+            check=True,
+        ).stdout
+        assert formatted == source.read_text("utf-8"), source.name
+
+
 def _render_chain(tmp_path: Path) -> Package:
     """A rendered python-nanobind package, parent then leaf."""
     destination = tmp_path / "packages" / "ext"

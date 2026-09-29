@@ -4,7 +4,7 @@ Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
 tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
 2026-09-28 (issues #860, #867 with its ordering fix #870, #874; 3c's leftover on 2026-09-29, #896), phase 3
 up to the dependency closure the same day (#876) and the rest of it on
-2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912) and host-scoped tool requirements (#917) beside the layering
+2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912), host-scoped tool requirements (#917) and the conformance loop's cpp-conan member (#914, the wave's wheels leg open in #931) beside the layering
 check's fix mode (#829) and phase 8's first change, the publishing
 opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
 item the remaining phases waited on; the decision record carries each
@@ -2469,6 +2469,43 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   consumer's Windows leg measures with no line in its contract, and
   this repository requires the same for its Windows leg's proof. The
   lock schema stays 1: the field is additive. Open item 20 closes.
+- 2026-09-29, phase 5's conformance-loop member (issue #914): the
+  loop births `loop-cpp` from `package-cpp-conan` beside
+  `loop-native`, its members are the workshop's dependency closure
+  (six of them) rather than a fixed list, the tree reset keeps what
+  `fm sync` materialises (`.venv`, `typings`, `.workshop`), every git
+  the pass runs has signing off through `GIT_CONFIG_*` on the task's
+  environment (the birth runs as a child with that environment
+  explicit, since a task's `os.environ` writes never reach a child
+  spawned through the runner alone), the serving probe follows each
+  member's kind (a python registry for wheels, conan's for the
+  library), and the pins widen to the three members. Found on the way
+  and fixed in the same change: the nanobind template's `_native.cpp`
+  was not clang-format clean and `new.package` never locked the tools
+  it wired (it syncs them now); the entry script installs a
+  platform-wheel member only after the tools are in the environment,
+  so the sync runs twice for a native workspace; the dev rig's runner
+  image is node's Debian trixie (glibc 2.41, gcc 14.2, the runner
+  binaries pinned) since pyrefly's linux-x64 build wants glibc 2.39,
+  pinned to `linux/amd64` because the two clang records ship no
+  linux-arm build; `fm sync` continues past a tool locked for no build
+  on this host and refuses only one named outright; Gitea's pull
+  lookup finds a merged pull by its former branch (`head.label`); the
+  cpp template seeds `coverage-floor = 100`. Pass 18 landed all three
+  members on the runner (`loop-cpp` built with gcc and measured by
+  gcov), proved the ratchet, scoped, prose and tests legs with the
+  widened pins, opened and merged its release PR, and main's run was
+  green after a rerun on a transient index read (#929); its wave then
+  hung for 50 minutes in the wheels job and was killed by hand: the
+  build container is denied the runner's bind mounts and cibuildwheel
+  3.4.1 spins on the dead attach (#931), so the release act's receipt
+  probe has no evidence yet. Timing: about 80 minutes of runner work
+  to the release PR's merge, 15 runs of 3 to 13 minutes, because the
+  runner's store is per job and every job downloads every tool object
+  (#930, with the runner's architecture and the clang records' source,
+  undecided). Acceptance: the union across gcc, clang and MSVC is
+  proven by the reducer's unit tests and the loop proves gcc's leg
+  alone, so the third item stays open (item 26).
 
 ## Open
 
@@ -2551,3 +2588,17 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
     the site's claim, and the chain's proof of the skip with the
     `gate` context still reporting waits for that scenario. Owner: the
     phase that adds it, with phase 4b's claims.
+25. The conformance loop's runner: its tool store is per job, so every
+    job downloads every object (about 80 minutes of runner work to a
+    release PR's merge); it runs `linux/amd64` under emulation because
+    the two clang records ship no linux-arm build, and their source
+    stops at LLVM 20 where LLVM's own releases and the PyPI wheels are
+    at 23; and the wave's wheels job cannot bind the runner's paths
+    into cibuildwheel's container through the host's socket (#931).
+    Mechanisms undecided (#930 lists them). Owner: Willem.
+26. Phase 5's third acceptance item, the union of gcc's, clang's and
+    MSVC's line sets proven by the conformance chain: the chain has
+    one linux runner and proves gcc's leg; the union is proven by unit
+    tests over the reducer. A three-runner proof needs a cpp-conan
+    member in a workspace with the three runners, and this repository
+    has none. Where that proof lives is a ruling. Owner: Willem.

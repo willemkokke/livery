@@ -290,10 +290,117 @@ def test_a_deletable_receipt_on_gitlab_is_the_contracts_failure(
     assert "delete refused; protection holds" in capsys.readouterr().out
 
 
+def test_the_pass_turns_signing_off_for_every_git_it_runs() -> None:
+    """A signer that waits for a person fails an unattended pass; the setting rides."""
+    assert _e2e.unsigned_environment({}) == {
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "commit.gpgsign",
+        "GIT_CONFIG_VALUE_0": "false",
+    }
+    # An entry the outer environment carries keeps its index; this one follows.
+    outer = {
+        "GIT_CONFIG_COUNT": "2",
+        "GIT_CONFIG_KEY_0": "a.b",
+        "GIT_CONFIG_KEY_1": "c.d",
+    }
+    assert _e2e.unsigned_environment(outer) == {
+        "GIT_CONFIG_COUNT": "3",
+        "GIT_CONFIG_KEY_2": "commit.gpgsign",
+        "GIT_CONFIG_VALUE_2": "false",
+    }
+    assert (
+        _e2e.unsigned_environment({"GIT_CONFIG_COUNT": "x"})["GIT_CONFIG_COUNT"] == "1"
+    )
+
+
+def test_the_tree_reset_keeps_what_sync_materialises(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A reset cleans a pass's residue and never the stubs, receipts or venv."""
+    from types import SimpleNamespace
+
+    from livery.toolroom import tools
+
+    calls: list[tuple[str, ...]] = []
+
+    def _opts(**kwargs: object) -> object:
+        def _run(*args: str) -> object:
+            calls.append(args)
+            if args[:2] == ("clean", "-ndx"):
+                return SimpleNamespace(code=0, stdout="Would remove dist/\n", stderr="")
+            return SimpleNamespace(code=0, stdout="", stderr="")
+
+        return _run
+
+    monkeypatch.setattr(tools, "git", SimpleNamespace(opts=_opts))
+    _e2e._align_main(tmp_path)
+    cleans = [call for call in calls if call[0] == "clean"]
+    kept = ("-e", ".venv", "-e", "typings", "-e", ".workshop")
+    assert cleans == [("clean", "-ndx", *kept), ("clean", "-fdx", *kept)]
+    assert "cleaned: dist/" in capsys.readouterr().out
+
+
+def test_the_serving_probe_asks_each_member_s_own_registry(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A python member is probed on the simple index, the conan member on its target."""
+    from types import SimpleNamespace
+
+    import livery.forge as forge_package
+    from livery.workshop import _registries
+    from livery.workshop._backends import _cpp_conan
+
+    asked: list[tuple[str, str]] = []
+    built: list[tuple[object, Path]] = []
+
+    class _Simple:
+        def __init__(self, url: str, *, token: str) -> None:
+            assert (url, token) == ("http://gitea:3000/simple", "lane-token")
+
+        def versions(self, name: str) -> tuple[str, ...]:
+            asked.append(("python", name))
+            return ("0.1.0",)
+
+    class _Conan:
+        def __init__(self, target: object, *, root: Path) -> None:
+            built.append((target, root))
+
+        def versions(self, name: str) -> tuple[str, ...]:
+            asked.append(("conan", name))
+            return ()
+
+    monkeypatch.setattr(forge_package, "SimpleRegistry", _Simple)
+    monkeypatch.setattr(_cpp_conan, "ConanRegistry", _Conan)
+    monkeypatch.setattr(
+        _registries, "resolve_registry", lambda root, kind: f"target:{kind}"
+    )
+    monkeypatch.setattr(_e2e, "_dev_forge", lambda kind: (None, "lane-token"))
+    monkeypatch.setattr(
+        _e2e,
+        "_lane",
+        lambda kind: SimpleNamespace(index=lambda: "http://gitea:3000/simple"),
+    )
+    served = _e2e._serving_probe(tmp_path, "gitea")
+    assert served("loop-echo") == ("0.1.0",)
+    assert served("loop-native") == ("0.1.0",)
+    assert served("loop-cpp") == ()
+    assert served("loop-cpp") == ()
+    assert asked == [
+        ("python", "ci-e2e-loop-loop-echo"),
+        ("python", "ci-e2e-loop-loop-native"),
+        ("conan", "ci-e2e-loop-loop-cpp"),
+        ("conan", "ci-e2e-loop-loop-cpp"),
+    ]
+    # The conan target resolves once, for the wave's whole wait.
+    assert built == [("target:conan", tmp_path)]
+
+
 # --- the dev-wheel pins: refusals first, then the read -----------------------
 
 HEAD = "05482de" + "0" * 33
 WHEEL = "livery_{member}-{version}-py3-none-any.whl"
+#: The closure the fake workspaces below declare: the workshop and its edges.
+MEMBERS = ("workshop", "forge", "toolroom", "footman")
 
 
 def _wheel(root: Path, member: str, version: str, *, age: float = 0.0) -> Path:
@@ -306,21 +413,65 @@ def _wheel(root: Path, member: str, version: str, *, age: float = 0.0) -> Path:
     return wheel
 
 
+_EDGES = "".join(
+    f'\n[[depends]]\npath = "packages/{member}"\nkind = "runtime"\nfloor = "0"\n'
+    for member in ("toolroom", "footman", "forge")
+)
+
+
+def _member(root: Path, name: str, *edges: str) -> None:
+    home = root / "packages" / name
+    home.mkdir(parents=True)
+    declared = "".join(
+        f'\n[[depends]]\npath = "packages/{edge}"\nkind = "runtime"\nfloor = "0"\n'
+        for edge in edges
+    )
+    (home / "workshop.toml").write_text(
+        f'kind = "python"\nname = "livery-{name}"\n' + declared
+    )
+    (home / "pyproject.toml").write_text(f'[project]\nname = "livery-{name}"\n')
+
+
+def test_dev_members_refuse_a_workspace_without_the_workshop(tmp_path: Path) -> None:
+    _member(tmp_path, "cbor")
+    with pytest.raises(_FAILURES, match="no packages/workshop member"):
+        _e2e.dev_members(tmp_path)
+
+
+def test_dev_members_are_the_workshop_s_closure_once_each(tmp_path: Path) -> None:
+    """Every member a wheel of the workshop resolves, and none the closure misses."""
+    _member(tmp_path, "workshop", "toolroom", "footman", "forge", "toolroom-store")
+    _member(tmp_path, "toolroom", "footman")
+    _member(tmp_path, "footman")
+    _member(tmp_path, "forge", "footman", "toolroom")
+    _member(tmp_path, "toolroom-store", "toolroom", "strongroom")
+    _member(tmp_path, "strongroom")
+    _member(tmp_path, "cbor")
+    assert _e2e.dev_members(tmp_path) == (
+        "workshop",
+        "toolroom",
+        "footman",
+        "forge",
+        "toolroom-store",
+        "strongroom",
+    )
+
+
 def test_dev_pins_refuse_a_member_without_a_wheel(tmp_path: Path) -> None:
     (tmp_path / "packages" / "workshop" / "dist").mkdir(parents=True)
     with pytest.raises(_FAILURES, match="built nothing for workshop"):
-        _e2e._dev_pins(tmp_path, HEAD)
+        _e2e._dev_pins(tmp_path, HEAD, MEMBERS)
 
 
 def test_dev_pins_refuse_a_wheel_another_commit_built(tmp_path: Path) -> None:
     # The stale case the loop measured: a previous pass's wheel, or
     # another branch's, must never pin the loop to yesterday's bytes.
-    for member in _e2e.DEV_MEMBERS:
+    for member in MEMBERS:
         _wheel(tmp_path, member, "0.2.0.dev96+feat.289.loop.9f8f0d0.20260907")
     with pytest.raises(
         _FAILURES, match=r"built from 9f8f0d0, not from HEAD 05482de0000"
     ):
-        _e2e._dev_pins(tmp_path, HEAD)
+        _e2e._dev_pins(tmp_path, HEAD, MEMBERS)
 
 
 def test_dev_pins_read_a_sha_of_digits_alone_through_its_g(tmp_path: Path) -> None:
@@ -328,9 +479,9 @@ def test_dev_pins_read_a_sha_of_digits_alone_through_its_g(tmp_path: Path) -> No
     # number and drops its leading zero; the g git describe puts first
     # keeps the sha a word, and the pin reads it back through the g.
     head = "0442877" + "a" * 33
-    for member in _e2e.DEV_MEMBERS:
+    for member in MEMBERS:
         _wheel(tmp_path, member, "0.3.0.dev6+feat.486.store.g0442877.20260912")
-    pins = _e2e._dev_pins(tmp_path, head)
+    pins = _e2e._dev_pins(tmp_path, head, MEMBERS)
     assert pins["livery-workshop"] == "0.3.0.dev6+feat.486.store.g0442877.20260912"
 
 
@@ -351,11 +502,12 @@ def test_the_dev_act_pins_a_released_member_and_drops_its_stale_wheels(
 ) -> None:
     from types import SimpleNamespace
 
-    for member in _e2e.DEV_MEMBERS:
+    for member in MEMBERS:
         home = tmp_path / "packages" / member
         home.mkdir(parents=True)
         (home / "workshop.toml").write_text(
             f'kind = "python"\nname = "livery-{member}"\n'
+            + (_EDGES if member == "workshop" else "")
         )
         (home / "pyproject.toml").write_text(
             f'[project]\nname = "livery-{member}"\nversion = "0"\n'
@@ -411,11 +563,11 @@ def test_the_dev_act_pins_a_released_member_and_drops_its_stale_wheels(
 
 
 def test_dev_pins_read_this_commits_newest_wheel(tmp_path: Path) -> None:
-    for member in _e2e.DEV_MEMBERS:
+    for member in MEMBERS:
         _wheel(tmp_path, member, "0.2.0.dev96+feat.289.loop.9f8f0d0.20260907", age=60)
         _wheel(tmp_path, member, "0.2.0.dev72+feat.314.profile.05482de.20260909")
     _wheel(tmp_path, "footman", "0.53.0.dev14+feat.314.profile.05482de.20260909.dirty")
-    pins = _e2e._dev_pins(tmp_path, HEAD)
+    pins = _e2e._dev_pins(tmp_path, HEAD, MEMBERS)
     assert pins == {
         "livery-workshop": "0.2.0.dev72+feat.314.profile.05482de.20260909",
         "livery-forge": "0.2.0.dev72+feat.314.profile.05482de.20260909",

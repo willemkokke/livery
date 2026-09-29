@@ -1068,7 +1068,14 @@ def materialise(
             try:
                 deployment = listing.deployment(name, locked.version, host)
             except CatalogueError as error:
-                fail(f"{name} {locked.version}: not locked for {host}: {error}")
+                # A host outside the lock's set, or one the version has
+                # no build for: the tool is reported and the others are
+                # supplied, as any tool the store cannot supply is.
+                reason = f"{name} {locked.version}: not locked for {host}: {error}"
+                if strict:
+                    fail(reason)
+                done.append(Materialised(None, False, reason))
+                continue
         try:
             ensured = store.supply(
                 name,

@@ -700,9 +700,16 @@ class _GiteaPullRequests:
     def find_by_head(
         self, branch: str, *, state: StateFilter = "open"
     ) -> PullRequest | None:
-        """The pull request whose head branch is *branch*, or None."""
+        """The pull request whose head branch is *branch*, or None.
+
+        Once a merged pull request's branch is deleted, Gitea reports
+        its head ``ref`` as the pull's own ref (``refs/pull/N/head``)
+        and keeps the branch name in the head's ``label``, so a merged
+        pull request is still found by the branch it came from.
+        """
         for raw in self._scan(state):
-            if (raw.get("head") or {}).get("ref") == branch:
+            head = raw.get("head") or {}
+            if branch in (head.get("ref"), head.get("label")):
                 return _as_pull_request(raw)
         return None
 

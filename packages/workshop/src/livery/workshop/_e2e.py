@@ -16,7 +16,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -43,8 +43,67 @@ _WORKSHOP_TESTS = Path(__file__).resolve().parents[3] / "tests"
 #: tree, so the loop tests the templates being edited.
 _TEMPLATES = Path(__file__).parent / "templates"
 
-#: The members whose dev wheels the loop eats, in the act's order.
-DEV_MEMBERS = ("workshop", "forge", "toolroom", "footman")
+#: The member the loop eats the dev wheels of; its dependency closure
+#: rides along, read from the contracts by `dev_members`.
+DEV_MEMBER = "packages/workshop"
+
+#: What a reset of the loop's tree keeps: the directories `fm sync`
+#: materialises, gitignored and read by the gate on the desk.
+KEPT_BY_SYNC = (".venv", "typings", ".workshop")
+
+
+def unsigned_environment(environ: Mapping[str, str]) -> dict[str, str]:
+    """The variables that turn commit signing off for every git a pass runs.
+
+    The loop's commits are scratch on a local forge and prove nothing
+    by their signature, while a developer's signer (1Password's
+    `op-ssh-sign` waits for a person) fails every commit of an
+    unattended pass. git reads `GIT_CONFIG_COUNT` with a key and a
+    value per index, so the setting rides the environment into the
+    driver's own git, the birth's, and the loop's fm; an entry the
+    outer environment already carries keeps its index and this one
+    follows it.
+    """
+    count = 0
+    raw = environ.get("GIT_CONFIG_COUNT", "")
+    if raw.isdigit():
+        count = int(raw)
+    return {
+        "GIT_CONFIG_COUNT": str(count + 1),
+        f"GIT_CONFIG_KEY_{count}": "commit.gpgsign",
+        f"GIT_CONFIG_VALUE_{count}": "false",
+    }
+
+
+def dev_members(root: Path) -> tuple[str, ...]:
+    """The members whose dev wheels the loop eats: the workshop and its closure.
+
+    Directory names, the workshop first and each dependency after the
+    first member that names it, once. An edge of every kind counts:
+    the wheel the runner installs resolves all of them from the
+    loop's registry, and a member the closure does not reach
+    publishes nothing there.
+
+    Raises:
+        Failed: when *root* has no workshop member to eat.
+    """
+    from livery.workshop._packages import discover_packages
+
+    by_path = {package.path: package for package in discover_packages(root)}
+    workshop = by_path.get(DEV_MEMBER)
+    if workshop is None:
+        fail(f"{root}: no {DEV_MEMBER} member; the loop eats the workshop's dev wheels")
+    ordered: list[str] = []
+    pending = [workshop]
+    while pending:
+        package = pending.pop(0)
+        if package.directory.name in ordered:
+            continue
+        ordered.append(package.directory.name)
+        pending.extend(
+            by_path[edge.path] for edge in package.depends if edge.path in by_path
+        )
+    return tuple(ordered)
 
 
 @dataclass(frozen=True)
@@ -348,10 +407,15 @@ LOOP_MEMBER_DIST = "ci-e2e-loop-loop-echo"
 #: The loop's members, name and template kind (empty for the default
 #: python kind). The nanobind member forces the wheels path on
 #: every pass: its wheel is built on the runner through cibuildwheel,
-#: published, and installed in the isolated leg.
+#: published, and installed in the isolated leg. The cpp-conan member
+#: forces the native measurement and the conan path: its gate build
+#: is measured by gcov beside the runner image's gcc and its lines
+#: join the union, the release leg creates it into conan's cache, and
+#: the wave publishes it through the forge's conan registry.
 LOOP_MEMBERS: tuple[tuple[str, str], ...] = (
     ("loop-echo", ""),
     ("loop-native", "package-python-nanobind"),
+    ("loop-cpp", "package-cpp-conan"),
 )
 
 #: The member that contributes a point, and the point's name.
@@ -362,6 +426,35 @@ CONTRIBUTED_POINT = "echo-audit"
 def _member_dist(name: str) -> str:
     """The distribution name ``new.package`` gives the loop member *name*."""
     return f"ci-e2e-loop-{name}"
+
+
+def _serving_probe(root: Path, kind: str) -> Callable[[str], tuple[str, ...]]:
+    """What the loop's registries serve of a member, by name: its versions.
+
+    A python member is probed on the lane's simple index, a conan
+    member through the conan target the loop's workspace resolves,
+    the forge's own conan registry; each registry is built once and
+    polled through the wave's wait.
+    """
+    from livery.forge import SimpleRegistry
+    from livery.workshop._backends import _cpp_conan
+
+    _, token = _dev_forge(kind)
+    python = SimpleRegistry(_lane(kind).index(), token=token)
+    conan: dict[str, _cpp_conan.ConanRegistry] = {}
+    kinds = dict(LOOP_MEMBERS)
+
+    def versions(name: str) -> tuple[str, ...]:
+        if kinds.get(name) != "package-cpp-conan":
+            return python.versions(_member_dist(name))
+        if "conan" not in conan:
+            from livery.workshop._registries import resolve_registry
+
+            target = resolve_registry(root, "conan")
+            conan["conan"] = _cpp_conan.ConanRegistry(target, root=root)
+        return conan["conan"].versions(_member_dist(name))
+
+    return versions
 
 
 def _require_host_alias(kind: str = "gitea") -> None:
@@ -407,10 +500,8 @@ def _loop_home(kind: str) -> Path:
     return data_dir() / "workshop-e2e" / kind
 
 
-def _dev_pins(
-    root: Path, head: str, members: tuple[str, ...] = DEV_MEMBERS
-) -> dict[str, str]:
-    """The dev versions this pass built, by distribution name.
+def _dev_pins(root: Path, head: str, members: tuple[str, ...]) -> dict[str, str]:
+    """The dev versions this pass built for *members*, by distribution name.
 
     Read from the newest wheel in each member's ``dist``, which the
     dev act just filled, and checked against *head*: a dev version's
@@ -474,7 +565,7 @@ def _publish_dev_wheels(kind: str) -> dict[str, str]:
     packages = {package.directory.name: package for package in discover_packages(root)}
     changed: list[str] = []
     released: dict[str, str] = {}
-    for member in DEV_MEMBERS:
+    for member in dev_members(root):
         version = unchanged_since_release(root, git, packages[member])
         if version:
             released[packages[member].name] = version
@@ -636,25 +727,40 @@ def _birth(kind: str, url: str) -> Path:
     """Birth or resume the loop's workspace; the root it lives at.
 
     ``fm new.project`` owns the whole half: render, git, repository,
-    protection, and the setup pull request. Re-running resumes, so
-    this is the recovery procedure too. The templates are this
-    package's own tree: the loop tests the source being edited.
+    protection, and the setup pull request. It runs as a child of the
+    pass, this interpreter's own footman with the pass's environment:
+    a task run in-process starts from the run's pinned environment,
+    and the pass's own settings, its unsigned commits, would never
+    reach the birth's git. Re-running resumes, so this is the recovery
+    procedure too. The templates are this package's own tree: the
+    loop tests the source being edited.
     """
-    import contextlib
-
-    from livery.workshop._new_project import new_project
+    import sys
 
     home = _loop_home(kind)
     home.mkdir(parents=True, exist_ok=True)
-    with contextlib.chdir(home):
-        new_project(
+    result = footman.run(
+        [
+            sys.executable,
+            "-m",
+            "livery.footman",
+            "--yes",
+            "new.project",
             E2E_REPO,
-            forge=kind,
-            owner=E2E_OWNER,
-            url=_lane(kind).alias,
-            templates=str(_TEMPLATES),
-            description="The workshop's local CI loop. Scratch; recreated freely.",
-        )
+            f"--forge={kind}",
+            f"--owner={E2E_OWNER}",
+            f"--url={_lane(kind).alias}",
+            f"--templates={_TEMPLATES}",
+            "--description=The workshop's local CI loop. Scratch; recreated freely.",
+        ],
+        cwd=home,
+        env={**os.environ, **unsigned_environment(os.environ)},
+        nofail=True,
+        timeout=900.0,
+    )
+    print(result.stdout.rstrip("\n"))
+    if result.code != 0:
+        fail(f"the loop's birth exited {result.code}:\n{result.stderr}")
     return home / E2E_REPO
 
 
@@ -1127,12 +1233,17 @@ def _align_main(root: Path) -> None:
     toolroom.git.opts(cwd=root)("reset", "--hard", "origin/main")
     # Residue too: a failed pass's branch leaves untracked leftovers
     # (a member directory without its contract refuses discovery).
-    # The venv survives, everything else is regenerable by charter.
-    residue = toolroom.git.opts(cwd=root, nofail=True)("clean", "-ndx", "-e", ".venv")
+    # What `fm sync` materialises survives: the venv, the stubs under
+    # typings/ and the receipts and fragments under .workshop/, which
+    # the gate reads and no verb between two syncs rewrites (a member
+    # is wired with `uv sync` alone); everything else is regenerable
+    # by charter.
+    kept = [flag for name in KEPT_BY_SYNC for flag in ("-e", name)]
+    residue = toolroom.git.opts(cwd=root, nofail=True)("clean", "-ndx", *kept)
     if residue.code == 0 and residue.stdout.strip():
         for line in residue.stdout.strip().splitlines():
             print(f"  cleaned: {line.removeprefix('Would remove ')}")
-        toolroom.git.opts(cwd=root)("clean", "-fdx", "-e", ".venv")
+        toolroom.git.opts(cwd=root)("clean", "-fdx", *kept)
     # Local branches too: main is the loop's only durable ref, and
     # every other local branch is a past pass's residue (a prepared
     # release branch whose PR already merged makes the driver refuse
@@ -1563,12 +1674,14 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
             "coverage store: tests stored for closure",
         ),
         forbidden=(
-            "affected: packages/loop-echo, packages/loop-native",
+            "affected: packages/loop-cpp",
+            "packages/loop-echo, packages/loop-native",
+            "coverage store: packages/loop-cpp runs",
             "coverage store: packages/loop-native runs",
         ),
     )
     # The union takes the one member the leg ran from the leg and the
-    # other from the store, and judges both.
+    # others from the store, and judges every one.
     _require_lines(
         repo,
         run,
@@ -1577,13 +1690,15 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
         (
             "coverage: packages/loop-native on check-ubuntu-latest-3.14:"
             " reused from run",
+            "coverage: packages/loop-cpp on check-ubuntu-latest-3.14: reused from run",
             "coverage packages/loop-echo: 100.0% (floor 100.0%",
             "coverage packages/loop-native: 100.0% (mark 90.0% accept by",
+            "coverage packages/loop-cpp: 100.0% (floor 100.0%",
             "accepted: the loop proves an accepted lowering",
             "new mark: 100.0%",
-            "coverage: the union of 1 leg(s) and 1 reused suite(s)",
+            "coverage: the union of 1 leg(s) and 2 reused suite(s)",
             "coverage record: chore/scoped-leg/check-ubuntu-latest-3.14: 2 fresh,"
-            " 1 carried, 0 removed",
+            " 2 carried, 0 removed",
             "speed packages/loop-echo on check-ubuntu-latest-3.14: ",
             "recorded as proved green by run",
             " on top of tree ",
@@ -1593,7 +1708,8 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
     )
     print(
         "  scoped leg: proven on a member-only pull request (affected:"
-        " packages/loop-echo; the union reused loop-native from main's record"
+        " packages/loop-echo; the union reused loop-native and loop-cpp from"
+        " main's record"
         " and wrote the branch's; the stamp composed with main's tree)"
     )
     # The narrowed run rested on main's verified tree, so its stamp
@@ -1620,8 +1736,9 @@ def _prove_scoped_leg(root: Path, kind: str) -> None:
             " it proved",
             "coverage packages/loop-echo: 100.0% (floor 100.0%",
             "coverage packages/loop-native: 100.0% (mark 100.0% ratchet by run",
-            "coverage: the union of 0 leg(s) and 3 reused suite(s)",
-            "coverage record: main/check-ubuntu-latest-3.14: 0 fresh, 3 carried,"
+            "coverage packages/loop-cpp: 100.0% (floor 100.0%",
+            "coverage: the union of 0 leg(s) and 4 reused suite(s)",
+            "coverage record: main/check-ubuntu-latest-3.14: 0 fresh, 4 carried,"
             " 0 removed",
         ),
         forbidden=("unjudged this run",),
@@ -1640,7 +1757,7 @@ def _prove_prose_leg(root: Path, kind: str) -> None:
     main's tip as the stamp so the diff is never empty. The check
     leg must say nothing is affected because only prose changed and
     skip its gate; the gate job must reuse every unit from the store,
-    judge both members, and compose the stamp with main's verified
+    judge every member, and compose the stamp with main's verified
     tree, so main's push run after the squash skips too.
     """
     from livery.workshop._git_ops import GitOps
@@ -1691,12 +1808,14 @@ def _prove_prose_leg(root: Path, kind: str) -> None:
             "coverage: packages/loop-echo on check-ubuntu-latest-3.14: reused from run",
             "coverage: packages/loop-native on check-ubuntu-latest-3.14:"
             " reused from run",
+            "coverage: packages/loop-cpp on check-ubuntu-latest-3.14: reused from run",
             "coverage: tests on check-ubuntu-latest-3.14: reused from run",
             "coverage packages/loop-echo: 100.0% (floor 100.0%",
             "coverage packages/loop-native: 100.0% (",
-            "coverage: the union of 0 leg(s) and 3 reused suite(s)",
+            "coverage packages/loop-cpp: 100.0% (floor 100.0%",
+            "coverage: the union of 0 leg(s) and 4 reused suite(s)",
             "coverage record: chore/prose-leg/check-ubuntu-latest-3.14: 0 fresh,"
-            " 3 carried, 0 removed",
+            " 4 carried, 0 removed",
             "recorded as proved green by run",
             " on top of tree ",
         ),
@@ -1719,7 +1838,7 @@ def _prove_tests_leg(root: Path, kind: str) -> None:
     A new test file under the root ``tests/`` and nothing else: the
     check leg must narrow to the workspace tests, run and store them
     as a unit, and leave every member's suite to the record; the
-    union judges both members from main's record, writes the branch's
+    union judges every member from main's record, writes the branch's
     record with the one fresh unit, and the stamp composes with main's
     tree. Re-run on a pass-owned branch with main's tip as the stamp.
     """
@@ -1766,6 +1885,7 @@ def _prove_tests_leg(root: Path, kind: str) -> None:
             "affected: packages/",
             "coverage store: packages/loop-echo stored",
             "coverage store: packages/loop-native stored",
+            "coverage store: packages/loop-cpp stored",
         ),
     )
     _require_lines(
@@ -1777,11 +1897,13 @@ def _prove_tests_leg(root: Path, kind: str) -> None:
             "coverage: packages/loop-echo on check-ubuntu-latest-3.14: reused from run",
             "coverage: packages/loop-native on check-ubuntu-latest-3.14:"
             " reused from run",
+            "coverage: packages/loop-cpp on check-ubuntu-latest-3.14: reused from run",
             "coverage packages/loop-echo: 100.0% (floor 100.0%",
             "coverage packages/loop-native: 100.0% (",
-            "coverage: the union of 1 leg(s) and 2 reused suite(s)",
+            "coverage packages/loop-cpp: 100.0% (floor 100.0%",
+            "coverage: the union of 1 leg(s) and 3 reused suite(s)",
             "coverage record: chore/tests-leg/check-ubuntu-latest-3.14: 1 fresh,"
-            " 2 carried, 0 removed",
+            " 3 carried, 0 removed",
             "recorded as proved green by run",
             " on top of tree ",
         ),
@@ -1789,7 +1911,7 @@ def _prove_tests_leg(root: Path, kind: str) -> None:
     )
     print(
         f"  tests leg: proven on a workspace-tests pull request (run {run.id}: the"
-        " check leg ran the workspace tests alone, the union reused both members"
+        " check leg ran the workspace tests alone, the union reused every member"
         " from main's record, the stamp composed)"
     )
     landed = GitOps(root).head_sha()
@@ -1932,7 +2054,6 @@ def _release_act(root: Path, kind: str) -> None:
     registry and cuts the receipt tag. Done means measured: the
     served version and the annotated tag, never the exit code alone.
     """
-    from livery.forge import SimpleRegistry
     from livery.toolroom import tools as toolroom
     from livery.workshop._release_driver import release_name
 
@@ -2045,11 +2166,10 @@ def _release_act(root: Path, kind: str) -> None:
         # registry wait that expires on a slow wheels leg.
         print("  main unmoved: the recovery arm dispatched; following its wave")
         _watch_latest(kind, "release.yml")
-    _, token = _dev_forge(kind)
-    registry = SimpleRegistry(_lane(kind).index(), token=token)
+    served_versions = _serving_probe(root, kind)
     deadline = time.monotonic() + 300
     for name in names:
-        while "0.1.0" not in registry.versions(_member_dist(name)):
+        while "0.1.0" not in served_versions(name):
             if time.monotonic() >= deadline:
                 fail(
                     f"the wave is green but the registry never served"
@@ -2185,6 +2305,10 @@ if _WORKSHOP_TESTS.is_dir():
         """
         import os
 
+        # Every commit the pass makes, the driver's, the birth's and
+        # the loop's own fm's, is unsigned: the setting rides the
+        # task's environment into each child.
+        os.environ.update(unsigned_environment(os.environ))
         url = os.environ.get(_lane(forge).url_var, "")
         _require_host_alias(forge)
         _require_runner_docker(forge)

@@ -237,6 +237,60 @@ def test_the_happy_path_syncs_locked_records_and_emits(tmp_path: Path) -> None:
     assert receipt.read_bytes() == (root / "uv.lock").read_bytes()
 
 
+@pytest.mark.skipif(BASH is None, reason="no bash on this machine")
+def test_a_native_member_installs_after_the_tools_are_in_the_environment(
+    tmp_path: Path,
+) -> None:
+    """The first sync leaves a platform-wheel member out; the second builds it."""
+    from livery.workshop._entry import entry_script, native_members
+
+    root, bin_dir, env = _script_home(tmp_path)
+    assert native_members(root) == ()
+    member = root / "packages" / "ext"
+    member.mkdir(parents=True)
+    (member / "workshop.toml").write_text(
+        'kind = "python-nanobind"\nname = "acme-ext"\n'
+    )
+    (member / "pyproject.toml").write_text('[project]\nname = "acme-ext"\n')
+    assert native_members(root) == ("acme-ext",)
+    (root / "setup.sh").write_text(entry_script(root))
+    calls = tmp_path / "uv-calls"
+    _stub(
+        bin_dir / "uv",
+        f'#!/bin/sh\necho "$@" >> "{calls}"\nmkdir -p "{root}/.venv"\nexit 0\n',
+    )
+    done = subprocess.run(
+        [str(BASH), "setup.sh", "github"],
+        cwd=root,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert done.returncode == 0, done.stderr
+    lines = calls.read_text().splitlines()
+    syncs = [line for line in lines if line.startswith("sync ")]
+    assert len(syncs) == 2
+    assert "--no-install-package acme-ext" in syncs[0]
+    assert "--no-install-package" not in syncs[1]
+
+    def step(line: str) -> str:
+        if line.startswith("sync "):
+            return "sync"
+        for tag in ("tools.sync", "env.emit posix", "env.emit --github"):
+            if tag in line:
+                return tag
+        return ""
+
+    order = [tag for tag in map(step, lines) if tag]
+    assert order == [
+        "sync",
+        "tools.sync",
+        "env.emit posix",
+        "sync",
+        "env.emit --github",
+    ]
+
+
 # --- the reconcile, fallbacks first -----------------------------------------
 
 

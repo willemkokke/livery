@@ -777,6 +777,43 @@ def test_a_tool_locked_for_other_hosts_is_skipped_here_and_its_receipt_swept(
     assert not (receipts / "tea.json").exists()
 
 
+def test_a_tool_with_no_build_for_this_host_is_reported_and_the_rest_supplied(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A host outside the lock's set meets a download it lacks: named, never fatal."""
+    from livery.toolroom.store import StoreError
+    from workshop_hosts import HERE
+
+    elsewhere = "linux-x64" if HERE != "linux-x64" else "macos-arm"
+    root = _workspace(
+        tmp_path, monkeypatch, tools=f'requires = ["tea"]\nhosts = ["{elsewhere}"]\n'
+    )
+    _records(root, _tea(elsewhere))
+    _tools.write_lock(root)
+    supplied: list[str] = []
+
+    class _Store:
+        host = HERE
+
+        def __init__(self, home: Path, **kwargs: object) -> None:
+            pass
+
+        def supply(self, name: str, *args: object, **kwargs: object) -> object:
+            supplied.append(name)
+            raise StoreError(f"{name}: stood in for")
+
+    monkeypatch.setattr(_tools, "Store", _Store)
+    # Strict, the refusal names the tool and the host.
+    with pytest.raises(Failed, match=rf"tea 1.0.0: not locked for {HERE}"):
+        _tools.materialise(root, ("tea",))
+    # As sync materialises, the tool is reported and every other tool
+    # is still supplied.
+    outcomes = _tools.materialise(root, strict=False)
+    reported = [made.failure for made in outcomes if made.failure]
+    assert any(f"tea 1.0.0: not locked for {HERE}" in why for why in reported)
+    assert "tea" not in supplied and "ruff" in supplied
+
+
 def test_the_catalogue_reads_an_index_directory_through_the_machines_store(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -206,6 +206,9 @@ def test_a_child_renders_from_the_composed_artifact(
         "livery.workshop._templates.workspace_root", lambda start=None: child
     )
     monkeypatch.setattr("livery.workshop._uv.run_uv", lambda *args, root: None)
+    monkeypatch.setattr(
+        "livery.workshop._tool_tasks.sync_tools", lambda root, **kwargs: None
+    )
     monkeypatch.setattr("livery.workshop._compose.layer_template_tree", wheel_arm)
     new_package("thing")
     assert (child / "packages" / "thing" / "cliff.toml").is_file()
