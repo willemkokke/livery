@@ -1,24 +1,19 @@
 # The extensible gate: checks opened to layers, the vocabulary bound
 
-Status: phase 0 approved and landed 2026-09-05 (issue #227), pulled
-ahead of the docs prepass so that plan's emitter tests pin the bare
-`fm` spelling. Contract 7's pinning tests landed 2026-09-28 (commit
-94096846). Phase 1 landed 2026-09-28 (issue #860, pull request
-#866); phase 2 landed the same day (issue #867, pull request #869,
-its ordering fix #870); phase 3c was built the same day (issue #874)
-and phase 8's first change, the publishing opt-out, too (issue #871).
-Phases 3, 3b, 4 to 8 are drafted and await Willem's review: phase 4 split
-into 4 and
-4b because its two halves block on different things, and the
-revision of 2026-09-28 added phase 3b (the part and channel
-registries, which 4b waits on), phase 3c (the regions a repository
-owns in its managed files, ruled generic that day) and phase 8 (the
-house layer, which that day's base-and-house ruling calls for),
-folded the day's other
-rulings into the design, contracts 10 to 12, phases 3 and 4, and
-the open list, and corrected one claim of the 2026-09-09 record. The
-design section below is written to graduate into
-`packages/workshop/docs/` after review; everything else is working
+Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
+tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
+2026-09-28 (issues #860, #867 with its ordering fix #870, #874), phase 3
+up to the dependency closure the same day (#876) beside the layering
+check's fix mode (#829) and phase 8's first change, the publishing
+opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
+item the remaining phases waited on; the decision record carries each
+ruling, and the design section, the contracts, phases 3 to 9 and the
+open list carry their consequences. Next, in dependency order: phase 3's
+remainder (the tool declaration, the AST rule registry, contributions
+by target), phase 3b (the category and channel registries), phase 4
+with 4b and 4c, the small 3c leftover, then phases 5 to 9 and the layer
+split as its own plan. The design section below is written to graduate
+into `packages/workshop/docs/` after review; everything else is working
 record.
 
 ## Why
@@ -130,10 +125,24 @@ language is a layer derived from the base: `livery.workshop.python`
 carries the python package kind, its template, its checks
 (formatting, lint, one type checker, the tests with their coverage
 floors) and its tools; `livery.workshop.cpp` carries the C++ kinds
-the same way. A house is a layer on top of the languages it wants:
+the same way, and `livery.workshop.nanobind`, a kind layer rather
+than a language, depends on both. Three more layers derive from the
+base and register no language: `livery.workshop.docs` assembles the
+site, judges the docs and runs the examples, asking each kind record
+for its extractor and its example runner; `livery.workshop.playground`
+depends on docs and python and adds the browser sandbox and the
+second run of the examples inside it; `livery.workshop.claude` writes
+the agent's entry file from the prose fragments the listed layers
+deliver. A house, `livery.housekeeping` here, is a layer of opinions:
 a second and a third type checker, a docstring convention, a voice,
-each a registration or content, listed by the project that wants
-it. The base is abstract, the way the base kind is: it heads
+a theme, each a registration or content, listed by the project that
+wants it. It depends on the base alone and contributes to each
+language it has opinions on by data: its plugin module names, per
+target layer, the module that carries the registrations for that
+target, and the mount grafts that module when both are listed. No
+mount code branches, the list stays the whole truth, and a house
+with opinions on six languages drags none of them into a project
+that has one. The base is abstract, the way the base kind is: it heads
 every stack, carries what every layer needs, and is used by nobody
 alone. A workspace listing the base alone registers no kind and can
 create no package; it is not a thing anyone uses. What the base is
@@ -177,8 +186,19 @@ place the tool exists:
   ruff judges a cpp-conan package's `conanfile.py` by one set and
   a python package's sources by another, derived from the claim
   instead of typed into a `per-file-ignores` table by hand. The
-  classification is the file's part, from the registry below,
-  never a table of the check's own;
+  classification is the file's category, from the registry below,
+  never a table of the check's own. What a check claims and the
+  facts it declares beside them, a released version the browser
+  installs say, are its inputs, and the record is where the gate
+  will one day read them to run a check only when an input moved;
+- the options a package may set for it. The record declares each
+  with a type and a default, a kind sets defaults, a layer
+  overrides, and a package sets them in its contract under
+  `[checks.<name>]`: `parallel = false` on the python test check
+  passes `-n 0` for that package, and `typecomplete` is one such
+  option, on by default. The record decides what a package may
+  say, so a fact about the package is offered and a rule set is
+  not, which keeps contract 5;
 - how it narrows under `--affected`: by explicit paths, by a
   package subset, or not at all (the whole is always checked);
 - the configuration the render manages for it, one fragment per
@@ -209,9 +229,14 @@ place the tool exists:
 
 Adding a tool is one record in a layer's plugin. Removing one is
 re-registering the role without it. A layer whose verbs need a
-tool with no check involved declares the tool at the same mount,
-the way it registers a kind or a check, and the derived profile
-takes it beside what the kinds and the contracts require. A
+tool with no check involved declares it as data on its plugin
+module, `WORKSHOP_TOOLS = ("docker>=27",)`, beside its API version
+and its dependencies, read at mount like them and never from a
+wheel's metadata; the derived profile takes it as a fourth site
+beside the kinds, the packages and the root contract, `fm layers`
+names each layer's tools, and a layer that lives in the repository
+as a member declares it the same way, since it imports the same
+way. A
 narrowed gate is always visible: every skipped check prints its
 name and the reason, and a layer that narrows a role is named in
 the gate's output, so a lighter gate is a legible brand decision,
@@ -225,6 +250,24 @@ the rendered file instead would move the truth from the template
 to the template plus the passes, and every rewrite of TOML or of
 JSON with comments either loses the prose or dictates how it may
 be written, which these files carry on purpose.
+
+**A slot is a hole one layer cuts and others fill.** A line the
+base template writes that a layer needs different is never
+overridden whole and never deleted by a fragment; the template
+splits until that line is a slot, and the records fill it. The
+owning layer declares the slot with its composition rule,
+`register_slot("python.dev-group", compose=union)`, and any layer
+or record contributes, `contribute("python.dev-group",
+"mypy>=1.14")`. A list composes as the union in contribution order,
+a scalar takes the nearest layer's value, two claims at one level
+refuse naming both, and a table applies those rules key by key; the
+owner reads the composed value and puts the instance's contract
+facts on top itself. The `dev` dependency group and pytest's
+`addopts` are the first slots, so a project born without the house
+has no mypy in its venv and nobody wrote either sentence; the docs
+layer's theme is another, the fonts and schemes a theme layer
+contributes. A contribution to a slot nobody declared refuses at
+mount naming the layer.
 
 **Where a tool composes its own configuration, the render uses
 that.** Tools differ in how they find their configuration, and the
@@ -255,8 +298,8 @@ reads each region from the committed file as an input, the way it
 reads the answers, and writes it back in place, so the drift gate
 still compares whole bytes, and an edit outside a region, or a
 removed marker, is drift like any other. The root `pyproject.toml`
-carries the repository's own tables and its own dependencies this
-way, the root `.gitignore` its own rules, `tasks.py` its own tasks,
+carries the repository's own tables this way, the root `.gitignore`
+its own rules, `tasks.py` its own tasks,
 and a package's managed files the same. What a region may say is
 the format's business: in TOML a tail region adds whole tables and
 array entries and never a key inside a rendered table, so a tool's
@@ -273,26 +316,35 @@ report says where the repository's own lines belong, so the refusal
 teaches the seam instead of only naming the file.
 
 **What a file is, and who owns it.** The workshop asks two
-questions about a path, and one file answers both. Its **part**:
-what this is to the package, one of source, test, test support or
-configuration. Its **channel**: who wrote it and where to edit it,
+questions about a path, and one file answers both. Its
+**category**: what this is to its package, source, test, test
+support, configuration, and whatever a layer adds, prose, example,
+asset, nav. Its **channel**: who wrote it and where to edit it,
 one of a layer's fragment, a rendered file, an emitted one, the
 contract, or yours. `packages/forge/workshop.toml` is
 configuration on the first and the contract on the second;
-`packages/forge/src/livery/forge/_http.py` is source and yours.
-Neither answer can be read off the other, so the two vocabularies
-stay apart and are never merged into one.
+`packages/forge/src/livery/forge/_http.py` is source and yours;
+`packages/footman/docs/examples/first_task.py` is example and
+yours. Neither answer can be read off the other, so the two
+vocabularies stay apart and are never merged into one.
 
-Each is a registry that a kind or a layer registers into, through
-the channel that already carries kinds and checks. Two registries
-rather than one with an axis parameter: a file's part is a pure
-function of its path inside a package, while its channel is read
-from the delivery manifest, the emitted set and the template
-source, so a single registry over both would answer `object` and
-hand every rule a context that is the union of two unrelated
-needs. What the two share is the walk, an ordered list of rules
-where the first to claim a path wins and the caller supplies the
-fallback. Same shape, without paying for that shape in types.
+Both live in one store keyed by axis, with a typed pair of
+functions per axis: `register_categories` and `category_of`,
+`register_channels` and `channel_of`. A category rule is a pattern
+table a kind or a layer registers, since nothing a category needs
+reads state, and the table renders into the documentation; a
+channel rule is a callable, since it reads the delivery manifest,
+the emitted set and the template source. Rules order by
+specificity, the most specific claim first, and two rules of one
+specificity claiming one path refuse at mount naming both, so two
+checkouts of one commit order alike and nothing is settled by mount
+order in silence. The workspace root is a unit of its own, the one
+the gate already has for its `tests/`, and the base registers its
+rules: notes, the site's files, the readme, the configuration.
+The root is never a package, so a `src/` at the root has no rule
+and no claim, and the layering check refuses it naming the move
+under `packages/<name>/`. A third axis, if one ever comes, is one
+more pair of functions over the same store.
 
 Today each is instead a closed ladder in one module. That is why a
 layer can teach the workshop a new package kind but not what a
@@ -303,9 +355,71 @@ Registered, not configured. The layout a kind expects is a fact
 about the kind, so it is layer code like everything else here. One
 package's local exception is a fact about that package, and the
 contract carries it in the same narrow shape it carries a coverage
-floor: these paths are not what the kind would assume. Anything
+floor, a `[categories]` table keyed by category, `vendored =
+["docs/assets/vendor/**"]`: these paths are not what the kind would
+assume, on the category axis alone, never the channel. Anything
 wider than that exception is a policy toggle, and the boundary
 above refuses it.
+
+**A check claims categories, and the docs check is one of them.**
+A claim is the relation between a check and the files it reads,
+named in categories. The site build claims prose, nav, asset,
+example and the root's site files; the examples check claims
+example; nothing claims notes, so a change under `notes/` runs
+the workspace checks and no more. "Does the site read this path"
+is therefore not a third axis and not a fact on the file; it is
+the docs check's claim, and the docs check knows the docs layout.
+
+**Prose fragments serve two readers.** A layer's prose, the voice,
+the standards, what a kind's package looks like, is a set of
+fragments, and the same set writes the agent's entry file and the
+site's development section. A fragment is a file in the layer's
+content named by the path alone,
+`<section>.[<kind>.]<topic>[.<audience>].md`, or a registration in
+code with a render that takes the audience. The base defines the
+sections and their order, identity, voice, standards, rules,
+workflow, gate, verbs, kinds, tools, and a layer adds one at a
+declared position. A kind in the name gates the fragment on a
+package of that kind, or a kind deriving from it, being present; a
+topic is unique across everything delivered, and a collision
+refuses naming both files. The audience is `agent` or `human`, and
+a name without one serves both; a dynamic fragment renders from
+the registries at sync, so the sentence naming the gate's checkers
+is derived and true for every project. `fm sync` delivers the
+agent-or-both set flat under `.workshop/fragments/`, byte for byte
+the source, materialised so an edit is kept and named; an agent
+layer writes its entry file from that set, sections in order, the
+repository's own fragments last; the docs layer renders the
+human-or-both set into the site's development section in the same
+order. Without an agent layer nothing writes an entry file.
+
+**Examples are files, tested twice.** A package's examples live
+under `docs/examples/` as python files a page includes by snippet,
+so an example is code with a category, judged by the format and
+lint checks, run by the docs layer's examples check through the
+kind's runner, and reported with a file and a line. A prose edit
+reaches the site build alone. When the playground layer is listed
+it registers a second check over the same category that runs the
+examples in the browser's environment, and declares that runtime
+as its tool.
+
+**A theme is a layer.** Its files, a palette, fonts, a logo, theme
+partials, ship as layer content, staged into the site build and
+wired in layer order with the workspace's own css last; its values
+are contributions to the docs layer's theme slot; an update is a
+wheel bump, never a template re-render.
+
+**Templates compose on demand.** A layer that ships template files
+publishes only its own, to a branch of the one templates artifact
+named by the layer and tagged with the layer's release version; a
+layer inside the workshop wheel publishes nothing, its templates
+ride the workshop's series. A project's stack is its layers list,
+the tag per layer is the version its lock pins, and the render
+fetches each series at that tag, composes them in layer order and
+renders the result, the way a home composes its local trees. A
+base fix reaches every project by one tag, and an overlay costs a
+layer nothing but the files it ships, so a house may replace the
+README and LICENSE seeds without becoming the base's publisher.
 
 **The editor answers with the gate's checkers.** A checker
 configured in `pyproject.toml` is the same program in an editor
@@ -327,8 +441,9 @@ belongs to the kind: a Python kind extracts its API through
 griffe, a C++ kind through its own extractor, and a binding kind
 composes both. Policy belongs to the layer: whether private
 members are documented, the voice, the site's tone. Assembly
-belongs to the core: the per-package site shape and the publish
-path. Coverage likewise: the floor is a contract fact in `[qa]`,
+belongs to the docs layer: the per-package site shape, the
+development section from the prose fragments, and the publish
+path, with nothing language-shaped in it. Coverage likewise: the floor is a contract fact in `[qa]`,
 the measurement is the kind's answer (coverage.py for Python,
 instrumented ctest for C++), and the floors, the grace, and the
 enforcement are one core implementation over every kind's
@@ -376,8 +491,8 @@ reviewed byte and never an install-time side effect.
 10. The base layer is abstract: it carries the engine and what
     operates it, registers the workspace checks alone, ships no
     language kind and no house convention, and is used by nobody
-    alone. Each language and each house is a layer depending on
-    the base, never the reverse: the core imports no layer and
+    alone. Each language, the documentation, an agent's files and
+    each house is a layer depending on the base, never the reverse: the core imports no layer and
     names no package kind and no check tool, and the layering lint
     and a vocabulary test refuse both on every change. The
     interpreter, uv and the venv that operate the workshop are the
@@ -397,15 +512,26 @@ reviewed byte and never an install-time side effect.
     everything else, the markers included, is judged as rendered
     bytes. `fm explain` names which form a file carries, and a
     drift report says where the repository's own lines belong.
-14. The base templates aim to be generic enough that a house layer
-    needs no overlay, so most projects need no template repository.
-    A house customises a rendered file through a fragment, a region,
-    or content, all of which travel in its wheel; an overlay stays
-    the declared exception for what those cannot say, because it
-    makes its home the template publisher and costs it an artifact
-    repository. What a house needs that no fragment or region can
-    say is first treated as a gap in the base template; open item 16
-    carries what remains.
+14. A layer's template files travel in a series of their own in the
+    one templates artifact, tagged with the layer's version, and a
+    project composes the series its lock pins at render. An overlay
+    therefore never makes a layer the base's publisher and costs no
+    repository; the base templates still aim to be generic enough
+    that most layers ship none, and a house customises a rendered
+    file through a fragment, a slot, a region or content first.
+15. A layer's declarations are attributes of its plugin module,
+    read at mount and never from a wheel's metadata: its API version,
+    its dependencies, its tools, and its contributions to other
+    layers as a map from target to module. Mount code never branches
+    on what is listed; the mount grafts a contribution module when
+    both its owner and its target are, and the list, with the
+    resolved targets the fix writes into it, is the whole truth.
+16. `fm check` runs each source parse once. The layering check
+    owns the one traversal, memoised per file and tree, and a kind
+    or a layer registers AST rules into it rather than walking
+    again; a rule's fix hooks run inside the check's rewrite and its
+    judgments inside the check's judge, so the gate's serial-then-
+    parallel ordering is implemented once, in the walk.
 
 ## Phases
 
@@ -545,14 +671,44 @@ API version (contract 8). `fm doctor` learns entry-point
 discovery: installed check or kind plugins that no layer mounts
 are listed as available, activating nothing (contract 3).
 
-A layer also declares the tools its own verbs need, at the same
-mount, so `_tools.requirements()` gains a fourth site beside the
-kinds, the packages and the root contract: `tools.lock` resolves
-them, the receipts record them, and `fm doctor` and `fm env.check`
-name an absence. Two checkouts listing the same layers derive the
-same profile, so the declaration is a registration at mount, never
-an installed wheel's metadata (contracts 2 and 3). Today a layer
-has nowhere to say it.
+The API version check, the withdrawal a layer may make with its
+name on it, the gate's narrowing lines, the dependency closure and
+its fix, `fm layers` and the doctor's discovery landed 2026-09-28
+(issue #876). Three pieces remain, ruled 2026-09-28 and 2026-09-29:
+
+- **The tool declaration.** A layer declares the tools its own
+  verbs need as `WORKSHOP_TOOLS = ("docker>=27",)` on its plugin
+  module, beside `WORKSHOP_DEPENDS` and `WORKSHOP_API_VERSION`.
+  `_tools.requirements()` gains the fourth site, `layer <import
+  path>`; `tools.lock` resolves them, the receipts record them,
+  `fm doctor` and `fm env.check` name an absence, and `fm layers`
+  names each layer's tools. A layer in the repository is a member
+  package and declares the same way.
+- **The AST rule registry.** The layering check owns the one
+  source traversal, memoised per file and tree, and offers
+  `register_ast_rule`: a kind or a layer hands it a rule that
+  receives each parsed module once and returns its problems, with
+  fix hooks beside. The check's three walks today, the
+  terminal-through-the-runner rule, the stdlib-only rule and the
+  sibling references, become its first three rules, and
+  import-shaped rules read the one import graph the check builds.
+  The rules' fix hooks run inside the check's rewrite and their
+  judgments inside its judge, so the walk sees one check and the
+  serial-then-parallel ordering stays implemented once (contract
+  16).
+- **Contributions by target.** A layer's plugin module declares
+  `WORKSHOP_FOR = {"livery.workshop.python": "livery.housekeeping.python", ...}`,
+  a map from target layer to the module carrying the registrations
+  for that target. The mount grafts a contribution module when both
+  its owner and its target are mounted, whichever mounts later; a
+  contribution module is straight-line registrations and no mount
+  code branches (contract 15). `fm layers` prints `<layer>: for
+  <targets>`. The closure lint's `--fix` writes the resolved targets
+  once into the entry's table form, `{ import = "...", for = [...]
+  }`; from then on `for` is the truth, the mount follows it, the
+  lint refuses a `for` naming an unlisted layer, the fix never
+  completes it again, and deleting a name from `for` is a project's
+  opt-out from that target's opinions.
 
 **Acceptance**
 
@@ -560,6 +716,17 @@ has nowhere to say it.
   lock's requirements and in the entered environment, and unlisting
   the layer drops it, proven by a forced test of the unlisted arm
   first.
+- The layering check parses each source once: a counting fake
+  over the parse proves one call per file with three rules
+  registered, and a test layer's AST rule sees every module, its
+  fix hook runs inside the check's rewrite, and its refusal names
+  the rule, proven by a forced test of the refusal first.
+- A contribution module for an unlisted target never mounts,
+  proven by the forced arm first; with the target listed it mounts
+  after both, `fm layers` names it, and its registrations answer.
+- `fm check --fix` writes `for` once; a name deleted from it stays
+  deleted on the next fix; a `for` naming an unlisted layer refuses
+  naming the fix; proven by tests in that order.
 - A test layer drops one checker and adds a fake one; the gate
   output names both moves, proven by a conformance-suite test.
 - An installed-but-unlisted plugin appears in `fm doctor` output
@@ -567,61 +734,79 @@ has nowhere to say it.
 - A layer declaring an incompatible API version refuses at mount
   with the version named.
 
-### Phase 3b: the part and channel registries
+### Phase 3b: the category and channel registries
 
 The one shared, extensible classification the 2026-09-27 rulings
-call for, numbered beside phase 3 because it needs nothing from
-phase 4 and phase 4b needs it. Two registries that share only their
-walk: the **part** registry answers what a path is to its package
-(`source`, `test`, `test-support`, `configuration`), the
-**channel** registry answers who wrote it and where to edit it
+call for, settled in full on 2026-09-28 (open item 9), numbered
+beside phase 3 because it needs nothing from phase 4 and phase 4b
+needs it. One store keyed by axis, and a typed pair of functions per
+axis: the **category** axis answers what a path is to its package
+(`source`, `test`, `test-support`, `configuration`, and what a layer
+adds: `prose`, `example`, `asset`, `nav`, `generated`), the
+**channel** axis answers who wrote it and where to edit it
 (`rendered`, `generated`, `materialised`, `layer content`, `seed`,
-`contract`, `yours`, and the rest `fm explain` prints today). Each
-is an ordered list of rules where the first to claim a path wins
-and the caller supplies the fallback. Both existing ladders
-migrate at once: every kind backend's `classify` becomes that
-kind's builtin part rules, and `_provenance.classify` becomes the
-channel's builtin rules, each registered through the same channel
-that carries kinds and checks. A layer or a kind registers rules
-into either. The per-package exception enters the contract in the
-narrow shape a coverage floor has: these paths are not what the
-kind would assume, on the part axis alone.
+`contract`, `yours`, and the rest `fm explain` prints today). A
+category rule is a pattern table, since nothing a category needs
+reads state, and the table renders into the documentation:
 
-The docs job's condition rides along (livery#839): the predicate
-"the site reads this path" is answered here, and the docs job skips
-on a change the site does not read, leaving the `gate` context
-reportable. The predicate is paths under `notes/` alone, narrower
-than `is_prose`, since `README.md` and every package's `docs/`
-markdown are published and the site build is their only gate.
+```python
+register_categories("python", [
+    ("src/**", "source"),
+    ("tests/**/test_*.py", "test"),
+    ("tests/**", "test-support"),
+    ("**", "configuration"),
+])
+```
 
-The leans on open item 9's remaining questions, each a ruling
-before this phase starts:
+A channel rule is a callable, since it reads the delivery manifest,
+the emitted set and the template source. Rules order by
+specificity, the most specific claim first, and two rules of one
+specificity claiming one path refuse at mount naming both; a
+callable declares its rank. Both existing ladders migrate at once:
+every kind backend's `classify` becomes that kind's builtin
+category rules, and `_provenance.classify` becomes the channel's,
+each registered through the channel that carries kinds and checks.
+The workspace root is a unit with rules the base registers, the one
+the gate already has for its `tests/`: tests as today, `notes/**`
+as notes, the site's files, `README.md`, the configuration files. A
+`src/` at the root has no rule and no claim, so the layering check
+refuses it naming the move under `packages/<name>/`: a project that
+ships one package has one directory under `packages/`. The
+per-package exception is a `[categories]` table in the package's
+contract, keyed by category, on that axis alone:
 
-- A part rule is data, a pattern table, where nothing reads state,
-  and a callable otherwise. The table renders into documentation
-  and the callable keeps promotion to one registry mechanical.
-- Rules order by registration, the most specific claim first, and
-  a tie refuses at mount naming both rules, so two checkouts of one
-  commit order alike.
-- `fm explain` prints the part, the channel, and the layer that
-  supplied each.
-- The single registry over both waits for a third axis. "Does the
-  site read it" is the first candidate and is answered here as a
-  channel fact until then.
+```toml
+[categories]
+vendored = ["docs/assets/vendor/**"]
+```
+
+`fm explain` prints the category, the channel, the layer that
+supplied each, and the checks that claim the file.
+
+The docs job's condition rides along (livery#839) as the first
+claim: the site build claims prose, nav, asset, example and the
+root's site files, nothing claims notes, and the docs job skips a
+change the site does not read, leaving the `gate` context
+reportable. The claim mechanism in full is phase 4b's; this phase
+lands the docs check's claim in the narrow form that skip needs.
 
 **Acceptance**
 
 - Every kind's `classify` and `_provenance.classify` are gone:
   `grep -rn "def classify" packages/workshop/src` finds only the
-  registries' own entry points, and `fm explain <path>` prints part,
-  channel and supplier for a rendered file, a seed, a contract, a
-  package source and a materialised entry.
-- A test layer registers a part rule and a channel rule and both
-  answer, with the supplier named; an ambiguous pair refuses at
-  mount naming both, proven by a forced test.
-- A package declaring the per-package exception is classified by it
-  and nothing wider enters the contract, proven by a test that a
-  wider key refuses naming the shape.
+  registries' own entry points, and `fm explain <path>` prints
+  category, channel, supplier and claims for a rendered file, a
+  seed, a contract, a package source, a materialised entry and a
+  root note.
+- A test layer registers a category rule and a channel rule and
+  both answer with the supplier named; two rules of one specificity
+  claiming one path refuse at mount naming both, proven by a forced
+  test first.
+- A package declaring `[categories]` is classified by it and
+  nothing wider enters the contract, proven by a test that a wider
+  key, and a channel key, refuse naming the shape.
+- A `src/` at the workspace root refuses in the layering check
+  naming the move, proven by a forced test.
 - A pull request changing only `notes/` skips the docs job and the
   `gate` context still reports, proven by the conformance chain; a
   change to `README.md` or a package's `docs/` still builds the
@@ -656,17 +841,21 @@ recommendations beside the derived ones.
 
 The first carriers, each with the lines that move into it today:
 
-- the root `pyproject.toml`, two regions. One inside the `dev`
-  dependency group's list, for the repository's own dependencies:
-  today's `types-pyyaml`, which is this repository's need, since the
-  workshop's yaml reads are type-checked here only because the
-  workshop is a member. One at the end of the file, for the
-  repository's own tables: today's three basedpyright execution
+- the root `pyproject.toml`, one region at the end of the file, for
+  the repository's own tables: today's three basedpyright execution
   environments for the imported tests. TOML decides what a tail
   region can say, whole tables and array-of-table entries and never
   a key inside a table the render wrote, so where a tool spells
   extension as its own key (ruff's `extend-per-file-ignores` and
-  `extend-select`) the region uses it;
+  `extend-select`) the region uses it. The repository's own dev
+  dependencies take no region (ruled 2026-09-28, open item 11): a
+  member declares what its dev loop needs as a `dev` extra of its
+  own, `livery-workshop[dev]` carrying `types-pyyaml`, which the
+  answers' dev entry already knows how to carry, and the base
+  template loses the line. A region inside a list is allowed
+  wherever the format allows a comment inside one, its entries
+  written with trailing commas, and is built when a carrier
+  appears;
 - the root `.gitignore`, one region for the repository's own rules;
 - `.vscode/settings.json`, one region inside the object for the
   repository's own editor settings;
@@ -706,9 +895,9 @@ change. Contract 13.
 - The base template names nothing of this repository:
   `grep -n "packages/toolroom\|packages/footman\|types-pyyaml"
   packages/workshop/src/livery/workshop/templates/project/pyproject.toml.jinja`
-  finds nothing, and this repository's root `pyproject.toml` still
-  carries the three execution environments and `types-pyyaml`,
-  inside its regions.
+  finds nothing; the three execution environments live inside the
+  root's `tables` region and `types-pyyaml` in the workshop member's
+  `dev` extra.
 - A workspace born now and a workspace rendered before the regions
   existed both gain the markers with empty content on
   `fm template.apply`, proven by the conformance chain and by a test
@@ -717,8 +906,8 @@ change. Contract 13.
   `fm template.apply` and reports a changed prefix as drift, proven
   by a test over a fixture file, since no managed file needs the
   form today.
-- `fm explain pyproject.toml` names its two regions with the lines
-  their markers enclose, and `fm explain` on a tail-form fixture
+- `fm explain pyproject.toml` names its region with the lines its
+  markers enclose, and `fm explain` on a tail-form fixture
   names the line the render ends on; the two outputs are distinct,
   proven by a test that pins both.
 - The drift report's three adapted lines each appear for their arm,
@@ -765,7 +954,8 @@ render does with each:
   fragments in check-name order, so two machines write the same
   bytes, and the drift gate judges the result.
 - **The tool's discovery shape**, one of two, as the design
-  section states it. A tool that reads one file per project gets
+  section states it (ruled 2026-09-28, open item 10, with open
+  items 6, 7 and 8 as leaned). A tool that reads one file per project gets
   its section in the shared rendered file, and per-package
   variation is spelled the tool's own way inside it (basedpyright
   execution environments, mypy module overrides, ty and pyrefly
@@ -788,6 +978,29 @@ render does with each:
   a local override. The record of what was written and its digest
   is the materialiser's manifest, the `.workshop-materialised`
   shape of `_materialise.py`, reused rather than invented twice.
+
+Two more things the record carries, ruled 2026-09-28:
+
+- **Slots.** A line the base template writes that a layer needs
+  different is split out of the template until it is a slot the
+  records fill: `register_slot(name, compose, default)` by the
+  owning layer, `contribute(slot, value)` by any layer or record,
+  composed by the rules the design section states. The `dev`
+  dependency group's tool entries and pytest's `addopts` are the
+  first slots; the python layer declares both and its check records
+  fill them, so the base template writes only `uv`, the members and
+  the layer requirements. A whole-file override and a removing
+  fragment were argued down (open item 7).
+- **Package-settable options.** The record declares the options a
+  package may set, each with a type and a default; a kind sets
+  defaults, a layer overrides, a package sets them in its contract
+  under `[checks.<name>]`; the render writes them where the tool
+  reads a file and the check passes them where it invokes. The
+  python test record declares `parallel`, and a package that says
+  `parallel = false` runs under `-n 0`. `typecomplete` is such an
+  option on the basedpyright check family, on by default, off per
+  package (open item 2); the release wave follows the gate and the
+  receipt records whether the role ran.
 
 Ruff (format and lint) is the proof: its rendered configuration,
 its editor settings, its recommended extension, its version pin,
@@ -833,19 +1046,28 @@ registered checks. Closes livery#779.
   registered checks.
 - A rendered project's editor and its gate answer alike on a file
   the gate excludes, proven by a test over the rendered settings.
+- A test layer contributes to the `dev` group slot and the rendered
+  group carries the line; unlisting the layer removes it; a scalar
+  slot claimed twice at one level refuses naming both; proven by
+  forced tests, the refusal first.
+- A package setting `[checks.test] parallel = false` runs its suite
+  under `-n 0` while its siblings run under `-n auto`, and a package
+  turning `typecomplete` off skips it by name, proven by tests over
+  the invocation and the gate output.
 - `fm check` green, output unchanged.
 
 ### Phase 4b: the check claims its files
 
 The other half, and the one that waits. A check record gains its
-claim, named in the part vocabulary rather than as globs, and a
-check judges the files its claim reaches. Ruff is the proof
+claim, named in the category vocabulary rather than as globs, and a
+check judges the files its claim reaches. The docs check's claim,
+landed narrowly in phase 3b, becomes an ordinary claim here. Ruff is the proof
 again: the rules it applies to a package's configuration files
 differ from the rules it applies to sources, and the rendered
 `per-file-ignores` is generated from the claim rather than
 written by hand.
 
-This phase needs the part registry of phase 3b and lands after
+This phase needs the category registry of phase 3b and lands after
 it. Building the claim on today's per-kind `classify` instead
 would be the second shape this plan then replaces, which is the
 argument that retired `kindcheck` inside phase 2. The hand-written
@@ -863,6 +1085,44 @@ tracked content pass's debt, not this plan's.
   proven by a fake check over a fixture package of each kind.
 - `conanfile.py` is judged by the checks that claim
   configuration, closing the gap the design section names.
+- `fm check` green, output unchanged.
+
+### Phase 4c: prose fragments serve two readers
+
+The prose a layer ships, the voice, the standards, what a kind's
+package looks like, becomes a registry of fragments with the
+convention ruled 2026-09-28 (the design section states it): a file
+named `<section>.[<kind>.]<topic>[.<audience>].md` in the layer's
+content, or `register_fragment(section, topic, render, kind=None)`
+with a render that takes the audience, `agent`, `human` or None.
+The base defines the sections and their order; `register_section`
+adds one at a declared position. A kind in the name gates on a
+package of that kind or a derived kind; an empty render is omitted;
+a topic collision refuses at sync naming both files. `fm sync`
+delivers the agent-or-both set flat under `.workshop/fragments/`,
+`<section>.[<kind>.]<topic>.md`, byte for byte the source for a
+static file, materialised with the manifest. The first dynamic
+fragments are the gate's composition from the check registry, the
+verbs by layer, the kinds present and the locked tools, so no
+fragment names a checker by hand again. The entry file is an agent
+layer's (phase 9); the human rendering is the docs layer's (phase
+6). The repository's own fragments live in `fragments/` at the
+root with the same names and come last.
+
+**Acceptance**
+
+- A topic collision, a `<topic>.md` beside a `<topic>.agent.md`, an
+  unknown section and an unknown kind each refuse at sync naming
+  the files, proven by forced tests first.
+- A kind-gated fragment is delivered only while a package of that
+  kind or a derived kind is present, proven by both arms.
+- The gate fragment renders the registered checks for the kinds
+  present, differs between a workspace with and without a test
+  layer's check, and renders differently for the two audiences,
+  proven by tests over the render.
+- A static fragment's delivered bytes equal its source, and an
+  edited delivered copy is kept and named, proven by a test through
+  the materialiser.
 - `fm check` green, output unchanged.
 
 ### Phase 5: the test role and coverage measurement by kind
@@ -887,16 +1147,41 @@ line here, not a silent gap.
 - A kind without a measurer skips coverage by name, never
   vacuously passes.
 
-### Phase 6: the documentation seams
+### Phase 6: the docs layer
 
-Extraction moves to the kind record (Python's griffe wiring is
-the first implementation), policy to layer registration, assembly
-stays in `_docs.py`. The proving feature is the one that started
-this: a layer that turns off private-member documentation does it
-in its plugin, in a few lines, touching no contract vocabulary. A
-C++ extractor is out of scope here; the seam ships with Python
-proving it and the kind record able to say "no extractor,
-documented as absent".
+Extraction moves to the kind record (Python's griffe wiring is the
+first implementation), policy to layer registration, and assembly to
+`livery.workshop.docs`, a layer derived from the base that registers
+no language (ruled 2026-09-28): the site build and its CI job, the
+docs categories (prose, nav, asset, generated, example), the examples
+check, the development section rendered from the prose fragments of
+phase 4c, one page per section, and the theme slot. The layer asks
+each kind record for its extractor and its example runner; a kind
+without either says so, and the site names the absence.
+
+The examples become files. A package's examples live under
+`docs/examples/` as python files, and a page includes them by
+snippet, the extension the rendered site config already enables,
+with named sections where a page shows one file in parts. The one
+harness ships in the layer and runs each example through the kind
+record's runner, pytest for python, replacing footman's
+page-as-session harness and the three markers it needed; a block
+that must show invalid code stays prose and never runs. Whether the
+examples work outside the playground's environment shims is unknown
+today, and this check is what finds out.
+
+Layer assets are staged into the build from the wheel: the base's
+palette and type css move from seeds to layer content, a theme
+layer's files land the same way, and the build wires them into
+`extra_css` in layer order with the workspace's own css last, so
+the seeds keep only the instance's identity, its og-card and an
+empty css of its own. The theme block's values become a slot the
+layer declares, `docs.theme`, which a theme layer fills. The
+playground is not this phase: it becomes a layer of its own in the
+split plan, depending on docs and python, with its assets staged
+the same way, its page and its second examples check in the
+browser's environment, and the browser runtime declared as its
+tool. C++ extraction stays out of scope.
 
 **Acceptance**
 
@@ -904,6 +1189,15 @@ documented as absent".
   site reflects it, proven by a docs-build test.
 - A kind without an extractor produces a site section naming the
   absence, never an empty page.
+- An example file under `docs/examples/` runs through the examples
+  check and reports its own file and line on failure; a prose-only
+  page edit reaches the site build and no test, proven by tests over
+  the affected walk; footman's docs build with its examples as files
+  is byte-equal in content to the build before the move, differences
+  named and ruled in the phase record.
+- A test layer's css appears in the built site after the base's and
+  before the workspace's, and a theme contribution to `docs.theme`
+  changes the rendered fonts, proven by build plus grep.
 - The livery site's content is unchanged by the seam: the site
   is built before and after, the builds are diffed, and every
   difference is named and ruled in the phase record. An empty
@@ -914,8 +1208,10 @@ documented as absent".
 `livery.workshop.testing` ships the pinning tests a third-party
 kind or check plugin must pass: the backend protocol, skip
 printing, narrowing behaviour, fix ordering, config-fragment
-drift, a fragment resolving per kind down the chain, and a
-withdrawn check's file removed only when unedited (contract 11).
+drift, a fragment resolving per kind down the chain, a withdrawn
+check's file removed only when unedited (contract 11), a category
+table that orders and refuses a tie, and a contribution module that
+mounts only with its target.
 The workshop's own kinds and checks run the same kit, so the kit
 cannot drift from the enforcement. Once phase 8 exists the kit
 carries the base-alone case of contract 10 too.
@@ -927,24 +1223,67 @@ carries the base-alone case of contract 10 too.
 - A deliberately broken fake plugin fails the kit with the
   violated clause named, proven per clause.
 
+### Phase 7b: template series per layer, composed on demand
+
+The template channel as ruled 2026-09-28 (contract 14). Today
+`fm release.templates` publishes one composed tree, base plus the
+last layer's overlay, to the artifact's default branch under the
+publisher's version, and a born project's answers record that one
+source; an overlay therefore made its home the base's publisher.
+Instead:
+
+- `release_templates` publishes every tree-shipping layer in the
+  wave, each to a branch of the one artifact named by the layer,
+  tagged `<layer>/v<version>` in lockstep with the layer's release
+  tag; a layer inside the workshop wheel publishes nothing, its
+  templates ride the `workshop` series. The default branch holds a
+  README naming the series. `composition.toml` goes.
+- The render composes on demand: for each listed layer that ships a
+  tree, the series at the version `uv.lock` pins for that layer,
+  fetched through the store's cache, composed in layer order into a
+  scratch tree copier renders; a home composes its local trees as
+  now. Nothing beyond the lock records the stack, and `fm update`
+  moves the wheels and the tags follow.
+- The drift check compares against that composition, so a lock
+  that moved while the files did not is drift, the signal
+  `fm update` acts on.
+
+**Acceptance**
+
+- A home whose stack ships two trees publishes two series with
+  their own tags, and a second publish of the same content is quiet
+  while different content under one tag refuses, proven by tests
+  over a local artifact, the refusal first.
+- A project listing base and a test layer with an overlay renders
+  the composition of the two series at its pinned versions; bumping
+  the base's pin alone changes the render; proven by the
+  conformance chain.
+- `grep -rn composition.toml packages/workshop/src` finds nothing.
+
 ### Phase 8: the house layer, and the base's small set
 
 The proof that the seam separates the workshop from livery's
-opinions. A house layer is a member of this workspace and a layer
-in its `[workspace] layers` list, after `livery.workshop`. Its
-plugin registers the checks the base does not: mypy on its three
-platforms, ty and pyrefly under the `types` role, and whatever the
-ruling on open item 2 leaves for `typecomplete`. Its
-`content/fragments/` carries `interaction-voice.md`,
-`documentation-standards.md` and the house half of today's
-`CLAUDE.workshop.md`: the four-checker sentence, the docstring
-convention, and every other line that states livery's preference
-rather than what the workshop enforces; the base's fragment keeps
-the rest. The base template's `pyproject.toml` loses `[tool.mypy]`,
-`[tool.ty]` and `[tool.pyrefly]`, which arrive as the house's
-fragments through phase 4, and the base's `python` kind record
-loses the three tools, which arrive through the layer's declaration
-of phase 3.
+opinions. The house is `livery.housekeeping` (ruled 2026-09-28,
+open item 13), a member of this workspace listed after the
+languages, depending on the base alone. Its plugin module declares
+`WORKSHOP_FOR`, and `livery.housekeeping.python` carries the
+registrations for the python layer: mypy on its three platforms, ty
+and pyrefly under the `types` role, `D` with the google convention
+contributed to the ruff slot, and the three tools contributed to
+the `dev` group slot; a `livery.housekeeping.cpp` and a
+`livery.housekeeping.nanobind` follow when the house has opinions
+there. `typecomplete` stays the python layer's, optional per
+package. Its prose fragments carry `voice.interaction-voice.md`,
+`standards.documentation-standards.md` and the house half of
+today's `CLAUDE.workshop.md`, the docstring convention and every
+other line that states livery's preference rather than what the
+workshop enforces, in the agent and human renderings phase 4c
+gives them; the base's fragment keeps the rest, and the sentence
+naming the checkers becomes the dynamic gate fragment. The base
+template's `pyproject.toml` loses `[tool.mypy]`, `[tool.ty]` and
+`[tool.pyrefly]`, which arrive as the house's fragments through
+phase 4, and loses the three tools from the `dev` group, which
+arrive through the slot.
 
 The python package kind and its tooling leave the base too, into
 `livery.workshop.python` (ruled 2026-09-28, open item 17), a layer
@@ -974,23 +1313,16 @@ answer for one package of a kind that does. What it does not cover:
 a repository outside this workspace that lists an unpublished layer
 must reach it by a source uv can install from, a git source or a
 private index, which the template does not render. The house ships
-no template overlay (ruled 2026-09-28, contract 14): its
-configuration is fragments and its voice is content, both in the
-wheel. The reason is concrete here: `fm release.templates` names
-as publisher the last layer in the stack that ships a template
-tree, and publishes that layer's composed tree to the one
-`[workspace] templates-artifact` this workspace declares. A house
-overlay would make the house the publisher of the base's artifact
-at `workshop-templates`, versioned by the house, and every workshop
-instance would receive livery's house in its templates. Whatever
-the house needs of a rendered file that a fragment or a region
-cannot say is first a gap in the base template, fixed in the base;
-what that cannot cover either is open item 16, and the house is
-born without an overlay until it is ruled.
+its README and LICENSE seeds as an overlay in its own series of the
+templates artifact (phase 7b, open item 16 resolved 2026-09-28) and
+nothing else in its tree: everything else it says is a fragment, a
+slot contribution, a region or content, all in the wheel, and a
+need none of those can carry is first a gap in the base template.
 
-Needs phases 3 and 4: a check moved out of the base takes its
-configuration and its tool with it, and both need the seams those
-phases build. Independent of phases 5 to 7. Livery's own gate does
+Needs phases 3, 4 and 7b: a check moved out of the base takes its
+configuration and its tool with it, the contributions need the
+mount of phase 3, and the seeds need the series of 7b. Independent
+of phases 5 and 6. Livery's own gate does
 not change, because the house is listed: the same members run and
 the same fragments are delivered. What changes is what a project
 born without the house gets, and the conformance suite gains that
@@ -1022,9 +1354,37 @@ project.
 - This workspace's house member is born with `publish = false`, and
   `fm workflow.release --local` releases the workspace with it
   unpublished.
-- The house ships no template tree: `layer_template_tree` answers
-  None for it, and `fm release.templates` on this workspace still
-  names `livery-workshop` as the publisher, proven by a test.
+- The house's series carries its two seeds and nothing else, and
+  the `workshop` series is unchanged by the house's presence, proven
+  by a test over the published trees.
+- A project listing the house and the python layer mounts
+  `livery.housekeeping.python` and no C++ contribution, `fm layers`
+  says so, and its `for` entry lists python alone after `--fix`,
+  proven by the conformance suite.
+
+### Phase 9: the agent layer
+
+The Claude pieces leave the base (ruled 2026-09-28): `.claude/`
+skills, hooks and settings, the `hooks.pre-bash` verb, and the
+assembly of `CLAUDE.md` move into `livery.workshop.claude`, a layer
+depending on the base. Its one job beyond delivering its content is
+the entry file: one import line per delivered fragment in section
+order, the repository's own fragments last, written by `fm sync`
+only while the layer is listed. The prose fragments stay with the
+layers whose opinions they are; a second agent's layer would
+compose the same delivered set into its own entry file. A workspace
+that does not list the layer has no `.claude/` and no `CLAUDE.md`.
+
+**Acceptance**
+
+- A workspace born without the layer has no `CLAUDE.md` and no
+  `.claude/`, and `fm sync` writes neither, proven by the
+  conformance suite's base-alone fixture.
+- This workspace's `CLAUDE.md` after the move imports the same
+  fragments in the same order as before it, proven by a diff kept
+  in the phase record.
+- `grep -rn "claude" packages/workshop/src/livery/workshop --include=*.py -il`
+  finds only the layer's own modules.
 
 ## Temporary, replaced by
 
@@ -1040,10 +1400,15 @@ project.
 | Windows C++ coverage deferral (phase 5) | a ruling once an MSVC toolchain answer exists |
 | `.clang-tidy` and `.clang-format` seeded per package, never rewritten | managed per-kind renders of the clang-tidy and clang-format check records (phase 4) |
 | The three basedpyright execution environments naming this repository's packages in the base template | the repository's own tail region in the root `pyproject.toml` (phase 3c); the lines themselves are the tracked content pass's debt |
-| `types-pyyaml` in the base template's dev group | the repository's own region inside the dev group (phase 3c) |
+| `types-pyyaml` in the base template's dev group | the workshop member's `dev` extra (phase 3c's leftover) |
 | The forge layer's `.forge.dev.env` rule in the base `.gitignore` template | the forge layer's fragment for `.gitignore` (phase 4) |
 | The hand-written `[tool.ruff]` stubs in four packages | the claim-derived `per-file-ignores` (phase 4b); the docstring carve-outs inside them are the content pass's |
-| The four checkers and the voice fragments shipped by the base | the house layer (phase 8) |
+| The four checkers and the voice fragments shipped by the base | `livery.housekeeping` (phase 8) |
+| The `dev` group's hand-written tool lines and pytest's `addopts` in the base template | slots the check records fill (phase 4) |
+| The three parse walks inside the layering check | the one traversal with registered rules (phase 3) |
+| footman's page-as-session harness with its three markers, and the playground assets hand-copied into two packages' docs | examples as files run by the docs layer, assets staged at build (phase 6, then the playground layer) |
+| The pre-composed template artifact, `composition.toml`, and the last-layer publisher | template series per layer, composed on demand (phase 7b) |
+| The Claude skills, hooks and the `CLAUDE.md` assembly in the base | `livery.workshop.claude` (phase 9) |
 
 ## Decision record
 
@@ -1590,18 +1955,109 @@ project.
   nanobind layer adds its kind on top of both, as Willem said; the
   objection was to the test's wording alone.
 
+- 2026-09-28 and 2026-09-29, the walk (Willem ruled every open item
+  the phases waited on, one by one, with the agent supplying context,
+  options and examples; each line below names its item):
+  - Open 14: a layer declares its tools as `WORKSHOP_TOOLS` on its
+    plugin module; a registration at mount is the same channel to
+    grow into, and a shipped TOML file was argued down because its
+    cost depends on where the layer lives and `fm layers` takes its
+    readability advantage. An in-repo layer is a member package.
+  - The tool records' future home is ticket livery#882, not a
+    musing: musings are for what has no actionable decision yet.
+  - Open 10: the check record names its tool's discovery shape and
+    the render follows it; open items 6, 7 and 8 as leaned. Open 7's
+    answer is the slot: a contested base line is split out until the
+    records fill it, a whole-file override and a removing fragment
+    both argued down; the python layer's test check contributes
+    pytest, pytest-cov, coverage and xdist, ctest contributes
+    nothing to the venv.
+  - Open 9, all seven: a category rule is a pattern table where
+    nothing reads state; most specific first, a tie refuses; the
+    per-package exception is a `[categories]` table on that axis
+    alone; both ladders migrate at once; `fm explain` prints
+    category, channel, supplier and claims; one store keyed by axis
+    with typed per-axis functions, since the `object` answer is
+    avoidable and the promotion trigger goes; "does the site read
+    it" is the docs check's claim. The axis is named **category**,
+    since `part` reads as directories split into parts. A `src/` at
+    the root refuses in the layering check naming the move.
+  - The playground is a layer of its own, since not everyone wants
+    it; examples live as files under `docs/examples/` included by
+    snippet and are tested twice, standalone by the docs layer and
+    in the browser's environment by the playground layer; the
+    examples check stays with docs, since a project with docs and no
+    playground still wants its examples proven.
+  - A check's configuration is overridable per package generically:
+    the record declares the package-settable options, a package sets
+    them under `[checks.<name>]`, phase 4. Open 2 follows:
+    `typecomplete` is such an option on the basedpyright family, on
+    by default, never a release refusal and never the base's.
+  - Direction: as little unnecessary work as possible. A check's
+    inputs, its claimed categories plus the facts it declares,
+    digested per check in the gate record, are the next lever after
+    4b (open item 19).
+  - The docs layer derives from the base, not from python, reading
+    each kind record for its extractor and example runner; the
+    playground depends on docs and python; the house on the base
+    alone. A theme is a layer: files as content staged into the
+    build, values as contributions to the docs layer's slot; updates
+    by wheel bump. `register_theme` was argued down for the generic
+    slot, since the core knows no fonts.
+  - Open 11's inner questions: the marker text stands; `types-pyyaml`
+    leaves the base template as the workshop member's `dev` extra,
+    named `dev` because it declares whatever the member's dev loop
+    needs; a region inside a list is allowed wherever a comment is,
+    built when a carrier appears; the owning template names a
+    region, a repository cannot add one.
+  - The layering check owns the one AST traversal and takes
+    registered rules: seconds in `fm check` are worth engineering,
+    since it ran 42 times on one desk on 2026-09-28; the
+    serial-then-parallel ordering stays implemented once.
+  - The Claude pieces are a layer of their own, `livery.workshop.claude`;
+    the prose fragments stay with the layers whose opinions they are.
+  - Prose fragments: a default naming convention and an optional
+    audience hint, agent or human, so one set writes the entry file
+    and the development documentation in a structured order. Ruled
+    to the path alone with no front matter, then flat and
+    dot-separated: `<section>.[<kind>.]<topic>[.<audience>].md`, a
+    kind in the name because one layer registers several kinds and
+    a layer contributes into another layer's section; delivered
+    with the audience suffix dropped, byte for byte the source.
+  - Open 12: the sets as tabled in the design, the python layer's
+    ruff set is today's minus `D`, and the docstring sentence moves
+    to the house with the rule.
+  - Open 13: the house is `livery.housekeeping`; the collision with
+    the sweep's prose sense is mild and prose about cleanup says
+    "the sweep".
+  - The template channel composes on demand, never pre-composed:
+    each tree-shipping layer publishes its own files to a branch
+    named by the layer, tagged with its version; the tag per layer
+    derives from the version the lock pins, so nothing else is
+    recorded; `composition.toml` and the two-hop rule go. Open 16
+    then closes: the house's seeds ride an overlay in its own series,
+    and registry-contributed files are not needed, since each case
+    has a home, an overlay, a check record's render, build-time
+    staging, or content delivery.
+  - Open 17: the sequencing stands, python and docs first.
+  - Open 18 (2026-09-29): contributions by data. A layer's plugin
+    module declares `WORKSHOP_FOR`, target layer to contribution
+    module; the mount grafts a contribution when both are mounted;
+    no soft-dependency attribute and no conditional mount code; the
+    fix writes the resolved targets into the entry once and from
+    then on `for` is the truth, which gives the per-project opt-out
+    for free. Willem: "I like it". The reproducibility argument
+    against conditional code was withdrawn as overstated; what
+    separates the shapes is legibility.
+
 ## Open
 
 1. Does `Edge.kind` rename too, or does "edge kind" bound by its
    table satisfy contract 9? Current lean: keep it, bound.
    Owner: Willem.
-2. How long do `typecomplete` and the release-path checks stay
-   builtin roles a layer cannot drop? The release train leans on
-   typecomplete; dropping it may need its own ruling. Since the
-   base-and-house ruling the question is also which side of that
-   line `typecomplete` sits: the lean is the python layer, because
-   it rides that layer's one type checker and judges python
-   distributions alone. Owner: Willem, before phase 8.
+2. Resolved 2026-09-28: `typecomplete` is a package-settable option on the python
+   layer's basedpyright check family, on by default; the wave
+   follows the gate. Decision record.
 3. The Windows MSVC coverage answer (phase 5 deferral): llvm-cov
    via clang-cl, or documented absence? Owner: Willem, when a
    consumer exists.
@@ -1612,257 +2068,57 @@ project.
 5. Resolved 2026-09-05: `setup.sh` at the root, sourcing optional
    (see the decision record). What stays open is the pwsh spelling,
    deferred to the tool-store port. Owner: Willem.
-6. The venv-side remainder, now that toolroom's store exists:
-   which tools must stay in the lock because they import the
-   project's environment (pytest and its plugins, coverage
-   certainly), and whether mypy and basedpyright run from the
-   store pointed at the venv's interpreter or stay locked beside
-   it. The fact today: mypy, pytest and coverage are declared in
-   both places, the rendered dev group and the store (a receipt in
-   `.workshop/receipts/` for each, beside the venv's copy), so which
-   one answers is PATH order after entry. Phase 4's tool-profile
-   contribution makes the check record the one declaration, and the
-   phase settles this with it. Owner: Willem, with phase 4.
-7. A fragment can only add. Two of the three cases are answered
-   since 2026-09-28: a kind that wants a different value than its
-   parent's replaces the parent's fragment for that check down the
-   chain, and a package that wants more than its kind's file rides
-   the tool's own inheritance. What remains is a check whose
-   fragment must contradict a line the base template itself wrote.
-   The lean is splitting the base template until the line is a
-   slot nobody else owns, because the whole-file override forfeits
-   every later base improvement for that file (0903 plan, contract
-   20). Owner: Willem, with phase 4.
-8. Which extensions a registered check names, and what the render
-   does with a check whose tool has none. Every id shipped is a
-   claim about a marketplace entry that this repository cannot
-   verify offline, so the check record either carries a verified
-   id or carries nothing and the editor keeps quiet about that
-   tool. Owner: Willem, with phase 4.
-9. The part and channel registries' remaining shape. The decision
-   record settles two registries, their names, their types and the
-   shared walk; these are what is left:
-   - **Whether a part rule may be data rather than a callable.**
-     Nothing about a part reads state, so that axis could take a
-     pattern table, which is easier to read and to render into
-     documentation. A callable on both keeps promotion to a single
-     registry mechanical. Symmetry against legibility, and only
-     this axis has the choice.
-   - **How rules from two layers order.** Most specific wins is
-     easy to say and needs defining over callables. Whatever it
-     is, two checkouts of one commit must order alike.
-   - **How far the per-package exception reaches**, in the shape a
-     coverage floor already has. A vendored tree that is not
-     source is the motivating case; "these paths are not what the
-     kind would assume" is the bound to hold it to. It applies to
-     the part axis; whether a package may say anything about its
-     own channel is a separate question, and the lean is no.
-   - **Whether both existing ladders migrate at once.** Each
-     becomes the builtin rules of its own registry, which is the
-     natural shape; doing one first leaves two mechanisms for a
-     while and proves less.
-   - **What `fm explain` prints** now a path has a part and a
-     channel, and whether it names the layer that supplied each.
-   - **When the single registry earns its keep.** A third axis is
-     the trigger; "is this a documented surface" from the docs
-     phase is the nearest candidate, and "does the site read it",
-     below, is a second. Naming the trigger now keeps the promotion
-     a decision rather than a drift.
-   - **Which axis answers "does the site read it"**, which the
-     docs job's condition needs (livery#839). Four things constrain
-     it. The predicate is paths under `notes/` alone, strictly
-     narrower than `is_prose`, which is "under `notes/`, or a
-     markdown file anywhere" and so also covers `README.md` and
-     every package's `docs/` markdown: those are published and the
-     site build is their only gate, so skipping on `is_prose` would
-     delete it. The paths it must answer for include workspace-root
-     ones (`notes/`, `zensical.toml`, the root `docs/`) as well as
-     package ones (`packages/*/docs/*.md`), while a part is defined
-     as a pure function of a path inside a package, so this case
-     tests that boundary rather than fitting inside it. `gate` is
-     the one required context and depends on `docs`, so a skipped
-     docs job must leave the context reportable. And the answer is
-     not an opinion, so it is not layer code by default: whether
-     the site reads a path is a fact about the render.
-   Owner: Willem. Blocks phase 4b; phase 3b states a lean on each
-   question and starts on the rulings.
-10. Fragments in a shared rendered file, or a file per check. The
-    proposal (design section, contract 12): neither by rule; the
-    check record names its tool's discovery shape and the render
-    follows it, a section for a tool that reads one file per
-    project, a file where the tool looks for one that searches
-    upward. The per-tool assignment: basedpyright, mypy, ty,
-    pyrefly, pytest and coverage are sections; ruff, clang-format,
-    clang-tidy and the ignore rules are files. ty reads `ty.toml`
-    or `[tool.ty]` and pyrefly reads `pyrefly.toml` or
-    `[tool.pyrefly]`, both checked against the locked versions'
-    `--help`, so either shape is available and the section is chosen
-    because their per-path variation is a table inside the one file.
-    Owner: Willem, before phase 4.
-11. Resolved 2026-09-28: the region a repository owns is a feature
-    of every managed file, read from the committed file as an input
-    to the render and written back in place (contract 13, phase
-    3c); a format without comments takes an unmarked tail. What
-    stays open inside it: the marker shape, one per comment style or
-    one text in every style; whether the root
-    `pyproject.toml` carries regions beyond the two named (the dev
-    group's list and the tail); and whether a region inside a list
-    is allowed in every format that has lists, or only where the
-    format tolerates an empty one. A layer's section is the fragment
-    mechanism of phase 4 and needs nothing new. Owner: Willem, with
-    phase 3c.
-12. The sets, member by member, since the 2026-09-28 ruling that
-    the base operates and languages are layers. The base: the
-    workspace checks (render drift, provenance, layering) and
-    nothing that reads a language. The python layer: ruff format
-    and ruff lint, basedpyright as the one type checker (the editor
-    answer and `typecomplete` ride it), pytest with the coverage
-    floors. The house: mypy on three platforms, ty, pyrefly, the
-    docstring convention, the voice. Two questions inside it: which
-    ruff rule set the python layer selects (the lean: today's
-    selection minus `D`, with the google docstring convention the
-    house's), and whether the docstring convention's sentence in
-    `CLAUDE.workshop.md` moves with it. Owner: Willem, before
-    phase 8.
-13. The house layer's name and home. Not settled (Willem,
-    2026-09-28: not sure about the name). The constraints: the layer
-    is livery's, so its import and distribution names carry livery,
-    and the instance-visible words speak workshop; the family's rule
-    holds, that a name is an identifier and no sentence depends on
-    the metaphor. Candidates, each with what it collides with:
-    `livery.house` (house style; vague alone); `livery.brand` (the
-    word the plans and code already use for what sits above the
-    base, and a born project's "brand's name"; near-redundant, since
-    a livery is a brand's paint); `livery.standards` (what the layer
-    holds, the documentation standards and the checkers; corporate);
-    `livery.household` (the family's register, the house's people
-    and their order, what a footman serves; long);
-    `livery.customs` (a company's established practices; collides
-    with customisation in a sentence); `livery.canon` (the accepted
-    body of rules; collides with "canonical" in code prose);
-    `livery.opinions` (the plan's own word, facts in the contract
-    and opinions in layers; unusual as a package name);
-    `livery.warden` (the wardens enforce a livery company's
-    ordinances, which fits the checks; reads as an agent). Its home
-    is this workspace
-    (0903 plan, contract 19), listed second in `[workspace] layers`.
-    The publishing opt-out lets the birth precede the name: the
-    member is born with `publish = false`, and the name is ruled
-    before the first release lifts it, so no index name is claimed
-    early. Owner: Willem, before the first release of the house.
-14. How a layer declares a tool: a registration at mount beside
-    `register_kind` and `register_check` (the lean, since the
-    profile then derives from the registry and two checkouts agree
-    by construction), or a `[tools] requires` table in the layer's
-    own contract. Owner: Willem, before phase 3.
+6. Resolved 2026-09-28: pytest, coverage and their plugins stay in the lock; the
+   check record is the one declaration of a tool. Decision record.
+7. Resolved 2026-09-28: a contested base line becomes a slot the records fill;
+   composition rules in the design section. Decision record.
+8. Resolved 2026-09-28: a check record carries a verified extension id or none.
+   Decision record.
+9. Resolved 2026-09-28: all seven questions, in the decision record; the axis is
+   `category`, one store with typed per-axis functions, the root a
+   unit, the docs check's claim answers the site build's condition.
+10. Resolved 2026-09-28: the record names its tool's discovery shape and the
+    render follows it. Decision record.
+11. Resolved 2026-09-28: the marker text stands; `types-pyyaml` becomes the
+    workshop member's `dev` extra; a region inside a list is allowed
+    wherever a comment is and built when a carrier appears; the
+    owning template names a region. Decision record.
+12. Resolved 2026-09-28: the sets as tabled in the design section; the python
+    layer's ruff set is today's minus `D`; the docstring sentence
+    moves with the rule. Decision record.
+13. Resolved 2026-09-28: `livery.housekeeping`. Decision record.
+14. Resolved 2026-09-28: `WORKSHOP_TOOLS` on the plugin module. Decision record.
 15. Resolved 2026-09-28: the repository's own override of a
     check's configuration lives in the managed file's region (phase
     3c), so the three basedpyright execution environments move there
     and no instance rung is built. The package rung of the
     2026-09-09 record, a package contributing to another file than
     its own, is designed when such a case exists.
-16. Whether the house can do without an overlay (Willem,
-    2026-09-28: not sure that will work for everything we need).
-    What a fragment, a region, or content cannot do today: add a
-    file the base template does not render (a house's own seed, a
-    brand's `og-card.png` and palette, a second workflow); replace a
-    seed wholesale (a brand's README or LICENSE seed, which the 0903
-    plan calls the cheap, ordinary customisation); contribute a
-    copier question. Each of those is an overlay, and an overlay
-    makes its home the template publisher. Two ways out, for
-    ruling. First, the designed one: the house's home is a child
-    workspace of its own (0903 plan, contract 19: a child created
-    with one added layer becomes that layer's home), which
-    publishes its own composed artifact, so the base's at
-    `workshop-templates` stays pure; the cost is a repository and a
-    gate of its own, and the house leaves this workspace. Second,
-    a layer contributes files and seeds through the registry at
-    mount, the unioned-registries rung of the 0903 plan's contract
-    20, which inherits fully and needs no template repository, and
-    the overlay keeps only the wholesale replace and the questions.
-    The lean is the second, designed when the first such file is
-    real, with the house born here without an overlay until then;
-    a wholesale seed replace the house turns out to need is what
-    decides for the first. Since the language layers live in the
-    workshop's one wheel and one template tree (open item 17), the
-    question is the house's alone: its seeds carry livery's
-    identity, which contract 18 of the 0903 plan keeps out of the
-    workshop's artifact, so a house seed means the house's own
-    home and artifact, and everything short of a seed means none.
-    Owner: Willem.
-17. The language layers, `livery.workshop.python`,
-    `livery.workshop.cpp` and `livery.workshop.nanobind`, each
-    derived from the base (ruled 2026-09-28: the base contains
-    enough to run the python that operates the workshop; the python
-    package kind and its tooling are separate; nanobind adds its
-    kind on top of both). Ruled the same day: they are layers, not
-    distributions. Each is a module inside the one workshop wheel,
-    listed in `[workspace] layers` by its import path and activated
-    only by that listing, and decoupled enough to become a
-    distribution of its own the day a cadence or an owner differs:
-    a layer module imports the core and never the reverse, imports
-    a sibling layer only through a declared dependency, and carries
-    its own `templates/`, `content/` and registrations, so a later
-    split is a move and a distribution name. `layer_entries` today
-    derives a distribution from the import path by dots to dashes,
-    which names nothing for a submodule; the lean is to resolve the
-    distribution from the installed metadata of the import path's
-    top-level package, the table form staying for the odd case.
-    Because the layers share the workshop's one wheel, their
-    templates stay in the one template tree and the one artifact,
-    organised by layer, so no layer needs an overlay and open item
-    16 narrows to the house's seeds. The python layer takes the
-    `python` kind record and backend, the `package-python` template
-    and its layer variant, the python checks and their tools (ruff,
-    basedpyright, pytest, coverage; uv stays in the base, since it
-    operates the workshop), the coverage measurement and the test
-    runner's python half, and the claim over the root's own
-    `tests/`. The C++ layer takes the cpp-conan kind, its tools and
-    host tools, the conan registry kind and the releases route; the
-    nanobind layer takes the python-nanobind kind and the wheels
-    matrix, depending on both. What the extraction faces today: the
-    python backend is imported directly by six modules,
-    `_quality.py` alone reaching into it fourteen times, and conan
-    is named outside the backends in six modules, about sixty
-    references, each a call site to route through a registry, most
-    of them phase 2's; the engine tests for the python kind by name
-    in five modules beyond the registry (`_docs.py`,
-    `_packages.py`, `_registries.py`, `_release.py`,
-    `_templates.py`, eleven sites), so "joins the uv workspace" and
-    "is a python distribution" must become facts of the kind record
-    before the name leaves the base; and the coverage store, the
-    leg and union verbs and the floors are written against
-    coverage.py's data files, which phase 5 turns into the kind's
-    answer, so the python extraction follows phase 5 as well as
-    phases 2 to 4. Each lands as its own plan after those phases,
-    python first, since the house depends on it. Each extraction's
-    acceptance is the static proof of contract 10: the layering
-    lint's rule that the core imports no language layer, and the
-    vocabulary test, both green after the cut. Owner: Willem, for
-    the sequencing.
-18. Layer dependencies. A layer declares, in its plugin at mount,
-    the layers it depends on, and the contract's list is kept
-    closed under those declarations (ruled 2026-09-28: automated,
-    it removes the objection and is more explicit). The list stays
-    the whole truth a reader and a reviewer see: `fm sync` and
-    `fm check --fix` append a missing dependency before its
-    dependent, with a comment naming who requires it, the same
-    shape as the layering lint's fix that writes a `[[depends]]`
-    edge (livery#829); the layering lint, a workspace check of the
-    base, refuses a list that lacks a dependency or orders one
-    after its dependent, naming the fix; and mount mounts in list
-    order, refusing at a dependency listed after its dependent so a
-    hand-edited list never runs half-wired. Contract 3 keeps its
-    wording: the list is the only activation channel, and the lint
-    is what keeps it complete. `fm layers` names who requires each
-    layer; a cycle refuses naming the ring; a declared dependency
-    that is not also a dependency of the layer's wheel refuses at
-    the lint, since the import would fail anyway. One form the
-    design still needs: a soft dependency beside the hard one. A
-    house with opinions on two languages must not drag both
-    languages into every project that lists it, so a layer also
-    names layers it mounts after when they are listed, contributing
-    its registrations for that language only then; the hard form
-    is for a layer that cannot mount without the other. Without the
-    soft form the alternative is one house per language. Owner:
-    Willem, for the soft form.
+16. Resolved 2026-09-28: an overlay in the house's own series for its seeds; no
+    registry-contributed files. Decision record.
+17. Resolved 2026-09-28: the sequencing stands; the docs, playground and claude
+    layers join the list; each extraction is its own plan after
+    phases 2 to 5, python and docs first. Decision record.
+18. Resolved 2026-09-28: contributions by data through `WORKSHOP_FOR`, no soft
+    dependency; the fix writes `for` once and it is then the truth.
+    Decision record, 2026-09-29.
+19. A check's inputs, its claimed categories plus the facts it
+    declares (a released version the browser installs, a lock
+    entry), digested per check in the gate record so a check runs
+    only when an input moved. The direction is ruled; the phase is
+    not written. Cost named: a row per check keyed by its input
+    digest, and the affected walk asking each check instead of
+    classifying paths itself. Owner: Willem, after 4b.
+20. A per-project opt-out of one target's opinions beyond deleting
+    a name from `for`, a negative spelling say. Not built until
+    wanted. Owner: Willem.
+21. The tool records' home and a repository's own records:
+    livery#882 carries the decision and its two design points; no
+    work is scheduled. Owner: Willem.
+22. Whether footman's docs examples work outside the playground's
+    environment shims. The docs layer's examples check is what
+    finds out (phase 6); what it finds is fixed in the examples or
+    ruled as browser-only. Owner: the phase.
+23. The browser runtime the playground layer declares as its tool:
+    a tool record for pyodide under node, or the CPython sim alone.
+    Owner: Willem, with the playground layer's plan.
