@@ -1102,9 +1102,10 @@ def _measure_msvc(
 
     Each executable ctest names, and every shared library the build
     made, is instrumented statically into a copy that takes the
-    original's place for the run and gives it back after, its symbols
-    removed with it, so the build's own output is never instrumented
-    twice. ctest runs under
+    original's place for the run and gives it back after; what the
+    engine wrote beside them, the copy's symbols and the engine's own
+    runtime, goes with it, so the build's own output is never
+    instrumented twice. ctest runs under
     ``dotnet-coverage collect`` with child processes included, and
     its verdict is read from the JUnit report it writes, never from
     the collector's exit code, which is the collector's own.
@@ -1127,6 +1128,8 @@ def _measure_msvc(
     verdict = profiles / "ctest.xml"
     for stale in (report, verdict):
         stale.unlink(missing_ok=True)
+    homes = {Path(name).parent for name in objects}
+    before = {path for home in homes for path in home.iterdir()}
     run_env = {
         **env,
         "DOTNET_COVERAGE_TELEMETRY_OPTOUT": "1",
@@ -1180,11 +1183,14 @@ def _measure_msvc(
     finally:
         for original, kept in swapped:
             os.replace(kept, original)
-            # The engine writes the instrumented binary's own symbols
-            # beside it (`<stem>.instrumented.pdb`), read during the
-            # run; nothing of the instrumented copy outlives it.
-            for extra in original.parent.glob(f"{original.stem}.instrumented.*"):
-                extra.unlink()
+        # The engine writes the instrumented copy's symbols and its own
+        # runtime beside the binaries, read during the run; nothing it
+        # wrote outlives the run, so the build's output stays its own
+        # and the next run instruments a build, never an engine file.
+        for home in homes:
+            for path in home.iterdir():
+                if path not in before and path.is_file():
+                    path.unlink()
     output = result.stdout + result.stderr
     _ctest_verdict(package, names, verdict, output)
     if result.code != 0:
@@ -1307,8 +1313,18 @@ def _ctest_verdict(
         )
 
 
+#: The file name of the runtime Microsoft's engine writes beside a
+#: binary it instrumented, loaded by the instrumented code: never a
+#: library the build made, so never an object to instrument.
+ENGINE_RUNTIME = re.compile(r"(static_)?covrun\d*\.dll", re.IGNORECASE)
+
+
 def _test_objects(package: Package) -> list[str]:
-    """The executables ctest runs, then every shared library the build made."""
+    """The executables ctest runs, then every shared library the build made.
+
+    A library left by a coverage engine's earlier run is not the
+    build's and is skipped by name.
+    """
     import json
 
     build_dir = package.directory / GATE_BUILD_DIR
@@ -1334,7 +1350,7 @@ def _test_objects(package: Package) -> list[str]:
         objects += [
             str(path)
             for path in sorted(build_dir.rglob(f"*{suffix}"))
-            if str(path) not in objects
+            if str(path) not in objects and not ENGINE_RUNTIME.fullmatch(path.name)
         ]
     return objects
 

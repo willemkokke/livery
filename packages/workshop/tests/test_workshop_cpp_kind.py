@@ -857,8 +857,10 @@ class _FakeEngine:
                     )
                 out = Path(args[args.index("-o") + 1])
                 out.write_bytes(b"MZ instrumented")
-                # The engine writes the copy's own symbols beside it.
+                # The engine writes the copy's own symbols and its
+                # runtime beside it.
                 out.with_suffix(".pdb").write_bytes(b"pdb")
+                (out.parent / "static_covrun64.dll").write_bytes(b"MZ runtime")
                 return SimpleNamespace(
                     code=0, stdout="Input file successfully instrumented.", stderr=""
                 )
@@ -1052,6 +1054,7 @@ def test_a_green_ctest_run_under_the_engine_is_measured_from_its_report(
     assert engine.ran == b"MZ instrumented"
     assert exe.read_bytes() == b"MZ original"
     assert _leftovers(exe) == []
+    assert not (exe.parent / "static_covrun64.dll").exists()
     settings = (exe.parent / "coverage" / "coverage.config").read_text()
     assert "<EnableStaticNativeInstrumentation>True" in settings
     assert "<CollectFromChildProcesses>True" in settings
@@ -1059,6 +1062,24 @@ def test_a_green_ctest_run_under_the_engine_is_measured_from_its_report(
     assert engine.envs[-1]["DOTNET_COVERAGE_TELEMETRY_OPTOUT"] == "1"
     assert engine.envs[-1]["DOTNET_COVERAGE_NOLOGO"] == "1"
     assert "coverage: 1 file(s) measured by msvc" in capsys.readouterr().out
+
+
+def test_the_engine_s_own_runtime_is_never_an_object_to_instrument(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A runtime an earlier run left is the engine's, never an object."""
+    engine = _FakeEngine(junit=_GREEN)
+    package, exe = _msvc_gate(tmp_path, monkeypatch, engine)
+    engine.report = _cobertura(package)
+    lingering = exe.parent / "static_covrun32.dll"
+    lingering.write_bytes(b"MZ runtime")
+    (exe.parent / "acme.dll").write_bytes(b"MZ library")
+    _cpp_conan.test(package, tmp_path)
+    instrumented = [call[-1] for call in engine.calls if call[0] == "instrument"]
+    assert instrumented == [str(exe), str(exe.parent / "acme.dll")]
+    # A file that was there before the run stays: the sweep takes
+    # only what this run's engine wrote.
+    assert lingering.is_file()
 
 
 @needs_msvc
