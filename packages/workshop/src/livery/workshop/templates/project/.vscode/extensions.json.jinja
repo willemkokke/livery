@@ -1,0 +1,14 @@
+{
+  // Rendered by the template channel ({{ template_source_label }}, project kind);
+  // the gate keeps it matching its render. Edit the source and
+  // run `{{ runner_prog }} template.apply`; an edit here is drift.
+  //
+  // The extensions the registered checks carry a marketplace id for,
+  // and nothing else: a check without a verified id recommends none.
+  "recommendations": [
+{% for extension in extensions %}    "{{ extension }}",
+{% endfor %}    // The repository's own recommendations, each line ending with a comma.
+    // -- workshop: region recommendations, yours to edit; the render keeps it --
+{{ (regions.get('.vscode/extensions.json') or {}).get('recommendations', '') }}    // -- workshop: end recommendations --
+  ]
+}

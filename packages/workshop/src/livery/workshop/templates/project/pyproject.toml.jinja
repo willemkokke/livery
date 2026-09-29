@@ -72,193 +72,21 @@ dev = [
     "types-pyyaml",
 ]
 
-# Ruff and basedpyright configuration cribbed from footman's pyproject:
-# footman's rules, global. The workshop adds pydocstyle in the google
-# convention: Google docstrings only, everywhere.
 {% if docs_site_url %}[tool.footman]
 # Task names in --list/--tree/--help (and --json rows) link into the
 # published task reference; the alias tree there redirects each task
 # to its page in the owning package's section.
 docs-url = "{{ docs_site_url }}tasks/{slug}/"
 
-{% endif %}[tool.ruff]
-line-length = 88
-target-version = "py{{ python_floor | replace('.', '') }}"
-src = [{% for package in py %}"packages/{{ package.dir }}/src", "packages/{{ package.dir }}/tests", {% endfor %}"tests"]
-
-[tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF", "D"]
-
-[tool.ruff.lint.pydocstyle]
-convention = "google"
-
-[tool.ruff.lint.per-file-ignores]
-# Test bodies explain themselves by name and assertion.
-"tests/**" = ["D1"]
-"**/tests/**" = ["D1"]
-# The provenance headers name the template source verbatim, and a
-# source URL or path may be long.
-"tasks.py" = ["E501"]
-"tests/test_workspace_contracts.py" = ["E501"]
-"tests/test_docs_drift.py" = ["E501"]
-# The CI emitters carry workflow YAML as string content; its lines
-# are the generated files' lines, not prose to wrap.
-"**/_ci_generate.py" = ["E501"]
-
-[tool.basedpyright]
-include = [{% if packages %}"packages", {% endif %}"tests", "tasks.py"]
-# A conan recipe is conan's input, read by conan's own interpreter
-# where the conan package lives; the workspace venv never has it, so
-# the checker that reads the whole tree skips the recipes. The cpp
-# members are skipped whole: their kind type-checks nothing.
-exclude = [{% if native %}{% for package in native %}"packages/{{ package.dir }}", {% endfor %}{% endif %}"packages/*/conanfile.py"]
-# The IDE and the CLI resolve the same environment: the workspace
-# members are editable installs in .venv, so basedpyright must look
-# there whatever interpreter the editor has selected.
-venvPath = "."
-venv = ".venv"
-# The tool stubs `fm tools.restub` writes; the default stub path,
-# named so the four checkers visibly read one directory.
-stubPath = "typings"
-pythonVersion = "{{ python_floor }}"
-typeCheckingMode = "standard"
-reportMissingModuleSource = false
-
-[tool.mypy]
-# Second gate of the four. {{ namespace_package }}.* is fully strict; tests and tasks.py
-# run the usage-checking half (check_untyped_defs, on via strict), so
-# every test body type-checks as consumer code without demanding
-# `-> None` on every def. Narrow suppressions live inline as
-# `# type: ignore[code]` with a reason; pyright-only suppressions use
-# `# pyright: ignore` so warn_unused_ignores keeps this checker's set
-# honest.
-files = [
-{% for package in py %}    "packages/{{ package.dir }}/src",
-    "packages/{{ package.dir }}/tests",
-{% endfor %}    "tests",
-    "tasks.py",
-]
-mypy_path = [
-    "typings",
-{% for package in py %}    "packages/{{ package.dir }}/src",
-    "packages/{{ package.dir }}/tests",
-{% endfor %}]
-# PEP 420 namespace in a src layout: mypy needs both to derive module
-# names without an __init__.py trail.
-namespace_packages = true
-explicit_package_bases = true
-# Deterministic world, whatever host runs the check. linux is the
-# bare-run default; the typecheck task adds darwin and win32 runs,
-# since mypy has no all-platforms mode.
-platform = "linux"
-python_version = "{{ python_floor }}"
-strict = true
-disallow_untyped_defs = false
-disallow_incomplete_defs = false
-disallow_untyped_calls = false
-disallow_untyped_decorators = false
-# The public surface's re-export discipline is policed by verifytypes
-# and the public-surface test instead.
-implicit_reexport = true
-
-[[tool.mypy.overrides]]
-module = "{{ namespace_package }}.*"
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-disallow_untyped_calls = true
-disallow_untyped_decorators = true
-
-[[tool.mypy.overrides]]
-# The generated tool stubs carry the suppressions their generator
-# placed for its own reading of each tool; which of them fire varies
-# with flags this config does not share, and an unused one there is
-# the generator's business, not drift.
-module = "*.toolroom.stubs.*"
-warn_unused_ignores = false
-
-[tool.ty]
-# Third gate. Scope: the packages themselves; the consumer seam in
-# tests is already double-checked by basedpyright and mypy.
-[tool.ty.src]
-include = [{% if py %}{% for package in py %}"packages/{{ package.dir }}/src"{% if not loop.last %}, {% endif %}{% endfor %}{% else %}"tasks.py"{% endif %}]
-
-[tool.ty.environment]
-# Every platform at once (ty checks the union), {{ python_floor }} floor.
-python-platform = "all"
-python-version = "{{ python_floor }}"
-# The tool stubs `fm tools.restub` writes.
-extra-paths = ["typings"]
-
-[tool.pyrefly]
-# Fourth gate, same scope as ty. Preset `default`, not `strict`:
-# strict demands @override, and `typing.override` is Python 3.12+; a
-# zero-dependency 3.11 library cannot spell it without a
-# typing_extensions runtime dep. Revisit when 3.11 support ends.
-preset = "default"
-project-includes = [{% if py %}{% for package in py %}"packages/{{ package.dir }}/src"{% if not loop.last %}, {% endif %}{% endfor %}{% else %}"tasks.py"{% endif %}]
-# Both path heuristics off: a checkout under a dot-directory (a
-# `.claude/worktrees/` worktree) silently skips every include and the
-# gate fails on "no files matched". At the repo root neither setting
-# changes anything.
-use-ignore-files = false
-disable-project-excludes-heuristics = true
-# The tool stubs `fm tools.restub` writes.
-search-path = ["typings"]
-# Every platform at once, {{ python_floor }} floor.
-python-platform = "all"
-python-version = "{{ python_floor }}"
-
-[tool.pyrefly.errors]
-# Held at error so they cannot silently accumulate; both classes are
-# zero today.
-deprecated = "error"
-unnecessary-type-conversion = "error"
-
+{% endif %}# The tables the registered checks own, each a check record's
+# fragment for this file, composed in check-name order; a check a
+# layer withdraws takes its tables with it.
+{{ fragments['pyproject.toml'] }}
 [tool.footman.notes]
 # Every misuse note fails the task at its boundary: a raw spawn or
 # an ambient write is fixed or deliberately classified, never
 # ambient. Loosen a single kind here with a reason, never the star.
 "*" = "error"
-
-[tool.coverage.run]
-# The tests measure, and every process they start, every
-# {{ runner_prog }} child a test spawns included: inside CI the test
-# runner arms COVERAGE_PROCESS_START in pytest's environment, the
-# installed .pth starts the meter in every python under it, and the
-# patch cascades through the workers. The gate's own driver is never
-# metered, so a line counts only when a test reached it. Parallel
-# data files merge per leg, then across legs in the aggregating
-# gate job.
-patch = ["subprocess"]
-parallel = true
-relative_files = true
-# Branches as well as statements: a conditional's untaken arm is
-# uncovered, where line coverage shows the conditional as covered
-# once its line ran. The floors judge the combined figure.
-branch = true
-source = ["{{ namespace_package }}"]
-# The C tracer, not sys.monitoring: the sysmon core records a line
-# under the first context that reaches it and never again, and the
-# check legs split one run's data per suite by context, which needs
-# every context complete.
-core = "ctrace"
-
-[tool.coverage.paths]
-# One identity for a file whichever separator wrote it, so Windows
-# and POSIX legs combine as one file set.
-packages = ["packages/", "packages\\"]
-
-[tool.pytest.ini_options]
-testpaths = [{% if packages %}"packages", {% endif %}"tests"]
-# Test modules are named by their path (`--import-mode=importlib`), so
-# two packages may both have a tests/test_lifecycle.py. That leaves the
-# tests directories off sys.path, so they go on pythonpath for the
-# helper modules, which carry their package's name and so never clash.
-pythonpath = [{% for package in py %}"packages/{{ package.dir }}/tests", {% endfor %}"tests"]
-# `-n auto` fans the suite across cores; `worksteal` because durations
-# are uneven (footman measured it; the choice carries until we measure
-# here).
-addopts = "{{ slots['python.test.addopts'] | join(' ') }}"
 
 # The repository's own tables: whole tables and array-of-table entries
 # (a `[[tool.basedpyright.executionEnvironments]]` for an imported

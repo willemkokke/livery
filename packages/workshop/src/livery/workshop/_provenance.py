@@ -39,6 +39,7 @@ PROJECT_RENDERED = (
     ".gitignore",
     ".gitattributes",
     ".vscode/settings.json",
+    ".vscode/extensions.json",
 )
 
 #: Comment leaders by suffix, and by exact name for suffixless files.
@@ -402,6 +403,19 @@ def _rule_member(
             "receipts",
             "machine-managed package identity",
             "never by hand; the render wrote it",
+        )
+    if rest == ".workshop-rendered":
+        return Provenance(
+            "receipts",
+            "what the render wrote into this package for the checks' files",
+            f"never by hand; `{prog} template.apply` keeps it",
+        )
+    if rest in (".clang-format", ".clang-tidy"):
+        return Provenance(
+            "rendered",
+            "a check record's fragment for this package's kind",
+            f"edit the record's fragment and run `{prog} template.apply`; a"
+            " deeper file with InheritParentConfig carries this package's own lines",
         )
     if "/content/" in rest:
         return Provenance(

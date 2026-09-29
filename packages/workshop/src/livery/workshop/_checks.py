@@ -35,7 +35,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
 from livery.footman import context, doc, fail, group, prog
-from livery.workshop import _slots
+from livery.workshop import _fragments, _slots
+from livery.workshop._fragments import Fragment
 
 if TYPE_CHECKING:
     from livery.workshop._packages import Package
@@ -171,6 +172,13 @@ class CheckRecord:
         contributions: ``(slot, value)`` pairs the record puts into
             slots at registration, the dev group's lines say; withdrawn
             with the record.
+        fragments: The configuration the render manages for the
+            check, one per rendered file it has something to say in;
+            composed in check-name order, judged by the drift gate,
+            gone from the next render with the record.
+        extension: The editor extension's marketplace id, when the
+            record carries a verified one; the rendered
+            recommendations list names these and nothing else.
     """
 
     name: str
@@ -187,6 +195,8 @@ class CheckRecord:
     tools: tuple[str, ...] = ()
     options: tuple[Option, ...] = ()
     contributions: tuple[tuple[str, object], ...] = ()
+    fragments: tuple[Fragment, ...] = ()
+    extension: str = ""
 
 
 _CHECKS: dict[str, CheckRecord] = {}
@@ -219,6 +229,10 @@ def register_check(record: CheckRecord) -> None:
             f"check {record.name!r} judges packages and names no kind: a"
             " package check applies to the kinds it lists"
         )
+    try:
+        _fragments.verify(record.fragments, record.name)
+    except ValueError as error:
+        fail(str(error))
     _CHECKS[record.name] = record
     _WITHDRAWN.pop(record.name, None)
     _contribute(record)
@@ -393,6 +407,16 @@ def restore(state: tuple[dict[str, CheckRecord], dict[str, str]]) -> None:
     _WITHDRAWN.update(withdrawn)
     for record in records.values():
         _contribute(record)
+
+
+def checks_by_name() -> dict[str, CheckRecord]:
+    """Every registered record by name, in registration order."""
+    return dict(_CHECKS)
+
+
+def extensions() -> tuple[str, ...]:
+    """The editor extension ids the registered checks carry, sorted, each once."""
+    return tuple(sorted({r.extension for r in _CHECKS.values() if r.extension}))
 
 
 def check_for(name: str) -> CheckRecord:
@@ -761,6 +785,11 @@ def _register_builtin() -> None:
             fix=format_fix,
             kinds=python,
             tools=("ruff",),
+            fragments=(
+                Fragment("pyproject.toml", _fragments.RUFF_BASE),
+                Fragment(".vscode/settings.json", _fragments.RUFF_SETTINGS),
+            ),
+            extension="charliermarsh.ruff",
         ),
         CheckRecord(
             "clang-format",
@@ -770,6 +799,10 @@ def _register_builtin() -> None:
             fix=clang_format_fix,
             kinds=native,
             tools=("clang_format",),
+            fragments=tuple(
+                Fragment(".clang-format", _fragments.CLANG_FORMAT, kind=kind)
+                for kind in native
+            ),
         ),
         CheckRecord(
             "lint",
@@ -779,6 +812,8 @@ def _register_builtin() -> None:
             fix=lint_fix,
             kinds=python,
             tools=("ruff",),
+            fragments=(Fragment("pyproject.toml", _fragments.RUFF_LINT),),
+            extension="charliermarsh.ruff",
         ),
         CheckRecord(
             "typecheck",
@@ -787,6 +822,8 @@ def _register_builtin() -> None:
             narrowing=PATHS,
             kinds=python,
             tools=("basedpyright", "mypy", "ty", "pyrefly"),
+            fragments=(Fragment("pyproject.toml", _fragments.TYPECHECKERS),),
+            extension="detachedfork.basedpyright",
             # mypy reads the members' own stubs from the venv, so it
             # rides the dev group beside the store's copy.
             contributions=(("python.dev-group", "mypy>=1.14"),),
@@ -809,6 +846,7 @@ def _register_builtin() -> None:
             # handle the runner calls, and its venv copy below is the
             # one that imports the project's environment.
             tools=("pytest",),
+            fragments=(Fragment("pyproject.toml", _fragments.TESTS),),
             options=(
                 Option(
                     "parallel",
@@ -876,6 +914,10 @@ def _register_builtin() -> None:
             kinds=("cpp-conan",),
             after=("configure",),
             tools=("clang_tidy",),
+            fragments=tuple(
+                Fragment(".clang-tidy", _fragments.CLANG_TIDY, kind=kind)
+                for kind in native
+            ),
         ),
     ):
         register_check(record)

@@ -120,23 +120,30 @@ def refresh_rendered(root: Path) -> list[str]:
     # to the contract, so rebranding or re-layering an instance is
     # exactly this run under the new contract.
     answers = read_answers(root / ".copier-answers.yml")
-    data = []
-    for key, value in render_injections(root, answers).items():
-        if isinstance(value, list):
-            spelled = "[" + ", ".join(str(item) for item in value) + "]"
-        else:
-            spelled = str(value)
-        data += ["--data", f"{key}={spelled}"]
-    result = tools.copier.opts(cwd=root)(
-        "update",
-        "--defaults",
-        "--trust",
-        "--skip-answered",
-        *data,
-        "--vcs-ref",
-        template_ref(root),
-        str(root),
-    )
+    # A data file rather than --data pairs: the regions, the slots and
+    # the fragments are tables of multi-line text, which no command
+    # line spells safely.
+    import tempfile
+
+    import yaml
+
+    with tempfile.NamedTemporaryFile("w", suffix=".yml", delete=False) as handle:
+        yaml.safe_dump(render_injections(root, answers), handle)
+        data_file = handle.name
+    try:
+        result = tools.copier.opts(cwd=root)(
+            "update",
+            "--defaults",
+            "--trust",
+            "--skip-answered",
+            "--data-file",
+            data_file,
+            "--vcs-ref",
+            template_ref(root),
+            str(root),
+        )
+    finally:
+        Path(data_file).unlink(missing_ok=True)
     if result.code != 0:
         fail(f"copier update exited {result.code}:\n{result.stdout}{result.stderr}")
     from livery.workshop._templates import apply_generated

@@ -488,6 +488,7 @@ def _register_builtin() -> None:
             # The build tools; the native format and lint tools ride
             # their check records.
             tools=("cmake", "ninja", "conan", "cmake_conan"),
+            managed=(".clang-format", ".clang-tidy"),
             native_sources=True,
             host_tools=("cc", "c++"),
             wheel_identity="platform",
@@ -506,6 +507,7 @@ def _register_builtin() -> None:
             template="package-cpp-conan",
             parent="base",
             tools=("cmake", "conan", "ninja"),
+            managed=(".clang-format", ".clang-tidy"),
             native_sources=True,
             host_tools=("cc", "c++"),
             ci=CiContract(check_verbs=("format", "lint", "build", "test")),

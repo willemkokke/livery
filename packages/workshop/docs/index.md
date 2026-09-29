@@ -95,6 +95,24 @@ An option a check does not declare, a check that does not exist, and
 a value of the wrong type each refuse in the layering check, naming
 the vocabulary.
 
+A check record also owns its configuration. Its `fragments`, one per
+rendered file, are what the render writes for it: the format, lint,
+typecheck and test records carry every `[tool.*]` table of the root
+`pyproject.toml`, composed in check-name order where the base template
+leaves the `fragments` block, and a check a layer withdraws takes its
+tables with it. A tool that reads one file per project gets its
+section there; a tool that searches upward from each file, clang-format
+and clang-tidy in a native package, gets a managed file where it looks,
+rendered from the record's fragment for the package's kind and judged
+by the drift gate, with a `.workshop-rendered` receipt beside it so a
+withdrawn check's file goes only when nobody edited it and an edited
+one is kept as a local override. A package's own lines ride the tool's
+inheritance, a deeper file with `InheritParentConfig`. The editor
+follows the same set: `.vscode/settings.json` takes each record's
+lines, and `.vscode/extensions.json` recommends the extension ids the
+records carry and nothing else, with a region for the repository's
+own.
+
 The layering check parses every python source once per gate and
 memoises the parse by the file's bytes, and a kind or a layer may
 register a rule over that parse beside the builtin three (the

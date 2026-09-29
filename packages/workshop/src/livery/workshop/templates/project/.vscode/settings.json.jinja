@@ -10,7 +10,9 @@
   // The repository's own settings, each line ending with a comma.
   // -- workshop: region settings, yours to edit; the render keeps it --
 {{ (regions.get('.vscode/settings.json') or {}).get('settings', '') }}  // -- workshop: end settings --
-  "terminal.integrated.profiles.osx": {
+  // What the registered checks say to the editor, each a check
+  // record's fragment for this file.
+{{ fragments['.vscode/settings.json'] }}  "terminal.integrated.profiles.osx": {
     "{{ project_name }}": {
       "path": "zsh",
       "args": ["-c", "eval \"$(uv run -q {{ runner_prog }} --quiet env.emit posix)\"; exec zsh -i"]

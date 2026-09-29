@@ -218,3 +218,19 @@ import_path:
     %}{{ project_slug
     }}{% endif %}
   when: false
+
+fragments:
+  type: yaml
+  default: {}
+  when: false
+  help: >-
+    the configuration fragments the registered checks own, composed
+    per rendered file; injected at render time from the check registry
+
+extensions:
+  type: yaml
+  default: []
+  when: false
+  help: >-
+    the editor extension ids the registered checks carry; injected at
+    render time from the check registry
