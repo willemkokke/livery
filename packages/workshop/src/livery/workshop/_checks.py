@@ -31,7 +31,7 @@ from __future__ import annotations
 from collections.abc import Callable, Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Annotated, Any
 
 from livery.footman import context, doc, fail, group, prog
@@ -127,6 +127,27 @@ ENABLED = Option("enabled", "bool", True, "whether the check judges this package
 
 
 @dataclass(frozen=True)
+class Claim:
+    """One category a check judges, and the rules it withholds there.
+
+    Attributes:
+        category: The category, ``source``, ``test``, ``configuration``.
+        ignore: Rule codes the check does not apply to that category;
+            a ruff-shaped tool renders them as its per-file ignores.
+        suffixes: The file suffixes the check reads in the category,
+            ``(".py", ".pyi")`` for a python tool; empty reads every
+            file. A category names a role, not a language: a native
+            package's ``source`` is C++ and its ``conanfile.py`` is
+            configuration, and the suffix keeps a python tool's claim
+            to the files it reads.
+    """
+
+    category: str
+    ignore: tuple[str, ...] = ()
+    suffixes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class CheckRecord:
     """One check, completely.
 
@@ -148,9 +169,11 @@ class CheckRecord:
         fix: The rewriting callable when the tool can rewrite, run
             serially before any judge under ``--fix``; None for a
             check that only judges.
-        kinds: The package kinds a package check judges, matched
-            against a package's kind chain, so a child kind takes its
-            parent's checks. Empty for a workspace check.
+        kinds: The package kinds the check judges, matched against a
+            package's kind chain, so a child kind takes its parent's
+            checks. A package check runs per member of these kinds; a
+            workspace check names them so its tools and claims reach
+            those kinds, or leaves them empty.
         tests_only: Whether a package check still runs when the
             package's change is confined to its tests. A build and
             the tests do; a formatter does not.
@@ -179,6 +202,11 @@ class CheckRecord:
         extension: The editor extension's marketplace id, when the
             record carries a verified one; the rendered
             recommendations list names these and nothing else.
+        claims: The categories the check judges, each with the rules
+            it withholds there and the suffixes it reads; a check
+            judges every file its claims reach and no other, and the
+            render derives a ruff-shaped tool's per-file ignores from
+            them.
     """
 
     name: str
@@ -197,6 +225,7 @@ class CheckRecord:
     contributions: tuple[tuple[str, object], ...] = ()
     fragments: tuple[Fragment, ...] = ()
     extension: str = ""
+    claims: tuple[Claim, ...] = ()
 
 
 _CHECKS: dict[str, CheckRecord] = {}
@@ -233,6 +262,15 @@ def register_check(record: CheckRecord) -> None:
         _fragments.verify(record.fragments, record.name)
     except ValueError as error:
         fail(str(error))
+    from livery.workshop._categories import known_categories
+
+    known = known_categories()
+    for claim in record.claims:
+        if claim.category not in known:
+            fail(
+                f"check {record.name!r} claims {claim.category!r}, which no category"
+                f" table knows; the categories are {', '.join(sorted(known))}"
+            )
     _CHECKS[record.name] = record
     _WITHDRAWN.pop(record.name, None)
     _contribute(record)
@@ -407,6 +445,114 @@ def restore(state: tuple[dict[str, CheckRecord], dict[str, str]]) -> None:
     _WITHDRAWN.update(withdrawn)
     for record in records.values():
         _contribute(record)
+
+
+def _reaches(claim: Claim, relative: str) -> bool:
+    """Whether the claim admits the file's suffix; no suffixes admits every file."""
+    return not claim.suffixes or PurePosixPath(relative).suffix in claim.suffixes
+
+
+def _admits(claim: Claim, pattern: str) -> bool:
+    """Whether a category pattern can name a file the claim reads.
+
+    A pattern ending in a literal suffix outside the claim's, a
+    native kind's ``tests/**/*.cpp`` against a python claim, renders
+    no ignore; a directory pattern renders as it is, since the tool
+    reads only its own files under it.
+    """
+    return not PurePosixPath(pattern).suffix or _reaches(claim, pattern)
+
+
+def _package_files(package: Package) -> tuple[str, ...]:
+    """The files git holds under the package: tracked, or untracked and not ignored.
+
+    Sorted, relative to the package. A build tree or a cache under the
+    package is ignored, so no claim reaches it; a tracked file deleted
+    from the tree is left out.
+    """
+    from livery.toolroom import tools
+
+    listing = tools.git.opts(cwd=package.directory, recorded=False)(
+        "ls-files", "--cached", "--others", "--exclude-standard", "-z"
+    )
+    names = sorted({name for name in listing.stdout.split("\0") if name})
+    return tuple(name for name in names if (package.directory / name).is_file())
+
+
+def judged_files(record: CheckRecord, package: Package) -> tuple[str, ...]:
+    """The files of *package* the check's claims reach, relative to it, sorted.
+
+    Every file git holds under the package directory is categorised
+    and kept when a claim names its category and admits its suffix; a
+    record without claims judges nothing by this measure, which is
+    what a check that runs a tool over directories looks like from
+    here.
+    """
+    from livery.workshop._categories import category_of
+
+    if not record.claims or not package.directory.is_dir():
+        return ()
+    found: list[str] = []
+    for relative in _package_files(package):
+        category = category_of(package, relative).name
+        if any(c.category == category and _reaches(c, relative) for c in record.claims):
+            found.append(relative)
+    return tuple(found)
+
+
+def claimants(package: Package, path: str) -> tuple[str, ...]:
+    """The checks whose claims reach *path* in *package*, by name, sorted."""
+    from livery.workshop._categories import category_of
+
+    category = category_of(package, path).name
+    names = []
+    for record in _CHECKS.values():
+        if not any(c.category == category and _reaches(c, path) for c in record.claims):
+            continue
+        if record.kinds and not _applies(record, package):
+            continue
+        names.append(record.name)
+    return tuple(sorted(names))
+
+
+def per_file_ignores(kinds: tuple[str, ...]) -> list[tuple[str, tuple[str, ...]]]:
+    """The per-file ignores the claims render, pattern to rule codes, sorted.
+
+    For each present kind and the workspace's own unit, every claim
+    that withholds rules on a category maps to that category's
+    patterns in the kind's table, a package's under ``packages/*/``
+    and the root's as they are; two checks claiming one category
+    under different rules land in one entry with both sets.
+    """
+    from livery.workshop._categories import WORKSPACE, category_rules
+    from livery.workshop._kinds import kind_chain, kind_names
+
+    table: dict[str, set[str]] = {}
+    units = [(kind, "packages/*/") for kind in kinds if kind in kind_names()]
+    units.append((WORKSPACE, ""))
+    for kind, prefix in units:
+        chain = (
+            {record.name for record in kind_chain(kind)}
+            if kind != WORKSPACE
+            else {WORKSPACE}
+        )
+        for record in _CHECKS.values():
+            if (
+                kind != WORKSPACE
+                and record.kinds
+                and not any(k in chain for k in record.kinds)
+            ):
+                continue
+            for claim in record.claims:
+                if not claim.ignore:
+                    continue
+                for rule in category_rules(kind):
+                    if rule.category != claim.category or rule.pattern == "**":
+                        continue
+                    if not _admits(claim, rule.pattern):
+                        continue
+                    table.setdefault(prefix + rule.pattern, set()).update(claim.ignore)
+    return [(pattern, tuple(sorted(codes))) for pattern, codes in sorted(table.items())]
 
 
 def checks_by_name() -> dict[str, CheckRecord]:
@@ -638,15 +784,29 @@ def _register_builtin() -> None:
         judged = tuple(p for p in gated(_members(ctx), role) if is_python_kind(p.kind))
         return enabled(name, judged)
 
+    def claimed(name: str, natives: tuple[Package, ...]) -> tuple[str, ...]:
+        """The files of the native members the check *name* claims, by path.
+
+        A native member's directories are C++ and not the check's to
+        walk, so its files come by name: its ``conanfile.py`` to ruff.
+        """
+        record = check_for(name)
+        return tuple(f"{p.path}/{f}" for p in natives for f in judged_files(record, p))
+
     def paths(ctx: GateContext, name: str) -> tuple[str, ...]:
         """The paths a path-narrowed check judges: the tree, or the enabled members'."""
-        members = python_members(ctx, name, name)
+        gated_members = gated(_members(ctx), name)
+        members = enabled(name, gated_members)
+        pythons = tuple(p for p in members if is_python_kind(p.kind))
+        natives = tuple(p for p in members if not is_python_kind(p.kind))
         if ctx.subset is None:
-            if len(members) == len(python_kinds(ctx)):
+            if len(members) == len(gated_members):
                 return _python.SRC
-            return _python.package_paths(members + unit(ctx)) or _python.SRC
-        judged = tuple(p for p in ctx.subset if p in members or p in unit(ctx))
-        return _python.package_paths(judged)
+            chosen = _python.package_paths(pythons + unit(ctx)) + claimed(name, natives)
+            return chosen or _python.SRC
+        judged = tuple(p for p in ctx.subset if p in pythons or p in unit(ctx))
+        present = tuple(p for p in natives if p in ctx.subset)
+        return _python.package_paths(judged) + claimed(name, present)
 
     def format_run(ctx: GateContext) -> None:
         _python.run_format(check=True, paths=paths(ctx, "format"))
@@ -776,6 +936,11 @@ def _register_builtin() -> None:
 
     native = ("cpp-conan", "python-nanobind")
     python = ("python",)
+    # ruff judges a native package's conanfile.py beside clang-format on
+    # its sources, so its records apply to the native kind as well.
+    ruffed = ("python", "cpp-conan")
+    py = _python.PY_SUFFIXES
+    cpp = _cpp_conan.SOURCE_SUFFIXES
     for record in (
         CheckRecord(
             "format",
@@ -783,13 +948,23 @@ def _register_builtin() -> None:
             format_run,
             narrowing=PATHS,
             fix=format_fix,
-            kinds=python,
+            kinds=ruffed,
             tools=("ruff",),
             fragments=(
                 Fragment("pyproject.toml", _fragments.RUFF_BASE),
                 Fragment(".vscode/settings.json", _fragments.RUFF_SETTINGS),
             ),
             extension="charliermarsh.ruff",
+            claims=tuple(
+                Claim(category, suffixes=py)
+                for category in (
+                    "source",
+                    "test",
+                    "test-support",
+                    "configuration",
+                    "example",
+                )
+            ),
         ),
         CheckRecord(
             "clang-format",
@@ -803,6 +978,10 @@ def _register_builtin() -> None:
                 Fragment(".clang-format", _fragments.CLANG_FORMAT, kind=kind)
                 for kind in native
             ),
+            claims=tuple(
+                Claim(category, suffixes=cpp)
+                for category in ("source", "test", "test-support")
+            ),
         ),
         CheckRecord(
             "lint",
@@ -810,10 +989,19 @@ def _register_builtin() -> None:
             lint_run,
             narrowing=PATHS,
             fix=lint_fix,
-            kinds=python,
+            kinds=ruffed,
             tools=("ruff",),
             fragments=(Fragment("pyproject.toml", _fragments.RUFF_LINT),),
             extension="charliermarsh.ruff",
+            # Test bodies explain themselves by name and assertion, so
+            # the docstring rules stop at the tests.
+            claims=(
+                Claim("source", suffixes=py),
+                Claim("test", ignore=("D1",), suffixes=py),
+                Claim("test-support", ignore=("D1",), suffixes=py),
+                Claim("configuration", suffixes=py),
+                Claim("example", suffixes=py),
+            ),
         ),
         CheckRecord(
             "typecheck",
@@ -824,6 +1012,10 @@ def _register_builtin() -> None:
             tools=("basedpyright", "mypy", "ty", "pyrefly"),
             fragments=(Fragment("pyproject.toml", _fragments.TYPECHECKERS),),
             extension="detachedfork.basedpyright",
+            claims=tuple(
+                Claim(category, suffixes=py)
+                for category in ("source", "test", "test-support")
+            ),
             # mypy reads the members' own stubs from the venv, so it
             # rides the dev group beside the store's copy.
             contributions=(("python.dev-group", "mypy>=1.14"),),
@@ -835,6 +1027,7 @@ def _register_builtin() -> None:
             narrowing=PACKAGES,
             kinds=python,
             tools=("basedpyright",),
+            claims=(Claim("source", suffixes=py),),
         ),
         CheckRecord(
             "test",
@@ -847,6 +1040,7 @@ def _register_builtin() -> None:
             # one that imports the project's environment.
             tools=("pytest",),
             fragments=(Fragment("pyproject.toml", _fragments.TESTS),),
+            claims=(Claim("test"), Claim("test-support")),
             options=(
                 Option(
                     "parallel",
@@ -918,6 +1112,7 @@ def _register_builtin() -> None:
                 Fragment(".clang-tidy", _fragments.CLANG_TIDY, kind=kind)
                 for kind in native
             ),
+            claims=(Claim("source", suffixes=cpp), Claim("test", suffixes=cpp)),
         ),
     ):
         register_check(record)

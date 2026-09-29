@@ -508,7 +508,11 @@ def describe(root: Path, relative: Path) -> list[str]:
     lines.append(f"    channel: {answer.channel} ({supplier})")
     lines.append(f"    source: {answer.source}")
     lines.append(f"    edit: {answer.edit}")
-    claims = ["site"] if site_reads(root, packages, relative.as_posix()) else []
+    from livery.workshop._checks import claimants
+
+    claims = list(claimants(unit, inside)) if unit is not None else []
+    if site_reads(root, packages, relative.as_posix()):
+        claims.append("site")
     if claims:
         lines.append(f"    claimed by: {', '.join(claims)}")
     lines.extend(f"    {line}" for line in owned_lines(root, relative))

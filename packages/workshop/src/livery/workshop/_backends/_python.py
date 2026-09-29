@@ -70,9 +70,9 @@ def package_paths(packages: tuple[Package, ...]) -> tuple[str, ...]:
     return tuple(paths)
 
 
-#: The python suffixes ruff owns; other files pass through untouched
-#: when an explicit path names them.
-_PY_SUFFIXES = (".py", ".pyi")
+#: The python suffixes ruff owns, what a python check's claims admit;
+#: a foreign file an explicit path names passes through untouched.
+PY_SUFFIXES = (".py", ".pyi")
 
 #: What ``--safe-fix`` refuses to let ruff remove: rules that delete
 #: code an edit in flight has not finished writing. This is the one
@@ -90,7 +90,7 @@ def _python_paths(paths: tuple[str, ...]) -> tuple[str, ...]:
     kept: list[str] = []
     for entry in paths:
         path = Path(entry)
-        if not path.is_file() or path.suffix in _PY_SUFFIXES:
+        if not path.is_file() or path.suffix in PY_SUFFIXES:
             kept.append(entry)
     return tuple(kept)
 

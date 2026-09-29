@@ -113,6 +113,16 @@ lines, and `.vscode/extensions.json` recommends the extension ids the
 records carry and nothing else, with a region for the repository's
 own.
 
+A check record also says which files it judges: its `claims`, named
+in categories rather than as globs, each with the rules the check
+withholds there and the suffixes it reads. A category is a role, not
+a language, so ruff claims a native package's configuration and
+reaches its `conanfile.py` alone, which a scoped gate hands it by
+name. `fm explain` prints the checks whose claims reach a file, and
+the lint check's category-shaped per-file ignores render from the
+claims over the present kinds' tables, so the docstring rules stop at
+the tests of every kind without a table typed by hand.
+
 The layering check parses every python source once per gate and
 memoises the parse by the file's bytes, and a kind or a layer may
 register a rule over that parse beside the builtin three (the
