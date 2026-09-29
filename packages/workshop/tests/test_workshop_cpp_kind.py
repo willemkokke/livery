@@ -855,7 +855,10 @@ class _FakeEngine:
                     return SimpleNamespace(
                         code=self.instrument_code, stdout="", stderr="no symbols"
                     )
-                Path(args[args.index("-o") + 1]).write_bytes(b"MZ instrumented")
+                out = Path(args[args.index("-o") + 1])
+                out.write_bytes(b"MZ instrumented")
+                # The engine writes the copy's own symbols beside it.
+                out.with_suffix(".pdb").write_bytes(b"pdb")
                 return SimpleNamespace(
                     code=0, stdout="Input file successfully instrumented.", stderr=""
                 )

@@ -1102,8 +1102,9 @@ def _measure_msvc(
 
     Each executable ctest names, and every shared library the build
     made, is instrumented statically into a copy that takes the
-    original's place for the run and gives it back after, so the
-    build's own output is never instrumented twice. ctest runs under
+    original's place for the run and gives it back after, its symbols
+    removed with it, so the build's own output is never instrumented
+    twice. ctest runs under
     ``dotnet-coverage collect`` with child processes included, and
     its verdict is read from the JUnit report it writes, never from
     the collector's exit code, which is the collector's own.
@@ -1179,6 +1180,11 @@ def _measure_msvc(
     finally:
         for original, kept in swapped:
             os.replace(kept, original)
+            # The engine writes the instrumented binary's own symbols
+            # beside it (`<stem>.instrumented.pdb`), read during the
+            # run; nothing of the instrumented copy outlives it.
+            for extra in original.parent.glob(f"{original.stem}.instrumented.*"):
+                extra.unlink()
     output = result.stdout + result.stderr
     _ctest_verdict(package, names, verdict, output)
     if result.code != 0:
