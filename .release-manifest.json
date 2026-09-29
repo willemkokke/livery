@@ -2,9 +2,24 @@
  "schema": 1,
  "members": [
   {
-   "dir": "cbor",
-   "name": "livery-cbor",
+   "dir": "strongroom",
+   "name": "livery-strongroom",
+   "version": "0.2.0"
+  },
+  {
+   "dir": "toolroom",
+   "name": "livery-toolroom",
+   "version": "0.8.0"
+  },
+  {
+   "dir": "toolroom-store",
+   "name": "livery-toolroom-store",
    "version": "0.0.0"
+  },
+  {
+   "dir": "toolroom-bench",
+   "name": "livery-toolroom-bench",
+   "version": "0.1.0"
   }
  ]
 }
