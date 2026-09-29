@@ -138,19 +138,30 @@ RECORD = Keyed(
 )
 
 
+#: A unit's measurer: coverage.py's arcs, or lines with their hit counts.
+ARCS = "arcs"
+LINES = "lines"
+
+
 @dataclass(frozen=True)
 class Unit:
-    """One unit's measurement: the arcs its suite reached within its closure.
+    """One unit's measurement: what its suite reached within its closure.
 
     Attributes:
         path: The unit's path (``packages/forge``, or ``tests``).
         closure: The closure identity the measurement is keyed by.
         run: The run that measured it.
         sha: The commit that run checked out.
-        files: Measured arcs per file, relative to the workspace root:
-            pairs of line numbers as coverage.py records them, a
+        files: The measurement per file, relative to the workspace
+            root, as pairs of numbers. Under the ``arcs`` measurer a
+            pair is two line numbers as coverage.py records them, a
             negative number an entry or an exit, so a file's
-            statements and branches are both in the row.
+            statements and branches are both in the row; under the
+            ``lines`` measurer a pair is a line number and its hit
+            count, every instrumentable line present.
+        measurer: Which reading the pairs are, ``arcs`` for a python
+            suite and ``lines`` for a native one; a row without one
+            is arcs.
     """
 
     path: str
@@ -158,6 +169,7 @@ class Unit:
     run: str
     sha: str
     files: dict[str, list[tuple[int, int]]]
+    measurer: str = ARCS
 
 
 @dataclass(frozen=True)
@@ -293,6 +305,7 @@ def _unit_fields(unit: Unit) -> dict[str, Any]:
         "closure": unit.closure,
         "run": unit.run,
         "sha": unit.sha,
+        "measurer": unit.measurer,
         "files": {
             name: [list(arc) for arc in sorted(arcs)]
             for name, arcs in sorted(unit.files.items())
@@ -324,6 +337,7 @@ def _parse_unit(raw: Any, *, path: str = "") -> Unit | None:
             for name, arcs in files.items()
             if isinstance(arcs, list)
         },
+        measurer=str(raw.get("measurer", ARCS) or ARCS),
     )
 
 

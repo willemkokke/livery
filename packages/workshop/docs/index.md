@@ -470,7 +470,22 @@ that is judged is the CI union: on every leg the tests run measured,
 each process a test starts included and the gate's own driver never,
 so a line counts only when a test reached it, and the gate job
 combines all platforms before enforcing, so the floors are
-deterministic per change and never depend on one machine's view. Coverage stays global
+deterministic per change and never depend on one machine's view.
+Measurement is the kind's answer, reduced to one shape before
+anything is stored. A python suite's is coverage.py's arcs. A native
+suite's is lines: the gate build is instrumented for the compiler
+family CMake detected (gcc with `--coverage`, clang and apple-clang
+with `-fprofile-instr-generate -fcoverage-mapping`), ctest runs, and
+the measurer beside that compiler reads which lines of each source
+file ran, gcov's JSON or llvm-profdata and llvm-cov's lcov; the
+result is one part per package at the workspace root, beside
+coverage.py's own. A host with the compiler and without its measurer
+refuses on that leg by name. The union across legs is a set union of
+lines per file, so two compilers never merge raw profiles, and a
+native package's floor is line coverage over its `source` category
+while a python package's stays statements and branches. A package
+with a floor that no leg measured refuses by name and never passes.
+Coverage stays global
 under the
 affected mode: in a check leg's one measured run every test records
 under a context named by its node id (the workshop's own pytest

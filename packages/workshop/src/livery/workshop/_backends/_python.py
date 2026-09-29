@@ -339,12 +339,26 @@ def measured_coverage(
 ) -> dict[str, float]:
     """Per-package coverage from the run's ``.coverage`` data, statements and branches.
 
-    A package's percentage is the statements and branches of its
-    files the data reached, over all of them, the figure coverage.py
-    reports as a file's total; a package with none to reach is 100.
-    A run that left no data (`NO_DATA`) is empty under *none_ok* and
-    a refusal otherwise.
+    A python package's percentage is the statements and branches of
+    its files the data reached, over all of them, the figure
+    coverage.py reports as a file's total; a package with none to
+    reach is 100. A native package's is its lines part's, the lines
+    hit over the instrumentable lines of its sources, and a native
+    package with no part left is absent, never a number. A run that
+    left no python data (`NO_DATA`) is empty under *none_ok* and a
+    refusal otherwise.
     """
+    from livery.workshop._coverage_lines import percent, read_parts
+
+    lines_parts = read_parts(root)
+    measured: dict[str, float] = {}
+    for package in packages:
+        if measures_lines(package) and package.path in lines_parts:
+            reached = percent(lines_parts[package.path], package)
+            measured[package.path] = 100.0 if reached is None else reached
+    arcs_packages = tuple(p for p in packages if not measures_lines(p))
+    if not arcs_packages:
+        return measured
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as handle:
         report = handle.name
     # The data read is *root*'s, by contract. Under a metered gate the
@@ -364,13 +378,13 @@ def measured_coverage(
     )
     if result.code != 0:
         if none_ok and NO_DATA in result.stdout + result.stderr:
-            return {}
+            return measured
         fail(f"coverage json exited {result.code}:\n{result.stdout}{result.stderr}")
     data = json.loads(Path(report).read_text("utf-8"))
     Path(report).unlink(missing_ok=True)
-    totals: dict[str, list[int]] = {package.path: [0, 0] for package in packages}
+    totals: dict[str, list[int]] = {package.path: [0, 0] for package in arcs_packages}
     for filename, entry in data.get("files", {}).items():
-        for package in packages:
+        for package in arcs_packages:
             if filename.startswith(f"{package.path}/src/"):
                 summary = entry.get("summary", {})
                 totals[package.path][0] += int(summary.get("covered_lines", 0)) + int(
@@ -380,10 +394,13 @@ def measured_coverage(
                     summary.get("num_branches", 0)
                 )
                 break
-    return {
-        path: (100.0 * covered / statements if statements else 100.0)
-        for path, (covered, statements) in totals.items()
-    }
+    measured.update(
+        {
+            path: (100.0 * covered / statements if statements else 100.0)
+            for path, (covered, statements) in totals.items()
+        }
+    )
+    return measured
 
 
 def report_coverage(root: Path, packages: tuple[Package, ...]) -> None:
@@ -402,12 +419,23 @@ def report_coverage(root: Path, packages: tuple[Package, ...]) -> None:
             "  coverage: nothing measured by this run (its tests reached no"
             " source); the CI union judges the floors"
         )
-        return
+    arcs_measured = any(
+        not measures_lines(package) and package.path in measured for package in packages
+    )
     for package in packages:
         if package.path == WORKSPACE_TESTS:
             continue  # a unit of the union, never a package with a floor
         policy = coverage_policy(package)
         if policy is None:
+            continue
+        if measures_lines(package):
+            if package.path not in measured:
+                print(
+                    f"  coverage {package.path}: not measured here (its tests did"
+                    " not run, or ran without their measurer)"
+                )
+                continue
+        elif not arcs_measured:
             continue
         percent = measured.get(package.path, 0.0)
         judged = (
@@ -439,6 +467,21 @@ def _unmetered() -> dict[str, str]:
         for key, value in os.environ.items()
         if not key.startswith(("COVERAGE_", "COV_CORE_"))
     }
+
+
+#: coverage.py's reading, the measurer of every python suite and the
+#: workspace's own tests.
+ARCS_MEASURER = "arcs"
+
+
+def measures_lines(package: Package) -> bool:
+    """Whether *package*'s suite is measured as lines: a native kind's, no python one's.
+
+    The workspace's own tests carry no kind and are python's.
+    """
+    from livery.workshop._kinds import is_python_kind, kind_names
+
+    return package.kind in kind_names() and not is_python_kind(package.kind)
 
 
 def suites_of(packages: tuple[Package, ...]) -> tuple[Package, ...]:
@@ -604,25 +647,43 @@ def store_suites(
     """
     from coverage import CoverageData
 
-    from livery.workshop._coverage_store import Unit, closure_id
+    from livery.workshop._coverage_lines import pairs, read_parts
+    from livery.workshop._coverage_store import LINES, Unit, closure_id
     from livery.workshop._git_ops import GitOps
     from livery.workshop._state import run_context
 
     leg = marker["leg"]
     parts = sorted(root.glob(".coverage.*"))
-    if not parts:
+    lines_parts = read_parts(root)
+    if not parts and not lines_parts:
         return
-    combined = CoverageData(basename=str(root / SUITES_DATA))
-    for part in parts:
-        piece = CoverageData(basename=str(part))
-        piece.read()
-        combined.update(piece)
-    combined.write()
+    if parts:
+        combined = CoverageData(basename=str(root / SUITES_DATA))
+        for part in parts:
+            piece = CoverageData(basename=str(part))
+            piece.read()
+            combined.update(piece)
+        combined.write()
     run = run_context()
     git = GitOps(root)
     measured: dict[str, Unit] = {}
     for package in suites_that_ran(marker, root, packages):
-        files = suite_arcs_by_context(root / SUITES_DATA, packages, package, root=root)
+        measurer = LINES if measures_lines(package) else ARCS_MEASURER
+        if measurer == LINES:
+            lines = lines_parts.get(package.path)
+            if lines is None:
+                print(
+                    f"  coverage store: {package.path} ran without a measurement;"
+                    " nothing to store for it"
+                )
+                continue
+            files = pairs(lines)
+        elif parts:
+            files = suite_arcs_by_context(
+                root / SUITES_DATA, packages, package, root=root
+            )
+        else:
+            continue
         if run is None:
             print(
                 f"  coverage store: {package.path} measured ({len(files)} files);"
@@ -631,7 +692,7 @@ def store_suites(
             continue
         key = closure_id(git, packages, package)
         measured[package.path] = Unit(
-            package.path, key, run.run_id, git.head_sha(), files
+            package.path, key, run.run_id, git.head_sha(), files, measurer=measurer
         )
     (root / SUITES_DATA).unlink(missing_ok=True)
     if run is None:
@@ -667,6 +728,7 @@ def combine_leg(
     *timing* row, when it has one, rides the one write with the
     scope; the marker's scope goes on it, as the stamp reads it.
     """
+    from livery.workshop._coverage_lines import read_parts
     from livery.workshop._verified import NOTHING, VERIFIED, read_marker
 
     parts = sorted(root.glob(".coverage.*"))
@@ -674,7 +736,7 @@ def combine_leg(
     scope = marker["scope"]
     if timing is not None:
         timing = {**timing, "scope": marker}
-    if not parts and not (root / ".coverage").is_file():
+    if not parts and not read_parts(root) and not (root / ".coverage").is_file():
         if scope in (VERIFIED, NOTHING):
             # A skipped leg measured nothing and names no unit, so the
             # union carries every unit from the records.
@@ -778,7 +840,14 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
         workspace has no unit to union, and then no union file is
         written.
     """
+    from livery.workshop._coverage_lines import (
+        from_pairs,
+        merge,
+        remove_parts,
+        write_part,
+    )
     from livery.workshop._coverage_store import (
+        LINES,
         RUN_FILE,
         Unit,
         closure_id,
@@ -820,6 +889,10 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
     bases, target = _record_bases(root, git, run)
     collected: list[Path] = []
     reused: list[Path] = []
+    # The lines units, merged per package across the legs and the
+    # records; written as parts once every leg is read.
+    lines_by_package: dict[str, dict[str, dict[int, int]]] = {}
+    lines_reused = 0
     ran = 0
     writes: list[tuple[str, dict[str, Unit], dict[str, tuple[str, Unit]], Record]] = []
     for leg in sorted(legs, key=lambda item: item.key):
@@ -848,6 +921,11 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
                 )
             ran += 1
             for path, unit in sorted(leg.units.items()):
+                if unit.measurer == LINES:
+                    lines_by_package[path] = merge(
+                        lines_by_package.get(path, {}), from_pairs(unit.files)
+                    )
+                    continue
                 collected.append(
                     _write_unit(
                         scratch / leg.label, f"fresh-{slug(path)}.coverage", unit.files
@@ -884,11 +962,19 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
                     " since; a run of the full gate measures it again."
                 )
             base, row = carried[suite.path]
-            reused.append(
-                _write_unit(
-                    scratch / leg.label, f"reuse-{slug(suite.path)}.coverage", row.files
+            if row.measurer == LINES:
+                lines_by_package[suite.path] = merge(
+                    lines_by_package.get(suite.path, {}), from_pairs(row.files)
                 )
-            )
+                lines_reused += 1
+            else:
+                reused.append(
+                    _write_unit(
+                        scratch / leg.label,
+                        f"reuse-{slug(suite.path)}.coverage",
+                        row.files,
+                    )
+                )
             print(
                 f"  coverage: {suite.path} on {leg.label}: reused from run"
                 f" {row.run} ({len(row.files)} files), {base}'s record"
@@ -896,20 +982,32 @@ def combine_union(root: Path, packages: tuple[Package, ...]) -> tuple[Package, .
         if target:
             own = _read_record(root, held, target, leg.label)
             writes.append((leg.label, dict(leg.units), carried, own))
-    if not collected and not reused:
+    if not collected and not reused and not lines_by_package:
         print("  coverage: no unit to union; nothing judged")
         return ()
     scrubbed = _unmetered()
-    result = tools.coverage.opts(cwd=root, env=scrubbed, nofail=True, recorded=False)(
-        "combine", *(str(path) for path in collected + reused)
+    if collected or reused:
+        result = tools.coverage.opts(
+            cwd=root, env=scrubbed, nofail=True, recorded=False
+        )("combine", *(str(path) for path in collected + reused))
+        if result.code != 0:
+            fail(
+                f"coverage combine exited {result.code}:\n"
+                f"{result.stdout}{result.stderr}"
+            )
+        report = tools.coverage.opts(
+            cwd=root, env=scrubbed, nofail=True, recorded=False
+        )("report", "--sort=cover")
+        print(report.stdout.rstrip())
+    remove_parts(root)
+    for path, lines in sorted(lines_by_package.items()):
+        write_part(root, path, lines)
+    if lines_by_package:
+        print(f"  coverage: {len(lines_by_package)} native package(s) unioned by lines")
+    print(
+        f"  coverage: the union of {ran} leg(s) and {len(reused) + lines_reused}"
+        " reused suite(s)"
     )
-    if result.code != 0:
-        fail(f"coverage combine exited {result.code}:\n{result.stdout}{result.stderr}")
-    report = tools.coverage.opts(cwd=root, env=scrubbed, nofail=True, recorded=False)(
-        "report", "--sort=cover"
-    )
-    print(report.stdout.rstrip())
-    print(f"  coverage: the union of {ran} leg(s) and {len(reused)} reused suite(s)")
     if not target:
         print(
             f"  coverage record: not written, a {run.event or 'local'} run"
@@ -1084,6 +1182,13 @@ def enforce_coverage(root: Path, packages: tuple[Package, ...]) -> dict[str, flo
     for package in packages:
         policy = policies[package.path]
         if policy is None:
+            continue
+        if package.path not in measured and measures_lines(package):
+            print(f"  coverage {package.path}: not measured")
+            problems.append(
+                f"{package.path}: not measured; its tests ran without their"
+                " measurer, or never ran, and an unmeasured suite never passes"
+            )
             continue
         percent = measured.get(package.path, 0.0)
         if not policy.ratchet:

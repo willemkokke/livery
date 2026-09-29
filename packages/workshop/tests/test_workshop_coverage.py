@@ -1002,3 +1002,125 @@ def test_the_union_of_two_legs_covers_what_each_left_uncovered(
     _python.enforce_coverage(
         tmp_path, (package,)
     )  # each leg alone: 50%; the union: 100%
+
+
+def _native_suite(tmp_path: Path, name: str) -> Package:
+    """A cpp-conan package with a floor, whose suite is measured as lines."""
+    directory = tmp_path / "packages" / name
+    (directory / "src").mkdir(parents=True)
+    (directory / "tests").mkdir()
+    (directory / "src" / "x.cpp").write_text("int f() { return 1; }\n")
+    (directory / "workshop.toml").write_text(
+        f'kind = "cpp-conan"\nname = "acme-{name}"\n[qa]\ncoverage-floor = 95\n'
+    )
+    return Package(
+        directory=directory,
+        path=f"packages/{name}",
+        name=f"acme-{name}",
+        kind="cpp-conan",
+        depends=(),
+    )
+
+
+def _lines_unit(
+    path: str, files: dict[str, dict[int, int]], *, run: str = "7"
+) -> _coverage_store.Unit:
+    """A native suite's unit: line and hit count pairs under the lines measurer."""
+    from livery.workshop._coverage_lines import pairs
+
+    return _coverage_store.Unit(
+        path, "k" * 64, run, "a" * 40, pairs(files), measurer=_coverage_store.LINES
+    )
+
+
+def test_a_leg_puts_a_native_suites_lines_beside_the_python_arcs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop._coverage_lines import write_part
+    from livery.workshop._verified import FULL, write_marker
+
+    x = _suite(tmp_path, "x")
+    n = _native_suite(tmp_path, "n")
+    x_source = str(_source(tmp_path, "x"))
+    _contextual_part(
+        tmp_path,
+        "host.1.X",
+        {
+            "": {x_source: [1]},
+            "packages/x/tests/test_mod.py::test_one|run": {x_source: [2]},
+        },
+    )
+    write_part(tmp_path, "packages/n", {"packages/n/src/x.cpp": {1: 1, 2: 0}})
+    write_marker(tmp_path, FULL, leg="check-a")
+    put: list[dict[str, object]] = []
+
+    def _capture(root: Path, run: object, **kw: object) -> str:
+        put.append(kw)
+        return ""
+
+    monkeypatch.setattr(_coverage_store, "closure_id", lambda git, ps, p: "k" * 64)
+    monkeypatch.setattr(_coverage_store, "put_run", _capture)
+    monkeypatch.setattr(
+        "livery.workshop._git_ops.GitOps.head_sha", lambda self: "a" * 40
+    )
+    _in_ci(monkeypatch, "check-a")
+    _python.combine_leg(tmp_path, (x, n))
+    units = _units(put[0])
+    assert sorted(units) == ["packages/n", "packages/x"]
+    assert units["packages/n"].measurer == "lines"
+    assert units["packages/n"].files == {"packages/n/src/x.cpp": [(1, 1), (2, 0)]}
+    assert units["packages/x"].measurer == "arcs"
+    out = capsys.readouterr().out
+    assert "coverage store: packages/n stored for closure kkkkkkkkkkkk" in out
+    # The refusal's cousin: a native suite that ran and left no part is
+    # not put, and the union will name it.
+    put.clear()
+    for part in tmp_path.glob(".coverage-lines.*.json"):
+        part.unlink()
+    _contextual_part(tmp_path, "host.2.X", {"": {x_source: [1]}})
+    _python.combine_leg(tmp_path, (x, n))
+    assert sorted(_units(put[0])) == ["packages/x"]
+    assert "packages/n ran without a measurement" in capsys.readouterr().out
+
+
+def test_the_union_of_two_legs_lines_covers_what_each_left_uncovered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from livery.workshop._coverage_lines import read_parts
+
+    package = _native_suite(tmp_path, "n")
+    source = "packages/n/src/x.cpp"
+    _in_ci(monkeypatch, "gate")
+    legs = [
+        _leg(
+            "check-a",
+            "full",
+            units={"packages/n": _lines_unit("packages/n", {source: {1: 1, 2: 0}})},
+        ),
+        _leg(
+            "check-b",
+            "affected",
+            ("packages/n",),
+            {"packages/n": _lines_unit("packages/n", {source: {1: 0, 2: 2}})},
+            label="check-b",
+        ),
+    ]
+    _union(monkeypatch, legs)
+    assert _python.combine_union(tmp_path, (package,)) == (package,)
+    assert read_parts(tmp_path) == {"packages/n": {source: {1: 1, 2: 2}}}
+    out = capsys.readouterr().out
+    assert "1 native package(s) unioned by lines" in out
+    assert "the union of 2 leg(s) and 0 reused suite(s)" in out
+    assert not (tmp_path / ".coverage").exists()  # no arcs, no coverage.py combine
+    assert _python.measured_coverage(tmp_path, (package,)) == {"packages/n": 100.0}
+    _python.enforce_coverage(
+        tmp_path, (package,)
+    )  # each leg alone: 50%; the union: 100%
+    # A skipped leg reuses the native suite from the record, lines and all.
+    held = _coverage_store.Record(
+        {"packages/n": _lines_unit("packages/n", {source: {1: 1, 2: 1}}, run="5")}
+    )
+    _union(monkeypatch, [_leg("check-a", "verified")], held=held)
+    assert _python.combine_union(tmp_path, (package,)) == (package,)
+    assert "packages/n on check-a: reused from run 5" in capsys.readouterr().out
+    assert read_parts(tmp_path) == {"packages/n": {source: {1: 1, 2: 1}}}

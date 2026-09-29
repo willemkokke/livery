@@ -539,3 +539,42 @@ def test_the_format_refusal_names_a_windows_path_whole() -> None:
         "src/native.cpp",
     ]
     assert _cpp_conan.unformatted("nothing to say here") == []
+
+
+@needs_toolchain
+def test_a_green_ctest_run_is_measured_by_the_compilers_own_measurer(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The gate build is instrumented for its compiler family and the run leaves lines.
+
+    gcov beside gcc, llvm-cov beside clang: whichever this host
+    builds with, the part names the package's source with hit
+    counts, and the local preview reads a number from it.
+    """
+    from livery.workshop import _coverage_lines as lines_
+    from livery.workshop._backends import _python
+
+    package = _render_cpp(tmp_path)
+    _cpp_conan.gate_build(package, tmp_path)
+    compiler_id, compiler = _cpp_conan.compiler_of(package)
+    assert lines_.measurer_for(compiler_id) in ("gcov", "llvm"), compiler_id
+    assert compiler
+    _cpp_conan.test(package, tmp_path)
+    parts = lines_.read_parts(tmp_path)
+    assert list(parts) == ["packages/native"]
+    sources = [
+        name
+        for name in parts["packages/native"]
+        if name.startswith("packages/native/src/")
+    ]
+    assert sources, parts["packages/native"]
+    assert any(
+        hits > 0 for name in sources for hits in parts["packages/native"][name].values()
+    )
+    measured = _python.measured_coverage(tmp_path, (package,))
+    assert 0.0 < measured["packages/native"] <= 100.0
+    assert "coverage: " in capsys.readouterr().out
+    # The selected arm measures its run too, afresh: the counters of
+    # the full run do not leak into it.
+    _cpp_conan.test(package, tmp_path, selection=("tests/test_native.cpp",))
+    assert list(lines_.read_parts(tmp_path)) == ["packages/native"]

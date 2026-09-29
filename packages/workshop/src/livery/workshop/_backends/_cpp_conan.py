@@ -18,6 +18,7 @@ from __future__ import annotations
 import os
 import platform
 import re
+import shutil
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
@@ -36,6 +37,15 @@ if TYPE_CHECKING:
 #: conan's own cmake_layout also builds under build/, so one
 #: gitignore entry covers both.
 GATE_BUILD_DIR = "build/gate"
+
+#: The include the gate's configure hands CMake, shipped beside this
+#: module: the instrumentation each compiler family takes, so the
+#: measurer beside the compiler can read the run.
+COVERAGE_CMAKE = Path(__file__).with_name("coverage.cmake")
+
+#: Where an llvm-instrumented test run leaves its raw profiles, under
+#: the gate build.
+PROFILE_DIR = "coverage"
 
 
 def conan_requirements(conanfile: Path) -> dict[str, str]:
@@ -672,6 +682,7 @@ def configure(package: Package) -> None:
         "-G",
         "Ninja",
         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+        f"-DCMAKE_PROJECT_INCLUDE={COVERAGE_CMAKE}",
     )
 
 
@@ -705,35 +716,37 @@ def test(
     A selected test file maps to the ctest named after its stem
     (``tests/test_acme.cpp`` runs ``test_acme``), which is how the
     template registers tests; a selection no ctest answers to is a
-    refusal naming the rule.
+    refusal naming the rule. A green run is then measured: the
+    lines it reached land as the package's part at the workspace
+    root, read by [livery.workshop._backends._cpp_conan.measure][].
     """
-    del root, pages  # no docs examples harness answers to a C++ kind
+    del pages  # no docs examples harness answers to a C++ kind
     build_dir = package.directory / GATE_BUILD_DIR
+    env = {**os.environ, "CTEST_OUTPUT_ON_FAILURE": "1", **_fresh_profiles(package)}
     if not selection:
         # The Ninja generator's `test` target runs ctest with the
         # verdict in the exit code; CTEST_OUTPUT_ON_FAILURE makes a red
         # test print its output instead of a bare summary line. The env
         # rides whole: standalone toolroom passes `env=` as the child's
         # entire environment, never a merge over the parent's.
-        result = tools.cmake.opts(
-            cwd=package.directory,
-            env={**os.environ, "CTEST_OUTPUT_ON_FAILURE": "1"},
-            nofail=True,
-        )("--build", str(build_dir), "--target", "test")
+        result = tools.cmake.opts(cwd=package.directory, env=env, nofail=True)(
+            "--build", str(build_dir), "--target", "test"
+        )
         if result.code != 0:
             fail(
                 f"{package.name}: ctest failed (exit {result.code}):\n"
                 f"{result.stdout[-4000:]}{result.stderr[-2000:]}"
             )
+        measure(package, root)
         return
     names = [Path(path).stem for path in selection]
     pattern = "^(" + "|".join(re.escape(name) for name in names) + ")$"
     # ctest is an entry point of the cmake record, so the store
     # deploys the two together and one handle each reaches them.
     try:
-        ran = tools.ctest.opts(cwd=package.directory, nofail=True, recorded=False)(
-            "--test-dir", str(build_dir), "-R", pattern, "--output-on-failure"
-        )
+        ran = tools.ctest.opts(
+            cwd=package.directory, env=env, nofail=True, recorded=False
+        )("--test-dir", str(build_dir), "-R", pattern, "--output-on-failure")
     except OSError:
         _undeployed("ctest")
     if "No tests were found" in ran.stdout + ran.stderr:
@@ -747,6 +760,229 @@ def test(
             f"{package.name}: ctest failed (exit {ran.code}):\n"
             f"{ran.stdout[-4000:]}{ran.stderr[-2000:]}"
         )
+    measure(package, root)
+
+
+def _fresh_profiles(package: Package) -> dict[str, str]:
+    """Clear the last run's counters and name where the next run's profiles land.
+
+    gcov adds a run's counts to the ``.gcda`` files the build left,
+    and llvm writes one ``.profraw`` per process wherever
+    ``LLVM_PROFILE_FILE`` points, so both are cleared first and the
+    run measures itself alone.
+    """
+    build_dir = package.directory / GATE_BUILD_DIR
+    for stale in build_dir.rglob("*.gcda"):
+        stale.unlink()
+    profiles = build_dir / PROFILE_DIR
+    profiles.mkdir(parents=True, exist_ok=True)
+    for stale in profiles.glob("*.profraw"):
+        stale.unlink()
+    return {"LLVM_PROFILE_FILE": str(profiles / "%p-%m.profraw")}
+
+
+def compiler_of(package: Package) -> tuple[str, str]:
+    """The gate build's C++ compiler id and path, as CMake detected them.
+
+    Read from the compiler file CMake writes on configure; both empty
+    for a package whose gate build is not configured.
+    """
+    build_dir = package.directory / GATE_BUILD_DIR
+    found = sorted(build_dir.glob("CMakeFiles/*/CMakeCXXCompiler.cmake"))
+    if not found:
+        return "", ""
+    text = found[-1].read_text(encoding="utf-8", errors="replace")
+    identity = re.search(r'set\(CMAKE_CXX_COMPILER_ID "([^"]*)"\)', text)
+    compiler = re.search(r'set\(CMAKE_CXX_COMPILER "([^"]*)"\)', text)
+    return (
+        identity.group(1) if identity else "",
+        compiler.group(1) if compiler else "",
+    )
+
+
+def measure(package: Package, root: Path) -> None:
+    """Read the lines the gate build's tests reached; the package's part at *root*.
+
+    The measurer follows the compiler CMake configured the gate build
+    with, and is found beside that compiler, then on PATH, then in
+    the SDK xcrun names: gcov for GNU, llvm-profdata and llvm-cov for
+    clang and apple-clang. A family without a measurer, or a measurer
+    that is not there, refuses by name, since a suite that ran
+    unmeasured never passes as measured. MSVC's measurer lands with
+    the dotnet kind; until then an MSVC run says it is not measured
+    and leaves no part, which the union refuses.
+    """
+    from livery.workshop import _coverage_lines as lines_
+
+    compiler_id, compiler = compiler_of(package)
+    family = lines_.measurer_for(compiler_id)
+    if not family:
+        fail(
+            f"{package.name}: the gate build's compiler"
+            f" {compiler_id or 'is unknown'} has no coverage measurer; the"
+            f" families are {', '.join(sorted(lines_.FAMILIES))}"
+        )
+    if family == "msvc":
+        print(
+            f"  {package.name}: coverage: MSVC's measurer is not wired yet; this"
+            " run is not measured"
+        )
+        return
+    measured = (
+        _measure_gcov(package, compiler)
+        if family == "gcov"
+        else _measure_llvm(package, compiler)
+    )
+    kept = lines_.within(lines_.relativise(measured, root), package)
+    lines_.write_part(root, package.path, kept)
+    print(f"  {package.name}: coverage: {len(kept)} file(s) measured by {family}")
+
+
+def _beside(compiler: str, *names: str) -> str:
+    """The first of *names* beside *compiler*, then on PATH; empty when none is."""
+    home = Path(compiler).parent if compiler else None
+    for name in names:
+        if home is not None:
+            for candidate in (home / name, (home / name).with_suffix(".exe")):
+                if candidate.is_file():
+                    return str(candidate)
+        found = shutil.which(name)
+        if found:
+            return found
+    return ""
+
+
+def _xcrun(name: str) -> str:
+    """Where the SDK keeps *name*, on macOS; empty elsewhere or when it has none."""
+    if sys.platform != "darwin":
+        return ""
+    return _asked(["xcrun", "--find", name])
+
+
+def _measure_gcov(package: Package, compiler: str) -> dict[str, dict[int, int]]:
+    """The lines gcov reads from the build's counters.
+
+    A file is named as the compiler saw it; one relative to the build
+    directory is made absolute there.
+    """
+    from livery.workshop import _coverage_lines as lines_
+
+    build_dir = package.directory / GATE_BUILD_DIR
+    data = sorted(build_dir.rglob("*.gcda"))
+    if not data:
+        fail(
+            f"{package.name}: the test run left no .gcda counter under"
+            f" {GATE_BUILD_DIR}; the build was configured without"
+            f" {COVERAGE_CMAKE.name}, so configure it again"
+        )
+    suffix = re.search(r"-(\d+)$", Path(compiler).name)
+    names = [f"gcov-{suffix.group(1)}"] if suffix else []
+    gcov = _beside(compiler, *names, "gcov")
+    if not gcov:
+        fail(
+            f"{package.name}: built with {compiler}, and no gcov is beside it or"
+            " on PATH; install the compiler's gcov"
+        )
+    merged: dict[str, dict[int, int]] = {}
+    for path in data:
+        result = footman.run(
+            [gcov, "--json-format", "--stdout", str(path)],
+            cwd=build_dir,
+            nofail=True,
+            recorded=False,
+        )
+        if result.code != 0:
+            fail(
+                f"{package.name}: gcov exited {result.code} on {path.name}:\n"
+                f"{result.stdout[-2000:]}{result.stderr[-2000:]}"
+            )
+        read = lines_.from_gcov_json(result.stdout)
+        # gcov names a file as the compiler saw it, relative to the
+        # build directory when the compile line was.
+        absolute = {
+            name if Path(name).is_absolute() else str(build_dir / name): counts
+            for name, counts in read.items()
+        }
+        merged = lines_.merge(merged, absolute)
+    return merged
+
+
+def _measure_llvm(package: Package, compiler: str) -> dict[str, dict[int, int]]:
+    """The lines llvm-cov reads from the run's profiles over the test executables."""
+    from livery.workshop import _coverage_lines as lines_
+
+    build_dir = package.directory / GATE_BUILD_DIR
+    raws = sorted((build_dir / PROFILE_DIR).glob("*.profraw"))
+    if not raws:
+        fail(
+            f"{package.name}: the test run left no .profraw under"
+            f" {GATE_BUILD_DIR}/{PROFILE_DIR}; the build was configured without"
+            f" {COVERAGE_CMAKE.name}, so configure it again"
+        )
+    profdata = _beside(compiler, "llvm-profdata") or _xcrun("llvm-profdata")
+    cov = _beside(compiler, "llvm-cov") or _xcrun("llvm-cov")
+    if not profdata or not cov:
+        fail(
+            f"{package.name}: built with {compiler}, and llvm-profdata or"
+            " llvm-cov is not beside it, on PATH, or where xcrun looks; install"
+            " the compiler's llvm tools"
+        )
+    merged = build_dir / PROFILE_DIR / "merged.profdata"
+    result = footman.run(
+        [profdata, "merge", "-sparse", *(str(raw) for raw in raws), "-o", str(merged)],
+        nofail=True,
+        recorded=False,
+    )
+    if result.code != 0:
+        fail(
+            f"{package.name}: llvm-profdata exited {result.code}:\n"
+            f"{result.stdout[-2000:]}{result.stderr[-2000:]}"
+        )
+    objects = _test_objects(package)
+    if not objects:
+        fail(f"{package.name}: ctest names no test executable to read coverage from")
+    argv = [cov, "export", "-format=lcov", f"-instr-profile={merged}", objects[0]]
+    for extra in objects[1:]:
+        argv += ["-object", extra]
+    result = footman.run(argv, nofail=True, recorded=False)
+    if result.code != 0:
+        fail(
+            f"{package.name}: llvm-cov exited {result.code}:\n"
+            f"{result.stdout[-2000:]}{result.stderr[-2000:]}"
+        )
+    return lines_.from_lcov(result.stdout)
+
+
+def _test_objects(package: Package) -> list[str]:
+    """The executables ctest runs, then every shared library the build made."""
+    import json
+
+    build_dir = package.directory / GATE_BUILD_DIR
+    try:
+        listed = tools.ctest.opts(cwd=package.directory, nofail=True, recorded=False)(
+            "--show-only=json-v1", "--test-dir", str(build_dir)
+        )
+    except OSError:
+        _undeployed("ctest")
+    objects: list[str] = []
+    if listed.code == 0:
+        try:
+            tests = json.loads(listed.stdout).get("tests", [])
+        except ValueError:
+            tests = []
+        for entry in tests:
+            command = entry.get("command") if isinstance(entry, dict) else None
+            if not isinstance(command, list) or not command:
+                continue
+            if Path(command[0]).is_file() and command[0] not in objects:
+                objects.append(command[0])
+    for suffix in (".so", ".dylib", ".dll"):
+        objects += [
+            str(path)
+            for path in sorted(build_dir.rglob(f"*{suffix}"))
+            if str(path) not in objects
+        ]
+    return objects
 
 
 #: Where a package keeps the sources the two clang tools read.
