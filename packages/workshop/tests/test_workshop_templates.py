@@ -903,6 +903,9 @@ def test_new_package_renders_from_the_artifact_repository(
     monkeypatch.setattr(
         "livery.workshop._uv.run_uv", lambda *args, root: synced.append(args[0])
     )
+    monkeypatch.setattr(
+        "livery.workshop._tool_tasks.sync_tools", lambda root, **kwargs: None
+    )
     new_package("thing")
     assert (root / "packages" / "thing" / "cliff.toml").is_file()
     assert (root / "packages" / "thing" / "pyproject.toml").is_file()
@@ -1033,6 +1036,9 @@ def test_a_credentialled_source_never_reaches_a_rendered_byte(
         "livery.workshop._templates.workspace_root", lambda start=None: root
     )
     monkeypatch.setattr("livery.workshop._uv.run_uv", lambda *args, root: None)
+    monkeypatch.setattr(
+        "livery.workshop._tool_tasks.sync_tools", lambda root, **kwargs: None
+    )
     new_package("thing")
     for path in sorted(root.rglob("*")):
         # The contract carries the caller's own value; everything the

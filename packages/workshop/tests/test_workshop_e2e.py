@@ -290,6 +290,33 @@ def test_a_deletable_receipt_on_gitlab_is_the_contracts_failure(
     assert "delete refused; protection holds" in capsys.readouterr().out
 
 
+def test_the_tree_reset_keeps_what_sync_materialises(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A reset cleans a pass's residue and never the stubs, receipts or venv."""
+    from types import SimpleNamespace
+
+    from livery.toolroom import tools
+
+    calls: list[tuple[str, ...]] = []
+
+    def _opts(**kwargs: object) -> object:
+        def _run(*args: str) -> object:
+            calls.append(args)
+            if args[:2] == ("clean", "-ndx"):
+                return SimpleNamespace(code=0, stdout="Would remove dist/\n", stderr="")
+            return SimpleNamespace(code=0, stdout="", stderr="")
+
+        return _run
+
+    monkeypatch.setattr(tools, "git", SimpleNamespace(opts=_opts))
+    _e2e._align_main(tmp_path)
+    cleans = [call for call in calls if call[0] == "clean"]
+    kept = ("-e", ".venv", "-e", "typings", "-e", ".workshop")
+    assert cleans == [("clean", "-ndx", *kept), ("clean", "-fdx", *kept)]
+    assert "cleaned: dist/" in capsys.readouterr().out
+
+
 def test_the_serving_probe_asks_each_member_s_own_registry(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

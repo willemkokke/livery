@@ -372,6 +372,9 @@ def test_integrate_matches_the_lock_when_the_move_touched_it(
     recorded: list[Path] = []
     monkeypatch.setattr(_uv, "run_uv", lambda *args, root: synced.append(root))
     monkeypatch.setattr(
+        "livery.workshop._tool_tasks.sync_tools", lambda root, **kwargs: None
+    )
+    monkeypatch.setattr(
         _reconcile, "record_receipt", lambda root: recorded.append(root)
     )
     # A move that touched nothing the venv reads: nothing happens.

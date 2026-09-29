@@ -47,6 +47,10 @@ _TEMPLATES = Path(__file__).parent / "templates"
 #: rides along, read from the contracts by `dev_members`.
 DEV_MEMBER = "packages/workshop"
 
+#: What a reset of the loop's tree keeps: the directories `fm sync`
+#: materialises, gitignored and read by the gate on the desk.
+KEPT_BY_SYNC = (".venv", "typings", ".workshop")
+
 
 def dev_members(root: Path) -> tuple[str, ...]:
     """The members whose dev wheels the loop eats: the workshop and its closure.
@@ -1191,12 +1195,17 @@ def _align_main(root: Path) -> None:
     toolroom.git.opts(cwd=root)("reset", "--hard", "origin/main")
     # Residue too: a failed pass's branch leaves untracked leftovers
     # (a member directory without its contract refuses discovery).
-    # The venv survives, everything else is regenerable by charter.
-    residue = toolroom.git.opts(cwd=root, nofail=True)("clean", "-ndx", "-e", ".venv")
+    # What `fm sync` materialises survives: the venv, the stubs under
+    # typings/ and the receipts and fragments under .workshop/, which
+    # the gate reads and no verb between two syncs rewrites (a member
+    # is wired with `uv sync` alone); everything else is regenerable
+    # by charter.
+    kept = [flag for name in KEPT_BY_SYNC for flag in ("-e", name)]
+    residue = toolroom.git.opts(cwd=root, nofail=True)("clean", "-ndx", *kept)
     if residue.code == 0 and residue.stdout.strip():
         for line in residue.stdout.strip().splitlines():
             print(f"  cleaned: {line.removeprefix('Would remove ')}")
-        toolroom.git.opts(cwd=root)("clean", "-fdx", "-e", ".venv")
+        toolroom.git.opts(cwd=root)("clean", "-fdx", *kept)
     # Local branches too: main is the loop's only durable ref, and
     # every other local branch is a past pass's residue (a prepared
     # release branch whose PR already merged makes the driver refuse

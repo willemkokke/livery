@@ -5,11 +5,21 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
 
+#include <string>
+
 namespace nb = nanobind;
 
-NB_MODULE(_native, m) {
-    // The greeting is formatted by fmt: the first third-party symbol
-    // the extension links, resolved by conan at configure time.
-    m.def("native_hello",
-          []() { return fmt::format("native hello from {}", "{{ package_name }}"); });
-}
+namespace {
+
+// The package this extension belongs to, as the greeting names it: a
+// literal on a line of its own, so the name's length reshapes nothing
+// the formatter judges.
+constexpr const char* kPackage = "{{ package_name }}";
+
+// The greeting is formatted by fmt: the first third-party symbol the
+// extension links, resolved by conan at configure time.
+std::string native_hello() { return fmt::format("native hello from {}", kPackage); }
+
+} // namespace
+
+NB_MODULE(_native, m) { m.def("native_hello", &native_hello); }

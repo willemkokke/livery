@@ -223,6 +223,32 @@ def test_a_red_ctest_is_a_refusal(tmp_path: Path) -> None:
         _cpp_conan.test(package, tmp_path)
 
 
+def test_the_rendered_cpp_member_passes_its_own_format_checks(tmp_path: Path) -> None:
+    """No rendered python line is over the column limit; the sources are formatted."""
+    import subprocess
+
+    package = _render_cpp(tmp_path)
+    over = [
+        (path.name, line)
+        for path in package.directory.rglob("*.py")
+        for line in path.read_text("utf-8").splitlines()
+        if len(line) > 88
+    ]
+    assert over == []
+    clang_format = shutil.which("clang-format")
+    if clang_format is None:
+        pytest.skip("clang-format is not on PATH")
+    for source in sorted(package.directory.rglob("*.cpp")):
+        formatted = subprocess.run(
+            [clang_format, "--style=file", str(source)],
+            capture_output=True,
+            text=True,
+            cwd=package.directory,
+            check=True,
+        ).stdout
+        assert formatted == source.read_text("utf-8"), source.name
+
+
 def test_the_cpp_template_seeds_a_line_coverage_floor(tmp_path: Path) -> None:
     """A native member is judged like the others: its contract carries a floor."""
     from livery.workshop._backends import _python

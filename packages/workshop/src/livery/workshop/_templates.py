@@ -1181,10 +1181,16 @@ def wire_package(root: Path, name: str, *, kind: str = "package-python") -> str:
     )
     for changed in apply_project(root):
         print(f"  rendered: {changed}")
+    from livery.workshop._tool_tasks import sync_tools
     from livery.workshop._uv import run_uv
 
     run_uv("lock", root=root)
     run_uv("sync", root=root)
+    # A kind brings tools of its own (a native kind's build tools and
+    # the checks that judge it), so the tool lock moves with the
+    # member and the store supplies what it names: the gate that
+    # follows finds them, as it does after a birth.
+    sync_tools(root)
     print(f"  packages/{name}: rendered, wired, and installed")
     return f"{namespace}.{slug}" if namespace else slug
 
