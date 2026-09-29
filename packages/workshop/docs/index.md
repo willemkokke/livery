@@ -484,10 +484,18 @@ suite's is lines: the gate build is instrumented for the compiler
 family CMake detected (gcc with `--coverage`, clang and apple-clang
 with `-fprofile-instr-generate -fcoverage-mapping`), ctest runs, and
 the measurer beside that compiler reads which lines of each source
-file ran, gcov's JSON or llvm-profdata and llvm-cov's lcov; the
-result is one part per package at the workspace root, beside
-coverage.py's own. A host with the compiler and without its measurer
-refuses on that leg by name. The union across legs is a set union of
+file ran, gcov's JSON or llvm-profdata and llvm-cov's lcov. A run
+built with MSVC is measured by Microsoft's Code Coverage engine,
+`dotnet-coverage`, a tool of the store the workspace requires as
+`dotnet_coverage` beside the .NET SDK it runs on: each test
+executable is instrumented statically for the run, ctest runs under
+the collector, its verdict is read from the report ctest writes, and
+the Cobertura report is read per line. On Windows the gate builds
+with MSVC unless `CXX` names another compiler, entering the newest
+Visual Studio's C++ build tools itself when `cl` is not already on
+PATH. The result is one part per package at the workspace root,
+beside coverage.py's own. A host with the compiler and without its
+measurer refuses on that leg by name. The union across legs is a set union of
 lines per file, so two compilers never merge raw profiles, and a
 native package's floor is line coverage over its `source` category
 while a python package's stays statements and branches. A package

@@ -4,7 +4,7 @@ Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
 tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
 2026-09-28 (issues #860, #867 with its ordering fix #870, #874; 3c's leftover on 2026-09-29, #896), phase 3
 up to the dependency closure the same day (#876) and the rest of it on
-2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905) and the dotnet kind (#907) beside the layering
+2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892), phase 4c (#894), phase 5's first change (#905), the dotnet kind (#907) and the MSVC measurer with the Windows toolchain environment (#912) beside the layering
 check's fix mode (#829) and phase 8's first change, the publishing
 opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
 item the remaining phases waited on; the decision record carries each
@@ -1149,10 +1149,15 @@ clang on Windows, `clang-cl` on the MSVC ABI or MinGW clang, is the
 llvm family, and MinGW gcc the gcov family; an instrumented
 `clang-cl` link goes through `lld-link`, since MSVC's `link.exe`
 leaves clang 20's profile names section empty and only clang 22
-and later survive it. The measurer's tools are host tools beside the
-compiler that built, verified on the host and never downloaded; a
+and later survive it. gcov and the llvm tools are host tools beside
+the compiler that built, verified on the host and never downloaded;
+Microsoft's engine is a tool of the store, `dotnet_coverage` on the
+.NET SDK, which the workspace requires in its `[tools] requires`. A
 host with the compiler and without its measurer refuses on that
-leg by name. The union is a set union of lines per file across the
+leg by name. On Windows the gate builds with MSVC unless `CXX` names
+another compiler: with `cl` off PATH it enters the newest Visual
+Studio's C++ build tools itself, `vswhere` naming the installation
+and its vcvars batch file read back through `set`. The union is a set union of lines per file across the
 legs that measured, so two compilers never merge raw profiles; a
 file both measured has the union of what either could reach as its
 denominator. C++ floors are line coverage, Python's stay statements
@@ -1179,6 +1184,12 @@ gaining gcc and gcov if it lacks them.
 - A kind without a measurer skips coverage by name, never
   vacuously passes; a host with the compiler and without its
   measurer refuses on that leg by name, proven by forced tests.
+- On Windows the gate enters MSVC's environment itself and a run
+  built with MSVC is measured by Microsoft's engine, the verdict
+  read from ctest's own report: proven by
+  `test_a_green_ctest_run_built_with_msvc_is_measured_by_microsoft_s_engine`
+  on the windows-latest leg, and by the faked-engine tests on every
+  leg.
 
 ### Phase 6: the docs layer
 
@@ -1430,7 +1441,7 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
 | The argv[0] probe deciding which process reconciles | footman's own real-invocation marker, when footman joins the workspace |
 | The gate tools still pinned in the rendered dev group beside their store records (mypy, pytest, coverage) | the check record's one tool declaration, with open item 6's ruling on the venv-side remainder (phase 4) |
 | Test role builtin wiring (phases 2-4) | the registered test role (phase 5) |
-| Windows C++ coverage deferral (phase 5) | a ruling once an MSVC toolchain answer exists |
+| Windows C++ coverage deferral (phase 5) | Microsoft's engine through the store's `dotnet_coverage` in the entered MSVC environment (2026-09-29, #912) |
 | `.clang-tidy` and `.clang-format` seeded per package, never rewritten | managed per-kind renders of the clang-tidy and clang-format check records (phase 4) |
 | The three basedpyright execution environments naming this repository's packages in the base template | the repository's own tail region in the root `pyproject.toml` (phase 3c); the lines themselves are the tracked content pass's debt |
 | The forge layer's `.forge.dev.env` rule in the base `.gitignore` template | the forge layer's fragment for `.gitignore` (phase 4) |
@@ -2385,8 +2396,45 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   the tool through it into its own directory, and ran the shim to its
   version under that environment. Not here: the MSVC measurer that
   reads `dotnet-coverage`,
-  which lands with the vcvars environment and the conformance loop's
-  cpp-conan member in the phase's third change.
+  which lands with the vcvars environment in the phase's third
+  change, and the conformance loop's cpp-conan member after it.
+- 2026-09-29, phase 5's third change built (issue #912): on Windows
+  the cpp-conan gate enters MSVC's environment itself. With no `CXX`
+  set and no `cl` on PATH, `vswhere` under the 32-bit program files
+  directory, asked for the C++ build tools component of the host's
+  architecture, names the newest installation; its `vcvars64.bat`
+  (`vcvarsarm64.bat` on ARM64) runs from a batch file whose `set` is
+  read back with keys upper-cased, cmd's hidden variables dropped;
+  `CC` and `CXX` then name `cl`, so CMake takes MSVC over a MinGW gcc
+  that is also on PATH, and a person who sets `CXX` chooses. The
+  environment is read once per process and refuses by name when the
+  installer is absent, no installation has the component, or the
+  batch file leaves no toolset. A run built with MSVC is measured by
+  Microsoft's engine through the store's `dotnet_coverage` handle:
+  each executable ctest names and each shared library the build made
+  is instrumented statically into a copy that takes the original's
+  place for the run and gives it back after, so a build output is
+  never instrumented twice; ctest runs under `dotnet-coverage collect
+  -f cobertura` with child processes collected, the settings naming
+  the build's own modules by file name in any letter case and
+  telemetry opted out; the verdict is read from the JUnit report
+  ctest writes, never from the collector's exit code, which is the
+  collector's own, the same rule as never piping a verdict; the
+  Cobertura report reduces to lines and lands as the part. ctest is
+  now spawned directly for every family, the `test` target no longer
+  (the two are the same run). `dotnet` and `dotnet_coverage` join the
+  root's `[tools] requires`, so the handle has a stub and every leg
+  deploys both, the SDK at 200 MB per host cached by the lock's hash.
+  Decided here, for his review (open item 20): the requirement is the
+  workspace's and not the kind's, since a kind-level requirement puts
+  the SDK on every host of every cpp-conan workspace, the conformance
+  loop's Alpine runner included, where the SDK's linux-x64 build does
+  not run (musl); a Windows run without the tool refuses naming the
+  line to add. Proven by the faked-engine and faked-ctest tests,
+  refusals first, the toolchain tests with vswhere and the batch file
+  faked, and the Windows leg's real build in the change's own gate
+  run. Found on the way and filed: `fm doctor` and `fm env.check`
+  name `cc` and `c++` missing on Windows (#913).
 - 2026-09-29, the layer template is `package-layer` (Willem's ruling,
   issue #908): every other template names what it makes, and a layer
   is a python plugin by definition, so the python in
@@ -2458,6 +2506,15 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
     not written. Cost named: a row per check keyed by its input
     digest, and the affected walk asking each check instead of
     classifying paths itself. Owner: Willem, after 4b.
+20. Where `dotnet_coverage` is required. Today the workspace names it
+    in `[tools] requires` and a Windows run without it refuses naming
+    the line; the cpp-conan kind requiring it would make every
+    consumer's Windows leg measure without a line, at the .NET SDK on
+    every host of every cpp-conan workspace, the conformance loop's
+    Alpine runner included, where the SDK's linux-x64 build does not
+    run. Options: the kind; a host-scoped requirement in the lock (a
+    shape the lock does not have); the package template seeding the
+    line in the package's own contract. Owner: Willem.
 20. A per-project opt-out of one target's opinions beyond deleting
     a name from `for`, a negative spelling say. Not built until
     wanted. Owner: Willem.
