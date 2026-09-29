@@ -1,15 +1,39 @@
-# The dev rig's runners, one image for both. Gitea's act_runner runs
-# jobs in host mode and GitLab's gitlab-runner in its shell executor,
-# each inside this container, so the tools the emitted workflows
-# assume must exist in it: node for actions/checkout, git for the
-# checkout itself, bash for run steps, curl for the uv installer, the
-# docker CLI for the jobs that build images through the host's socket
+# The dev rig's runners, one image for both. Gitea's runner runs jobs
+# in host mode and GitLab's gitlab-runner in its shell executor, each
+# inside this container, so the tools the emitted workflows assume
+# must exist in it: node for actions/checkout, git for the checkout
+# itself, bash for run steps, curl for the uv installer, the docker
+# CLI for the jobs that build images through the host's socket
 # (mounted by `fm forge.dev.up --with-docker`), and a C++ toolchain
-# with cmake so a platform-wheel member's editable install compiles in
-# the gate leg. The gitlab-runner binary is Alpine's package, so the
-# GitLab service runs on the same image, its jobs under /builds. The
-# FROM digest is the same pin compose.yaml carried before the build
-# stanza; move both together.
-FROM docker.gitea.com/act_runner@sha256:2f54d4df2a1e1b69c4b44db53c70dbd57043594b7f48bcf2e685c3b5bdb738e0
-RUN apk add --no-cache nodejs git bash curl docker-cli build-base cmake gitlab-runner \
-    && mkdir -p /builds
+# with gcov so a native member builds and is measured in the gate
+# leg. The base is glibc, node's own Debian image: the tools the store
+# downloads are built for the hosted runners, which are glibc, and a
+# musl base cannot run them (nodejs.org ships no arm64 musl node). The
+# runner binaries are pinned by version and taken from their releases
+# for the building architecture; the run script is Gitea's own, kept
+# beside this file. The FROM digest is the image index, one digest for
+# every architecture; move it deliberately.
+FROM node:24-bookworm@sha256:64af3819f9275802414d7cdc38c27e9d82bd564dec4d4da87d008255d36c63b4
+ARG TARGETARCH
+ARG GITEA_RUNNER_VERSION=3.3.1
+ARG GITLAB_RUNNER_VERSION=19.1.1
+ARG DOCKER_VERSION=29.8.1
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tini \
+    && rm -rf /var/lib/apt/lists/* \
+    && case "${TARGETARCH}" in \
+         amd64) static=x86_64 ;; \
+         arm64) static=aarch64 ;; \
+         *) echo "no runner build for ${TARGETARCH}" >&2; exit 1 ;; \
+       esac \
+    && curl -fsSL "https://dl.gitea.com/gitea-runner/${GITEA_RUNNER_VERSION}/gitea-runner-${GITEA_RUNNER_VERSION}-linux-${TARGETARCH}" \
+         -o /usr/local/bin/gitea-runner \
+    && curl -fsSL "https://gitlab-runner-downloads.s3.amazonaws.com/v${GITLAB_RUNNER_VERSION}/binaries/gitlab-runner-linux-${TARGETARCH}" \
+         -o /usr/local/bin/gitlab-runner \
+    && curl -fsSL "https://download.docker.com/linux/static/stable/${static}/docker-${DOCKER_VERSION}.tgz" \
+         | tar -xz -C /usr/local/bin --strip-components=1 docker/docker \
+    && chmod +x /usr/local/bin/gitea-runner /usr/local/bin/gitlab-runner /usr/local/bin/docker \
+    && mkdir -p /builds /data
+COPY act_run.sh /usr/local/bin/run.sh
+RUN chmod +x /usr/local/bin/run.sh
+ENTRYPOINT ["/usr/bin/tini", "--", "run.sh"]
