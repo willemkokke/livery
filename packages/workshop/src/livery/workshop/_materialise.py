@@ -470,6 +470,22 @@ def materialise_file(repo_root: Path, source: Path, relative: str) -> list[str]:
     is an override, kept and named. Returns summary lines; errors
     are reported, never raised.
     """
+    try:
+        body = source.read_bytes()
+    except OSError as exc:
+        return [f"  Note: could not materialise {relative} ({exc})"]
+    return materialise_bytes(repo_root, body, relative)
+
+
+def materialise_bytes(repo_root: Path, body: bytes, relative: str) -> list[str]:
+    """Deliver *body* as the file at *relative*, by the file delivery's rules.
+
+    The bytes stand for a shipped file that exists nowhere on disk, a
+    fragment rendered from the registries say; the manifest, the
+    override and the managed ``.gitignore`` behave as they do for
+    [livery.workshop._materialise.materialise_file][], the ignore
+    listing every copy the directory's manifest owns.
+    """
     target = repo_root / relative
     home = target.parent
     lines: list[str] = []
@@ -484,21 +500,21 @@ def materialise_file(repo_root: Path, source: Path, relative: str) -> list[str]:
         if _is_link(target):
             # An editor's write through a link would land in the wheel.
             _remove(target)
-            shutil.copy2(source, target)
+            target.write_bytes(body)
             lines.append(f"  {relative}: copied in place of a link")
         elif not target.exists():
-            shutil.copy2(source, target)
+            target.write_bytes(body)
             lines.append(f"  {relative}: materialised")
         elif recorded is not None:
-            if _same_content(target, source):
+            if _holds(target, body):
                 pass  # our copy, current: nothing to do or say
             elif recorded and _digest(target) != recorded:
                 ours = False
             else:
                 _remove(target)
-                shutil.copy2(source, target)
+                target.write_bytes(body)
                 lines.append(f"  {relative}: refreshed")
-        elif _same_content(target, source):
+        elif _holds(target, body):
             lines.append(f"  {relative}: adopted; it matches the shipped copy")
         else:
             ours = False
@@ -510,7 +526,40 @@ def materialise_file(repo_root: Path, source: Path, relative: str) -> list[str]:
                 " copy; commit it like any repo file"
             )
         _write_manifest(home, copies)
-        _write_gitignore(home, [target.name] if ours else [])
+        _write_gitignore(home, sorted(copies))
     except OSError as exc:
         lines.append(f"  Note: could not materialise {relative} ({exc})")
     return lines
+
+
+def _holds(target: Path, body: bytes) -> bool:
+    """Whether the real file at *target* is exactly *body*."""
+    return target.is_file() and target.read_bytes() == body
+
+
+def sweep_files(home: Path, keep: set[str]) -> list[str]:
+    """Remove the files in *home* outside *keep* and forget them; the names removed.
+
+    The directory is one the sync delivers wholesale, so a file nobody
+    delivers is gone whoever wrote it; the manifest and the managed
+    ``.gitignore`` stay and are rewritten to what remains.
+    """
+    if not home.is_dir():
+        return []
+    removed: list[str] = []
+    for child in sorted(home.iterdir()):
+        if child.name in keep or child.name in (".gitignore", _MANIFEST):
+            continue
+        if not child.is_file():
+            continue
+        child.unlink()
+        removed.append(child.name)
+    if removed:
+        copies = {
+            name: digest
+            for name, digest in _read_manifest(home).items()
+            if name in keep
+        }
+        _write_manifest(home, copies)
+        _write_gitignore(home, sorted(copies))
+    return removed

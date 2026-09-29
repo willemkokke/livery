@@ -3,10 +3,12 @@
 Three channels, walked in layer order so a later layer's same-named
 file wins and the instance always wins last:
 
-- fragments into ``.workshop/fragments/`` (gitignored, regenerated
-  wholesale): each layer's ``content/fragments/*``, the files the
-  managed ``CLAUDE.md`` stub imports. Their own directory, so the
-  sweep that clears a withdrawn fragment owns everything it walks;
+- prose fragments into ``.workshop/fragments/`` (gitignored): the
+  agent's set from every layer's ``content/fragments/*`` and the
+  registries' renders, in section order, each through the
+  materialiser so an edited copy is kept and named; the registry is
+  [livery.workshop._prose][]. Their own directory, so the sweep that
+  clears a withdrawn fragment owns everything it walks;
   ``.workshop/`` itself holds this checkout's state, in directories
   beside it.
 - skills and hooks into ``.claude/skills`` and ``.claude/hooks``
@@ -15,8 +17,9 @@ file wins and the instance always wins last:
   at ``.claude/settings.json`` the same way, always as a copy:
   settings editors write the file in place.
 - the managed ``CLAUDE.md`` stub itself: one import line per
-  materialised fragment, then ``CLAUDE.project.md``, the repository's
-  own file that nobody else writes.
+  delivered fragment in section order, the repository's own
+  ``fragments/`` after them, then ``CLAUDE.project.md``, the
+  repository's own file that nobody else writes.
 
 Idempotent: a second run changes nothing and says nothing.
 """
@@ -41,15 +44,11 @@ from livery.workshop._materialise import materialise, materialise_file, write_lf
 # Formatted at write time: a module-level f-string would freeze the
 # brand at import.
 _STUB_HEADER = (
-    "<!-- Managed by `{prog} sync`: one import per layer fragment, in layer\n"
-    "     order, then the repository's own CLAUDE.project.md, which always\n"
-    "     wins. Edit CLAUDE.project.md, never this file. -->\n"
+    "<!-- Managed by `{prog} sync`: one import per fragment, in section\n"
+    "     order, the repository's own fragments/ after them, then its\n"
+    "     CLAUDE.project.md, which always wins. Edit CLAUDE.project.md,\n"
+    "     never this file. -->\n"
 )
-
-#: The fragments every stub imports first, in this order, when a layer
-#: ships them: the voice and documentation rules read before any
-#: layer's own rules.
-_GUIDANCE_FIRST = ("interaction-voice.md", "documentation-standards.md")
 
 
 def _layer_content(layer: str) -> Path | None:
@@ -68,14 +67,6 @@ def _layer_content(layer: str) -> Path | None:
     return content if content.is_dir() else None
 
 
-#: Where the mounted layers' fragments land, under the workspace root.
-#: Their own directory, so the sweep below owns every file it walks.
-#: ``.workshop/`` itself holds this checkout's state, each kind in a
-#: directory of its own: a shared top level cost the stub receipt,
-#: which a sweep for withdrawn fragments deleted on every sync.
-FRAGMENTS = ".workshop/fragments"
-
-
 def sync_workspace(root: Path) -> list[str]:
     """Deliver every layer's content into *root*; the summary lines.
 
@@ -90,29 +81,14 @@ def sync_workspace(root: Path) -> list[str]:
         if (content := _layer_content(layer)) is not None
     ]
 
-    fragment_home = root / FRAGMENTS
-    fragment_home.mkdir(parents=True, exist_ok=True)
-    fragments: dict[str, Path] = {}
-    for _layer, content in contents:
-        fragment_dir = content / "fragments"
-        if not fragment_dir.is_dir():
-            continue
-        for fragment in sorted(fragment_dir.iterdir()):
-            if fragment.is_file():
-                fragments[fragment.name] = fragment
-    written = 0
-    for name, source in fragments.items():
-        target = fragment_home / name
-        body = source.read_bytes()
-        if not target.is_file() or target.read_bytes() != body:
-            target.write_bytes(body)
-            written += 1
-    for stale in sorted(fragment_home.iterdir()):
-        if stale.is_file() and stale.name not in fragments:
-            stale.unlink()
-            lines.append(f"  fragments: removed {stale.name} (no layer ships it)")
-    if written:
-        lines.append(f"  fragments: {written} refreshed")
+    from livery.workshop import _prose
+
+    listed = [
+        prose for layer, content in contents for prose in _prose.shipped(layer, content)
+    ]
+    listed += _prose.repository_fragments(root)
+    delivery = _prose.deliver(root, listed)
+    lines += delivery.lines
 
     for _layer, content in contents:
         lines += materialise(root, content / "skills", "skills")
@@ -121,10 +97,9 @@ def sync_workspace(root: Path) -> list[str]:
         if settings.is_file():
             lines += materialise_file(root, settings, ".claude/settings.json")
 
-    ordered = [name for name in _GUIDANCE_FIRST if name in fragments]
-    ordered += [name for name in sorted(fragments) if name not in _GUIDANCE_FIRST]
     stub = _STUB_HEADER.format(prog=footman.prog())
-    stub += "".join(f"@{FRAGMENTS}/{name}\n" for name in ordered)
+    stub += "".join(f"@{_prose.DELIVERED}/{name}\n" for name in delivery.delivered)
+    stub += "".join(f"@{_prose.OWN}/{name}\n" for name in delivery.own)
     stub += "@CLAUDE.project.md\n"
     stub_path = root / "CLAUDE.md"
     current = stub_path.read_text(encoding="utf-8") if stub_path.is_file() else ""
