@@ -4,7 +4,7 @@ Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
 tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
 2026-09-28 (issues #860, #867 with its ordering fix #870, #874; 3c's leftover on 2026-09-29, #896), phase 3
 up to the dependency closure the same day (#876) and the rest of it on
-2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890) and phase 4b (#892) beside the layering
+2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890), phase 4b (#892) and phase 4c (#894) beside the layering
 check's fix mode (#829) and phase 8's first change, the publishing
 opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
 item the remaining phases waited on; the decision record carries each
@@ -2194,6 +2194,41 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   for the member is `livery-workshop[dev]`; the base template names
   nothing of this repository, which closes phase 3c's open
   acceptance line.
+- 2026-09-29, phase 4c built (issue #894): a layer's prose is a
+  registry of fragments, `livery.workshop._prose`. A fragment is a
+  file in the layer's `content/fragments/` named
+  `<section>.[<kind>.]<topic>[.<audience>].md`, or a registration
+  with a render that takes the root and the audience; the base
+  defines the sections in order, identity, voice, standards, rules,
+  workflow, gate, verbs, kinds, tools, and `register_section` adds
+  one after a named anchor. A name outside the convention, an
+  unknown section, an unknown kind, a topic spelling an audience,
+  and two fragments of one delivered name in one reader's set, a
+  `<topic>.md` beside a `<topic>.agent.md` included, each refuse
+  naming the files; the reader's set is validated at the same
+  delivery. A kind in the name delivers only while a package of that
+  kind, or one deriving from it, is present, an abstract kind never
+  counting. `fm sync` delivers the agent's set flat under
+  `.workshop/fragments/` in section order, the mounted layers in
+  mount order inside a section, through the materialiser: a shipped
+  fragment byte for byte, a rendered one under a header naming its
+  origin, an edited copy kept and named, a withdrawn one removed with
+  the manifest rewritten; the entry file imports that set, the
+  repository's own `fragments/` after it, then `CLAUDE.project.md`.
+  The materialiser gained a bytes delivery for what exists nowhere
+  on disk, and its managed ignore lists every copy the directory's
+  manifest owns. The base's first rendered fragments are the gate's
+  checks for the kinds present, the verbs by layer from one `--json
+  --list` of the workspace, left out without a tasks file or the
+  runner on PATH, the kinds present and the locked tools, so the
+  workshop's rules fragment names no checker by hand; the three
+  shipped fragments took their convention names,
+  `voice.interaction.md`, `standards.documentation.md` and
+  `rules.workshop.md`, and the layer template's became
+  `rules.<slug>.md`. Not built here: the human rendering into the
+  site, the docs layer's (phase 6), and the entry file's move to the
+  agent layer (phase 9). The birth test's fake lock became a lock of
+  the schema, since the tools render reads it.
 
 ## Open
 
