@@ -816,12 +816,11 @@ dev = [
     { name = "livery-toolroom", extra = ["test"] },
     { name = "livery-toolroom-bench" },
     { name = "livery-toolroom-store" },
-    { name = "livery-workshop" },
+    { name = "livery-workshop", extra = ["dev"] },
     { name = "mypy" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-xdist" },
-    { name = "types-pyyaml" },
     { name = "uv" },
 ]
 docs = [
@@ -842,12 +841,11 @@ dev = [
     { name = "livery-toolroom", extras = ["test"], editable = "packages/toolroom" },
     { name = "livery-toolroom-bench", editable = "packages/toolroom-bench" },
     { name = "livery-toolroom-store", editable = "packages/toolroom-store" },
-    { name = "livery-workshop", editable = "packages/workshop" },
+    { name = "livery-workshop", extras = ["dev"], editable = "packages/workshop" },
     { name = "mypy", specifier = ">=1.14" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-cov", specifier = ">=5" },
     { name = "pytest-xdist", specifier = ">=3.6" },
-    { name = "types-pyyaml" },
     { name = "uv" },
 ]
 docs = [
@@ -995,6 +993,11 @@ dependencies = [
     { name = "pyyaml" },
 ]
 
+[package.optional-dependencies]
+dev = [
+    { name = "types-pyyaml" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "copier", specifier = ">=9.18.2" },
@@ -1004,7 +1007,9 @@ requires-dist = [
     { name = "livery-toolroom", editable = "packages/toolroom" },
     { name = "livery-toolroom-store", editable = "packages/toolroom-store" },
     { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "types-pyyaml", marker = "extra == 'dev'" },
 ]
+provides-extras = ["dev"]
 
 [[package]]
 name = "markdown"

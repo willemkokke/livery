@@ -68,9 +68,7 @@ dev = [
     # check a layer withdraws takes its line with it, and the record
     # is where its floor and its reason live.
 {% for requirement in slots['python.dev-group'] %}    "{{ requirement }}",
-{% endfor %}    # Stubs for the workshop's own yaml reads, so mypy stays strict.
-    "types-pyyaml",
-]
+{% endfor %}]
 
 {% if docs_site_url %}[tool.footman]
 # Task names in --list/--tree/--help (and --json rows) link into the
