@@ -6,14 +6,16 @@
 # CLI for the jobs that build images through the host's socket
 # (mounted by `fm forge.dev.up --with-docker`), and a C++ toolchain
 # with gcov so a native member builds and is measured in the gate
-# leg. The base is glibc, node's own Debian image: the tools the store
-# downloads are built for the hosted runners, which are glibc, and a
-# musl base cannot run them (nodejs.org ships no arm64 musl node). The
+# leg. The base is glibc, node's own Debian image, at least as new as
+# the hosted ubuntu runner's (glibc 2.39 on ubuntu-latest; trixie has
+# 2.41): the tools the store downloads are built against it, a musl
+# base cannot run them (nodejs.org ships no arm64 musl node) and an
+# older glibc refuses them (pyrefly wants 2.39). The
 # runner binaries are pinned by version and taken from their releases
 # for the building architecture; the run script is Gitea's own, kept
 # beside this file. The FROM digest is the image index, one digest for
 # every architecture; move it deliberately.
-FROM node:24-bookworm@sha256:64af3819f9275802414d7cdc38c27e9d82bd564dec4d4da87d008255d36c63b4
+FROM node:24-trixie@sha256:be40f6a87b9b22215ddb20da0a2320a5c6d583fe3ee3b0024d9fa4f05b40c8fd
 ARG TARGETARCH
 ARG GITEA_RUNNER_VERSION=3.3.1
 ARG GITLAB_RUNNER_VERSION=19.1.1

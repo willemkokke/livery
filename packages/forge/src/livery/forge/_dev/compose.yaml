@@ -48,6 +48,10 @@ services:
       dockerfile: runner.Dockerfile
     image: livery-forge-dev-act-runner:pinned
     pull_policy: never
+    # The runner is linux-x64, the host the hosted ubuntu runner is and
+    # the one every tool record covers; on an arm64 desk it runs
+    # emulated, which costs speed and mirrors the real runner.
+    platform: linux/amd64
     profiles: [gitea-runner]
     depends_on:
       gitea:
@@ -117,6 +121,7 @@ services:
       dockerfile: runner.Dockerfile
     image: livery-forge-dev-act-runner:pinned
     pull_policy: never
+    platform: linux/amd64
     entrypoint: ["gitlab-runner"]
     command: ["run", "--working-directory", "/builds"]
     profiles: [gitlab-runner]
