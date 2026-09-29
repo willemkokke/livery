@@ -210,18 +210,25 @@ def _paths(root: Path, *paths: str) -> None:
 
 
 def test_the_python_kind_classifies_tests_support_source_and_configuration() -> None:
-    from livery.workshop._backends import _python
+    from livery.workshop._categories import category_of
     from livery.workshop._kinds import CONFIGURATION, SOURCE, TEST, TEST_SUPPORT
 
     package = Package(Path("packages/x"), "packages/x", "livery-x", "python", ())
-    assert _python.classify(package, "tests/test_a.py") == TEST
-    assert _python.classify(package, "tests/deep/a_test.py") == TEST
-    assert _python.classify(package, "tests/conftest.py") == TEST_SUPPORT
-    assert _python.classify(package, "tests/x_seeds.py") == TEST_SUPPORT
-    assert _python.classify(package, "tests/data/test_a.json") == TEST_SUPPORT
-    assert _python.classify(package, "src/livery/x/mod.py") == SOURCE
-    assert _python.classify(package, "pyproject.toml") == CONFIGURATION
-    assert _python.classify(package, "workshop.toml") == CONFIGURATION
+
+    def category(path: str) -> str:
+        return category_of(package, path).name
+
+    assert category("tests/test_a.py") == TEST
+    assert category("tests/deep/a_test.py") == TEST
+    assert category("tests/conftest.py") == TEST_SUPPORT
+    assert category("tests/x_seeds.py") == TEST_SUPPORT
+    assert category("tests/data/test_a.json") == TEST_SUPPORT
+    assert category("src/livery/x/mod.py") == SOURCE
+    assert category("pyproject.toml") == CONFIGURATION
+    assert category("workshop.toml") == CONFIGURATION
+    # The registry names who answered: the base's table, by its pattern.
+    assert category_of(package, "src/livery/x/mod.py").supplier == "livery.workshop"
+    assert category_of(package, "src/livery/x/mod.py").pattern == "src/**"
 
 
 def test_a_test_file_reaches_its_package_alone_and_runs_alone(seeds: Seeds) -> None:

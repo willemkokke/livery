@@ -133,15 +133,20 @@ def test_a_selected_test_refuses_when_ctest_is_not_deployed(
 def test_the_cpp_kind_classifies_tests_support_source_and_configuration(
     tmp_path: Path,
 ) -> None:
+    from livery.workshop._categories import category_of
     from livery.workshop._kinds import CONFIGURATION, SOURCE, TEST, TEST_SUPPORT
 
     package = _package(tmp_path / "packages" / "native", "acme-native", "cpp-conan")
-    assert _cpp_conan.classify(package, "tests/test_native.cpp") == TEST
-    assert _cpp_conan.classify(package, "tests/helpers.hpp") == TEST_SUPPORT
-    assert _cpp_conan.classify(package, "src/native.cpp") == SOURCE
-    assert _cpp_conan.classify(package, "include/acme/native.hpp") == SOURCE
-    assert _cpp_conan.classify(package, "CMakeLists.txt") == CONFIGURATION
-    assert _cpp_conan.classify(package, "conanfile.py") == CONFIGURATION
+
+    def category(path: str) -> str:
+        return category_of(package, path).name
+
+    assert category("tests/test_native.cpp") == TEST
+    assert category("tests/helpers.hpp") == TEST_SUPPORT
+    assert category("src/native.cpp") == SOURCE
+    assert category("include/acme/native.hpp") == SOURCE
+    assert category("CMakeLists.txt") == CONFIGURATION
+    assert category("conanfile.py") == CONFIGURATION
     # The kind's tests run on a build; python's run on source.
     assert kind_for("cpp-conan").tests_need_build
     assert not kind_for("python").tests_need_build
@@ -311,9 +316,6 @@ def test_host_tools_are_named_when_missing(restored_registry, tmp_path: Path) ->
             target: RegistryTarget,
         ) -> bool:
             return True
-
-        def classify(self, package: Package, path: str) -> str:
-            return "source"
 
         def gate_build(self, package: Package, root: Path) -> None:
             return None

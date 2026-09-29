@@ -869,3 +869,11 @@ def test_a_rule_without_a_name_refuses() -> None:
 
     with pytest.raises(ValueError, match="needs a name"):
         register_ast_rule(AstRule("", lambda modules, context: []))
+
+
+def test_a_src_at_the_workspace_root_refuses_naming_the_move(tmp_path: Path) -> None:
+    _package(tmp_path, "tool")
+    _forge_stub(tmp_path)
+    (tmp_path / "src").mkdir()
+    with pytest.raises(ValueError, match="src/ at the workspace root is not a member"):
+        verify_workspace(tmp_path)

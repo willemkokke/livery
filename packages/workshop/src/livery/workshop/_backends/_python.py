@@ -1158,31 +1158,6 @@ def scoped_rewrite(subset: tuple[Package, ...]) -> None:
         run_lint(fix=True, paths=paths)
 
 
-def classify(package: Package, path: str) -> str:
-    """What *path*, relative to *package*, is to the python kind.
-
-    A ``test_*.py`` or ``*_test.py`` under ``tests/`` is a test; any
-    other file there (a conftest, a helper module, a fixture) is test
-    support, since the tests import or read it; ``src/`` is source;
-    everything else (the manifest, the contract, the changelog
-    configuration) is configuration. The workspace's own tests unit
-    is classified by the same rule on its repo-relative paths.
-    """
-    from livery.workshop._kinds import CONFIGURATION, SOURCE, TEST, TEST_SUPPORT
-
-    del package
-    parts = path.split("/")
-    if parts[0] == "tests" and len(parts) > 1:
-        name = parts[-1]
-        is_test = name.endswith(".py") and (
-            name.startswith("test_") or name.endswith("_test.py")
-        )
-        return TEST if is_test else TEST_SUPPORT
-    if parts[0] == "src":
-        return SOURCE
-    return CONFIGURATION
-
-
 def gate_build(package: Package, root: Path) -> None:
     """Nothing: python tests run on source, so there is nothing to build."""
     del package, root

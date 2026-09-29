@@ -63,6 +63,11 @@ class Package:
         kind: The package kind, as the contract's ``kind`` declares
             it: ``python``, ``python-nanobind`` or ``cpp-conan``.
         depends: The declared edges, in contract order.
+        categories: The package's own reassignments of its paths
+            among the categories, ``[categories] vendored =
+            ["docs/assets/vendor/**"]``: a fact about the package in
+            the narrow shape a coverage floor has, on the category
+            axis alone, winning over every kind's rule.
         publish: Whether the release train uploads the package's
             artifact to its registry. ``[release] publish = false``
             keeps an internal tool versioned, tagged and built by the
@@ -75,6 +80,7 @@ class Package:
     kind: str
     depends: tuple[Edge, ...]
     publish: bool = True
+    categories: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
 
 def discover_packages(root: Path) -> tuple[Package, ...]:
@@ -125,6 +131,28 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
             for edge in contract.get("depends", [])
         )
         release = contract.get("release") or {}
+        if "channels" in contract:
+            raise ValueError(
+                f"{directory.name}: [channels] is not a package's to say; who"
+                " wrote a file is the workshop's answer, and a package"
+                " reassigns only its categories, under [categories]"
+            )
+        categories = contract.get("categories", {})
+        if not isinstance(categories, dict):
+            raise ValueError(
+                f"{directory.name}: [categories] is a table of category ="
+                " [patterns], not {categories!r}"
+            )
+        reassigned: list[tuple[str, tuple[str, ...]]] = []
+        for category, patterns in categories.items():
+            if not isinstance(patterns, list) or not all(
+                isinstance(pattern, str) for pattern in patterns
+            ):
+                raise ValueError(
+                    f"{directory.name}: [categories] {category} must be a list"
+                    f" of path patterns, not {patterns!r}"
+                )
+            reassigned.append((str(category), tuple(patterns)))
         publish = release.get("publish", True) if isinstance(release, dict) else True
         if not isinstance(publish, bool):
             problems.append(
@@ -140,6 +168,7 @@ def discover_packages(root: Path) -> tuple[Package, ...]:
                 kind=kind_name,
                 depends=depends,
                 publish=publish,
+                categories=tuple(reassigned),
             )
         )
     if problems:
@@ -239,6 +268,13 @@ def verify_workspace(root: Path) -> tuple[Package, ...]:
     from livery.workshop._layers import closure_problems
 
     problems.extend(closure_problems(root))
+    if (root / "src").is_dir():
+        problems.append(
+            "src/ at the workspace root is not a member: the root is never a"
+            " package, so nothing claims, formats, lints or tests it; a"
+            " package lives under packages/<name>/, one directory per"
+            " package, and a project shipping one package has one"
+        )
     # The rules over the sources, builtin and registered alike, read
     # the one parse; each problem carries its rule's name.
     context = RuleContext(root=root, packages=packages)

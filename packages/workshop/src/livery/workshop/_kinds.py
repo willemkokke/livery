@@ -30,6 +30,27 @@ from typing import TYPE_CHECKING, Protocol
 
 from livery.footman import fail
 
+# The four builtin categories live beside the registry that answers
+# them and are re-exported here as the kind's vocabulary.
+from livery.workshop._categories import (
+    CONFIGURATION as CONFIGURATION,
+)
+from livery.workshop._categories import (
+    SOURCE as SOURCE,
+)
+from livery.workshop._categories import (
+    TEST as TEST,
+)
+from livery.workshop._categories import (
+    TEST_SUPPORT as TEST_SUPPORT,
+)
+from livery.workshop._categories import (
+    WORKSPACE as WORKSPACE,
+)
+from livery.workshop._categories import (
+    register_categories,
+)
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -43,15 +64,6 @@ class Stamper(Protocol):
     def stamp(self, version: str) -> list[str]:
         """Write *version* into the kind's homes; the files changed."""
         ...
-
-
-#: What a path is to its kind, as `Backend.classify` answers: a
-#: change to a test runs that test alone; a change to anything else
-#: runs the package's suite and its dependents'.
-SOURCE = "source"
-TEST = "test"
-TEST_SUPPORT = "test-support"
-CONFIGURATION = "configuration"
 
 
 class Backend(Protocol):
@@ -120,17 +132,6 @@ class Backend(Protocol):
         from a test one. A reference the kind's own conventions
         already account for is left out, so the caller judges only
         what nothing explains.
-        """
-        ...
-
-    def classify(self, package: Package, path: str) -> str:
-        """What *path*, relative to the package, is to the kind.
-
-        `SOURCE`, `TEST` (a file that is a test and nothing imports),
-        `TEST_SUPPORT` (a conftest, a helper, a fixture the tests
-        read), or `CONFIGURATION` (the manifest, the build script).
-        The reflex runs a changed test alone and widens anything else
-        to the package's suite and its dependents'.
         """
         ...
 
@@ -518,4 +519,57 @@ def _register_builtin() -> None:
     )
 
 
+def _register_categories() -> None:
+    """The builtin category tables, one per kind that ships, and the root's."""
+    register_categories(
+        "base",
+        [
+            ("docs/**/*.md", "prose"),
+            ("docs/nav.toml", "nav"),
+            ("docs/assets/**", "asset"),
+            ("docs/examples/**/*.py", "example"),
+            ("docs/_generated/**", "generated"),
+            ("**", CONFIGURATION),
+        ],
+    )
+    register_categories(
+        "python",
+        [
+            ("tests/**/test_*.py", TEST),
+            ("tests/**/*_test.py", TEST),
+            ("tests/**", TEST_SUPPORT),
+            ("src/**", SOURCE),
+        ],
+    )
+    register_categories(
+        "cpp-conan",
+        [
+            ("tests/**/*.cpp", TEST),
+            ("tests/**/*.cc", TEST),
+            ("tests/**/*.cxx", TEST),
+            ("tests/**/*.c", TEST),
+            ("tests/**", TEST_SUPPORT),
+            ("src/**", SOURCE),
+            ("include/**", SOURCE),
+        ],
+    )
+    # The workspace's own unit: its tests as the python kind reads
+    # them, and the files beside them that only the site or nobody
+    # reads.
+    register_categories(
+        WORKSPACE,
+        [
+            ("tests/**/test_*.py", TEST),
+            ("tests/**/*_test.py", TEST),
+            ("tests/**", TEST_SUPPORT),
+            ("notes/**", "notes"),
+            ("docs/**", "site"),
+            ("zensical.toml", "site"),
+            ("README.md", "readme"),
+            ("**", CONFIGURATION),
+        ],
+    )
+
+
 _register_builtin()
+_register_categories()

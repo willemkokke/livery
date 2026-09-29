@@ -15,13 +15,20 @@ the provenance lint, whose ``--fix`` writes the computed text.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
 import livery.footman as footman
 from livery.footman import Arg, ask, doc, fail, suggest, task
+from livery.workshop._categories import (
+    ChannelRule,
+    Provenance,
+    category_of,
+    channel_of,
+    register_channels,
+)
 from livery.workshop._layers import layer_names, workspace_root
+from livery.workshop._packages import Package
 
 #: The project render's managed names, judged by the drift gate. The
 #: template tree is the truth; this list is the offline copy a wheel
@@ -150,21 +157,6 @@ def strip_header(text: str, path: Path) -> str:
     return text
 
 
-@dataclass(frozen=True)
-class Provenance:
-    """One file's answer: the channel, the source, the edit path.
-
-    Attributes:
-        channel: The owning channel's short name.
-        source: Where the content comes from.
-        edit: What to change, and through which verb.
-    """
-
-    channel: str
-    source: str
-    edit: str
-
-
 def _materialised(root: Path, relative: Path) -> Provenance | None:
     """The answer for a path the sync verb delivers, or None."""
     from livery.workshop._materialise import _is_link, _read_manifest
@@ -271,89 +263,175 @@ def classify(
     path it points into. *emitted* is the emitters' path set from
     [livery.workshop._provenance.emitted_paths][]; a caller with many
     paths passes one set rather than paying an emission per path.
+    The answer comes from the channel registry, the builtin ladder
+    below and whatever a layer registered beside it, highest rank
+    first.
     """
+    found = channel_of(root, relative, emitted=emitted)
+    if found is not None:
+        return found.provenance
+    return Provenance("yours", "this repository", "edit directly")
+
+
+def _rule_materialised(
+    root: Path, relative: Path, emitted: frozenset[str] | None
+) -> Provenance | None:
+    del emitted
+    return _materialised(root, relative)
+
+
+def _rule_generated(
+    root: Path, relative: Path, emitted: frozenset[str] | None
+) -> Provenance | None:
+    prog = footman.prog()
+    generated = emitted_paths(root) if emitted is None else emitted
+    if relative.as_posix() not in generated:
+        return None
+    return Provenance(
+        "generated",
+        "the workshop emitters, from workshop.toml",
+        f"edit workshop.toml (or the emitters) and run `{prog} template.apply`",
+    )
+
+
+def _rule_rendered(
+    root: Path, relative: Path, emitted: frozenset[str] | None
+) -> Provenance | None:
+    del emitted
+    from livery.workshop._templates import template_source
+
+    if relative.as_posix() not in PROJECT_RENDERED:
+        return None
+    prog = footman.prog()
+    return Provenance(
+        "rendered",
+        f"the template channel ({template_source(root)}, project kind)",
+        f"edit the template source and run `{prog} template.apply`",
+    )
+
+
+def _rule_seed(
+    root: Path, relative: Path, emitted: frozenset[str] | None
+) -> Provenance | None:
+    del emitted
     from livery.workshop._templates import PROJECT_SEEDS, template_source
 
+    if relative.as_posix() not in PROJECT_SEEDS:
+        return None
+    return Provenance(
+        "seed",
+        f"seeded at birth from the template channel ({template_source(root)})",
+        "yours: edit directly; the template never rewrites it",
+    )
+
+
+def _rule_answers(
+    root: Path, relative: Path, emitted: frozenset[str] | None
+) -> Provenance | None:
+    del root, emitted
+    if relative.as_posix() != ".copier-answers.yml":
+        return None
     prog = footman.prog()
-    posix = relative.as_posix()
+    return Provenance(
+        "receipts",
+        "machine-managed identity and template provenance",
+        f"never by hand; `{prog} new.package` and the update wave write it",
+    )
 
-    delivered = _materialised(root, relative)
-    if delivered is not None:
-        return delivered
 
-    generated = emitted_paths(root) if emitted is None else emitted
-    if posix in generated:
-        return Provenance(
-            "generated",
-            "the workshop emitters, from workshop.toml",
-            f"edit workshop.toml (or the emitters) and run `{prog} template.apply`",
-        )
+def _rule_contract(
+    root: Path, relative: Path, emitted: frozenset[str] | None
+) -> Provenance | None:
+    del root, emitted
+    if relative.name != "workshop.toml":
+        return None
+    return Provenance(
+        "contract",
+        "the workspace contract, config-as-code",
+        "edit directly and merge; governance applies itself on main",
+    )
 
-    source = template_source(root)
-    if posix in PROJECT_RENDERED:
+
+def _rule_environment(
+    root: Path, relative: Path, emitted: frozenset[str] | None
+) -> Provenance | None:
+    del root, emitted
+    if relative.as_posix() != ".repo.env":
+        return None
+    prog = footman.prog()
+    return Provenance(
+        "environment",
+        "the committed rung of the env cascade",
+        f"`{prog} env.set KEY --scope=repo`, or edit directly",
+    )
+
+
+def _rule_toolchain(
+    root: Path, relative: Path, emitted: frozenset[str] | None
+) -> Provenance | None:
+    del root, emitted
+    if relative.as_posix() != "uv.lock":
+        return None
+    return Provenance(
+        "toolchain",
+        "uv's lockfile",
+        "`uv lock` (or the update wave); never by hand",
+    )
+
+
+def _rule_member(
+    root: Path, relative: Path, emitted: frozenset[str] | None
+) -> Provenance | None:
+    """A package's own files: its changelog config, its receipts, its content."""
+    del emitted
+    from livery.workshop._templates import template_source
+
+    if len(relative.parts) <= 2 or relative.parts[0] != "packages":
+        return None
+    prog = footman.prog()
+    member = Path(*relative.parts[:2])
+    rest = Path(*relative.parts[2:]).as_posix()
+    if rest == "cliff.toml":
         return Provenance(
             "rendered",
-            f"the template channel ({source}, project kind)",
+            f"the template channel ({template_source(root)}, package-python kind)",
             f"edit the template source and run `{prog} template.apply`",
         )
-    if posix in PROJECT_SEEDS:
-        return Provenance(
-            "seed",
-            f"seeded at birth from the template channel ({source})",
-            "yours: edit directly; the template never rewrites it",
-        )
-    if posix == ".copier-answers.yml":
+    if rest == ".copier-answers.yml":
         return Provenance(
             "receipts",
-            "machine-managed identity and template provenance",
-            f"never by hand; `{prog} new.package` and the update wave write it",
+            "machine-managed package identity",
+            "never by hand; the render wrote it",
         )
-    if relative.name == "workshop.toml":
+    if "/content/" in rest:
         return Provenance(
-            "contract",
-            "the workspace contract, config-as-code",
-            "edit directly and merge; governance applies itself on main",
+            "layer content",
+            f"{member.as_posix()}: what this layer ships; the"
+            " provenance lint keeps its header",
+            f"edit directly here; `{prog} sync` delivers it",
         )
-    if posix == ".repo.env":
-        return Provenance(
-            "environment",
-            "the committed rung of the env cascade",
-            f"`{prog} env.set KEY --scope=repo`, or edit directly",
-        )
-    if posix == "uv.lock":
-        return Provenance(
-            "toolchain",
-            "uv's lockfile",
-            "`uv lock` (or the update wave); never by hand",
-        )
-    if len(relative.parts) > 2 and relative.parts[0] == "packages":
-        member = Path(*relative.parts[:2])
-        rest = Path(*relative.parts[2:]).as_posix()
-        if rest == "cliff.toml":
-            return Provenance(
-                "rendered",
-                f"the template channel ({source}, package-python kind)",
-                f"edit the template source and run `{prog} template.apply`",
-            )
-        if rest == ".copier-answers.yml":
-            return Provenance(
-                "receipts",
-                "machine-managed package identity",
-                "never by hand; the render wrote it",
-            )
-        if "/content/" in rest:
-            return Provenance(
-                "layer content",
-                f"{member.as_posix()}: what this layer ships; the"
-                " provenance lint keeps its header",
-                f"edit directly here; `{prog} sync` delivers it",
-            )
-        return Provenance(
-            "yours",
-            f"{member.as_posix()}: the package's own file since its birth",
-            "edit directly",
-        )
-    return Provenance("yours", "this repository", "edit directly")
+    return Provenance(
+        "yours",
+        f"{member.as_posix()}: the package's own file since its birth",
+        "edit directly",
+    )
+
+
+# The builtin ladder as ranked rules: a layer registers its own beside
+# them, at the rank that says where it stands.
+register_channels(
+    [
+        ChannelRule("materialised", _rule_materialised, 100, "livery.workshop"),
+        ChannelRule("generated", _rule_generated, 90, "livery.workshop"),
+        ChannelRule("rendered", _rule_rendered, 80, "livery.workshop"),
+        ChannelRule("seed", _rule_seed, 70, "livery.workshop"),
+        ChannelRule("answers", _rule_answers, 60, "livery.workshop"),
+        ChannelRule("contract", _rule_contract, 50, "livery.workshop"),
+        ChannelRule("environment", _rule_environment, 40, "livery.workshop"),
+        ChannelRule("toolchain", _rule_toolchain, 30, "livery.workshop"),
+        ChannelRule("member", _rule_member, 20, "livery.workshop"),
+    ]
+)
 
 
 def _tracked_paths() -> list[str]:
@@ -395,13 +473,57 @@ def explain(
     relative = Path(os.path.normpath(str(raw)))
     if not relative.parts or relative.parts[0] == "..":
         fail(f"{path} is outside this workspace")
-    answer = classify(root, relative)
-    print(f"  {relative.as_posix()}")
-    print(f"    channel: {answer.channel}")
-    print(f"    source: {answer.source}")
-    print(f"    edit: {answer.edit}")
-    for line in owned_lines(root, relative):
-        print(f"    {line}")
+    for line in describe(root, relative):
+        print(line)
+
+
+def describe(root: Path, relative: Path) -> list[str]:
+    """The lines ``fm explain`` prints for *relative*: category, channel, claims."""
+    from livery.workshop._docs import site_reads
+    from livery.workshop._packages import discover_packages
+
+    packages = discover_packages(root) if (root / "packages").is_dir() else ()
+    unit, inside = unit_of(root, packages, relative.as_posix())
+    lines = [f"  {relative.as_posix()}"]
+    if unit is not None:
+        category = category_of(unit, inside)
+        lines.append(f"    category: {category.name} ({category.supplier})")
+    found = channel_of(root, relative)
+    answer = found.provenance if found is not None else classify(root, relative)
+    supplier = found.supplier if found is not None else "livery.workshop"
+    lines.append(f"    channel: {answer.channel} ({supplier})")
+    lines.append(f"    source: {answer.source}")
+    lines.append(f"    edit: {answer.edit}")
+    claims = ["site"] if site_reads(root, packages, relative.as_posix()) else []
+    if claims:
+        lines.append(f"    claimed by: {', '.join(claims)}")
+    lines.extend(f"    {line}" for line in owned_lines(root, relative))
+    return lines
+
+
+def unit_of(
+    root: Path, packages: tuple[Package, ...], path: str
+) -> tuple[Package | None, str]:
+    """The package *path* belongs to and the path inside it, or the root's unit.
+
+    A path under no package is the workspace unit's, relative to the
+    root; None when the root has no unit to speak of.
+    """
+    from livery.workshop._coverage_store import workspace_suite
+
+    for package in packages:
+        if path.startswith(package.path + "/"):
+            return package, path[len(package.path) + 1 :]
+    return workspace_suite(root) or _root_unit(root), path
+
+
+def _root_unit(root: Path) -> Package:
+    """The workspace unit for a root without its own tests directory."""
+    from livery.workshop._categories import WORKSPACE
+
+    return Package(
+        directory=root, path=".", name="workspace", kind=WORKSPACE, depends=()
+    )
 
 
 def owned_lines(root: Path, relative: Path) -> list[str]:
