@@ -54,6 +54,11 @@ requires = [
     "cmake_conan",
     "clang_format",
     "clang_tidy",
+    # Microsoft's coverage engine, the measurer of a cpp-conan package
+    # built with MSVC, which the workshop's own tests prove on the
+    # Windows leg; the .NET SDK it runs on rides as its runtime, on
+    # the same hosts.
+    "dotnet_coverage@windows",
 ]
 
 # Who reviews the workspace's own governance. These owners guard

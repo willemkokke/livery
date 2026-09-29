@@ -110,6 +110,104 @@ def test_a_requirement_is_a_name_or_a_name_with_a_floor():
         Requirement.parse("ruff<2")
 
 
+def test_a_scope_names_platforms_or_host_keys_and_refuses_anything_else():
+    # The refusals first: an empty scope, and a token that is neither.
+    with pytest.raises(LockError, match=r"here: 'tea@' names no host after @"):
+        Requirement.parse("tea@", site="here")
+    with pytest.raises(
+        LockError,
+        match=r"'windwos' in 'tea@windwos' is neither a platform \(windows, macos,"
+        r" linux\) nor a host key",
+    ):
+        Requirement.parse("tea@windwos")
+    with pytest.raises(LockError, match=r"'plan9' in 'tea>=1@linux,plan9'"):
+        Requirement.parse("tea>=1@linux,plan9")
+    scoped = Requirement.parse("tea >= 1.1 @ windows, macos-arm", site="s")
+    assert scoped == Requirement("tea", "1.1", "s", ("windows", "macos-arm"))
+    assert str(scoped) == "tea>=1.1@windows,macos-arm"
+    assert str(Requirement.parse("tea@linux")) == "tea@linux"
+    # A platform means every locked host of it; a key means itself;
+    # no scope means every locked host, in the lock's order.
+    assert scoped.on(THREE) == ("macos-arm", "windows-x64")
+    assert Requirement.parse("tea@windows").on(("linux-x64", "macos-arm")) == ()
+    assert Requirement.parse("tea").on(THREE) == THREE
+
+
+def test_a_scoped_tool_is_locked_on_its_hosts_alone(tmp_path):
+    tea = _archive("tea", ("1.0.0", THREE), ("1.1.0", ("linux-x64", "macos-arm")))
+    catalogue = Catalogue.of_records(
+        _records(tmp_path, tea, _delegated("ruff", "0.16.4"))
+    )
+    lock = resolve_lock(
+        catalogue,
+        [Requirement.parse("tea@linux,macos", site="kind cpp"), Requirement("ruff")],
+        hosts=THREE,
+    )
+    # Windows is not asked for, so 1.1.0 resolves and the entry names
+    # the hosts it is locked on, digests for those alone.
+    assert lock.tools["tea"].version == "1.1.0"
+    assert lock.tools["tea"].on == ("linux-x64", "macos-arm")
+    assert set(lock.tools["tea"].hosts) == {"linux-x64", "macos-arm"}
+    assert lock.tools["tea"].applies("linux-x64")
+    assert not lock.tools["tea"].applies("windows-x64")
+    assert lock.tools["ruff"].on == ()
+    assert lock.on_host("windows-x64") == ("ruff",)
+    assert lock.on_host("linux-x64") == ("ruff", "tea")
+    # Scopes union across sites: a second site asking for Windows
+    # widens the entry to every locked host, which 1.1.0 lacks.
+    widened = resolve_lock(
+        catalogue,
+        [
+            Requirement.parse("tea@linux,macos", site="kind cpp"),
+            Requirement.parse("tea@windows-x64", site="workshop.toml"),
+        ],
+        hosts=THREE,
+    )
+    assert widened.tools["tea"].version == "1.0.0"
+    assert widened.tools["tea"].on == ()
+    # A scope reaching no locked host locks nothing for the tool.
+    absent = resolve_lock(
+        catalogue,
+        [Requirement.parse("tea@windows"), Requirement("ruff")],
+        hosts=("linux-x64", "macos-arm"),
+    )
+    assert "tea" not in absent.tools
+    # A kept entry stands on the scoped hosts alone.
+    kept = resolve_lock(
+        catalogue,
+        [Requirement.parse("tea@linux,macos")],
+        hosts=THREE,
+        keep=lock,
+    )
+    assert kept.tools["tea"] == lock.tools["tea"]
+
+
+def test_a_scoped_entry_round_trips_and_a_scope_outside_the_lock_is_refused(
+    tmp_path,
+):
+    lock = Lock(
+        THREE,
+        {
+            "tea": Locked(
+                "1.1.0",
+                {"linux-x64": Digest.parse(f"sha256:{SHA}")},
+                on=("linux-x64",),
+            ),
+            "ruff": Locked("0.16.4"),
+        },
+    )
+    path = tmp_path / "tools.lock"
+    lock.save(path)
+    assert Lock.load(path) == lock
+    written = json.loads(path.read_text())
+    assert written["tools"]["tea"]["on"] == ["linux-x64"]
+    assert "on" not in written["tools"]["ruff"]
+    written["tools"]["tea"]["on"] = ["linux-arm"]
+    path.write_text(json.dumps(written))
+    with pytest.raises(LockError, match=r"tea: `on` names a host outside the lock's"):
+        Lock.load(path)
+
+
 def test_a_tool_the_catalogue_does_not_list_refuses_naming_the_site(tmp_path):
     catalogue = Catalogue.of_records(_records(tmp_path, _delegated("ruff", "1.0")))
     with pytest.raises(

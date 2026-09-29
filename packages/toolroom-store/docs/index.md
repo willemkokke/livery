@@ -102,16 +102,23 @@ read is offline; the authoring site reads its records directly and gets
 the same catalogue, since a deployment's digest is the digest of its
 canonical JSON either way.
 
-A requirement is a tool's name with a floor, `ruff` or `ruff>=0.16`.
-The lock takes for each tool the newest version the catalogue lists
-that satisfies every floor and resolves on every locked host: a
-downloaded kind resolves on a host when it has that host's artifact, a
-delegated kind everywhere its installer does. A requirement that cannot
-be met refuses naming the tool, each floor with the site that declared
-it, and for a host no eligible version has, the first version that has
-it. The lock is `tools.lock` at the repository root, one version per
-tool with the deployment digest per locked host; an entry stands while
-it still satisfies and resolves, and moves only when asked.
+A requirement is a tool's name with a floor, `ruff` or `ruff>=0.16`,
+and may name the hosts it applies to after `@`, `dotnet_coverage@windows`
+or `tea>=1.1@linux,macos-arm`: a platform means every locked host of
+it, a host key itself, and any other token refuses at parse. The lock
+takes for each tool the newest version the catalogue lists that
+satisfies every floor and resolves on every host the tool is required
+on, the union of its requirements' scopes and the whole lock for one
+with no scope: a downloaded kind resolves on a host when it has that
+host's artifact, a delegated kind everywhere its installer does. A
+requirement that cannot be met refuses naming the tool, each floor
+with the site that declared it, and for a host no eligible version
+has, the first version that has it. The lock is `tools.lock` at the
+repository root, one version per tool with the deployment digest per
+host it is locked on; an entry locked on fewer hosts than the lock's
+names them in `on`, a scope no locked host matches locks nothing, and
+an entry stands while it still satisfies and resolves, moving only
+when asked.
 
 ## What a load refuses
 

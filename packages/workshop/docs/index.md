@@ -172,7 +172,10 @@ comments keeps your lines as a tail after the lines the render owns.
 ## The tools a workspace requires
 
 Five sites declare tool requirements, each a name with a floor,
-`ruff` or `ruff>=0.16`: a package kind, in its record, for what
+`ruff` or `ruff>=0.16`, and each may name the hosts it applies to,
+`dotnet_coverage@windows` or `tea>=1.1@linux,macos-arm`, a platform
+meaning every locked host of it and a host key itself: a package
+kind, in its record, for what
 operates it, uv for the python kind; the checks that judge a kind,
 each naming its tools, which is how ruff, pytest and the checkers
 reach a python workspace; a listed layer, as `WORKSHOP_TOOLS` on its plugin
@@ -188,14 +191,18 @@ otherwise. The repository that authors the records reads them directly.
 `fm tools.lock` resolves every site's requirements against the
 catalogue and writes `tools.lock` at the root: one version per tool for
 the whole repository, the newest that satisfies every floor and
-resolves on every locked host, refusing by name otherwise. `fm
+resolves on every host the tool is required on, refusing by name
+otherwise. A tool required on some of the locked hosts alone is
+locked on those, its entry names them, and a scope no locked host
+matches locks nothing, which the lock says per requirement. `fm
 tools.add <requirement>` declares a tool at the project site, locks it
 and materialises it; `fm tools.lock --upgrade-tool=<tool>` moves one entry to the
 newest eligible version, and every package with it, since no package
 runs a version of its own.
 
 Entering the environment materialises the bundle the sites require:
-`fm sync` supplies every locked tool through the machine's store, the
+`fm sync` supplies every tool locked for this host through the
+machine's store, skipping one locked for other hosts alone, the
 downloaded kinds from the catalogue's deployment for this host through
 `[tools] sources` (folders or URLs in the store's layout, consulted
 before the origin) and the delegated kinds through their installer, in

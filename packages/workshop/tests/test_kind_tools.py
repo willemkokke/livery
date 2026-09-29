@@ -16,6 +16,7 @@ from livery.toolroom.store import (
     Lock,
     Record,
     RecordDelta,
+    Requirement,
     Surface,
 )
 from livery.workshop import _tool_tasks, _tools
@@ -631,6 +632,149 @@ def test_a_dotnet_tool_locks_its_sdk_and_is_supplied_after_it(
         "dotnet",
         "dotnet_coverage",
     )
+
+
+def _tea(*hosts: str) -> Record:
+    """tea, an archive on *hosts* (the three when none are named)."""
+    served = hosts or THREE
+    return Record(
+        "tea",
+        kind="download",
+        hosts=served,
+        layout=Layout(file="tea", entry_points=("tea",), paths=(".",)),
+        deltas=(
+            RecordDelta(
+                1, "1.0.0", "", {h: Artifact(f"https://x/1/{h}", SHA) for h in served}
+            ),
+        ),
+    )
+
+
+def test_a_scope_no_locked_host_matches_locks_nothing_and_says_so(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # The refusal first: a scope token that is no host, named with its site.
+    root = _workspace(tmp_path, monkeypatch, tools='requires = ["tea@windwos"]\n')
+    _records(root, _tea())
+    with pytest.raises(Failed, match=r"workshop.toml: 'windwos' in 'tea@windwos'"):
+        _tools.write_lock(root)
+    # A scope reaching none of the locked hosts: the tool is not locked,
+    # and the lock says which requirement went unmet.
+    (root / "workshop.toml").write_text(
+        '[workspace]\n\n[tools]\nindex = "records"\nrequires = ["tea@windows"]\n'
+        'hosts = ["linux-x64", "macos-arm"]\n'
+    )
+    lock = _tools.write_lock(root)
+    assert "tea" not in lock.tools
+    assert (
+        "tea@windows (workshop.toml): no locked host is windows; not locked"
+        in capsys.readouterr().out
+    )
+
+
+def test_a_scoped_requirement_locks_its_tool_on_the_named_hosts_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = _workspace(tmp_path, monkeypatch, tools='requires = ["tea@windows"]\n')
+    _records(root, _tea())
+    _tool_tasks.tools_lock()
+    lock = _tools.current_lock(root)
+    assert lock is not None
+    assert lock.tools["tea"].on == ("windows-x64",)
+    assert list(lock.tools["tea"].hosts) == ["windows-x64"]
+    assert "  tea 1.0.0  on windows-x64" in capsys.readouterr().out
+    assert _tools.lock_is_current(root) == (True, "")
+    # Widening the scope moves the lock: the check says so.
+    (root / "workshop.toml").write_text(
+        '[workspace]\n\n[tools]\nindex = "records"\nrequires = ["tea"]\n'
+    )
+    assert _tools.lock_is_current(root) == (False, "the lock would move: tea")
+
+
+def test_a_runtime_inherits_the_scope_of_the_tool_that_runs_on_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _workspace(
+        tmp_path, monkeypatch, tools='requires = ["dotnet_coverage@windows"]\n'
+    )
+    _records(
+        root,
+        Record(
+            "dotnet_coverage",
+            kind="dotnet",
+            package="dotnet-coverage",
+            runtime="dotnet",
+            deltas=_read("18.11.2"),
+        ),
+        _dotnet("10.0.401"),
+    )
+    lock = _tools.write_lock(root)
+    assert lock.tools["dotnet_coverage"].on == ("windows-x64",)
+    assert lock.tools["dotnet"].on == ("windows-x64",)
+    assert list(lock.tools["dotnet"].hosts) == ["windows-x64"]
+    listing = _tools.catalogue(root)
+    added = _tools.with_runtimes(
+        (Requirement.parse("dotnet_coverage@windows", site="s"),), listing
+    )
+    assert added[-1] == Requirement(
+        "dotnet", site="dotnet_coverage (dotnet)", hosts=("windows",)
+    )
+    # A site requiring the SDK everywhere needs no scoped copy.
+    everywhere = _tools.with_runtimes(
+        (
+            Requirement.parse("dotnet_coverage@windows", site="s"),
+            Requirement.parse("dotnet", site="t"),
+        ),
+        listing,
+    )
+    assert [str(r) for r in everywhere] == ["dotnet_coverage@windows", "dotnet"]
+    (root / "workshop.toml").write_text(
+        '[workspace]\n\n[tools]\nindex = "records"\n'
+        'requires = ["dotnet_coverage@windows", "dotnet"]\n'
+    )
+    assert _tools.write_lock(root).tools["dotnet"].on == ()
+
+
+def test_a_tool_locked_for_other_hosts_is_skipped_here_and_its_receipt_swept(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from livery.toolroom.store import StoreError
+    from workshop_hosts import HERE
+
+    elsewhere = "linux-x64" if HERE != "linux-x64" else "macos-arm"
+    root = _workspace(tmp_path, monkeypatch, tools=f'requires = ["tea@{elsewhere}"]\n')
+    _records(root, _tea())
+    _tools.write_lock(root)
+    supplied: list[str] = []
+
+    class _Store:
+        """A store that supplies nothing and remembers what was asked."""
+
+        host = HERE
+
+        def __init__(self, home: Path, **kwargs: object) -> None:
+            pass
+
+        def supply(self, name: str, *args: object, **kwargs: object) -> object:
+            supplied.append(name)
+            raise StoreError(f"{name}: stood in for")
+
+    monkeypatch.setattr(_tools, "Store", _Store)
+    # Named outright, the tool refuses: it is locked for another host.
+    with pytest.raises(
+        Failed, match=rf"tea is locked for {elsewhere} and not for this host"
+    ):
+        _tools.materialise(root, ("tea",))
+    # The whole bundle skips it, and a receipt an earlier install left
+    # for it goes with the sweep.
+    receipts = _tools.receipts_dir(root)
+    receipts.mkdir(parents=True)
+    (receipts / "tea.json").write_text("{}")
+    (receipts / "ruff.json").write_text("{}")
+    outcomes = _tools.materialise(root, strict=False)
+    assert "tea" not in supplied and "ruff" in supplied
+    assert all(made.receipt is None for made in outcomes)
+    assert not (receipts / "tea.json").exists()
 
 
 def test_the_catalogue_reads_an_index_directory_through_the_machines_store(

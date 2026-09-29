@@ -1,13 +1,17 @@
 """The lock: one version per tool for the repository, resolved against the catalogue.
 
-A requirement is a tool's name with a floor, declared at one of three
-sites; the sites' requirements union, and the lock takes for each tool
-the newest version the catalogue lists that satisfies every floor and
-resolves on every locked host. A version of a downloaded kind resolves
+A requirement is a tool's name with a floor, declared at one of the
+sites, and may name the hosts it applies to; the sites' requirements
+union, and the lock takes for each tool the newest version the
+catalogue lists that satisfies every floor and resolves on every
+host the tool is required on. A version of a downloaded kind resolves
 on a host when it has that host's artifact; a delegated kind resolves
 everywhere its installer does. A requirement that cannot be satisfied
 refuses naming the tool, each floor and its site, and for a host that
-no eligible version has, the first version that has it.
+no eligible version has, the first version that has it. A tool
+required on some of the locked hosts alone is locked on those, and
+the entry says which; one whose scope names no locked host is not
+locked at all.
 
 The lock is a file in the repository, `tools.lock`, so every checkout
 and every runner installs the same version; it moves only through a
@@ -28,7 +32,7 @@ from typing import Any
 
 from livery.strongroom import Digest
 from livery.toolroom.store._catalogue import Catalogue, CatalogueError, Listed
-from livery.toolroom.store._record import DOWNLOAD_KINDS, HOSTS, version_key
+from livery.toolroom.store._record import DOWNLOAD_KINDS, HOSTS, PLATFORMS, version_key
 from livery.toolroom.tools import version_tuple
 
 LOCK_FILE = "tools.lock"
@@ -41,7 +45,8 @@ GRAPHS = "tools.graphs"
 """The directory beside the lock holding one resolved graph per delegated tool."""
 
 _REQUIREMENT = re.compile(
-    r"^\s*(?P<name>[A-Za-z0-9_.\-]+)\s*(?:>=\s*(?P<floor>\S+))?\s*$"
+    r"^\s*(?P<name>[A-Za-z0-9_.\-]+)\s*(?:>=\s*(?P<floor>[^\s@]+))?\s*"
+    r"(?:@\s*(?P<hosts>[A-Za-z0-9,\-\s]*))?\s*$"
 )
 
 
@@ -51,39 +56,80 @@ class LockError(ValueError):
 
 @dataclass(frozen=True)
 class Requirement:
-    """One site's requirement of a tool: a floor, or any version.
+    """One site's requirement of a tool: a floor, or any version, on some hosts or all.
 
     Attributes:
         name: The tool's name.
         floor: The lowest version that satisfies; empty for any.
         site: Where the requirement was declared, for a refusal.
+        hosts: The hosts the requirement applies to, each a platform
+            (``windows``, every locked host of that platform) or a
+            host key (``windows-x64``); empty for every locked host.
     """
 
     name: str
     floor: str = ""
     site: str = ""
+    hosts: tuple[str, ...] = ()
 
     @classmethod
     def parse(cls, text: str, *, site: str = "") -> Requirement:
-        """A requirement from its spelling, `name` or `name>=floor`.
+        """A requirement from its spelling, `name`, `name>=floor`, `name@hosts`.
+
+        The hosts after ``@`` are comma-separated platforms or host
+        keys, ``dotnet_coverage@windows`` or ``tea>=1.1@linux,macos-arm``.
 
         Raises:
-            LockError: for a spelling that is neither.
+            LockError: for a spelling that is none of these, or a
+                scope naming no host or a token that is neither a
+                platform nor a host key.
         """
         match = _REQUIREMENT.match(text)
         if match is None:
             raise LockError(
                 f"{site or 'a requirement'}: {text!r} is not a requirement;"
-                " spell it `name` or `name>=floor`"
+                " spell it `name`, `name>=floor`, or either followed by"
+                " `@hosts`"
             )
-        return cls(match["name"], match["floor"] or "", site)
+        scope: tuple[str, ...] = ()
+        if match["hosts"] is not None:
+            tokens = tuple(
+                token.strip() for token in match["hosts"].split(",") if token.strip()
+            )
+            if not tokens:
+                raise LockError(
+                    f"{site or 'a requirement'}: {text!r} names no host after @;"
+                    f" a scope names a platform ({', '.join(PLATFORMS)}) or a"
+                    f" host key ({', '.join(HOSTS)})"
+                )
+            for token in tokens:
+                if token not in PLATFORMS and token not in HOSTS:
+                    raise LockError(
+                        f"{site or 'a requirement'}: {token!r} in {text!r} is"
+                        f" neither a platform ({', '.join(PLATFORMS)}) nor a host"
+                        f" key ({', '.join(HOSTS)})"
+                    )
+            scope = tokens
+        return cls(match["name"], match["floor"] or "", site, scope)
 
     def __str__(self) -> str:
-        return f"{self.name}>={self.floor}" if self.floor else self.name
+        spelled = f"{self.name}>={self.floor}" if self.floor else self.name
+        return f"{spelled}@{','.join(self.hosts)}" if self.hosts else spelled
 
     def satisfied_by(self, version: str) -> bool:
         """Whether *version* is at or above the floor."""
         return not self.floor or version_tuple(version) >= version_tuple(self.floor)
+
+    def on(self, locked: Iterable[str]) -> tuple[str, ...]:
+        """The hosts of *locked* this requirement applies to, in their order."""
+        hosts = tuple(locked)
+        if not self.hosts:
+            return hosts
+        return tuple(
+            host
+            for host in hosts
+            if host in self.hosts or host.partition("-")[0] in self.hosts
+        )
 
 
 @dataclass(frozen=True)
@@ -139,16 +185,25 @@ class Locked:
 
     Attributes:
         version: The version locked.
-        hosts: Per locked host the deployment's digest; empty for a
-            delegated kind, whose installer resolves the host.
+        hosts: Per host the tool is locked on, the deployment's
+            digest; empty for a delegated kind, whose installer
+            resolves the host.
         graph: The resolved graph of a delegated kind's version, or
             None for a downloaded kind and for a delegated one locked
             before a graph was written for it.
+        on: The locked hosts the tool is required on, when they are
+            fewer than the lock's; empty when it is required on every
+            one.
     """
 
     version: str
     hosts: dict[str, Digest] = field(default_factory=dict)
     graph: Graph | None = None
+    on: tuple[str, ...] = ()
+
+    def applies(self, host: str) -> bool:
+        """Whether the tool is locked for *host*."""
+        return not self.on or host in self.on
 
     def to_json(self) -> dict[str, Any]:
         """The entry as a JSON object."""
@@ -158,6 +213,8 @@ class Locked:
         }
         if self.graph is not None:
             out["graph"] = self.graph.to_json()
+        if self.on:
+            out["on"] = list(self.on)
         return out
 
 
@@ -172,6 +229,12 @@ class Lock:
 
     hosts: tuple[str, ...]
     tools: dict[str, Locked]
+
+    def on_host(self, host: str) -> tuple[str, ...]:
+        """The tools locked for *host*, in name order."""
+        return tuple(
+            name for name in sorted(self.tools) if self.tools[name].applies(host)
+        )
 
     def to_json(self) -> dict[str, Any]:
         """The lock as a JSON object, tools in name order."""
@@ -228,7 +291,15 @@ class Lock:
             graph = (
                 None if raw is None else Graph.from_json(raw, where=f"{path}: {name}")
             )
-            locked[str(name)] = Locked(entry["version"], digests, graph)
+            scope = entry.get("on", [])
+            if not isinstance(scope, list) or not all(
+                isinstance(h, str) and h in hosts for h in scope
+            ):
+                raise LockError(
+                    f"{path}: {name}: `on` names a host outside the lock's"
+                    f" ({', '.join(hosts)})"
+                )
+            locked[str(name)] = Locked(entry["version"], digests, graph, tuple(scope))
         return cls(tuple(hosts), locked)
 
 
@@ -243,10 +314,14 @@ def resolve_lock(
     """The lock for *requirements* against *catalogue*, on *hosts*.
 
     Each tool takes the newest version that satisfies every floor
-    declared for it and resolves on every host. A tool *keep* already
-    locks stays at its version when that version still satisfies and
-    resolves, unless it is named in *upgrade*; a tool no requirement
-    names any more leaves the lock.
+    declared for it and resolves on every host it is required on: the
+    union of its requirements' scopes, the whole of *hosts* for one
+    with no scope. A tool required on fewer hosts than the lock's is
+    locked on those and its entry names them; one whose scopes reach
+    no locked host is left out. A tool *keep* already locks stays at
+    its version when that version still satisfies and resolves,
+    unless it is named in *upgrade*; a tool no requirement names any
+    more leaves the lock.
 
     Raises:
         LockError: naming the first requirement that cannot be met:
@@ -271,13 +346,19 @@ def resolve_lock(
                 ", ".join(sorted({w.site for w in wants if w.site})) or "a requirement"
             )
             raise LockError(f"{error}; required by {sites}") from None
-        held = keep.tools.get(name) if keep and name not in moving else None
-        if held is not None and _eligible(listed, held.version, wants, locked_hosts):
-            tools[name] = _locked(listed, held.version, locked_hosts)
-            continue
-        tools[name] = _locked(
-            listed, _newest(listed, wants, locked_hosts), locked_hosts
+        on = tuple(
+            host
+            for host in locked_hosts
+            if any(host in want.on(locked_hosts) for want in wants)
         )
+        if not on:
+            continue
+        scope = on if on != locked_hosts else ()
+        held = keep.tools.get(name) if keep and name not in moving else None
+        if held is not None and _eligible(listed, held.version, wants, on):
+            tools[name] = _locked(listed, held.version, on, scope)
+            continue
+        tools[name] = _locked(listed, _newest(listed, wants, on), on, scope)
     return Lock(locked_hosts, tools)
 
 
@@ -331,7 +412,11 @@ def _newest(listed: Listed, wants: list[Requirement], hosts: tuple[str, ...]) ->
     )
 
 
-def _locked(listed: Listed, version: str, hosts: tuple[str, ...]) -> Locked:
+def _locked(
+    listed: Listed, version: str, hosts: tuple[str, ...], scope: tuple[str, ...]
+) -> Locked:
     if listed.kind not in DOWNLOAD_KINDS:
-        return Locked(version)
-    return Locked(version, {host: listed.hosts[version][host] for host in hosts})
+        return Locked(version, on=scope)
+    return Locked(
+        version, {host: listed.hosts[version][host] for host in hosts}, on=scope
+    )
