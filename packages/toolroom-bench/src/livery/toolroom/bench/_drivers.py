@@ -76,7 +76,10 @@ class Provision:
     npm, installed through the runtime `runtime` names and run on it.
     `nodejs` — node's own build from nodejs.org's release index, the runtime
     a node-tier package runs on unless its driver names bun. `bun` — bun's
-    own GitHub release, the other runtime. `github` / `gitlab` / `gitea` — a prebuilt
+    own GitHub release, the other runtime. `dotnet` — the .NET SDK from
+    Microsoft's release metadata, the runtime a `nuget` package runs on
+    and installs through. `nuget` — a .NET tool package from nuget.org,
+    installed by that SDK into a tool path. `github` / `gitlab` / `gitea` — a prebuilt
     release asset, the tier for every tool with a release of its own.
     `docker` — a static build from docker's own per-platform index, which is
     a directory listing rather than an asset list. `man` — a release's
@@ -88,7 +91,8 @@ class Provision:
     (`markdownlint-cli2`); otherwise the binary name is used."""
     runtime: str = ""
     """What a `node`-tier package runs on and installs through: node, unless
-    this says `bun`. Stamped on the record when it is first written, and
+    this says `bun`; `dotnet` for a `nuget` package. Stamped on the record
+    when it is first written, and
     read by every install of the package since. Which runtime a package
     gets is measured: a package moves by a reviewed edit here and on its
     record, never by default."""
@@ -138,6 +142,8 @@ RECORD_KINDS = {
     "python": "python",
     "node": "npm",
     "nodejs": "download",
+    "dotnet": "download",
+    "nuget": "dotnet",
     "man": "system-check",
     # The docker tier fetches a CLI to read; a consumer checks the docker it
     # has, since the daemon is its own install and the CLI belongs with it.
@@ -471,6 +477,18 @@ DRIVERS: tuple[Driver, ...] = (
         url="https://nodejs.org/docs/latest/api/cli.html",
     ),
     Driver(
+        "dotnet",
+        provision=Provision(kind="dotnet"),
+        url="https://learn.microsoft.com/dotnet/core/tools/",
+    ),
+    Driver(
+        "dotnet-coverage",
+        attr="dotnet_coverage",
+        provision=Provision(kind="nuget", runtime="dotnet"),
+        verbs=("collect", "instrument", "merge", "snapshot", "connect", "shutdown"),
+        url="https://learn.microsoft.com/dotnet/core/additional-tools/dotnet-coverage",
+    ),
+    Driver(
         "mkdocs",
         verbs=("build", "serve", "new", "gh-deploy"),
         in_process=True,
@@ -737,7 +755,14 @@ DRIVERS: tuple[Driver, ...] = (
     Driver("bash", source="manual", url="https://www.gnu.org/software/bash/"),
     Driver("zsh", source="manual", url="https://www.zsh.org/"),
     Driver("fish", source="manual", url="https://fishshell.com/"),
-    Driver("pwsh", source="manual", url="https://learn.microsoft.com/powershell/"),
+    # PowerShell publishes self-contained archives per platform, so its
+    # record is a download; the surface stays the hand-written shell stub.
+    Driver(
+        "pwsh",
+        source="manual",
+        url="https://learn.microsoft.com/powershell/",
+        provision=Provision(kind="github", repo="PowerShell/PowerShell"),
+    ),
     Driver("nu", source="manual", url="https://www.nushell.sh/"),
     Driver(
         "cmd",

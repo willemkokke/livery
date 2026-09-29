@@ -162,6 +162,13 @@ def _on_path(prefix: str | Path) -> Generator[None]:
     # rather than by `PATH`, so it takes a variable of its own.
     if (root / "man").is_dir():
         overlay["FOOTMAN_MANPATH"] = str(root / "man")
+    # A .NET tool's shim finds its runtime through DOTNET_ROOT and never
+    # through PATH, so a provisioned SDK is named for the tools on it.
+    from livery.toolroom.bench._provision import provisioned_dotnet
+
+    dotnet = provisioned_dotnet(root)
+    if dotnet is not None:
+        overlay["DOTNET_ROOT"] = str(dotnet.parent)
     with _overlay(**overlay):
         yield
 
@@ -2219,6 +2226,11 @@ def _curated(only: str, fetch: ModuleType) -> tuple[list[_drivers.Driver], list[
             # the same walk read all 23 with none missing.
             missing = "node" if shutil.which("node") is None else "bun"
             skipped.append(f"{driver.key} (no {missing} to install with)")
+            continue
+        if driver.provision.kind == "nuget" and shutil.which("dotnet") is None:
+            # The same again for a .NET tool: the SDK installs it and
+            # runs its shim, so without one every release reads as a hole.
+            skipped.append(f"{driver.key} (no dotnet to install with)")
             continue
         if driver.provision.kind == "man" and shutil.which("man") is None:
             # The pages are the reading, and rendering them takes `man`.

@@ -186,13 +186,25 @@ def test_a_mode_outside_the_three_is_refused_and_the_kinds_default_by_shape(
     assert default_mode("download", ("bin",)) == "path"
     assert default_mode("download") == "none"
     assert default_mode("system-check") == "none"
-    assert {default_mode(k) for k in ("pypi", "npm")} == {"path"}
-    # A runtime is an npm record's, one of the two, written after the package.
+    assert {default_mode(k) for k in ("pypi", "npm", "dotnet")} == {"path"}
+    # A runtime is an npm or a dotnet record's, written after the package:
+    # node or bun for npm, dotnet alone for dotnet.
     npm: dict[str, object] = {"kind": "npm", "hosts": (), "deltas": ()}
-    with pytest.raises(RecordError, match=r"runtime 'deno' is not one of node, bun"):
+    with pytest.raises(
+        RecordError, match=r"runtime 'deno' is not one of node, bun, dotnet"
+    ):
         _record(**npm, runtime="deno")
-    with pytest.raises(RecordError, match=r"a runtime is named by an npm record"):
+    with pytest.raises(RecordError, match=r"a runtime is named by an npm or a dotnet"):
         _record(runtime="bun")
+    with pytest.raises(RecordError, match=r"an npm record runs on node or bun, not"):
+        _record(**npm, runtime="dotnet")
+    dotnet: dict[str, object] = {"kind": "dotnet", "hosts": (), "deltas": ()}
+    with pytest.raises(
+        RecordError, match=r"a dotnet record runs on dotnet, not 'node'"
+    ):
+        _record(**dotnet, runtime="node")
+    assert _record(**dotnet).runtime == ""
+    assert _record(**dotnet, runtime="dotnet").to_json()["runtime"] == "dotnet"
     assert list(_record(**npm, runtime="bun").to_json())[:5] == [
         "name",
         "description",

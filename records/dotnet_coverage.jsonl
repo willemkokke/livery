@@ -1,0 +1,57 @@
+{"name": "dotnet_coverage", "description": "Microsoft's Code Coverage engine as a .NET tool: collects, instruments and merges coverage for .NET, and for native code on Windows", "kind": "dotnet", "package": "dotnet-coverage", "min_version": "", "hosts": []}
+{"version": "18.11.2", "date": "2026-09-11", "artifacts": {}, "read": {"platforms": ["macOS"], "extractor": 4, "help": ""}}
+{"verb": "", "help": "", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "collect", "help": "", "wraps": true, "positional": "any", "lead": ""}
+{"verb": "collect", "option": "app_id", "flags": ["--app-id"], "negation": "", "help": "Application User Model ID (AUMID, in the form PackageFamilyName!AppId) of a packaged (MSIX) app to activate and collect coverage for", "type": "str", "default": null, "choices": []}
+{"verb": "collect", "option": "background", "flags": ["--background", "-b"], "negation": "", "help": "Starts code coverage collection server in a new background process", "type": "bool", "default": null, "choices": []}
+{"verb": "collect", "option": "disable_console_output", "flags": ["--disable-console-output", "-dco"], "negation": "", "help": "Disables console output", "type": "bool", "default": null, "choices": []}
+{"verb": "collect", "option": "include_files", "flags": ["--include-files", "-if"], "negation": "", "help": "List of files to be instrumented", "type": "str", "default": null, "choices": []}
+{"verb": "collect", "option": "log_file", "flags": ["--log-file", "-l"], "negation": "", "help": "Log file path", "type": "str", "default": null, "choices": []}
+{"verb": "collect", "option": "log_level", "flags": ["--log-level", "-ll"], "negation": "", "help": "Log level", "type": "str", "default": null, "choices": []}
+{"verb": "collect", "option": "nologo", "flags": ["--nologo"], "negation": "", "help": "Do not display Code Coverage banner", "type": "bool", "default": null, "choices": []}
+{"verb": "collect", "option": "output", "flags": ["--output", "-o"], "negation": "", "help": "Output file", "type": "str", "default": null, "choices": []}
+{"verb": "collect", "option": "output_format", "flags": ["--output-format", "-f"], "negation": "", "help": "Output file format", "type": "str", "default": null, "choices": []}
+{"verb": "collect", "option": "server_mode", "flags": ["--server-mode", "-sv"], "negation": "", "help": "Starts code coverage collection in server mode", "type": "bool", "default": null, "choices": []}
+{"verb": "collect", "option": "session_id", "flags": ["--session-id", "-id"], "negation": "", "help": "Session ID of collection", "type": "str", "default": null, "choices": []}
+{"verb": "collect", "option": "settings", "flags": ["--settings", "-s"], "negation": "", "help": "XML code coverage settings", "type": "str", "default": null, "choices": []}
+{"verb": "collect", "option": "timeout", "flags": ["--timeout", "-t"], "negation": "", "help": "Timeout (in milliseconds) for interprocess communication", "type": "str", "default": null, "choices": []}
+{"verb": "connect", "help": "", "wraps": true, "positional": "required", "lead": "session"}
+{"verb": "connect", "option": "background", "flags": ["--background", "-b"], "negation": "", "help": "Executes command in a new background process", "type": "bool", "default": null, "choices": []}
+{"verb": "connect", "option": "disable_console_output", "flags": ["--disable-console-output", "-dco"], "negation": "", "help": "Disables console output", "type": "bool", "default": null, "choices": []}
+{"verb": "connect", "option": "log_file", "flags": ["--log-file", "-l"], "negation": "", "help": "Log file path", "type": "str", "default": null, "choices": []}
+{"verb": "connect", "option": "log_level", "flags": ["--log-level", "-ll"], "negation": "", "help": "Log level", "type": "str", "default": null, "choices": []}
+{"verb": "connect", "option": "nologo", "flags": ["--nologo"], "negation": "", "help": "Do not display Code Coverage banner", "type": "bool", "default": null, "choices": []}
+{"verb": "connect", "option": "timeout", "flags": ["--timeout", "-t"], "negation": "", "help": "Timeout (in milliseconds) for interprocess communication", "type": "str", "default": null, "choices": []}
+{"verb": "instrument", "help": "", "wraps": false, "positional": "required", "lead": "input_file"}
+{"verb": "instrument", "option": "disable_console_output", "flags": ["--disable-console-output", "-dco"], "negation": "", "help": "Disables console output", "type": "bool", "default": null, "choices": []}
+{"verb": "instrument", "option": "log_file", "flags": ["--log-file", "-l"], "negation": "", "help": "Log file path", "type": "str", "default": null, "choices": []}
+{"verb": "instrument", "option": "log_level", "flags": ["--log-level", "-ll"], "negation": "", "help": "Log level", "type": "str", "default": null, "choices": []}
+{"verb": "instrument", "option": "nologo", "flags": ["--nologo"], "negation": "", "help": "Do not display Code Coverage banner", "type": "bool", "default": null, "choices": []}
+{"verb": "instrument", "option": "output", "flags": ["--output", "-o"], "negation": "", "help": "Output file", "type": "str", "default": null, "choices": []}
+{"verb": "instrument", "option": "session_id", "flags": ["--session-id", "-id"], "negation": "", "help": "Session ID of collection", "type": "str", "default": null, "choices": []}
+{"verb": "instrument", "option": "settings", "flags": ["--settings", "-s"], "negation": "", "help": "XML code coverage settings", "type": "str", "default": null, "choices": []}
+{"verb": "merge", "help": "", "wraps": false, "positional": "any", "lead": ""}
+{"verb": "merge", "option": "disable_console_output", "flags": ["--disable-console-output", "-dco"], "negation": "", "help": "Disables console output", "type": "bool", "default": null, "choices": []}
+{"verb": "merge", "option": "log_file", "flags": ["--log-file", "-l"], "negation": "", "help": "Log file path", "type": "str", "default": null, "choices": []}
+{"verb": "merge", "option": "log_level", "flags": ["--log-level", "-ll"], "negation": "", "help": "Log level", "type": "str", "default": null, "choices": []}
+{"verb": "merge", "option": "nologo", "flags": ["--nologo"], "negation": "", "help": "Do not display Code Coverage banner", "type": "bool", "default": null, "choices": []}
+{"verb": "merge", "option": "output", "flags": ["--output", "-o"], "negation": "", "help": "Output file", "type": "str", "default": null, "choices": []}
+{"verb": "merge", "option": "output_format", "flags": ["--output-format", "-f"], "negation": "", "help": "Output file format", "type": "str", "default": null, "choices": []}
+{"verb": "merge", "option": "recursive", "flags": ["--recursive", "-r"], "negation": "", "help": "Search for coverage reports in subdirectories", "type": "bool", "default": null, "choices": []}
+{"verb": "merge", "option": "remove_input_files", "flags": ["--remove-input-files"], "negation": "", "help": "Removes all input coverage reports which were merged", "type": "bool", "default": null, "choices": []}
+{"verb": "shutdown", "help": "", "wraps": false, "positional": "required", "lead": "session"}
+{"verb": "shutdown", "option": "disable_console_output", "flags": ["--disable-console-output", "-dco"], "negation": "", "help": "Disables console output", "type": "bool", "default": null, "choices": []}
+{"verb": "shutdown", "option": "log_file", "flags": ["--log-file", "-l"], "negation": "", "help": "Log file path", "type": "str", "default": null, "choices": []}
+{"verb": "shutdown", "option": "log_level", "flags": ["--log-level", "-ll"], "negation": "", "help": "Log level", "type": "str", "default": null, "choices": []}
+{"verb": "shutdown", "option": "nologo", "flags": ["--nologo"], "negation": "", "help": "Do not display Code Coverage banner", "type": "bool", "default": null, "choices": []}
+{"verb": "shutdown", "option": "timeout", "flags": ["--timeout", "-t"], "negation": "", "help": "Timeout (in milliseconds) for interprocess communication", "type": "str", "default": null, "choices": []}
+{"verb": "snapshot", "help": "", "wraps": false, "positional": "required", "lead": "session"}
+{"verb": "snapshot", "option": "disable_console_output", "flags": ["--disable-console-output", "-dco"], "negation": "", "help": "Disables console output", "type": "bool", "default": null, "choices": []}
+{"verb": "snapshot", "option": "log_file", "flags": ["--log-file", "-l"], "negation": "", "help": "Log file path", "type": "str", "default": null, "choices": []}
+{"verb": "snapshot", "option": "log_level", "flags": ["--log-level", "-ll"], "negation": "", "help": "Log level", "type": "str", "default": null, "choices": []}
+{"verb": "snapshot", "option": "nologo", "flags": ["--nologo"], "negation": "", "help": "Do not display Code Coverage banner", "type": "bool", "default": null, "choices": []}
+{"verb": "snapshot", "option": "output", "flags": ["--output", "-o"], "negation": "", "help": "Output file", "type": "str", "default": null, "choices": []}
+{"verb": "snapshot", "option": "reset", "flags": ["--reset", "-r"], "negation": "", "help": "Clears coverage information for a code coverage collection", "type": "bool", "default": null, "choices": []}
+{"verb": "snapshot", "option": "tag_identifier", "flags": ["--tag-identifier", "-tid"], "negation": "", "help": "Tag id of the snapshot stored in the coverage file", "type": "str", "default": null, "choices": []}
+{"verb": "snapshot", "option": "tag_name", "flags": ["--tag-name", "-tn"], "negation": "", "help": "Tag name of the snapshot stored in the coverage file", "type": "str", "default": null, "choices": []}
+{"verb": "snapshot", "option": "timeout", "flags": ["--timeout", "-t"], "negation": "", "help": "Timeout (in milliseconds) for interprocess communication", "type": "str", "default": null, "choices": []}

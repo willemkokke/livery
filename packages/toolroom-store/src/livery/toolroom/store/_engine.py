@@ -489,10 +489,15 @@ class Store:
         bun, which the caller supplied first: npm run on node, or bun's
         own installer. Its launchers start with `#!/usr/bin/env node`,
         which the runtime answers on the caller's PATH, bun through the
-        `node` shim its record declares. A `system-check` is the
-        machine's own tool, found on PATH and held to *min_version*.
-        `python` is not supplied through the store yet and refuses
-        naming the kind.
+        `node` shim its record declares. A `dotnet` tool is installed
+        the same way through *runtime_exe*, the dotnet SDK's own
+        executable, with `dotnet tool install --tool-path` into its
+        own directory; its launchers are the shims the SDK writes,
+        which find the runtime through `DOTNET_ROOT`, the SDK
+        record's own environment. A `system-check` is the machine's
+        own tool, found on PATH and held to *min_version*. `python`
+        is not supplied through the store yet and refuses naming the
+        kind.
 
         Raises:
             StoreError: for a kind the store cannot supply, a downloaded
@@ -522,6 +527,13 @@ class Store:
             return self._supply_npm(
                 name, version, package or name, runs_on, runtime_exe, graph
             )
+        if kind == "dotnet":
+            if runtime_exe is None:
+                raise StoreError(
+                    f"{name}: a dotnet tool needs dotnet; lock dotnet first, and"
+                    " hand its executable over"
+                )
+            return self._supply_dotnet(name, version, package or name, runtime_exe)
         if kind == "system-check":
             return self._supply_system(name, version, min_version)
         raise StoreError(
@@ -641,7 +653,7 @@ class Store:
     # --- the delegated kinds --------------------------------------------------
 
     def _probe_delegated(self, name: str, kind: str, version: str) -> Ensured | None:
-        if kind in ("pypi", "npm"):
+        if kind in ("pypi", "npm", "dotnet"):
             tool_dir = self._delegated_dir(name, kind, version)
             launchers = _launchers(tool_dir / "bin")
             if not launchers:
@@ -657,9 +669,9 @@ class Store:
         return None
 
     def _delegated_dir(self, name: str, kind: str, version: str) -> Path:
-        """Where a delegated kind's install lives: under `uv/` or `npm/`."""
-        home = self.home.uv if kind == "pypi" else self.home.npm
-        return home / "tools" / f"{name}@{version}"
+        """Where a delegated kind's install lives: under `uv/`, `npm/` or `dotnet/`."""
+        homes = {"pypi": self.home.uv, "npm": self.home.npm, "dotnet": self.home.dotnet}
+        return homes[kind] / "tools" / f"{name}@{version}"
 
     def _supply_npm(
         self,
@@ -736,6 +748,57 @@ class Store:
                     f" {tool_dir}, at {target}; the store runs nothing it did not"
                     " place"
                 )
+        return Ensured(name, version, True, tool_dir, _delegated(launchers), None)
+
+    def _supply_dotnet(
+        self, name: str, version: str, package: str, exe: Path
+    ) -> Ensured:
+        """Install *package* at *version* through the dotnet at *exe*.
+
+        `dotnet tool install --tool-path` writes the tool's shim into
+        the directory named and the package under `.store` beside it,
+        so the directory named is the tool's `bin`. No graph: a .NET
+        tool package carries its dependencies, and the version pins
+        the whole. The SDK's first-run work and telemetry are off for
+        the install, and `DOTNET_ROOT` points it at its own runtime;
+        the shim finds the runtime the same way at run time, through
+        the SDK record's environment.
+        """
+        self._progress(Event(name, version, "probe"))
+        present = self._probe_delegated(name, "dotnet", version)
+        if present is not None:
+            return present
+        tool_dir = self._delegated_dir(name, "dotnet", version)
+        bin_dir = tool_dir / "bin"
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        root = exe.parent
+        env = {
+            "PATH": os.pathsep.join([str(root), os.environ.get("PATH", "")]),
+            "DOTNET_ROOT": str(root),
+            "DOTNET_CLI_HOME": str(tool_dir),
+            "DOTNET_NOLOGO": "1",
+            "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
+            "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1",
+        }
+        argv = [
+            str(exe),
+            "tool",
+            "install",
+            package,
+            "--version",
+            version,
+            "--tool-path",
+            str(bin_dir),
+        ]
+        self._progress(Event(name, version, "install", " ".join(argv)))
+        code = run_installer(argv, env)
+        launchers = _launchers(bin_dir)
+        if code != 0 or not launchers:
+            shutil.rmtree(tool_dir, ignore_errors=True)
+            raise StoreError(
+                f"{name} {version}: `{' '.join(argv)}` exited {code} and left"
+                f" {'no launcher' if code == 0 else 'nothing'} in {bin_dir}"
+            )
         return Ensured(name, version, True, tool_dir, _delegated(launchers), None)
 
     def _supply_uv_tool(

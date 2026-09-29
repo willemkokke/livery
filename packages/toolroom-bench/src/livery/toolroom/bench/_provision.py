@@ -135,6 +135,8 @@ def provision(
         outcomes.append(_release(prefix, driver, host="github"))
     outcomes += _nodejs_tier(prefix, by_kind.get("nodejs", []))
     outcomes += _node_tier(prefix, by_kind.get("node", []))
+    outcomes += _dotnet_tier(prefix, by_kind.get("dotnet", []))
+    outcomes += _nuget_tier(prefix, by_kind.get("nuget", []))
     forges = ("github", "gitlab", "gitea")
     for driver in [d for kind in forges for d in by_kind.get(kind, [])]:
         outcomes.append(_release(prefix, driver, host=driver.provision.kind))
@@ -465,6 +467,87 @@ def _node_tier(prefix: Path, drivers: list[Driver]) -> list[Outcome]:
             Outcome(d.key, "node", "ok" if ok else "fail", d.provision.target(d.name))
             for d in on_bun
         ]
+    return outcomes
+
+
+# --- dotnet tiers (the SDK, and the NuGet tools that install through it) -----
+
+
+def _dotnet_tier(prefix: Path, drivers: list[Driver]) -> list[Outcome]:
+    """The newest .NET SDK, unpacked whole under the prefix and linked into its `bin`.
+
+    Whole, because `dotnet tool install` is the SDK's, and the muxer
+    finds its SDK beside itself; the launcher in `bin` is what puts
+    `dotnet` on the prefix's PATH for the nuget tier.
+    """
+    from livery.toolroom.bench import _toolfetch
+
+    outcomes: list[Outcome] = []
+    for driver in drivers:
+        try:
+            found = _toolfetch.releases(driver)
+        except _toolfetch.Unreachable as blocked:
+            outcomes.append(Outcome(driver.key, "dotnet", "fail", str(blocked)))
+            continue
+        if not found:
+            outcomes.append(Outcome(driver.key, "dotnet", "fail", "no builds listed"))
+            continue
+        newest = found[0]
+        placed = _toolfetch.install(driver, newest, prefix / ".dotnet")
+        if placed is None:
+            outcomes.append(
+                Outcome(
+                    driver.key, "dotnet", "fail", f"{newest.version} would not install"
+                )
+            )
+            continue
+        write_launcher(bin_dir(prefix), "dotnet", placed / exe("dotnet"))
+        outcomes.append(Outcome(driver.key, "dotnet", "ok", newest.version))
+    return outcomes
+
+
+def provisioned_dotnet(prefix: Path) -> Path | None:
+    """The dotnet the dotnet tier unpacked under *prefix*, or None before it ran."""
+    root = prefix / ".dotnet" / "dotnet"
+    if not root.is_dir():
+        return None
+    for tree in sorted(root.iterdir()):
+        muxer = tree / exe("dotnet")
+        if muxer.is_file():
+            return muxer
+    return None
+
+
+def _nuget_tier(prefix: Path, drivers: list[Driver]) -> list[Outcome]:
+    """Each .NET tool package through the SDK, the prefix's `bin` its shims' home.
+
+    A package already in the tool path is updated rather than
+    installed again, which is how a second provision moves to the
+    newest.
+    """
+    if not drivers:
+        return []
+    dotnet = provisioned_dotnet(prefix)
+    if dotnet is None:
+        return [
+            Outcome(d.key, "nuget", "fail", "dotnet was not provisioned first")
+            for d in drivers
+        ]
+    from livery.toolroom.bench._toolfetch import _dotnet_env
+
+    env = {
+        **os.environ,
+        "PATH": f"{bin_dir(prefix)}{os.pathsep}{os.environ.get('PATH', '')}",
+        **_dotnet_env(prefix),
+    }
+    outcomes: list[Outcome] = []
+    for driver in drivers:
+        package = driver.provision.target(driver.name)
+        tool_path = ["--tool-path", str(bin_dir(prefix))]
+        install = [str(dotnet), "tool", "install", package, *tool_path]
+        update = [str(dotnet), "tool", "update", package, *tool_path]
+        ok = _run(install, env=env) or _run(update, env=env)
+        outcomes.append(Outcome(driver.key, "nuget", "ok" if ok else "fail", package))
     return outcomes
 
 

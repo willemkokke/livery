@@ -32,9 +32,9 @@ if TYPE_CHECKING:
 FORGE_TIERS = ("github", "gitlab", "gitea", "bun")
 """The provision tiers whose releases publish per-host assets on a forge."""
 
-ASSET_TIERS = (*FORGE_TIERS, "nodejs")
-"""Every tier a version's artifacts can be recorded from: the forges, and
-node's own release index."""
+ASSET_TIERS = (*FORGE_TIERS, "nodejs", "dotnet")
+"""Every tier a version's artifacts can be recorded from: the forges,
+node's own release index, and Microsoft's for the .NET SDK."""
 
 
 class ArtifactError(Exception):
@@ -127,10 +127,14 @@ def record_version(
             repo=driver.provision.repo, tag=tag or version
         )
         assets = [(universal.rsplit("/", 1)[-1], universal)]
-    elif driver.provision.kind == "nodejs":
-        from livery.toolroom.bench._toolfetch import nodejs_assets
+    elif driver.provision.kind in ("nodejs", "dotnet"):
+        from livery.toolroom.bench._toolfetch import dotnet_assets, nodejs_assets
 
-        assets = nodejs_assets(version)
+        assets = (
+            nodejs_assets(version)
+            if driver.provision.kind == "nodejs"
+            else dotnet_assets(version)
+        )
     else:
         forge = forge_of(driver)
         assets = _assets(record.name, forge, driver.provision.repo, version, tag)
