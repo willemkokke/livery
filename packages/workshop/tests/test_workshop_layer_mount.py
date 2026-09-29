@@ -43,12 +43,9 @@ def _contract(root: Path, layers: str) -> None:
 
 @pytest.fixture
 def restored_checks():
-    before, withdrawn = dict(_checks._CHECKS), dict(_checks._WITHDRAWN)
+    state = _checks.snapshot()
     yield
-    _checks._CHECKS.clear()
-    _checks._CHECKS.update(before)
-    _checks._WITHDRAWN.clear()
-    _checks._WITHDRAWN.update(withdrawn)
+    _checks.restore(state)
 
 
 def _noop(ctx: GateContext) -> None:

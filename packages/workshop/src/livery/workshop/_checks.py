@@ -372,6 +372,29 @@ def check_names() -> tuple[str, ...]:
     return tuple(_CHECKS)
 
 
+def snapshot() -> tuple[dict[str, CheckRecord], dict[str, str]]:
+    """The registry's state, for [livery.workshop._checks.restore][] to put back."""
+    return dict(_CHECKS), dict(_WITHDRAWN)
+
+
+def restore(state: tuple[dict[str, CheckRecord], dict[str, str]]) -> None:
+    """Put the registry back to *state*, the slot contributions with it.
+
+    A test that replaces a record with one that contributes nothing
+    would otherwise leave the slots short of the real record's lines
+    for every test after it on the same worker.
+    """
+    records, withdrawn = state
+    for name in list(_CHECKS):
+        _slots_withdraw(name)
+    _CHECKS.clear()
+    _CHECKS.update(records)
+    _WITHDRAWN.clear()
+    _WITHDRAWN.update(withdrawn)
+    for record in records.values():
+        _contribute(record)
+
+
 def check_for(name: str) -> CheckRecord:
     """The record named *name*; refusal names the registry."""
     record = _CHECKS.get(name)

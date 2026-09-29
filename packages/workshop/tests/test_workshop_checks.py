@@ -34,11 +34,10 @@ _FAILURES = (BaseException,)
 def restored_registries():
     from livery.workshop import _checks, _kinds
 
-    checks = dict(_checks._CHECKS)
+    checks = _checks.snapshot()
     kinds = dict(_kinds._KINDS)
     yield
-    _checks._CHECKS.clear()
-    _checks._CHECKS.update(checks)
+    _checks.restore(checks)
     _kinds._KINDS.clear()
     _kinds._KINDS.update(kinds)
 

@@ -58,12 +58,11 @@ def restored_registry():
     from livery.workshop import _checks, _kinds
 
     before = dict(_kinds._KINDS)
-    checks = dict(_checks._CHECKS)
+    checks = _checks.snapshot()
     yield
     _kinds._KINDS.clear()
     _kinds._KINDS.update(before)
-    _checks._CHECKS.clear()
-    _checks._CHECKS.update(checks)
+    _checks.restore(checks)
 
 
 def _package(directory: Path, name: str, kind_name: str) -> Package:
