@@ -9,6 +9,55 @@ format follows [Keep a Changelog](https://keepachangelog.com/), the
 project adheres to [Semantic Versioning](https://semver.org/), and
 while it is pre-1.0 a minor version may include breaking changes.
 
+## [0.1.0] - 2026-09-29
+
+### Added
+
+- The release act, the points by hand and the clock on GitLab: the loop is whole on both lanes by @willemkokke
+- The surface rides in the record, and the histories are absorbed by @willemkokke
+- The index: every record materialised, and the pointer that names it by @willemkokke
+- Stubs in the index, the renderer's identity, and the golden render by @willemkokke
+- The three declaration sites, the catalogue, and the lock by @willemkokke
+- Receipts, materialisation on sync, and the modes by @willemkokke
+- The stubs live in typings/, written from the index, and the toolroom wheel ships none by @willemkokke
+- Stubs for the locked tools only, with sorted imports and a noqa header, declared by a handles module beside them by @willemkokke
+- The steady state costs the stats: a nothing-moved gate, records digested once, a lazy catalogue by @willemkokke
+- The store renders stubs from surfaces, and the index holds none by @willemkokke
+- Pyrefly has a record, a stub and a place in the python kind's lock by @willemkokke
+- The record is one file per tool with one line per option by @willemkokke
+- Ingest verification, the nine structural checks over every host by @willemkokke
+- The six-host verification point, every downloaded tool installs, runs and reads on its host by @willemkokke
+- The refresh records each new version's artifacts per host, and an archive root may carry the version by @willemkokke
+- Git-cliff comes from its own release, required by the base kind every package kind derives from by @willemkokke
+- Ruff and pyrefly come from their own releases, and ty, uv and prek list from theirs by @willemkokke
+- Cmake and ninja come from their own releases, and the asset picker learns universal and arch-less builds by @willemkokke
+- Basedpyright comes through bun: the store supplies bun-install, and bun is its locked dependency by @willemkokke
+- The site's URL scheme: packages, tasks, releases and tools, with _generated in no published path by @willemkokke
+- A package's docs section is the package's, and the site assembles its config at build time by @willemkokke
+- A tool's own switches live in its record's env, and gh's update check leaves the code for the record by @willemkokke
+- Conan is a tool store record from its own releases, and the cpp backend's refusal names the store by @willemkokke
+- The store owns download, unpack and the host table; the bench reads through it and runs a release binary in its own tree by @willemkokke
+- An npm kind names its runtime, node has a record from nodejs.org, and basedpyright runs on node by @willemkokke
+- The extension compiles against the library at HEAD and a third-party package through the store's cmake-conan provider, and the store's downloaded kinds are one download by @willemkokke
+- The pypi and python kinds name their source; uv is the installer, not the kind by @willemkokke
+- The native kinds format and lint their sources, with the two clang tools in the store by @willemkokke
+- The layering lint reads what the sources use, and each kind answers for its own by @willemkokke
+- The tools lock and sync in uv's shape, and a newborn locks its own by @willemkokke
+- A managed file carries the regions the repository owns by @willemkokke
+- The dotnet kind: .NET as a runtime record on every host, NuGet tools through it, pwsh as a download by @willemkokke
+
+### Fixed
+
+- The stubs and handles live beside the tools package, never inside its directory by @willemkokke
+- A stalled version read is tried again alone with a longer budget before it fails the check by @willemkokke
+- A bun global install gets its own project under the tool's directory, where bun's walk up for one stops by @willemkokke
+- The bench's suite runs in a release leg: the records from its own position, the runner's directories isolated by @willemkokke
+
+### Changed
+
+- The chain proves one first-party and one third-party symbol in the child's extension by @willemkokke
+- The contract key type becomes kind by @willemkokke
+
 ## [0.0.0] - 2026-09-13
 
 ### Added

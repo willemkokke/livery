@@ -7,7 +7,7 @@ build-backend = "uv_build"
 
 [project]
 name = "livery-toolroom-bench"
-version = "0.0.0"
+version = "0.1.0"
 description = "The bench where toolroom's typed tool handles are made and refreshed."
 readme = "README.md"
 license = "MIT"
