@@ -800,6 +800,27 @@ def test_the_lock_check_answers_without_writing(
     capsys.readouterr()
     _tool_tasks.tools_lock(check=True)
     assert "current" in capsys.readouterr().out
+    # A delegated entry's graph is written when its version enters the
+    # lock and kept after, and a fresh resolution carries none: that is
+    # no move, so the check stays current and writes nothing.
+    lock_file = root / "tools.lock"
+    data = json.loads(lock_file.read_text())
+    delegated = next(
+        name for name, entry in data["tools"].items() if not entry["hosts"]
+    )
+    data["tools"][delegated]["graph"] = {
+        "file": f"{delegated}.txt",
+        "digest": f"sha256:{SHA}",
+        "by": "uv 0.4",
+    }
+    lock_file.write_text(json.dumps(data, indent=2) + "\n")
+    with_graph = lock_file.read_bytes()
+    _tool_tasks.tools_lock(check=True)
+    assert "current" in capsys.readouterr().out
+    assert lock_file.read_bytes() == with_graph
+    _tool_tasks.tools_sync()
+    assert "writing it" not in capsys.readouterr().out
+    assert lock_file.read_bytes() == with_graph
     # A tool the sites require and the lock does not hold: the check names
     # what would move and writes nothing, so the file stands until
     # someone locks deliberately.
