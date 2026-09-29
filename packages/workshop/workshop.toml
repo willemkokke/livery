@@ -54,3 +54,9 @@ coverage-floor = 83
 # these declarations.
 [owners]
 users = ["willemkokke"]
+
+# The Windows coverage spike, on this branch alone: it never merges.
+[[ci.point]]
+name = "coverage-spike"
+task = "ci.coverage-spike"
+runners = ["windows-latest"]

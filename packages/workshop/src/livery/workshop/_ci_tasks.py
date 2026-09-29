@@ -1050,3 +1050,11 @@ def doctor() -> None:
             " nothing until [workspace] layers names it"
         )
     doctor_flow(this_forge(root))
+
+
+@ci.task(name="coverage-spike", hidden=True)
+def ci_coverage_spike() -> None:
+    """Run the Windows coverage spike; see [livery.workshop._coverage_spike][]."""
+    from livery.workshop._coverage_spike import spike
+
+    spike()
