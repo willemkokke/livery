@@ -116,9 +116,9 @@ class Prose:
 
     @property
     def origin(self) -> str:
-        """Where it comes from, for a refusal: the file, or the registering layer."""
+        """Where it comes from, for a refusal: the file in posix form, or the layer."""
         if self.source is not None:
-            return f"{self.source} ({self.layer or 'this repository'})"
+            return f"{self.source.as_posix()} ({self.layer or 'this repository'})"
         return f"the render {self.layer} registered"
 
     def text(self, root: Path, audience: str | None) -> str:
@@ -302,7 +302,7 @@ def shipped(layer: str, content: Path) -> list[Prose]:
     for path in sorted(directory.iterdir()):
         if not path.is_file():
             continue
-        section, kind, topic, audience = parse_name(path.name, where=str(path))
+        section, kind, topic, audience = parse_name(path.name, where=path.as_posix())
         found.append(Prose(section, topic, kind, audience, layer, source=path))
     return found
 
