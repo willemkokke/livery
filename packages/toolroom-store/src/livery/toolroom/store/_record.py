@@ -58,7 +58,7 @@ HOSTS = (
 )
 """The six host keys, `<platform>-<arch>`. A record carries any subset."""
 
-KINDS = ("download", "pypi", "python", "npm", "system-check")
+KINDS = ("download", "pypi", "python", "npm", "dotnet", "system-check")
 """The installer kinds. A `download` is fetched by URL and lands in the
 store: an archive is unpacked and its root hoisted, a bare file is
 saved under its `file` name, and the layout says what reaches the
@@ -66,15 +66,17 @@ outside, entry points and `paths` for a program, `env` alone for a
 file that is never run (a CMake module, a plugin bundle). `pypi`
 installs a package from the index and `python` an interpreter, both
 through uv today; `npm` installs a package from npm through the
-runtime the record names; `system-check` verifies a system tool
-against `min_version`, and may carry an artifact for a host that has
-no system tool. A kind names where a tool comes from; how it is
-installed or run is a field of its own."""
+runtime the record names; `dotnet` installs a .NET tool package from
+nuget.org through the dotnet SDK, its runtime; `system-check`
+verifies a system tool against `min_version`, and may carry an
+artifact for a host that has no system tool. A kind names where a
+tool comes from; how it is installed or run is a field of its own."""
 
-RUNTIMES = ("node", "bun")
+RUNTIMES = ("node", "bun", "dotnet")
 """What an `npm` record runs on, and installs through: node, unless the
-record names bun. The runtime is a tool of its own, locked beside the
-package and supplied first."""
+record names bun; and what a `dotnet` record runs on, the dotnet SDK.
+The runtime is a tool of its own, locked beside the package and
+supplied first."""
 
 DOWNLOAD_KINDS = frozenset({"download"})
 """The kinds whose every host needs an artifact."""
@@ -629,7 +631,8 @@ class Record:
         package: What a delegated kind's installer installs, when it
             differs from the tool's name: the PyPI or npm package.
         runtime: What an `npm` tool runs on and installs through, one
-            of `RUNTIMES`; empty means node.
+            of `RUNTIMES`; empty means node. A `dotnet` tool runs on
+            dotnet, and may say so.
         mode: How the tool reaches PATH once materialised, one of
             `MODES`; empty takes the kind's default.
         min_version: The floor a `system-check` tool must reach.
@@ -1206,9 +1209,16 @@ def validate(record: Record) -> None:
         raise RecordError(
             f"{where}: runtime {record.runtime!r} is not one of {', '.join(RUNTIMES)}"
         )
-    if record.runtime and record.kind != "npm":
+    if record.runtime and record.kind not in ("npm", "dotnet"):
         raise RecordError(
-            f"{where}: a runtime is named by an npm record; this one is {record.kind!r}"
+            f"{where}: a runtime is named by an npm or a dotnet record; this one is"
+            f" {record.kind!r}"
+        )
+    if record.kind == "npm" and record.runtime == "dotnet":
+        raise RecordError(f"{where}: an npm record runs on node or bun, not dotnet")
+    if record.kind == "dotnet" and record.runtime not in ("", "dotnet"):
+        raise RecordError(
+            f"{where}: a dotnet record runs on dotnet, not {record.runtime!r}"
         )
     for host in record.hosts:
         if host not in HOSTS:

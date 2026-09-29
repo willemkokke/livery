@@ -765,7 +765,10 @@ def test_which_tiers_can_be_listed():
         "python": True,  # uv carries CPython's own download index
         "docker": True,  # its own static-build index
         "git": True,  # kernel.org's per-release manuals
+        "dotnet": True,  # Microsoft's release metadata
+        "dotnet_coverage": True,  # nuget.org's flat container
         "bash": False,  # manual stub
+        "pwsh": False,  # manual stub, its archives recorded from a forge
     }
     for key, listable in expected.items():
         driver = _drivers.find(key)
@@ -1472,3 +1475,161 @@ def test_python_installs_into_a_private_store(monkeypatch, tmp_path):
     _toolfetch._install_python("3.10.0", tmp_path)
     assert envs[0] is not None
     assert envs[0]["UV_PYTHON_INSTALL_DIR"] == str(tmp_path / "store")
+
+
+def _indexes(monkeypatch, payloads: dict[str, object]) -> None:
+    """Serve *payloads* by URL, gzipped where the key says so, as the registries do."""
+    import gzip
+    import json as _json
+
+    from livery.toolroom.bench import _toolfetch
+
+    def fetch(url: str, *a: object, **k: object) -> bytes:
+        body = _json.dumps(payloads[url]).encode()
+        return gzip.compress(body) if "-gz-" in url else body
+
+    monkeypatch.setattr(_toolfetch, "fetch_bytes", fetch)
+
+
+def test_nuget_releases_come_from_the_flat_container_and_the_registration(monkeypatch):
+    """The container lists the versions, the gzipped registration dates them,
+    a page without its items inline is fetched by its address, and a
+    pre-release is not offered.
+    """
+    from livery.toolroom.bench import _drivers, _toolfetch
+
+    base = "https://api.nuget.org/v3"
+    _indexes(
+        monkeypatch,
+        {
+            f"{base}-flatcontainer/dotnet-coverage/index.json": {
+                "versions": ["17.9.0", "18.0.0-beta.1", "18.10.0", "18.11.2"]
+            },
+            f"{base}/registration5-gz-semver2/dotnet-coverage/index.json": {
+                "items": [
+                    {
+                        "@id": f"{base}/registration5-gz-semver2/dotnet-coverage/page/1.json"
+                    },
+                    {
+                        "items": [
+                            {
+                                "catalogEntry": {
+                                    "version": "18.10.0",
+                                    "published": "2026-08-12T10:00:00Z",
+                                }
+                            },
+                            {
+                                "catalogEntry": {
+                                    "version": "18.11.2",
+                                    "published": "2026-09-11T10:00:00Z",
+                                }
+                            },
+                        ]
+                    },
+                ]
+            },
+            f"{base}/registration5-gz-semver2/dotnet-coverage/page/1.json": {
+                "items": [
+                    {
+                        "catalogEntry": {
+                            "version": "17.9.0",
+                            "published": "2025-01-01T00:00:00Z",
+                        }
+                    }
+                ]
+            },
+        },
+    )
+    driver = _drivers.find("dotnet_coverage")
+    assert driver is not None
+    got = _toolfetch.releases(driver)
+    assert [(r.version, r.date) for r in got] == [
+        ("18.11.2", "2026-09-11"),
+        ("18.10.0", "2026-08-12"),
+        ("17.9.0", "2025-01-01"),
+    ]
+
+
+def test_dotnet_releases_come_from_the_supported_channels(monkeypatch):
+    """A channel in active or maintenance support, its SDK versions dated by
+    the release that shipped them; a preview channel, an end-of-life one
+    and a pre-release SDK are left out.
+    """
+    from livery.toolroom.bench import _drivers, _toolfetch
+
+    meta = "https://builds.dotnet.microsoft.com/dotnet/release-metadata"
+    _indexes(
+        monkeypatch,
+        {
+            f"{meta}/releases-index.json": {
+                "releases-index": [
+                    {
+                        "channel-version": "11.0",
+                        "support-phase": "go-live",
+                        "releases.json": f"{meta}/11.0/releases.json",
+                    },
+                    {
+                        "channel-version": "10.0",
+                        "support-phase": "active",
+                        "releases.json": f"{meta}/10.0/releases.json",
+                    },
+                    {
+                        "channel-version": "8.0",
+                        "support-phase": "maintenance",
+                        "releases.json": f"{meta}/8.0/releases.json",
+                    },
+                    {
+                        "channel-version": "7.0",
+                        "support-phase": "eol",
+                        "releases.json": f"{meta}/7.0/releases.json",
+                    },
+                ]
+            },
+            f"{meta}/10.0/releases.json": {
+                "releases": [
+                    {"release-date": "2026-09-08", "sdk": {"version": "10.0.401"}},
+                    {
+                        "release-date": "2026-08-10",
+                        "sdk": {"version": "10.0.400-preview.1"},
+                    },
+                    {"release-date": "2026-07-14", "sdk": {"version": "10.0.303"}},
+                ]
+            },
+            f"{meta}/8.0/releases.json": {
+                "releases": [
+                    {"release-date": "2026-09-08", "sdk": {"version": "8.0.425"}}
+                ]
+            },
+        },
+    )
+    driver = _drivers.find("dotnet")
+    assert driver is not None
+    got = _toolfetch.releases(driver)
+    assert [(r.version, r.date) for r in got] == [
+        ("10.0.401", "2026-09-08"),
+        ("10.0.303", "2026-07-14"),
+        ("8.0.425", "2026-09-08"),
+    ]
+    assets = dict(_toolfetch.dotnet_assets("10.0.401"))
+    assert assets["dotnet-sdk-10.0.401-osx-arm64.tar.gz"].endswith(
+        "/Sdk/10.0.401/dotnet-sdk-10.0.401-osx-arm64.tar.gz"
+    )
+    assert "dotnet-sdk-10.0.401-win-x64.zip" in assets and len(assets) == 6
+
+
+def test_the_nuget_tier_needs_its_runtime_and_says_so(tmp_path, monkeypatch):
+    """A .NET tool installs through the SDK and its shim runs on it: without
+    one the walk names it, as it names a missing node.
+    """
+    import shutil
+
+    from livery.toolroom.bench import _drivers, _toolfetch
+    from livery.toolroom.bench._tasks import _curated
+
+    monkeypatch.setattr(shutil, "which", lambda _name: None)
+    driver = _drivers.find("dotnet_coverage")
+    assert driver is not None
+    release = _toolfetch.Release("18.11.2")
+    assert _toolfetch.install(driver, release, tmp_path / "dc") is None
+    _chosen, skipped = _curated("", _toolfetch)
+    assert "dotnet_coverage (no dotnet to install with)" in skipped

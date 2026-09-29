@@ -636,6 +636,30 @@ def test_task_sync_runs_the_reading_against_the_prefix(tmp_path, monkeypatch):
     assert str(_provision.bin_dir(tmp_path)) in seen["path"]
 
 
+def test_a_prefix_read_names_its_provisioned_sdk_for_the_dotnet_shims(
+    tmp_path, monkeypatch
+):
+    """A .NET shim finds its runtime through DOTNET_ROOT and never PATH.
+
+    A prefix without an SDK leaves the variable as it was; one with an
+    SDK names it for the read, so a nuget tool's help is the tool's
+    and not the shim's plea to install .NET.
+    """
+    import os
+
+    from livery.toolroom.bench import _tasks as tools
+
+    monkeypatch.delenv("DOTNET_ROOT", raising=False)
+    _provision.bin_dir(tmp_path).mkdir(parents=True, exist_ok=True)
+    with tools._on_path(str(tmp_path)):
+        assert "DOTNET_ROOT" not in os.environ
+    dotnet = _fake_dotnet(tmp_path)
+    with tools._on_path(str(tmp_path)):
+        assert os.environ["DOTNET_ROOT"] == str(dotnet.parent)
+        assert str(_provision.bin_dir(tmp_path)) in os.environ["PATH"]
+    assert "DOTNET_ROOT" not in os.environ
+
+
 def test_pytest_provisions_with_its_cov_plugin():
     from livery.toolroom.bench import _drivers
 
@@ -737,3 +761,91 @@ def test_an_explicit_prefix_wins_over_the_default_room(tmp_path, monkeypatch):
     (tmp_path / "data" / "toolroom-bench" / "bin").mkdir(parents=True)
     mine = tmp_path / "mine"
     assert _tasks._resolve_prefix(str(mine)) == mine.resolve()
+
+
+def _fake_dotnet(prefix: Path) -> Path:
+    """A dotnet the dotnet tier would have unpacked, the muxer at the tree's root."""
+    root = prefix / ".dotnet" / "dotnet" / "10.0.401"
+    muxer = root / ("dotnet.exe" if sys.platform == "win32" else "dotnet")
+    muxer.parent.mkdir(parents=True, exist_ok=True)
+    muxer.write_text("")
+    return muxer
+
+
+def test_nuget_tier_fails_without_dotnet_and_installs_through_it(tmp_path, monkeypatch):
+    drivers = (
+        Driver(
+            "dotnet-coverage",
+            attr="dotnet_coverage",
+            provision=Provision(kind="nuget", runtime="dotnet"),
+        ),
+    )
+    (out,) = _provision.provision(drivers, tmp_path)
+    assert out.status == "fail" and "dotnet was not provisioned first" in out.detail
+    dotnet = _fake_dotnet(tmp_path)
+    calls: list[tuple[list[str], dict[str, str]]] = []
+
+    def fake_run(argv, env):
+        calls.append((argv, env))
+        return True
+
+    monkeypatch.setattr(_provision, "_run", fake_run)
+    (out,) = _provision.provision(drivers, tmp_path)
+    assert out.status == "ok" and out.detail == "dotnet-coverage"
+    ((argv, env),) = calls
+    assert argv == [
+        str(dotnet),
+        "tool",
+        "install",
+        "dotnet-coverage",
+        "--tool-path",
+        str(_provision.bin_dir(tmp_path)),
+    ]
+    assert env["PATH"].split(os.pathsep)[0] == str(_provision.bin_dir(tmp_path))
+    assert env["DOTNET_CLI_TELEMETRY_OPTOUT"] == "1"
+    assert env["DOTNET_CLI_HOME"] == str(tmp_path)
+    # A package already in the tool path is updated instead.
+    calls.clear()
+    monkeypatch.setattr(_provision, "_run", lambda argv, env: argv[2] == "update")
+    (out,) = _provision.provision(drivers, tmp_path)
+    assert out.status == "ok"
+
+
+def test_dotnet_tier_unpacks_the_sdk_whole_and_links_it_into_bin(tmp_path, monkeypatch):
+    """The whole tree, since the muxer finds its SDK beside itself, and a
+    `dotnet` beside the launchers for the nuget tier to install through.
+    """
+    from livery.toolroom.bench import _toolfetch
+
+    payload = io.BytesIO()
+    windows = sys.platform == "win32"
+    members = (
+        (("dotnet.exe", b"MZ"), ("sdk/10.0.401/dotnet.dll", b"MZ"))
+        if windows
+        else (
+            ("dotnet", b"#!/bin/sh\necho dotnet\n"),
+            ("sdk/10.0.401/dotnet.dll", b"MZ"),
+        )
+    )
+    with tarfile.open(fileobj=payload, mode="w:gz") as tar:
+        for name, data in members:
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            info.mode = 0o755
+            tar.addfile(info, io.BytesIO(data))
+    archive = tmp_path / "dotnet-sdk-10.0.401-osx-arm64.tar.gz"
+    archive.write_bytes(payload.getvalue())
+    monkeypatch.setattr(
+        _toolfetch, "releases", lambda driver: [_toolfetch.Release("10.0.401")]
+    )
+    monkeypatch.setattr(_provision, "_pick_asset", lambda assets, host="": assets[0])
+    monkeypatch.setattr(_provision, "_download", lambda url, prefix: archive)
+    (out,) = _provision.provision(
+        (Driver("dotnet", provision=Provision(kind="dotnet")),), tmp_path
+    )
+    assert out.status == "ok" and out.detail == "10.0.401"
+    dotnet = _provision.provisioned_dotnet(tmp_path)
+    assert dotnet is not None and dotnet.parent.name == "10.0.401"
+    assert (dotnet.parent / "sdk" / "10.0.401" / "dotnet.dll").is_file()
+    link = _provision.bin_dir(tmp_path) / ("dotnet.cmd" if windows else "dotnet")
+    assert link.exists()

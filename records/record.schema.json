@@ -104,6 +104,7 @@
             "pypi",
             "python",
             "npm",
+            "dotnet",
             "system-check"
           ],
           "default": "download"
@@ -116,7 +117,8 @@
           "type": "string",
           "enum": [
             "node",
-            "bun"
+            "bun",
+            "dotnet"
           ]
         },
         "mode": {

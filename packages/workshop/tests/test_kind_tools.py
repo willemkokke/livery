@@ -583,6 +583,56 @@ def test_each_runtime_is_locked_once_for_the_tools_that_run_on_it(
     assert "bun" not in locked and "cspell" not in locked and "node" in locked
 
 
+def _dotnet(*versions: str) -> Record:
+    """dotnet, the SDK a nuget tool installs through and runs on, on the three hosts."""
+    return Record(
+        "dotnet",
+        kind="download",
+        hosts=THREE,
+        layout=Layout(entry_points=("dotnet",), paths=(".",)),
+        deltas=tuple(
+            RecordDelta(
+                n,
+                v,
+                "",
+                {
+                    host: Artifact(f"https://x/dotnet/{v}/{host}.tar.gz", SHA)
+                    for host in THREE
+                },
+            )
+            for n, v in enumerate(versions, start=1)
+        ),
+    )
+
+
+def test_a_dotnet_tool_locks_its_sdk_and_is_supplied_after_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _workspace(tmp_path, monkeypatch, tools='requires = ["dotnet_coverage"]\n')
+    _records(
+        root,
+        Record(
+            "dotnet_coverage",
+            kind="dotnet",
+            package="dotnet-coverage",
+            runtime="dotnet",
+            deltas=_read("18.11.2"),
+        ),
+        _dotnet("10.0.401"),
+    )
+    lock = _tools.write_lock(root)
+    assert {"dotnet_coverage", "dotnet"} <= set(lock.tools)
+    # No graph for a dotnet tool: its package carries its dependencies.
+    assert lock.tools["dotnet_coverage"].graph is None
+    listing = _tools.catalogue(root)
+    assert _tools.runtime_of(listing.listed("dotnet_coverage")) == "dotnet"
+    assert _tools.runtime_of(listing.listed("dotnet")) == ""
+    assert _tools._runtimes_first(("dotnet_coverage",), lock, listing) == (
+        "dotnet",
+        "dotnet_coverage",
+    )
+
+
 def test_the_catalogue_reads_an_index_directory_through_the_machines_store(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

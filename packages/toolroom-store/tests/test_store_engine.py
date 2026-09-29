@@ -712,6 +712,92 @@ def _npm(name: str, version: str, runtime: str = "") -> Record:
     return replace(_uv_tool(name, version), kind="npm", package="", runtime=runtime)
 
 
+def _dotnet(name: str, version: str) -> Record:
+    from dataclasses import replace
+
+    return replace(
+        _uv_tool(name, version), kind="dotnet", package=name, runtime="dotnet"
+    )
+
+
+def _sdk(home: Home) -> Path:
+    """A dotnet SDK's executable in the store's layout, the muxer at its root."""
+    exe = home.root / "tools" / "dotnet@10.0.401" / f"dotnet{EXE}"
+    exe.parent.mkdir(parents=True, exist_ok=True)
+    exe.write_text("")
+    return exe
+
+
+def test_a_dotnet_tool_without_its_runtime_refuses_naming_it(home: Home) -> None:
+    store = Store(home, host=HOST)
+    with pytest.raises(
+        StoreError, match=r"dotnet-coverage: a dotnet tool needs dotnet; lock dotnet"
+    ):
+        store.ensure(_dotnet("dotnet-coverage", "18.11.2"), "18.11.2")
+    assert not (home.dotnet / "tools").exists()
+
+
+def test_a_dotnet_install_that_fails_or_writes_no_shim_leaves_nothing(
+    home: Home, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sdk = _sdk(home)
+    record = _dotnet("dotnet-coverage", "18.11.2")
+    store = Store(home, host=HOST)
+    monkeypatch.setattr(_engine, "run_installer", lambda argv, env: 4)
+    with pytest.raises(
+        StoreError, match=r"dotnet-coverage 18\.11\.2: `.* tool install"
+    ):
+        store.ensure(record, "18.11.2", runtime=sdk)
+    assert not (home.dotnet / "tools" / "dotnet-coverage@18.11.2").exists()
+    monkeypatch.setattr(_engine, "run_installer", lambda argv, env: 0)
+    with pytest.raises(StoreError, match=r"exited 0 and left no launcher"):
+        store.ensure(record, "18.11.2", runtime=sdk)
+    assert store.probe(record, "18.11.2") is None
+
+
+def test_a_dotnet_tool_lands_through_the_sdk_into_its_own_bin(
+    home: Home, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`dotnet tool install --tool-path` into the tool's `bin`, the SDK's root as DOTNET_ROOT."""
+    calls: list[tuple[list[str], dict[str, str]]] = []
+
+    def installing(argv: list[str], env: dict[str, str]) -> int:
+        calls.append((argv, env))
+        bin_dir = Path(argv[argv.index("--tool-path") + 1])
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        (bin_dir / f"dotnet-coverage{EXE}").write_text("")
+        (bin_dir / ".store").mkdir()  # the package, beside the shim
+        return 0
+
+    monkeypatch.setattr(_engine, "run_installer", installing)
+    sdk = _sdk(home)
+    record = _dotnet("dotnet-coverage", "18.11.2")
+    store = Store(home, host=HOST)
+    ensured = store.ensure(record, "18.11.2", runtime=sdk)
+    tool_dir = home.dotnet / "tools" / "dotnet-coverage@18.11.2"
+    assert ensured.installed and ensured.tool_dir == tool_dir
+    assert ensured.deployment.entry_points == (f"bin/dotnet-coverage{EXE}",)
+    assert ensured.paths == (tool_dir / "bin",)
+    ((argv, env),) = calls
+    assert argv == [
+        str(sdk),
+        "tool",
+        "install",
+        "dotnet-coverage",
+        "--version",
+        "18.11.2",
+        "--tool-path",
+        str(tool_dir / "bin"),
+    ]
+    assert env["DOTNET_ROOT"] == str(sdk.parent)
+    assert env["PATH"].startswith(str(sdk.parent))
+    assert env["DOTNET_CLI_TELEMETRY_OPTOUT"] == "1" and env["DOTNET_NOLOGO"] == "1"
+    # Present already: the second ensure probes and installs nothing.
+    again = store.ensure(record, "18.11.2", runtime=sdk)
+    assert not again.installed and len(calls) == 1
+    assert store.probe(record, "18.11.2") is not None
+
+
 def test_an_npm_tool_without_its_runtime_or_without_an_npm_refuses_naming_it(
     home: Home,
 ) -> None:

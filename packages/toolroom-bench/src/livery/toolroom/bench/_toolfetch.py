@@ -140,6 +140,8 @@ LISTABLE = (
     "uv",
     "node",
     "nodejs",
+    "nuget",
+    "dotnet",
     "github",
     "gitlab",
     "gitea",
@@ -185,6 +187,10 @@ def releases(driver: Driver) -> list[Release]:
         found = _uv_python()
     elif kind == "nodejs":
         found = _nodejs_index()
+    elif kind == "dotnet":
+        found = _dotnet_index()
+    elif kind == "nuget":
+        found = _nuget(driver)
     elif kind == "docker":
         found = _docker_index()
     elif kind == "man":
@@ -291,8 +297,15 @@ def _index(url: str) -> Any:
     forge API a list), so the honest static type is the JSON it is. Raises
     `Unreachable` when it cannot be read.
     """
+    raw = _read_index(url)
+    if raw[:2] == b"\x1f\x8b":
+        # NuGet's registration index is served gzipped, whatever the
+        # request accepts.
+        import gzip
+
+        raw = gzip.decompress(raw)
     try:
-        return json.loads(_read_index(url))
+        return json.loads(raw)
     except ValueError as cause:  # answered, but not with JSON
         raise Unreachable(url, cause) from cause
 
@@ -351,6 +364,165 @@ def nodejs_assets(version: str) -> list[tuple[str, str]]:
         )
         for platform_, suffix in NODEJS_FILES.items()
     ]
+
+
+_DOTNET_INDEX = (
+    "https://builds.dotnet.microsoft.com/dotnet/release-metadata/releases-index.json"
+)
+_DOTNET_SDK = (
+    "https://builds.dotnet.microsoft.com/dotnet/Sdk/{version}/"
+    "dotnet-sdk-{version}-{rid}.{suffix}"
+)
+DOTNET_FILES = {
+    "osx-arm64": "tar.gz",
+    "osx-x64": "tar.gz",
+    "linux-x64": "tar.gz",
+    "linux-arm64": "tar.gz",
+    "win-x64": "zip",
+    "win-arm64": "zip",
+}
+"""The SDK builds Microsoft publishes per release that the six hosts map
+to, by runtime identifier and archive suffix."""
+_NUGET_VERSIONS = "https://api.nuget.org/v3-flatcontainer/{package}/index.json"
+_NUGET_REGISTRATION = (
+    "https://api.nuget.org/v3/registration5-gz-semver2/{package}/index.json"
+)
+
+
+def _dotnet_index() -> list[Release]:
+    """Every SDK release on a supported .NET channel, from Microsoft's release metadata.
+
+    The index names the channels; a channel in active or maintenance
+    support lists its releases with the SDK each one shipped and the
+    day it did. A channel past its end of life or still in preview is
+    left out, so the newest release is always one with a support
+    window, and a pre-release SDK on a supported channel is left out
+    the same way. The version is the SDK's, which is what `dotnet
+    --version` answers.
+    """
+    index = _index(_DOTNET_INDEX)
+    channels = index.get("releases-index", []) if isinstance(index, dict) else []
+    found: list[Release] = []
+    for channel in channels:
+        if not isinstance(channel, dict):
+            continue
+        if channel.get("support-phase") not in ("active", "maintenance"):
+            continue
+        url = str(channel.get("releases.json", ""))
+        if not url:
+            continue
+        listing = _index(url)
+        releases = listing.get("releases", []) if isinstance(listing, dict) else []
+        for release in releases:
+            if not isinstance(release, dict):
+                continue
+            sdk = release.get("sdk")
+            version = str(sdk.get("version", "")) if isinstance(sdk, dict) else ""
+            if not version or "-" in version:
+                continue
+            found.append(
+                Release(version=version, date=str(release.get("release-date", ""))[:10])
+            )
+    return _order(found)
+
+
+def dotnet_assets(version: str) -> list[tuple[str, str]]:
+    """`[(asset name, download url)]` for the SDK at *version*, one per build.
+
+    Built from the version, since Microsoft names every build the same
+    way at a versioned address; the asset matcher then picks each
+    host's the way it picks a forge's.
+    """
+    return [
+        (
+            f"dotnet-sdk-{version}-{rid}.{suffix}",
+            _DOTNET_SDK.format(version=version, rid=rid, suffix=suffix),
+        )
+        for rid, suffix in DOTNET_FILES.items()
+    ]
+
+
+def _nuget(driver: Driver) -> list[Release]:
+    """NuGet's flat container lists a package's versions; its registration dates them.
+
+    The registration index is served gzipped and in pages; a page
+    without its items inline is fetched by its address. A pre-release
+    version, one with a hyphen, is not offered.
+    """
+    package = driver.provision.target(driver.name).lower()
+    versions = _index(_NUGET_VERSIONS.format(package=package))
+    listed = (
+        [str(v) for v in versions.get("versions", [])]
+        if isinstance(versions, dict)
+        else []
+    )
+    dates: dict[str, str] = {}
+    registration = _index(_NUGET_REGISTRATION.format(package=package))
+    pages = registration.get("items", []) if isinstance(registration, dict) else []
+    for page in pages:
+        if not isinstance(page, dict):
+            continue
+        items = page.get("items")
+        if items is None and page.get("@id"):
+            fetched = _index(str(page["@id"]))
+            items = fetched.get("items", []) if isinstance(fetched, dict) else []
+        for item in items or []:
+            entry = item.get("catalogEntry") if isinstance(item, dict) else None
+            if isinstance(entry, dict) and entry.get("version"):
+                dates[str(entry["version"])] = str(entry.get("published", ""))[:10]
+    found = [Release(version=v, date=dates.get(v, "")) for v in listed if "-" not in v]
+    return _order(found)
+
+
+def _dotnet_env(home: Path) -> dict[str, str]:
+    """The SDK's environment for an install: no first-run work, no telemetry."""
+    return {
+        "DOTNET_CLI_HOME": str(home),
+        "DOTNET_NOLOGO": "1",
+        "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
+        "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1",
+    }
+
+
+def _install_dotnet(release: Release, into: Path) -> Path | None:
+    """Unpack the SDK build for this platform whole; the directory holding `dotnet`.
+
+    Whole, since the SDK is what installs a NuGet tool and the muxer
+    finds its SDK beside itself.
+    """
+    from livery.toolroom.bench import _provision
+    from livery.toolroom.store import UnpackError, unpack
+
+    tree = into / "dotnet" / release.version
+    try:
+        _name, url = _provision._pick_asset(dotnet_assets(release.version))
+        archive = _provision._download(url, into)
+        unpack(archive, tree)
+    except (_provision.ProvisionError, UnpackError, OSError, ValueError):
+        return None
+    muxer = tree / ("dotnet.exe" if _windows() else "dotnet")
+    return tree if muxer.is_file() else None
+
+
+def _install_nuget(driver: Driver, version: str, into: Path) -> Path | None:
+    """Install the tool package at a pinned version through the dotnet on PATH.
+
+    Into the prefix's `bin`, where `dotnet tool install --tool-path`
+    writes the shim; without the SDK on PATH there is nothing to
+    install with, and the walk stops.
+    """
+    import shutil
+
+    dotnet = shutil.which("dotnet")
+    if dotnet is None:
+        return None
+    package = driver.provision.target(driver.name)
+    bindir = into / "bin"
+    argv = [dotnet, "tool", "install", package, "--version", version]
+    argv += ["--tool-path", str(bindir)]
+    if not _run(argv, env={**os.environ, **_dotnet_env(into)}):
+        return None
+    return bindir
 
 
 def _npm(driver: Driver) -> list[Release]:
@@ -795,6 +967,10 @@ def install(driver: Driver, release: Release, into: Path) -> Path | None:
         return _install_npm(driver, release.version, into)
     if kind == "nodejs":
         return _install_nodejs(release, into)
+    if kind == "dotnet":
+        return _install_dotnet(release, into)
+    if kind == "nuget":
+        return _install_nuget(driver, release.version, into)
     if kind in ("github", "gitlab", "gitea", "bun"):
         return _install_asset(driver, release, into)
     if kind == "python":

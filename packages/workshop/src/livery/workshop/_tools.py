@@ -614,7 +614,9 @@ def with_graphs(
 
     A `pypi` tool's graph is uv's hashed requirements, a `npm` tool's
     is its runtime's lockfile, each written under `GRAPHS` beside the
-    lock and named there by its digest. A graph that cannot be
+    lock and named there by its digest; a `dotnet` tool has none, since
+    its package carries its dependencies and the version pins the
+    whole. A graph that cannot be
     resolved now, the runtime it needs being absent on a checkout
     that has not materialised yet, leaves the tool as it was: it
     installs the way it did and says so, and the next lock writes it.
@@ -669,13 +671,16 @@ def with_graphs(
 
 
 def runtime_of(listed: Listed) -> str:
-    """The runtime an `npm` tool runs on: its record's, node unless it says bun.
+    """The runtime a tool runs on: an `npm` tool's record's, node unless it says bun.
 
-    Empty for every other kind, which runs on nothing the lock supplies.
+    A `dotnet` tool runs on dotnet, the SDK. Empty for every other
+    kind, which runs on nothing the lock supplies.
     """
-    if listed.kind != "npm":
-        return ""
-    return listed.runtime or "node"
+    if listed.kind == "npm":
+        return listed.runtime or "node"
+    if listed.kind == "dotnet":
+        return "dotnet"
+    return ""
 
 
 def with_runtimes(

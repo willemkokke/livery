@@ -173,7 +173,14 @@ bun, whose executable the caller supplied first: npm run on node, or
 bun's own installer. Its launchers under `bin` are the entry points,
 they start with `#!/usr/bin/env node`, and the runtime's directory
 stays on PATH to answer that, bun through the `node` shim its record
-declares. A launcher the runtime placed outside the tool's directory
+declares. A `dotnet` tool is installed through the dotnet SDK, the
+runtime its record names, with `dotnet tool install --tool-path` into
+a directory of its own under the home, the record's `package` naming
+the NuGet package; the shims the SDK writes under `bin` are its entry
+points, and they find the runtime through `DOTNET_ROOT`, which the
+SDK's own record sets. It has no graph: a .NET tool package carries
+its dependencies, and the version pins the whole. A launcher the
+runtime placed outside the tool's directory
 is refused naming where it points. A `system-check` tool is the
 machine's own, found on PATH and held to the record's `min_version`
 alone, since its locked version is the newest reading the stubs render

@@ -66,6 +66,11 @@ class Home:
         """The npm installs, one directory per `<name>@<version>`, by either runtime."""
         return self.root / "npm"
 
+    @property
+    def dotnet(self) -> Path:
+        """The dotnet tool installs, one directory per `<name>@<version>`."""
+        return self.root / "dotnet"
+
     def tool_dir(self, name: str, version: str) -> Path:
         """The view of *name* at *version*."""
         return self.tools / f"{name}@{version}"
