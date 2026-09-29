@@ -3,7 +3,8 @@
 Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
 tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
 2026-09-28 (issues #860, #867 with its ordering fix #870, #874), phase 3
-up to the dependency closure the same day (#876) beside the layering
+up to the dependency closure the same day (#876) and the rest of it on
+2026-09-29 (#884) beside the layering
 check's fix mode (#829) and phase 8's first change, the publishing
 opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
 item the remaining phases waited on; the decision record carries each
@@ -2049,6 +2050,29 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
     for free. Willem: "I like it". The reproducibility argument
     against conditional code was withdrawn as overstated; what
     separates the shapes is legibility.
+
+- 2026-09-29, phase 3's remainder built (issue #884): `WORKSHOP_TOOLS`
+  on the plugin module is the profile's fourth site, `layer <import
+  path>`, and `fm layers` prints each layer's tools; `WORKSHOP_FOR`
+  maps a target layer to a contribution module the mount imports once
+  both are mounted, whichever mounts later, and the closure lint's
+  `--fix` writes the resolved targets into the entry once, after which
+  `for` is the truth, a deleted name staying deleted and an unlisted
+  or undeclared name refusing; the layering check parses each source
+  once through a memo keyed by path, size and modification time,
+  its three walks became the first three registered rules
+  (`runner-terminal`, `forge-stdlib-only`, `sibling-references` with
+  `write_edges` as its fix), `register_ast_rule` takes a kind's or a
+  layer's, a rule's fix runs inside the check's rewrite and its
+  judgment inside the judge, and each problem carries the rule's
+  name. Two things the phase found. A contribution module mounts by
+  import alone: footman's `plugin()` takes entry points only, so a
+  contribution carries registrations and never verbs, which stay on
+  the owner's plugin module. And `for` is written only when at least
+  one target is listed: an empty `for` written early would be the
+  truth and silence a target listed later, so the fix waits for the
+  first one. Not built: nothing of the phase; its acceptance lines
+  are met by the tests named in the commit.
 
 ## Open
 
