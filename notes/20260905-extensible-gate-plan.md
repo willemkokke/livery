@@ -4,7 +4,7 @@ Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
 tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
 2026-09-28 (issues #860, #867 with its ordering fix #870, #874), phase 3
 up to the dependency closure the same day (#876) and the rest of it on
-2026-09-29 (#884); phase 3b was built the same day (#886), and phase 4's two changes too (#888, #890) beside the layering
+2026-09-29 (#884); phase 3b was built the same day (#886), phase 4's two changes (#888, #890) and phase 4b (#892) beside the layering
 check's fix mode (#829) and phase 8's first change, the publishing
 opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
 item the remaining phases waited on; the decision record carries each
@@ -2161,6 +2161,36 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   python and hands it to both; and the drift gate judges a fragment
   file only where a receipt says the render wrote it, since a copy
   nobody receipted is either adopted or an override, never drift.
+- 2026-09-29, phase 4b built (issue #892): a check record carries
+  `claims`, the categories it judges with the rules it withholds
+  there and the suffixes it reads; `judged_files` names the files
+  of a package a check's claims reach, the files git holds under
+  it, tracked or untracked and not ignored, so a build tree under a
+  native member reaches no claim; `fm explain` prints the checks
+  whose claims reach a file beside the site's; and the lint
+  fragment's category-shaped per-file ignores render from the
+  claims over the present kinds' tables and the workspace unit,
+  `packages/*/tests/**` and `tests/**` with `D1`, so two checks
+  claiming one category under different rules land in one entry
+  with both sets, in a stable order. A claim on a category no table
+  knows refuses at registration naming the vocabulary. Three things
+  the phase found. A category is a role, not a language: a native
+  package's `source` is C++ and its `conanfile.py` is
+  configuration, so a claim names the suffixes its tool reads, and
+  ruff's records apply to `cpp-conan` as well as `python`, which
+  puts ruff in the native kind's tool profile and keeps its claim
+  on a native package to `conanfile.py`, while the native kind's
+  `tests/**/*.cpp` renders no python ignore. The python checks keep
+  their directory invocations, since ruff over the tree already
+  judges every python file the claims name, and a native member in
+  a scoped gate hands ruff the files its claims reach by name,
+  which the scoped gate skipped before. And the four packages' own
+  `[tool.ruff]` stubs stay: ruff's `extend` replaces the
+  per-file-ignores table wholesale rather than merging it, so a
+  package that carries carve-outs must repeat `D1` beside them, and
+  those carve-outs are the tracked content pass's debt as the phase
+  says.
+
 
 ## Open
 
