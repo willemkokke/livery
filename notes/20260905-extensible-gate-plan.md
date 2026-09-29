@@ -4,7 +4,7 @@ Status: phase 0 landed 2026-09-05 (issue #227). Contract 7's pinning
 tests landed 2026-09-28 (commit 94096846). Phases 1, 2 and 3c landed
 2026-09-28 (issues #860, #867 with its ordering fix #870, #874), phase 3
 up to the dependency closure the same day (#876) and the rest of it on
-2026-09-29 (#884) beside the layering
+2026-09-29 (#884); phase 3b was built the same day (#886) beside the layering
 check's fix mode (#829) and phase 8's first change, the publishing
 opt-out (#871). On 2026-09-28 and 2026-09-29 Willem ruled every open
 item the remaining phases waited on; the decision record carries each
@@ -2074,6 +2074,36 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
   first one. Not built: nothing of the phase; its acceptance lines
   are met by the tests named in the commit.
 
+- 2026-09-29, phase 3b built (issue #886): one store keyed by axis in
+  `_categories.py`, `register_categories` and `category_of` over
+  pattern tables, `register_channels` and `channel_of` over ranked
+  callables; specificity is the literal characters a pattern names,
+  a tie between two rules of one specificity claiming one path
+  refuses naming both, and a derived kind inherits the tables up its
+  chain with the nearer kind winning. The builtin tables register
+  beside the kinds (the base's docs categories on the abstract base
+  kind, python's, cpp-conan's, the workspace unit's) and the
+  provenance ladder became nine ranked channel rules; every
+  backend's `classify` and the protocol slot are gone. A package's
+  `[categories]` table wins over its kind's rules; a `[channels]`
+  table refuses. `fm explain` prints the category and the channel
+  with their suppliers, and `claimed by: site` on a file the build
+  reads; a `src/` at the workspace root refuses in the layering
+  check. The docs job's condition (livery#839) is the docs check's
+  claim, `site_reads`, and `fm docs.build` skips a pull request's
+  build when nothing the site reads changed against the base, on the
+  same terms the check legs narrow on. Two things the phase found.
+  A tie is detected when a path meets it, at the first gate or
+  explain over that path, rather than at mount: two patterns'
+  overlap is not decidable from the patterns alone, so the refusal
+  names the path as well as both rules. And the workspace unit is
+  the root's tests unit where one exists and a root-only record
+  otherwise, so `fm explain notes/x.md` answers in a workspace with
+  no `tests/`. One acceptance line is open: the conformance chain
+  has no notes-only pull request scenario yet, so the skip is proven
+  by unit tests over the decision and the claim, and the chain's
+  proof waits for that scenario (open item 24).
+
 ## Open
 
 1. Does `Edge.kind` rename too, or does "edge kind" bound by its
@@ -2146,3 +2176,8 @@ that does not list the layer has no `.claude/` and no `CLAUDE.md`.
 23. The browser runtime the playground layer declares as its tool:
     a tool record for pyodide under node, or the CPython sim alone.
     Owner: Willem, with the playground layer's plan.
+24. The conformance chain has no notes-only pull request scenario, so
+    phase 3b's docs-job skip is proven by tests over the decision and
+    the site's claim, and the chain's proof of the skip with the
+    `gate` context still reporting waits for that scenario. Owner: the
+    phase that adds it, with phase 4b's claims.
