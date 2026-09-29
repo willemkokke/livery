@@ -83,7 +83,7 @@ def test_an_unknown_kind_names_the_kinds_the_stack_has(tmp_path: Path) -> None:
     with pytest.raises(_FAILURES) as caught:
         compose_source(root, tmp_path / "out")
     text = str(caught.value)
-    assert "maya-plugin" in text and "package-python-layer" in text
+    assert "maya-plugin" in text and "package-layer" in text
 
 
 def test_a_stale_replace_declaration_is_refused(tmp_path: Path) -> None:

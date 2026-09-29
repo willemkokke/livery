@@ -384,7 +384,7 @@ def new_project(
 def _add_layer(root: Path, layer: str) -> None:
     """Scaffold *layer* and self-host it: contract 19's home shape.
 
-    The layer package renders from the ``package-python-layer``
+    The layer package renders from the ``package-layer``
     kind; the contract's stack gains its import path last, so the
     home composes with its own overlay at HEAD from the first
     commit. Idempotent: an already-listed layer walks past.
@@ -395,7 +395,7 @@ def _add_layer(root: Path, layer: str) -> None:
     if (root / "packages" / layer).exists():
         print(f"  layer: packages/{layer} already scaffolded")
         return
-    import_path = wire_package(root, layer, kind="package-python-layer")
+    import_path = wire_package(root, layer, kind="package-layer")
     contract = root / "workshop.toml"
     text = contract.read_text("utf-8")
     if f'"{import_path}"' not in text:
